@@ -1527,6 +1527,74 @@ static TRef crec_vec_build_half(jit_State *J, CTState *cts, IRType vt,
   return v;
 }
 
+/* Recover tr = base + k for a Lua integer base. */
+static int crec_vec_affine_offset(jit_State *J, TRef tr, TRef base,
+				  int32_t *pofs)
+{
+  IRIns *ir;
+  IRRef br = tref_ref(base), kr;
+  uint32_t neg = 0;
+  if (tr == base) {
+    *pofs = 0;
+    return 1;
+  }
+  if (!tref_isint(tr)) return 0;
+  ir = IR(tref_ref(tr));
+  if (ir->o == IR_ADD || ir->o == IR_ADDOV) {
+    if (ir->op1 == br && IR(ir->op2)->o == IR_KINT) {
+      kr = ir->op2;
+    } else if (ir->op2 == br && IR(ir->op1)->o == IR_KINT) {
+      kr = ir->op1;
+    } else {
+      return 0;
+    }
+  } else if ((ir->o == IR_SUB || ir->o == IR_SUBOV) && ir->op1 == br &&
+	     IR(ir->op2)->o == IR_KINT) {
+    kr = ir->op2;
+    neg = 1;
+  } else {
+    return 0;
+  }
+  *pofs = neg ? (int32_t)(0u - (uint32_t)IR(kr)->i) : IR(kr)->i;
+  return 1;
+}
+
+/*
+** Build a full byte/word/dword vector whose integer lanes are affine offsets
+** from the same runtime value. Conversion to these lane widths commutes with
+** modular packed addition, replacing up to 31 scalar inserts with one
+** broadcast and one constant add.
+*/
+static TRef crec_vec_build_affine(jit_State *J, CTState *cts, IRType vt,
+				  const CTVecInfo *vi, RecordFFData *rd,
+				  MSize nargs)
+{
+  uint64_t vdata[LJ_VEC_MAXSIZE/sizeof(uint64_t)];
+  uint8_t *vbuf = (uint8_t *)vdata;
+  CType *ect;
+  TRef base, v;
+  uint32_t i;
+  int allzero = 1;
+  if (veck_isfp(vi->kind) || vi->esize > 4 || nargs != vi->lanes)
+    return 0;
+  base = J->base[1];
+  if (!tref_isint(base) || tref_isk(base)) return 0;
+  ect = ctype_get(cts, vi->eid);
+  memset(vbuf, 0, sizeof(vdata));
+  for (i = 0; i < vi->lanes; i++) {
+    int32_t ofs;
+    TValue tv;
+    if (!crec_vec_affine_offset(J, J->base[1+i], base, &ofs)) return 0;
+    if (ofs) allzero = 0;
+    setintV(&tv, ofs);
+    lj_cconv_ct_tv(cts, ect, vbuf + i*vi->esize, &tv, 0);
+  }
+  v = crec_ct_tv(J, ect, 0, base, &rd->argv[1]);
+  v = emitir(IRT(IR_VSPLAT, vt), v, IRVSPLAT_BROADCAST);
+  return allzero ? v :
+    emitir(IRT(IR_VADD, vt), v, lj_ir_kvec(J, vt, vbuf));
+}
+
 /*
 ** Build a native-width initializer directly from scalar values. This is the
 ** packed equivalent of the temporary cdata plus lane stores used by generic
@@ -1537,6 +1605,8 @@ static TRef crec_vec_build_half(jit_State *J, CTState *cts, IRType vt,
 static TRef crec_vec_build(jit_State *J, CTState *cts, IRType vt,
 			   const CTVecInfo *vi, RecordFFData *rd, MSize nargs)
 {
+  TRef affine = crec_vec_build_affine(J, cts, vt, vi, rd, nargs);
+  if (affine) return affine;
   if (veck_isfp(vi->kind)) {
     if (vi->esize == 4 && !(J->flags & JIT_F_SSE4_1)) return 0;
   } else {

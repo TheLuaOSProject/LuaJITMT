@@ -204,6 +204,20 @@ test("multi-lane dynamic vector constructors on trace", function()
     for i = 1, n do acc = acc + i4(i, -1, i+0x100000000, -i-0.75) end
     return acc
   end, 200)
+  local i1, u2 = T.T.i8x16.ct, T.T.u16x8.ct
+  diff("affine integer constructors wrap exact lane widths", function(n)
+    local a, b, c = i1(0), u2(0), i4(0)
+    for i = 1, n do
+      local x = i + 120
+      a = a + i1(x, x+1, x+2, x+3, x+4, x+5, x+6, x+7,
+		 x+8, x+9, x+10, x+11, x+12, x+13, x+14, x+15)
+      local y = i*257 - 40000
+      b = b + u2(y, y-3, y+5, y-7, y+11, y-13, y+17, y-19)
+      local z = i*1000003 - 100000000
+      c = c + i4(z, z-17, z+65537, z-1048576)
+    end
+    return a, b, c
+  end, 200)
   diff("dynamic float constructor preserves zero bits", function(n)
     local r
     for i = 1, n do r = f4(i*0.25, -0.0, i+0.5, 0.0) end
@@ -248,6 +262,19 @@ test("multi-lane dynamic vector constructors on trace", function()
 
   if simd.features().avx2 then
     local i8 = T.W.i32x8.ct
+    local b32 = T.W.u8x32.ct
+    diff("affine wide byte constructor wraps", function(n)
+      local acc = b32(0)
+      for i = 1, n do
+	local x = i + 240
+	acc = acc + b32(
+	  x,x+1,x+2,x+3,x+4,x+5,x+6,x+7,
+	  x+8,x+9,x+10,x+11,x+12,x+13,x+14,x+15,
+	  x+16,x+17,x+18,x+19,x+20,x+21,x+22,x+23,
+	  x+24,x+25,x+26,x+27,x+28,x+29,x+30,x+31)
+      end
+      return acc
+    end, 200)
     local function partial_cross(i)
       return i8(i, i+1, i+2, i+3, i+4, i+5)
     end

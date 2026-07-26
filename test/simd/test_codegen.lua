@@ -168,11 +168,15 @@ test("dynamic vector constructors stay in registers", function()
   end
 
   local h8 = T.T.i16x8.ct
-  check_count("i16x8 dynamic constructor", h8, {"movd", "pinsrw", "paddw"},
-	      "pinsrw", 7,
+  local hm = check_count("i16x8 affine dynamic constructor", h8,
+	      {"movd", "pshuflw", "pshufd", "paddw"}, "paddw", 2,
     function(ct, i)
       return ct(i, i+1, i+2, i+3, i+4, i+5, i+6, i+7)
     end)
+  if hm then
+    check(count(hm, "pinsrw") == 0,
+	  "i16x8 affine constructor must not insert individual lanes")
+  end
 
   if simd.features().sse4_1 then
     local f4 = T.T.float4.ct
@@ -196,20 +200,32 @@ test("dynamic vector constructors stay in registers", function()
     end
 
     local i4 = T.T.i32x4.ct
-    check_count("i32x4 dynamic constructor", i4,
-		{"movd", "pinsrd", "paddd"}, "pinsrd", 3,
+    local im = check_count("i32x4 affine dynamic constructor", i4,
+		{"movd", "pshufd", "paddd"}, "paddd", 2,
       function(ct, i) return ct(i, i+1, i+2, i+3) end)
+    if im then
+      check(count(im, "pinsrd") == 0,
+	    "i32x4 affine constructor must not insert individual lanes")
+    end
     check_count("i32x4 partial dynamic constructor", i4,
 		{"movd", "pinsrd", "paddd"}, "pinsrd", 1,
       function(ct, i) return ct(i, i+1) end)
+    check_count("i32x4 non-affine dynamic constructor", i4,
+		{"movd", "pinsrd", "paddd"}, "pinsrd", 3,
+      function(ct, i) return ct(i, i*i, i+2, i-3) end)
 
     local b16 = T.T.i8x16.ct
-    check_count("i8x16 dynamic constructor", b16,
-		{"movd", "pinsrb", "paddb"}, "pinsrb", 15,
+    local bm = check_count("i8x16 affine dynamic constructor", b16,
+		{"movd", "punpcklbw", "pshuflw", "pshufd", "paddb"},
+		"paddb", 2,
       function(ct, i)
 	return ct(i, i+1, i+2, i+3, i+4, i+5, i+6, i+7,
 		  i+8, i+9, i+10, i+11, i+12, i+13, i+14, i+15)
       end)
+    if bm then
+      check(count(bm, "pinsrb") == 0,
+	    "i8x16 affine constructor must not insert individual lanes")
+    end
 
     if ffi.abi("64bit") then
       local q2 = T.T.i64x2.ct
@@ -243,8 +259,8 @@ test("dynamic vector constructors stay in registers", function()
     end
 
     local i8 = T.W.i32x8.ct
-    m, _, body = checkloop("i32x8 dynamic constructor",
-      {"movd", "pinsrd", "insertf128", "paddd"}, NOCALL, function()
+    m, _, body = checkloop("i32x8 affine dynamic constructor",
+      {"movd", "pbroadcastd", "paddd"}, NOCALL, function()
 	local acc = i8(0)
 	for i = 1, 400 do
 	  acc = acc + i8(i, i+1, i+2, i+3, i+4, i+5, i+6, i+7)
@@ -252,10 +268,10 @@ test("dynamic vector constructors stay in registers", function()
 	return acc
       end)
     if m then
-      check(count(m, "pinsrd") == 6,
-	    "i32x8 dynamic constructor: expected six lane inserts")
-      check(count(m, "insertf128") == 1,
-	    "i32x8 dynamic constructor: expected one half join")
+      check(count(m, "paddd") == 2,
+	    "i32x8 affine constructor: expected offset and accumulator adds")
+      check(count(m, "pinsrd") == 0 and count(m, "insertf128") == 0,
+	    "i32x8 affine constructor must not build scalar halves")
       check(body:find("vpaddd ymm", 1, true) ~= nil,
 	    "i32x8 dynamic constructor: add must remain YMM-width")
     end
@@ -293,8 +309,8 @@ test("dynamic vector constructors stay in registers", function()
     end
 
     local b32 = T.W.i8x32.ct
-    m, _, body = checkloop("i8x32 dynamic constructor",
-      {"movd", "pinsrb", "insertf128", "paddb"}, NOCALL, function()
+    m, _, body = checkloop("i8x32 affine dynamic constructor",
+      {"movd", "pbroadcastb", "paddb"}, NOCALL, function()
 	local acc = b32(0)
 	for i = 1, 400 do
 	  acc = acc + b32(i, i+1, i+2, i+3, i+4, i+5, i+6, i+7,
@@ -305,10 +321,10 @@ test("dynamic vector constructors stay in registers", function()
 	return acc
       end)
     if m then
-      check(count(m, "pinsrb") == 30,
-	    "i8x32 dynamic constructor: expected thirty lane inserts")
-      check(count(m, "insertf128") == 1,
-	    "i8x32 dynamic constructor: expected one half join")
+      check(count(m, "paddb") == 2,
+	    "i8x32 affine constructor: expected offset and accumulator adds")
+      check(count(m, "pinsrb") == 0 and count(m, "insertf128") == 0,
+	    "i8x32 affine constructor must not build scalar halves")
       check(body:find("vpaddb ymm", 1, true) ~= nil,
 	    "i8x32 dynamic constructor: add must remain YMM-width")
     end
