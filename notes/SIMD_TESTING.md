@@ -28,8 +28,8 @@ status is non-zero if anything failed.
 | `test_jit.lua` | interpreter/JIT differential: the same computation run interpreted and compiled, including loop-carried values, guards, side exits, spills |
 | `test_codegen.lua` | inspects `jit.dump`/`jit.util` output of representative traces to prove packed instructions are emitted and no scalarisation or permanent exit happens; also checks vector IR/constants and explicit YMM operands |
 | `test_ffi_abi.lua` | vector arguments, returns, stack spilling, mixed argument lists and memory round trips against a small C helper library compiled at test time; callbacks taking and returning vectors by value for every lane kind, ten vector arguments (registers plus stack), 16-byte stack alignment behind eight register arguments, mixed integer/FP/vector argument lists, and the rejection of vectors too wide for a register |
-| `bench.lua` | microbenchmarks: saxpy and dot product compare scalar, 128-bit XMM and 256-bit YMM; horizontal max and clamp compare scalar and the complete 128-bit backend |
-| `bench_ops.lua` | realistic kernels, per-operation latency, and a direct XMM/YMM lane-throughput comparison for the current AVX2 subset |
+| `bench.lua` | scalar/XMM/YMM comparisons for saxpy, dot, horizontal max and clamp, plus heavier unaligned 8-tap FIR, degree-11 polynomial and divergent-mask Mandelbrot kernels |
+| `bench_ops.lua` | realistic kernels, per-operation latency, and a direct XMM/YMM lane-throughput comparison for the AVX2 backend |
 | `test_noregress.lua` | ordinary Lua and FFI behaviour with no vector types anywhere; its output is diffed against a pristine LuaJIT build |
 
 ## Method

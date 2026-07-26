@@ -310,9 +310,9 @@ keeps running interpreted with identical results.
 <li>The 256-bit JIT supports the ordinary vector operators, dynamic scalar
 splats, comparisons and masks, min/max, shifts, abs/sqrt/rounding, FMA,
 saturating arithmetic, 16-bit <tt>mulhi</tt>, direct 32-bit conversions,
-logical/select/bitcast, and unaligned loads and stores. Reductions,
-<tt>insert</tt>, <tt>shuffle</tt>, and <tt>shuffle2</tt> currently abandon
-the trace and continue in the interpreter.</li>
+logical/select/bitcast, unaligned loads and stores, horizontal reductions,
+constant and runtime-index shuffles, two-source shuffles, and constant or
+runtime-index insertion.</li>
 <li>When AVX is present every packed instruction is emitted in its three
 operand VEX form.</li>
 <li>An ordinary <tt>a*b + c</tt> written with operators is <b>never</b>

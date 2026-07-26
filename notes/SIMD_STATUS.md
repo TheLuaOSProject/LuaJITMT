@@ -14,7 +14,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
   the fork rather than stand alone.
 * Latest pushed commit: see "Milestones" below.
 * Target: **x86-64-v3** (SSE4.2 + AVX2 + BMI2), with complete 128-bit
-  lowering and broad 256-bit YMM lowering.
+  lowering and a full supported 256-bit YMM operation surface.
   Feature use is runtime detected, so the binary still runs on older CPUs.
 
 ## Milestones
@@ -47,6 +47,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M24 | 256-bit IR/KVEC values, YMM loads/stores/spills/exits, and AVX2 add/sub/direct-mul/div/logical lowering | done |
 | M25 | Benchmarks compare scalar, 128-bit XMM, and 256-bit AVX2/YMM execution | done |
 | M26 | 256-bit broadcasts, comparisons/equality, min/max, shifts, FMA, rounding, conversions, saturating arithmetic, movemask, mulhi, and 8/64-bit multiply emulations | done |
+| M27 | 256-bit reductions, constant/runtime shuffles, two-source shuffles, and constant/runtime insert via explicit 128-bit half crossing | done |
 
 ## Commands that pass
 
@@ -266,27 +267,20 @@ Each of these is a decision, not an unfinished edge. None of them can give a
 wrong answer: where the JIT has no lowering the trace aborts with
 `LJ_TRERR_NYIVEC` and the interpreter produces the same value.
 
-1. **256-bit cross-lane operations remain staged.** AVX2 hosts now JIT the
-   complete ordinary operator surface, dynamic scalar splats, comparisons and
-   masks, min/max, shifts, abs/sqrt/rounding, FMA, saturating arithmetic,
-   16-bit `mulhi`, direct 32-bit conversions, logical/select/bitcast, and all
-   integer multiply lane widths. Reductions, `insert`, `shuffle`, and
-   `shuffle2` still abort the trace cleanly until their 128-bit lane-crossing
-   sequences are made YMM-aware.
-2. **Separate non-constant scalar indices in `shuffle`/`shuffle2`.** Rejected
+1. **Separate non-constant scalar indices in `shuffle`/`shuffle2`.** Rejected
    at record time. Pass one runtime index vector instead; that form and
-   variable `insert` are supported for 128-bit vectors.
-3. **Vectors by value in FFI callbacks are x86-64 SysV only.** Supported for 8
+   variable `insert` are supported for both XMM and YMM vectors.
+2. **Vectors by value in FFI callbacks are x86-64 SysV only.** Supported for 8
    and 16 byte vectors there (see `SIMD_DESIGN.md` D14). On Windows x64, x86
    and non-x86 targets, and for any vector wider than one register, `ffi.cast`
    still rejects the callback with the ordinary "cannot convert" error; pass a
    pointer instead.
-4. **`a*b+c` written with operators is never contracted into an FMA.**
+3. **`a*b+c` written with operators is never contracted into an FMA.**
    Contraction would round once where the interpreter rounds twice. The fused
    form is available explicitly as `simd.fma()`, which rounds once in *both*
    the interpreter (C99 `fma`/`fmaf`) and the JIT (`VFMADD213`), so the two
    still agree bit for bit.
-5. **This branch does not sit on `origin/v2.1`** -- see D13 above.
+4. **This branch does not sit on `origin/v2.1`** -- see D13 above.
 
 ## Benchmarks
 
@@ -295,19 +289,24 @@ wrong answer: where the JIT has no lowering the trace aborts with
 AVX2 machine:
 
 ```
-saxpy (float)              scalar     5.5 ms   XMM     1.4 ms  3.85x   YMM     1.1 ms  4.85x (1.26x/XMM)
-dot product (float)        scalar     5.0 ms   XMM     1.3 ms  3.97x   YMM     0.7 ms  7.48x (1.88x/XMM)
-horizontal max (int32)     scalar     3.8 ms   XMM     3.7 ms    1.02x
-clamp (float)              scalar    24.4 ms   XMM     1.6 ms   15.23x
+saxpy (float)              scalar     5.4 ms   XMM     1.4 ms  3.80x   YMM     1.2 ms  4.52x (1.19x/XMM)
+dot product (float)        scalar     5.0 ms   XMM     1.2 ms  3.98x   YMM     0.7 ms  7.46x (1.88x/XMM)
+horizontal max (int32)     scalar     3.8 ms   XMM     3.7 ms  1.02x   YMM     1.9 ms  1.99x (1.95x/XMM)
+clamp (float)              scalar    24.4 ms   XMM     1.6 ms 15.41x   YMM     1.3 ms 18.28x (1.19x/XMM)
+
+Heavy kernels: FIR 32768x60, polynomial 32768x60, Mandelbrot 16384x4
+8-tap FIR (float)          scalar     3.4 ms   XMM     0.8 ms  4.15x   YMM     0.6 ms  5.38x (1.30x/XMM)
+degree-11 poly (double)    scalar     3.8 ms   XMM     2.2 ms  1.77x   YMM     1.4 ms  2.67x (1.51x/XMM)
+Mandelbrot 64-it (double)  scalar     6.7 ms   XMM     7.6 ms  0.88x   YMM     6.9 ms  0.97x (1.10x/XMM)
 ```
 
 The dot product gets close to the expected second width doubling: 4 lanes are
-3.97x scalar and 8 lanes are 7.48x. SAXPY improves less because it streams two
+3.98x scalar and 8 lanes are 7.46x. SAXPY improves less because it streams two
 loads and one store and becomes memory-bound. Clamp wins much more because the
 scalar version is branchy and the vector version is branchless. Horizontal max
-shows no gain: both versions stream 256 KB per pass and are memory bound, not
-ALU bound. Those last two remain XMM-only until wide min/max and reductions are
-lowered.
+is memory-bound at either width, but YMM still nearly doubles XMM throughput.
+The heavier group covers overlapping unaligned loads, a dependent Horner
+chain, and divergent mask updates rather than only one-instruction kernels.
 
 `bench_ops.lua` also compares dependent XMM and YMM operations directly. On
 this machine the YMM instruction has essentially the same latency while doing

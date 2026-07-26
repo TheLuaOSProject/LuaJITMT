@@ -930,6 +930,85 @@ if simd.features().avx2 then
     end, 301)
   end)
 
+  test("256-bit reductions cross the 128-bit boundary", function()
+    for _, ti in ipairs(T.W) do
+      local lanes = {}
+      for i = 1, ti.lanes do
+	if ti.fp or ti.signed then
+	  lanes[i] = i == 1 and 90 or i == ti.lanes and -100 or i * 3 - 7
+	else
+	  lanes[i] = i == 1 and 1 or i == ti.lanes and 1000 or i * 3 + 7
+	end
+      end
+      local ct, a = ti.ct, ti.ct(unpack(lanes, 1, ti.lanes))
+      diff(ti.name .. " ymm reductions", function(n)
+	local sum, lo, hi
+	for i = 1, n do
+	  local v = a + ct(i % 5)
+	  sum, lo, hi = simd.hsum(v), simd.hmin(v), simd.hmax(v)
+	end
+	return sum, lo, hi
+      end, 120)
+    end
+  end)
+
+  test("256-bit constant and runtime shuffles cross halves", function()
+    for _, ti in ipairs(T.W) do
+      local lanes, rev, mix, raw = {}, {}, {}, {}
+      local half = ti.lanes / 2
+      for i = 0, ti.lanes-1 do
+	lanes[i+1] = i + 1
+	rev[i+1] = ti.lanes - 1 - i
+	mix[i+1] = i % 2 == 0 and ti.lanes - 1 - i
+				      or ti.lanes + (i + half) % ti.lanes
+	local src = (i + half) % ti.lanes
+	raw[i+1] = i % 2 == 0 and src or src - ti.lanes
+      end
+      local ct = ti.ct
+      local a = ct(unpack(lanes, 1, ti.lanes))
+      local b = ct(101)
+      local it = T.masktype(ti)
+      local ix = it.ct(unpack(raw, 1, ti.lanes))
+      diff(ti.name .. " ymm constant reverse", function(n)
+	local acc = ct(0)
+	for _ = 1, n do
+	  acc = simd.shuffle(acc + a, unpack(rev, 1, ti.lanes))
+	end
+	return acc
+      end, 80)
+      diff(ti.name .. " ymm shuffle2", function(n)
+	local acc = ct(0)
+	for _ = 1, n do
+	  acc = simd.shuffle2(acc + a, b, unpack(mix, 1, ti.lanes))
+	end
+	return acc
+      end, 80)
+      diff(ti.name .. " ymm runtime permute", function(n)
+	local acc = ct(0)
+	for _ = 1, n do acc = simd.shuffle(acc + a, ix) end
+	return acc
+      end, 80)
+    end
+  end)
+
+  test("256-bit insert addresses both halves", function()
+    for _, ti in ipairs(T.W) do
+      local lanes = {}
+      for i = 1, ti.lanes do lanes[i] = i end
+      local ct = ti.ct
+      local a = ct(unpack(lanes, 1, ti.lanes))
+      local value = ti.fp and 1.5 or 7
+      diff(ti.name .. " ymm insert", function(n)
+	local dyn, high = ct(0), ct(0)
+	for i = 1, n do
+	  dyn = simd.insert(dyn + a, i % ti.lanes, value)
+	  high = simd.insert(high + a, ti.lanes-1, value)
+	end
+	return dyn, high
+      end, 120)
+    end
+  end)
+
   test("256-bit memory, guards, and sunk boxes", function()
     local ti, N = T.W.i32x8, 48
     local ct = ti.ct

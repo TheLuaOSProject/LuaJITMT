@@ -24,6 +24,7 @@ local features = simd.features()
 local has_ymm = features.avx2 and features.vecsize >= 32
 local f8 = has_ymm and ffi.typeof("float8")
 local d4 = has_ymm and ffi.typeof("double4")
+local i8 = has_ymm and ffi.typeof("i32x8")
 local i64x4 = has_ymm and ffi.typeof("i64x4")
 local f4p = ffi.typeof("$ *", f4)
 local d2p = ffi.typeof("$ *", d2)
@@ -147,6 +148,7 @@ end
 local is = ffi.new("int32_t[?]", N)
 for i = 0, N-1 do is[i] = (i * 2654435761) % 1000003 - 500000 end
 local iv = ffi.cast(ffi.typeof("$ *", i4), is)
+local iw = has_ymm and ffi.cast(ffi.typeof("$ *", i8), is)
 
 local function max_scalar()
   local s = 0
@@ -163,6 +165,16 @@ local function max_vector()
   for _ = 1, PASSES do
     local m = i4(-2147483648)
     for i = 0, NV-1 do m = simd.max(m, iv[i]) end
+    s = s + simd.hmax(m)
+  end
+  return s
+end
+
+local function max_ymm()
+  local s = 0
+  for _ = 1, PASSES do
+    local m = i8(-2147483648)
+    for i = 0, NW-1 do m = simd.max(m, iw[i]) end
     s = s + simd.hmax(m)
   end
   return s
@@ -189,6 +201,16 @@ local function clamp_vector()
   for _ = 1, PASSES do
     for i = 0, NV-1 do yv[i] = simd.min(simd.max(xv[i], lo), hi) end
     s = s + yv[0][0]
+  end
+  return s
+end
+
+local function clamp_ymm()
+  local lo, hi = f8(1), f8(9)
+  local s = 0
+  for _ = 1, PASSES do
+    for i = 0, NW-1 do yw[i] = simd.min(simd.max(xw[i], lo), hi) end
+    s = s + yw[0][0]
   end
   return s
 end
@@ -496,11 +518,21 @@ end
 
 ts, ss = bench("max scalar", max_scalar)
 tx, sx = bench("max XMM", max_vector)
-report("horizontal max (int32)", ts, tx, ss, sx)
+if has_ymm then
+  local ty, sy = bench("max YMM", max_ymm)
+  report_ymm("horizontal max (int32)", ts, tx, ty, ss, sx, sy)
+else
+  report("horizontal max (int32)", ts, tx, ss, sx)
+end
 
 ts, ss = bench("clamp scalar", clamp_scalar)
 tx, sx = bench("clamp XMM", clamp_vector)
-report("clamp (float)", ts, tx, ss, sx)
+if has_ymm then
+  local ty, sy = bench("clamp YMM", clamp_ymm)
+  report_ymm("clamp (float)", ts, tx, ty, ss, sx, sy)
+else
+  report("clamp (float)", ts, tx, ss, sx)
+end
 
 io.write(string.format(
   "\nHeavy kernels: FIR %dx%d, polynomial %dx%d, Mandelbrot %dx%d\n",

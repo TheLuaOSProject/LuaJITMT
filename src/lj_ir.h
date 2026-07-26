@@ -280,6 +280,7 @@ IRFLDEF(FLENUM)
 #define IRVSHUF_PSRLDQ		1	/* Shift the whole vector right, bytes. */
 #define IRVSHUF_PSHUFLW		2	/* Permute the low four 16 bit lanes. */
 #define IRVSHUF_PSHUFHW		3	/* Permute the high four 16 bit lanes. */
+#define IRVSHUF_SWAP128		4	/* Swap the two 128 bit halves of YMM. */
 #define IRVSHUF(mode, imm)	(((mode)<<8) + (imm))
 
 /* VEXTRACT and VMOVMSK op2 literal: the source vector IRType is carried in

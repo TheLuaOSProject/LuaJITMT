@@ -5,6 +5,10 @@ local ffi, simd, test, check, checkeq = T.ffi, T.simd, T.test, T.check, T.checke
 local SEED = tonumber(os.getenv("SIMD_SEED") or "20260725")
 
 local bit = require("bit")
+local alltypes = {}
+for _, types in ipairs({T.T, T.W}) do
+  for _, ti in ipairs(types) do alltypes[#alltypes+1] = ti end
+end
 
 test("bitwise ops", function()
   for _, ti in ipairs(T.T) do
@@ -205,7 +209,7 @@ test("saturating arithmetic", function()
 end)
 
 test("reductions", function()
-  for _, ti in ipairs(T.T) do
+  for _, ti in ipairs(alltypes) do
     local rnd = T.rng(SEED + ti.bits * 23)
     for _ = 1, 60 do
       local a = T.rand(ti, rnd)
@@ -219,7 +223,7 @@ test("reductions", function()
 end)
 
 test("insert and shuffle", function()
-  for _, ti in ipairs(T.T) do
+  for _, ti in ipairs(alltypes) do
     local rnd = T.rng(SEED + ti.bits * 29)
     local a, b = T.rand(ti, rnd), T.rand(ti, rnd)
     for lane = 0, ti.lanes-1 do
@@ -261,7 +265,7 @@ test("shuffle with a runtime index vector", function()
   -- Indices are reduced modulo the lane count, so every value is defined and
   -- no guard is needed; the reference reduces them the same way.
   local bit_ = require("bit")
-  for _, ti in ipairs(T.T) do
+  for _, ti in ipairs(alltypes) do
     local it = T.masktype(ti)
     local rnd = T.rng(SEED + ti.bits * 131 + (ti.fp and 3 or 0))
     for _ = 1, 30 do

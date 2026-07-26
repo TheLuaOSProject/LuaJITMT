@@ -661,7 +661,12 @@ static void asm_vecshuf(ASMState *as, IRIns *ir)
   int wide = irt_isvec256(ir->t);
   Reg dest = ra_dest(as, ir, RSET_FPR);
   Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
-  if (mode == IRVSHUF_PSRLDQ) {
+  if (mode == IRVSHUF_SWAP128) {
+    lj_assertA(wide && (as->flags & JIT_F_AVX2),
+	       "128 bit half swap without AVX2");
+    emit_i8(as, 0x01);
+    emit_vexrrl(as, XO_VPERM2I128, dest, left, left, 1);
+  } else if (mode == IRVSHUF_PSRLDQ) {
     emit_vshiftl(as, XO_PSHIFTQ, 3, dest, left, imm, wide);
     /* PSRLDQ is group 3. */
   } else {

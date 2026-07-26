@@ -40,12 +40,17 @@ vector element ("Valarray elements are constant").  `v[i] = x` therefore raises
   * Immutability is what makes vectors behave as SSA values: a vector load from
     a cdata payload is a *pure* load, so it CSEs, hoists out of loops and never
     needs alias analysis against lane stores.
+  * Cdata assignments copy a reference to the same GC object. Making a lane
+    writable would therefore introduce observable aliases (`b = a; a[0] = x`)
+    and could force a register-resident value back into a materialised box.
   * It matches the way LuaJIT already treats 64-bit integer cdata: a boxed,
     immutable payload that the JIT keeps unboxed in a register.
 
 Lane insertion is therefore a *functional* operation and lives in `ffi.simd`
 (`simd.insert(v, i, x)` returns a new vector), which is exactly the kind of
-operation constraint 7 reserves for the module.
+operation constraint 7 reserves for the module. Its temporary box is sunk, so
+the functional spelling does not imply an allocation or memory round trip in
+compiled code.
 
 ## D3. Value model in the JIT: "a vector is a wide int64 cdata"
 
@@ -584,8 +589,29 @@ bytes. A differential with distinct low/high masks caught the tempting but
 wrong `raw | (raw >> 8)` version, which mixed the duplicate low byte into the
 high byte.
 
-Reductions and shuffles are intentionally separate. Their 128-bit lowering
-uses byte shifts or `PSHUFB`, whose AVX2 forms remain confined to each
-128-bit lane. Merely setting VEX.L would compile, but would implement the
-wrong full-vector permutation. They remain `NYIVEC` until the IR explicitly
-models the required cross-lane step.
+Reductions and shuffles were intentionally kept out of the direct-operation
+slice. Their 128-bit lowering uses byte shifts or `PSHUFB`, whose AVX2 forms
+remain confined to each 128-bit lane. Merely setting VEX.L would compile, but
+would implement the wrong full-vector permutation. D22 adds the explicit
+cross-lane step.
+
+## D22. One explicit half-swap completes YMM cross-lane operations
+
+`IRVSHUF_SWAP128` represents a swap of the low and high 128-bit halves and
+lowers to `VPERM2I128`. Keeping this operation explicit prevents a lane-local
+`VPSHUFB` or `VPSRLDQ` from silently pretending to be a whole-YMM shuffle.
+
+Horizontal reductions first combine the original vector with the half-swapped
+copy, then reuse the existing lane-local halving shifts. Operand order in the
+low half matches the interpreter's fixed reduction tree, including asymmetric
+floating-point MIN/MAX behaviour for NaNs and signed zero.
+
+A constant shuffle applies `VPSHUFB` to the original and half-swapped sources
+with disjoint masks, then ORs the results when both routes are populated. An
+all-same-half shuffle omits the swap; an all-cross shuffle omits the empty
+shuffle and merge. A runtime index vector uses control bit 4 to determine
+whether each requested byte belongs to the output's current half: it shuffles
+both source arrangements and selects between them with packed masks.
+`shuffle2` composes two of the same permutes. Insert already had the right
+packed select algebra; widening its lane-number vector makes constant and
+runtime indices address all YMM lanes without scalarisation.

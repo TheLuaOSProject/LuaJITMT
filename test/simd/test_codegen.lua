@@ -558,6 +558,7 @@ if simd.features().avx2 then
     end
     check(not body:find("call", 1, true),
 	  name .. " must not call a scalar helper: " .. body:gsub("\n", " | "))
+    return body
   end
 
   test("256-bit arithmetic uses YMM encodings", function()
@@ -663,6 +664,73 @@ if simd.features().avx2 then
       for _ = 1, 400 do acc = acc * k + q4(1) end
       return acc
     end)
+  end)
+
+  test("256-bit cross-lane operations stay in YMM registers", function()
+    local i8 = T.W.i32x8.ct
+    local a = i8(1, 2, 3, 4, 5, 6, 7, 8)
+    local body = checkymm("i32x8 reverse",
+      {"vperm2i128 ymm", "vpshufb ymm"},
+      function()
+	local acc = i8(0)
+	for _ = 1, 400 do
+	  acc = simd.shuffle(acc + a, 7, 6, 5, 4, 3, 2, 1, 0)
+	end
+	return acc
+      end)
+    check(not body:find("vpor ymm", 1, true),
+	  "an all-cross shuffle must not merge an empty same-half result")
+
+    body = checkymm("i32x8 same-half shuffle", {"vpshufb ymm"}, function()
+      local acc = i8(0)
+      for _ = 1, 400 do
+	acc = simd.shuffle(acc + a, 3, 2, 1, 0, 7, 6, 5, 4)
+      end
+      return acc
+    end)
+    check(not body:find("vperm2i128 ymm", 1, true),
+	  "a same-half shuffle must not pay for a cross-half permutation")
+
+    local ix = i8(4, 5, 6, 7, 0, 1, 2, 3)
+    checkymm("i32x8 runtime permute",
+      {"vperm2i128 ymm", "vpshufb ymm", "vpand ymm", "vpandn ymm"},
+      function()
+	local acc = i8(0)
+	for _ = 1, 400 do acc = simd.shuffle(acc + a, ix) end
+	return acc
+      end)
+
+    local b = i8(11, 12, 13, 14, 15, 16, 17, 18)
+    checkymm("i32x8 shuffle2",
+      {"vperm2i128 ymm", "vpshufb ymm", "vpor ymm"},
+      function()
+	local acc = i8(0)
+	for _ = 1, 400 do
+	  acc = simd.shuffle2(acc + a, b, 7, 12, 5, 14, 3, 8, 1, 10)
+	end
+	return acc
+      end)
+
+    checkymm("i32x8 insert",
+      {"vpbroadcastd ymm", "vpcmpeqd ymm", "vpand ymm", "vpandn ymm"},
+      function()
+	local acc = i8(0)
+	for i = 1, 400 do acc = simd.insert(acc + a, i % 8, 42) end
+	return acc
+      end)
+
+    local f8 = T.W.float8.ct
+    local fv = f8(1, 2, 3, 4, 5, 6, 7, 8)
+    checkymm("float8 hsum",
+      {"vperm2i128 ymm", "vaddps ymm", "vpsrldq ymm"},
+      function()
+	local v, sum = f8(0), 0
+	for _ = 1, 400 do
+	  v = v + fv
+	  sum = sum + simd.hsum(v)
+	end
+	return v, sum
+      end)
   end)
 end
 

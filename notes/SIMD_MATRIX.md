@@ -23,7 +23,7 @@ least two lanes.
 |---|---|---|---|
 | 16 bytes (128-bit) | yes | yes | complete operation surface below |
 | 8 bytes | yes | no (trace aborts, NYI) | correct results, stays interpreted |
-| 32 bytes (256-bit) | yes | partial (AVX2) | core YMM slice; see below |
+| 32 bytes (256-bit) | yes | yes (AVX2) | full supported YMM surface; see below |
 | 64 bytes and wider | yes | no (trace aborts, NYI) | AVX-512 is out of scope |
 | 4 bytes / 1 lane | — | — | no packed meaning, rejected |
 | `_Bool` elements | — | — | the C parser drops `vector_size` for `_Bool` |
@@ -58,12 +58,13 @@ The current YMM operation surface compiles:
 * logical operations, comparisons/masks, select, min/max, shifts,
   abs/sqrt/rounding, FMA, saturating arithmetic, 16-bit `mulhi`, equal-size
   bitcast, and the direct 32-bit lane conversions;
+* horizontal reductions, constant and runtime-index shuffles, two-source
+  shuffles, and constant or runtime-index insertion across both 128-bit halves;
 * unaligned loads/stores, loop-carried values, 32-byte spills, and reconstruction
   of sunk boxes from a trace exit.
 
-Reductions, `insert`, `shuffle`, and `shuffle2` still abort the trace with
-`NYIVEC` and run interpreted. This is a staged cross-lane boundary, not silent
-128-bit truncation.
+The deliberate no-instruction cases listed under "Backend gaps" still abort
+the trace and run interpreted, just as they do for 128-bit vectors.
 
 ## Ordinary Lua operators (complete 128-bit surface)
 
@@ -224,10 +225,10 @@ Semantics worth pinning down:
 | non-constant lane index in `insert` | supported: the range is guarded and the lane mask is built with a packed compare against a constant vector of lane numbers |
 | per-lane count **vector** in `shl`/`shr`/`sar` on 8/16-bit lanes | rejected at record time, stays interpreted. AVX2 has no per-lane shift narrower than 32 bits (VPSLLVW is AVX-512), and emulating one costs an unpack, two shifts and a pack per direction |
 | per-lane count **vector** on 64-bit `sar` | no VPSRAVQ before AVX-512, so it lowers to a clamped VPSRLVQ plus the sign-bias trick: eight packed instructions, no call. The clamp is needed because VPSRLVQ flushes to zero past the lane width, which would take the sign bias with it |
-| runtime index **vector** in `shuffle` | supported: `shuffle(a, idxvec)` builds the PSHUFB control at runtime. A byte vector is one PSHUFB; a wider lane costs five packed instructions (mask, scale, replicate the byte over its lane, add 0..esize-1, permute) |
+| runtime index **vector** in `shuffle` | supported: `shuffle(a, idxvec)` builds the PSHUFB control at runtime. For XMM, a byte vector is one PSHUFB and a wider lane first scales and replicates the byte offset. For YMM, a `VPERM2I128` half-swap, a second `VPSHUFB`, and a packed half-select extend that control across the 128-bit boundary |
 | separate non-constant lane indices in `shuffle`/`shuffle2` | still rejected at record time. Assembling a control mask from N *scalar* indices costs more than it saves; pass an index vector instead |
 | scalar **cdata** as the second operand of an `ffi.simd` binary call | supported: it is unboxed, converted with the ordinary FFI rules and splatted |
-| 256-bit operation surface | broad direct-operation support; reductions and shuffle/insert remain staged as listed above |
+| 256-bit operation surface | the supported 128-bit operation surface is YMM-aware, including reductions and shuffle/insert; AVX2 is required |
 
 "JIT NYI" always means: the trace aborts with a NYI reason, the code keeps
 running interpreted, and the result is identical. It never means a wrong

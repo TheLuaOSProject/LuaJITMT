@@ -2144,13 +2144,43 @@ static void crec_simd_idx(jit_State *J, RecordFFData *rd, int narg,
   UNUSED(rd);
 }
 
-/* One PSHUFB with a constant mask handles any lane width and any permute. */
+/* A 128 bit permute is one PSHUFB. A 256 bit permute also shuffles a copy
+** with its 128 bit halves swapped, then selects the matching bytes.
+*/
 static TRef crec_simd_shuf1(jit_State *J, IRType vt, const CTVecInfo *vi,
 			    TRef a, const uint8_t *idx, uint32_t base)
 {
+  IRType bvt = (IRType)(IRT_V16I8 | (vt & IRT_VEC256));
   uint8_t mask[LJ_VEC_MAXSIZE];
-  crec_simd_shufmask(mask, vi, idx, base);
-  return emitir(IRT(IR_VSHUFB, vt), a, lj_ir_kvec(J, IRT_V16I8, mask));
+  if (!(vt & IRT_VEC256)) {
+    crec_simd_shufmask(mask, vi, idx, base);
+    return emitir(IRT(IR_VSHUFB, vt), a, lj_ir_kvec(J, bvt, mask));
+  } else {
+    uint8_t cross[LJ_VEC_MAXSIZE];
+    uint32_t i, j, n = vi->lanes, esz = vi->esize;
+    int has_same = 0, has_cross = 0;
+    TRef same, other, sw;
+    memset(mask, 0x80, sizeof(mask));
+    memset(cross, 0x80, sizeof(cross));
+    for (i = 0; i < n; i++) {
+      uint32_t src = idx[i];
+      if (src >= base && src < base + n) {
+	uint32_t lane = src - base;
+	int is_cross = (((i*esz) ^ (lane*esz)) & 16) != 0;
+	uint8_t *m = is_cross ? cross : mask;
+	if (is_cross) has_cross = 1; else has_same = 1;
+	for (j = 0; j < esz; j++)
+	  m[i*esz+j] = (uint8_t)((lane*esz+j) & 15);
+      }
+    }
+    if (!has_cross)
+      return emitir(IRT(IR_VSHUFB, vt), a, lj_ir_kvec(J, bvt, mask));
+    sw = emitir(IRT(IR_VSHUF, vt), a, IRVSHUF(IRVSHUF_SWAP128, 0));
+    other = emitir(IRT(IR_VSHUFB, vt), sw, lj_ir_kvec(J, bvt, cross));
+    if (!has_same) return other;
+    same = emitir(IRT(IR_VSHUFB, vt), a, lj_ir_kvec(J, bvt, mask));
+    return emitir(IRT(IR_VOR, vt), same, other);
+  }
 }
 
 /*
@@ -2159,9 +2189,10 @@ static TRef crec_simd_shuf1(jit_State *J, IRType vt, const CTVecInfo *vi,
 ** lane index has to be scaled to a byte offset and replicated across the
 ** bytes of its lane, with 0..esize-1 added back.
 **
-** Masking the index with lanes-1 first keeps every scaled offset below 16,
-** so the control byte's high bit is always clear and PSHUFB never takes its
-** "write zero" path. That also makes any index value defined without a guard,
+** Masking the index with lanes-1 first keeps every scaled offset within the
+** vector. For XMM the offset is below 16; for YMM bit 4 selects the source
+** half. The control byte's high bit is always clear, so PSHUFB never takes
+** its "write zero" path. Every index is therefore defined without a guard,
 ** matching lj_simd_permute().
 */
 static TRef crec_simd_permute(jit_State *J, IRType vt, const CTVecInfo *vi,
@@ -2169,6 +2200,7 @@ static TRef crec_simd_permute(jit_State *J, IRType vt, const CTVecInfo *vi,
 {
   uint8_t rep[LJ_VEC_MAXSIZE], off[LJ_VEC_MAXSIZE];
   uint32_t i, k, esz = vi->esize, n = vi->lanes;
+  IRType bvt = (IRType)(IRT_V16I8 | (vt & IRT_VEC256));
   TRef ctrl;
   {  /* Reduce the index modulo the lane count. */
     uint8_t kbuf[LJ_VEC_MAXSIZE];
@@ -2179,19 +2211,36 @@ static TRef crec_simd_permute(jit_State *J, IRType vt, const CTVecInfo *vi,
     lj_simd_splat(kbuf, elem, vi);
     ctrl = emitir(IRT(IR_VAND, ivt), ix, lj_ir_kvec(J, ivt, kbuf));
   }
-  if (esz == 1)
+  if (esz != 1) {
+    /* Scale to a byte offset, then spread that byte over the whole lane. */
+    ctrl = emitir(IRT(IR_VSHL, ivt), ctrl,
+		  lj_ir_kint(J, (int32_t)lj_fls(esz)));
+    for (i = 0; i < n; i++)
+      for (k = 0; k < esz; k++) {
+	rep[i*esz + k] = (uint8_t)(i*esz);  /* Low byte of lane i. */
+	off[i*esz + k] = (uint8_t)k;
+      }
+    ctrl = emitir(IRT(IR_VSHUFB, bvt), ctrl, lj_ir_kvec(J, bvt, rep));
+    ctrl = emitir(IRT(IR_VADD, bvt), ctrl, lj_ir_kvec(J, bvt, off));
+  }
+  if (!(vt & IRT_VEC256))
     return emitir(IRT(IR_VSHUFB, vt), a, ctrl);
-  /* Scale to a byte offset, then spread that byte over the whole lane. */
-  ctrl = emitir(IRT(IR_VSHL, ivt), ctrl, lj_ir_kint(J, (int32_t)lj_fls(esz)));
-  for (i = 0; i < n; i++)
-    for (k = 0; k < esz; k++) {
-      rep[i*esz + k] = (uint8_t)(i*esz);  /* Low byte of lane i. */
-      off[i*esz + k] = (uint8_t)k;
-    }
-  ctrl = emitir(IRT(IR_VSHUFB, IRT_V16I8), ctrl,
-		lj_ir_kvec(J, IRT_V16I8, rep));
-  ctrl = emitir(IRT(IR_VADD, IRT_V16I8), ctrl, lj_ir_kvec(J, IRT_V16I8, off));
-  return emitir(IRT(IR_VSHUFB, vt), a, ctrl);
+  else {
+    uint8_t hbuf[LJ_VEC_MAXSIZE], obuf[LJ_VEC_MAXSIZE];
+    TRef hbit, out, same, lo, hi, sw;
+    memset(hbuf, 0x10, sizeof(hbuf));
+    memset(obuf, 0, 16);
+    memset(obuf+16, 0x10, 16);
+    hbit = emitir(IRT(IR_VAND, bvt), ctrl, lj_ir_kvec(J, bvt, hbuf));
+    out = lj_ir_kvec(J, bvt, obuf);
+    same = emitir(IRT(IR_VCMPEQ, bvt), hbit, out);
+    lo = emitir(IRT(IR_VSHUFB, vt), a, ctrl);
+    sw = emitir(IRT(IR_VSHUF, vt), a, IRVSHUF(IRVSHUF_SWAP128, 0));
+    hi = emitir(IRT(IR_VSHUFB, vt), sw, ctrl);
+    return emitir(IRT(IR_VOR, vt),
+		  emitir(IRT(IR_VAND, vt), same, lo),
+		  emitir(IRT(IR_VANDN, vt), same, hi));
+  }
 }
 
 void LJ_FASTCALL recff_ffi_simd_shuffle(jit_State *J, RecordFFData *rd)
@@ -2199,7 +2248,6 @@ void LJ_FASTCALL recff_ffi_simd_shuffle(jit_State *J, RecordFFData *rd)
   CTVecInfo vi; CTypeID id; IRType vt;
   TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
   uint8_t idx[LJ_VEC_MAXSIZE];
-  if (vt & IRT_VEC256) lj_trace_err(J, LJ_TRERR_NYIVEC);
   crec_simd_need(J, (J->flags & JIT_F_SSSE3) != 0);
   if (J->base[1] && tref_iscdata(J->base[1])) {
     CTVecInfo ivi; CTypeID iid; IRType ivt;
@@ -2222,7 +2270,6 @@ void LJ_FASTCALL recff_ffi_simd_shuffle2(jit_State *J, RecordFFData *rd)
   TRef b;
   uint8_t idx[LJ_VEC_MAXSIZE];
   TRef ra, rb;
-  if (vt & IRT_VEC256) lj_trace_err(J, LJ_TRERR_NYIVEC);
   b = crec_simd_arg(J, rd, 1, &vi2, &id2, &vt2);
   /* Compare the raw ctypes: an arithmetic result carries the raw id, while a
   ** value built from a typedef carries the typedef id.
@@ -2250,7 +2297,6 @@ void LJ_FASTCALL recff_ffi_simd_insert(jit_State *J, RecordFFData *rd)
   int32_t lane;
   TRef splat, kmask;
   CType *sct;
-  if (vt & IRT_VEC256) lj_trace_err(J, LJ_TRERR_NYIVEC);
   if (!trlane) lj_trace_err(J, LJ_TRERR_NYIVEC);
   if (!tref_isinteger(trlane)) {
     if (tref_isnum(trlane)) trlane = lj_opt_narrow_toint(J, trlane);
@@ -2270,8 +2316,10 @@ void LJ_FASTCALL recff_ffi_simd_insert(jit_State *J, RecordFFData *rd)
     ** a constant vector of lane numbers against the splatted index. Still
     ** fully packed, no memory round trip.
     */
-    IRType ivt = vi.esize == 1 ? IRT_V16I8 : vi.esize == 2 ? IRT_V8I16 :
-		 vi.esize == 4 ? IRT_V4I32 : IRT_V2I64;
+    IRType ivt = (IRType)((vi.esize == 1 ? IRT_V16I8 :
+			   vi.esize == 2 ? IRT_V8I16 :
+			   vi.esize == 4 ? IRT_V4I32 : IRT_V2I64) |
+			  (vt & IRT_VEC256));
     TRef tridx, kidx;
     uint32_t i;
     emitir(IRTGI(IR_ULT), trlane, lj_ir_kint(J, (int32_t)vi.lanes));
@@ -2301,7 +2349,6 @@ void LJ_FASTCALL recff_simd_reduce(jit_State *J, RecordFFData *rd)
   IROp op;
   int mm64 = 0;  /* 64 bit lane min/max needs the compare and blend form. */
   TRef r = a;
-  if (vt & IRT_VEC256) lj_trace_err(J, LJ_TRERR_NYIVEC);
   switch (rd->data) {
   case VRD_SUM: op = IR_VADD; break;
   case VRD_MIN: case VRD_MAX:
@@ -2328,7 +2375,9 @@ void LJ_FASTCALL recff_simd_reduce(jit_State *J, RecordFFData *rd)
     TRef half;
     n >>= 1;
     sz >>= 1;
-    half = emitir(IRT(IR_VSHUF, vt), r, IRVSHUF(IRVSHUF_PSRLDQ, sz));
+    half = emitir(IRT(IR_VSHUF, vt), r,
+      IRVSHUF((vt & IRT_VEC256) && sz == 16 ?
+	      IRVSHUF_SWAP128 : IRVSHUF_PSRLDQ, sz));
     r = mm64 ? crec_simd_minmax64(J, vt, &vi, r, half, rd->data == VRD_MAX)
 	     : emitir(IRT(op, vt), r, half);
   }
