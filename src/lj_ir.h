@@ -191,7 +191,7 @@
   _(VABS,	N , ref, ___) \
   _(VROUND,	N , ref, lit) \
   _(VSHUF,	N , ref, lit) \
-  /* Two vector refs plus a mode/immediate carried by op2's CARG. */ \
+  /* Two inputs plus a mode/immediate carried by op2's CARG. */ \
   _(VSHUF2,	N , ref, ref) \
   _(VSHUFB,	N , ref, ref) \
   _(VPERMD,	N , ref, ref) \
@@ -301,6 +301,7 @@ IRFLDEF(FLENUM)
 #define IRVSHUF2_ALIGNR		4
 #define IRVSHUF2_ALIGNR256	5
 #define IRVSHUF2_PBLENDD	6
+#define IRVSHUF2_INSERT		7	/* XMM plus scalar, not two vectors. */
 #define IRVSHUF2(mode, imm)	(((mode)<<8) + (imm))
 
 /* VEXTRACT and VMOVMSK op2 literal: the source vector IRType is carried in

@@ -1407,13 +1407,81 @@ test("shuffle and insert are packed", function()
     for i = 1, 400 do acc = simd.insert(acc + a, i % 4, 42) end
     return acc
   end)
-  -- The mask AND the splatted constant fold together, so only the ANDN and
-  -- the OR survive in the loop.
-  checkloop("insert", {"pandn", "por"}, NOCALL, function()
+  -- A literal scalar and lane become one immediate blend on SSE4.1.
+  local cw = simd.features().sse4_1 and {"pblendw"} or {"pandn", "por"}
+  checkloop("insert", cw, NOCALL, function()
     local acc = i4(0)
     for _ = 1, 400 do acc = simd.insert(acc + a, 2, 42) end
     return acc
   end)
+
+  -- With a literal lane but a runtime scalar, insert directly from the scalar
+  -- register instead of broadcasting it and constructing a vector mask.
+  local direct_no = {"call", "pbroadcastb", "pbroadcastw", "pbroadcastd",
+		     "pbroadcastq", "pand", "pandn", "por"}
+  checkloop("i16x8 direct insert", {"pinsrw"}, direct_no, function()
+    local ct, acc, add, value = T.T.i16x8.ct, T.T.i16x8.ct(0),
+      T.T.i16x8.ct(1), 1
+    for _ = 1, 400 do
+      value = value + 13
+      acc = simd.insert(acc + add, 3, value)
+    end
+    return acc
+  end)
+  checkloop("double2 low direct insert", {"movsd"}, direct_no, function()
+    local ct, acc, add, value = T.T.double2.ct, T.T.double2.ct(0),
+      T.T.double2.ct(1), 1
+    for _ = 1, 400 do
+      value = value + 0.25
+      acc = simd.insert(acc + add, 0, value)
+    end
+    return acc
+  end)
+  checkloop("double2 high direct insert", {"unpcklpd"}, direct_no, function()
+    local ct, acc, add, value = T.T.double2.ct, T.T.double2.ct(0),
+      T.T.double2.ct(1), 1
+    for _ = 1, 400 do
+      value = value + 0.25
+      acc = simd.insert(acc + add, 1, value)
+    end
+    return acc
+  end)
+  if simd.features().sse4_1 then
+    checkloop("i8x16 direct insert", {"pinsrb"}, direct_no, function()
+      local acc, add, value = T.T.i8x16.ct(0), T.T.i8x16.ct(1), 1
+      for _ = 1, 400 do
+	value = value + 13
+	acc = simd.insert(acc + add, 7, value)
+      end
+      return acc
+    end)
+    checkloop("i32x4 direct insert", {"pinsrd"}, direct_no, function()
+      local acc, add, value = i4(0), i4(1), 1
+      for _ = 1, 400 do
+	value = value + 13
+	acc = simd.insert(acc + add, 2, value)
+      end
+      return acc
+    end)
+    checkloop("float4 direct insert", {"insertps"}, direct_no, function()
+      local acc, add, value = T.T.float4.ct(0), T.T.float4.ct(1), 1
+      for _ = 1, 400 do
+	value = value + 0.25
+	acc = simd.insert(acc + add, 2, value)
+      end
+      return acc
+    end)
+    if ffi.abi("64bit") then
+      checkloop("i64x2 direct insert", {"pinsrq"}, direct_no, function()
+	local acc, add, value = T.T.i64x2.ct(0), T.T.i64x2.ct(1), 1
+	for _ = 1, 400 do
+	  value = value + 13
+	  acc = simd.insert(acc + add, 1, value)
+	end
+	return acc
+      end)
+    end
+  end
 end)
 
 test("vector loads and stores use MOVUPS", function()

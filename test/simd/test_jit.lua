@@ -616,6 +616,22 @@ test("ffi.simd insert and shuffle on trace", function()
 	for _ = 1, n do acc = simd.insert(acc + a, lane, kv) end
 	return acc
       end, 200)
+      -- Generate a literal lane index while making the inserted scalar change
+      -- on every iteration. This reaches the direct PINSR/INSERTPS lowering,
+      -- and exercises every immediate lane value against the interpreter.
+      local src = string.format([[
+	local simd, ct, add = ...
+	return function(n)
+	  local acc, value = ct(0), 1
+	  for _ = 1, n do
+	    value = value + %s
+	    acc = simd.insert(acc + add, %d, value)
+	  end
+	  return acc
+	end
+      ]], ti.fp and "0.25" or "13", lane)
+      local direct = assert(loadstring(src))(simd, ct, a)
+      diffop(ti, "insert dynamic scalar " .. lane, direct, 200)
     end
     local rev, mix = {}, {}
     for i = 1, ti.lanes do

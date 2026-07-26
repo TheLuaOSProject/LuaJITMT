@@ -981,9 +981,10 @@ static void asm_vecshuf(ASMState *as, IRIns *ir)
 }
 
 /*
-** VSHUF2's second source is carried through the adjacent CARG. Skip that
-** structural use while checking whether a one-use XLOAD can become the
-** instruction's read-only memory operand.
+** VSHUF2's second source is carried through the adjacent CARG. Except for
+** scalar INSERT mode it is another vector. Skip that structural use while
+** checking whether a one-use XLOAD can become the instruction's read-only
+** memory operand.
 */
 static int asm_vecshuf2canfuseload(ASMState *as, IRRef ref)
 {
@@ -1016,6 +1017,44 @@ static void asm_vecshuf2(ASMState *as, IRIns *ir)
   lit = (uint32_t)k->i;
   mode = lit >> 8;
   imm = (int32_t)(lit & 255);
+  if (mode == IRVSHUF2_INSERT) {
+    IRType t = irt_type(ir->t);
+    int fp = irt_isvecfp(ir->t);
+    int w = t == IRT_V2I64;
+    Reg left;
+    lj_assertA(!wide, "scalar insert into a wide vector");
+    dest = ra_dest(as, ir, RSET_FPR);
+    left = ra_alloc1(as, lref, RSET_FPR);
+    right = ra_alloc1(as, rref, fp ? RSET_FPR : RSET_GPR);
+    if (as->flags & JIT_F_AVX) {
+      if (t == IRT_V2F64) {
+	emit_vexrr(as, imm ? XO_UNPCKLPD : XO_MOVSD,
+		   dest, left, right);
+      } else {
+	xo = fp ? XO_INSERTPS :
+	     t == IRT_V16I8 ? XO_PINSRB :
+	     t == IRT_V8I16 ? XO_PINSRW : XO_PINSRD;
+	emit_i8(as, fp ? imm << 4 : imm);
+	emit_vexrrw(as, xo, dest, left, right, w);
+      }
+    } else {
+      if (t == IRT_V2F64) {
+	emit_rr(as, imm ? XO_UNPCKLPD : XO_MOVSD, dest, right);
+      } else {
+	xo = fp ? XO_INSERTPS :
+	     t == IRT_V16I8 ? XO_PINSRB :
+	     t == IRT_V8I16 ? XO_PINSRW : XO_PINSRD;
+	emit_i8(as, fp ? imm << 4 : imm);
+	if (asm_vec3byte(xo))
+	  emit_vrr66(as, xo, dest | (w ? REX_64 : 0),
+		     right | (w ? REX_64 : 0));
+	else
+	  emit_rr(as, xo, dest, right);
+      }
+      ra_left(as, dest, lref);
+    }
+    return;
+  }
   if (mode == IRVSHUF2_ALIGNR256) {
     Reg left, tmp;
     lj_assertA(wide && (as->flags & JIT_F_AVX2),

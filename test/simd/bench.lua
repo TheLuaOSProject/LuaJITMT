@@ -1225,6 +1225,96 @@ real_benches.blur = {
 }
 end
 
+------------------------------------------------ weighted point transforms --
+
+do
+-- Transform half a million XYZ points while injecting a per-point homogeneous
+-- weight. This is the layout used by skinning, instancing, and weighted point
+-- clouds: a scalar stream feeds one fixed vector lane, then every lane takes
+-- part in the matrix multiply. YMM processes two independent points per op.
+local XFORM_N = 1 << 19
+local XFORM_PASSES = 12
+local xform_in = ffi.new("float[?]", XFORM_N*4)
+local xform_weight = ffi.new("float[?]", XFORM_N)
+local xform_out_s = ffi.new("float[?]", XFORM_N*4)
+local xform_out_x = ffi.new("float[?]", XFORM_N*4)
+local xform_out_y = has_ymm and ffi.new("float[?]", XFORM_N*4)
+for i = 0, XFORM_N-1 do
+  local p = i*4
+  xform_in[p] = ((i*17) % 1024 - 512) / 128
+  xform_in[p+1] = ((i*29) % 2048 - 1024) / 256
+  xform_in[p+2] = ((i*43) % 4096 - 2048) / 512
+  xform_in[p+3] = -999  -- Deliberately replaced by the scalar weight stream.
+  xform_weight[i] = 0.5 + (i % 257) / 256
+end
+
+local function xform_scalar()
+  local src, weight, out = xform_in, xform_weight, xform_out_s
+  for _ = 1, XFORM_PASSES do
+    for i = 0, XFORM_N-1 do
+      local p = i*4
+      local x, y, z, w = src[p], src[p+1], src[p+2], weight[i]
+      out[p]   = ((1.125*x + -0.375*y) + 0.25*z) + 3.5*w
+      out[p+1] = ((0.125*x +  0.875*y) + -0.5*z) + -2.25*w
+      out[p+2] = ((-0.25*x +  0.375*y) + 1.25*z) + 0.75*w
+      out[p+3] = ((0.03125*x + -0.0625*y) + 0.125*z) + 1.0*w
+    end
+  end
+  return sample_sum(out, XFORM_N*4)
+end
+
+local xform_in4 = ffi.cast(f4p, xform_in)
+local xform_out4 = ffi.cast(f4p, xform_out_x)
+local function xform_xmm()
+  local c0 = f4(1.125, 0.125, -0.25, 0.03125)
+  local c1 = f4(-0.375, 0.875, 0.375, -0.0625)
+  local c2 = f4(0.25, -0.5, 1.25, 0.125)
+  local c3 = f4(3.5, -2.25, 0.75, 1)
+  for _ = 1, XFORM_PASSES do
+    for i = 0, XFORM_N-1 do
+      local p = simd.insert(xform_in4[i], 3, xform_weight[i])
+      local x = simd.shuffle(p, 0, 0, 0, 0)
+      local y = simd.shuffle(p, 1, 1, 1, 1)
+      local z = simd.shuffle(p, 2, 2, 2, 2)
+      local w = simd.shuffle(p, 3, 3, 3, 3)
+      xform_out4[i] = ((c0*x + c1*y) + c2*z) + c3*w
+    end
+  end
+  return sample_sum(xform_out_x, XFORM_N*4)
+end
+
+local xform_in8 = has_ymm and ffi.cast(f8p, xform_in)
+local xform_out8 = has_ymm and ffi.cast(f8p, xform_out_y)
+local function xform_ymm()
+  local c0 = f8(1.125, 0.125, -0.25, 0.03125,
+		 1.125, 0.125, -0.25, 0.03125)
+  local c1 = f8(-0.375, 0.875, 0.375, -0.0625,
+		 -0.375, 0.875, 0.375, -0.0625)
+  local c2 = f8(0.25, -0.5, 1.25, 0.125,
+		 0.25, -0.5, 1.25, 0.125)
+  local c3 = f8(3.5, -2.25, 0.75, 1, 3.5, -2.25, 0.75, 1)
+  for _ = 1, XFORM_PASSES do
+    for i = 0, XFORM_N/2-1 do
+      local p = xform_in8[i]
+      p = simd.insert(p, 3, xform_weight[i*2])
+      p = simd.insert(p, 7, xform_weight[i*2+1])
+      local x = simd.shuffle(p, 0, 0, 0, 0, 4, 4, 4, 4)
+      local y = simd.shuffle(p, 1, 1, 1, 1, 5, 5, 5, 5)
+      local z = simd.shuffle(p, 2, 2, 2, 2, 6, 6, 6, 6)
+      local w = simd.shuffle(p, 3, 3, 3, 3, 7, 7, 7, 7)
+      xform_out8[i] = ((c0*x + c1*y) + c2*z) + c3*w
+    end
+  end
+  return sample_sum(xform_out_y, XFORM_N*4)
+end
+
+real_benches.transform = {
+  scalar = xform_scalar, xmm = xform_xmm, ymm = xform_ymm,
+  name = "weighted 4x4 point transform", mpoints = XFORM_N/1000000,
+  cmp = function(a, b) return approx(a, b, 2e-5) end,
+}
+end
+
 ----------------------------------------------------------- 64-tap audio FIR --
 
 do
@@ -1745,9 +1835,10 @@ else
 end
 
 io.write(string.format(
-  "\nReal-world kernels: 1080p RGBA merge + blur, 4K depth tiles, %.0f MiB checksums, %.0f MiB INT8 ranges + %.0f MiB ternary dots, %.0fs PCM envelope, %.1fs fixed FIR, %.2fs float FIR, %d particles, %d ChaCha blocks\n",
+  "\nReal-world kernels: 1080p RGBA merge + blur, 4K depth tiles, %.0f MiB checksums, %.0f MiB INT8 ranges + %.0f MiB ternary dots, %.1fM weighted points, %.0fs PCM envelope, %.1fs fixed FIR, %.2fs float FIR, %d particles, %d ChaCha blocks\n",
   real_benches.checksum.mib, real_benches.activations.mib,
   real_benches.ternary.mib,
+  real_benches.transform.mpoints,
   real_benches.pcm.seconds, real_benches.pcmfir.seconds,
   real_benches.audio.seconds,
   real_benches.particles.count,
@@ -1778,6 +1869,7 @@ run_real(real_benches.pcmfir)
 run_real(real_benches.activations)
 run_real(real_benches.ternary)
 run_real(real_benches.blur)
+run_real(real_benches.transform)
 run_real(real_benches.audio)
 run_real(real_benches.particles)
 run_real(real_benches.chacha)

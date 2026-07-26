@@ -567,6 +567,10 @@ do
   end
   op_cost("i32x4 select", function() return ia, ib end,
 	  function(x, y) return simd.select(simd.gt(x, y), x, y) end)
+  op_cost("i32x4 insert const", function() return ia end,
+	  function(x) return simd.insert(x, 2, 42) end)
+  op_cost("i32x4 insert scalar", function() return ia, 7 end,
+	  function(x, y) return simd.insert(x, 2, y) end)
   op_cost("i32x4 shuffle const", function() return ia, ib end,
 	  function(x) return simd.shuffle(x, 3, 2, 1, 0) end)
   op_cost("i32x4 shuffle vector", function() return ia, i4(3, 2, 1, 0) end,
@@ -912,6 +916,16 @@ if has_ymm then
     function() return i4(3), i4(5) end,
     function() return i8(3), i8(5) end,
     function(x, y) return simd.select(simd.gt(x, y), x, y) end)
+  width_cost("int32 insert const",
+    function() return i4(3) end,
+    function() return i8(3) end,
+    function(x) return simd.insert(x, 2, 42) end,
+    function(x) return simd.insert(x, 5, 42) end)
+  width_cost("int32 insert scalar",
+    function() return i4(3), 7 end,
+    function() return i8(3), 7 end,
+    function(x, y) return simd.insert(x, 2, y) end,
+    function(x, y) return simd.insert(x, 5, y) end)
   width_cost("int32 shuffle const",
     function() return i4(0, 1, 2, 3), i4(0) end,
     function() return i8(0, 1, 2, 3, 4, 5, 6, 7), i8(0) end,

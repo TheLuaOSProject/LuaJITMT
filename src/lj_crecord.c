@@ -3186,7 +3186,7 @@ void LJ_FASTCALL recff_ffi_simd_insert(jit_State *J, RecordFFData *rd)
   TRef trlane = J->base[1], trval = J->base[2];
   uint8_t kbuf[LJ_VEC_MAXSIZE];
   int32_t lane;
-  TRef splat, kmask;
+  TRef splat, kmask, ra;
   CType *sct;
   if (!trlane) lj_trace_err(J, LJ_TRERR_NYIVEC);
   if (!tref_isinteger(trlane)) {
@@ -3197,8 +3197,32 @@ void LJ_FASTCALL recff_ffi_simd_insert(jit_State *J, RecordFFData *rd)
   sct = ctype_get(cts, tref_isinteger(trval) ? CTID_INT32 : CTID_DOUBLE);
   splat = crec_vec_splat(J, cts, vt, &vi, trval, sct, &rd->argv[2]);
   if (tref_isk(trlane)) {
+    uint32_t i;
     lane = IR(tref_ref(trlane))->i;
     if ((uint32_t)lane >= (uint32_t)vi.lanes) lj_trace_err(J, LJ_TRERR_BADTYPE);
+    if (!(vt & IRT_VEC256) && IR(tref_ref(splat))->o == IR_VSPLAT &&
+	(veck_isfp(vi.kind) ?
+	 (vi.esize == 8 || (J->flags & JIT_F_SSE4_1)) :
+	 (vi.esize == 2 || ((J->flags & JIT_F_SSE4_1) &&
+			    (vi.esize != 8 || LJ_64))))) {
+      IRRef sr = IR(tref_ref(splat))->op1;
+      ra = crec_simd_shuf2_emit(J, vt, a, TREF(sr, irt_t(IR(sr)->t)),
+				IRVSHUF2_INSERT, (uint32_t)lane);
+      J->base[0] = crec_vec_box(J, ra, vt, id);
+      return;
+    }
+    /*
+    ** An immutable constant-lane insert is a two-input blend: every lane
+    ** comes from the original vector except one from the splat. Prefer the
+    ** immediate blend forms when the ISA can express that mask directly.
+    */
+    for (i = 0; i < vi.lanes; i++) kbuf[i] = (uint8_t)i;
+    kbuf[lane] = (uint8_t)(vi.lanes + lane);
+    ra = crec_simd_shuf2_direct(J, vt, &vi, a, splat, kbuf);
+    if (ra) {
+      J->base[0] = crec_vec_box(J, ra, vt, id);
+      return;
+    }
     memset(kbuf, 0, sizeof(kbuf));
     memset(kbuf + (uint32_t)lane * vi.esize, 0xff, vi.esize);
     kmask = lj_ir_kvec(J, vt, kbuf);

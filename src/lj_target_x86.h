@@ -496,6 +496,7 @@ typedef enum {
   XO_PBLENDD =	XO_0f3a(02),		/* AVX2 */
   XO_PBLENDW =	XO_0f3a(0e),		/* SSE4.1 */
   XO_PINSRB =	XO_0f3a(20),		/* SSE4.1 */
+  XO_INSERTPS =	XO_0f3a(21),		/* SSE4.1 */
   XO_PINSRD =	XO_0f3a(22),		/* SSE4.1 */
   XO_PEXTRB =	XO_0f3a(14),		/* SSE4.1 */
   XO_PEXTRD =	XO_0f3a(16),		/* SSE4.1 */
