@@ -72,7 +72,7 @@ static void rec_check_ir(jit_State *J)
     case IRMcst:
       if (i >= REF_BIAS) { err = "constant in IR range"; break; }
       if (irt_isvec(ir->t))
-	i += 2;  /* Skip the two payload slots of a 128 bit constant. */
+	i += irt_vecslots(ir->t);  /* Skip the vector constant payload. */
       else if (irt_is64(ir->t) && ir->o != IR_KNULL)
 	i++;
       continue;

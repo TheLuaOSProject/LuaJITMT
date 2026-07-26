@@ -731,4 +731,102 @@ test("ffi.simd bitcast and convert on trace", function()
   end, 300)
 end)
 
+if simd.features().avx2 then
+  test("256-bit add/sub differential", function()
+    for _, ti in ipairs(T.W) do
+      local lanes = {}
+      for i = 1, ti.lanes do lanes[i] = i * 3 - 11 end
+      local ct, a, one = ti.ct, T.vec(ti, lanes), ti.ct(1)
+      diff(ti.name .. " ymm add/sub", function(n)
+	local acc = ct(0)
+	for _ = 1, n do acc = acc + a - one end
+	return acc
+      end, 300)
+    end
+  end)
+
+  test("256-bit direct multiply and floating division", function()
+    local names = {"float8", "double4", "i16x16", "u16x16", "i32x8", "u32x8"}
+    for _, name in ipairs(names) do
+      local ct = T.W[name].ct
+      diff(name .. " ymm multiply", function(n)
+	local acc, k = ct(1), ct(3)
+	for _ = 1, n do acc = acc * k + ct(1) end
+	return acc
+      end, 80)
+    end
+    for _, name in ipairs({"float8", "double4"}) do
+      local ct = T.W[name].ct
+      diff(name .. " ymm divide", function(n)
+	local acc, a = ct(1), ct(0.25)
+	for _ = 1, n do acc = (acc + a) / ct(2) end
+	return acc
+      end, 300)
+    end
+  end)
+
+  test("256-bit constants and logical operations", function()
+    local ct = T.W.u32x8.ct
+    local a = ct(0xaaaaaaaa, 1, 2, 3, 0x55555555, 5, 6, 7)
+    local b = ct(0x55555555, 8, 9, 10, 0xaaaaaaaa, 12, 13, 14)
+    diff("u32x8 ymm logic", function(n)
+      local acc = ct(0)
+      for _ = 1, n do acc = simd.bxor(simd.bor(acc, a), b) end
+      return acc
+    end, 301)
+  end)
+
+  test("256-bit memory, guards, and sunk boxes", function()
+    local ti, N = T.W.i32x8, 48
+    local ct = ti.ct
+    local src = ffi.new(ffi.typeof("$[?]", ct), N)
+    local dst = ffi.new(ffi.typeof("$[?]", ct), N)
+    for i = 0, N-1 do src[i] = ct(i, i+1, i+2, i+3, i+4, i+5, i+6, i+7) end
+    diff("i32x8 ymm array", function(n)
+      for _ = 1, n do
+	for i = 0, N-1 do dst[i] = src[i] + ct(7) end
+      end
+      return dst[0], dst[N-1]
+    end, 20)
+    local a = ct(1, 2, 3, 4, 5, 6, 7, 8)
+    diff("i32x8 ymm side exit", function(n)
+      local acc, hits = ct(0), 0
+      for i = 1, n do
+	local v = acc + a
+	if i % 37 == 0 then hits = hits + v[7] end
+	acc = v - a + a
+      end
+      return acc, hits, acc[0], acc[7]
+    end, 500)
+    diff("i32x8 ymm sunk box", function(n)
+      local acc = ct(0)
+      for i = 1, n do
+	acc = acc + a
+	if i == n then return acc, acc[0], acc[7] end
+      end
+    end, 300)
+  end)
+
+  test("256-bit register pressure spills full YMM values", function()
+    local ct = T.W.float8.ct
+    local v = {}
+    for i = 1, 20 do v[i] = ct(i, i+1, i+2, i+3, i+4, i+5, i+6, i+7) end
+    diff("float8 ymm pressure", function(n)
+      local a1,a2,a3,a4,a5 = ct(0),ct(0),ct(0),ct(0),ct(0)
+      local a6,a7,a8,a9,a10 = ct(0),ct(0),ct(0),ct(0),ct(0)
+      local a11,a12,a13,a14,a15 = ct(0),ct(0),ct(0),ct(0),ct(0)
+      local a16,a17,a18,a19,a20 = ct(0),ct(0),ct(0),ct(0),ct(0)
+      for _ = 1, n do
+	a1=a1+v[1]; a2=a2+v[2]; a3=a3+v[3]; a4=a4+v[4]
+	a5=a5+v[5]; a6=a6+v[6]; a7=a7+v[7]; a8=a8+v[8]
+	a9=a9+v[9]; a10=a10+v[10]; a11=a11+v[11]; a12=a12+v[12]
+	a13=a13+v[13]; a14=a14+v[14]; a15=a15+v[15]; a16=a16+v[16]
+	a17=a17+v[17]; a18=a18+v[18]; a19=a19+v[19]; a20=a20+v[20]
+      end
+      return a1+a2+a3+a4+a5+a6+a7+a8+a9+a10+
+	     a11+a12+a13+a14+a15+a16+a17+a18+a19+a20
+    end, 300)
+  end)
+end
+
 return T

@@ -153,12 +153,12 @@ enum {
 
 /* -- Exit state ---------------------------------------------------------- */
 
-/* A saved FP register. The full 128 bits are kept, because a vector value may
-** be live in an XMM register at a side exit (see lj_snap.c:snap_unsink()).
+/* A saved FP register. The full native vector register is kept, because a
+** vector value may be live at a side exit (see lj_snap.c:snap_unsink()).
 */
 typedef union {
   lua_Number n;			/* Low half, as used by scalar FP values. */
-  uint8_t b[16];		/* Raw bytes, as used by vector values. */
+  uint8_t b[LJ_64 ? 32 : 16];	/* Raw bytes, as used by vector values. */
 } ExitFPR;
 
 /* This definition must match with the *.dasc file(s). */

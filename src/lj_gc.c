@@ -262,7 +262,7 @@ static void gc_traverse_trace(global_State *g, GCtrace *T)
     if (ir->o == IR_KGC)
       gc_markobj(g, ir_kgc(ir));
     if (irt_isvec(ir->t))
-      ref += 2;
+      ref += irt_vecslots(ir->t);
     else if (irt_is64(ir->t) && ir->o != IR_KNULL)
       ref++;
   }
@@ -906,4 +906,3 @@ void *lj_mem_grow(lua_State *L, void *p, MSize *szp, MSize lim, MSize esz)
   *szp = sz;
   return p;
 }
-

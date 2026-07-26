@@ -407,7 +407,7 @@ static Reg ra_rematk(ASMState *as, IRRef ref)
 #endif
 #if LJ_TARGET_X86ORX64
   if (ir->o == IR_KVEC) {
-    emit_loadk128(as, r, ir);
+    emit_loadkvec(as, r, ir);
   } else
 #endif
   if (emit_canremat(REF_BASE) && ir->o == IR_BASE) {
@@ -443,9 +443,9 @@ static int32_t ra_spill(ASMState *as, IRIns *ir)
   lj_assertA(ir >= as->ir + REF_TRUE,
 	     "spill of K%03d", REF_BIAS - (int)(ir - as->ir));
   if (!ra_hasspill(slot)) {
-    if (irt_isvec(ir->t)) {  /* 128 bit values need four consecutive slots. */
+    if (irt_isvec(ir->t)) {
       slot = as->evenspill;
-      as->evenspill += 4;
+      as->evenspill += irt_isvec256(ir->t) ? 8 : 4;
     } else if (irt_is64(ir->t)) {
       slot = as->evenspill;
       as->evenspill += 2;
@@ -826,7 +826,7 @@ static void ra_left(ASMState *as, Reg dest, IRRef lref)
 	}
 #if LJ_TARGET_X86ORX64 && LJ_HASFFI
       } else if (ir->o == IR_KVEC) {
-	emit_loadk128(as, dest, ir);
+	emit_loadkvec(as, dest, ir);
 	return;
 #endif
 #if LJ_64
@@ -2243,7 +2243,7 @@ static void asm_setup_regsp(ASMState *as)
     if (irt_isvec(ir->t)) {
       /* Will become non-zero only for constants interned into the mcode. */
       ir->i = 0;
-      ir += 2;  /* Skip the two payload slots of a 128 bit constant. */
+      ir += irt_vecslots(ir->t);  /* Skip the vector constant payload. */
       continue;
     }
     if (irt_is64(ir->t) && ir->o != IR_KNULL) {

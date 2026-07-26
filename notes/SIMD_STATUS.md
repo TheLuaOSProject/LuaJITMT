@@ -13,7 +13,8 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
   means; it is the first thing to revisit if this work is meant to land in
   the fork rather than stand alone.
 * Latest pushed commit: see "Milestones" below.
-* Target: **x86-64-v3** (SSE4.2 + AVX2 + BMI2), 128-bit vectors.
+* Target: **x86-64-v3** (SSE4.2 + AVX2 + BMI2), with complete 128-bit
+  lowering and the first 256-bit YMM lowering slice.
   Feature use is runtime detected, so the binary still runs on older CPUs.
 
 ## Milestones
@@ -43,6 +44,8 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M21 | FMA form selection (132/213/231) so no register copy is needed | done |
 | M22 | `simd.mulhi`, the high half of the lane product (PMULHW/PMULHUW) | done |
 | M23 | Move transient IR marks to a scratch bitset, reserving type bit `0x20` for 256-bit width | done |
+| M24 | 256-bit IR/KVEC values, YMM loads/stores/spills/exits, and AVX2 add/sub/direct-mul/div/logical lowering | done |
+| M25 | Benchmarks compare scalar, 128-bit XMM, and 256-bit AVX2/YMM execution | done |
 
 ## Commands that pass
 
@@ -52,7 +55,8 @@ make -j$(nproc)                       # release build (x86-64-v3 target)
 ./src/luajit test/simd/run.lua -interp
 ./src/luajit test/simd/run.lua -jit
 ./src/luajit test/simd/run.lua -mixed  # JIT on, but pre-loaded protos off
-./src/luajit test/simd/bench.lua       # microbenchmarks
+./src/luajit test/simd/bench.lua       # scalar/XMM/YMM microbenchmarks
+./src/luajit test/simd/bench_ops.lua   # kernels and XMM/YMM operation costs
 for s in 1 7 999 31337; do SIMD_SEED=$s ./src/luajit test/simd/run.lua; done
 make clean && make -j$(nproc) XCFLAGS=-DLUAJIT_DISABLE_JIT   # also passes
 make -j$(nproc) CCDEBUG=-g XCFLAGS=-DLUA_USE_ASSERT          # also passes
@@ -88,15 +92,15 @@ backend bug that neither of the other two modes reached. Keep it.
 
 ```
 src/lj_ir.h                      IRT_V16I8..IRT_V2F64, IR_KVEC, vector IR ops
-src/lj_ir.c   src/lj_iropt.h     lj_ir_kvec(), 128 bit constant interning
-src/lj_asm.c                     vector register class, 4-slot spills,
+src/lj_ir.c   src/lj_iropt.h     lj_ir_kvec(), 128/256 bit constant interning
+src/lj_asm.c                     vector register class, 4/8-slot spills,
                                  ra_left()/ra_rematk() for IR_KVEC, dispatch
-src/lj_asm_x86.h                 vector XLOAD/XSTORE (MOVUPS)
+src/lj_asm_x86.h                 vector XLOAD/XSTORE (MOVUPS/VMOVUPS)
 src/lj_asm_x86_vec.h             the x86-64 vector backend (new)
-src/lj_emit_x86.h                emit_prefix66(), emit_loadk128(), spills
-src/lj_target_x86.h              packed SSE opcodes, 128 bit ExitState.fpr
-src/vm_x86.dasc src/vm_x64.dasc  save full XMM registers at a trace exit
-src/lj_snap.c                    16 byte restore, sunk vector boxes
+src/lj_emit_x86.h                VEX width encoding, emit_loadkvec(), spills
+src/lj_target_x86.h              packed SSE/AVX opcodes, 256 bit ExitState.fpr
+src/vm_x86.dasc src/vm_x64.dasc  save full XMM/YMM registers at a trace exit
+src/lj_snap.c                    16/32 byte restore, sunk vector boxes
 src/lj_crecord.c                 crec_vec2irt(), crec_arith_vec(), boxing
 src/lj_gc.c src/lj_opt_sink.c src/lj_opt_split.c
                                  skip the two payload slots of a KVEC
@@ -146,9 +150,10 @@ notes/*                          design/status/matrix/testing notes (new)
   characters by the generic string formatting. `test_codegen.lua` now dumps a
   vector trace in all three colour modes and checks the constant is 32 hex
   digits.
-* A 128-bit constant occupies **three** IR slots, and every loop that walks the
-  constant range from `nk` has to skip the two payload slots or it will decode
-  them as instructions. `gc_traverse_trace()`, `lj_opt_sink()` and the
+* A vector constant occupies **three or five** IR slots, and every loop that
+  walks the constant range from `nk` has to skip its two or four payload slots
+  or it will decode them as instructions. `gc_traverse_trace()`,
+  `lj_opt_sink()` and the
   constant loop in `lj_asm.c` do this with `irt_isvec()`;
   `rec_check_ir()` in `lj_record.c` did not, so the assert build tripped
   "IRMref op2 out of range" on a payload word. It stayed hidden until a new
@@ -260,13 +265,16 @@ Each of these is a decision, not an unfinished edge. None of them can give a
 wrong answer: where the JIT has no lowering the trace aborts with
 `LJ_TRERR_NYIVEC` and the interpreter produces the same value.
 
-1. **128-bit only in the JIT.** Other widths keep working interpreted.
-   256-bit is blocked by the IR type encoding, not by AVX2; see
-   `SIMD_DESIGN.md` D9 for the full list of what it would take.
-2. **Non-constant lane index in `shuffle`/`shuffle2`.** Rejected at record
-   time. A runtime permutation would need a `PSHUFB` control mask assembled
-   from N separate variable indices, which costs more than it saves.
-   `insert` *does* support a variable index.
+1. **256-bit lowering is deliberately partial.** AVX2 hosts now JIT
+   vector-vector add/sub, direct hardware multiply (FP and 16/32-bit integer
+   lanes), FP division, unary minus, logical operations, select, bitcast, and
+   unaligned memory round trips. Dynamic scalar splats, equality, reductions,
+   shuffles, comparisons, shifts, FMA, and the remaining `ffi.simd` surface
+   still abort the trace cleanly. Eight- and 64-bit integer multiply also stay
+   interpreted until their emulation sequences become width-aware.
+2. **Separate non-constant scalar indices in `shuffle`/`shuffle2`.** Rejected
+   at record time. Pass one runtime index vector instead; that form and
+   variable `insert` are supported for 128-bit vectors.
 3. **Vectors by value in FFI callbacks are x86-64 SysV only.** Supported for 8
    and 16 byte vectors there (see `SIMD_DESIGN.md` D14). On Windows x64, x86
    and non-x86 targets, and for any vector wider than one register, `ffi.cast`
@@ -283,19 +291,36 @@ wrong answer: where the JIT has no lowering the trace aborts with
 
 
 `./src/luajit test/simd/bench.lua`, N=65536, 200 passes, best of 3, on this
-machine:
+AVX2 machine:
 
 ```
-saxpy (float)              scalar     6.8 ms   vector     1.8 ms    3.72x
-dot product (float)        scalar     6.1 ms   vector     1.5 ms    3.99x
-horizontal max (int32)     scalar     4.7 ms   vector     4.0 ms    1.16x
-clamp (float)              scalar    29.1 ms   vector     1.9 ms   15.07x
+saxpy (float)              scalar     5.5 ms   XMM     1.4 ms  3.85x   YMM     1.1 ms  4.85x (1.26x/XMM)
+dot product (float)        scalar     5.0 ms   XMM     1.3 ms  3.97x   YMM     0.7 ms  7.48x (1.88x/XMM)
+horizontal max (int32)     scalar     3.8 ms   XMM     3.7 ms    1.02x
+clamp (float)              scalar    24.4 ms   XMM     1.6 ms   15.23x
 ```
 
-saxpy and the dot product reach ~4x, which is the ceiling for 4 lanes. Clamp
-wins much more because the scalar version is branchy and the vector version is
-branchless. Horizontal max shows no gain: both versions stream 256 KB per pass
-and are memory bound, not ALU bound.
+The dot product gets close to the expected second width doubling: 4 lanes are
+3.97x scalar and 8 lanes are 7.48x. SAXPY improves less because it streams two
+loads and one store and becomes memory-bound. Clamp wins much more because the
+scalar version is branchy and the vector version is branchless. Horizontal max
+shows no gain: both versions stream 256 KB per pass and are memory bound, not
+ALU bound. Those last two remain XMM-only until wide min/max and reductions are
+lowered.
+
+`bench_ops.lua` also compares dependent XMM and YMM operations directly. On
+this machine the YMM instruction has essentially the same latency while doing
+twice the lane work:
+
+```
+                                  XMM       YMM   lane throughput
+float add                     0.38 ns   0.38 ns       2.00x
+float mul                     0.76 ns   0.76 ns       2.00x
+float div                     2.08 ns   2.09 ns       1.99x
+int32 add                     0.22 ns   0.22 ns       2.00x
+int32 mul                     1.89 ns   1.89 ns       2.00x
+int32 xor                     0.25 ns   0.25 ns       2.01x
+```
 
 `simd.fma` is worth measuring separately, because whether it helps depends
 entirely on whether the loop is arithmetic bound:

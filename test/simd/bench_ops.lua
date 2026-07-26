@@ -26,6 +26,10 @@ local i4 = ffi.typeof("i32x4")
 local u4 = ffi.typeof("u32x4")
 local i16 = ffi.typeof("i16x8")
 local u8 = ffi.typeof("u8x16")
+local features = simd.features()
+local has_ymm = features.avx2 and features.vecsize >= 32
+local f8 = has_ymm and ffi.typeof("float8")
+local i8 = has_ymm and ffi.typeof("i32x8")
 
 local failures = 0
 
@@ -186,7 +190,7 @@ end
 -- and makes it slightly slower. The loop-carried version is bound by the
 -- chain itself, which is where fusing two 4-cycle operations into one shows
 -- up as roughly the 2x it should be.
-if simd.features().fma then
+if features.fma then
   local N = 1 << 14
   local xs = ffi.new(ffi.typeof("$[?]", f4), N)
   for i = 0, N-1 do xs[i] = f4(i*0.0001, i*0.0002, i*0.0003, i*0.0004) end
@@ -340,7 +344,7 @@ end
 ------------------------------------------------------- per-lane shifts -----
 -- Each lane scaled by its own power of two. Without a per-lane shift this is
 -- a scalar loop; with AVX2 it is one instruction.
-if simd.features().avx2 then
+if features.avx2 then
   local N = 1 << 14
   local vals = ffi.new(ffi.typeof("$[?]", i4), N)
   local cnts = ffi.new(ffi.typeof("$[?]", i4), N)
@@ -458,7 +462,7 @@ io.write("\n== per-operation throughput (ns per 128-bit op, loop-carried) ==\n")
 
 -- A dependent chain of one operation, so the number is latency bound and
 -- directly comparable between operations. The accumulator is consumed.
-local function op_cost(name, setup, step)
+local function op_latency(setup, step)
   local ITERS = 1 << 20
   local a, b, c = setup()
   local best = math.huge
@@ -468,9 +472,14 @@ local function op_cost(name, setup, step)
     for _ = 1, ITERS do acc = step(acc, b, c) end
     local dt = os.clock() - t0
     if dt < best then best = dt end
-    if acc ~= acc then io.write("nan\n") end
+    local lane0 = tonumber(acc[0])
+    if lane0 ~= lane0 then io.write("nan\n") end
   end
-  io.write(string.format("  %-24s %6.2f ns\n", name, best*1e9/ITERS))
+  return best*1e9/ITERS
+end
+
+local function op_cost(name, setup, step)
+  io.write(string.format("  %-24s %6.2f ns\n", name, op_latency(setup, step)))
 end
 
 do
@@ -486,7 +495,7 @@ do
 	  function(x) return simd.sqrt(x) end)
   op_cost("float4 min", function() return fa, fb end,
 	  function(x, y) return simd.min(x, y) end)
-  if simd.features().fma then
+  if features.fma then
     local fma = simd.fma
     op_cost("float4 fma", function() return f4(1.0000001), fb, f4(0.5) end,
 	    function(x, y, z) return fma(x, y, z) end)
@@ -497,7 +506,7 @@ do
 	  function(x, y) return x * y end)
   op_cost("i32x4 shl const", function() return ia, ib end,
 	  function(x) return simd.shl(x, 1) end)
-  if simd.features().avx2 then
+  if features.avx2 then
     op_cost("i32x4 shl per-lane", function() return ia, i4(0, 1, 0, 1) end,
 	    function(x, y) return simd.shl(x, y) end)
   end
@@ -515,6 +524,44 @@ do
 	  function(x, y) return simd.adds(x, y) end)
   op_cost("i16x8 mulhi", function() return i16(30000), i16(30000) end,
 	  function(x, y) return simd.mulhi(x, y) end)
+end
+
+if has_ymm then
+  io.write("\n== AVX2 width comparison (dependent ns/op) ==\n")
+  io.write("                                      XMM       YMM   lane throughput\n")
+
+  local function width_cost(name, setup_xmm, setup_ymm, step)
+    local tx = op_latency(setup_xmm, step)
+    local ty = op_latency(setup_ymm, step)
+    -- YMM has twice as many lanes. 2*tx/ty is its per-lane throughput gain.
+    io.write(string.format("  %-24s %6.2f ns  %6.2f ns      %5.2fx\n",
+			   name, tx, ty, 2*tx/ty))
+  end
+
+  width_cost("float add",
+    function() return f4(1.0009765625), f4(1.00048828125) end,
+    function() return f8(1.0009765625), f8(1.00048828125) end,
+    function(x, y) return x + y end)
+  width_cost("float mul",
+    function() return f4(1.0000001), f4(1.00048828125) end,
+    function() return f8(1.0000001), f8(1.00048828125) end,
+    function(x, y) return x * y end)
+  width_cost("float div",
+    function() return f4(1e30), f4(1.0000001) end,
+    function() return f8(1e30), f8(1.0000001) end,
+    function(x, y) return x / y end)
+  width_cost("int32 add",
+    function() return i4(3), i4(5) end,
+    function() return i8(3), i8(5) end,
+    function(x, y) return x + y end)
+  width_cost("int32 mul",
+    function() return i4(1), i4(1) end,
+    function() return i8(1), i8(1) end,
+    function(x, y) return x * y end)
+  width_cost("int32 xor",
+    function() return i4(0x55555555), i4(0x33333333) end,
+    function() return i8(0x55555555), i8(0x33333333) end,
+    function(x, y) return simd.bxor(x, y) end)
 end
 
 if failures > 0 then

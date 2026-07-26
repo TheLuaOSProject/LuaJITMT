@@ -2,8 +2,8 @@
 ** x86-64 SIMD vector backend.
 ** Copyright (C) 2005-2026 Mike Pall. See Copyright Notice in luajit.h
 **
-** Included from lj_asm_x86.h. Every vector value is 128 bits wide and lives
-** in an XMM register. Memory operands are never fused into a packed
+** Included from lj_asm_x86.h. Vector values are 128 or 256 bits wide and live
+** in an XMM or YMM register. Memory operands are never fused into a packed
 ** instruction, because a vector cdata payload is only 8 byte aligned and a
 ** vector may also be loaded through a pointer to arbitrary memory: everything
 ** goes through MOVUPS.
@@ -222,6 +222,7 @@ static void asm_vecbin(ASMState *as, IRIns *ir, x86Op xo, int is3byte)
   IRRef lref = ir->op1, rref = ir->op2;
   RegSet allow = RSET_FPR;
   Reg dest, right;
+  int wide = irt_isvec256(ir->t);
   UNUSED(is3byte);  /* The VEX map is derived from the opcode itself. */
   if ((as->flags & JIT_F_AVX)) {
     /* Three operands: the destination may alias either source. */
@@ -230,9 +231,10 @@ static void asm_vecbin(ASMState *as, IRIns *ir, x86Op xo, int is3byte)
     left = ra_alloc1(as, lref, RSET_FPR);
     right = lref == rref ? left :
 	    ra_alloc1(as, rref, rset_exclude(RSET_FPR, left));
-    emit_vexrr(as, xo, dest, left, right);
+    emit_vexrrl(as, xo, dest, left, right, wide);
     return;
   }
+  lj_assertA(!wide, "256 bit vector operation without AVX");
   right = IR(rref)->r;
   if (ra_hasreg(right)) {
     rset_clear(allow, right);
@@ -348,8 +350,10 @@ static void asm_vmul(ASMState *as, IRIns *ir)
     else
       asm_vmul_i32_sse2(as, ir);
   } else if (irt_type(ir->t) == IRT_V16I8) {
+    if (irt_isvec256(ir->t)) lj_trace_err(as->J, LJ_TRERR_NYIVEC);
     asm_vmul_i8(as, ir);
   } else {
+    if (irt_isvec256(ir->t)) lj_trace_err(as->J, LJ_TRERR_NYIVEC);
     asm_vmul_i64(as, ir);
   }
 }
@@ -692,6 +696,11 @@ static void asm_vec(ASMState *as, IRIns *ir)
 {
   IRType t = irt_type(ir->t);
   x86Op xo;
+  if (irt_isvec256(ir->t) &&
+      !(ir->o == IR_VADD || ir->o == IR_VSUB || ir->o == IR_VMUL ||
+	ir->o == IR_VDIV || ir->o == IR_VAND || ir->o == IR_VOR ||
+	ir->o == IR_VXOR || ir->o == IR_VANDN))
+    lj_trace_err(as->J, LJ_TRERR_NYIVEC);
   switch ((IROp)ir->o) {
   case IR_VSPLAT: asm_vsplat(as, ir); return;
   case IR_VMUL: asm_vmul(as, ir); return;

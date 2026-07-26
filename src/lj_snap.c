@@ -454,7 +454,7 @@ static TRef snap_replay_const(jit_State *J, IRIns *ir)
     return lj_ir_k64(J, (IROp)ir->o, ir_k64(ir)->u64);
 #if LJ_HASFFI
   case IR_KVEC:  /* Stored into a sunk vector box, see snap_unsink(). */
-    return lj_ir_kvec(J, irt_type(ir->t), ir_kvec(ir));
+    return lj_ir_kvec(J, irt_vtype(ir->t), ir_kvec(ir));
 #endif
   case IR_KPTR: return lj_ir_kptr(J, ir_kptr(ir));  /* Continuation. */
   case IR_KNULL: return lj_ir_knull(J, irt_type(ir->t));
@@ -483,7 +483,7 @@ static TRef snap_pref(jit_State *J, GCtrace *T, SnapEntry *map, MSize nmax,
   else if (!regsp_used(ir->prev))
     tr = 0;
   else if (!bloomtest(seen, ref) || (tr = snap_dedup(J, map, nmax, ref)) == 0)
-    tr = emitir(IRT(IR_PVAL, irt_type(ir->t)), ref - REF_BIAS, 0);
+    tr = emitir(IRT(IR_PVAL, irt_vtype(ir->t)), ref - REF_BIAS, 0);
   return tr;
 }
 
@@ -826,11 +826,12 @@ static void snap_restoredata(jit_State *J, GCtrace *T, ExitState *ex,
       }
     }
   }
-  lj_assertJ(sz == 1 || sz == 2 || sz == 4 || sz == 8 || sz == 16,
+  lj_assertJ(sz == 1 || sz == 2 || sz == 4 || sz == 8 ||
+	     sz == 16 || sz == 32,
 	     "restore from IR %04d with bad size %d", ref - REF_BIAS, sz);
   if (sz == 4) *(int32_t *)dst = *src;
   else if (sz == 8) *(int64_t *)dst = *(int64_t *)src;
-  else if (sz == 16) memcpy(dst, src, 16);  /* Vector value. */
+  else if (sz == 16 || sz == 32) memcpy(dst, src, sz);  /* Vector value. */
   else if (sz == 1) *(int8_t *)dst = (int8_t)*src;
   else *(int16_t *)dst = (int16_t)*src;
 }
@@ -854,7 +855,7 @@ static void snap_unsink(jit_State *J, GCtrace *T, ExitState *ex,
     setcdataV(J->L, o, cd);
     if (ir->o == IR_CNEWI) {
       uint8_t *p = (uint8_t *)cdataptr(cd);
-      lj_assertJ(sz == 4 || sz == 8 || sz == 16,
+      lj_assertJ(sz == 4 || sz == 8 || sz == 16 || sz == 32,
 		 "sunk cdata with bad size %d", sz);
       if (LJ_32 && sz == 8 && ir+1 < T->ir + T->nins && (ir+1)->o == IR_HIOP) {
 	snap_restoredata(J, T, ex, snapno, rfilt, (ir+1)->op2,
@@ -875,7 +876,7 @@ static void snap_unsink(jit_State *J, GCtrace *T, ExitState *ex,
 		     "sunk store with bad add op %d", T->ir[irs->op1].o);
 	  lj_assertJ(iro->o == IR_KINT || iro->o == IR_KINT64,
 		     "sunk store with bad const offset op %d", iro->o);
-	  if (irt_isvec(irs->t)) szs = 16;
+	  if (irt_isvec(irs->t)) szs = (CTSize)irt_vecsize(irs->t);
 	  else if (irt_is64(irs->t)) szs = 8;
 	  else if (irt_isi8(irs->t) || irt_isu8(irs->t)) szs = 1;
 	  else if (irt_isi16(irs->t) || irt_isu16(irs->t)) szs = 2;

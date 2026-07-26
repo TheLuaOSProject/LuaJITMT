@@ -195,7 +195,7 @@ static void loop_emit_phi(jit_State *J, IRRef1 *subst, IRRef1 *phi, IRRef nphi,
       IRRef rref = subst[lref];
       if (rref > invar)
 	irt_setphi(IR(rref)->t);
-      emitir_raw(IRT(IR_PHI, irt_type(ir->t)), lref, rref);
+      emitir_raw(IRT(IR_PHI, irt_vtype(ir->t)), lref, rref);
     } else {  /* Otherwise eliminate PHI. */
       irref_clearmark(J, lref);
       irt_clearphi(ir->t);

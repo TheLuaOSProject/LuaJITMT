@@ -231,7 +231,7 @@ static void sink_sweep_ins(jit_State *J)
     ir->prev = REGSP_INIT;
     /* The false-positive of irt_is64() for ASMREF_L (REF_NIL) is OK here. */
     if (irt_isvec(ir->t))
-      ir += 2;
+      ir += irt_vecslots(ir->t);
     else if (irt_is64(ir->t) && ir->o != IR_KNULL)
       ir++;
   }

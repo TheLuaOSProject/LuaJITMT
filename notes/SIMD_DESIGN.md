@@ -536,3 +536,31 @@ Those marks now live in an 8192-byte scratch bitset with one bit for every
 16-bit IR reference. The bitset is cleared at recording setup and before each
 assembly attempt. This frees the width bit without growing `IRIns` or changing
 the meaning of persistent IR.
+
+## D20. The first YMM slice includes storage and exits, not just arithmetic
+
+Setting VEX.L on `VADDPS` is the small part of 256-bit support. A real value
+also has to survive constant interning, register moves, spills, allocation
+sinking, loop PHIs, parent snapshots, and every kind of trace exit. The first
+YMM milestone therefore treats width as an end-to-end value property:
+
+* `IRT_VEC256` is preserved by TRefs, CSE, PHIs, snapshot replay, and alias
+  checks; `irt_size()` reports 32 and a KVEC owns four payload slots.
+* YMM values use eight consecutive 32-bit spill slots. Constants, cdata
+  payloads, and spills use unaligned `VMOVUPS`; register copies use
+  `VMOVAPS`.
+* On x64, `ExitFPR` is 32 bytes. The exit handler reserves 32 bytes per FP
+  register and branches on `JIT_F_AVX`: an AVX-capable host saves YMM0-YMM15,
+  while an older host executes only legacy XMM stores into the low half of
+  each slot. This keeps one binary runnable on x86-64-v2 hardware.
+* The AVX exit path executes `VZEROUPPER` after saving YMM state, and generated
+  calls do the same immediately before entering C. On Windows, a live
+  256-bit value is evicted even from XMM6-XMM15 because that ABI preserves
+  only their low 128 bits.
+
+The recorder exposes only operations whose whole lowering is width-aware:
+add/sub, direct FP or 16/32-bit integer multiply, FP division, unary minus,
+logical operations, select, and bitcast. Everything else still raises
+`NYIVEC` while recording and resumes in the interpreter. That boundary is
+intentional: an operation is not called YMM-supported until its tests inspect
+the emitted `ymm` operands and exercise upper lanes, spills, and exit rebuilds.

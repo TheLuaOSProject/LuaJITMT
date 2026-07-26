@@ -92,7 +92,7 @@ static void lj_ir_growbot(jit_State *J)
   IRIns *baseir = J->irbuf + J->irbotlim;
   MSize szins = J->irtoplim - J->irbotlim;
   lj_assertJ(szins != 0, "zero IR size");
-  lj_assertJ(J->cur.nk - J->irbotlim <= 2, "unexpected IR growth");
+  lj_assertJ(J->cur.nk - J->irbotlim <= 4, "unexpected IR growth");
   if (J->cur.nins + (szins >> 1) < J->irtoplim) {
     /* More than half of the buffer is free on top: shift up by a quarter. */
     MSize ofs = szins >> 2;
@@ -235,37 +235,42 @@ found:
   return TREF(ref, t);
 }
 
-/* Get ref of next 128 bit IR constant and optionally grow IR.
+/* Get ref of the next vector IR constant and optionally grow IR.
 ** Note: this may invalidate all IRIns *!
 */
-static LJ_AINLINE IRRef ir_nextk128(jit_State *J)
+static LJ_AINLINE IRRef ir_nextkvec(jit_State *J, uint32_t size)
 {
-  IRRef ref = J->cur.nk - 3;
+  IRRef nslot = 1 + (IRRef)(size >> 3);
+  IRRef ref = J->cur.nk - nslot;
+  lj_assertJ(size == 16 || size == 32, "bad vector constant size");
   lj_assertJ(J->state != LJ_TRACE_ASM, "bad JIT state");
   if (LJ_UNLIKELY(ref < J->irbotlim)) lj_ir_growbot(J);
-  ref = J->cur.nk - 3;
+  ref = J->cur.nk - nslot;
   J->cur.nk = ref;
   return ref;
 }
 
-/* Intern 128 bit vector constant, given by its raw bytes. */
+/* Intern a vector constant, given by its raw bytes. */
 TRef lj_ir_kvec(jit_State *J, IRType t, const void *data)
 {
   IRIns *ir, *cir = J->cur.ir;
+  IRType vt = (IRType)(t & IRT_VTYPE);
+  uint32_t size = (vt & IRT_VEC256) ? 32u : 16u;
   IRRef ref;
   for (ref = J->chain[IR_KVEC]; ref; ref = cir[ref].prev)
-    if (irt_type(cir[ref].t) == t && !memcmp(ir_kvec(&cir[ref]), data, 16))
+    if (irt_vtype(cir[ref].t) == vt &&
+	!memcmp(ir_kvec(&cir[ref]), data, size))
       goto found;
-  ref = ir_nextk128(J);
+  ref = ir_nextkvec(J, size);
   ir = IR(ref);
-  memcpy(&ir[1], data, 16);
-  ir->t.irt = (uint8_t)t;
+  memcpy(&ir[1], data, size);
+  ir->t.irt = (uint8_t)vt;
   ir->o = IR_KVEC;
   ir->op12 = 0;
   ir->prev = J->chain[IR_KVEC];
   J->chain[IR_KVEC] = (IRRef1)ref;
 found:
-  return TREF(ref, t);
+  return TREF(ref, vt);
 }
 
 /* Intern FP constant, given by its 64 bit pattern. */
@@ -422,17 +427,18 @@ void lj_ir_kvalue(lua_State *L, TValue *tv, const IRIns *ir)
     break;
     }
   case IR_KVEC: {
-    /* Render as a hex string: there is no TValue for a 128 bit constant. */
+    /* Render as a hex string: there is no TValue for a vector constant. */
     static const char hexdig[] = "0123456789abcdef";
     const uint8_t *p = ir_kvec(ir);
-    char buf[2+2*16];
+    char buf[2+2*32];
+    uint32_t size = irt_vecsize(ir->t);
     uint32_t i;
     buf[0] = '0'; buf[1] = 'x';
-    for (i = 0; i < 16; i++) {  /* Most significant byte first. */
-      buf[2+2*i] = hexdig[p[15-i] >> 4];
-      buf[3+2*i] = hexdig[p[15-i] & 15];
+    for (i = 0; i < size; i++) {  /* Most significant byte first. */
+      buf[2+2*i] = hexdig[p[size-1-i] >> 4];
+      buf[3+2*i] = hexdig[p[size-1-i] & 15];
     }
-    setstrV(L, tv, lj_str_new(L, buf, sizeof(buf)));
+    setstrV(L, tv, lj_str_new(L, buf, 2+2*size));
     break;
     }
 #endif

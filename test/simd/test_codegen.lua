@@ -547,4 +547,34 @@ test("no boxing allocation remains in a hot vector loop", function()
 	body:gsub("\n", " | "))
 end)
 
+if simd.features().avx2 then
+  test("256-bit arithmetic uses YMM encodings", function()
+    local f8 = T.W.float8.ct
+    local a = f8(1, 2, 3, 4, 5, 6, 7, 8)
+    local body = loopcode(function()
+      local acc = f8(0)
+      for _ = 1, 400 do acc = acc + a - f8(1) end
+      return acc
+    end)
+    check(body:find("vaddps ymm", 1, true) ~= nil,
+	  "float8 add must target YMM registers: " .. body:gsub("\n", " | "))
+    check(body:find("vsubps ymm", 1, true) ~= nil,
+	  "float8 sub must target YMM registers: " .. body:gsub("\n", " | "))
+    check(body:find("vmovups ymm", 1, true) ~= nil,
+	  "float8 load must move 32 bytes: " .. body:gsub("\n", " | "))
+
+    local i8 = T.W.i32x8.ct
+    local b = i8(1, 2, 3, 4, 5, 6, 7, 8)
+    body = loopcode(function()
+      local acc = i8(0)
+      for _ = 1, 400 do acc = acc + b - i8(1) end
+      return acc
+    end)
+    check(body:find("vpaddd ymm", 1, true) ~= nil,
+	  "i32x8 add must target YMM registers: " .. body:gsub("\n", " | "))
+    check(body:find("vpsubd ymm", 1, true) ~= nil,
+	  "i32x8 sub must target YMM registers: " .. body:gsub("\n", " | "))
+  end)
+end
+
 return T

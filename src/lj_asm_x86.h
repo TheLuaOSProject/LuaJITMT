@@ -590,8 +590,10 @@ static void asm_gencall(ASMState *as, const CCallInfo *ci, IRRef *args)
       gprs = REGARG_GPRS;
   }
 #endif
-  if ((void *)ci->func)
+  if ((void *)ci->func) {
     emit_call(as, ci->func);
+    if (as->flags & JIT_F_AVX) emit_vzeroupper(as);
+  }
 #if LJ_64
   if ((ci->flags & CCI_VARARG)) {  /* Special handling for vararg calls. */
 #if LJ_ABI_WIN
@@ -684,6 +686,16 @@ static void asm_setupresult(ASMState *as, IRIns *ir, const CCallInfo *ci)
   int hiop = ((ir+1)->o == IR_HIOP && !irt_isnil((ir+1)->t));
   if ((ci->flags & CCI_NOFPRCLOBBER))
     drop &= ~RSET_FPR;
+#if LJ_64 && LJ_ABI_WIN
+  {
+    Reg r;
+    /* The Windows ABI preserves only the low 128 bits of XMM6-XMM15. */
+    for (r = RID_XMM6; r < RID_MAX_FPR; r++)
+      if (!rset_test(as->freeset, r) &&
+	  irt_isvec256(IR(regcost_ref(as->cost[r]))->t))
+	rset_set(drop, r);
+  }
+#endif
   if (ra_hasreg(ir->r))
     rset_clear(drop, ir->r);  /* Dest reg handled below. */
   if (hiop && ra_hasreg((ir+1)->r))
@@ -1470,7 +1482,7 @@ static void asm_fxload(ASMState *as, IRIns *ir)
       /* Vector cdata payloads are only 8 byte aligned, and a vector may also
       ** be loaded through a pointer to arbitrary memory. Always unaligned.
       */
-      xo = XO_MOVUPS;
+      xo = irt_isvec256(ir->t) ? emit_vexop(XO_MOVUPS, 0, 1) : XO_MOVUPS;
       break;
     }
     if (LJ_64 && irt_is64(ir->t))
@@ -1523,7 +1535,9 @@ static void asm_fxstore(ASMState *as, IRIns *ir)
     case IRT_FLOAT: xo = XO_MOVSSto; break;
     case IRT_V16I8: case IRT_V8I16: case IRT_V4I32:
     case IRT_V2I64: case IRT_V4F32: case IRT_V2F64:
-      xo = XO_MOVUPSto; break;
+      xo = irt_isvec256(ir->t) ?
+	   emit_vexop(XO_MOVUPSto, 0, 1) : XO_MOVUPSto;
+      break;
 #if LJ_64 && !LJ_GC64
     case IRT_LIGHTUD:
       /* NYI: mask 64 bit lightuserdata. */

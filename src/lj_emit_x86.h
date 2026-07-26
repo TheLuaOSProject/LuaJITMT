@@ -467,52 +467,85 @@ static uint32_t emit_vexmp(x86Op xo)
 ** the three byte form, which needs no special casing for the high registers
 ** or for the 0F 38 / 0F 3A maps.
 */
-static void emit_vexrrw(ASMState *as, x86Op xo, Reg rr, Reg rv, Reg rb, int w)
+static void emit_vexrrwl(ASMState *as, x86Op xo, Reg rr, Reg rv, Reg rb,
+			 int w, int l)
 {
   MCode *p = as->mcp - 5;
   uint32_t mp = emit_vexmp(xo);
   p[0] = 0xc4;
   p[1] = (MCode)((((rr>>3)&1) ? 0 : 0x80) | 0x40 |
 		 (((rb>>3)&1) ? 0 : 0x20) | (mp >> 4));
-  /* L=0 (128 bit). W selects the lane width of the AVX2 per-lane shifts. */
-  p[2] = (MCode)((w ? 0x80 : 0) | ((~rv & 15) << 3) | (mp & 3));
+  p[2] = (MCode)((w ? 0x80 : 0) | (l ? 0x04 : 0) |
+		 ((~rv & 15) << 3) | (mp & 3));
   p[3] = (MCode)(xo >> 24);
   p[4] = MODRM(XM_REG, rr, rb);
   as->mcp = p;
 }
 
+#define emit_vexrrw(as, xo, rr, rv, rb, w) \
+  emit_vexrrwl((as), (xo), (rr), (rv), (rb), (w), 0)
+#define emit_vexrrl(as, xo, rr, rv, rb, l) \
+  emit_vexrrwl((as), (xo), (rr), (rv), (rb), 0, (l))
 #define emit_vexrr(as, xo, rr, rv, rb) \
-  emit_vexrrw((as), (xo), (rr), (rv), (rb), 0)
+  emit_vexrrwl((as), (xo), (rr), (rv), (rb), 0, 0)
 
-/* Load a 128 bit vector constant into an FP register. */
-static void emit_loadk128(ASMState *as, Reg r, IRIns *ir)
+static void emit_vzeroupper(ASMState *as)
+{
+  MCode *p = as->mcp - 3;
+  p[0] = 0xc5; p[1] = 0xf8; p[2] = 0x77;
+  as->mcp = p;
+}
+
+/* Turn an SSE opcode into a VEX opcode usable by the generic ModRM emitter.
+** VEX.vvvv is unused and therefore encoded as all ones.
+*/
+static x86Op emit_vexop(x86Op xo, int w, int l)
+{
+  uint32_t mp = emit_vexmp(xo);
+  return (x86Op)(0xc4u | ((0xe0u | (mp >> 4)) << 8) |
+		((0x78u | (w ? 0x80u : 0) | (l ? 0x04u : 0) |
+		  (mp & 3)) << 16) | (xo & 0xff000000u));
+}
+
+/* Load a vector constant into an FP register. */
+static void emit_loadkvec(ASMState *as, Reg r, IRIns *ir)
 {
   const uint8_t *k = ir_kvec(ir);
+  uint32_t i, size = irt_vecsize(ir->t);
+  int wide = irt_isvec256(ir->t);
   lj_assertA(rset_test(RSET_FPR, r), "vector constant needs an FP register");
-  if (((const uint64_t *)k)[0] == 0 && ((const uint64_t *)k)[1] == 0) {
-    emit_rr(as, XO_PXOR, r, r);
+  for (i = 0; i < size; i += 8)
+    if (((const uint64_t *)k)[i >> 3] != 0)
+      break;
+  if (i == size) {
+    if (wide || (as->flags & JIT_F_AVX))
+      emit_vexrrl(as, XO_PXOR, r, r, r, wide);
+    else
+      emit_rr(as, XO_PXOR, r, r);
     return;
   }
 #if LJ_GC64
-  if (checki32(dispofs(as, k)) && checki32(dispofs(as, k+15))) {
-    emit_rmro(as, XO_MOVUPS, r, RID_DISPATCH, (int32_t)dispofs(as, k));
-  } else if (checki32(mcpofs(as, k)) && checki32(mcpofs(as, k+15)) &&
-	     checki32(mctopofs(as, k)) && checki32(mctopofs(as, k+15))) {
-    emit_rmro(as, XO_MOVUPS, r, RID_RIP, (int32_t)mcpofs(as, k));
+  if (checki32(dispofs(as, k)) && checki32(dispofs(as, k+size-1))) {
+    emit_rmro(as, wide ? emit_vexop(XO_MOVUPS, 0, 1) : XO_MOVUPS,
+	      r, RID_DISPATCH, (int32_t)dispofs(as, k));
+  } else if (checki32(mcpofs(as, k)) && checki32(mcpofs(as, k+size-1)) &&
+	     checki32(mctopofs(as, k)) && checki32(mctopofs(as, k+size-1))) {
+    emit_rmro(as, wide ? emit_vexop(XO_MOVUPS, 0, 1) : XO_MOVUPS,
+	      r, RID_RIP, (int32_t)mcpofs(as, k));
   } else {  /* Intern the constant at the bottom of the mcode area. */
     if (!ir->i) {
-      while ((uintptr_t)as->mcbot & 15) *as->mcbot++ = XI_INT3;
-      memcpy(as->mcbot, k, 16);
+      while ((uintptr_t)as->mcbot & (size-1)) *as->mcbot++ = XI_INT3;
+      memcpy(as->mcbot, k, size);
       ir->i = (int32_t)(as->mctop - as->mcbot);
-      as->mcbot += 16;
+      as->mcbot += size;
       as->mclim = as->mcbot + MCLIM_REDZONE;
       lj_mcode_commitbot(as->J, as->mcbot);
     }
-    emit_rmro(as, XO_MOVUPS, r, RID_RIP,
+    emit_rmro(as, wide ? emit_vexop(XO_MOVUPS, 0, 1) : XO_MOVUPS, r, RID_RIP,
 	      (int32_t)mcpofs(as, as->mctop - ir->i));
   }
 #else
-  emit_rma(as, XO_MOVUPS, r, k);
+  emit_rma(as, wide ? emit_vexop(XO_MOVUPS, 0, 1) : XO_MOVUPS, r, k);
 #endif
 }
 
@@ -636,9 +669,10 @@ static void emit_call_(ASMState *as, MCode *target)
 /* Generic move between two regs. */
 static void emit_movrr(ASMState *as, IRIns *ir, Reg dst, Reg src)
 {
-  UNUSED(ir);
   if (dst < RID_MAX_GPR)
     emit_rr(as, XO_MOV, REX_64IR(ir, dst), src);
+  else if (irt_isvec256(ir->t))
+    emit_rr(as, emit_vexop(XO_MOVAPS, 0, 1), dst, src);
   else
     emit_rr(as, XO_MOVAPS, dst, src);
 }
@@ -648,8 +682,10 @@ static void emit_loadofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
 {
   if (r < RID_MAX_GPR)
     emit_rmro(as, XO_MOV, REX_64IR(ir, r), base, ofs);
-  else if (irt_isvec(ir->t))
-    emit_rmro(as, XO_MOVUPS, r, base, ofs);  /* Spill slots are not aligned. */
+  else if (irt_isvec(ir->t)) {
+    x86Op xo = irt_isvec256(ir->t) ? emit_vexop(XO_MOVUPS, 0, 1) : XO_MOVUPS;
+    emit_rmro(as, xo, r, base, ofs);  /* Spill slots are not aligned. */
+  }
   else
     emit_rmro(as, irt_isnum(ir->t) ? XO_MOVSD : XO_MOVSS, r, base, ofs);
 }
@@ -659,8 +695,11 @@ static void emit_storeofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
 {
   if (r < RID_MAX_GPR)
     emit_rmro(as, XO_MOVto, REX_64IR(ir, r), base, ofs);
-  else if (irt_isvec(ir->t))
-    emit_rmro(as, XO_MOVUPSto, r, base, ofs);
+  else if (irt_isvec(ir->t)) {
+    x86Op xo = irt_isvec256(ir->t) ?
+	       emit_vexop(XO_MOVUPSto, 0, 1) : XO_MOVUPSto;
+    emit_rmro(as, xo, r, base, ofs);
+  }
   else
     emit_rmro(as, irt_isnum(ir->t) ? XO_MOVSDto : XO_MOVSSto, r, base, ofs);
 }
@@ -677,4 +716,3 @@ static void emit_addptr(ASMState *as, Reg r, int32_t ofs)
 
 /* Prefer rematerialization of BASE/L from global_State over spills. */
 #define emit_canremat(ref)	((ref) <= REF_BASE)
-

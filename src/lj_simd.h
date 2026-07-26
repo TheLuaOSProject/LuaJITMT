@@ -12,9 +12,9 @@
 
 #include "lj_ctype.h"
 
-/* Vector width in bytes that the JIT backend compiles natively. 0 = none. */
+/* Maximum vector width in bytes that the JIT backend compiles natively. */
 #if LJ_HASJIT && LJ_TARGET_X64
-#define LJ_SIMD_JITSIZE		16
+#define LJ_SIMD_JITSIZE		32
 #else
 #define LJ_SIMD_JITSIZE		0
 #endif

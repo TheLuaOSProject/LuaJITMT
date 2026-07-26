@@ -1,4 +1,4 @@
--- SIMD microbenchmarks: vectorized vs. equivalent scalar code.
+-- SIMD microbenchmarks: scalar vs. 128-bit XMM vs. 256-bit AVX2 code.
 --
 --   luajit test/simd/bench.lua [reps]
 --
@@ -18,6 +18,9 @@ local PASSES = 200
 
 local f4 = ffi.typeof("float4")
 local i4 = ffi.typeof("i32x4")
+local features = simd.features()
+local has_ymm = features.avx2 and features.vecsize >= 32
+local f8 = has_ymm and ffi.typeof("float8")
 
 local function bench(name, f, ...)
   local best, sink = math.huge, nil
@@ -31,7 +34,7 @@ local function bench(name, f, ...)
 end
 
 local function report(name, tscalar, tvector, ss, sv)
-  io.write(string.format("%-26s scalar %7.1f ms   vector %7.1f ms   %5.2fx\n",
+  io.write(string.format("%-26s scalar %7.1f ms   XMM %7.1f ms   %5.2fx\n",
 			 name, tscalar*1000, tvector*1000, tscalar/tvector))
   if ss ~= sv then
     io.write(string.format("   ! results differ: %s vs %s\n",
@@ -39,15 +42,35 @@ local function report(name, tscalar, tvector, ss, sv)
   end
 end
 
+local function report_ymm(name, ts, tx, ty, ss, sx, sy)
+  io.write(string.format(
+    "%-26s scalar %7.1f ms   XMM %7.1f ms %5.2fx   YMM %7.1f ms %5.2fx (%4.2fx/XMM)\n",
+    name, ts*1000, tx*1000, ts/tx, ty*1000, ts/ty, tx/ty))
+  if ss ~= sx or ss ~= sy then
+    io.write(string.format("   ! results differ: %s vs %s vs %s\n",
+			   tostring(ss), tostring(sx), tostring(sy)))
+  end
+end
+
 ------------------------------------------------------------------ saxpy ----
 
 local xs = ffi.new("float[?]", N)
 local ys = ffi.new("float[?]", N)
-for i = 0, N-1 do xs[i] = i % 17; ys[i] = i % 13 end
+local ys_xmm = ffi.new("float[?]", N)
+local ys_ymm = has_ymm and ffi.new("float[?]", N)
+for i = 0, N-1 do
+  xs[i] = i % 17
+  ys[i] = i % 13
+  ys_xmm[i] = ys[i]
+  if has_ymm then ys_ymm[i] = ys[i] end
+end
 
 local xv = ffi.cast(ffi.typeof("$ *", f4), xs)
-local yv = ffi.cast(ffi.typeof("$ *", f4), ys)
+local yv = ffi.cast(ffi.typeof("$ *", f4), ys_xmm)
 local NV = N / 4
+local xw = has_ymm and ffi.cast(ffi.typeof("$ *", f8), xs)
+local yw = has_ymm and ffi.cast(ffi.typeof("$ *", f8), ys_ymm)
+local NW = N / 8
 
 local function saxpy_scalar()
   local a = 2.5
@@ -56,7 +79,7 @@ local function saxpy_scalar()
     for i = 0, N-1 do ys[i] = a * xs[i] + ys[i] end
     s = s + ys[0]
   end
-  return s
+  return s + ys[1]
 end
 
 local function saxpy_vector()
@@ -66,7 +89,17 @@ local function saxpy_vector()
     for i = 0, NV-1 do yv[i] = a * xv[i] + yv[i] end
     s = s + yv[0][0]
   end
-  return s
+  return s + yv[0][1]
+end
+
+local function saxpy_ymm()
+  local a = f8(2.5)
+  local s = 0
+  for _ = 1, PASSES do
+    for i = 0, NW-1 do yw[i] = a * xw[i] + yw[i] end
+    s = s + yw[0][0]
+  end
+  return s + yw[0][1]
 end
 
 ------------------------------------------------------------------- dot ------
@@ -87,6 +120,16 @@ local function dot_vector()
     local acc = f4(0)
     for i = 0, NV-1 do local v = xv[i]; acc = acc + v * v end
     s = s + simd.hsum(acc)
+  end
+  return s
+end
+
+local function dot_ymm()
+  local s = 0
+  for _ = 1, PASSES do
+    local acc = f8(0)
+    for i = 0, NW-1 do local v = xw[i]; acc = acc + v * v end
+    for i = 0, 7 do s = s + acc[i] end
   end
   return s
 end
@@ -146,17 +189,27 @@ end
 
 io.write(string.format("N=%d, %d passes, best of %d\n", N, PASSES, REPS))
 local ts, ss = bench("saxpy scalar", saxpy_scalar)
-local tv, sv = bench("saxpy vector", saxpy_vector)
-report("saxpy (float)", ts, tv, ss, sv)
+local tx, sx = bench("saxpy XMM", saxpy_vector)
+if has_ymm then
+  local ty, sy = bench("saxpy YMM", saxpy_ymm)
+  report_ymm("saxpy (float)", ts, tx, ty, ss, sx, sy)
+else
+  report("saxpy (float)", ts, tx, ss, sx)
+end
 
 ts, ss = bench("dot scalar", dot_scalar)
-tv, sv = bench("dot vector", dot_vector)
-report("dot product (float)", ts, tv, nil, nil)
+tx, sx = bench("dot XMM", dot_vector)
+if has_ymm then
+  local ty = bench("dot YMM", dot_ymm)
+  report_ymm("dot product (float)", ts, tx, ty, nil, nil, nil)
+else
+  report("dot product (float)", ts, tx, nil, nil)
+end
 
 ts, ss = bench("max scalar", max_scalar)
-tv, sv = bench("max vector", max_vector)
-report("horizontal max (int32)", ts, tv, ss, sv)
+tx, sx = bench("max XMM", max_vector)
+report("horizontal max (int32)", ts, tx, ss, sx)
 
 ts, ss = bench("clamp scalar", clamp_scalar)
-tv, sv = bench("clamp vector", clamp_vector)
-report("clamp (float)", ts, tv, ss, sv)
+tx, sx = bench("clamp XMM", clamp_vector)
+report("clamp (float)", ts, tx, ss, sx)

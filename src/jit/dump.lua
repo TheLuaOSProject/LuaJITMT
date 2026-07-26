@@ -353,7 +353,7 @@ local function formatk(tr, idx, sn)
     end
   elseif tn == "string" then
     if t >= IRT_FIRSTVEC then
-      -- A 128 bit vector constant. lj_ir_kvalue() renders it as a hex string,
+      -- A vector constant. lj_ir_kvalue() renders it as a hex string,
       -- because there is no TValue that can hold one. Print it unquoted and
       -- in full: the bytes are the entire content of the constant.
       s = k
@@ -514,11 +514,11 @@ local function dump_ir(tr, dumpsnap, dumpreg)
       else
 	out:write(format("%04d ", ins))
       end
-      out:write(format("%s%s %s %s ",
+      out:write(format("%s%s %s%s %s ",
 		       (rid == 254 or rid == 253) and "}" or
 		       (band(ot, 128) == 0 and " " or ">"),
 		       band(ot, 64) == 0 and " " or "+",
-		       irtype[t], op))
+		       irtype[t], band(ot, 32) ~= 0 and "x2" or "", op))
       local m1, m2 = band(m, 3), band(m, 3*4)
       if sub(op, 1, 4) == "CALL" then
 	local ctype
@@ -752,4 +752,3 @@ return {
   off = dumpoff,
   start = dumpon -- For -j command line option.
 }
-

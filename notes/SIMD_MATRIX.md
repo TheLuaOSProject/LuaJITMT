@@ -21,9 +21,10 @@ least two lanes.
 
 | Total size | Interpreter | JIT | Notes |
 |---|---|---|---|
-| 16 bytes (128-bit) | yes | yes | the supported width |
+| 16 bytes (128-bit) | yes | yes | complete operation surface below |
 | 8 bytes | yes | no (trace aborts, NYI) | correct results, stays interpreted |
-| 32 bytes and wider | yes | no (trace aborts, NYI) | needs AVX, see DESIGN D9 |
+| 32 bytes (256-bit) | yes | partial (AVX2) | core YMM slice; see below |
+| 64 bytes and wider | yes | no (trace aborts, NYI) | AVX-512 is out of scope |
 | 4 bytes / 1 lane | — | — | no packed meaning, rejected |
 | `_Bool` elements | — | — | the C parser drops `vector_size` for `_Bool` |
 | elements of 16 bytes | — | — | e.g. `__int128`, rejected |
@@ -43,7 +44,27 @@ least two lanes.
 | `i64x2`   | `int64_t`  | 2  | yes | yes |
 | `u64x2`   | `uint64_t` | 2  | yes | yes |
 
-## Ordinary Lua operators
+## Element kinds (256-bit)
+
+All ten ordinary numeric lane kinds have interpreter support and native
+32-byte loads, stores, constants, spills, snapshots, and side exits on an
+AVX2 host: `float8`, `double4`, `i8x32`, `u8x32`, `i16x16`, `u16x16`,
+`i32x8`, `u32x8`, `i64x4`, and `u64x4`.
+
+The current YMM operation slice compiles:
+
+* vector-vector `+` and `-` for every lane kind;
+* `*` for FP and 16/32-bit integer lanes, and `/` for FP lanes;
+* unary minus and constant scalar operands (folded into a 32-byte KVEC);
+* `band`, `bor`, `bxor`, `bandn`, `bnot`, `select`, and equal-size `bitcast`;
+* unaligned loads/stores, loop-carried values, 32-byte spills, and reconstruction
+  of sunk boxes from a trace exit.
+
+Dynamic scalar splats, whole-vector equality, 8/64-bit integer multiply, and
+the other `ffi.simd` operations still abort the trace with `NYIVEC` and run
+interpreted. This is a staged backend boundary, not silent 128-bit truncation.
+
+## Ordinary Lua operators (complete 128-bit surface)
 
 Operand rules for every row: either both operands are vectors of *exactly the
 same* ctype, or one operand is a vector and the other is a Lua number or a
@@ -102,11 +123,15 @@ lane counts are rejected; use `bitcast` for pure reinterpretation.
   either be undefined C behaviour or would force the operation to differ
   between the interpreter and the JIT.
 
+For 256-bit types, zero/multi-lane construction, copies, constants, memory
+loads/stores, and equal-size `bitcast` are native. A non-constant one-value
+constructor needs a YMM broadcast and currently stays interpreted.
+
 Rounding (`floor`/`ceil`/`trunc`/`round`) returns a NaN operand **quieted**,
 which is what `ROUNDPS`/`ROUNDPD` do. The reference implementation handles NaN
 lanes explicitly, because libm's `floor()` need not quiet a signalling NaN.
 
-## `ffi.simd`
+## `ffi.simd` (complete 128-bit surface)
 
 Binary entries accept a matching vector or a splattable scalar as the second
 operand, exactly like the operators.
@@ -202,6 +227,7 @@ Semantics worth pinning down:
 | runtime index **vector** in `shuffle` | supported: `shuffle(a, idxvec)` builds the PSHUFB control at runtime. A byte vector is one PSHUFB; a wider lane costs five packed instructions (mask, scale, replicate the byte over its lane, add 0..esize-1, permute) |
 | separate non-constant lane indices in `shuffle`/`shuffle2` | still rejected at record time. Assembling a control mask from N *scalar* indices costs more than it saves; pass an index vector instead |
 | scalar **cdata** as the second operand of an `ffi.simd` binary call | supported: it is unboxed, converted with the ordinary FFI rules and splatted |
+| 256-bit operation surface | partial: logical operations, select and bitcast are native; the rest stays interpreted as listed above |
 
 "JIT NYI" always means: the trace aborts with a NYI reason, the code keeps
 running interpreted, and the result is identical. It never means a wrong

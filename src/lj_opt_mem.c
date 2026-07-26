@@ -743,10 +743,10 @@ static AliasRet aa_xref(jit_State *J, IRIns *refa, IRIns *xa, IRIns *xb)
   if (basea == baseb) {
     ptrdiff_t sza = irt_size(xa->t), szb = irt_size(xb->t);
     if (ofsa == ofsb) {
-      /* Vectors are same-sized whatever their lane type is, but there is no
-      ** conversion between two vector types and a forwarded value would carry
-      ** the wrong lane type. Only forward identical types, else force a
-      ** reload.
+      /* Vectors of one width are same-sized whatever their lane type is, but
+      ** there is no conversion between two vector types and a forwarded value
+      ** would carry the wrong lane type. Only forward identical types, else
+      ** force a reload.
       */
       if (irt_isvec(xa->t) || irt_isvec(xb->t))
 	return irt_sametype(xa->t, xb->t) ? ALIAS_MUST : ALIAS_MAY;
@@ -859,18 +859,19 @@ retry:
 	  ** There is no CONV between vector types. Synthesising one produces
 	  ** IR the backend cannot assemble: asm_conv would take the integer
 	  ** path and allocate a GPR for a value that lives in an XMM register.
-	  ** Every vector type is 128 bits wide and they all share one register
-	  ** class, so forwarding a value whose lane type differs changes no
-	  ** bits, and instruction selection never depends on an operand's
-	  ** type. A vector against a scalar has no such guarantee, so that
-	  ** case falls back to a reload.
+	  ** Vector lane types of the same width share one register class, so
+	  ** forwarding a value whose lane type differs changes no bits, and
+	  ** instruction selection never depends on an operand's type. A width
+	  ** mismatch or a vector against a scalar has no such guarantee, so
+	  ** that case falls back to a reload.
 	  **
 	  ** This is reachable because an XSTORE's type is the ctype the value
 	  ** is boxed as, which is not always the lane type the value was
 	  ** computed with: ffi.simd.bitcast deliberately re-boxes a value
 	  ** under a different lane type.
 	  */
-	  if (irt_isvec(fins->t) && irt_isvec(IR(store->op2)->t))
+	  if (irt_isvec(fins->t) && irt_isvec(IR(store->op2)->t) &&
+	      irt_isvec256(fins->t) == irt_isvec256(IR(store->op2)->t))
 	    return store->op2;
 	  lim = ref;
 	  goto cselim;

@@ -8,7 +8,8 @@ make -j$(nproc)
 ./src/luajit test/simd/run.lua -interp    # interpreter only
 ./src/luajit test/simd/run.lua -jit       # JIT only
 ./src/luajit test/simd/run.lua test_lib   # one file, all modes
-./src/luajit test/simd/bench.lua          # microbenchmarks
+./src/luajit test/simd/bench.lua          # scalar vs. XMM vs. YMM kernels
+./src/luajit test/simd/bench_ops.lua      # kernels and operation throughput
 SIMD_SEED=12345 ./src/luajit test/simd/run.lua   # different random seed
 ```
 
@@ -25,9 +26,10 @@ status is non-zero if anything failed.
 | `test_arith.lua` | the Lua operators, randomized against the scalar reference, splat operands, wraparound, FP edge cases, rejected operators |
 | `test_lib.lua` | every `ffi.simd` function, randomized against the scalar reference, plus negative tests |
 | `test_jit.lua` | interpreter/JIT differential: the same computation run interpreted and compiled, including loop-carried values, guards, side exits, spills |
-| `test_codegen.lua` | inspects `jit.dump`/`jit.util` output of representative traces to prove packed instructions are emitted and no scalarisation or permanent exit happens; also checks that the IR dump itself renders vector types and 128-bit constants in all three colour modes |
+| `test_codegen.lua` | inspects `jit.dump`/`jit.util` output of representative traces to prove packed instructions are emitted and no scalarisation or permanent exit happens; also checks vector IR/constants and explicit YMM operands |
 | `test_ffi_abi.lua` | vector arguments, returns, stack spilling, mixed argument lists and memory round trips against a small C helper library compiled at test time; callbacks taking and returning vectors by value for every lane kind, ten vector arguments (registers plus stack), 16-byte stack alignment behind eight register arguments, mixed integer/FP/vector argument lists, and the rejection of vectors too wide for a register |
-| `bench.lua` | microbenchmarks: saxpy, dot product, horizontal max and clamp, each against equivalent scalar code |
+| `bench.lua` | microbenchmarks: saxpy and dot product compare scalar, 128-bit XMM and 256-bit YMM; horizontal max and clamp compare scalar and the complete 128-bit backend |
+| `bench_ops.lua` | realistic kernels, per-operation latency, and a direct XMM/YMM lane-throughput comparison for the current AVX2 subset |
 | `test_noregress.lua` | ordinary Lua and FFI behaviour with no vector types anywhere; its output is diffed against a pristine LuaJIT build |
 
 ## Method
@@ -56,7 +58,7 @@ be replayed from its seed. The permutation now comes from a separate seeded
 RNG stream. Do not introduce `pairs()` over a string-keyed table anywhere that
 affects what gets executed or in which order.
 
-**Some bugs need repetition, not a seed.** The `emit_loadk128` failure (see
+**Some bugs need repetition, not a seed.** The vector-constant reload failure
 `SIMD_STATUS.md`) showed up in roughly 1 run in 300 and never twice at the
 same seed. Running the same command in a loop and keeping the output of the
 failing runs is the tool for that:
@@ -162,7 +164,7 @@ touch at all. All pre-existing.
 
 Run the **assert** build with more than one seed, not just once. The assert
 build is the only configuration that validates IR structure, and one of its
-checks (`rec_check_ir`) only trips when a 128-bit constant's *payload bytes*
+checks (`rec_check_ir`) only trips when a vector constant's *payload bytes*
 happen to decode as an invalid instruction, which depends on the constants a
 given test run interns.
 

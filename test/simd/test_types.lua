@@ -15,6 +15,20 @@ test("sizeof/alignof", function()
   check(not simd.isvector(ffi.typeof("int")), "int is not a vector")
 end)
 
+test("256-bit vector representation", function()
+  for _, ti in ipairs(T.W) do
+    checkeq(ffi.sizeof(ti.ct), 32, ti.name .. " sizeof")
+    -- LuaJIT's cdata payload alignment is capped at 16; YMM memory operations
+    -- are deliberately unaligned, so the native JIT does not require 32.
+    checkeq(ffi.alignof(ti.ct), 16, ti.name .. " alignof")
+    checkeq(simd.lanes(ti.ct), ti.lanes, ti.name .. " lanes")
+    local v = ti.ct(3)
+    for i = 0, ti.lanes-1 do
+      checkeq(tonumber(v[i]), 3, ti.name .. " splat lane " .. i)
+    end
+  end
+end)
+
 test("construction", function()
   for _, ti in ipairs(T.T) do
     local z = ti.ct()

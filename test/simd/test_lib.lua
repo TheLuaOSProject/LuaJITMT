@@ -476,6 +476,8 @@ test("introspection", function()
   local ft = simd.features()
   check(type(ft) == "table", "features is a table")
   check(type(ft.vecsize) == "number", "features.vecsize")
+  checkeq(ft.vecsize, ft.avx2 and 32 or ft.sse2 and 16 or 0,
+	  "features.vecsize matches the usable native width")
 end)
 
 test("negative arguments", function()

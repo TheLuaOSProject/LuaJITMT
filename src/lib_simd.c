@@ -581,6 +581,7 @@ static int simd_cf_elementtype(lua_State *L)
 static int simd_cf_features(lua_State *L)
 {
   GCtab *t = lj_tab_new(L, 0, 4);
+  int32_t vecsize = 0;
   settabV(L, L->top++, t);
 #if LJ_HASJIT
   {
@@ -597,13 +598,16 @@ static int simd_cf_features(lua_State *L)
     SETFEAT("avx", f & JIT_F_AVX);
     SETFEAT("avx2", f & JIT_F_AVX2);
     SETFEAT("fma", f & JIT_F_FMA);
+#if LJ_TARGET_X64
+    vecsize = (f & JIT_F_AVX2) ? 32 : 16;
+#endif
 #else
     UNUSED(f);
 #endif
 #undef SETFEAT
   }
 #endif
-  setintV(lj_tab_setstr(L, t, lj_str_newlit(L, "vecsize")), LJ_SIMD_JITSIZE);
+  setintV(lj_tab_setstr(L, t, lj_str_newlit(L, "vecsize")), vecsize);
   lj_gc_check(L);
   return 1;
 }

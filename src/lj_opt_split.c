@@ -355,7 +355,7 @@ static void split_ir(jit_State *J)
       hisubst[ref] = 0;
     }
     if (irt_isvec(ir->t))
-      ref += 2;
+      ref += irt_vecslots(ir->t);
     else if (irt_is64(ir->t) && ir->o != IR_KNULL)
       ref++;
   }

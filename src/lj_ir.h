@@ -396,7 +396,7 @@ LJ_DATA const uint8_t lj_ir_mode[IR__MAX+1];
   _(FLOAT, 4) _(NUM, 8) _(I8, 1) _(U8, 1) _(I16, 2) _(U16, 2) \
   _(INT, 4) _(U32, 4) _(I64, 8) _(U64, 8) \
   _(SOFTFP, 4) \
-  /* 128 bit vector types, ordered by lane width. ORDER VECIRT */ \
+  /* Vector lane types, ordered by lane width. ORDER VECIRT */ \
   _(V16I8, 16) _(V8I16, 16) _(V4I32, 16) _(V2I64, 16) \
   _(V4F32, 16) _(V2F64, 16)  /* There is room for 2 more types. */
 
@@ -414,12 +414,14 @@ IRTDEF(IRTENUM)
   IRT_INTP = LJ_64 ? IRT_I64 : IRT_INT,
   IRT_UINTP = LJ_64 ? IRT_U64 : IRT_U32,
 
-  /* Additional flags. Bit 0x20 is reserved for vector width. */
+  /* Additional flags. */
+  IRT_VEC256 = 0x20,	/* 256 bit vector width (otherwise 128 bit). */
   IRT_ISPHI = 0x40,	/* Instruction is left or right PHI operand. */
   IRT_GUARD = 0x80,	/* Instruction is a guard. */
 
   /* Masks. */
   IRT_TYPE = 0x1f,
+  IRT_VTYPE = 0x3f,	/* Base type plus vector width. */
   IRT_T = 0xff
 } IRType;
 
@@ -436,7 +438,8 @@ typedef struct IRType1 { uint8_t irt; } IRType1;
 
 #define irt_t(t)		((IRType)(t).irt)
 #define irt_type(t)		((IRType)((t).irt & IRT_TYPE))
-#define irt_sametype(t1, t2)	((((t1).irt ^ (t2).irt) & IRT_TYPE) == 0)
+#define irt_vtype(t)		((IRType)((t).irt & IRT_VTYPE))
+#define irt_sametype(t1, t2)	((((t1).irt ^ (t2).irt) & IRT_VTYPE) == 0)
 #define irt_typerange(t, first, last) \
   ((uint32_t)((t).irt & IRT_TYPE) - (uint32_t)(first) <= (uint32_t)(last-first))
 
@@ -466,6 +469,10 @@ typedef struct IRType1 { uint8_t irt; } IRType1;
 #define irt_isvec(t)		(irt_typerange((t), IRT_V16I8, IRT_V2F64))
 #define irt_isvecfp(t)		(irt_typerange((t), IRT_V4F32, IRT_V2F64))
 #define irt_isvecint(t)		(irt_typerange((t), IRT_V16I8, IRT_V2I64))
+#define irt_isvec256(t)		(irt_isvec(t) && ((t).irt & IRT_VEC256))
+#define irt_vecsize(t)		(irt_isvec256(t) ? 32u : 16u)
+/* Number of eight-byte payload slots following a KVEC instruction. */
+#define irt_vecslots(t)		(irt_vecsize(t) >> 3)
 /* Lane size in bytes of a vector IR type. */
 #define irt_vecesz(t) \
   (irt_isvecfp(t) ? (4u << (irt_type(t)-IRT_V4F32)) : \
@@ -491,7 +498,8 @@ typedef struct IRType1 { uint8_t irt; } IRType1;
 #define irt_is64(t)		((IRT_IS64 >> irt_type(t)) & 1)
 #define irt_is64orfp(t)		(((IRT_IS64|(1u<<IRT_FLOAT))>>irt_type(t)) & 1)
 
-#define irt_size(t)		(lj_ir_type_size[irt_t((t))])
+#define irt_size(t) \
+  (irt_isvec256(t) ? 32u : (uint32_t)lj_ir_type_size[irt_type((t))])
 
 LJ_DATA const uint8_t lj_ir_type_size[];
 
@@ -583,10 +591,12 @@ typedef uint32_t TRef;
 #define tref_ref(tr)		((IRRef1)(tr))
 #define tref_t(tr)		((IRType)((tr)>>24))
 #define tref_type(tr)		((IRType)(((tr)>>24) & IRT_TYPE))
+#define tref_vtype(tr)		((IRType)(((tr)>>24) & IRT_VTYPE))
+#define tref_isvec256(tr)	(((tr) & ((TRef)IRT_VEC256<<24)) != 0)
 #define tref_typerange(tr, first, last) \
   ((((tr)>>24) & IRT_TYPE) - (TRef)(first) <= (TRef)(last-first))
 
-#define tref_istype(tr, t)	(((tr) & (IRT_TYPE<<24)) == ((t)<<24))
+#define tref_istype(tr, t)	(((tr) & (IRT_VTYPE<<24)) == ((t)<<24))
 #define tref_isnil(tr)		(tref_istype((tr), IRT_NIL))
 #define tref_isfalse(tr)	(tref_istype((tr), IRT_FALSE))
 #define tref_istrue(tr)		(tref_istype((tr), IRT_TRUE))
@@ -674,7 +684,7 @@ typedef union IRIns {
 #define ir_kptr(ir) \
   check_exp((ir)->o == IR_KPTR || (ir)->o == IR_KKPTR, \
     mref((ir)[LJ_GC64].ptr, void))
-/* A 128 bit vector constant occupies two extra IR slots after the KVEC. */
+/* A vector constant occupies two or four extra IR slots after the KVEC. */
 #define ir_kvec(ir)	check_exp((ir)->o == IR_KVEC, (uint8_t *)&(ir)[1])
 
 /* A store or any other op with a non-weak guard has a side-effect. */

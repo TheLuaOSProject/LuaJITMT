@@ -18,6 +18,15 @@ typedef int64_t	  i64x2   __attribute__((vector_size(16)));
 typedef uint64_t  u64x2   __attribute__((vector_size(16)));
 typedef float	  float2  __attribute__((vector_size(8)));
 typedef float	  float8  __attribute__((vector_size(32)));
+typedef double	  double4 __attribute__((vector_size(32)));
+typedef int8_t	  i8x32   __attribute__((vector_size(32)));
+typedef uint8_t	  u8x32   __attribute__((vector_size(32)));
+typedef int16_t	  i16x16  __attribute__((vector_size(32)));
+typedef uint16_t  u16x16  __attribute__((vector_size(32)));
+typedef int32_t	  i32x8   __attribute__((vector_size(32)));
+typedef uint32_t  u32x8   __attribute__((vector_size(32)));
+typedef int64_t	  i64x4   __attribute__((vector_size(32)));
+typedef uint64_t  u64x4   __attribute__((vector_size(32)));
 ]]
 
 -- name -> { ct = ctype, lanes = n, fp = bool, signed = bool, bits = n }
@@ -40,7 +49,28 @@ deftype("u32x4", 4, false, false, 32)
 deftype("i64x2", 2, false, true, 64)
 deftype("u64x2", 2, false, false, 64)
 
-for _, ti in ipairs(M.T) do ti.ect = simd.elementtype(ti.ct) end
+M.W = {}
+local function defwide(name, lanes, fp, signed, bits)
+  local ct = ffi.typeof(name)
+  M.W[name] = { name = name, ct = ct, lanes = lanes, fp = fp,
+		signed = signed, bits = bits }
+  M.W[#M.W+1] = M.W[name]
+end
+
+defwide("float8", 8, true, true, 32)
+defwide("double4", 4, true, true, 64)
+defwide("i8x32", 32, false, true, 8)
+defwide("u8x32", 32, false, false, 8)
+defwide("i16x16", 16, false, true, 16)
+defwide("u16x16", 16, false, false, 16)
+defwide("i32x8", 8, false, true, 32)
+defwide("u32x8", 8, false, false, 32)
+defwide("i64x4", 4, false, true, 64)
+defwide("u64x4", 4, false, false, 64)
+
+for _, tab in ipairs({M.T, M.W}) do
+  for _, ti in ipairs(tab) do ti.ect = simd.elementtype(ti.ct) end
+end
 
 M.simd = simd
 M.ffi = ffi
@@ -95,8 +125,11 @@ end
 -- The signed integer vector type with the same lane width and lane count.
 -- This is what a comparison returns and what a runtime index vector must be.
 function M.masktype(ti)
-  return M.T[(ti.bits == 8 and "i8x16") or (ti.bits == 16 and "i16x8") or
-	     (ti.bits == 32 and "i32x4") or "i64x2"]
+  local tab = ffi.sizeof(ti.ct) == 32 and M.W or M.T
+  return tab[(ti.bits == 8 and (tab == M.W and "i8x32" or "i8x16")) or
+	     (ti.bits == 16 and (tab == M.W and "i16x16" or "i16x8")) or
+	     (ti.bits == 32 and (tab == M.W and "i32x8" or "i32x4")) or
+	     (tab == M.W and "i64x4" or "i64x2")]
 end
 
 -- Lane-wise reference for a comparison, returns the all-ones/zero mask.

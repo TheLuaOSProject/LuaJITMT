@@ -87,8 +87,10 @@ never an error.
 <p>
 A vector type is supported when its element is a plain number type of 1, 2, 4
 or 8 bytes and it has at least two lanes. The interpreter supports every such
-type at any power-of-two width. The JIT compiles <b>128-bit</b> vectors;
-other widths keep working but stay interpreted.
+type at any power-of-two width. The JIT has a complete <b>128-bit</b> backend
+and, on AVX2 machines, a core <b>256-bit</b> backend. Other widths and
+operations outside the current 256-bit subset keep working but stay
+interpreted.
 </p>
 <p>
 Masks produced by the comparison functions are signed integer vectors with the
@@ -280,14 +282,15 @@ local ints = simd.convert(int4, v)                -- 1.9 -> 1, -1.9 -> -1
 </table>
 <p>
 <tt>features().vecsize</tt> is the vector width in bytes that the JIT compiles
-natively, or <tt>0</tt> if this build has no vector backend.
+natively: <tt>32</tt> with AVX2, <tt>16</tt> with SSE2, or <tt>0</tt> if this
+build has no vector backend.
 </p>
 
 <h2 id="loads">Loading and storing</h2>
 <p>
 No special functions are needed: cast a pointer to a vector pointer and
 dereference it. All vector loads and stores use unaligned instructions, so
-the address does not have to be 16-byte aligned.
+the address does not have to be aligned to the 16- or 32-byte vector width.
 </p>
 <pre class="code">
 local buf = ffi.new("float[?]", n)
@@ -304,6 +307,12 @@ at run time, so the same binary works on older machines: an operation without
 a packed instruction is never scalarised, the trace is abandoned and the code
 keeps running interpreted with identical results.
 <tt>simd.features()</tt> reports what was found.</li>
+<li>The current 256-bit JIT subset includes vector <tt>+</tt> and
+<tt>-</tt>, floating-point and 16/32-bit integer <tt>*</tt>,
+floating-point <tt>/</tt>, unary minus, bitwise operations,
+<tt>simd.select()</tt>, equal-size <tt>simd.bitcast()</tt>, constant scalar
+splats, and unaligned loads and stores. Other operations on 256-bit values
+currently abandon the trace and continue in the interpreter.</li>
 <li>When AVX is present every packed instruction is emitted in its three
 operand VEX form.</li>
 <li>An ordinary <tt>a*b + c</tt> written with operators is <b>never</b>
@@ -315,9 +324,8 @@ JIT.</li>
 x86-64 SysV this also works for FFI <em>callbacks</em>: a Lua function cast to
 a C function pointer may take and return 8 or 16 byte vectors by value, in
 registers or on the stack, mixed freely with ordinary arguments. On Windows
-x64, on x86, and for vectors wider than one register, such a cast is still
-rejected with a &ldquo;cannot convert&rdquo; error &mdash; pass a pointer
-instead.</li>
+x64, on x86, and for 32-byte or wider vectors, such a cast is still rejected
+with a &ldquo;cannot convert&rdquo; error &mdash; pass a pointer instead.</li>
 </ul>
 <br class="flush">
 </div>
