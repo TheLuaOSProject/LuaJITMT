@@ -1816,7 +1816,8 @@ static void asm_ir(ASMState *as, IRIns *ir)
   case IR_VSHLV: case IR_VSHRV: case IR_VSARV:
   case IR_VFMA:
   case IR_VSQRT: case IR_VABS: case IR_VROUND:
-  case IR_VSHUF: case IR_VSHUFB: case IR_VUNPKL: case IR_VUNPKH:
+  case IR_VSHUF: case IR_VSHUFB: case IR_VPERMD:
+  case IR_VUNPKL: case IR_VUNPKH:
   case IR_VCONV: case IR_VEXTRACT: case IR_VMOVMSK:
     asm_vec(as, ir); break;
 #endif

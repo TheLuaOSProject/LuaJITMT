@@ -989,6 +989,12 @@ if simd.features().avx2 then
 	return acc
       end, 80)
     end
+    local ct = T.W.i32x8.ct
+    diff("i32x8 ymm data is also its index", function(n)
+      local acc = ct(7, 0, 6, 1, 5, 2, 4, 3)
+      for _ = 1, n do acc = simd.shuffle(acc, acc) end
+      return acc
+    end, 80)
   end)
 
   test("256-bit insert addresses both halves", function()

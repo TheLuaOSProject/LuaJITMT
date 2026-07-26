@@ -666,6 +666,11 @@ static void asm_vecshuf(ASMState *as, IRIns *ir)
 	       "128 bit half swap without AVX2");
     emit_i8(as, 0x01);
     emit_vexrrl(as, XO_VPERM2I128, dest, left, left, 1);
+  } else if (mode == IRVSHUF_PERMQ) {
+    lj_assertA(wide && (as->flags & JIT_F_AVX2),
+	       "64 bit YMM permute without AVX2");
+    emit_i8(as, imm);
+    emit_vexrrwl(as, XO_VPERMQ, dest, VEXNOV, left, 1, 1);
   } else if (mode == IRVSHUF_PSRLDQ) {
     emit_vshiftl(as, XO_PSHIFTQ, 3, dest, left, imm, wide);
     /* PSRLDQ is group 3. */
@@ -679,6 +684,18 @@ static void asm_vecshuf(ASMState *as, IRIns *ir)
 static void asm_vecshufb(ASMState *as, IRIns *ir)
 {
   asm_vecbin(as, ir, XO_PSHUFB, 1);
+}
+
+static void asm_vecpermd(ASMState *as, IRIns *ir)
+{
+  Reg dest, data, index;
+  lj_assertA(irt_isvec256(ir->t) && irt_vecesz(ir->t) == 4 &&
+	     (as->flags & JIT_F_AVX2), "VPERMD without 32 bit YMM lanes");
+  dest = ra_dest(as, ir, RSET_FPR);
+  data = ra_alloc1(as, ir->op1, RSET_FPR);
+  index = ir->op1 == ir->op2 ? data :
+	  ra_alloc1(as, ir->op2, rset_exclude(RSET_FPR, data));
+  emit_vexrrl(as, XO_VPERMD, dest, index, data, 1);
 }
 
 /* Sign bits of all lanes, gathered into an integer. */
@@ -793,6 +810,7 @@ static void asm_vec(ASMState *as, IRIns *ir)
   case IR_VROUND: asm_vecround(as, ir); return;
   case IR_VSHUF: asm_vecshuf(as, ir); return;
   case IR_VSHUFB: asm_vecshufb(as, ir); return;
+  case IR_VPERMD: asm_vecpermd(as, ir); return;
   case IR_VMOVMSK: asm_vecmovmsk(as, ir); return;
   case IR_VEXTRACT: asm_vecextract(as, ir); return;
   case IR_VCONV: asm_vecconv(as, ir); return;

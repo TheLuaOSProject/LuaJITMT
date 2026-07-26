@@ -669,17 +669,15 @@ if simd.features().avx2 then
   test("256-bit cross-lane operations stay in YMM registers", function()
     local i8 = T.W.i32x8.ct
     local a = i8(1, 2, 3, 4, 5, 6, 7, 8)
-    local body = checkymm("i32x8 reverse",
-      {"vperm2i128 ymm", "vpshufb ymm"},
-      function()
+    local body = checkymm("i32x8 reverse", {"vpermd ymm"}, function()
 	local acc = i8(0)
 	for _ = 1, 400 do
 	  acc = simd.shuffle(acc + a, 7, 6, 5, 4, 3, 2, 1, 0)
 	end
 	return acc
       end)
-    check(not body:find("vpor ymm", 1, true),
-	  "an all-cross shuffle must not merge an empty same-half result")
+    check(not body:find("vpshufb ymm", 1, true),
+	  "a cross-half 32 bit constant must use one VPERMD")
 
     body = checkymm("i32x8 same-half shuffle", {"vpshufb ymm"}, function()
       local acc = i8(0)
@@ -688,17 +686,48 @@ if simd.features().avx2 then
       end
       return acc
     end)
-    check(not body:find("vperm2i128 ymm", 1, true),
-	  "a same-half shuffle must not pay for a cross-half permutation")
+    check(not body:find("vpermd ymm", 1, true) and
+	  not body:find("vperm2i128 ymm", 1, true),
+	  "a same-half constant must use one lane-local shuffle")
+
+    body = checkymm("i32x8 mixed constant permute", {"vpermd ymm"}, function()
+      local acc = i8(0)
+      for _ = 1, 400 do
+	acc = simd.shuffle(acc + a, 0, 5, 2, 7, 4, 1, 6, 3)
+      end
+      return acc
+    end)
+    check(not body:find("vpshufb ymm", 1, true),
+	  "a mixed 32 bit constant must use one VPERMD")
 
     local ix = i8(4, 5, 6, 7, 0, 1, 2, 3)
-    checkymm("i32x8 runtime permute",
-      {"vperm2i128 ymm", "vpshufb ymm", "vpand ymm", "vpandn ymm"},
-      function()
+    body = checkymm("i32x8 runtime permute", {"vpermd ymm"}, function()
 	local acc = i8(0)
 	for _ = 1, 400 do acc = simd.shuffle(acc + a, ix) end
 	return acc
       end)
+    check(not body:find("vpshufb ymm", 1, true) and
+	  not body:find("vpand ymm", 1, true),
+	  "a 32 bit runtime permute must be one direct packed operation")
+
+    local q4 = T.W.i64x4.ct
+    local q = q4(1, 2, 3, 4)
+    body = checkymm("i64x4 constant permute", {"permq ymm"}, function()
+      local acc = q4(0)
+      for _ = 1, 400 do acc = simd.shuffle(acc + q, 3, 1, 2, 0) end
+      return acc
+    end)
+    check(not body:find("vpshufb ymm", 1, true),
+	  "a constant 64 bit permute must use VPERMQ")
+
+    body = checkymm("i64x4 same-half shuffle", {"vpshufb ymm"}, function()
+      local acc = q4(0)
+      for _ = 1, 400 do acc = simd.shuffle(acc + q, 1, 0, 3, 2) end
+      return acc
+    end)
+    check(not body:find("permq ymm", 1, true) and
+	  not body:find("vperm2i128 ymm", 1, true),
+	  "a same-half 64 bit constant must use one lane-local shuffle")
 
     local b = i8(11, 12, 13, 14, 15, 16, 17, 18)
     checkymm("i32x8 shuffle2",

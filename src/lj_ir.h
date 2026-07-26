@@ -186,6 +186,7 @@
   _(VROUND,	N , ref, lit) \
   _(VSHUF,	N , ref, lit) \
   _(VSHUFB,	N , ref, ref) \
+  _(VPERMD,	N , ref, ref) \
   _(VUNPKL,	N , ref, ref) \
   _(VUNPKH,	N , ref, ref) \
   _(VCONV,	N , ref, lit) \
@@ -281,6 +282,7 @@ IRFLDEF(FLENUM)
 #define IRVSHUF_PSHUFLW		2	/* Permute the low four 16 bit lanes. */
 #define IRVSHUF_PSHUFHW		3	/* Permute the high four 16 bit lanes. */
 #define IRVSHUF_SWAP128		4	/* Swap the two 128 bit halves of YMM. */
+#define IRVSHUF_PERMQ		5	/* Permute four 64 bit lanes of YMM. */
 #define IRVSHUF(mode, imm)	(((mode)<<8) + (imm))
 
 /* VEXTRACT and VMOVMSK op2 literal: the source vector IRType is carried in

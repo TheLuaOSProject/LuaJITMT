@@ -97,6 +97,31 @@ in every run instead of being separate hand-written tests.
 times within one process and compares, which is what catches recorder bugs
 that only appear after a trace is linked.
 
+## CPU feature-level matrix
+
+The release binary is also run under explicit QEMU x86-64 CPU models. Invoke
+the child mode directly: the normal runner starts another process without the
+QEMU prefix and would accidentally test the native host instead.
+
+```
+tests=(test_types test_arith test_lib test_jit test_codegen test_ffi_abi test_stress)
+for cpu in Nehalem-v1 SandyBridge-v1 Haswell-v2; do
+  for mode in interp jit mixed; do
+    for testname in "${tests[@]}"; do
+      qemu-x86_64 -cpu "$cpu" ./src/luajit test/simd/run.lua \
+        --one "$mode" "$testname"
+    done
+  done
+done
+```
+
+`Nehalem-v1` exercises the x86-64-v2/SSE path with no AVX,
+`SandyBridge-v1` exercises VEX/XMM lowering with AVX but no AVX2, and
+`Haswell-v2` exercises AVX2/YMM and FMA. Every test file passes in
+interpreter, JIT, and mixed mode on all three. This is separate from the
+native feature check: it proves that runtime dispatch never executes an AVX
+or AVX2 instruction on an older advertised CPU.
+
 ## Reference-implementation hazards
 
 The min/max references compare lane values directly instead of widening them

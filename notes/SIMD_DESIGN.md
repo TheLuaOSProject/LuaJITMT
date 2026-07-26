@@ -615,3 +615,30 @@ both source arrangements and selects between them with packed masks.
 `shuffle2` composes two of the same permutes. Insert already had the right
 packed select algebra; widening its lane-number vector makes constant and
 runtime indices address all YMM lanes without scalarisation.
+
+## D23. Use direct AVX2 lane permutes only when they shorten the critical path
+
+AVX2 has full-width `VPERMD` and immediate `VPERMQ`, but replacing every
+constant byte shuffle with them would not be faster. A constant permutation
+whose sources all remain in the corresponding 128-bit half is one
+low-latency `VPSHUFB`; the full-width permutes have higher dependent latency
+on the measured target.
+
+The recorder therefore classifies 32- and 64-bit constant YMM shuffles by
+their routes:
+
+* a wholly same-half constant remains one `VPSHUFB`;
+* a 32-bit constant with any cross-half route becomes one `VPERMD`;
+* a 64-bit constant with any cross-half route becomes one `VPERMQ`.
+
+A runtime 32-bit index vector always becomes one `VPERMD`. Its hardware
+semantics use the low three bits of each index, exactly matching the public
+modulo-eight rule, and replace the generic control construction, two byte
+shuffles, half swap, and packed select. Other runtime lane widths retain the
+generic byte-control lowering because AVX2 has no matching variable
+full-width permute for them.
+
+This is intentionally a cost decision rather than an instruction-count
+fashion: use the direct permute where it removes a cross-lane dependency
+chain, and retain the cheaper lane-local operation where no crossing is
+needed.

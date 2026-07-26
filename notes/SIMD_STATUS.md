@@ -48,6 +48,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M25 | Benchmarks compare scalar, 128-bit XMM, and 256-bit AVX2/YMM execution | done |
 | M26 | 256-bit broadcasts, comparisons/equality, min/max, shifts, FMA, rounding, conversions, saturating arithmetic, movemask, mulhi, and 8/64-bit multiply emulations | done |
 | M27 | 256-bit reductions, constant/runtime shuffles, two-source shuffles, and constant/runtime insert via explicit 128-bit half crossing | done |
+| M28 | Cost-selective AVX2 `VPERMD`/`VPERMQ` lowering for 32/64-bit YMM shuffles; v2, AVX-only, and AVX2 CPU-model test matrix | done |
 
 ## Commands that pass
 
@@ -62,6 +63,10 @@ make -j$(nproc)                       # release build (x86-64-v3 target)
 for s in 1 7 999 31337; do SIMD_SEED=$s ./src/luajit test/simd/run.lua; done
 make clean && make -j$(nproc) XCFLAGS=-DLUAJIT_DISABLE_JIT   # also passes
 make -j$(nproc) CCDEBUG=-g XCFLAGS=-DLUA_USE_ASSERT          # also passes
+
+# Every file and mode also passes under these QEMU CPU models:
+# Nehalem-v1 (x86-64-v2/no AVX), SandyBridge-v1 (AVX/no AVX2),
+# and Haswell-v2 (AVX2/FMA).
 ```
 
 The "mixed" mode (`jit.off(true, true)` before loading the test file) produces
@@ -325,9 +330,18 @@ int32 mul                     1.89 ns   1.89 ns       2.00x
 int32 xor                     0.25 ns   0.25 ns       2.00x
 int32 shl const               0.21 ns   0.21 ns       2.01x
 int32 select                  0.62 ns   0.62 ns       2.00x
+int32 shuffle const           0.21 ns   0.57 ns       0.73x
+int32 shuffle vector          0.30 ns   0.57 ns       1.04x
 int16 mulhi                   0.90 ns   0.89 ns       2.02x
 uint8 saturated add           0.20 ns   0.20 ns       2.01x
 ```
+
+The constant row is a deliberately dependent full reversal: `VPERMD` has
+more latency than XMM `PSHUFD`, but is still faster than the former
+half-swap-plus-byte-shuffle chain. Runtime YMM indices benefit much more in
+instruction count: one `VPERMD` replaces control expansion, two
+`VPSHUFB`s, a half swap, and a packed select. Same-half constants are not
+represented by this row; they retain one low-latency `VPSHUFB`.
 
 `simd.fma` is worth measuring separately, because whether it helps depends
 entirely on whether the loop is arithmetic bound:

@@ -2254,12 +2254,44 @@ void LJ_FASTCALL recff_ffi_simd_shuffle(jit_State *J, RecordFFData *rd)
     TRef ix = crec_simd_arg(J, rd, 1, &ivi, &iid, &ivt);
     crec_simd_need(J, !veck_isfp(ivi.kind) &&
 		      ivi.esize == vi.esize && ivi.lanes == vi.lanes);
-    J->base[0] = crec_vec_box(J, crec_simd_permute(J, vt, &vi, a, ix, ivt),
-			      vt, id);
+    J->base[0] = crec_vec_box(J,
+      (vt & IRT_VEC256) && vi.esize == 4 ?
+	emitir(IRT(IR_VPERMD, vt), a, ix) :
+	crec_simd_permute(J, vt, &vi, a, ix, ivt), vt, id);
     return;
   }
   crec_simd_idx(J, rd, 1, vi.lanes, vi.lanes, idx);
-  J->base[0] = crec_vec_box(J, crec_simd_shuf1(J, vt, &vi, a, idx, 0), vt, id);
+  if ((vt & IRT_VEC256) && vi.esize == 4) {
+    uint32_t ctl[8], i, routes = 0;
+    for (i = 0; i < vi.lanes; i++) {
+      ctl[i] = idx[i];
+      routes |= 1u << ((((i*4) ^ ((uint32_t)idx[i]*4)) & 16) != 0);
+    }
+    /* A same-half constant is one low-latency VPSHUFB. Once any lane crosses
+    ** a half, one VPERMD beats the dependent half-swap plus byte shuffle.
+    */
+    J->base[0] = crec_vec_box(J, routes == 1 ?
+      crec_simd_shuf1(J, vt, &vi, a, idx, 0) :
+      emitir(IRT(IR_VPERMD, vt), a,
+	     lj_ir_kvec(J, (IRType)(IRT_V4I32|IRT_VEC256), ctl)), vt, id);
+  } else if ((vt & IRT_VEC256) && vi.esize == 8) {
+    uint32_t i, routes = 0;
+    for (i = 0; i < vi.lanes; i++)
+      routes |= 1u << ((((i*8) ^ ((uint32_t)idx[i]*8)) & 16) != 0);
+    /* As above: retain one VPSHUFB for a purely same-half constant. */
+    if (routes != 1) {
+      uint32_t imm = (uint32_t)idx[0] | ((uint32_t)idx[1] << 2) |
+		     ((uint32_t)idx[2] << 4) | ((uint32_t)idx[3] << 6);
+      J->base[0] = crec_vec_box(J,
+	emitir(IRT(IR_VSHUF, vt), a, IRVSHUF(IRVSHUF_PERMQ, imm)), vt, id);
+    } else {
+      J->base[0] = crec_vec_box(J,
+	crec_simd_shuf1(J, vt, &vi, a, idx, 0), vt, id);
+    }
+  } else {
+    J->base[0] = crec_vec_box(J,
+      crec_simd_shuf1(J, vt, &vi, a, idx, 0), vt, id);
+  }
 }
 
 void LJ_FASTCALL recff_ffi_simd_shuffle2(jit_State *J, RecordFFData *rd)

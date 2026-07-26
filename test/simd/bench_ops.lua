@@ -532,9 +532,9 @@ if has_ymm then
   io.write("\n== AVX2 width comparison (dependent ns/op) ==\n")
   io.write("                                      XMM       YMM   lane throughput\n")
 
-  local function width_cost(name, setup_xmm, setup_ymm, step)
-    local tx = op_latency(setup_xmm, step)
-    local ty = op_latency(setup_ymm, step)
+  local function width_cost(name, setup_xmm, setup_ymm, step_xmm, step_ymm)
+    local tx = op_latency(setup_xmm, step_xmm)
+    local ty = op_latency(setup_ymm, step_ymm or step_xmm)
     -- YMM has twice as many lanes. 2*tx/ty is its per-lane throughput gain.
     io.write(string.format("  %-24s %6.2f ns  %6.2f ns      %5.2fx\n",
 			   name, tx, ty, 2*tx/ty))
@@ -586,6 +586,16 @@ if has_ymm then
     function() return i4(3), i4(5) end,
     function() return i8(3), i8(5) end,
     function(x, y) return simd.select(simd.gt(x, y), x, y) end)
+  width_cost("int32 shuffle const",
+    function() return i4(0, 1, 2, 3), i4(0) end,
+    function() return i8(0, 1, 2, 3, 4, 5, 6, 7), i8(0) end,
+    function(x) return simd.shuffle(x, 3, 2, 1, 0) end,
+    function(x) return simd.shuffle(x, 7, 6, 5, 4, 3, 2, 1, 0) end)
+  width_cost("int32 shuffle vector",
+    function() return i4(0, 1, 2, 3), i4(3, 2, 1, 0) end,
+    function() return i8(0, 1, 2, 3, 4, 5, 6, 7),
+		      i8(7, 6, 5, 4, 3, 2, 1, 0) end,
+    function(x, y) return simd.shuffle(x, y) end)
   width_cost("int16 mulhi",
     function() return i16(30000), i16(30000) end,
     function() return i16w(30000), i16w(30000) end,
