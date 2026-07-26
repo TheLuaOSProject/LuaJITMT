@@ -83,6 +83,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M60 | Map signed-word horizontal min/max to biased `PHMINPOSUW` reductions | done |
 | M61 | Widen byte extrema into word pairs and finish with `PHMINPOSUW` | done |
 | M62 | Fuse 16-bit `hsum(a*b)` into `PMADDWD` pair-dot reductions | done |
+| M63 | Fuse 8-bit `hsum(a*b)` into even/odd `PMADDWD` pair-dot reductions | done |
 
 ## Commands that pass
 
@@ -707,3 +708,12 @@ from 7/9 to 5/7 vector instructions. Dependent cost improves about 11%/8% and
 eight-chain throughput about 14%/12%. A 16 MiB PCM16 16-tap polyphase
 decimator improves from about 2.8 to 2.5 ms at XMM width and 1.9 to 1.7 ms at
 YMM width, reaching roughly 5.5x/7.8x scalar throughput.
+
+Byte `hsum(a*b)` now recognises the exact packed byte-multiply expansion and
+reduces its even and odd bytes with two `PMADDWD` instructions. Every term
+discarded by the rewrite is divisible by 256, so final byte narrowing
+preserves signed and unsigned wraparound exactly. Dependent cost improves
+about 11% for XMM and 7% for YMM; eight-chain throughput improves about 9%
+and up to 3%. A 16 MiB INT8 32-tap ternary filter improves about 9--10% at
+XMM width and 4--5% at YMM width, reaching roughly 9.6x/14.2x scalar
+throughput.

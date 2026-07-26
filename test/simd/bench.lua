@@ -1019,6 +1019,83 @@ real_benches.activations = {
 }
 end
 
+---------------------------------------------------- INT8 ternary filter --
+
+do
+-- Apply a 32-tap ternary/small-weight inference filter to 16 MiB of signed
+-- INT8 activations. Inputs in {-1,0,1} and weights in {-2..2} keep every dot
+-- in signed-byte range, so this measures exact arithmetic rather than using
+-- wraparound to manufacture agreement.
+local TERNARY_N = 16 * 1024 * 1024
+local TERNARY_BLOCKS = TERNARY_N / 32
+local TERNARY_PASSES = 4
+local ternary_in = ffi.new("int8_t[?]", TERNARY_N)
+local ternary_out_s = ffi.new("int8_t[?]", TERNARY_BLOCKS)
+local ternary_out_x = ffi.new("int8_t[?]", TERNARY_BLOCKS)
+local ternary_out_y = has_ymm and ffi.new("int8_t[?]", TERNARY_BLOCKS)
+local ternary_weight = {
+  -2,-1,0,1,2,1,0,-1, -2,0,2,0,-2,1,-1,2,
+  2,1,0,-1,-2,-1,0,1, 2,0,-2,0,2,-1,1,-2,
+}
+for i = 0, TERNARY_N-1 do
+  ternary_in[i] = (i*17 + math.floor(i/32)*7) % 3 - 1
+end
+local ternary16 = ffi.typeof("i8x16")
+local ternary32 = has_ymm and ffi.typeof("i8x32")
+local ternary_v16 = ffi.cast(ffi.typeof("$ *", ternary16), ternary_in)
+local ternary_v32 = has_ymm and
+		    ffi.cast(ffi.typeof("$ *", ternary32), ternary_in)
+local ternary_w0 = ternary16(unpack(ternary_weight, 1, 16))
+local ternary_w1 = ternary16(unpack(ternary_weight, 17, 32))
+local ternary_w32 = has_ymm and
+		    ternary32(unpack(ternary_weight, 1, 32))
+
+local function ternary_scalar()
+  local src, out, w = ternary_in, ternary_out_s, ternary_weight
+  for _ = 1, TERNARY_PASSES do
+    for i = 0, TERNARY_BLOCKS-1 do
+      local p = i*32
+      out[i] =
+	src[p]   *w[1]  + src[p+1] *w[2]  + src[p+2] *w[3]  + src[p+3] *w[4] +
+	src[p+4] *w[5]  + src[p+5] *w[6]  + src[p+6] *w[7]  + src[p+7] *w[8] +
+	src[p+8] *w[9]  + src[p+9] *w[10] + src[p+10]*w[11] + src[p+11]*w[12] +
+	src[p+12]*w[13] + src[p+13]*w[14] + src[p+14]*w[15] + src[p+15]*w[16] +
+	src[p+16]*w[17] + src[p+17]*w[18] + src[p+18]*w[19] + src[p+19]*w[20] +
+	src[p+20]*w[21] + src[p+21]*w[22] + src[p+22]*w[23] + src[p+23]*w[24] +
+	src[p+24]*w[25] + src[p+25]*w[26] + src[p+26]*w[27] + src[p+27]*w[28] +
+	src[p+28]*w[29] + src[p+29]*w[30] + src[p+30]*w[31] + src[p+31]*w[32]
+    end
+  end
+  return sample_sum(out, TERNARY_BLOCKS)
+end
+
+local function ternary_xmm()
+  local src, out = ternary_v16, ternary_out_x
+  local w0, w1 = ternary_w0, ternary_w1
+  for _ = 1, TERNARY_PASSES do
+    for i = 0, TERNARY_BLOCKS-1 do
+      local p = i*2
+      out[i] = tonumber(simd.hsum(src[p]*w0)) +
+	       tonumber(simd.hsum(src[p+1]*w1))
+    end
+  end
+  return sample_sum(out, TERNARY_BLOCKS)
+end
+
+local function ternary_ymm()
+  local src, out, w = ternary_v32, ternary_out_y, ternary_w32
+  for _ = 1, TERNARY_PASSES do
+    for i = 0, TERNARY_BLOCKS-1 do out[i] = simd.hsum(src[i]*w) end
+  end
+  return sample_sum(out, TERNARY_BLOCKS)
+end
+
+real_benches.ternary = {
+  scalar = ternary_scalar, xmm = ternary_xmm, ymm = ternary_ymm,
+  name = "INT8 32-tap ternary filter", mib = TERNARY_N/(1024*1024),
+}
+end
+
 -------------------------------------------------------- 1080p Gaussian blur --
 
 do
@@ -1668,8 +1745,9 @@ else
 end
 
 io.write(string.format(
-  "\nReal-world kernels: 1080p RGBA merge + blur, 4K depth tiles, %.0f MiB checksums, %.0f MiB INT8 ranges, %.0fs PCM envelope, %.1fs fixed FIR, %.2fs float FIR, %d particles, %d ChaCha blocks\n",
+  "\nReal-world kernels: 1080p RGBA merge + blur, 4K depth tiles, %.0f MiB checksums, %.0f MiB INT8 ranges + %.0f MiB ternary dots, %.0fs PCM envelope, %.1fs fixed FIR, %.2fs float FIR, %d particles, %d ChaCha blocks\n",
   real_benches.checksum.mib, real_benches.activations.mib,
+  real_benches.ternary.mib,
   real_benches.pcm.seconds, real_benches.pcmfir.seconds,
   real_benches.audio.seconds,
   real_benches.particles.count,
@@ -1698,6 +1776,7 @@ run_real(real_benches.depth)
 run_real(real_benches.pcm)
 run_real(real_benches.pcmfir)
 run_real(real_benches.activations)
+run_real(real_benches.ternary)
 run_real(real_benches.blur)
 run_real(real_benches.audio)
 run_real(real_benches.particles)

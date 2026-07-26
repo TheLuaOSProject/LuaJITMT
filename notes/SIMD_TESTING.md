@@ -28,7 +28,7 @@ status is non-zero if anything failed.
 | `test_jit.lua` | interpreter/JIT differential: the same computation run interpreted and compiled, including loop-carried values, guards, side exits, spills |
 | `test_codegen.lua` | inspects `jit.dump`/`jit.util` output of representative traces to prove packed instructions are emitted and no scalarisation or permanent exit happens; also checks vector IR/constants and explicit YMM operands |
 | `test_ffi_abi.lua` | vector arguments, returns, stack spilling, mixed argument lists and memory round trips against a small C helper library compiled at test time; callbacks taking and returning vectors by value for every lane kind, ten vector arguments (registers plus stack), 16-byte stack alignment behind eight register arguments, mixed integer/FP/vector argument lists, and the rejection of vectors too wide for a register |
-| `bench.lua` | scalar/XMM/YMM comparisons for small and heavy kernels, plus production-sized 1080p Gaussian blur, 64-tap audio FIR, 32-step particle gravity/collision simulation and 20-round ChaCha20 block processing |
+| `bench.lua` | scalar/XMM/YMM comparisons for small and heavy kernels, plus production-sized image, audio, depth, checksum, INT8 inference, particle and ChaCha20 workloads |
 | `bench_ops.lua` | realistic kernels, per-operation latency, four-chain numeric-conversion throughput, and direct XMM/YMM lane-throughput comparisons for the AVX2 backend |
 | `test_noregress.lua` | ordinary Lua and FFI behaviour with no vector types anywhere; its output is diffed against a pristine LuaJIT build |
 
@@ -238,6 +238,17 @@ separate unaligned load. Differential vectors include high unsigned words,
 signed extremes, and the `-32768 * -32768` dword-overflow case. The 16 MiB
 PCM16 decimator checks a fully unrolled scalar 16-tap dot against two XMM
 8-tap dots and one YMM 16-tap dot over four passes.
+
+Byte-dot codegen covers signed and unsigned `hsum(a*b)` at XMM and YMM widths.
+Both source vectors change in the loop so neither of the two logical word
+shifts can be hoisted. The checks require exactly two `PMADDWD`s, two
+`PSRLW`s, and the width-appropriate dword reduction tree, while rejecting
+`PMULLW`, `PAND`, `POR`, and `PSADBW` from the materialised product route.
+Differential cases return both the byte product and its sum, keeping the
+ordinary multiply and the fused consumer live together across signed and
+unsigned extrema. The 16 MiB INT8 benchmark applies a 32-tap ternary/small
+weight filter over four passes and compares every sampled output against a
+fully unrolled scalar implementation.
 
 The enlarged ChaCha20 benchmark provides a production-shaped check with
 sixteen live state vectors; its main traces contain 32 byte shuffles and are

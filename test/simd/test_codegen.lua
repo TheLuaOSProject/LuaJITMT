@@ -1149,6 +1149,37 @@ test("horizontal reduction uses shuffles, not lane loads", function()
     end
   end
   for _, spec in ipairs({
+    {"i8x16", T.T.i8x16.ct,
+      {-128,127,-96,95,-65,64,-33,32,-17,16,-9,8,-5,4,-3,2},
+      {127,-128,95,-96,64,-65,32,-33,16,-17,8,-9,4,-5,2,-3}},
+    {"u8x16", T.T.u8x16.ct,
+      {255,254,253,252,224,192,160,128,96,64,32,16,8,4,2,1},
+      {255,1,254,2,253,3,252,4,251,5,250,6,249,7,248,8}},
+  }) do
+    local name, ct = spec[1], spec[2]
+    local a = ct(unpack(spec[3], 1, 16))
+    local b = ct(unpack(spec[4], 1, 16))
+    local bm = checkloop(name .. " hsum product",
+      {"pmaddwd", "psrlw", "paddd", "psrldq"},
+      {"pmullw", "pand", "por", "psadbw", "call"}, function()
+	local s, v, u = 0, ct(0), ct(0)
+	for _ = 1, 400 do
+	  v = v + a
+	  u = u + b
+	  s = s + tonumber(simd.hsum(v * u))
+	end
+	return v, u, s
+      end)
+    if bm then
+      check(count(bm, "pmaddwd") == 2 and count(bm, "psrlw") == 2,
+	    name .. " hsum product: even/odd bytes need two pair dots")
+      check(count(bm, "paddd") == 3 and count(bm, "psrldq") == 2,
+	    name .. " hsum product: expected the dword reduction tree")
+      check(count(bm, "pmullw") == 0 and count(bm, "psadbw") == 0,
+	    name .. " hsum product: materialised byte multiply must be gone")
+    end
+  end
+  for _, spec in ipairs({
     {"i16x8", T.T.i16x8.ct,
       {-32768, 32767, -12345, 23456, -30000, 11111, -22222, 9999}},
     {"u16x8", T.T.u16x8.ct,
@@ -2403,6 +2434,47 @@ if simd.features().avx2 then
       end)
     check(count(mnemonics(body), "paddb") == 1,
 	  "i8x32 hsum must reduce qword partial sums, not every byte lane")
+
+    for _, spec in ipairs({
+      {"i8x32", T.W.i8x32.ct, -1},
+      {"u8x32", T.W.u8x32.ct, 1},
+    }) do
+      local name, ct, sign = spec[1], spec[2], spec[3]
+      local av, bv = {}, {}
+      for i = 1, 32 do
+	if sign < 0 then
+	  av[i] = (i % 4 == 0 and -128 or
+		   i % 4 == 1 and 127 or i * 7 - 112)
+	  bv[i] = (i % 4 == 0 and 127 or
+		   i % 4 == 1 and -128 or 111 - i * 6)
+	else
+	  av[i] = (i % 3 == 0 and 255 or (i * 37) % 256)
+	  bv[i] = (i % 4 == 0 and 254 or (255 - i * 29) % 256)
+	end
+      end
+      local a = ct(unpack(av, 1, 32))
+      local b = ct(unpack(bv, 1, 32))
+      body = checkymm(name .. " hsum product",
+	{"vpmaddwd ymm", "vpsrlw ymm", "vpaddd ymm",
+	 "vperm2i128 ymm", "vpsrldq ymm"}, function()
+	  local v, u, sum = ct(0), ct(0), 0
+	  for _ = 1, 400 do
+	    v = v + a
+	    u = u + b
+	    sum = sum + tonumber(simd.hsum(v * u))
+	  end
+	  return v, u, sum
+	end)
+      local dm = mnemonics(body)
+      check(count(dm, "pmaddwd") == 2 and count(dm, "psrlw") == 2,
+	    name .. " hsum product must use two even/odd pair dots")
+      check(count(dm, "paddd") == 4 and count(dm, "psrldq") == 2 and
+	    count(dm, "vperm2i128") == 1,
+	    name .. " hsum product must use the YMM dword reduction tree")
+      check(count(dm, "pmullw") == 0 and count(dm, "psadbw") == 0 and
+	    count(dm, "pand") == 0 and count(dm, "por") == 0,
+	    name .. " hsum product must not materialise byte products")
+    end
 
     for _, spec in ipairs({
       {"i16x16", T.W.i16x16.ct,

@@ -1623,3 +1623,41 @@ suite adds a 16 MiB PCM16 16-tap polyphase decimator whose bounded samples
 make every dot mathematically exact without overflow. It improves from about
 2.8 to 2.5 ms for XMM and 1.9 to 1.7 ms for YMM, reaching roughly 5.5x/7.8x
 the explicitly unrolled scalar implementation.
+
+## D57. Fuse byte multiply plus horizontal sum modulo one byte
+
+Packed byte multiplication is expanded into two word products: the low byte
+of each source word supplies the even lanes, while logical word shifts expose
+the odd lanes. Materialising the byte result and then reducing it is
+unnecessary when the consumer is `hsum`.
+
+For source words `A = a0 + 256*a1` and `B = b0 + 256*b1`,
+
+```
+A*B + (A>>8)*(B>>8) = a0*b0 + a1*b1  (mod 256)
+```
+
+The cross terms and the excess copy of the odd product from `A*B` are all
+multiples of 256. Therefore the recorder can apply `PMADDWD` once to the
+original source words and once to their logical eight-bit shifts, add the
+dword partials, reduce those dwords, and perform the existing final byte
+narrowing. Signed byte multiplication and unsigned byte multiplication have
+the same low-byte bit pattern, so the identity covers both APIs. Signed word
+interpretation inside `PMADDWD` can only change a product by a multiple of
+65536 and is harmless for the same reason.
+
+The recogniser deliberately matches the complete, typed
+`crec_simd_mul_i8()` IR expansion, including its repeated `0x00ff` mask and
+shift counts. It cannot rewrite an unrelated logical expression that merely
+ends in `VOR`. The ordinary expansion remains available for CSE and for any
+other consumer; when only `hsum` uses it, backwards DCE removes the dead
+multiply/mask/shift/or chain.
+
+Both widths replace the materialised byte product plus byte reduction with
+two shifts, two pair dots, one partial-sum add, and the dword reduction tree.
+Dependent signed/unsigned cost improves about 11% for XMM and 7% for YMM;
+eight independent chains improve about 9% and up to 3%. The production suite
+adds a 16 MiB, 32-tap INT8 ternary/small-weight filter whose sums stay in
+signed-byte range. In alternating pinned-core runs it improves from about
+3.2 to 2.9 ms at XMM width and 2.1 to 2.0 ms at YMM width, reaching roughly
+9.6x/14.2x the fully unrolled scalar implementation.

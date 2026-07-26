@@ -560,7 +560,28 @@ test("ffi.simd reductions on trace", function()
 	return tostring(last)
       end, 200)
     end
-    if ti.bits == 16 then
+    if ti.bits == 8 then
+      local av, bv
+      if ti.signed then
+	av = {-128,127,-127,126,-96,95,-65,64,-33,32,-17,16,-3,2,-1,0}
+	bv = {127,-128,126,-127,95,-96,64,-65,32,-33,16,-17,2,-3,0,-1}
+      else
+	av = {255,254,253,252,224,192,160,128,96,64,32,16,8,4,2,1}
+	bv = {255,1,254,2,253,3,252,4,251,5,250,6,249,7,248,8}
+      end
+      local x = ct(unpack(av, 1, ti.lanes))
+      local y = ct(unpack(bv, 1, ti.lanes))
+      diffop(ti, "hsum product", function(n)
+	local product, last
+	for i = 1, n do
+	  product = (x + ct(i % 7)) * y
+	  last = simd.hsum(product)
+	end
+	-- Keeping both values live covers the ordinary byte multiply and the
+	-- fused reduction of that multiply on the same trace.
+	return product, tostring(last)
+      end, 200)
+    elseif ti.bits == 16 then
       local av, bv
       if ti.signed then
 	av = {-32768, -32768, 32767, -1, 12345, -23456, 30000, -30000}
@@ -1487,7 +1508,30 @@ if simd.features().avx2 then
 	end
 	return sum, lo, hi
       end, 120)
-      if ti.bits == 16 then
+      if ti.bits == 8 then
+	local av, bv = {}, {}
+	for i = 1, ti.lanes do
+	  if ti.signed then
+	    av[i] = (i % 4 == 0 and -128 or
+		     i % 4 == 1 and 127 or i * 9 - 120)
+	    bv[i] = (i % 4 == 0 and 127 or
+		     i % 4 == 1 and -128 or 119 - i * 7)
+	  else
+	    av[i] = (i % 3 == 0 and 255 or (i * 37) % 256)
+	    bv[i] = (i % 4 == 0 and 254 or (255 - i * 29) % 256)
+	  end
+	end
+	local x = ct(unpack(av, 1, ti.lanes))
+	local y = ct(unpack(bv, 1, ti.lanes))
+	diff(ti.name .. " ymm hsum product", function(n)
+	  local product, last
+	  for i = 1, n do
+	    product = (x + ct(i % 7)) * y
+	    last = simd.hsum(product)
+	  end
+	  return product, last
+	end, 120)
+      elseif ti.bits == 16 then
 	local av, bv = {}, {}
 	for i = 1, ti.lanes do
 	  if ti.signed then

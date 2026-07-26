@@ -1482,6 +1482,72 @@ static TRef crec_simd_mul_i8(jit_State *J, IRType vt, TRef a, TRef b)
 		emitir(IRT(IR_VSHL, wvt), odd, lj_ir_kint(J, 8)));
 }
 
+/* Recover the two original operands from crec_simd_mul_i8()'s packed IR.
+** This lets a following byte hsum bypass the materialised byte products while
+** keeping the expansion visible for ordinary multiply CSE.
+*/
+static int crec_simd_match_mul_i8(jit_State *J, TRef tr,
+				  IRRef *pa, IRRef *pb)
+{
+  IRIns *top = IR(tref_ref(tr)), *band, *shl, *even, *odd, *sa, *sb, *mask;
+  IRRef er, kr;
+  uint32_t i, size;
+  const uint8_t *kp;
+  if (top->o != IR_VOR || irt_type(top->t) != IRT_V16I8) return 0;
+  band = IR(top->op1);
+  shl = IR(top->op2);
+  if (band->o != IR_VAND || shl->o != IR_VSHL) {
+    band = IR(top->op2);
+    shl = IR(top->op1);
+    if (band->o != IR_VAND || shl->o != IR_VSHL) return 0;
+  }
+  if (irt_type(band->t) != IRT_V8I16 ||
+      irt_type(shl->t) != IRT_V8I16 ||
+      irt_isvec256(band->t) != irt_isvec256(top->t) ||
+      irt_isvec256(shl->t) != irt_isvec256(top->t))
+    return 0;
+  if (IR(shl->op2)->o != IR_KINT || IR(shl->op2)->i != 8) return 0;
+  if (IR(band->op1)->o == IR_VMUL && IR(band->op2)->o == IR_KVEC) {
+    er = band->op1; kr = band->op2;
+  } else if (IR(band->op2)->o == IR_VMUL &&
+	     IR(band->op1)->o == IR_KVEC) {
+    er = band->op2; kr = band->op1;
+  } else {
+    return 0;
+  }
+  even = IR(er);
+  mask = IR(kr);
+  if (irt_type(even->t) != IRT_V8I16 ||
+      irt_type(mask->t) != IRT_V8I16 ||
+      irt_isvec256(even->t) != irt_isvec256(top->t) ||
+      irt_isvec256(mask->t) != irt_isvec256(top->t))
+    return 0;
+  size = irt_isvec256(top->t) ? 32 : 16;
+  kp = ir_kvec(mask);
+  for (i = 0; i < size; i += 2)
+    if (kp[i] != 0xff || kp[i+1] != 0) return 0;
+  odd = IR(shl->op1);
+  if (odd->o != IR_VMUL || irt_type(odd->t) != IRT_V8I16 ||
+      irt_isvec256(odd->t) != irt_isvec256(top->t))
+    return 0;
+  sa = IR(odd->op1);
+  sb = IR(odd->op2);
+  if (sa->o != IR_VSHR || sb->o != IR_VSHR ||
+      irt_type(sa->t) != IRT_V8I16 ||
+      irt_type(sb->t) != IRT_V8I16 ||
+      irt_isvec256(sa->t) != irt_isvec256(top->t) ||
+      irt_isvec256(sb->t) != irt_isvec256(top->t) ||
+      IR(sa->op2)->o != IR_KINT || IR(sa->op2)->i != 8 ||
+      IR(sb->op2)->o != IR_KINT || IR(sb->op2)->i != 8)
+    return 0;
+  if (!((even->op1 == sa->op1 && even->op2 == sb->op1) ||
+	(even->op1 == sb->op1 && even->op2 == sa->op1)))
+    return 0;
+  *pa = even->op1;
+  *pb = even->op2;
+  return 1;
+}
+
 /* Record arithmetic on vector cdata. Returns 0 if this is not vector math. */
 static TRef crec_arith_vec(jit_State *J, TRef *sp, CType **s, MMS mm,
 			   RecordFFData *rd)
@@ -3196,17 +3262,35 @@ void LJ_FASTCALL recff_simd_reduce(jit_State *J, RecordFFData *rd)
     return;
   }
   if (rd->data == VRD_SUM && vi.esize == 1) {
-    /*
-    ** PSADBW against zero sums each group of eight byte bit-patterns into a
-    ** qword. The final lane-width narrowing makes this identical for signed
-    ** and unsigned byte sums, including wraparound.
-    */
-    IRType qvt = (IRType)(IRT_V2I64 | (vt & IRT_VEC256));
-    uint8_t zbuf[LJ_VEC_MAXSIZE];
-    memset(zbuf, 0, sizeof(zbuf));
-    r = emitir(IRT(IR_VSADU8, qvt), a, lj_ir_kvec(J, vt, zbuf));
-    rvt = qvt;
-    n = sz >> 3;
+    IRRef ma, mb;
+    if (crec_simd_match_mul_i8(J, a, &ma, &mb)) {
+      /*
+      ** Pair-dot the even bytes as their containing words, then do the same
+      ** after exposing odd bytes in the low half of each word. Every omitted
+      ** term is a multiple of 256, so the extracted byte is unchanged.
+      */
+      IRType wvt = (IRType)(IRT_V8I16 | (vt & IRT_VEC256));
+      IRType dvt = (IRType)(IRT_V4I32 | (vt & IRT_VEC256));
+      TRef ah = emitir(IRT(IR_VSHR, wvt), ma, lj_ir_kint(J, 8));
+      TRef bh = emitir(IRT(IR_VSHR, wvt), mb, lj_ir_kint(J, 8));
+      TRef even = emitir(IRT(IR_VPMADW, dvt), ma, mb);
+      TRef odd = emitir(IRT(IR_VPMADW, dvt), ah, bh);
+      r = emitir(IRT(IR_VADD, dvt), even, odd);
+      rvt = dvt;
+      n = sz >> 2;
+    } else {
+      /*
+      ** PSADBW against zero sums each group of eight byte bit-patterns into a
+      ** qword. The final lane-width narrowing makes this identical for signed
+      ** and unsigned byte sums, including wraparound.
+      */
+      IRType qvt = (IRType)(IRT_V2I64 | (vt & IRT_VEC256));
+      uint8_t zbuf[LJ_VEC_MAXSIZE];
+      memset(zbuf, 0, sizeof(zbuf));
+      r = emitir(IRT(IR_VSADU8, qvt), a, lj_ir_kvec(J, vt, zbuf));
+      rvt = qvt;
+      n = sz >> 3;
+    }
   } else if (rd->data == VRD_SUM && vi.esize == 2 &&
 	     IR(tref_ref(a))->o == IR_VMUL) {
     /*
