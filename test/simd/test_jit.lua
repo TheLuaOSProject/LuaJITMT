@@ -1364,14 +1364,21 @@ if simd.features().avx2 then
 
   test("256-bit constant and runtime shuffles cross halves", function()
     for _, ti in ipairs(T.W) do
-      local lanes, identity, localrev, halfswap, rev, mix, raw =
-	{}, {}, {}, {}, {}, {}, {}
+      local lanes, identity, localrev, halfswap, unpklo, unpkhi, unpkswap,
+	    rev, mix, raw = {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
       local half = ti.lanes / 2
+      local nph = 128 / ti.bits
       for i = 0, ti.lanes-1 do
+	local h, out = (i-i%nph)/nph, i%nph
+	local lolane = h*nph + (out-out%2)/2
+	local hilane = lolane + nph/2
 	lanes[i+1] = i + 1
 	identity[i+1] = i
 	localrev[i+1] = i-i%half + half-1-i%half
 	halfswap[i+1] = (i+half) % ti.lanes
+	unpklo[i+1] = lolane + (out%2 == 1 and ti.lanes or 0)
+	unpkhi[i+1] = hilane + (out%2 == 1 and ti.lanes or 0)
+	unpkswap[i+1] = lolane + (out%2 == 0 and ti.lanes or 0)
 	rev[i+1] = ti.lanes - 1 - i
 	mix[i+1] = i % 2 == 0 and ti.lanes - 1 - i
 				      or ti.lanes + (i + half) % ti.lanes
@@ -1401,6 +1408,27 @@ if simd.features().avx2 then
 	local acc = ct(0)
 	for _ = 1, n do
 	  acc = simd.shuffle(acc + a, unpack(halfswap, 1, ti.lanes))
+	end
+	return acc
+      end, 80)
+      diff(ti.name .. " ymm low unpack", function(n)
+	local acc = ct(0)
+	for _ = 1, n do
+	  acc = simd.shuffle2(acc + a, b, unpack(unpklo, 1, ti.lanes))
+	end
+	return acc
+      end, 80)
+      diff(ti.name .. " ymm high unpack", function(n)
+	local acc = ct(0)
+	for _ = 1, n do
+	  acc = simd.shuffle2(acc + a, b, unpack(unpkhi, 1, ti.lanes))
+	end
+	return acc
+      end, 80)
+      diff(ti.name .. " ymm swapped unpack", function(n)
+	local acc = ct(0)
+	for _ = 1, n do
+	  acc = simd.shuffle2(acc + a, b, unpack(unpkswap, 1, ti.lanes))
 	end
 	return acc
       end, 80)

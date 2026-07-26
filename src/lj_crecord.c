@@ -2707,6 +2707,33 @@ static int crec_simd_shufd(const CTVecInfo *vi, const uint8_t *idx,
   return 1;
 }
 
+/* Recognise the lane-local low/high interleaves implemented directly by the
+** PUNPCK family. AVX/YMM unpacking repeats independently in each 128 bit
+** half, so account for that layout rather than treating YMM as one lane.
+*/
+static int crec_simd_unpk(const CTVecInfo *vi, const uint8_t *idx,
+			  IROp *op, int *swap)
+{
+  uint32_t high, sw, i, n = vi->lanes, nph = 16 / vi->esize;
+  for (high = 0; high < 2; high++) {
+    for (sw = 0; sw < 2; sw++) {
+      for (i = 0; i < n; i++) {
+	uint32_t h = i / nph, out = i % nph;
+	uint32_t lane = h*nph + (out >> 1) + high*(nph >> 1);
+	uint32_t fromb = (out & 1) ^ sw;
+	uint32_t want = lane + (fromb ? n : 0);
+	if (idx[i] != want) break;
+      }
+      if (i == n) {
+	*op = high ? IR_VUNPKH : IR_VUNPKL;
+	*swap = (int)sw;
+	return 1;
+      }
+    }
+  }
+  return 0;
+}
+
 /* A 128 bit permute is one PSHUFB. A 256 bit permute also shuffles a copy
 ** with its 128 bit halves swapped, then selects the matching bytes.
 */
@@ -2889,11 +2916,10 @@ void LJ_FASTCALL recff_ffi_simd_shuffle2(jit_State *J, RecordFFData *rd)
   TRef a = crec_simd_arg(J, rd, 0, &vi, &id, &vt);
   TRef b;
   uint8_t idx[LJ_VEC_MAXSIZE];
+  IROp op;
+  int swap;
   TRef ra, rb;
   b = crec_simd_arg(J, rd, 1, &vi2, &id2, &vt2);
-  /* Compare the raw ctypes: an arithmetic result carries the raw id, while a
-  ** value built from a typedef carries the typedef id.
-  */
   UNUSED(vi2);
   /* Compare the raw ctypes: an arithmetic result carries the raw id, while a
   ** value built from a typedef carries the typedef id.
@@ -2901,6 +2927,11 @@ void LJ_FASTCALL recff_ffi_simd_shuffle2(jit_State *J, RecordFFData *rd)
   crec_simd_need(J, (J->flags & JIT_F_SSSE3) != 0 && vt == vt2 &&
 		    ctype_raw(cts, id) == ctype_raw(cts, id2));
   crec_simd_idx(J, rd, 2, vi.lanes, 2*(uint32_t)vi.lanes, idx);
+  if (crec_simd_unpk(&vi, idx, &op, &swap)) {
+    J->base[0] = crec_vec_box(J,
+      emitir(IRT(op, vt), swap ? b : a, swap ? a : b), vt, id);
+    return;
+  }
   /* Two permutes, each zeroing the lanes taken from the other vector. */
   ra = crec_simd_shuf1(J, vt, &vi, a, idx, 0);
   rb = crec_simd_shuf1(J, vt, &vi, b, idx, vi.lanes);

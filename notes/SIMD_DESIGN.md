@@ -612,9 +612,11 @@ all-same-half shuffle omits the swap; an all-cross shuffle omits the empty
 shuffle and merge. A runtime index vector uses control bit 4 to determine
 whether each requested byte belongs to the output's current half: it shuffles
 both source arrangements and selects between them with packed masks.
-`shuffle2` composes two of the same permutes. Insert already had the right
-packed select algebra; widening its lane-number vector makes constant and
-runtime indices address all YMM lanes without scalarisation.
+`shuffle2` generally composes two of the same permutes. Its canonical
+lane-local low/high interleaves instead use one `PUNPCK*`, including the
+reversed operand forms. Insert already had the right packed select algebra;
+widening its lane-number vector makes constant and runtime indices address
+all YMM lanes without scalarisation.
 
 ## D23. Use direct AVX2 lane permutes only when they shorten the critical path
 
@@ -1290,3 +1292,22 @@ about 18%, because the controls no longer occupy registers or become memory
 operands. XMM remains neutral at roughly 0.14 ns. Differential coverage runs
 identity, lane-local reverse, half swap, and cross-half reverse for every YMM
 lane kind; machine-code checks forbid the eliminated byte-control operations.
+
+## D45. Collapse two-source interleaves to one unpack
+
+A general `shuffle2(a, b, ...)` needs two zero-masked byte permutations and
+an OR. The common structure-of-arrays interleave is already a native x86
+operation: `PUNPCKL*` or `PUNPCKH*`. The recorder now recognises low and high
+interleaves at every lane width, in either `a,b` or `b,a` order, and emits the
+existing `VUNPKL/VUNPKH` IR directly.
+
+The recognition follows the hardware's 128-bit lane boundaries. A YMM low
+dword unpack is `[a0,b0,a1,b1,a4,b4,a5,b5]`, not a whole-vector interleave of
+lanes zero through three. This keeps XMM, AVX, and AVX2 semantics identical
+to their respective `PUNPCK*` instructions while arbitrary full-width
+patterns retain the general lowering.
+
+On the measured host, dependent XMM/YMM interleave latency improves from
+about 0.390 to 0.235 ns/vector, roughly 40%. Eight independent chains improve
+from 0.137 to 0.096 ns/op, about 30%. The generated hot path is one unpack
+instead of two `PSHUFB`s plus `POR`.

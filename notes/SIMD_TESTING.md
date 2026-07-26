@@ -154,6 +154,10 @@ emits no shuffle, XMM and repeated lane-local YMM 32/64-bit controls use
 immediate `PSHUFD`, and an exact YMM half exchange uses only `VPERM2I128`,
 including for byte lanes. Interpreter/JIT differentials exercise identity,
 lane-local reverse, half exchange, and full reverse for every YMM lane kind.
+Two-source coverage additionally constructs low, high, and reversed-operand
+lane-local interleaves for every lane kind. Machine-code checks require one
+`PUNPCKL*`/`PUNPCKH*` and reject both `PSHUFB` and the final `POR`; a separate
+cross-half `shuffle2` keeps the general path covered.
 
 The enlarged ChaCha20 benchmark provides a production-shaped check with
 sixteen live state vectors; its main traces contain 32 byte shuffles and are

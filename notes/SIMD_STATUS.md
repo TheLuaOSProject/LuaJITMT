@@ -71,6 +71,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M48 | Lower variable word left shifts through packed power-of-two factors and one native word multiply | done |
 | M49 | Lower word logical-right and YMM arithmetic-right shifts through packed factors and native high products | done |
 | M50 | Canonicalise identity, half-swap, and immediate 32/64-bit constant shuffles before allocating byte controls | done |
+| M51 | Collapse lane-local two-source low/high interleaves to one packed unpack instruction | done |
 
 ## Commands that pass
 
@@ -628,3 +629,10 @@ with distinct controls improve from 0.169 to 0.138 ns/shuffle, about 18%;
 XMM remains neutral near 0.14 ns. Differential and codegen tests cover
 identity, local reversal, pure half exchange, and arbitrary cross-half
 permutations for all lane kinds.
+
+Canonical `shuffle2` low/high interleaves now emit one `PUNPCK*` at every
+lane width, in either operand order, instead of two zero-masked byte shuffles
+and an OR. The recogniser follows each 128-bit hardware half at YMM width.
+Dependent XMM/YMM latency improves from about 0.390 to 0.235 ns/vector,
+roughly 40%, and eight-chain throughput from 0.137 to 0.096 ns/op, about 30%.
+Arbitrary two-source permutations retain the general lowering.

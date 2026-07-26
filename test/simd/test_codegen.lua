@@ -1052,7 +1052,7 @@ test("shuffle and insert are packed", function()
       for _ = 1, 400 do acc = simd.shuffle(acc + a, 0, 1, 2, 3) end
       return acc
     end)
-  checkloop("shuffle2", {"pshufb", "por"}, NOCALL, function()
+  checkloop("shuffle2", {"punpckldq"}, {"call", "pshufb", "por"}, function()
     local acc = i4(0)
     local b = i4(9, 8, 7, 6)
     for _ = 1, 400 do acc = simd.shuffle2(acc + a, b, 0, 4, 1, 5) end
@@ -1859,6 +1859,43 @@ if simd.features().avx2 then
     end)
     check(not body:find("vpshufb ymm", 1, true),
 	  "a byte-vector half swap must not retain an identity VPSHUFB")
+
+    body = checkymm("i32x8 low unpack", {"vpunpckldq ymm"}, function()
+      local acc = i8(0)
+      for _ = 1, 400 do
+	acc = simd.shuffle2(acc + a, a, 0, 8, 1, 9, 4, 12, 5, 13)
+      end
+      return acc
+    end)
+    check(not body:find("vpshufb ymm", 1, true) and
+	  not body:find("vpor ymm", 1, true),
+	  "a lane-local low interleave must be one unpack")
+
+    body = checkymm("i32x8 high unpack", {"vpunpckhdq ymm"}, function()
+      local acc = i8(0)
+      for _ = 1, 400 do
+	acc = simd.shuffle2(acc + a, a, 2, 10, 3, 11, 6, 14, 7, 15)
+      end
+      return acc
+    end)
+    check(not body:find("vpshufb ymm", 1, true) and
+	  not body:find("vpor ymm", 1, true),
+	  "a lane-local high interleave must be one unpack")
+
+    local ub32 = T.W.u8x32.ct
+    local uv = ub32(1)
+    body = checkymm("u8x32 low unpack", {"vpunpcklbw ymm"}, function()
+      local acc = ub32(0)
+      for _ = 1, 400 do
+	acc = simd.shuffle2(acc + uv, uv,
+	  0,32,1,33,2,34,3,35,4,36,5,37,6,38,7,39,
+	  16,48,17,49,18,50,19,51,20,52,21,53,22,54,23,55)
+      end
+      return acc
+    end)
+    check(not body:find("vpshufb ymm", 1, true) and
+	  not body:find("vpor ymm", 1, true),
+	  "a byte interleave must use PUNPCKLBW")
 
     local b = i8(11, 12, 13, 14, 15, 16, 17, 18)
     checkymm("i32x8 shuffle2",
