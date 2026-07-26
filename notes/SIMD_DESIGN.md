@@ -1165,3 +1165,24 @@ chains, signed XMM/YMM throughput improves about 20--23% and unsigned about
 8--12%. Across signed/unsigned XMM/YMM square root-and-loop traces, total
 instructions fall from 412 to 392, `VPMULUDQ` from 32 to 24, and qword shifts
 from 48 to 40.
+
+## D41. Compute byte `mulhi` squares as full word products
+
+A general byte `mulhi(a, b)` has to arrange one operand for `PMULHW` or
+`PMULHUW`, because x86 has no packed byte high-product instruction. A square
+is simpler: the full product of two bytes always fits in one 16-bit lane.
+The recorder recognises identical IR operands, zero-extends the even and odd
+bytes, issues two `VPMULLW`s, and directly extracts bits 8 through 15.
+
+Signed squares use `VPABSB` first. A square is non-negative and
+`abs(-128)` deliberately remains the byte bit pattern `0x80`, which is the
+unsigned magnitude 128 required by `(-128)^2`. This removes the signed
+word-extension chain as well as both high-word multiplies.
+
+Unsigned dependent square latency improves from about 1.83 to 1.67 ns/vector,
+roughly 9%. Signed dependent latency is flat within measurement noise, while
+eight independent chains improve about 12% signed and 9% unsigned. Across
+the signed/unsigned XMM/YMM dependent and eight-chain traces, total
+instructions fall from 1532 to 1418; all 144 high-word multiplies are
+replaced with low-word products and the former 144 left shifts and 72
+arithmetic word shifts disappear.

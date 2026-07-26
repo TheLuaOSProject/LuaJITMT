@@ -2256,6 +2256,21 @@ void LJ_FASTCALL recff_ffi_simd_mulhi(jit_State *J, RecordFFData *rd)
     TRef lo = crec_simd_k16(J, wvt, 0x00ff);
     TRef hi = crec_simd_k16(J, wvt, 0xff00);
     TRef even, odd;
+    if (a == b) {
+      TRef sq = veck_isunsigned(vi.kind) ? a :
+	emitir(IRT(IR_VABS, vt), a, 0);
+      /* A byte square is unsigned and fits in a word. Multiply the absolute,
+      ** zero-extended even and odd bytes, then take bits 8..15.
+      */
+      even = emitir(IRT(IR_VAND, wvt), sq, lo);
+      odd = emitir(IRT(IR_VSHR, wvt), sq, lj_ir_kint(J, 8));
+      even = emitir(IRT(IR_VMUL, wvt), even, even);
+      even = emitir(IRT(IR_VSHR, wvt), even, lj_ir_kint(J, 8));
+      odd = emitir(IRT(IR_VMUL, wvt), odd, odd);
+      odd = emitir(IRT(IR_VAND, wvt), odd, hi);
+      J->base[0] = crec_vec_box(J, emitir(IRT(IR_VOR, vt), even, odd), vt, id);
+      return;
+    }
     if (veck_isunsigned(vi.kind)) {
       /* Scale one byte operand by 2^8, then PMULHUW gives bits 8..15
       ** of the original byte product in the low byte of each word.

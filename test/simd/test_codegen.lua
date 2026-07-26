@@ -502,6 +502,19 @@ test("mulhi uses packed multiplication", function()
       for _ = 1, 400 do acc = simd.mulhi(acc + i8(3), b) end
       return acc
     end)
+  local mi8sq = checkloop("i8x16 mulhi square",
+    {"pabsb", "pmullw", "psrlw", "pand", "por"},
+    {"call", "pmulhw", "pmulhuw"}, function()
+      local acc = i8(-128, 127, -119, 113, -107, 101, -97, 89,
+		     -83, 79, -73, 67, -61, 59, -53, 47)
+      for _ = 1, 400 do
+	local x = acc + i8(3)
+	acc = simd.mulhi(x, x) + i8(1)
+      end
+      return acc
+    end)
+  check(count(mi8sq, "pmullw") == 2 and count(mi8sq, "pabsb") == 1,
+	"i8x16 mulhi square must use absolute bytes and two low products")
 
   local u8 = T.T.u8x16.ct
   checkloop("u8x16 mulhi", {"pmulhuw", "psrlw", "psllw"},
@@ -512,6 +525,19 @@ test("mulhi uses packed multiplication", function()
       for _ = 1, 400 do acc = simd.mulhi(acc + u8(3), b) end
       return acc
     end)
+  local mu8sq = checkloop("u8x16 mulhi square",
+    {"pmullw", "psrlw", "pand", "por"},
+    {"call", "pmulhuw", "pmulhw"}, function()
+      local acc = u8(255, 241, 233, 227, 211, 199, 193, 181,
+		     173, 167, 157, 149, 139, 131, 127, 113)
+      for _ = 1, 400 do
+	local x = acc + u8(3)
+	acc = simd.mulhi(x, x) + u8(1)
+      end
+      return acc
+    end)
+  check(count(mu8sq, "pmullw") == 2,
+	"u8x16 mulhi square must use two low word products")
 
   local i32 = T.T.i32x4.ct
   checkloop("i32x4 mulhi", {"pmuldq", "pblendw", "psrlq"},
@@ -1185,6 +1211,35 @@ if simd.features().avx2 then
 	for _ = 1, 400 do acc = simd.mulhi(acc + sb32(3), k) end
 	return acc
       end)
+
+    local sbsqbody = checkymm("i8x32 mulhi square",
+      {"vpabsb ymm", "vpmullw ymm", "vpsrlw ymm", "vpand ymm", "vpor ymm"},
+      function()
+	local acc = sb32(-119)
+	for _ = 1, 400 do
+	  local x = acc + sb32(3)
+	  acc = simd.mulhi(x, x) + sb32(1)
+	end
+	return acc
+      end)
+    local _, nsb = sbsqbody:gsub("vpmullw ymm", "")
+    check(nsb == 2 and not sbsqbody:find("vpmulhw", 1, true),
+	  "i8x32 mulhi square must use absolute bytes and two low products")
+
+    local ub32 = T.W.u8x32.ct
+    local ubbody = checkymm("u8x32 mulhi square",
+      {"vpmullw ymm", "vpsrlw ymm", "vpand ymm", "vpor ymm"},
+      function()
+	local acc = ub32(241)
+	for _ = 1, 400 do
+	  local x = acc + ub32(3)
+	  acc = simd.mulhi(x, x) + ub32(1)
+	end
+	return acc
+      end)
+    local _, nub = ubbody:gsub("vpmullw ymm", "")
+    check(nub == 2 and not ubbody:find("vpmulhuw", 1, true),
+	  "u8x32 mulhi square must use two low word products")
 
     local bc = sb32(0, 1, 7, 8, 9, -1, 3, 6)
     local blbody = checkymm("i8x32 per-lane shl lookup",

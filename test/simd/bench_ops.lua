@@ -571,8 +571,12 @@ do
 	  function(x, y) return simd.mulhi(x, y) end)
   op_cost("i8x16 mulhi", function() return s8(-119), s8(117) end,
 	  function(x, y) return simd.mulhi(x, y) end)
+  op_cost("i8x16 mulhi square", function() return s8(-119) end,
+	  function(x) return simd.mulhi(x, x) end)
   op_cost("u8x16 mulhi", function() return u8(241), u8(233) end,
 	  function(x, y) return simd.mulhi(x, y) end)
+  op_cost("u8x16 mulhi square", function() return u8(241) end,
+	  function(x) return simd.mulhi(x, x) end)
   op_cost("i32x4 mulhi",
 	  function() return i4(0x40000000), i4(-123456789) end,
 	  function(x, y) return simd.mulhi(x, y) end)
@@ -934,10 +938,18 @@ if has_ymm then
     function() return s8(-119), s8(117) end,
     function() return s8w(-119), s8w(117) end,
     function(x, y) return simd.mulhi(x, y) end)
+  width_cost("int8 mulhi square",
+    function() return s8(-119) end,
+    function() return s8w(-119) end,
+    function(x) return simd.mulhi(x, x) end)
   width_cost("uint8 mulhi",
     function() return u8(241), u8(233) end,
     function() return u8w(241), u8w(233) end,
     function(x, y) return simd.mulhi(x, y) end)
+  width_cost("uint8 mulhi square",
+    function() return u8(241) end,
+    function() return u8w(241) end,
+    function(x) return simd.mulhi(x, x) end)
   width_cost("uint8 saturated add",
     function() return u8(1), u8(3) end,
     function() return u8w(1), u8w(3) end,

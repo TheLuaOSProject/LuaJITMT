@@ -222,6 +222,13 @@ squares require three products and no subtraction. Existing randomized
 interpreter/JIT square differentials cover signed/unsigned XMM and YMM values,
 and the operation benchmark records both dependent square widths.
 
+Byte `mulhi` square codegen is also separate from the general path. Signed
+XMM/YMM loops require one packed byte absolute and exactly two low-word
+products; unsigned loops require exactly two low-word products; neither may
+retain `PMULHW`/`PMULHUW`. Differential square tests include signed `-128`
+and randomized signed/unsigned XMM/YMM values. The operation table and
+eight-chain stress benchmark cover latency and throughput independently.
+
 Floating unary minus has explicit qNaN, sNaN, payload and signed-zero bit tests.
 This matters under aggressive PGO builds: C arithmetic negation may quiet an
 sNaN, while the JIT's XOR sign flip does not. The interpreter now flips the

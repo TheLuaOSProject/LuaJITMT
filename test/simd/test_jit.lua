@@ -62,7 +62,7 @@ test("packed mulhi emulations", function()
       for _ = 1, n do acc = simd.mulhi(acc + a, k) end
       return acc
     end, ti.bits == 64 and 120 or 240)
-    if ti.bits >= 32 then
+    if ti.bits == 8 or ti.bits >= 32 then
       diff(name .. " mulhi square", function(n)
 	local acc = a
 	for _ = 1, n do acc = simd.mulhi(acc, acc) + k end
@@ -1150,6 +1150,13 @@ if simd.features().avx2 then
 	for _ = 1, n do acc = simd.mulhi(acc, k) + a end
 	return acc
       end, 120)
+      if ti.bits == 8 then
+	diff(name .. " ymm mulhi square", function(n)
+	  local acc, k = a, ct(3)
+	  for _ = 1, n do acc = simd.mulhi(acc, acc) + k end
+	  return acc
+	end, 120)
+      end
     end
   end)
 

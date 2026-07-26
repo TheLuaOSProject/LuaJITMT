@@ -67,6 +67,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M44 | Lower variable byte left shifts through a packed power-of-two lookup and IR-visible byte multiplication | done |
 | M45 | Lower logical and arithmetic variable byte right shifts through lookup factors and isolated word products | done |
 | M46 | Shorten signed qword `mulhi` correction and reuse cross-products/sign masks when squaring | done |
+| M47 | Compute signed/unsigned byte `mulhi` squares through absolute bytes and full word products | done |
 
 ## Commands that pass
 
@@ -584,3 +585,12 @@ eight-chain throughput by about 20--23%; unsigned square throughput improves
 about 8--12%. The XMM/YMM signed/unsigned square dump shrinks from 412 to 392
 instructions and from 32 to 24 `VPMULUDQ`s. `bench_ops.lua` now keeps both
 dependent square paths visible.
+
+Byte `mulhi` squares now use two full word products instead of arranging two
+high-word products. Signed inputs first take packed absolute bytes, with
+`-128` retaining the correct magnitude bit pattern. Unsigned dependent
+latency improves from about 1.83 to 1.67 ns/vector; signed dependent latency
+is flat, while eight-chain throughput improves about 9% unsigned and 12%
+signed. The XMM/YMM dependent/parallel dump shrinks from 1532 to 1418
+instructions and eliminates all 144 high-word multiplies. Dedicated
+`bench_ops.lua` rows retain both square paths.
