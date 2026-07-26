@@ -115,6 +115,27 @@ test("non-constant scalar operand", function()
   end
 end)
 
+test("constant integer modulo is exact at signed extremes", function()
+  local bit_ = require("bit")
+  local values = {
+    -2147483648, -2147483647, -1000000001, -38, -37, -8, -7, -2, -1,
+    0, 1, 2, 7, 8, 37, 38, 1000000001, 2147483646, 2147483647,
+  }
+  diff("constant integer modulo", function(n)
+    local a, b, c, d, e, f = 0, 0, 0, 0, 0, 0
+    for i = 1, n do
+      local x = values[(i % #values) + 1]
+      a = bit_.bxor(a, x % 3)
+      b = bit_.bxor(b, x % -3)
+      c = bit_.bxor(c, x % 37)
+      d = bit_.bxor(d, x % -37)
+      e = bit_.bxor(e, x % 2147483647)
+      f = bit_.bxor(f, x % -2147483648)
+    end
+    return a, b, c, d, e, f
+  end, 600)
+end)
+
 test("vectors from memory", function()
   for _, ti in ipairs(T.T) do
     local rnd = T.rng(SEED + 7 * ti.bits)

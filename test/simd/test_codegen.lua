@@ -1111,6 +1111,29 @@ if simd.features().avx2 then
 	  table.concat(legacy, ", ") .. " | " .. body:gsub("\n", " | "))
   end)
 
+  test("constant modulo stays inline in YMM loops", function()
+    local bit_ = require("bit")
+    local i8 = T.W.i32x8.ct
+    local inc = i8(1, 2, 3, 4, 5, 6, 7, 8)
+    local body, isloop = loopcode(function()
+      local v, s = i8(0), 0
+      for i = 1, 400 do
+	v = v + inc
+	s = bit_.bxor(s, i % 37)
+      end
+      return v, s
+    end)
+    local m = mnemonics(body)
+    check(isloop, "constant modulo/YMM test must compile as a loop")
+    check((m.vpaddd or 0) > 0,
+	  "constant modulo/YMM loop lost packed add: " .. body:gsub("\n", " | "))
+    check((m.imul or 0) >= 2,
+	  "constant modulo must use reciprocal multiplies: " ..
+	  body:gsub("\n", " | "))
+    check((m.idiv or 0) == 0 and (m.call or 0) == 0,
+	  "constant modulo must not divide or call: " .. body:gsub("\n", " | "))
+  end)
+
   test("256-bit cross-lane operations stay in YMM registers", function()
     local i8 = T.W.i32x8.ct
     local a = i8(1, 2, 3, 4, 5, 6, 7, 8)

@@ -1447,6 +1447,8 @@ LJFOLDF(simplify_intmod_k)
 {
   int32_t k = fright->i;
   lj_assertJ(k != 0, "integer mod 0");
+  if (k == -1)  /* Avoid the signed INT_MIN / -1 division overflow. */
+    return INTFOLD(0);
   if (k > 0 && (k & (k-1)) == 0) {  /* i % (2^k) ==> i & (2^k-1) */
     fins->o = IR_BAND;
     fins->op2 = lj_ir_kint(J, k-1);

@@ -723,7 +723,7 @@ if has_ymm then
 
   io.write("\n== VEX-clean mixed scalar/YMM throughput ==\n")
   local transition_sink
-  local function transition_cost(mixed)
+  local function transition_cost(kind)
     local ITERS = 1 << 20
     local inc = f8(0.001)
     jit_.flush()
@@ -731,8 +731,10 @@ if has_ymm then
     for _ = 1, REPS do
       local v, s = f8(1), 1.0
       local t0 = os.clock()
-      if mixed then
+      if kind == "scalar" then
 	for _ = 1, ITERS do v = v + inc; s = s + 0.25 end
+      elseif kind == "mod37" then
+	for i = 1, ITERS do v = v + inc; s = s + i % 37 end
       else
 	for _ = 1, ITERS do v = v + inc end
       end
@@ -742,11 +744,15 @@ if has_ymm then
     end
     return best*1e9/ITERS
   end
-  local ymm_only = transition_cost(false)
-  local ymm_scalar = transition_cost(true)
+  local ymm_only = transition_cost("ymm")
+  local ymm_scalar = transition_cost("scalar")
+  local ymm_mod37 = transition_cost("mod37")
   io.write(string.format(
     "  YMM add only %6.2f ns  + Lua scalar add %6.2f ns  %5.2fx\n",
     ymm_only, ymm_scalar, ymm_scalar/ymm_only))
+  io.write(string.format(
+    "  YMM add only %6.2f ns  + integer %% 37  %6.2f ns  %5.2fx\n",
+    ymm_only, ymm_mod37, ymm_mod37/ymm_only))
 
   io.write("\n== AVX2 width comparison (dependent ns/op) ==\n")
   io.write("                                      XMM       YMM   lane throughput\n")

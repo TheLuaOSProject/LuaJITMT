@@ -1792,6 +1792,11 @@ static void asm_mod(ASMState *as, IRIns *ir)
 					  IRCALL_lj_carith_modu64);
   else
 #endif
+#if LJ_TARGET_X86ORX64
+  if (IR(ir->op2)->o == IR_KINT)
+    asm_intmod(as, ir);
+  else
+#endif
     asm_callid(as, ir, IRCALL_lj_vm_modi);
 }
 

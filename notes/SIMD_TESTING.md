@@ -133,6 +133,15 @@ benchmark compares a YMM-only add against YMM plus a scalar add. The latter
 fell from 76.50 ns to 0.38 ns per iteration after the VEX cleanup and should
 remain at parity with the vector-only loop.
 
+A companion trace mixes a YMM add with `i % 37`. It must contain the packed
+add and the two reciprocal-multiply instructions, and must contain neither
+`CALL` nor `IDIV`. The differential test covers positive and negative
+divisors, signed extrema, and the `INT_MIN` divisor. Validation also ran 1,054
+literal divisors against a floor-modulo oracle, then repeated the edge set
+with folding disabled so the backend's `+/-1` and power-of-two robustness
+paths were exercised directly. The 32-bit x86 build passes the same
+interpreter/JIT edge cases through its inline `CDQ`/`IDIV` fallback.
+
 Floating unary minus has explicit qNaN, sNaN, payload and signed-zero bit tests.
 This matters under aggressive PGO builds: C arithmetic negation may quiet an
 sNaN, while the JIT's XOR sign flip does not. The interpreter now flips the
@@ -209,6 +218,14 @@ make -j$(nproc)                                     # default release
 make -j$(nproc) CCDEBUG=-g XCFLAGS=-DLUA_USE_ASSERT # assertions on
 make clean && make -j$(nproc) XCFLAGS=-DLUAJIT_DISABLE_JIT  # no JIT at all
 
+# Compile and exercise the generic x86 modulo fallback. SIMD JIT lowering is
+# intentionally x64-only, so run the focused differential test, not the full
+# x64 SIMD codegen suite.
+make clean && make -j$(nproc) CC="gcc -m32" \
+  CCDEBUG=-g XCFLAGS=-DLUA_USE_ASSERT
+./src/luajit test/simd/run.lua --one jit test_jit
+./src/luajit test/simd/run.lua --one mixed test_jit
+
 # AddressSanitizer. The sanitizer flags must go to the *target* only, or the
 # host build tools fail. LUAJIT_USE_SYSMALLOC routes allocations through
 # malloc so ASan can actually see them; it works because GC64 has no low-2GB
@@ -230,8 +247,13 @@ or `lj_record.c`; the remaining reports come from stock LuaJIT files
 (`lj_parse.c`, `lj_buf.c`, `lj_bcread.c`, `lib_jit.c`) and from the
 deliberately unaligned mcode stores, which the compiler attributes to their
 inlining sites in `lj_asm.c`, `lj_asm_x86.h`, `lj_emit_x86.h`, and
-`lj_ccallback.c`. The modified emitter ranges add no new UBSan site. All are
-pre-existing.
+`lj_ccallback.c`. These are the emitter's longstanding byte-buffer access
+pattern rather than a newly introduced runtime fault.
+
+The constant-modulo emitter adds one more reported source line in
+`lj_asm_x86.h`: UBSan attributes an intentionally unaligned immediate write
+to its inlined call site. It is the same machine-code-buffer pattern as the
+other emitter reports, not arithmetic UB in the reciprocal calculation.
 
 Run the **assert** build with more than one seed, not just once. The assert
 build is the only configuration that validates IR structure, and one of its

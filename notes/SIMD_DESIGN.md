@@ -851,3 +851,28 @@ callee-saved low halves. This preserves the existing 128-bit allocation
 quality while making ordinary calls, GC checks, barriers, scalar conversion
 helpers, and indirect FFI calls YMM-safe. Indirect FFI calls also get the
 missing `VZEROUPPER` discipline.
+
+## D31. Keep constant integer modulo out of vector loops
+
+An ordinary Lua integer operation can dominate an otherwise packed loop.
+LuaJIT formerly lowered every non-power-of-two `int % constant` to
+`lj_vm_modi`. Beside a live YMM value that means a call, `VZEROUPPER`, and
+full-width spill/reload protection even though the divisor is known while
+assembling the trace.
+
+On x64, signed constant division now uses the exact reciprocal multiplier and
+shift from Hacker's Delight. The generated quotient is truncating, so a final
+branchless `LEA`/`TEST`/`CMOV` correction gives Lua's floor-modulo semantics
+for positive and negative divisors. The remainder stays exact for every
+signed 32-bit numerator and divisor, including `INT_MIN`; divisors `1` and
+`-1` become zero without executing the overflowing `INT_MIN / -1` operation.
+The x86 backend uses inline `CDQ`/`IDIV` with the same branchless correction,
+because its smaller register file makes the reciprocal sequence a poor
+tradeoff.
+
+This is deliberately a generic scalar optimization rather than a SIMD-only
+opcode. It removes the call boundary that forced wide-vector preservation and
+benefits scalar traces too. In a loop carrying a YMM add, `i % 37` fell from
+about 1.70 ns to 0.85 ns per iteration on the AVX2 test host; the vector-only
+loop is about 0.37 ns. Machine-code tests require reciprocal multiplies and
+reject both `CALL` and `IDIV` in the x64 YMM loop.

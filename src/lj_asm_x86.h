@@ -2336,6 +2336,119 @@ static void asm_mul(ASMState *as, IRIns *ir)
     asm_intarith(as, ir, XOg_X_IMUL);
 }
 
+#if LJ_64
+typedef struct IntModMagic {
+  int32_t mul;
+  uint8_t shift;
+} IntModMagic;
+
+/* Compute the signed-division multiplier from Hacker's Delight, figure 10-1. */
+static IntModMagic asm_intmod_magic(int32_t d)
+{
+  uint32_t ad = d < 0 ? ~(uint32_t)d + 1u : (uint32_t)d;
+  uint32_t t = 0x80000000u + ((uint32_t)d >> 31);
+  uint32_t anc = t - 1u - t % ad;
+  uint32_t q1 = 0x80000000u / anc;
+  uint32_t r1 = 0x80000000u - q1 * anc;
+  uint32_t q2 = 0x80000000u / ad;
+  uint32_t r2 = 0x80000000u - q2 * ad;
+  uint32_t delta, p = 31;
+  IntModMagic mag;
+  do {
+    p++;
+    q1 += q1; r1 += r1;
+    if (r1 >= anc) { q1++; r1 -= anc; }
+    q2 += q2; r2 += r2;
+    if (r2 >= ad) { q2++; r2 -= ad; }
+    delta = ad - r2;
+  } while (q1 < delta || (q1 == delta && r1 == 0));
+  mag.mul = (int32_t)(q2 + 1u);
+  if (d < 0) mag.mul = (int32_t)(~(uint32_t)mag.mul + 1u);
+  mag.shift = (uint8_t)(p - 32);
+  return mag;
+}
+
+/* Inline exact floor-modulo by a non-zero integer constant. */
+static void asm_intmod(ASMState *as, IRIns *ir)
+{
+  IRIns *irr = IR(ir->op2);
+  IntModMagic mag;
+  Reg left, dest, quot;
+  int32_t k = irr->i;
+
+  lj_assertA(irt_isint(ir->t) && irr->o == IR_KINT && k != 0,
+	     "bad constant integer modulo");
+  if (k == 1 || k == -1) {
+    Reg zero = ra_dest(as, ir, RSET_GPR);
+    emit_rr(as, XO_ARITH(XOg_XOR), zero, zero);
+    return;
+  }
+  mag = asm_intmod_magic(k);
+  left = ra_alloc1(as, ir->op1, RSET_GPR);
+  dest = ra_dest(as, ir, rset_exclude(RSET_GPR, left));
+  lj_assertA(dest != left, "constant modulo needs a separate destination");
+  quot = ra_scratch(as, rset_exclude(rset_exclude(RSET_GPR, left), dest));
+
+  /* Correct the truncating remainder to Lua's floor-modulo semantics. */
+  emit_rr(as, XO_CMOV + ((k > 0 ? CC_S : CC_G) << 24), dest, quot);
+  emit_rr(as, XO_TEST, dest, dest);
+  emit_rmro(as, XO_LEA, quot, dest, k);
+  emit_rr(as, XO_ARITH(XOg_SUB), dest, quot);
+  emit_rr(as, XO_MOV, dest, left);
+  if (checki8(k)) {
+    emit_i8(as, k);
+    emit_mrm(as, XO_IMULi8, quot, quot);
+  } else {
+    emit_i32(as, k);
+    emit_mrm(as, XO_IMULi, quot, quot);
+  }
+
+  /* Turn the high multiply into a truncating signed quotient. */
+  emit_rr(as, XO_ARITH(XOg_ADD), quot, dest);
+  emit_shifti(as, XOg_SHR, dest, 31);
+  emit_rr(as, XO_MOV, dest, quot);
+  if (mag.shift)
+    emit_shifti(as, XOg_SAR, quot, mag.shift);
+  if (k > 0 && mag.mul < 0)
+    emit_rr(as, XO_ARITH(XOg_ADD), quot, left);
+  else if (k < 0 && mag.mul > 0)
+    emit_rr(as, XO_ARITH(XOg_SUB), quot, left);
+  emit_shifti(as, XOg_SAR|REX_64, quot, 32);
+  emit_i32(as, mag.mul);
+  emit_mrm(as, XO_IMULi, quot|REX_64, quot);
+  emit_rr(as, XO_MOVSXd, quot|REX_64, left);
+}
+#else
+/* Inline exact floor-modulo by a non-zero integer constant. */
+static void asm_intmod(ASMState *as, IRIns *ir)
+{
+  IRIns *irr = IR(ir->op2);
+  RegSet fixed = RID2RSET(RID_EAX)|RID2RSET(RID_EDX);
+  RegSet allow = RSET_GPR & ~fixed;
+  Reg right;
+  int32_t k = irr->i;
+
+  lj_assertA(irt_isint(ir->t) && irr->o == IR_KINT && k != 0,
+	     "bad constant integer modulo");
+  if (k == 1 || k == -1) {
+    Reg zero = ra_dest(as, ir, RSET_GPR);
+    emit_rr(as, XO_ARITH(XOg_XOR), zero, zero);
+    return;
+  }
+  if (ra_hasreg(ir->r))
+    rset_clear(fixed, ir->r);
+  ra_evictset(as, fixed);
+  ra_destreg(as, ir, RID_EDX);
+  right = ra_alloc1(as, ir->op2, allow);
+  emit_rr(as, XO_CMOV + ((k > 0 ? CC_S : CC_G) << 24), RID_EDX, RID_EAX);
+  emit_rr(as, XO_TEST, RID_EDX, RID_EDX);
+  emit_rmro(as, XO_LEA, RID_EAX, RID_EDX, k);
+  emit_rr(as, XO_GROUP3, XOg_IDIV, right);
+  *--as->mcp = 0x99;  /* CDQ: sign-extend EAX into EDX:EAX. */
+  ra_left(as, RID_EAX, ir->op1);
+}
+#endif
+
 #define asm_fpdiv(as, ir)	asm_fparith(as, ir, XO_DIVSD)
 
 static void asm_neg_not(ASMState *as, IRIns *ir, x86Group3 xg)

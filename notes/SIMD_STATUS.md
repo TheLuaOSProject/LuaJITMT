@@ -57,6 +57,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M34 | Every equal-lane numeric conversion between native 16/32-byte vectors; VEX-clean mixed XMM/YMM moves | done |
 | M35 | Generic Lua scalar FP code is VEX-128-clean on AVX, eliminating scalar/YMM transition stalls | done |
 | M36 | Central call-site YMM preservation, including GC/indirect calls; Windows x64 upper-lane runtime correctness | done |
+| M37 | Exact inline constant integer modulo, eliminating helper calls and YMM spill/reload traffic in mixed loops | done |
 
 ## Commands that pass
 
@@ -450,12 +451,16 @@ sqrt, and rounding whenever AVX is active:
 ```
 YMM add only                 0.38 ns
 YMM add + Lua scalar add     0.38 ns   (was 76.50 ns)
+YMM add + integer % 37       0.85 ns   (was  1.70 ns)
 ```
 
 The codegen test carries memory traffic, multiply, sqrt, comparison and both
 scalar/YMM loop PHIs at once, then rejects every non-VEX instruction naming an
-XMM register. Dumps of every trace produced by both benchmark suites are
-likewise free of legacy XMM instructions whenever that trace uses YMM.
+XMM register. A second mixed loop requires constant integer modulo to use
+reciprocal multiplies with no helper call or `IDIV`, avoiding the
+`VZEROUPPER` and wide spill/reload sequence that a call would require. Dumps
+of every trace produced by both benchmark suites are likewise free of legacy
+XMM instructions whenever that trace uses YMM.
 
 `simd.fma` is worth measuring separately, because whether it helps depends
 entirely on whether the loop is arithmetic bound:
