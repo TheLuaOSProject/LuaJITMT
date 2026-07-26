@@ -294,6 +294,7 @@ IRFLDEF(FLENUM)
 #define IRVSHUF2_PBLENDW	3
 #define IRVSHUF2_ALIGNR		4
 #define IRVSHUF2_ALIGNR256	5
+#define IRVSHUF2_PBLENDD	6
 #define IRVSHUF2(mode, imm)	(((mode)<<8) + (imm))
 
 /* VEXTRACT and VMOVMSK op2 literal: the source vector IRType is carried in

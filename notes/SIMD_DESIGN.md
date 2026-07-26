@@ -1430,3 +1430,26 @@ the aligned window to bring in the next lane. The measured scalar time is
 about 5.2--5.4 ms versus 2.2--2.3 ms at either SIMD width, a 2.3--2.4x
 speedup; the YMM form is memory/cross-lane bound rather than arithmetic
 bound.
+
+## D51. Use `VPBLENDD` for independent YMM-half masks
+
+`PBLENDW` has one eight-bit immediate even at YMM width, so its word mask
+repeats in both 128-bit halves. A same-position dword or qword blend with
+different choices in the high half therefore fell through to two
+`VPSHUFB`s and `VPOR`.
+
+AVX2 `VPBLENDD` assigns one immediate bit to each of the eight YMM dwords.
+The recorder now uses it for non-repeating same-position 32-bit controls and
+for 64-bit controls whose two component dword bits select the same source.
+Repeating masks retain the existing `PBLENDW` route; byte/word controls that
+cannot be represented at dword granularity retain the generic permutation.
+The normal `VSHUF2` memory-source path also lets `VPBLENDD` consume a one-use
+final array load directly.
+
+Dependent dword blend time improves from about 0.583 to 0.447--0.454
+ns/vector, roughly 22--23%. Eight independent chains improve from 0.220 to
+0.172 ns/op, also about 22%. The qword pattern improves more modestly from
+0.600 to 0.567 ns/vector. A full-HD streaming probe was deliberately not
+added as another headline benchmark: it saturated memory bandwidth and was
+neutral despite the shorter code, while the permanent operation benchmark
+isolates the execution and register-pressure gain.

@@ -1040,6 +1040,11 @@ static void asm_vecshuf2(ASMState *as, IRIns *ir)
     xo = XO_SHUFPD;
   else if (mode == IRVSHUF2_PBLENDW)
     xo = XO_PBLENDW;
+  else if (mode == IRVSHUF2_PBLENDD) {
+    lj_assertA(wide && (as->flags & JIT_F_AVX2),
+	       "full-width dword blend without AVX2");
+    xo = XO_PBLENDD;
+  }
   else if (mode == IRVSHUF2_ALIGNR) {
     lj_assertA(imm > 0 && imm < 16, "bad lane-local ALIGNR control");
     xo = XO_PALIGNR;

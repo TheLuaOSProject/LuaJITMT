@@ -260,6 +260,12 @@ test("native two-source shuffles consume their final array load", function()
       end,
     }
     cases[#cases+1] = {
+      "i32x8 VPBLENDD", T.W.i32x8.ct, "vpblendd",
+      function(a, b)
+	return simd.shuffle2(a, b, 0, 9, 2, 3, 12, 5, 14, 7)
+      end,
+    }
+    cases[#cases+1] = {
       "i32x8 VPALIGNR", T.W.i32x8.ct, "vpalignr",
       function(a, b)
 	return simd.shuffle2(a, b, 9, 10, 11, 0, 13, 14, 15, 4)
@@ -2049,6 +2055,31 @@ if simd.features().avx2 then
     check(not body:find("vpshufb ymm", 1, true) and
 	  not body:find("vpor ymm", 1, true),
 	  "a representable byte blend must use VPBLENDW")
+
+    body = checkymm("i32x8 independent blend", {"vpblendd ymm"}, function()
+      local acc, other = i8(0), i8(11, 12, 13, 14, 15, 16, 17, 18)
+      for _ = 1, 400 do
+	acc = simd.shuffle2(acc+a, other, 0,9,2,3,12,5,14,7)
+      end
+      return acc
+    end)
+    check(not body:find("vpblendw ymm", 1, true) and
+	  not body:find("vpshufb ymm", 1, true) and
+	  not body:find("vpor ymm", 1, true),
+	  "a non-repeating dword mask must use one VPBLENDD")
+
+    body = checkymm("i64x4 independent blend", {"vpblendd ymm"}, function()
+      local q = T.W.i64x4.ct
+      local acc, add, other = q(0), q(1), q(11, 12, 13, 14)
+      for _ = 1, 400 do
+	acc = simd.shuffle2(acc+add, other, 4,1,2,7)
+      end
+      return acc
+    end)
+    check(not body:find("vpblendw ymm", 1, true) and
+	  not body:find("vpshufb ymm", 1, true) and
+	  not body:find("vpor ymm", 1, true),
+	  "a non-repeating qword mask must use one VPBLENDD")
 
     body = checkymm("i8x32 unpaired byte blend",
       {"vpshufb ymm", "vpor ymm"}, function()

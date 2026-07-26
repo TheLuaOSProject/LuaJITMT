@@ -187,6 +187,13 @@ cross-half control still requires `PSHUFB`/`POR`. Indexed-array cases also
 verify that AVX can consume the final load in lane-local `PALIGNR` and in the
 full-width bridge, while legacy SSE keeps its separate unaligned load.
 
+Independent full-width blend differentials cover signed, unsigned and
+floating 32/64-bit YMM lanes. Non-repeating dword and qword masks must emit
+exactly one `VPBLENDD` and reject `PBLENDW`, `PSHUFB`, and `POR`; the existing
+repeating mask must continue to use `PBLENDW`, and the unpaired-byte case
+must continue through the generic route. An indexed-array case requires the
+`VPBLENDD` itself to contain the final memory source.
+
 The enlarged ChaCha20 benchmark provides a production-shaped check with
 sixteen live state vectors; its main traces contain 32 byte shuffles and are
 62 instructions shorter at either width.

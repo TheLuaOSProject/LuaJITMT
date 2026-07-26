@@ -663,6 +663,30 @@ test("two-source aligned windows on trace", function()
   end
 end)
 
+if simd.features().avx2 then
+  test("full-width AVX2 dword blends on trace", function()
+    local cases = {
+      {T.W.i32x8, {0,9,2,3,12,5,14,7}},
+      {T.W.u32x8, {0,9,2,3,12,5,14,7}},
+      {T.W.float8, {0,9,2,3,12,5,14,7}},
+      {T.W.i64x4, {4,1,2,7}},
+      {T.W.u64x4, {4,1,2,7}},
+      {T.W.double4, {4,1,2,7}},
+    }
+    for _, c in ipairs(cases) do
+      local ti, ctl = c[1], c[2]
+      local ct, a, b = ti.ct, ti.ct(1), ti.ct(11)
+      diff(ti.name .. " independent full-width blend", function(n)
+	local acc = ct(0)
+	for _ = 1, n do
+	  acc = simd.shuffle2(acc+a, b, unpack(ctl, 1, ti.lanes))
+	end
+	return acc
+      end, 120)
+    end
+  end)
+end
+
 test("type punning does not confuse store-to-load forwarding", function()
   -- A bitcast boxes the value under a new ctype, so the boxing store and the
   -- next load of the same address have different vector IR types. Forwarding

@@ -2786,6 +2786,21 @@ static TRef crec_simd_shuf2_direct(jit_State *J, IRType vt,
 				    IRVSHUF2_PBLENDW, imm);
     }
   }
+  if ((vt & IRT_VEC256) && (J->flags & JIT_F_AVX2) &&
+      (vi->esize == 4 || vi->esize == 8)) {
+    uint32_t imm = 0, nd = vi->esize >> 2;
+    for (i = 0; i < n; i++) {
+      uint32_t v = idx[i], fromb, d;
+      if (v == i) fromb = 0;
+      else if (v == n+i) fromb = 1;
+      else break;
+      for (d = 0; d < nd; d++)
+	imm |= fromb << (i*nd+d);
+    }
+    if (i == n)
+      return crec_simd_shuf2_emit(J, vt, a, b,
+				  IRVSHUF2_PBLENDD, imm);
+  }
   if (vi->esize == 4) {
     uint32_t sw;
     for (sw = 0; sw < 2; sw++) {
