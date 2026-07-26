@@ -9,8 +9,9 @@ the same binary keeps working on older CPUs: an operation whose instruction is
 missing aborts the trace and stays interpreted with an identical result, it is
 never scalarised and never wrong. `simd.features()` reports what was found.
 
-When AVX is present the backend emits the VEX three operand form of every
-packed instruction, so no register copy is needed before a binary operation.
+When AVX is present the backend emits VEX forms for packed instructions and
+ordinary scalar FP code alike. This avoids both register copies before packed
+binary operations and AVX-to-SSE transitions in mixed scalar/YMM loops.
 
 ## Vector shapes
 

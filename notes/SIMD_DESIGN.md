@@ -788,3 +788,36 @@ constants, loads, stores, spills, GPR transfers and extracts now use VEX-128
 even for XMM values. VEX-128 preserves the intended low-half semantics,
 zeroes the upper half, and avoids the transition. A codegen test rejects
 legacy `MOVAPS` and `MOVUPS` in a representative mixed XMM/YMM loop.
+
+## D29. AVX traces must keep ordinary scalar FP operations VEX-clean too
+
+Vector-only emission is not enough. Lua loop state routinely mixes a YMM value
+with an ordinary number, a scalar FFI field, a bound check, or `math.sqrt`.
+One legacy scalar `ADDSD`, `MOVSD`, `UCOMISD`, or `SQRTSD` beside a live YMM
+upper half causes the same AVX-to-SSE transition as a legacy packed move.
+
+When AVX is active, the generic x86 backend therefore uses VEX-128 for all
+scalar FP register moves, constants, spills, loads/stores, arithmetic,
+conversions, comparisons, square root, and SSE4.1 rounding. The VEX
+three-operand form keeps the legacy destination-as-left semantics by encoding
+the destination as the merge/source operand. CPUs without AVX retain the
+original SSE encodings byte for byte.
+
+The distinction between VEX scalar forms is load-bearing:
+
+* arithmetic, conversion, sqrt, and rounding use VEX.vvvv as a real merge
+  source and go through `emit_vexopv`;
+* memory `VMOVSD`/`VMOVSS` loads and stores are two-operand forms whose
+  VEX.vvvv field is reserved, so they must go through `emit_vexop`.
+
+Encoding a memory scalar move with the destination as VEX.vvvv appears to work
+for XMM0 because its inverted field happens to be the reserved all-ones bit
+pattern, but every other destination raises `#UD`. A test suite run caught
+that immediately; do not generalise register-register scalar move rules to
+the memory form.
+
+On the measured AVX2 host, a dependent YMM add costs 0.38 ns/iteration. Adding
+an independent ordinary Lua-number add formerly raised that to 76.50 ns;
+after the generic VEX cleanup the mixed loop remains 0.38 ns. A stronger
+codegen test mixes scalar memory load/store, add, multiply, sqrt, comparison
+and YMM arithmetic, and rejects any legacy instruction that names XMM.

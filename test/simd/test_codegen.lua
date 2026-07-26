@@ -1071,6 +1071,41 @@ if simd.features().avx2 then
 	  "u64x4 to float4 needs signed/high-half paths for every lane")
   end)
 
+  test("mixed scalar and YMM loops stay entirely VEX-clean", function()
+    local f8 = T.W.float8.ct
+    local p = ffi.new("double[2]", 1.000001, 0)
+    local inc = f8(0.001)
+    local body, isloop = loopcode(function()
+      local v, s = f8(1), 1.0
+      for _ = 1, 400 do
+	v = v + inc
+	s = (s + p[0]) * 0.5
+	p[1] = s
+	s = math.sqrt(s*s + 1)
+	if s < 0 then s = -s end
+      end
+      return tonumber(v[0]) + s + p[1]
+    end)
+    local m = mnemonics(body)
+    check(isloop, "mixed scalar/YMM test must compile as a loop")
+    for _, op in ipairs({"vaddps", "vaddsd", "vmulsd", "vsqrtsd",
+			 "vucomisd", "vmovsd"}) do
+      check((m[op] or 0) > 0,
+	    "mixed scalar/YMM loop expected " .. op .. ": " ..
+	    body:gsub("\n", " | "))
+    end
+    local legacy = {}
+    for line in body:gmatch("[^\n]+") do
+      local op = line:match("^%x+%s+(%a[%w]*)")
+      if op and op:sub(1, 1) ~= "v" and line:find("xmm", 1, true) then
+	legacy[#legacy+1] = op
+      end
+    end
+    check(#legacy == 0,
+	  "mixed scalar/YMM loop contains legacy SSE: " ..
+	  table.concat(legacy, ", ") .. " | " .. body:gsub("\n", " | "))
+  end)
+
   test("256-bit cross-lane operations stay in YMM registers", function()
     local i8 = T.W.i32x8.ct
     local a = i8(1, 2, 3, 4, 5, 6, 7, 8)

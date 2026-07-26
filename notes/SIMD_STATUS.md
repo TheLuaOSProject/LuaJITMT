@@ -55,6 +55,7 @@ Keep this file short and current. Design rationale goes in `SIMD_DESIGN.md`.
 | M32 | Signed and unsigned 64-bit `mulhi` via four packed 32x32 partial products, XMM and YMM | done |
 | M33 | Exact call-free `u32 -> float`, `i64/u64 -> double`, and `double -> i64/u64` lowering for XMM/YMM | done |
 | M34 | Every equal-lane numeric conversion between native 16/32-byte vectors; VEX-clean mixed XMM/YMM moves | done |
+| M35 | Generic Lua scalar FP code is VEX-128-clean on AVX, eliminating scalar/YMM transition stalls | done |
 
 ## Commands that pass
 
@@ -430,6 +431,23 @@ AVX-to-SSE transition cost about 19--22 ns per iteration: for example
 stores, constants and spills were made VEX-128-clean whenever AVX is active.
 A codegen assertion now forbids legacy `MOVAPS`/`MOVUPS` in a representative
 mixed-width loop.
+
+The same audit found a broader transition in mixed ordinary-number/SIMD code.
+A loop carrying one YMM `float8` add and one Lua-number add took 76.50 ns per
+iteration even though the YMM-only loop took 0.38 ns. The scalar `ADDSD` was
+still legacy SSE. The generic x86 backend now emits VEX-128 forms for scalar
+FP arithmetic, moves, constants, loads/stores, conversions, comparisons,
+sqrt, and rounding whenever AVX is active:
+
+```
+YMM add only                 0.38 ns
+YMM add + Lua scalar add     0.38 ns   (was 76.50 ns)
+```
+
+The codegen test carries memory traffic, multiply, sqrt, comparison and both
+scalar/YMM loop PHIs at once, then rejects every non-VEX instruction naming an
+XMM register. Dumps of every trace produced by both benchmark suites are
+likewise free of legacy XMM instructions whenever that trace uses YMM.
 
 `simd.fma` is worth measuring separately, because whether it helps depends
 entirely on whether the loop is arithmetic bound:

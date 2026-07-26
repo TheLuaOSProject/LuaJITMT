@@ -401,6 +401,13 @@ static void emit_rma(ASMState *as, x86Op xo, Reg rr, const void *addr)
   }
 }
 
+/* Forward declarations: scalar constant loads also need VEX-clean forms. */
+#define VEXNOV	0
+static void emit_vexrrwl(ASMState *as, x86Op xo, Reg rr, Reg rv, Reg rb,
+			 int w, int l);
+static x86Op emit_vexopv(x86Op xo, Reg rv, int w, int l);
+static x86Op emit_vexop(x86Op xo, int w, int l);
+
 /* Load 64 bit IR constant into register. */
 static void emit_loadk64(ASMState *as, Reg r, IRIns *ir)
 {
@@ -409,13 +416,18 @@ static void emit_loadk64(ASMState *as, Reg r, IRIns *ir)
   const uint64_t *k = &ir_k64(ir)->u64;
   if (rset_test(RSET_FPR, r)) {
     r64 = r;
-    xo = XO_MOVSD;
+    xo = (as->flags & JIT_F_AVX) ?
+	 emit_vexop(XO_MOVSD, 0, 0) : XO_MOVSD;
   } else {
     r64 = r | REX_64;
     xo = XO_MOV;
   }
   if (*k == 0) {
-    emit_rr(as, rset_test(RSET_FPR, r) ? XO_XORPS : XO_ARITH(XOg_XOR), r, r);
+    if (rset_test(RSET_FPR, r) && (as->flags & JIT_F_AVX))
+      emit_vexrrwl(as, XO_XORPS, r, r, r, 0, 0);
+    else
+      emit_rr(as, rset_test(RSET_FPR, r) ? XO_XORPS : XO_ARITH(XOg_XOR),
+	      r, r);
 #if LJ_GC64
   } else if (checki32((intptr_t)k) || checki32(dispofs(as, k)) ||
 	     (checki32(mcpofs(as, k)) && checki32(mctopofs(as, k)))) {
@@ -459,9 +471,6 @@ static uint32_t emit_vexmp(x86Op xo)
   return (3u<<4) + 1;				/* 66 0F 3A */
 }
 
-/* VEX.vvvv is unused by the two operand forms and must then be all ones. */
-#define VEXNOV	0
-
 /*
 ** Emit a VEX-encoded three operand instruction: rr = rv <xo> rb. Always uses
 ** the three byte form, which needs no special casing for the high registers
@@ -496,15 +505,19 @@ static void emit_vzeroupper(ASMState *as)
   as->mcp = p;
 }
 
-/* Turn an SSE opcode into a VEX opcode usable by the generic ModRM emitter.
-** VEX.vvvv is unused and therefore encoded as all ones.
-*/
-static x86Op emit_vexop(x86Op xo, int w, int l)
+/* Turn an SSE opcode into a VEX opcode usable by the generic ModRM emitter. */
+static x86Op emit_vexopv(x86Op xo, Reg rv, int w, int l)
 {
   uint32_t mp = emit_vexmp(xo);
   return (x86Op)(0xc4u | ((0xe0u | (mp >> 4)) << 8) |
-		((0x78u | (w ? 0x80u : 0) | (l ? 0x04u : 0) |
+		((((~rv & 15) << 3) | (w ? 0x80u : 0) | (l ? 0x04u : 0) |
 		  (mp & 3)) << 16) | (xo & 0xff000000u));
+}
+
+/* VEX.vvvv is unused by a two operand instruction and encodes as all ones. */
+static x86Op emit_vexop(x86Op xo, int w, int l)
+{
+  return emit_vexopv(xo, VEXNOV, w, l);
 }
 
 /* Load a vector constant into an FP register. */
@@ -672,8 +685,7 @@ static void emit_movrr(ASMState *as, IRIns *ir, Reg dst, Reg src)
 {
   if (dst < RID_MAX_GPR)
     emit_rr(as, XO_MOV, REX_64IR(ir, dst), src);
-  else if (irt_isvec(ir->t) &&
-	   (irt_isvec256(ir->t) || (as->flags & JIT_F_AVX)))
+  else if ((as->flags & JIT_F_AVX) || irt_isvec256(ir->t))
     emit_rr(as, emit_vexop(XO_MOVAPS, 0, irt_isvec256(ir->t)), dst, src);
   else
     emit_rr(as, XO_MOVAPS, dst, src);
@@ -690,8 +702,11 @@ static void emit_loadofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
 	       emit_vexop(XO_MOVUPS, 0, wide) : XO_MOVUPS;
     emit_rmro(as, xo, r, base, ofs);  /* Spill slots are not aligned. */
   }
-  else
-    emit_rmro(as, irt_isnum(ir->t) ? XO_MOVSD : XO_MOVSS, r, base, ofs);
+  else {
+    x86Op xo = irt_isnum(ir->t) ? XO_MOVSD : XO_MOVSS;
+    if ((as->flags & JIT_F_AVX)) xo = emit_vexop(xo, 0, 0);
+    emit_rmro(as, xo, r, base, ofs);
+  }
 }
 
 /* Generic store of register with base and (small) offset address. */
@@ -705,8 +720,11 @@ static void emit_storeofs(ASMState *as, IRIns *ir, Reg r, Reg base, int32_t ofs)
 	       emit_vexop(XO_MOVUPSto, 0, wide) : XO_MOVUPSto;
     emit_rmro(as, xo, r, base, ofs);
   }
-  else
-    emit_rmro(as, irt_isnum(ir->t) ? XO_MOVSDto : XO_MOVSSto, r, base, ofs);
+  else {
+    x86Op xo = irt_isnum(ir->t) ? XO_MOVSDto : XO_MOVSSto;
+    if ((as->flags & JIT_F_AVX)) xo = emit_vexop(xo, 0, 0);
+    emit_rmro(as, xo, r, base, ofs);
+  }
 }
 
 /* Add offset to pointer. */

@@ -125,6 +125,14 @@ mixed XMM/YMM loop additionally rejects legacy `MOVAPS` and `MOVUPS`: one such
 loop-PHI move caused a roughly 20 ns AVX-to-SSE transition before the vector
 move/load/store paths were made VEX-128-clean.
 
+Another codegen trace deliberately mixes a YMM add with ordinary Lua-number
+arithmetic, scalar FFI memory traffic, multiply, `math.sqrt`, and a comparison.
+Every instruction naming XMM in its loop body must begin with `v`; this guards
+the generic scalar backend as well as the vector backend. The matching
+benchmark compares a YMM-only add against YMM plus a scalar add. The latter
+fell from 76.50 ns to 0.38 ns per iteration after the VEX cleanup and should
+remain at parity with the vector-only loop.
+
 Floating unary minus has explicit qNaN, sNaN, payload and signed-zero bit tests.
 This matters under aggressive PGO builds: C arithmetic negation may quiet an
 sNaN, while the JIT's XOR sign flip does not. The interpreter now flips the
