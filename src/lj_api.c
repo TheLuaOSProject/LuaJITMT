@@ -627,6 +627,31 @@ LUA_API const float *lua_tofloatvector(lua_State *L, int idx, size_t *lanes)
   return NULL;
 }
 
+LUA_API void *lua_tocdataof(lua_State *L, int idx, int ctype_idx, size_t *size)
+{
+#if LJ_HASFFI
+  cTValue *o = index2adr(L, idx);
+  cTValue *t = index2adr(L, ctype_idx);
+  if (tviscdata(o) && tviscdata(t)) {
+    CTState *cts = ctype_cts(L);
+    GCcdata *cd = cdataV(o);
+    GCcdata *typecd = cdataV(t);
+    CTypeID id = typecd->ctypeid == CTID_CTYPEID
+      ? *(CTypeID *)cdataptr(typecd) : typecd->ctypeid;
+    if (cd->ctypeid == id) {
+      if (size) {
+        *size = cdataisv(cd) ? cdatavlen(cd) : lj_ctype_size(cts, id);
+      }
+      return cdataptr(cd);
+    }
+  }
+#else
+  UNUSED(L); UNUSED(idx); UNUSED(ctype_idx);
+#endif
+  if (size) *size = 0;
+  return NULL;
+}
+
 LUA_API int lua_pushfloatvector(lua_State *L, int ctype_idx,
 				const float *values, size_t lanes)
 {

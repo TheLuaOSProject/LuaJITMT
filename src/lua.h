@@ -154,6 +154,8 @@ LUA_API lua_CFunction   (lua_tocfunction) (lua_State *L, int idx);
 LUA_API void	       *(lua_touserdata) (lua_State *L, int idx);
 LUA_API const float    *(lua_tofloatvector) (lua_State *L, int idx,
                                               size_t *lanes);
+LUA_API void           *(lua_tocdataof) (lua_State *L, int idx,
+                                          int ctype_idx, size_t *size);
 LUA_API int             (lua_pushfloatvector) (lua_State *L, int ctype_idx,
                                                 const float *values,
                                                 size_t lanes);
