@@ -25,6 +25,10 @@
 #include "lj_vm.h"
 #include "lj_strscan.h"
 #include "lj_strfmt.h"
+#if LJ_HASFFI
+#include "lj_ctype.h"
+#include "lj_cdata.h"
+#endif
 
 /* -- Common helper functions --------------------------------------------- */
 
@@ -600,6 +604,57 @@ LUA_API void *lua_touserdata(lua_State *L, int idx)
     return lightudV(G(L), o);
   else
     return NULL;
+}
+
+LUA_API const float *lua_tofloatvector(lua_State *L, int idx, size_t *lanes)
+{
+#if LJ_HASFFI
+  cTValue *o = index2adr(L, idx);
+  if (tviscdata(o)) {
+    CTState *cts = ctype_cts(L);
+    GCcdata *cd = cdataV(o);
+    CType *ct = ctype_raw(cts, cd->ctypeid);
+    CTVecInfo vi;
+    if (lj_ctype_vecinfo(cts, ct, &vi) && vi.kind == VECK_F32) {
+      if (lanes) *lanes = vi.lanes;
+      return (const float *)cdataptr(cd);
+    }
+  }
+#else
+  UNUSED(L); UNUSED(idx);
+#endif
+  if (lanes) *lanes = 0;
+  return NULL;
+}
+
+LUA_API int lua_pushfloatvector(lua_State *L, int ctype_idx,
+				const float *values, size_t lanes)
+{
+#if LJ_HASFFI
+  cTValue *o = index2adr(L, ctype_idx);
+  if (tviscdata(o) && values) {
+    CTState *cts = ctype_cts(L);
+    GCcdata *typecd = cdataV(o);
+    CTypeID id = typecd->ctypeid == CTID_CTYPEID
+      ? *(CTypeID *)cdataptr(typecd) : typecd->ctypeid;
+    CType *ct = ctype_raw(cts, id);
+    CTVecInfo vi;
+    if (lj_ctype_vecinfo(cts, ct, &vi) && vi.kind == VECK_F32 &&
+	vi.lanes == lanes) {
+      CTSize size = (CTSize)(lanes * sizeof(float));
+      GCcdata *cd;
+      lj_gc_check(L);
+      cd = lj_cdata_new(cts, id, size);
+      memcpy(cdataptr(cd), values, size);
+      setcdataV(L, L->top, cd);
+      incr_top(L);
+      return 1;
+    }
+  }
+#else
+  UNUSED(L); UNUSED(ctype_idx); UNUSED(values); UNUSED(lanes);
+#endif
+  return 0;
 }
 
 LUA_API lua_State *lua_tothread(lua_State *L, int idx)
@@ -1300,4 +1355,3 @@ LUA_API void lua_setallocf(lua_State *L, lua_Alloc f, void *ud)
   g->allocd = ud;
   g->allocf = f;
 }
-

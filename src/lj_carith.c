@@ -322,12 +322,34 @@ static int lj_carith_meta(lua_State *L, CTState *cts, CDArith *ca, MMS mm)
   return lj_meta_tailcall(L, tv);
 }
 
+/*
+** Vector arithmetic normally has built-in packed semantics. A vector ctype
+** can also have an FFI metatype, however, and an explicitly supplied
+** arithmetic metamethod must take precedence just as it does for structs.
+*/
+static int carith_vec_hasmeta(lua_State *L, CTState *cts, MMS mm)
+{
+  TValue *o = L->base;
+  MSize i;
+  for (i = 0; i < 2 && o+i < L->top; i++) {
+    if (tviscdata(o+i)) {
+      CTypeID id = cdataV(o+i)->ctypeid;
+      CType *ct = ctype_raw(cts, id);
+      if (ctype_isvector(ct->info) && lj_ctype_meta(cts, id, mm))
+	return 1;
+    }
+  }
+  return 0;
+}
+
 /* Arithmetic operators for cdata. */
 int lj_carith_op(lua_State *L, MMS mm)
 {
   CTState *cts = ctype_cts(L);
   CDArith ca;
   if (carith_checkarg(L, cts, &ca) && mm != MM_len && mm != MM_concat) {
+    if (carith_vec_hasmeta(L, cts, mm))
+      return lj_carith_meta(L, cts, &ca, mm);
     if (carith_vec(L, cts, &ca, mm) ||
 	carith_int64(L, cts, &ca, mm) || carith_ptr(L, cts, &ca, mm)) {
       copyTV(L, &G(L)->tmptv2, L->top-1);  /* Remember for trace recorder. */

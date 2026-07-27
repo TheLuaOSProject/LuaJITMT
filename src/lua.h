@@ -81,6 +81,7 @@ typedef void * (*lua_Alloc) (void *ud, void *ptr, size_t osize, size_t nsize);
 #define LUA_TFUNCTION		6
 #define LUA_TUSERDATA		7
 #define LUA_TTHREAD		8
+#define LUA_TCDATA		10
 
 
 
@@ -151,6 +152,11 @@ LUA_API const char     *(lua_tolstring) (lua_State *L, int idx, size_t *len);
 LUA_API size_t          (lua_objlen) (lua_State *L, int idx);
 LUA_API lua_CFunction   (lua_tocfunction) (lua_State *L, int idx);
 LUA_API void	       *(lua_touserdata) (lua_State *L, int idx);
+LUA_API const float    *(lua_tofloatvector) (lua_State *L, int idx,
+                                              size_t *lanes);
+LUA_API int             (lua_pushfloatvector) (lua_State *L, int ctype_idx,
+                                                const float *values,
+                                                size_t lanes);
 LUA_API lua_State      *(lua_tothread) (lua_State *L, int idx);
 LUA_API const void     *(lua_topointer) (lua_State *L, int idx);
 

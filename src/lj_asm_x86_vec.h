@@ -1415,12 +1415,22 @@ static void asm_vecmovmsk(ASMState *as, IRIns *ir)
 static void asm_vecextract(ASMState *as, IRIns *ir)
 {
   IRType st = (IRType)(irvsrc_type(ir->op2) & IRT_TYPE);
+  uint32_t lane = irvsrc_imm(ir->op2);
   if (irt_isfp(ir->t)) {
     Reg dest = ra_dest(as, ir, RSET_FPR);
-    ra_left(as, dest, ir->op1);  /* Lane 0 is the low part of the register. */
+    if (lane == 0) {
+      ra_left(as, dest, ir->op1);  /* Lane 0 is already the low element. */
+    } else {
+      Reg left;
+      lj_assertA(st == IRT_V4F32 && lane < 4,
+		 "unsupported vector lane extraction");
+      left = ra_alloc1(as, ir->op1, RSET_FPR);
+      emit_vrr2il(as, XO_PSHUFD, dest, left, lane, 0);
+    }
   } else {
     Reg dest = ra_dest(as, ir, RSET_GPR);
     Reg left = ra_alloc1(as, ir->op1, RSET_FPR);
+    lj_assertA(lane == 0, "unsupported integer vector lane extraction");
     emit_vmovd_to_gpr(as, dest, left, st == IRT_V2I64);
   }
 }

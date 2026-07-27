@@ -219,7 +219,9 @@ typedef const TValue cTValue;
 /* More external and GCobj tags for internal objects. */
 #define LAST_TT		LUA_TTHREAD
 #define LUA_TPROTO	(LAST_TT+1)
+#ifndef LUA_TCDATA
 #define LUA_TCDATA	(LAST_TT+2)
+#endif
 
 /* Internal object tags.
 **

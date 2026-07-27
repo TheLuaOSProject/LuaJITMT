@@ -139,6 +139,19 @@ test("float arithmetic is packed", function()
   end)
 end)
 
+test("loop-carried vector lane extraction stays in registers", function()
+  local f4 = T.T.float4.ct
+  local step = f4(.001, -.002, .003, .999)
+  checkloop("float4 constant lane extract", {"mulps", "addps"},
+    {"call"}, function()
+      local acc = f4(1, 2, 3, 4)
+      for _ = 1, 400 do
+        acc = acc + step * acc[3]
+      end
+      return acc
+    end)
+end)
+
 test("dynamic vector constructors stay in registers", function()
   local function check_count(name, ct, want, opname, n, make)
     local m = checkloop(name, want, NOCALL, function()

@@ -870,6 +870,71 @@ static void crec_index_bf(jit_State *J, RecordFFData *rd, TRef ptr, CTInfo info)
   }
 }
 
+/*
+** Extract a constant lane directly from a vector IR value.
+**
+** Going through the ordinary array-index path first materializes a boxed
+** vector and reloads a scalar from its payload.  That prevents allocation
+** sinking for loop-carried vectors.  A VEXTRACT keeps the vector in a SIMD
+** register and lets the optimizer eliminate the box around bitcasts and
+** arithmetic results.
+*/
+static int crec_index_vec(jit_State *J, CTState *cts, CType *ct, TRef ptr,
+			  ptrdiff_t ofs, TRef idx)
+{
+  CTVecInfo vi;
+  IRType vt, et;
+  IRIns *irk;
+  ptrdiff_t lane;
+  TRef vec, res;
+  CType *ect;
+
+  if (!tref_isk(idx) || !lj_ctype_vecinfo(cts, ct, &vi) ||
+      vi.kind != VECK_F32 || vi.lanes != 4)
+    return 0;
+  irk = IR(tref_ref(idx));
+  if (LJ_64 && irk->o == IR_KINT64)
+    lane = (ptrdiff_t)ir_kint64(irk)->u64;
+  else
+    lane = (ptrdiff_t)irk->i;
+  if (lane < 0 || lane >= (ptrdiff_t)vi.lanes)
+    return 0;
+
+  vt = crec_vec2irt(cts, ct);
+  if (vt == IRT_NIL)
+    lj_trace_err(J, LJ_TRERR_NYIVEC);
+  if (ofs)
+    ptr = emitir(IRT(IR_ADD, IRT_PTR), ptr, lj_ir_kintp(J, ofs));
+  vec = emitir(IRT(IR_XLOAD, vt), ptr, 0);
+  et = veck_isfp(vi.kind) ?
+       (vi.kind == VECK_F32 ? IRT_FLOAT : IRT_NUM) :
+       (vi.esize == 8 ?
+	((ctype_get(cts, vi.eid)->info & CTF_UNSIGNED) ? IRT_U64 : IRT_I64) :
+	IRT_INT);
+  res = emitir(IRT(IR_VEXTRACT, et), vec, IRVSRC(vt, (uint32_t)lane));
+  ect = ctype_get(cts, vi.eid);
+
+  if (et == IRT_FLOAT) {
+    J->base[0] = emitconv(res, IRT_NUM, IRT_FLOAT, 0);
+  } else if (et == IRT_NUM) {
+    J->base[0] = res;
+  } else if (et == IRT_INT) {
+    IRType st = crec_ct2irt(cts, ect);
+    if (st == IRT_U32) {
+      J->base[0] = emitconv(res, IRT_NUM, IRT_U32, 0);
+    } else if (st != IRT_INT) {
+      J->base[0] = emitconv(res, IRT_INT, st, 0);
+    } else {
+      J->base[0] = res;
+    }
+  } else {
+    lj_needsplit(J);
+    J->base[0] = emitir(IRTG(IR_CNEWI, IRT_CDATA),
+			lj_ir_kint(J, (int32_t)vi.eid), res);
+  }
+  return 1;
+}
+
 void LJ_FASTCALL recff_cdata_index(jit_State *J, RecordFFData *rd)
 {
   TRef idx, ptr = J->base[0];
@@ -892,6 +957,9 @@ again:
   idx = J->base[1];
   if (tref_isnumber(idx)) {
     idx = lj_opt_narrow_cindex(J, idx);
+    if (rd->data == 0 && ctype_isvector(ct->info) &&
+	crec_index_vec(J, cts, ct, ptr, ofs, idx))
+      return;
     if (ctype_ispointer(ct->info)) {
       CTSize sz;
   integer_key:
@@ -4189,6 +4257,26 @@ static TRef crec_arith_meta(jit_State *J, TRef *sp, CType **s, CTState *cts,
   return 0;
 }
 
+/*
+** Match the interpreter's precedence rule for vector metatypes. Packed
+** operators are the default, but an explicit arithmetic metamethod owns the
+** operation when one is present.
+*/
+static int crec_arith_vec_hasmeta(jit_State *J, CTState *cts,
+				  RecordFFData *rd, MMS mm)
+{
+  MSize i;
+  for (i = 0; i < 2; i++) {
+    if (J->base[i] && tviscdata(&rd->argv[i])) {
+      CTypeID id = cdataV(&rd->argv[i])->ctypeid;
+      CType *ct = ctype_raw(cts, id);
+      if (ctype_isvector(ct->info) && lj_ctype_meta(cts, id, mm))
+	return 1;
+    }
+  }
+  return 0;
+}
+
 void LJ_FASTCALL recff_cdata_arith(jit_State *J, RecordFFData *rd)
 {
   CTState *cts = ctype_cts(J->L);
@@ -4285,6 +4373,11 @@ void LJ_FASTCALL recff_cdata_arith(jit_State *J, RecordFFData *rd)
   }
   {
     TRef tr;
+    if (mm != MM_len && mm != MM_concat &&
+	crec_arith_vec_hasmeta(J, cts, rd, mm)) {
+      (void)crec_arith_meta(J, sp, s, cts, rd);
+      return;
+    }
     if ((mm == MM_len || mm == MM_concat ||
 	 (!(tr = crec_arith_vec(J, sp, s, mm, rd)) &&
 	  !(tr = crec_arith_int64(J, sp, s, mm)) &&

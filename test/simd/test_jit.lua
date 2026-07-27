@@ -37,6 +37,47 @@ local function diff(name, f, ...)
   end
 end
 
+test("vector arithmetic metatype overrides packed default", function()
+  ffi.cdef[[
+    typedef const float meta_float4 __attribute__((vector_size(16)));
+  ]]
+  local f4 = T.T.float4.ct
+  local meta4
+  meta4 = ffi.metatype("meta_float4", {
+    __mul = function(a, b)
+      local av = simd.bitcast(f4, a)
+      local bv = simd.bitcast(f4, b)
+      return simd.bitcast(meta4, av + simd.shuffle(bv, 1, 2, 3, 0))
+    end
+  })
+
+  local a = meta4(1, 2, 3, 4)
+  local b = meta4(5, 6, 7, 8)
+  local c = a * b
+  checkeq(c[0], 7, "interpreter uses __mul lane 0")
+  checkeq(c[1], 9, "interpreter uses __mul lane 1")
+  checkeq(c[2], 11, "interpreter uses __mul lane 2")
+  checkeq(c[3], 9, "interpreter uses __mul lane 3")
+
+  diff("vector arithmetic metatype", function(n)
+    local acc = a
+    for _ = 1, n do acc = acc * b end
+    return simd.bitcast(f4, acc)
+  end, 300)
+end)
+
+test("loop-carried float vector lane extraction", function()
+  local f4 = T.T.float4.ct
+  local step = f4(.001, -.002, .003, .999)
+  diff("nonzero lane extraction", function(n)
+    local acc = f4(1, 2, 3, .5)
+    for _ = 1, n do
+      acc = acc + step * acc[3]
+    end
+    return acc
+  end, 300)
+end)
+
 test("loop-carried accumulator", function()
   for _, ti in ipairs(T.T) do
     local rnd = T.rng(SEED + ti.bits)
