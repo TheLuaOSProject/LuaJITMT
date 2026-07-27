@@ -643,6 +643,13 @@ LUA_API void *lua_tocdataof(lua_State *L, int idx, int ctype_idx, size_t *size)
         *size = cdataisv(cd) ? cdatavlen(cd) : lj_ctype_size(cts, id);
       }
       return cdataptr(cd);
+    } else {
+      /* Resolve exact references produced for nested struct values. */
+      CType *ct = ctype_raw(cts, cd->ctypeid);
+      if (ctype_isref(ct->info) && ctype_cid(ct->info) == id) {
+        if (size) *size = lj_ctype_size(cts, id);
+        return *(void **)cdataptr(cd);
+      }
     }
   }
 #else
