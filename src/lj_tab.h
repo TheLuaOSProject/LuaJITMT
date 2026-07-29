@@ -180,6 +180,119 @@ static LJ_AINLINE void lj_tab_array_retired_acap_rel(TabArrayRetire *ret,
 #undef LJ_TAB_RETIRE_RECORD_ACCESSORS
 #undef LJ_TAB_RETIRE_HEAD_ACCESSORS
 
+static LJ_AINLINE TabResizeDesc *
+lj_tab_resize_desc_head_acq(const global_State *g)
+{
+  return (TabResizeDesc *)la_loadptr_acq(
+    (void *const *)&g->tab_resize.resize_descs);
+}
+
+static LJ_AINLINE int lj_tab_resize_desc_head_cas(global_State *g,
+						   TabResizeDesc **oldp,
+						   TabResizeDesc *desc)
+{
+  return la_casptr((void **)&g->tab_resize.resize_descs, (void **)oldp, desc,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE TabResizeDesc *
+lj_tab_resize_desc_head_xchg_acqrel(global_State *g, TabResizeDesc *desc)
+{
+  return (TabResizeDesc *)la_xchgptr_acqrel(
+    (void **)&g->tab_resize.resize_descs, desc);
+}
+
+static LJ_AINLINE TabResizeDesc *
+lj_tab_resize_desc_next_acq(const TabResizeDesc *desc)
+{
+  return (TabResizeDesc *)la_loadptr_acq((void *const *)&desc->next);
+}
+
+static LJ_AINLINE void lj_tab_resize_desc_next_rel(TabResizeDesc *desc,
+						    TabResizeDesc *next)
+{
+  la_storeptr_rel((void **)&desc->next, next);
+}
+
+static LJ_AINLINE GCtab *
+lj_tab_resize_desc_tab_acq(const TabResizeDesc *desc)
+{
+  return (GCtab *)la_loadptr_acq((void *const *)&desc->tab);
+}
+
+static LJ_AINLINE void lj_tab_resize_desc_tab_rel(TabResizeDesc *desc,
+						   GCtab *t)
+{
+  la_storeptr_rel((void **)&desc->tab, t);
+}
+
+static LJ_AINLINE uint64_t
+lj_tab_resize_desc_id_acq(const TabResizeDesc *desc)
+{
+  return la_load64_acq(&desc->id);
+}
+
+static LJ_AINLINE uint32_t
+lj_tab_resize_desc_phase_acq(const TabResizeDesc *desc)
+{
+  return la_load32_acq(&desc->phase);
+}
+
+static LJ_AINLINE uint32_t
+lj_tab_resize_desc_flags_acq(const TabResizeDesc *desc)
+{
+  return la_load32_acq(&desc->flags);
+}
+
+static LJ_AINLINE void lj_tab_resize_desc_flags_rel(TabResizeDesc *desc,
+						     uint32_t flags)
+{
+  la_store32_rel(&desc->flags, flags);
+}
+
+static LJ_AINLINE void lj_tab_resize_desc_flags_or(TabResizeDesc *desc,
+						    uint32_t flags)
+{
+  uint32_t current = lj_tab_resize_desc_flags_acq(desc);
+  while (!la_cas32(&desc->flags, &current, current | flags,
+		   LA_ACQ_REL, LA_ACQ))
+    ;
+}
+
+static LJ_AINLINE int
+lj_tab_resize_desc_vm_guard_release_claim(TabResizeDesc *desc)
+{
+  uint32_t current = lj_tab_resize_desc_flags_acq(desc);
+  for (;;) {
+    if (!(current & TAB_RESIZE_DESC_F_VM_GUARD) ||
+	(current & TAB_RESIZE_DESC_F_VM_GUARD_RELEASED))
+      return 0;
+    if (la_cas32(&desc->flags, &current,
+		 current | TAB_RESIZE_DESC_F_VM_GUARD_RELEASED,
+		 LA_ACQ_REL, LA_ACQ))
+      return 1;
+  }
+}
+
+static LJ_AINLINE int lj_tab_resize_desc_phase_cas(TabResizeDesc *desc,
+						    uint32_t *oldp,
+						    uint32_t phase)
+{
+  return la_cas32(&desc->phase, oldp, phase, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint64_t
+lj_tab_resize_desc_epoch_acq(const TabResizeDesc *desc)
+{
+  return la_load64_acq(&desc->retire_epoch);
+}
+
+static LJ_AINLINE void lj_tab_resize_desc_epoch_rel(TabResizeDesc *desc,
+						     uint64_t epoch)
+{
+  la_store64_rel(&desc->retire_epoch, epoch);
+}
+
 /* A construction root closes the gap between a table becoming READY and its
 ** first ordinary Lua/native semantic root. The rooted API leaves this TG slot
 ** live so callers may safely wait, reacquire a state claim, or grow a stack. */
@@ -240,8 +353,41 @@ LJ_FUNC void lj_tab_read_unwind(const LJTabReadCheckpoint *cp);
 /* Runtime drain only: the detached vectors require GC2's exact-thread
 ** exclusive-reclaimer scope; terminal cleanup calls lj_tab_freeretired(). */
 LJ_FUNC uint32_t lj_tab_reclaim_retired(global_State *g,
-					uint64_t completed_epoch);
+					 uint64_t completed_epoch);
 LJ_FUNC void lj_tab_freeretired(global_State *g);
+/*
+** Persistent resize descriptors are published in a global registry before any
+** descriptor marker can become visible. install() leaves a PREPARED record
+** private only when it cannot enter SMR. The reserve() caller exclusively owns
+** that raw PREPARED pointer and may retry install(), or ask discard() to claim
+** and terminalize it through the registry; discard returns zero only when SMR
+** admission leaves PREPARED caller-owned. Reentrant or concurrent operations
+** on the same private pointer require an outer SMR reader which begins before
+** either operation. Ownership is consumed as soon as any caller wins the
+** PREPARED phase CAS; raw-pointer reuse after that point is forbidden unless
+** protected by an existing reader or rediscovered with find_held(). No caller
+** directly frees an install-capable record. Once PREPARED is claimed, success
+** leaves a borrowed active pointer and every failure leaves a terminal record
+** owned by the registry. Table control is a discovery anchor, not by itself a
+** pointer-lifetime lease. Terminal records stay discoverable until the same
+** grace rule as retired table vectors permits physical free.
+*/
+LJ_FUNC TabResizeDesc *lj_tab_resize_desc_reserve(lua_State *L, GCtab *t,
+						   uint32_t newacap);
+LJ_FUNC int lj_tab_resize_desc_discard(global_State *g,
+					TabResizeDesc *desc);
+LJ_FUNC int lj_tab_resize_desc_install(lua_State *L, GCtab *t,
+				       TabResizeDesc *desc);
+LJ_FUNC int lj_tab_resize_desc_clear(GCtab *t, TabResizeDesc *desc,
+				      uint32_t acap);
+LJ_FUNC TabResizeDesc *lj_tab_resize_desc_find_held(global_State *g,
+						     GCtab *t, uint64_t id);
+LJ_FUNC int lj_tab_resize_desc_maintain_held(global_State *g,
+					      TabResizeDesc *desc);
+LJ_FUNC int lj_tab_resize_desc_advance(TabResizeDesc *desc,
+				       uint32_t from, uint32_t to);
+LJ_FUNC int lj_tab_resize_desc_terminal(global_State *g,
+					 TabResizeDesc *desc, uint32_t from);
 LJ_FUNCA void lj_tab_reasize(lua_State *L, GCtab *t, uint32_t nasize);
 
 /* Caveat: all getters except lj_tab_get() can return NULL! */
@@ -342,9 +488,21 @@ typedef void (*LJTabRootedReaderRetryHook)(lua_State *L, GCtab *t,
 /* Test-only one-shot hook immediately before rooted length validates its
 ** captured table generation. Hooks must not wait, allocate or throw. */
 typedef void (*LJTabLenRootedTryHook)(GCtab *t);
+typedef void (*LJTabResizeDescInstallHook)(lua_State *L, GCtab *t,
+					   TabResizeDesc *desc,
+					   uint32_t stage);
+typedef void (*LJTabResizeDescClearHook)(GCtab *t, TabResizeDesc *desc,
+					 uint32_t acap);
 enum {
   LJ_TAB_ROOTED_READER_NEXT = 1,
   LJ_TAB_ROOTED_READER_LEN = 2
+};
+enum {
+  LJ_TAB_RESIZE_DESC_HOOK_BEFORE_PHASE_CAS = 1,
+  LJ_TAB_RESIZE_DESC_HOOK_PUBLISHED,
+  LJ_TAB_RESIZE_DESC_HOOK_BEFORE_CONTROL_CAS,
+  LJ_TAB_RESIZE_DESC_HOOK_CONTROL,
+  LJ_TAB_RESIZE_DESC_HOOK_CANCELLING
 };
 enum {
   LJ_TAB_NEWKEY_HOOK_ANCHOR_KEY = 1,
@@ -371,6 +529,10 @@ LJ_FUNC void lj_tab_test_set_rooted_reader_retry_hook(
   LJTabRootedReaderRetryHook hook);
 LJ_FUNC void lj_tab_test_set_len_rooted_try_hook(
   LJTabLenRootedTryHook hook);
+LJ_FUNC void lj_tab_test_set_resize_desc_install_hook(
+  LJTabResizeDescInstallHook hook);
+LJ_FUNC void lj_tab_test_set_resize_desc_clear_hook(
+  LJTabResizeDescClearHook hook);
 LJ_FUNC int lj_tab_test_resize_copy_hash_slot(lua_State *L, GCtab *src,
 					      MSize idx, GCtab *dst,
 					      int freeze_old);

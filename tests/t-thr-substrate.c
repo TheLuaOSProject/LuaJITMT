@@ -174,19 +174,25 @@ int main(void)
   uint64_t epoch0;
 
   {
-    uint32_t counter = LJ_THREAD_GCPREP - 3u;
+    uint32_t counter = LJ_THREAD_OWNER_MAX - 2u;
     LJThr invalid = {0};
-    assert(lj_thr_id_alloc(&counter) == LJ_THREAD_GCPREP - 2u);
-    assert(lj_thr_id_alloc(&counter) == LJ_THREAD_GCPREP - 1u);
+    assert(lj_thr_id_alloc(&counter) == LJ_THREAD_OWNER_MAX - 1u);
+    assert(lj_thr_id_alloc(&counter) == LJ_THREAD_OWNER_MAX);
     assert(lj_thr_id_alloc(&counter) == 0);
     assert(lj_thr_id_alloc(&counter) == 0);
-    assert(counter == LJ_THREAD_GCPREP - 1u);
+    assert(counter == LJ_THREAD_OWNER_MAX);
+    counter = LJ_THREAD_STRUCT;
+    assert(lj_thr_id_alloc(&counter) == 0);
+    assert(counter == LJ_THREAD_STRUCT);
     counter = LJ_THREAD_GCPREP;
     assert(lj_thr_id_alloc(&counter) == 0);
     assert(counter == LJ_THREAD_GCPREP);
     counter = LJ_THREAD_GCSCAN;
     assert(lj_thr_id_alloc(&counter) == 0);
     assert(counter == LJ_THREAD_GCSCAN);
+    invalid.tid = LJ_THREAD_STRUCT;
+    assert(lj_thr_create(&invalid, id_stress_main, NULL) == EAGAIN);
+    assert(invalid.tid == 0);
     invalid.tid = LJ_THREAD_GCPREP;
     assert(lj_thr_create(&invalid, id_stress_main, NULL) == EAGAIN);
     assert(invalid.tid == 0);
@@ -198,7 +204,7 @@ int main(void)
     IdStressCtx idctx = {0};
     LJThr idthr[ID_STRESS_THREADS] = {{0}};
     uint32_t i;
-    idctx.counter = LJ_THREAD_GCPREP - 1u - ID_STRESS_COUNT;
+    idctx.counter = LJ_THREAD_OWNER_MAX - ID_STRESS_COUNT;
     idctx.first = idctx.counter + 1u;
     for (i = 0; i < ID_STRESS_THREADS; i++)
       assert(lj_thr_create(&idthr[i], id_stress_main, &idctx) == 0);
@@ -208,7 +214,7 @@ int main(void)
     for (i = 0; i < ID_STRESS_THREADS; i++)
       assert(lj_thr_join(&idthr[i], NULL) == 0);
     assert(la_load32_acq(&idctx.successes) == ID_STRESS_COUNT);
-    assert(la_load32_acq(&idctx.counter) == LJ_THREAD_GCPREP - 1u);
+    assert(la_load32_acq(&idctx.counter) == LJ_THREAD_OWNER_MAX);
     for (i = 0; i < ID_STRESS_COUNT; i++)
       assert(la_load32_acq(&idctx.seen[i]) == 1);
   }
@@ -221,7 +227,13 @@ int main(void)
     LJGC2RootDescView root_view;
     assert(lj_gc2_rootdesc_snapshot(&tg->root_desc, &root_view) ==
            LJ_GC2_ROOTDESC_SNAPSHOT_IDLE);
-    assert(root_view.generation == 0);
+    /*
+    ** luaL_newstate() may complete rooted table transactions while building
+    ** the registry and libraries. Unlike the raw worker initialization above,
+    ** the main TG is only required to be idle here; its generation is
+    ** deliberately monotonic across those completed transactions.
+    */
+    assert(root_view.generation <= LJ_GC2_ROOTDESC_MAX_GENERATION);
   }
 
   lj_thr_set_tg(tg);
@@ -323,6 +335,7 @@ int main(void)
   lj_tg_init_thread(g, &late_tg, late_L, 0);
   late_tg.cur_L = late_L;
   lj_native_enter(&late_tg);
+  assert(lj_thr_tg_bind_current(&late_tg));
   attach_without_catchup(g, &late_tg);
   wait_late_remote_ack(&late_tg, g);
   assert(la_load64_acq(&late_tg.hs_epoch_ack) == g->gc2.hs_epoch);
@@ -332,6 +345,12 @@ int main(void)
 
   lj_tg_store_cur_L(&hold_tg, hold_L);
   assert(lj_safepoint_ack(hold_L) == hs.actions);
+  /*
+  ** The handshake leader is a bare C thread, not the main TG. Acknowledge the
+  ** main participant explicitly before joining that leader; otherwise the
+  ** fixture itself waits forever for a TG whose owner is blocked in join().
+  */
+  assert(lj_safepoint_ack(L) == hs.actions);
   assert(lj_thr_join(&hs_thread, NULL) == 0);
   assert(hs.signaled == 3u);
   assert(g->gc2.hs_pending == 0);
@@ -339,6 +358,7 @@ int main(void)
   assert(la_load64_acq(&late_tg.hs_epoch_ack) == g->gc2.hs_epoch);
   assert(la_load64_acq(&hold_tg.hs_epoch_ack) == g->gc2.hs_epoch);
 
+  assert(lj_native_leave_tg(&late_tg) == 0);
   lj_tg_detach(g, &late_tg);
   assert(lj_tg_reclaim_dead(g) == 0u);
   lj_tg_fini_thread(g, &late_tg);

@@ -21,6 +21,7 @@
 #include "lj_tabtxn.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
+#include "lj_trace.h"
 #if LJ_HASFFI
 #include "lj_cdata.h"
 #endif
@@ -322,11 +323,14 @@ void lj_tab_read_unwind(const LJTabReadCheckpoint *cp)
   }
 }
 
+LJ_STATIC_ASSERT(LJ_THREAD_OWNER_MAX < LJ_TAB_STRUCT_OWNER_LIMIT);
+LJ_STATIC_ASSERT(LJ_THREAD_STRUCT < LJ_TAB_STRUCT_OWNER_LIMIT);
+
 static uint32_t tab_struct_tid(lua_State *L)
 {
   TGState *tg = L ? L2TG(L) : lj_thr_get_tg();
   uint32_t tid = tg ? lj_tg_tid_acq(tg) : 0;
-  return tid != 0 ? tid : ~(uint32_t)0;
+  return tid != 0 ? tid : LJ_THREAD_STRUCT;
 }
 
 #ifdef LJ_TAB_TEST_HELPERS
@@ -384,11 +388,56 @@ static LJ_AINLINE int tab_private_mutation_allowed(lua_State *L)
 	 gc2_phase_acq(g) == LJ_GC2_IDLE && !lj_tg_mark_active_acq(tg);
 }
 
+static LJ_AINLINE int
+tab_private_table_mutation_allowed(lua_State *L, GCtab *t)
+{
+  /*
+  ** Descriptor installation holds a counted guard in the raw mt_active word
+  ** from before its control CAS until after detachment. This keeps the stock
+  ** global fast-path shape and avoids a table-header load on every mutation.
+  */
+  UNUSED(t);
+  return tab_private_mutation_allowed(L);
+}
+
+static int tab_struct_desc_help(lua_State *L, GCtab *t, uint64_t control)
+{
+  TGState *tg = L ? L2TG(L) : lj_thr_get_tg();
+  global_State *g = L ? G(L) : (tg ? tg->gl : NULL);
+  TabResizeDesc *desc;
+  int changed = 0;
+  if (!g || !lj_gc2_smr_read_try(g))
+    return 0;
+  /*
+  ** SMR admission precedes the exact tag recheck and every descriptor
+  ** dereference. Registry publication precedes the tag CAS; terminal reclaim
+  ** cannot free a still-tagged descriptor, and the reader closes the detach
+  ** race after this recheck.
+  */
+  if (lj_tab_struct_control_acq(t) == control) {
+    desc = lj_tab_struct_control_desc(control);
+    if (desc && lj_tab_resize_desc_tab_acq(desc) == t) {
+      (void)lj_tab_resize_desc_maintain_held(g, desc);
+      changed = lj_tab_struct_control_acq(t) != control;
+    }
+  }
+  lj_gc2_smr_read_leave(g);
+  return changed;
+}
+
 int lj_tab_struct_enter(lua_State *L, GCtab *t)
 {
   uint32_t tid = tab_struct_tid(L);
   for (;;) {
-    uint32_t owner = lj_tab_struct_owner_acq(t);
+    uint64_t control = lj_tab_struct_control_acq(t);
+    uint32_t owner;
+    if (LJ_UNLIKELY(lj_tab_struct_control_is_desc(control))) {
+      if (tab_struct_desc_help(L, t, control))
+	continue;
+      tab_struct_owner_wait(L, t, LJ_TAB_STRUCT_DESC_OWNER);
+      continue;
+    }
+    owner = lj_tab_struct_control_owner(control);
     if (owner == tid)
       return 0;
     if (owner == 0) {
@@ -1511,6 +1560,825 @@ static uint32_t tab_rehash_hashcount(lua_State *L, Node *oldnode, MSize oldhmask
   return count;
 }
 
+static uint64_t tab_resize_desc_id_reserve(global_State *g)
+{
+  uint64_t current = la_load64_rlx(&g->tab_resize.resize_next_id);
+  for (;;) {
+    uint64_t next;
+    if (current >= LJ_TAB_RESIZE_MARK_ID_MAX)
+      return 0;
+    next = current + 1u;
+    if (la_cas64(&g->tab_resize.resize_next_id, &current, next,
+		 LA_RLX, LA_RLX))
+      return next;
+  }
+}
+
+TabResizeDesc *lj_tab_resize_desc_reserve(lua_State *L, GCtab *t,
+					   uint32_t newacap)
+{
+  global_State *g = G(L);
+  TabResizeDesc *desc;
+  uint64_t id;
+  lj_assertL(t != NULL, "resize descriptor requires a table");
+  if (LJ_UNLIKELY(newacap > TABARRAY_ACAP_MASK))
+    lj_err_msg(L, LJ_ERR_TABOV);
+  id = tab_resize_desc_id_reserve(g);
+  if (LJ_UNLIKELY(id == 0))
+    lj_err_msg(L, LJ_ERR_TABOV);
+  desc = lj_mem_newt(L, sizeof(TabResizeDesc), TabResizeDesc);
+  memset(desc, 0, sizeof(*desc));
+  desc->tab = t;
+  desc->id = id;
+  desc->newacap = newacap;
+  desc->phase = TAB_RESIZE_DESC_PREPARED;
+  return desc;
+}
+
+static void tab_resize_desc_preserve(global_State *g, TabResizeDesc *desc)
+{
+  GCtab *t;
+  if (!desc)
+    return;
+  (void)lj_gc2_markmem_registered_publish_try(g, desc);
+  t = lj_tab_resize_desc_tab_acq(desc);
+  if (t)
+    lj_gc2_preserve_root(g, obj2gco(t));
+}
+
+static void tab_resize_desc_push(global_State *g, TabResizeDesc *desc)
+{
+  TabResizeDesc *head = lj_tab_resize_desc_head_acq(g);
+  do {
+    lj_tab_resize_desc_next_rel(desc, head);
+  } while (!lj_tab_resize_desc_head_cas(g, &head, desc));
+}
+
+static void tab_resize_desc_publish(global_State *g, TabResizeDesc *desc)
+{
+  if (!g || !desc)
+    return;
+  lj_assertG(lj_tab_resize_desc_phase_acq(desc) ==
+	     TAB_RESIZE_DESC_INSTALLING,
+	     "publishing resize descriptor outside INSTALLING");
+  lj_assertG(!(lj_tab_resize_desc_flags_acq(desc) &
+	       TAB_RESIZE_DESC_F_PUBLISHED),
+	     "resize descriptor published twice");
+  /*
+  ** Mark the private record and preserve its semantic table edge before list
+  ** publication. Registry linkage is the first externally recoverable state.
+  ** A scanner retains but deliberately does not cancel the pre-control
+  ** INSTALLING window; only the publishing call owns that first CAS. The
+  ** second preserve closes IDLE->MARK/root-snapshot overlap like raw
+  ** table-retire records.
+  */
+  tab_resize_desc_preserve(g, desc);
+  tab_resize_desc_push(g, desc);
+  lj_tab_resize_desc_flags_rel(desc, TAB_RESIZE_DESC_F_PUBLISHED);
+  tab_resize_desc_preserve(g, desc);
+}
+
+#ifdef LJ_TAB_TEST_HELPERS
+static LJTabResizeDescInstallHook tab_test_resize_desc_install_hook;
+static LJTabResizeDescClearHook tab_test_resize_desc_clear_hook;
+
+void lj_tab_test_set_resize_desc_install_hook(
+  LJTabResizeDescInstallHook hook)
+{
+  tab_test_resize_desc_install_hook = hook;
+}
+
+void lj_tab_test_set_resize_desc_clear_hook(LJTabResizeDescClearHook hook)
+{
+  tab_test_resize_desc_clear_hook = hook;
+}
+
+static void tab_test_resize_desc_install(lua_State *L, GCtab *t,
+					 TabResizeDesc *desc,
+					 uint32_t stage)
+{
+  LJTabResizeDescInstallHook hook = tab_test_resize_desc_install_hook;
+  if (hook) {
+    /* Reentrant helper fixtures use a one-shot pause point. */
+    tab_test_resize_desc_install_hook = NULL;
+    hook(L, t, desc, stage);
+  }
+}
+
+static void tab_test_resize_desc_clear(GCtab *t, TabResizeDesc *desc,
+					uint32_t acap)
+{
+  LJTabResizeDescClearHook hook = tab_test_resize_desc_clear_hook;
+  if (hook) {
+    tab_test_resize_desc_clear_hook = NULL;
+    hook(t, desc, acap);
+  }
+}
+#else
+#define tab_test_resize_desc_install(L, t, desc, stage)	((void)0)
+#define tab_test_resize_desc_clear(t, desc, acap)	((void)0)
+#endif
+
+static int tab_resize_desc_cancel_installing(global_State *g, lua_State *L,
+					      TabResizeDesc *desc);
+
+int lj_tab_resize_desc_discard(global_State *g, TabResizeDesc *desc)
+{
+  uint32_t expect;
+  if (!desc)
+    return 1;
+  if (!g || !lj_gc2_smr_read_tracked_try(g))
+    return 0;
+  expect = TAB_RESIZE_DESC_PREPARED;
+  if (!lj_tab_resize_desc_phase_cas(desc, &expect,
+				    TAB_RESIZE_DESC_INSTALLING)) {
+    /*
+    ** Another installer/discarder owns every non-PREPARED record. The outer
+    ** reader keeps it alive until this losing caller has stopped touching it.
+    */
+    lj_gc2_smr_read_leave(g);
+    return expect != TAB_RESIZE_DESC_PREPARED;
+  }
+  /*
+  ** Never physically free a private intent here: an installer may already
+  ** hold its pointer while paused before the same phase CAS. Registry
+  ** retirement plus the installer's SMR reader closes that lifetime race.
+  */
+  tab_resize_desc_publish(g, desc);
+  (void)tab_resize_desc_cancel_installing(g, NULL, desc);
+  lj_gc2_smr_read_leave(g);
+  return 1;
+}
+
+enum {
+  TAB_RESIZE_DESC_SNAPSHOT_EMPTY = 0,
+  TAB_RESIZE_DESC_SNAPSHOT_CAPTURING,
+  TAB_RESIZE_DESC_SNAPSHOT_READY
+};
+
+/*
+** Single-attempt root capture. Descriptor control excludes every structural
+** publisher while this runs; cancellation may remove that exclusion, so each
+** root and retiring bit is revalidated and any overlap aborts without waiting.
+*/
+static int tab_resize_desc_roots_try(GCtab *t, TValue **arrayp,
+				      MSize *asizep, Node **nodep,
+				      MSize *hmaskp)
+{
+  TValue *array;
+  Node *node;
+  MSize asize, hmask, table_asize, table_hmask;
+  table_asize = lj_tab_asize_acq(t);
+  array = lj_tab_array_acq(t);
+  asize = table_asize;
+  if (array && !lj_tab_array_is_colocated(t, array)) {
+    if (lj_tab_array_is_retiring(t, array))
+      return 0;
+    asize = lj_tab_array_hdr_asize_acq(array);
+  } else if (lj_tab_asize_acq(t) != table_asize) {
+    return 0;
+  }
+  if (array != lj_tab_array_acq(t))
+    return 0;
+
+  node = lj_tab_node_acq(t);
+  if (!node || lj_tab_node_is_retiring(node))
+    return 0;
+  hmask = lj_tab_node_hmask_acq(node);
+  table_hmask = lj_tab_hmask_acq(t);
+  if (!lj_tab_hmask_value_valid(hmask) || hmask != table_hmask ||
+      node != lj_tab_node_acq(t))
+    return 0;
+
+  /*
+  ** Keep the two roots in one structural generation even if cancellation
+  ** cleared descriptor control between their individual samples.
+  */
+  if (array != lj_tab_array_acq(t) ||
+      (array && !lj_tab_array_is_colocated(t, array) &&
+       lj_tab_array_is_retiring(t, array)) ||
+      node != lj_tab_node_acq(t) || lj_tab_node_is_retiring(node))
+    return 0;
+  *arrayp = array;
+  *asizep = asize;
+  *nodep = node;
+  *hmaskp = hmask;
+  return 1;
+}
+
+static int tab_resize_desc_capture_snapshot(GCtab *t, TabResizeDesc *desc)
+{
+  TValue *array;
+  Node *node;
+  MSize asize, hmask;
+  uint32_t expect = TAB_RESIZE_DESC_SNAPSHOT_EMPTY;
+  if (!la_cas32(&desc->snapshot_state, &expect,
+		TAB_RESIZE_DESC_SNAPSHOT_CAPTURING, LA_ACQ_REL, LA_ACQ))
+    return expect == TAB_RESIZE_DESC_SNAPSHOT_READY;
+  if (lj_tab_resize_desc_phase_acq(desc) !=
+	TAB_RESIZE_DESC_INSTALLING ||
+      lj_tab_resize_desc_control_acq(t) != desc ||
+      !tab_resize_desc_roots_try(t, &array, &asize, &node, &hmask) ||
+      (uint32_t)lj_tab_acap_acq(t) != desc->oldacap ||
+      lj_tab_resize_desc_control_acq(t) != desc ||
+      lj_tab_resize_desc_phase_acq(desc) !=
+	TAB_RESIZE_DESC_INSTALLING)
+    return 0;
+  desc->oldarray = array;
+  desc->oldnode = node;
+  desc->oldasize = (uint32_t)asize;
+  desc->oldhmask = (uint32_t)hmask;
+  la_store32_rel(&desc->snapshot_state, TAB_RESIZE_DESC_SNAPSHOT_READY);
+  return 1;
+}
+
+static int tab_resize_desc_snapshot_current(GCtab *t, TabResizeDesc *desc)
+{
+  TValue *array;
+  Node *node;
+  MSize asize, hmask;
+  if (la_load32_acq(&desc->snapshot_state) !=
+	TAB_RESIZE_DESC_SNAPSHOT_READY ||
+      lj_tab_resize_desc_control_acq(t) != desc ||
+      !tab_resize_desc_roots_try(t, &array, &asize, &node, &hmask))
+    return 0;
+  return array == desc->oldarray && node == desc->oldnode &&
+    (uint32_t)asize == desc->oldasize &&
+    (uint32_t)hmask == desc->oldhmask &&
+    (uint32_t)lj_tab_acap_acq(t) == desc->oldacap &&
+    lj_tab_resize_desc_control_acq(t) == desc;
+}
+
+static void tab_resize_desc_epoch_max(TabResizeDesc *desc, uint64_t epoch)
+{
+  uint64_t current = lj_tab_resize_desc_epoch_acq(desc);
+  while (current < epoch &&
+	 !la_cas64(&desc->retire_epoch, &current, epoch,
+		   LA_ACQ_REL, LA_ACQ))
+    ;
+}
+
+static void tab_resize_desc_vm_guard_release(global_State *g,
+					      TabResizeDesc *desc)
+{
+  if (lj_tab_resize_desc_vm_guard_release_claim(desc))
+    mt_resize_guard_leave(g);
+}
+
+static int tab_resize_desc_vm_guard_acquire(lua_State *L,
+					     TabResizeDesc *desc)
+{
+  global_State *g = G(L);
+  int entered = mt_resize_guard_enter(g);
+  if (!entered)
+    return 0;
+  /*
+  ** Publish descriptor ownership of the count before any path can cancel the
+  ** INSTALLING record. The release claim is monotonic and therefore exactly
+  ** one helper performs the matching decrement.
+  */
+  lj_tab_resize_desc_flags_or(desc, TAB_RESIZE_DESC_F_VM_GUARD);
+#if LJ_HASJIT
+  /*
+  ** A pre-MT trace may contain raw ASTORE/HSTORE instructions with no runtime
+  ** mt_active test. The new raw-word guard prevents any later recording from
+  ** selecting that lowering; serialize with the JIT token and retire every
+  ** earlier trace while table control is still stable. First MT activation
+  ** performs the same flush before publishing the sticky latch.
+  */
+  /*
+  ** A nonzero guard count is not itself proof that the first guard has
+  ** completed its trace flush: another installer may be paused between those
+  ** events. Every pre-MT installer therefore serializes through the bounded
+  ** token path before it may publish table control.
+  */
+  if (mt_active_acq(g) == 0 && lj_trace_flushall_try_noevent(L)) {
+    tab_resize_desc_vm_guard_release(g, desc);
+    return 0;
+  }
+#else
+  UNUSED(L);
+#endif
+  return 1;
+}
+
+static int tab_resize_desc_finish_terminal(global_State *g,
+					    TabResizeDesc *desc)
+{
+  GCtab *t;
+  uint32_t expect = TAB_RESIZE_DESC_TERMINATING;
+  uint32_t phase = lj_tab_resize_desc_phase_acq(desc);
+  t = lj_tab_resize_desc_tab_acq(desc);
+  if (!t || lj_tab_resize_desc_control_acq(t) == desc)
+    return 0;
+  if (phase == TAB_RESIZE_DESC_TERMINAL) {
+    tab_resize_desc_vm_guard_release(g, desc);
+    return 1;
+  }
+  if (phase != TAB_RESIZE_DESC_TERMINATING)
+    return 0;
+  /*
+  ** Control is already stable. Drop the universe-wide private-store veto
+  ** before publishing TERMINAL, so reclamation can never free a descriptor
+  ** whose matching global_State count is still live.
+  */
+  tab_resize_desc_vm_guard_release(g, desc);
+  tab_resize_desc_epoch_max(desc, lj_gc2_retire_epoch(g));
+  if (lj_tab_resize_desc_phase_cas(desc, &expect,
+				   TAB_RESIZE_DESC_TERMINAL))
+    return 1;
+  return expect == TAB_RESIZE_DESC_TERMINAL;
+}
+
+static int tab_resize_desc_detach_control(TabResizeDesc *desc)
+{
+  GCtab *t = lj_tab_resize_desc_tab_acq(desc);
+  uint64_t current;
+  if (!t)
+    return 0;
+  current = lj_tab_struct_control_acq(t);
+  while (lj_tab_struct_control_desc(current) == desc) {
+    uint64_t desired = lj_tab_struct_control_pack(
+      (uint32_t)lj_tab_acap_acq(t), 0);
+    if (lj_tab_struct_control_cas(t, &current, desired))
+      return 1;
+  }
+  return 1;
+}
+
+static int tab_resize_desc_help_terminating(global_State *g,
+					     TabResizeDesc *desc)
+{
+  GCtab *t = lj_tab_resize_desc_tab_acq(desc);
+  if (!t || (lj_tab_resize_desc_phase_acq(desc) !=
+	     TAB_RESIZE_DESC_TERMINATING &&
+	     lj_tab_resize_desc_phase_acq(desc) !=
+	     TAB_RESIZE_DESC_TERMINAL))
+    return 0;
+  if (!tab_resize_desc_detach_control(desc))
+    return 0;
+  return tab_resize_desc_finish_terminal(g, desc);
+}
+
+/*
+** Publish the target capacity while descriptor control still excludes every
+** structural successor, then claim TERMINATING before releasing that control.
+** The 128-bit no-control-change CAS makes a delayed capacity writer fail after
+** detachment. install() guarantees the same descriptor can never be tagged
+** again, so that failure cannot suffer descriptor ABA.
+**
+** The return value distinguishes an exact target cutover (1) from a displaced
+** generation which was terminalized without changing its capacity (2).
+*/
+static int tab_resize_desc_prepare_clearing(TabResizeDesc *desc, int testhook)
+{
+  GCtab *t = lj_tab_resize_desc_tab_acq(desc);
+  uint32_t acap = desc->newacap;
+  uint64_t expected, weak, desiredweak;
+  if (!t || lj_tab_resize_desc_phase_acq(desc) !=
+	    TAB_RESIZE_DESC_CLEARING)
+    return 0;
+  expected = lj_tab_struct_control_acq(t);
+  weak = lj_tab_weak_record_raw_acq(t);
+  if (testhook)
+    tab_test_resize_desc_clear(t, desc, acap);
+  for (;;) {
+    uint32_t phase = lj_tab_resize_desc_phase_acq(desc);
+    uint32_t expect_phase;
+    if (phase == TAB_RESIZE_DESC_TERMINATING ||
+	phase == TAB_RESIZE_DESC_TERMINAL)
+      return 2;
+    if (phase != TAB_RESIZE_DESC_CLEARING)
+      return 0;
+    if (lj_tab_struct_control_desc(expected) != desc) {
+      /*
+      ** A conforming cutover never releases descriptor control in CLEARING.
+      ** Fail closed if legacy/test code displaced it: mark the descriptor as
+      ** terminating, but preserve the current generation's capacity.
+      */
+      expect_phase = TAB_RESIZE_DESC_CLEARING;
+      if (!lj_tab_resize_desc_phase_cas(desc, &expect_phase,
+					TAB_RESIZE_DESC_TERMINATING) &&
+	  expect_phase != TAB_RESIZE_DESC_TERMINATING &&
+	  expect_phase != TAB_RESIZE_DESC_TERMINAL)
+	return 0;
+      return 2;
+    }
+    desiredweak = (weak & ~LJ_TAB_WEAK_RECORD_ACAP_MASK) |
+      ((uint64_t)acap << LJ_TAB_WEAK_RECORD_ACAP_SHIFT);
+    if (lj_tab_struct_weak_pair_cas(t, &expected, &weak, expected,
+				    desiredweak)) {
+      /*
+      ** Success validated descriptor control and published the target shadow
+      ** in one event. Record exact provenance before exposing a terminal phase:
+      ** capacity equality in some later stable generation cannot prove that
+      ** this descriptor performed the cutover. Semantic weak-record writers
+      ** preserve the capacity bits.
+      */
+      lj_tab_resize_desc_flags_or(desc, TAB_RESIZE_DESC_F_CUTOVER);
+      expect_phase = TAB_RESIZE_DESC_CLEARING;
+      if (lj_tab_resize_desc_phase_cas(desc, &expect_phase,
+				       TAB_RESIZE_DESC_TERMINATING) ||
+	  expect_phase == TAB_RESIZE_DESC_TERMINATING ||
+	  expect_phase == TAB_RESIZE_DESC_TERMINAL)
+	return 1;
+      return 0;
+    }
+  }
+}
+
+static int tab_resize_desc_help_clearing(global_State *g,
+					  TabResizeDesc *desc)
+{
+  uint32_t phase;
+  int cleared;
+  if (!g || !desc)
+    return 0;
+  phase = lj_tab_resize_desc_phase_acq(desc);
+  if (phase == TAB_RESIZE_DESC_TERMINATING ||
+      phase == TAB_RESIZE_DESC_TERMINAL)
+    return tab_resize_desc_help_terminating(g, desc);
+  if (phase != TAB_RESIZE_DESC_CLEARING)
+    return 0;
+  cleared = tab_resize_desc_prepare_clearing(desc, 0);
+  if (cleared &&
+      (lj_tab_resize_desc_phase_acq(desc) ==
+       TAB_RESIZE_DESC_TERMINATING ||
+       lj_tab_resize_desc_phase_acq(desc) == TAB_RESIZE_DESC_TERMINAL))
+    return tab_resize_desc_help_terminating(g, desc);
+  phase = lj_tab_resize_desc_phase_acq(desc);
+  if (phase == TAB_RESIZE_DESC_TERMINATING ||
+      phase == TAB_RESIZE_DESC_TERMINAL)
+    return tab_resize_desc_help_terminating(g, desc);
+  return 0;
+}
+
+/*
+** Only the sole pre-control issuer may cancel after its install CAS fails.
+** Once table control names the descriptor, any helper may cancel a failed
+** snapshot. Claim TERMINATING before clearing control so a delayed capturer
+** cannot advance INSTALLING after detachment; later helpers may finish it.
+*/
+static int tab_resize_desc_cancel_installing(global_State *g, lua_State *L,
+					      TabResizeDesc *desc)
+{
+  GCtab *t = lj_tab_resize_desc_tab_acq(desc);
+  uint32_t expect = TAB_RESIZE_DESC_INSTALLING;
+  if (!t)
+    return 0;
+  if (!lj_tab_resize_desc_phase_cas(desc, &expect,
+				    TAB_RESIZE_DESC_TERMINATING)) {
+    if (expect == TAB_RESIZE_DESC_TERMINATING ||
+	expect == TAB_RESIZE_DESC_TERMINAL)
+      return tab_resize_desc_help_terminating(g, desc);
+    return 0;
+  }
+  if (L)
+    tab_test_resize_desc_install(L, t, desc,
+				 LJ_TAB_RESIZE_DESC_HOOK_CANCELLING);
+  return tab_resize_desc_help_terminating(g, desc);
+}
+
+static int tab_resize_desc_finish_install(TabResizeDesc *desc)
+{
+  uint32_t expect = TAB_RESIZE_DESC_INSTALLING;
+  if (lj_tab_resize_desc_phase_cas(desc, &expect,
+				   TAB_RESIZE_DESC_INSTALLED))
+    return 1;
+  return expect == TAB_RESIZE_DESC_INSTALLED;
+}
+
+int lj_tab_resize_desc_maintain_held(global_State *g, TabResizeDesc *desc)
+{
+  GCtab *t;
+  uint32_t phase;
+  if (!g || !desc)
+    return 0;
+  phase = lj_tab_resize_desc_phase_acq(desc);
+  /*
+  ** Registry publication intentionally precedes table-control publication.
+  ** Before the publishing call performs its one allowed control CAS, the
+  ** descriptor is only a cold retained intent and the stable table remains
+  ** usable. Do not cancel that window: restoring the same stable word would
+  ** let the delayed CAS reinstall a terminal descriptor after an ABA cycle.
+  ** Once control names the descriptor, any scanner can finish the bounded
+  ** root snapshot or cancel an invalid generation.
+  */
+  if (phase == TAB_RESIZE_DESC_INSTALLING) {
+    t = lj_tab_resize_desc_tab_acq(desc);
+    if (!t || lj_tab_resize_desc_control_acq(t) != desc)
+      return t != NULL;
+    if (tab_resize_desc_capture_snapshot(t, desc) &&
+	tab_resize_desc_snapshot_current(t, desc) &&
+	tab_resize_desc_finish_install(desc))
+      return 1;
+    phase = lj_tab_resize_desc_phase_acq(desc);
+    if (phase >= TAB_RESIZE_DESC_INSTALLED &&
+	phase <= TAB_RESIZE_DESC_PUBLISHING)
+      return lj_tab_resize_desc_control_acq(t) == desc;
+    if (phase == TAB_RESIZE_DESC_INSTALLING)
+      return tab_resize_desc_cancel_installing(g, NULL, desc);
+    if (phase == TAB_RESIZE_DESC_TERMINATING ||
+	phase == TAB_RESIZE_DESC_TERMINAL)
+      return tab_resize_desc_help_terminating(g, desc);
+    return 0;
+  }
+  if (phase == TAB_RESIZE_DESC_TERMINATING ||
+      phase == TAB_RESIZE_DESC_TERMINAL)
+    return tab_resize_desc_help_terminating(g, desc);
+  if (phase == TAB_RESIZE_DESC_CLEARING)
+    return tab_resize_desc_help_clearing(g, desc);
+  if (phase == TAB_RESIZE_DESC_PUBLISHING) {
+    t = lj_tab_resize_desc_tab_acq(desc);
+    if (t && lj_tab_resize_desc_control_acq(t) != desc) {
+      uint32_t expect = TAB_RESIZE_DESC_PUBLISHING;
+      if (lj_tab_resize_desc_phase_cas(desc, &expect,
+				       TAB_RESIZE_DESC_TERMINATING) ||
+	  expect == TAB_RESIZE_DESC_TERMINATING)
+	return tab_resize_desc_help_terminating(g, desc);
+      if (expect == TAB_RESIZE_DESC_CLEARING)
+	return tab_resize_desc_help_clearing(g, desc);
+      if (expect == TAB_RESIZE_DESC_TERMINATING ||
+	  expect == TAB_RESIZE_DESC_TERMINAL)
+	return tab_resize_desc_help_terminating(g, desc);
+      return 0;
+    }
+  }
+  return phase >= TAB_RESIZE_DESC_INSTALLED &&
+    phase <= TAB_RESIZE_DESC_PUBLISHING;
+}
+
+int lj_tab_resize_desc_install(lua_State *L, GCtab *t, TabResizeDesc *desc)
+{
+  global_State *g;
+  uint32_t oldacap;
+  uint32_t expect_phase;
+  uint64_t control, expected, desired;
+  uint32_t flags, phase;
+  int install_authority = 0, install_valid = 0, installed;
+  if (!L || !t || !desc)
+    return 0;
+  g = G(L);
+  if (!lj_gc2_smr_read_tracked_try(g)) {
+    /*
+    ** No phase claim was made, so the still-private PREPARED record remains
+    ** available to retry or explicitly discard. Tracked admission also refuses
+    ** a cross-universe TLS fallback before the JIT flush can open nested
+    ** readers.
+    */
+    return 0;
+  }
+  if (lj_tab_resize_desc_tab_acq(desc) != t) {
+    lj_gc2_smr_read_leave(g);
+    return 0;
+  }
+
+  flags = lj_tab_resize_desc_flags_acq(desc);
+  if (!(flags & TAB_RESIZE_DESC_F_PUBLISHED)) {
+    /*
+    ** Claim sole initial-CAS authority before writing the immutable install
+    ** snapshot. A concurrent loser observes INSTALLING and returns without
+    ** touching these fields.
+    */
+    tab_test_resize_desc_install(
+      L, t, desc, LJ_TAB_RESIZE_DESC_HOOK_BEFORE_PHASE_CAS);
+    expect_phase = TAB_RESIZE_DESC_PREPARED;
+    if (!lj_tab_resize_desc_phase_cas(desc, &expect_phase,
+				      TAB_RESIZE_DESC_INSTALLING)) {
+      lj_gc2_smr_read_leave(g);
+      return 0;
+    }
+    install_authority = 1;
+    control = lj_tab_struct_control_acq(t);
+    if (!lj_tab_struct_control_is_desc(control)) {
+      oldacap = lj_tab_struct_control_acap(control);
+      if (lj_tab_struct_control_owner(control) == 0 &&
+	  (uint32_t)lj_tab_acap_acq(t) == oldacap &&
+	  lj_tab_struct_control_acq(t) == control) {
+	desc->stable_control = control;
+	desc->oldacap = oldacap;
+	install_valid = 1;
+      }
+    }
+    /*
+    ** Even a rejected claimed intent joins the registry before terminalizing.
+    ** This lets concurrent install callers leave without a private-record
+    ** lifetime race and gives the exact reclaimer sole physical-free authority.
+    ** Immutable fields are complete before the published flag's release store.
+    */
+    tab_resize_desc_publish(g, desc);
+    if (!install_valid) {
+      (void)tab_resize_desc_cancel_installing(g, L, desc);
+      lj_gc2_smr_read_leave(g);
+      return 0;
+    }
+    tab_test_resize_desc_install(L, t, desc,
+				 LJ_TAB_RESIZE_DESC_HOOK_PUBLISHED);
+  }
+
+  phase = lj_tab_resize_desc_phase_acq(desc);
+  if (phase >= TAB_RESIZE_DESC_INSTALLED &&
+      phase <= TAB_RESIZE_DESC_PUBLISHING) {
+    installed = lj_tab_resize_desc_control_acq(t) == desc;
+    phase = lj_tab_resize_desc_phase_acq(desc);
+    if (installed && phase >= TAB_RESIZE_DESC_INSTALLED &&
+	phase <= TAB_RESIZE_DESC_PUBLISHING) {
+      lj_gc2_smr_read_leave(g);
+      return 1;
+    }
+    if (phase == TAB_RESIZE_DESC_PUBLISHING)
+      (void)lj_tab_resize_desc_maintain_held(g, desc);
+  }
+  if (phase != TAB_RESIZE_DESC_INSTALLING) {
+    if (phase == TAB_RESIZE_DESC_CLEARING)
+      (void)tab_resize_desc_help_clearing(g, desc);
+    else if (phase == TAB_RESIZE_DESC_TERMINATING ||
+	phase == TAB_RESIZE_DESC_TERMINAL)
+      (void)tab_resize_desc_help_terminating(g, desc);
+    lj_gc2_smr_read_leave(g);
+    return 0;
+  }
+
+  if (install_authority &&
+      !tab_resize_desc_vm_guard_acquire(L, desc)) {
+    (void)tab_resize_desc_cancel_installing(g, L, desc);
+    lj_gc2_smr_read_leave(g);
+    return 0;
+  }
+
+  control = desc->stable_control;
+  expected = lj_tab_struct_control_acq(t);
+  desired = lj_tab_struct_control_desc_word(desc);
+  if (expected != desired) {
+    /*
+    ** Only the call which changed PREPARED->INSTALLING may perform the first
+    ** stable->descriptor CAS. Published-pointer helpers join only after that
+    ** CAS is visible. Thus, once a descriptor is detached, no delayed helper
+    ** can reinstall the same tagged value into a later stable generation.
+    */
+    if (!install_authority) {
+      lj_gc2_smr_read_leave(g);
+      return 0;
+    }
+    if (expected == control) {
+      /*
+      ** Stable tables need not maintain the cold capacity shadow. Synchronize
+      ** it immediately before the one control-tag CAS; a changed stable word
+      ** makes that CAS fail without exposing the shadow to ordinary readers.
+      */
+      lj_tab_weak_acap_rel(t, desc->oldacap);
+      tab_test_resize_desc_install(
+	L, t, desc, LJ_TAB_RESIZE_DESC_HOOK_BEFORE_CONTROL_CAS);
+      if (!lj_tab_struct_control_cas(t, &expected, desired) &&
+	  expected != desired) {
+	(void)tab_resize_desc_cancel_installing(g, L, desc);
+	lj_gc2_smr_read_leave(g);
+	return 0;
+      }
+    } else {
+      (void)tab_resize_desc_cancel_installing(g, L, desc);
+      lj_gc2_smr_read_leave(g);
+      return 0;
+    }
+  }
+
+  tab_test_resize_desc_install(L, t, desc,
+			       LJ_TAB_RESIZE_DESC_HOOK_CONTROL);
+  phase = lj_tab_resize_desc_phase_acq(desc);
+  if (phase != TAB_RESIZE_DESC_INSTALLING) {
+    if (phase >= TAB_RESIZE_DESC_INSTALLED &&
+	phase <= TAB_RESIZE_DESC_PUBLISHING) {
+      installed = lj_tab_resize_desc_control_acq(t) == desc;
+      phase = lj_tab_resize_desc_phase_acq(desc);
+      if (installed && phase >= TAB_RESIZE_DESC_INSTALLED &&
+	  phase <= TAB_RESIZE_DESC_PUBLISHING) {
+	lj_gc2_smr_read_leave(g);
+	return 1;
+      }
+      if (phase == TAB_RESIZE_DESC_PUBLISHING)
+	(void)lj_tab_resize_desc_maintain_held(g, desc);
+    }
+    if (phase == TAB_RESIZE_DESC_CLEARING)
+      (void)tab_resize_desc_help_clearing(g, desc);
+    else if (phase == TAB_RESIZE_DESC_TERMINATING ||
+	phase == TAB_RESIZE_DESC_TERMINAL)
+      (void)tab_resize_desc_help_terminating(g, desc);
+    lj_gc2_smr_read_leave(g);
+    return 0;
+  }
+  if (!tab_resize_desc_capture_snapshot(t, desc)) {
+    (void)tab_resize_desc_cancel_installing(g, L, desc);
+    lj_gc2_smr_read_leave(g);
+    return 0;
+  }
+  if (!tab_resize_desc_snapshot_current(t, desc)) {
+    (void)tab_resize_desc_cancel_installing(g, L, desc);
+    lj_gc2_smr_read_leave(g);
+    return 0;
+  }
+  installed = tab_resize_desc_finish_install(desc);
+  if (!installed) {
+    phase = lj_tab_resize_desc_phase_acq(desc);
+    if (phase >= TAB_RESIZE_DESC_INSTALLED &&
+	phase <= TAB_RESIZE_DESC_PUBLISHING &&
+	lj_tab_resize_desc_control_acq(t) == desc)
+      installed = 1;
+    else if (phase == TAB_RESIZE_DESC_CLEARING)
+      (void)tab_resize_desc_help_clearing(g, desc);
+    else if (phase == TAB_RESIZE_DESC_TERMINATING ||
+	phase == TAB_RESIZE_DESC_TERMINAL)
+      (void)tab_resize_desc_help_terminating(g, desc);
+  }
+  lj_gc2_smr_read_leave(g);
+  return installed;
+}
+
+int lj_tab_resize_desc_clear(GCtab *t, TabResizeDesc *desc, uint32_t acap)
+{
+  int prepared;
+  uint32_t expect;
+  if (!t || !desc || lj_tab_resize_desc_tab_acq(desc) != t ||
+      desc->newacap != acap)
+    return 0;
+  lj_assertX(acap <= TABARRAY_ACAP_MASK, "invalid resize array capacity");
+  expect = lj_tab_resize_desc_phase_acq(desc);
+  if (expect == TAB_RESIZE_DESC_PUBLISHING) {
+    if (!lj_tab_resize_desc_phase_cas(desc, &expect,
+				      TAB_RESIZE_DESC_CLEARING) &&
+	expect != TAB_RESIZE_DESC_CLEARING)
+      return 0;
+  } else if (expect == TAB_RESIZE_DESC_TERMINATING ||
+	     expect == TAB_RESIZE_DESC_TERMINAL) {
+    uint64_t control;
+    if (!tab_resize_desc_detach_control(desc))
+      return 0;
+    if (!(lj_tab_resize_desc_flags_acq(desc) &
+	  TAB_RESIZE_DESC_F_CUTOVER))
+      return 0;
+    control = lj_tab_struct_control_acq(t);
+    return !lj_tab_struct_control_is_desc(control) &&
+      lj_tab_struct_control_owner(control) == 0 &&
+      lj_tab_struct_control_acap(control) == acap &&
+      (uint32_t)lj_tab_acap_acq(t) == acap;
+  } else if (expect != TAB_RESIZE_DESC_CLEARING) {
+    return 0;
+  }
+  prepared = tab_resize_desc_prepare_clearing(desc, 1);
+  if (!prepared || !tab_resize_desc_detach_control(desc))
+    return 0;
+  return prepared == 1;
+}
+
+TabResizeDesc *lj_tab_resize_desc_find_held(global_State *g, GCtab *t,
+					    uint64_t id)
+{
+  TabResizeDesc *desc;
+  uint32_t guard = 0;
+  if (!g || !t || id == 0 || id > LJ_TAB_RESIZE_MARK_ID_MAX)
+    return NULL;
+  desc = lj_tab_resize_desc_control_acq(t);
+  if (desc && lj_tab_resize_desc_id_acq(desc) == id &&
+      lj_tab_resize_desc_tab_acq(desc) == t)
+    return desc;
+  for (desc = lj_tab_resize_desc_head_acq(g); desc != NULL;
+       desc = lj_tab_resize_desc_next_acq(desc)) {
+    if (LJ_UNLIKELY(++guard > LJ_ROOT_SCAN_LIMIT ||
+		    !lj_gc2_mem_registered_known(g, desc)))
+      return 0;
+    if (lj_tab_resize_desc_id_acq(desc) == id &&
+	lj_tab_resize_desc_tab_acq(desc) == t)
+      return desc;
+  }
+  return NULL;
+}
+
+int lj_tab_resize_desc_advance(TabResizeDesc *desc, uint32_t from,
+			       uint32_t to)
+{
+  uint32_t expect = from;
+  if (!desc || from < TAB_RESIZE_DESC_INSTALLED ||
+      to != from + 1u || to > TAB_RESIZE_DESC_PUBLISHING)
+    return 0;
+  if (lj_tab_resize_desc_phase_cas(desc, &expect, to))
+    return 1;
+  return expect == to;
+}
+
+int lj_tab_resize_desc_terminal(global_State *g, TabResizeDesc *desc,
+				 uint32_t from)
+{
+  uint32_t phase;
+  if (!g || !desc || from != TAB_RESIZE_DESC_TERMINATING)
+    return 0;
+  if (!(lj_tab_resize_desc_flags_acq(desc) & TAB_RESIZE_DESC_F_PUBLISHED))
+    return 0;
+  phase = lj_tab_resize_desc_phase_acq(desc);
+  if (phase == TAB_RESIZE_DESC_TERMINATING ||
+      phase == TAB_RESIZE_DESC_TERMINAL)
+    return tab_resize_desc_help_terminating(g, desc);
+  return 0;
+}
+
 #define TAB_RETIRE_PUSH(name, type, head_acq, next_rel, head_cas) \
 static void name(global_State *g, type *ret) \
 { \
@@ -1789,7 +2657,8 @@ static LJ_AINLINE void clearapart(GCtab *t)
   cleararray(array, asize);
 }
 
-static LJ_AINLINE void tab_init_empty(global_State *g, GCtab *t)
+static LJ_AINLINE void tab_init_empty(global_State *g, GCtab *t,
+				      uint32_t acap)
 {
   Node *nilnode = &g->nilnode;
   t->gct = ~LJ_TTAB;
@@ -1798,11 +2667,10 @@ static LJ_AINLINE void tab_init_empty(global_State *g, GCtab *t)
   lj_tab_array_set(t, NULL);
   lj_tab_metatable_rel(t, NULL);
   lj_tab_asize_rel(t, 0);
-  lj_tab_acap_rel(t, 0);
+  lj_tab_struct_control_store_rlx(t, acap, 0);
   lj_tab_hmask_rel(t, 0);
   lj_tab_node_set(t, nilnode);
-  lj_tab_struct_owner_store_rlx(t, 0);
-  lj_tab_weak_record_store_rlx(t, lj_tab_weak_record_pack(
+  lj_tab_weak_record_init_rlx(t, acap, lj_tab_weak_record_pack(
     0, LJ_TAB_WEAK_RECORD_NONE));
   lj_tab_gc2_rescan_state_store_rlx(t, LJ_TAB_RESCAN_NONE);
   lj_tab_freetop_rel(t, nilnode);
@@ -1829,7 +2697,8 @@ static LJ_AINLINE void tab_publish_new(lua_State *L, GCtab *t,
 static LJ_AINLINE void tab_publish_array(GCtab *t, TValue *array,
 					 uint32_t asize, uint32_t acap)
 {
-  lj_tab_acap_rel(t, acap);
+  lj_assertX(lj_tab_acap_acq(t) == acap,
+	     "private table capacity changed before array publication");
   lj_tab_array_rel(t, array);
   lj_tab_asize_rel(t, asize);
 }
@@ -1885,7 +2754,7 @@ static GCtab *newtab_rooted(lua_State *L, uint32_t asize, uint32_t hbits,
   t = (GCtab *)lj_mem_newgco_unlinked_deferred_nothrow(L, tbytes);
   if (!t)
     goto oom;
-  tab_init_empty(g, t);
+  tab_init_empty(g, t, asize);
   if (colocated) {
     array = (TValue *)((char *)t + sizeof(GCtab));
     lj_tab_colo_rel(t, (int8_t)asize);
@@ -1996,7 +2865,7 @@ static GCtab *tab_new0_bump(lua_State *L, global_State *g, TGState *tg)
     return NULL;
   b->cell = next;
   t = (GCtab *)lj_arena_cellptr(a, cell);
-  tab_init_empty(g, t);
+  tab_init_empty(g, t, 0);
   newwhite(g, t);
   black = lj_arena_alloc_black_acq(&tg->alloc);
   if (black)
@@ -2257,7 +3126,7 @@ restart_resize:
   deadkey = 0;
   count_retry = 0;
   weak = lj_gc2_weak_write_candidate(L, t);
-  shared_resize = !tab_private_mutation_allowed(L);
+  shared_resize = !tab_private_table_mutation_allowed(L, t);
   hash_flags0 = oldhmask > 0 ? lj_tab_node_hdr_flags_word_acq(oldnode) : 0;
   if (oldhmask > 0 && (hash_flags0 & (uint32_t)TABNODE_FLAG_RETIRING)) {
     lj_tab_wait_l(L);
@@ -2361,7 +3230,7 @@ restart_resize:
     if (curarray != oldarray || (uint32_t)curasize != oldasize ||
 	lj_tab_node_acq(t) != oldnode)
       goto retry_resize;
-    if (!shared_resize && !tab_private_mutation_allowed(L))
+    if (!shared_resize && !tab_private_table_mutation_allowed(L, t))
       goto retry_resize;
   }
   if (oldret)
@@ -2524,6 +3393,8 @@ TAB_RETIRE_CHAIN_VALIDATOR(tab_node_retired_chain_valid, TabNodeRetire,
 			   lj_tab_node_retired_next_acq)
 TAB_RETIRE_CHAIN_VALIDATOR(tab_array_retired_chain_valid, TabArrayRetire,
 			   lj_tab_array_retired_next_acq)
+TAB_RETIRE_CHAIN_VALIDATOR(tab_resize_desc_chain_valid, TabResizeDesc,
+			   lj_tab_resize_desc_next_acq)
 
 #undef TAB_RETIRE_CHAIN_VALIDATOR
 
@@ -2531,6 +3402,7 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
 {
   TabNodeRetire *ret;
   TabArrayRetire *aret;
+  TabResizeDesc *desc;
   uint64_t oldest_reader;
   uint32_t reclaimed = 0;
   if (!g || completed_epoch == 0)
@@ -2617,6 +3489,56 @@ uint32_t lj_tab_reclaim_retired(global_State *g, uint64_t completed_epoch)
     }
     aret = next;
   }
+  desc = lj_tab_resize_desc_head_acq(g);
+  if (desc != NULL)
+    desc = lj_tab_resize_desc_head_xchg_acqrel(g, NULL);
+  if (LJ_UNLIKELY(!tab_resize_desc_chain_valid(g, desc, 1))) {
+    lj_assertG(0, "invalid/cyclic detached table-resize descriptor chain");
+    abort();
+  }
+  while (desc) {
+    TabResizeDesc *next;
+    GCtab *t;
+    uint32_t phase;
+    uint64_t retire_epoch;
+    if (LJ_UNLIKELY(
+	!lj_gc2_mem_registered_known_reclaim_held(g, desc))) {
+      lj_assertG(0, "invalid detached table-resize descriptor");
+      abort();
+    }
+    next = lj_tab_resize_desc_next_acq(desc);
+    lj_tab_resize_desc_next_rel(desc, NULL);
+    phase = lj_tab_resize_desc_phase_acq(desc);
+    retire_epoch = lj_tab_resize_desc_epoch_acq(desc);
+    t = lj_tab_resize_desc_tab_acq(desc);
+    if (LJ_UNLIKELY(!t ||
+	!lj_gc2_mem_registered_known_reclaim_held(g, t))) {
+      lj_assertG(0, "resize descriptor lost semantic table edge");
+      abort();
+    }
+    if (phase == TAB_RESIZE_DESC_TERMINAL &&
+	lj_tab_resize_desc_control_acq(t) != desc)
+      tab_resize_desc_vm_guard_release(g, desc);
+    if (phase == TAB_RESIZE_DESC_TERMINAL &&
+	lj_tab_resize_desc_control_acq(t) != desc &&
+	(!(lj_tab_resize_desc_flags_acq(desc) &
+	   TAB_RESIZE_DESC_F_VM_GUARD) ||
+	 (lj_tab_resize_desc_flags_acq(desc) &
+	  TAB_RESIZE_DESC_F_VM_GUARD_RELEASED)) &&
+	tab_retire_epoch_elapsed(completed_epoch, retire_epoch) &&
+	oldest_reader > retire_epoch) {
+      lj_mem_freet(g, desc);
+      reclaimed++;
+    } else {
+      if (LJ_UNLIKELY(phase < TAB_RESIZE_DESC_PREPARED ||
+		      phase > TAB_RESIZE_DESC_TERMINAL)) {
+	lj_assertG(0, "invalid table-resize descriptor phase");
+	abort();
+      }
+      tab_resize_desc_push(g, desc);
+    }
+    desc = next;
+  }
   return reclaimed;
 }
 
@@ -2624,6 +3546,7 @@ void lj_tab_freeretired(global_State *g)
 {
   TabNodeRetire *ret;
   TabArrayRetire *aret;
+  TabResizeDesc *desc;
   if (!g)
     return;
   ret = lj_tab_node_retired_head_xchg_acqrel(g, NULL);
@@ -2680,6 +3603,34 @@ void lj_tab_freeretired(global_State *g)
     lj_mem_freet(g, aret);
     aret = next;
   }
+  desc = lj_tab_resize_desc_head_xchg_acqrel(g, NULL);
+  if (LJ_UNLIKELY(!tab_resize_desc_chain_valid(g, desc, 0))) {
+    lj_assertG(0, "invalid/cyclic terminal table-resize descriptor chain");
+    abort();
+  }
+  while (desc) {
+    TabResizeDesc *next;
+    GCtab *t;
+    if (LJ_UNLIKELY(!lj_gc2_mem_registered_known(g, desc))) {
+      lj_assertG(0, "invalid terminal table-resize descriptor");
+      abort();
+    }
+    next = lj_tab_resize_desc_next_acq(desc);
+    t = lj_tab_resize_desc_tab_acq(desc);
+    if (t && lj_gc2_mem_registered_known(g, t)) {
+      uint64_t control = lj_tab_struct_control_acq(t);
+      if (lj_tab_struct_control_desc(control) == desc) {
+	uint64_t stable = lj_tab_struct_control_pack(
+	  (uint32_t)lj_tab_acap_acq(t), 0);
+	(void)lj_tab_struct_control_cas(t, &control, stable);
+      }
+    }
+    tab_resize_desc_vm_guard_release(g, desc);
+    lj_mem_freet(g, desc);
+    desc = next;
+  }
+  lj_assertG(mt_resize_guard_count_acq(g) == 0,
+	     "table-resize VM guards survived terminal cleanup");
 }
 
 static uint32_t countint(cTValue *key, uint32_t *bins)
@@ -3336,7 +4287,8 @@ static int tab_resolve_current_keyed_held(GCtab *t, cTValue *key,
       result = TAB_RESOLVE_FORWARD_ARRAY;
       goto validate;
     }
-    if (tab_val_is_publish_claim(&val) || !tab_tv_snapshot_valid(&val))
+    if (tab_val_is_publish_claim(&val) ||
+	(!out && !tab_tv_snapshot_valid(&val)))
       return TAB_RESOLVE_RETRY;
     slot = candidate;
     if (out) *out = val;
@@ -3376,7 +4328,8 @@ static int tab_resolve_current_keyed_held(GCtab *t, cTValue *key,
 	result = TAB_RESOLVE_FORWARD_HASH;
 	goto validate;
       }
-      if (tab_val_is_publish_claim(&val) || !tab_tv_snapshot_valid(&val))
+      if (tab_val_is_publish_claim(&val) ||
+	  (!out && !tab_tv_snapshot_valid(&val)))
 	return TAB_RESOLVE_RETRY;
       slot = candidate;
       if (out) *out = val;
@@ -4219,7 +5172,7 @@ static TValue *tab_newkey_private_empty_anchor(lua_State *L, GCtab *t,
   ** MT, GC workers, active marking, KEYLOCK claims, resize, tombstones, and
   ** collision chains still fall through to the normal protocol below.
   */
-  if (!tab_private_mutation_allowed(L) ||
+  if (!tab_private_table_mutation_allowed(L, t) ||
       !tab_hash_generation_current(t, nodebase))
     return NULL;
   lj_tv_load_acq(&nk, &anchor->key);
@@ -4245,7 +5198,7 @@ static TValue *tab_newkey_private(lua_State *L, GCtab *t, cTValue *key,
   Node *n;
   MSize chainlen = 0;
   *chain_overflow = 0;
-  if (!tab_private_mutation_allowed(L) ||
+  if (!tab_private_table_mutation_allowed(L, t) ||
       !tab_hash_generation_current(t, nodebase))
     return NULL;
   /*
@@ -4637,7 +5590,7 @@ retry_insert:
       return slot;
     }
   }
-  if (tab_private_mutation_allowed(L)) {
+  if (tab_private_table_mutation_allowed(L, t)) {
     int chain_overflow;
     TValue *slot = tab_newkey_private(L, t, key, nodebase, hmask, n,
 				      &chain_overflow);
@@ -6427,7 +7380,8 @@ void LJ_FASTCALL lj_tab_clear(lua_State *L, GCtab *t)
   ** already in progress. Avoid private raw clearing while the attach/spawn
   ** handoff can make the table visible to another thread.
   */
-  if (mt_active_or_entering_acq(G(L)))
+  if (mt_active_or_entering_acq(G(L)) ||
+      lj_tab_struct_control_is_desc(lj_tab_struct_control_acq(t)))
     tab_clear_shared(L, t);
   else
     tab_clear_raw(t);
@@ -6868,7 +7822,7 @@ LJ_FUNCA void lj_tab_storetvn_forvm_array(lua_State *L, GCtab *parent,
   if (!weakcand)
     lj_gc2_barrier_tvn_pair_g(g, obj2gco(parent), src, n);
   if (stack_src) src = restorestack(L, srcofs);
-  if (!weakcand && tab_private_mutation_allowed(L)) {
+  if (!weakcand && tab_private_table_mutation_allowed(L, parent)) {
     TValue *dst = tab_tsetm_fast_range(parent, start, n);
     if (dst) {
       tab_test_tsetm_fast_call();

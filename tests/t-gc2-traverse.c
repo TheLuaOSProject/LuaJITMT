@@ -6735,6 +6735,15 @@ static void test_forjit_weak_result_lease(lua_State *L, global_State *g,
   assert(lj_tab_gettv_forjit(L, weak, &key, &out) == &out);
   assert(tvisnil(&out));
   setudataV(L, slot, value);
+
+  /* Exercise the same terminal classification through the hash-vector path. */
+  setintV(&key, -17);
+  slot = lj_tab_setinth(L, weak, -17);
+  assert(slot != NULL);
+  setgcVraw(slot, obj2gco(value), LJ_TFUNC);
+  assert(lj_tab_gettv_forjit(L, weak, &key, &out) == &out);
+  assert(tvisnil(&out));
+  setudataV(L, slot, value);
   lua_settop(L, base);
 }
 

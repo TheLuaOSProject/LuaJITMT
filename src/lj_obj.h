@@ -16,6 +16,13 @@
 #include "lj_gc2token.h"
 #include "lj_tgregistry.h"
 
+struct global_State;
+#if defined(LUA_USE_ASSERT) || defined(LUA_USE_APICHECK)
+LJ_FUNC_NORET void lj_assert_fail(struct global_State *g, const char *file,
+				  int line, const char *func,
+				  const char *fmt, ...);
+#endif
+
 LJ_FUNCA void lj_tab_wait_no_l(void);
 
 /* -- Memory references --------------------------------------------------- */
@@ -245,8 +252,32 @@ typedef const TValue cTValue;
 #define LJ_LIGHTUD_INTERNAL_BASE \
   ((((uint64_t)LJ_TLIGHTUD) << 47) | \
    (LJ_LIGHTUD_INTERNAL_SEG << LJ_LIGHTUD_BITS_LO))
+#define LJ_LIGHTUD_INTERNAL_LO_MASK \
+  (((uint64_t)1 << LJ_LIGHTUD_BITS_LO) - 1u)
 #define LJ_TFORWARD_BITS	(LJ_LIGHTUD_INTERNAL_BASE | 1u)
 #define LJ_TKEYLOCK_BITS	(LJ_LIGHTUD_INTERNAL_BASE | 2u)
+
+/*
+** Persistent resize markers reserve the remaining low three-bit internal
+** lightuserdata tags. The upper payload is a non-repeating per-universe
+** descriptor id, never an address: arena mappings may use more than the 39
+** directly encoded lightuserdata bits and descriptor storage is reclaimed
+** only after SMR grace.
+*/
+#define LJ_TAB_RESIZE_MARK_KIND_BITS	3u
+#define LJ_TAB_RESIZE_MARK_KIND_MASK \
+  (((uint64_t)1 << LJ_TAB_RESIZE_MARK_KIND_BITS) - 1u)
+#define LJ_TAB_RESIZE_MARK_ID_BITS \
+  (LJ_LIGHTUD_BITS_LO - LJ_TAB_RESIZE_MARK_KIND_BITS)
+#define LJ_TAB_RESIZE_MARK_ID_MAX \
+  (((uint64_t)1 << LJ_TAB_RESIZE_MARK_ID_BITS) - 1u)
+#define LJ_TAB_RESIZE_MARK_SRC		3u
+#define LJ_TAB_RESIZE_MARK_DST		4u
+#define LJ_TAB_RESIZE_MARK_DONE		5u
+#define LJ_TAB_RESIZE_MARK_NIL_DONE	6u
+#define LJ_TAB_RESIZE_MARK_BITS(id, kind) \
+  (LJ_LIGHTUD_INTERNAL_BASE | \
+   ((uint64_t)(id) << LJ_TAB_RESIZE_MARK_KIND_BITS) | (uint64_t)(kind))
 #endif
 
 /* -- String object ------------------------------------------------------- */
@@ -711,6 +742,48 @@ typedef struct TabArrayRetire {
   struct TabArrayRetire *next;
 } TabArrayRetire;
 
+enum {
+  TAB_RESIZE_DESC_PREPARED = 1,
+  TAB_RESIZE_DESC_INSTALLING,
+  TAB_RESIZE_DESC_INSTALLED,
+  TAB_RESIZE_DESC_RETIRING,
+  TAB_RESIZE_DESC_MIGRATING,
+  TAB_RESIZE_DESC_PUBLISHING,
+  TAB_RESIZE_DESC_CLEARING,
+  TAB_RESIZE_DESC_TERMINATING,
+  TAB_RESIZE_DESC_TERMINAL
+};
+
+#define TAB_RESIZE_DESC_F_PUBLISHED	0x00000001u
+#define TAB_RESIZE_DESC_F_CUTOVER	0x00000002u
+#define TAB_RESIZE_DESC_F_VM_GUARD	0x00000004u
+#define TAB_RESIZE_DESC_F_VM_GUARD_RELEASED	0x00000008u
+
+/*
+** Cold persistent identity for a helpable resize. The installed substrate
+** retains an immutable old-generation snapshot; move intents, successor roots
+** and completion accounting join it before the first runtime marker is
+** published. Registry membership is the raw-memory and semantic table-root
+** owner. IDs never repeat within their global_State, and terminal records
+** remain findable until SMR grace has elapsed.
+*/
+typedef struct TabResizeDesc {
+  struct GCtab *tab;
+  TValue *oldarray;
+  Node *oldnode;
+  uint64_t id;
+  uint64_t stable_control;  /* Exact pre-install {owner, acap} word. */
+  uint64_t retire_epoch;
+  uint32_t oldasize;
+  uint32_t oldhmask;
+  uint32_t oldacap;
+  uint32_t newacap;
+  uint32_t snapshot_state;
+  uint32_t phase;
+  uint32_t flags;
+  struct TabResizeDesc *next;
+} TabResizeDesc;
+
 typedef struct GC2FinRegUDataNode {
   GCRef obj;		/* Userdata object tracked for metatable __gc. */
   struct GC2FinRegUDataNode *next;
@@ -730,12 +803,31 @@ typedef struct GCtab {
   uint32_t asize;	/* Size of array part (keys [0, asize-1]). */
   uint32_t hmask;	/* Hash part mask (size of hash part - 1). */
   MRef freetop;		/* Top of free elements. */
-  uint32_t acap;	/* Allocated array capacity. */
-  uint32_t struct_owner;  /* Table resize/compound array op owner tid. */
-  uint64_t weak_record;	/* Exact GC2 weak snapshot cycle/publication state. */
+  union {
+    struct {
+      union {
+	struct {
+	  uint32_t acap;  /* Stable compatibility mirror of array capacity. */
+	  uint32_t struct_owner;  /* Stable compound-op owner tid. */
+	};
+	uint64_t struct_control;  /* Stable pair or tagged resize descriptor. */
+      };
+      /*
+      ** Exact GC2 weak snapshot state plus the descriptor-time capacity shadow.
+      ** The weak state needs two low bits and the cycle occupies the upper
+      ** word; bits 2..29 retain acap while control contains a descriptor.
+      */
+      uint64_t weak_record;
+    };
+    la_u128 struct_weak_pair;  /* Atomic descriptor completion pair. */
+  };
 } GCtab;
 
 LJ_STATIC_ASSERT((offsetof(GCtab, weak_record) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(GCtab, struct_control) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(GCtab, struct_weak_pair) & 15u) == 0);
+LJ_STATIC_ASSERT(offsetof(GCtab, weak_record) ==
+		 offsetof(GCtab, struct_control) + 8u);
 
 enum {
   LJ_TAB_RESCAN_NONE = 0,
@@ -828,35 +920,238 @@ static LJ_AINLINE void lj_tab_asize_rel(GCtab *t, MSize asize)
   la_store32_rel(&t->asize, (uint32_t)asize);
 }
 
+typedef union LJTabStructControl {
+  uint64_t word;
+  struct {
+    uint32_t acap;
+    uint32_t owner;
+  } stable;
+} LJTabStructControl;
+
+#define LJ_TAB_STRUCT_DESC_TAG		U64x(ffff0000,00000000)
+#define LJ_TAB_STRUCT_DESC_MASK		(~LJ_GCVMASK)
+#define LJ_TAB_STRUCT_OWNER_LIMIT	0xffff0000u
+#define LJ_TAB_STRUCT_DESC_OWNER	0xffffffffu
+
+#define LJ_TAB_WEAK_RECORD_STATE_MASK	((uint64_t)3u)
+#define LJ_TAB_WEAK_RECORD_ACAP_SHIFT	2u
+#define LJ_TAB_WEAK_RECORD_ACAP_MASK \
+  ((uint64_t)TABARRAY_ACAP_MASK << LJ_TAB_WEAK_RECORD_ACAP_SHIFT)
+#define LJ_TAB_WEAK_RECORD_SEMANTIC_MASK \
+  (U64x(ffffffff,00000000) | LJ_TAB_WEAK_RECORD_STATE_MASK)
+
+LJ_STATIC_ASSERT(TABARRAY_ACAP_BITS == 28);
+LJ_STATIC_ASSERT((LJ_TAB_WEAK_RECORD_ACAP_MASK &
+		  LJ_TAB_WEAK_RECORD_SEMANTIC_MASK) == 0);
+
+static LJ_AINLINE uint64_t lj_tab_weak_record_raw_acq(const GCtab *t)
+{
+  return la_load64_acq(&t->weak_record);
+}
+
+static LJ_AINLINE MSize
+lj_tab_weak_record_raw_acap(uint64_t record)
+{
+  return (MSize)((record & LJ_TAB_WEAK_RECORD_ACAP_MASK) >>
+		 LJ_TAB_WEAK_RECORD_ACAP_SHIFT);
+}
+
+static LJ_AINLINE void lj_tab_weak_acap_rel(GCtab *t, MSize acap)
+{
+  uint64_t current = lj_tab_weak_record_raw_acq(t);
+  uint64_t bits;
+  lj_assertX(acap <= TABARRAY_ACAP_MASK, "invalid table array capacity");
+  bits = (uint64_t)acap << LJ_TAB_WEAK_RECORD_ACAP_SHIFT;
+  for (;;) {
+    uint64_t desired = (current & ~LJ_TAB_WEAK_RECORD_ACAP_MASK) | bits;
+    if (la_cas64(&t->weak_record, &current, desired, LA_ACQ_REL, LA_ACQ))
+      return;
+  }
+}
+
+static LJ_AINLINE void
+lj_tab_weak_record_init_rlx(GCtab *t, MSize acap, uint64_t record)
+{
+  uint64_t raw;
+  lj_assertX(acap <= TABARRAY_ACAP_MASK, "invalid initial array capacity");
+  raw = ((uint64_t)acap << LJ_TAB_WEAK_RECORD_ACAP_SHIFT) |
+	(record & LJ_TAB_WEAK_RECORD_SEMANTIC_MASK);
+  la_store64_rlx(&t->weak_record, raw);
+}
+
+/*
+** Atomically replace the descriptor control and capacity shadow while
+** preserving the most recently observed weak cycle/state. On failure both
+** expected words are updated to the current pair.
+*/
+static LJ_AINLINE int
+lj_tab_struct_weak_pair_cas(GCtab *t, uint64_t *controlp,
+			    uint64_t *weakp, uint64_t control,
+			    uint64_t weak)
+{
+  la_u128 expected, desired;
+  int ok;
+  expected.lo = *controlp;
+  expected.hi = *weakp;
+  desired.lo = control;
+  desired.hi = weak;
+  ok = la_cas128(&t->struct_weak_pair, &expected, desired);
+  if (!ok) {
+    *controlp = expected.lo;
+    *weakp = expected.hi;
+  }
+  return ok;
+}
+
+static LJ_AINLINE uint64_t lj_tab_struct_control_pack(uint32_t acap,
+						      uint32_t owner)
+{
+  LJTabStructControl control;
+  lj_assertX(owner < LJ_TAB_STRUCT_OWNER_LIMIT,
+	     "table structural owner overlaps resize descriptor tag");
+  control.stable.acap = acap;
+  control.stable.owner = owner;
+  return control.word;
+}
+
+static LJ_AINLINE uint32_t lj_tab_struct_control_acap(uint64_t word)
+{
+  LJTabStructControl control;
+  control.word = word;
+  return control.stable.acap;
+}
+
+static LJ_AINLINE uint32_t lj_tab_struct_control_owner(uint64_t word)
+{
+  LJTabStructControl control;
+  control.word = word;
+  return control.stable.owner;
+}
+
+static LJ_AINLINE int lj_tab_struct_control_is_desc(uint64_t word)
+{
+  return (word & LJ_TAB_STRUCT_DESC_MASK) == LJ_TAB_STRUCT_DESC_TAG;
+}
+
+static LJ_AINLINE uint64_t
+lj_tab_struct_control_desc_word(const TabResizeDesc *desc)
+{
+  uintptr_t p = (uintptr_t)(const void *)desc;
+  lj_assertX(desc != NULL && (p & ~(uintptr_t)LJ_GCVMASK) == 0,
+	     "resize descriptor address exceeds tagged control word");
+  return LJ_TAB_STRUCT_DESC_TAG | (uint64_t)p;
+}
+
+static LJ_AINLINE TabResizeDesc *
+lj_tab_struct_control_desc(uint64_t word)
+{
+  return lj_tab_struct_control_is_desc(word) ?
+    (TabResizeDesc *)(void *)(uintptr_t)(word & LJ_GCVMASK) : NULL;
+}
+
+static LJ_AINLINE uint64_t lj_tab_struct_control_acq(const GCtab *t)
+{
+  return la_load64_acq(&t->struct_control);
+}
+
+static LJ_AINLINE int lj_tab_struct_control_cas(GCtab *t, uint64_t *oldp,
+						uint64_t control)
+{
+  return la_cas64(&t->struct_control, oldp, control, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE void lj_tab_struct_control_store_rlx(GCtab *t,
+							uint32_t acap,
+							uint32_t owner)
+{
+  la_store64_rlx(&t->struct_control,
+		 lj_tab_struct_control_pack(acap, owner));
+}
+
+static LJ_AINLINE TabResizeDesc *
+lj_tab_resize_desc_control_acq(const GCtab *t)
+{
+  return lj_tab_struct_control_desc(lj_tab_struct_control_acq(t));
+}
+
 static LJ_AINLINE MSize lj_tab_acap_acq(const GCtab *t)
 {
-  return (MSize)la_load32_acq(&t->acap);
+  uint64_t control = lj_tab_struct_control_acq(t);
+  if (LJ_LIKELY(!lj_tab_struct_control_is_desc(control)))
+    return (MSize)lj_tab_struct_control_acap(control);
+  /*
+  ** Never dereference the encoded descriptor here. A reader may load its tag
+  ** immediately before terminal reclamation. The colocated weak-record shadow
+  ** remains valid for the GCtab lifetime and is synchronized before the sole
+  ** stable->descriptor install CAS.
+  */
+  return lj_tab_weak_record_raw_acap(lj_tab_weak_record_raw_acq(t));
 }
 
 static LJ_AINLINE void lj_tab_acap_rel(GCtab *t, MSize acap)
 {
-  la_store32_rel(&t->acap, (uint32_t)acap);
+  uint64_t control = lj_tab_struct_control_acq(t);
+  /*
+  ** Legacy resize holds the structural owner, while a private resize has sole
+  ** table authority. Thus this is the same release publication as the former
+  ** standalone acap store, without locked RMWs on the production resize path.
+  ** Descriptor installation first synchronizes the weak shadow and then CASes
+  ** this exact stable word, so it never relies on a concurrently overwritten
+  ** private/legacy publication.
+  */
+  lj_assertX(!lj_tab_struct_control_is_desc(control),
+	     "array capacity store during descriptor resize");
+  la_store64_rel(&t->struct_control, lj_tab_struct_control_pack(
+    (uint32_t)acap, lj_tab_struct_control_owner(control)));
 }
 
 static LJ_AINLINE uint32_t lj_tab_struct_owner_acq(const GCtab *t)
 {
-  return la_load32_acq(&t->struct_owner);
+  uint64_t control = lj_tab_struct_control_acq(t);
+  return lj_tab_struct_control_is_desc(control) ?
+    LJ_TAB_STRUCT_DESC_OWNER : lj_tab_struct_control_owner(control);
 }
 
 static LJ_AINLINE void lj_tab_struct_owner_store_rlx(GCtab *t, uint32_t owner)
 {
-  la_store32_rlx(&t->struct_owner, owner);
+  uint64_t control = la_load64_rlx(&t->struct_control);
+  lj_assertX(!lj_tab_struct_control_is_desc(control),
+	     "owner initialization during descriptor resize");
+  la_store64_rlx(&t->struct_control, lj_tab_struct_control_pack(
+    lj_tab_struct_control_acap(control), owner));
 }
 
 static LJ_AINLINE void lj_tab_struct_owner_rel(GCtab *t, uint32_t owner)
 {
-  la_store32_rel(&t->struct_owner, owner);
+  uint64_t control = lj_tab_struct_control_acq(t);
+  lj_assertX(!lj_tab_struct_control_is_desc(control),
+	     "legacy owner store during descriptor resize");
+  la_store64_rel(&t->struct_control, lj_tab_struct_control_pack(
+    lj_tab_struct_control_acap(control), owner));
 }
 
 static LJ_AINLINE int lj_tab_struct_owner_cas(GCtab *t, uint32_t *oldp,
 					      uint32_t owner)
 {
-  return la_cas32(&t->struct_owner, oldp, owner, LA_ACQ_REL, LA_ACQ);
+  uint64_t control = lj_tab_struct_control_acq(t);
+  uint32_t expected = *oldp;
+  for (;;) {
+    uint32_t current;
+    uint64_t desired;
+    if (lj_tab_struct_control_is_desc(control)) {
+      *oldp = LJ_TAB_STRUCT_DESC_OWNER;
+      return 0;
+    }
+    current = lj_tab_struct_control_owner(control);
+    if (current != expected) {
+      *oldp = current;
+      return 0;
+    }
+    desired = lj_tab_struct_control_pack(
+      lj_tab_struct_control_acap(control), owner);
+    if (lj_tab_struct_control_cas(t, &control, desired))
+      return 1;
+  }
 }
 
 enum {
@@ -868,6 +1163,8 @@ enum {
 static LJ_AINLINE uint64_t lj_tab_weak_record_pack(uint32_t cycle,
 						   uint32_t state)
 {
+  lj_assertX(state <= LJ_TAB_WEAK_RECORD_STATE_MASK,
+	     "invalid table weak-record state");
   return ((uint64_t)cycle << 32) | (uint64_t)state;
 }
 
@@ -878,24 +1175,44 @@ static LJ_AINLINE uint32_t lj_tab_weak_record_cycle(uint64_t record)
 
 static LJ_AINLINE uint32_t lj_tab_weak_record_state(uint64_t record)
 {
-  return (uint32_t)record;
+  return (uint32_t)(record & LJ_TAB_WEAK_RECORD_STATE_MASK);
 }
 
 static LJ_AINLINE uint64_t lj_tab_weak_record_acq(const GCtab *t)
 {
-  return la_load64_acq(&t->weak_record);
+  return lj_tab_weak_record_raw_acq(t) &
+	 LJ_TAB_WEAK_RECORD_SEMANTIC_MASK;
 }
 
 static LJ_AINLINE void lj_tab_weak_record_store_rlx(GCtab *t,
 						     uint64_t record)
 {
-  la_store64_rlx(&t->weak_record, record);
+  uint64_t current = la_load64_rlx(&t->weak_record);
+  record &= LJ_TAB_WEAK_RECORD_SEMANTIC_MASK;
+  for (;;) {
+    uint64_t desired = (current & LJ_TAB_WEAK_RECORD_ACAP_MASK) | record;
+    if (la_cas64(&t->weak_record, &current, desired, LA_RLX, LA_RLX))
+      return;
+  }
 }
 
 static LJ_AINLINE int lj_tab_weak_record_cas(GCtab *t, uint64_t *oldp,
 					      uint64_t record)
 {
-  return la_cas64(&t->weak_record, oldp, record, LA_ACQ_REL, LA_ACQ);
+  uint64_t expected = *oldp & LJ_TAB_WEAK_RECORD_SEMANTIC_MASK;
+  uint64_t current = lj_tab_weak_record_raw_acq(t);
+  record &= LJ_TAB_WEAK_RECORD_SEMANTIC_MASK;
+  for (;;) {
+    uint64_t semantic = current & LJ_TAB_WEAK_RECORD_SEMANTIC_MASK;
+    uint64_t desired;
+    if (semantic != expected) {
+      *oldp = semantic;
+      return 0;
+    }
+    desired = (current & LJ_TAB_WEAK_RECORD_ACAP_MASK) | record;
+    if (la_cas64(&t->weak_record, &current, desired, LA_ACQ_REL, LA_ACQ))
+      return 1;
+  }
 }
 
 /* White-box compatibility accessors used by the recycled-inline-TNEW test. */
@@ -1499,6 +1816,15 @@ typedef struct TabState {
   TabArrayRetire *retired_arrays;  /* Retired array vectors awaiting SMR. */
 } TabState;
 
+/*
+** Resize descriptors are cold structural state. Keep them out of TabState so
+** adding the registry does not shift established global_State/VM offsets.
+*/
+typedef struct TabResizeState {
+  TabResizeDesc *resize_descs;  /* Active/recent persistent resize identities. */
+  uint64_t resize_next_id;  /* Monotonic marker id; zero is never issued. */
+} TabResizeState;
+
 #define LJ_GC2_HS_LATENCY_BUCKETS 48
 #define LJ_GC2_WORKER_MAX 2
 #define LJ_GC2_GREY_EMBEDDED 256u
@@ -1875,18 +2201,20 @@ typedef struct global_State {
   lua_State *threading_states;  /* All non-main lua_State objects. */
   lua_State *thread_gcprep;  /* Terminal THREAD preparation queue. */
   GC2State gc2;		/* Concurrent GC scaffold state. */
-  uint32_t mt_active;	/* One-way latch: secondary Lua threads existed. */
+  /*
+  ** Bit 0 is the one-way secondary-Lua-thread latch. Bits 1..31 are a
+  ** transient count of installed table-resize VM guards. Native x64 tests the
+  ** raw word, so a live descriptor invalidates private trace/VM assumptions
+  ** without adding an instruction to the ordinary zero-word fast path.
+  */
+  uint32_t mt_active;
   uint32_t mt_live;	/* Active secondary Lua threads. */
   uint32_t mt_entering;	/* Secondary entrants before mt_live claim. */
   uint32_t mt_gc_exclusive;  /* Explicit color GC excludes secondary entry. */
   uint32_t mt_shutdown;	/* VM teardown is rejecting new secondary threads. */
   GCSize mt_gc_threshold;  /* Saved automatic-GC threshold. */
+  TabResizeState tab_resize;  /* Cold persistent table-resize state. */
 } global_State;
-
-#if defined(LUA_USE_ASSERT) || defined(LUA_USE_APICHECK)
-LJ_FUNC_NORET void lj_assert_fail(global_State *g, const char *file, int line,
-				  const char *func, const char *fmt, ...);
-#endif
 
 LJ_STATIC_ASSERT(offsetof(global_State, nilnode) ==
 		 offsetof(global_State, nilnodehdr) + sizeof(TabNodeHdr));
@@ -2101,15 +2429,75 @@ static LJ_AINLINE void vmevent_owner_rel(global_State *g, uint32_t owner)
   UNUSED(released);
 }
 
-static LJ_AINLINE uint32_t mt_active_acq(global_State *g)
+#define LJ_MT_ACTIVE_LATCH		0x00000001u
+#define LJ_MT_RESIZE_GUARD_ONE		0x00000002u
+#define LJ_MT_RESIZE_GUARD_MASK		0xfffffffeu
+
+static LJ_AINLINE uint32_t mt_active_word_acq(global_State *g)
 {
   return la_load32_acq(&g->mt_active);
 }
 
+/* Exact sticky-thread semantic state, excluding transient resize guards. */
+static LJ_AINLINE uint32_t mt_active_acq(global_State *g)
+{
+  return mt_active_word_acq(g) & LJ_MT_ACTIVE_LATCH;
+}
+
+/*
+** Set the sticky-thread bit without overwriting a concurrently acquired
+** resize-guard count. oldp and active retain the historical boolean API.
+*/
 static LJ_AINLINE int mt_active_cas(global_State *g, uint32_t *oldp,
 				    uint32_t active)
 {
-  return la_cas32(&g->mt_active, oldp, active, LA_ACQ_REL, LA_ACQ);
+  uint32_t expected = *oldp & LJ_MT_ACTIVE_LATCH;
+  uint32_t current = mt_active_word_acq(g);
+  for (;;) {
+    uint32_t desired;
+    if ((current & LJ_MT_ACTIVE_LATCH) != expected) {
+      *oldp = current & LJ_MT_ACTIVE_LATCH;
+      return 0;
+    }
+    desired = (current & LJ_MT_RESIZE_GUARD_MASK) |
+	      (active & LJ_MT_ACTIVE_LATCH);
+    if (la_cas32(&g->mt_active, &current, desired, LA_ACQ_REL, LA_ACQ))
+      return 1;
+  }
+}
+
+static LJ_AINLINE uint32_t mt_resize_guard_count_acq(global_State *g)
+{
+  return mt_active_word_acq(g) >> 1;
+}
+
+static LJ_AINLINE int mt_resize_guard_enter(global_State *g)
+{
+  uint32_t current = mt_active_word_acq(g);
+  for (;;) {
+    uint32_t first;
+    if ((current & LJ_MT_RESIZE_GUARD_MASK) ==
+	LJ_MT_RESIZE_GUARD_MASK)
+      return 0;
+    first = (current & LJ_MT_RESIZE_GUARD_MASK) == 0 ? 2u : 1u;
+    if (la_cas32(&g->mt_active, &current,
+		 current + LJ_MT_RESIZE_GUARD_ONE, LA_ACQ_REL, LA_ACQ))
+      return (int)first;
+  }
+}
+
+static LJ_AINLINE void mt_resize_guard_leave(global_State *g)
+{
+  uint32_t current = mt_active_word_acq(g);
+  for (;;) {
+    if (LJ_UNLIKELY((current & LJ_MT_RESIZE_GUARD_MASK) == 0)) {
+      lj_assertG(0, "table-resize VM guard underflow");
+      return;  /* Never corrupt the sticky latch in a release build. */
+    }
+    if (la_cas32(&g->mt_active, &current,
+		 current - LJ_MT_RESIZE_GUARD_ONE, LA_ACQ_REL, LA_ACQ))
+      return;
+  }
 }
 
 static LJ_AINLINE uint32_t mt_live_acq(global_State *g)
@@ -2173,7 +2561,7 @@ static LJ_AINLINE void mt_entering_futex_wake(global_State *g, int n)
 
 static LJ_AINLINE int mt_active_or_entering_acq(global_State *g)
 {
-  return mt_active_acq(g) != 0 || mt_entering_acq(g) != 0;
+  return mt_active_word_acq(g) != 0 || mt_entering_acq(g) != 0;
 }
 
 static LJ_AINLINE uint32_t mt_gc_exclusive_acq(global_State *g)
@@ -5783,11 +6171,39 @@ static LJ_AINLINE void lj_uv_setnext_rel(GCupval *uv, GCupval *next)
 #if LJ_64
 #define tvisforward(o)	((o)->u64 == LJ_TFORWARD_BITS)
 #define tviskeylock(o)	((o)->u64 == LJ_TKEYLOCK_BITS)
+static LJ_AINLINE int tvisresizemarker(cTValue *o)
+{
+  uint64_t bits = o->u64;
+  uint64_t kind = bits & LJ_TAB_RESIZE_MARK_KIND_MASK;
+  uint64_t id = (bits & LJ_LIGHTUD_INTERNAL_LO_MASK) >>
+		LJ_TAB_RESIZE_MARK_KIND_BITS;
+  return (bits & ~LJ_LIGHTUD_INTERNAL_LO_MASK) ==
+	   LJ_LIGHTUD_INTERNAL_BASE &&
+	 id != 0 && kind >= LJ_TAB_RESIZE_MARK_SRC &&
+	 kind <= LJ_TAB_RESIZE_MARK_NIL_DONE;
+}
+
+static LJ_AINLINE uint32_t lj_tab_resize_marker_kind(cTValue *o)
+{
+  return tvisresizemarker(o) ?
+    (uint32_t)(o->u64 & LJ_TAB_RESIZE_MARK_KIND_MASK) : 0;
+}
+
+static LJ_AINLINE uint64_t lj_tab_resize_marker_id(cTValue *o)
+{
+  return tvisresizemarker(o) ?
+    ((o->u64 & LJ_LIGHTUD_INTERNAL_LO_MASK) >>
+     LJ_TAB_RESIZE_MARK_KIND_BITS) : 0;
+}
 #else
 #define tvisforward(o)	0
 #define tviskeylock(o)	0
+#define tvisresizemarker(o)	0
+#define lj_tab_resize_marker_kind(o)	0
+#define lj_tab_resize_marker_id(o)	0
 #endif
-#define tvistabinternal(o)	(tvisforward(o) || tviskeylock(o))
+#define tvistabinternal(o) \
+  (tvisforward(o) || tviskeylock(o) || tvisresizemarker(o))
 #define tvisstr(o)	(itype(o) == LJ_TSTR)
 #define tvisfunc(o)	(itype(o) == LJ_TFUNC)
 #define tvisthread(o)	(itype(o) == LJ_TTHREAD)
@@ -6180,6 +6596,22 @@ static LJ_AINLINE void setkeylockV(TValue *o)
 #if LJ_64
   tv_rawstore(o, LJ_TKEYLOCK_BITS);
 #else
+  setnilV(o);
+#endif
+}
+
+static LJ_AINLINE void setresizemarkerV(TValue *o, uint64_t id, uint32_t kind)
+{
+#if LJ_64
+  lj_assertX(id != 0 && id <= LJ_TAB_RESIZE_MARK_ID_MAX,
+	     "invalid resize descriptor marker id");
+  lj_assertX(kind >= LJ_TAB_RESIZE_MARK_SRC &&
+	     kind <= LJ_TAB_RESIZE_MARK_NIL_DONE,
+	     "invalid resize descriptor marker kind");
+  tv_rawstore(o, LJ_TAB_RESIZE_MARK_BITS(id, kind));
+#else
+  UNUSED(id);
+  UNUSED(kind);
   setnilV(o);
 #endif
 }

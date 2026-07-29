@@ -1,5 +1,7 @@
 local build = require("suite_build")
 local runtime = require("suite_runtime")
+local resize_desc_flags =
+  "-DLJ_TAB_TEST_HELPERS " .. build.gc2_test_helper_flag
 
 return function(add)
   runtime.add_luajit_c_fixture_cases(add, {
@@ -144,6 +146,18 @@ return function(add)
       cfile = "t-tab-resize-copy-helper.c",
       opts = build.tab_helper_opts({ timeout = "20s" }),
       message = "M5 table resize copy helper tests passed"
+    },
+    {
+      name = "m5_tab_resize_descriptor",
+      description = "persistent table resize descriptor identity fixture",
+      output = "lj_t-tab-resize-descriptor",
+      cfile = "t-tab-resize-descriptor.c",
+      opts = build.tab_helper_opts({
+        timeout = "20s",
+        xcflags = resize_desc_flags,
+        cflags = resize_desc_flags
+      }),
+      message = "M5 persistent table resize descriptor substrate passed"
     },
     {
       name = "m5_tab_capi_resize_stress",

@@ -335,6 +335,9 @@ LJ_FUNC int lj_gc2_sweep_pending(global_State *g);
 LJ_FUNC uint32_t lj_gc2_handshake(global_State *g, uint32_t actions);
 LJ_FUNC uint64_t lj_gc2_retire_epoch(global_State *g);
 LJ_FUNC int lj_gc2_smr_read_try(global_State *g);
+/* Like read_try(), but refuses an untracked cross-universe fallback. Use this
+** before an operation which may open nested readers in deeper callees. */
+LJ_FUNC int lj_gc2_smr_read_tracked_try(global_State *g);
 LJ_FUNC void lj_gc2_smr_read_enter(global_State *g);
 LJ_FUNC void lj_gc2_smr_read_leave(global_State *g);
 LJ_FUNC LJGC2TableStoreGuardResult lj_gc2_table_store_begin(

@@ -102,6 +102,8 @@ typedef enum LJThrTGResult {
 #define LJ_THREAD_RUNNING	1u
 #define LJ_THREAD_DONE		2u
 #define LJ_THREAD_ABORTING	3u
+#define LJ_THREAD_OWNER_MAX	0xfffefffeu
+#define LJ_THREAD_STRUCT	0xfffeffffu
 #define LJ_THREAD_GCPREP	0xfffffffeu
 #define LJ_THREAD_GCSCAN	0xffffffffu
 
@@ -110,26 +112,27 @@ typedef enum LJThrTGResult {
 ** a binder which sampled pre-DEAD state can never CAS a retired TG from zero. */
 #define LJ_THR_ACTOR_RETIRED	0xffffffffu
 
-/* Only process-issued ids may name a live OS-thread/TG owner. The top two
-** values are non-TG protocol claims and must never enter owner lookup, cycle
-** leadership, dirty-epoch routing or safepoint leadership. */
+/* Only process-issued ids may name a live OS-thread/TG owner. The upper
+** 64-KiB range is reserved for tagged table-control words and protocol claims;
+** none may enter owner lookup, cycle leadership, dirty-epoch routing or
+** safepoint leadership. */
 static LJ_AINLINE int lj_thr_id_is_owner(uint32_t tid)
 {
-  return tid != 0 && tid < LJ_THREAD_GCPREP;
+  return tid != 0 && tid <= LJ_THREAD_OWNER_MAX;
 }
 
 /* Process-wide owner ids are never reused. The counter stores the largest id
 ** already issued and saturates at the final non-sentinel value. Returning zero
 ** is an explicit admission failure: wrapping would alias an older state/TG
-** owner, while issuing either reserved value would impersonate a GC protocol
-** claim. Relaxed ordering is sufficient because the CAS publishes uniqueness,
-** not any object initialized by the eventual id owner. */
+** owner, while issuing the reserved upper range would collide with table or GC
+** protocol claims. Relaxed ordering is sufficient because the CAS publishes
+** uniqueness, not any object initialized by the eventual id owner. */
 static LJ_AINLINE uint32_t lj_thr_id_alloc(uint32_t *counter)
 {
   uint32_t current = la_load32_rlx(counter);
   for (;;) {
     uint32_t next;
-    if (current >= LJ_THREAD_GCPREP - 1u)
+    if (current >= LJ_THREAD_OWNER_MAX)
       return 0;
     next = current + 1u;
     if (la_cas32(counter, &current, next, LA_RLX, LA_RLX))

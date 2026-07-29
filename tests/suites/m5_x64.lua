@@ -104,6 +104,17 @@ return function(add)
   })
 
   add({
+    name = "m5_x64_tset_forward",
+    description = "x64 TSET/TSETM stable-current FORWARD repair behavior",
+    run = function(t)
+      build.build_and_run_c(t, t:tmp("lj_t-x64-tset-forward"),
+			    "t-x64-tset-forward.c",
+			    build.tab_helper_opts({ timeout = "20s" }))
+      print("M5 x64 TSET/TSETM FORWARD repair behavior passed")
+    end
+  })
+
+  add({
     name = "m5_x64_getmetatable_node_order",
     description = "x64 getmetatable behavior",
     run = function(t)

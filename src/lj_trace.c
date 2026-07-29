@@ -5130,7 +5130,7 @@ static void trace_flush_callback_newtoken(lua_State *L, jit_State *J)
 }
 
 static int trace_flushall_direct(lua_State *L, int allow_gc_hook,
-				 int send_event)
+				 int send_event, int smr_held)
 {
   jit_State *J = L2J(L);
   global_State *g = J2G(J);
@@ -5146,7 +5146,8 @@ static int trace_flushall_direct(lua_State *L, int allow_gc_hook,
   ** enclosing recorder/control transaction's existing J->L identity. */
   if (token)
     jit_owner_l_rel(J, L);
-  lj_gc2_smr_read_enter(J2G(J));
+  if (!smr_held)
+    lj_gc2_smr_read_enter(g);
   for (i = (ptrdiff_t)trace_sizetrace_acq(J)-1; i > 0; i--) {
     GCtrace *T = traceref_safe(J, i);
     if (T && trace_traceno_acq(T) == (TraceNo)i) {
@@ -5172,7 +5173,8 @@ static int trace_flushall_direct(lua_State *L, int allow_gc_hook,
       */
     }
   }
-  lj_gc2_smr_read_leave(J2G(J));
+  if (!smr_held)
+    lj_gc2_smr_read_leave(g);
   J->cur.traceno = 0;
   J->freetrace = 0;
   J->gc_pressure_traces = 0;
@@ -5192,12 +5194,12 @@ static int trace_flushall_direct(lua_State *L, int allow_gc_hook,
 
 int lj_trace_flushall(lua_State *L)
 {
-  return trace_flushall_direct(L, 0, 1);
+  return trace_flushall_direct(L, 0, 1, 0);
 }
 
 int lj_trace_flushall_gc(lua_State *L)
 {
-  return trace_flushall_direct(L, 1, 0);
+  return trace_flushall_direct(L, 1, 0, 0);
 }
 
 /* Request a leader-owned full trace flush through the safepoint protocol.
@@ -5226,7 +5228,7 @@ static int trace_flushall_hs_impl(lua_State *L, int send_event)
     ** the safepoint epoch: otherwise every flush reserves another trace number at
     ** the same generation and the namespace can never reach its reuse grace.
     */
-    return trace_flushall_direct(L, 0, send_event);
+    return trace_flushall_direct(L, 0, send_event, 0);
   }
   token = lj_jit_token_acquire_wait(J);
   /* FLUSHJ's nested eventless direct pass sees this token as pre-owned. Give
@@ -5260,6 +5262,52 @@ int lj_trace_flushall_hs(lua_State *L)
 int lj_trace_flushall_hs_noevent(lua_State *L)
 {
   return trace_flushall_hs_impl(L, 0);
+}
+
+/*
+** A resize descriptor has already made the raw mt_active word nonzero before
+** entering here, preventing new pre-MT direct-store traces. Retire all traces
+** assembled before that publication without a wait, callback, STOPREQ check,
+** or error path: the caller already owns an install transaction which must be
+** explicitly unwound on contention.
+*/
+int lj_trace_flushall_try_noevent(lua_State *L)
+{
+  global_State *g = G(L);
+  jit_State *J = L2J(L);
+  int acquired = 0;
+  int retry;
+
+  if (mt_active_acq(g) != 0)
+    return 0;  /* First MT activation already retired pre-MT traces. */
+  if (mt_entering_acq(g) != 0)
+    return 1;  /* Let that activation own the trace transition. */
+  if (lj_trace_state_load(J) != LJ_TRACE_IDLE)
+    return 1;  /* Never dismantle an in-progress pre-guard recording. */
+  if (!lj_jit_token_held_l(L, J)) {
+    if (!lj_jit_token_try_l(L, J))
+      return 1;
+    acquired = 1;
+    jit_owner_l_rel(J, L);
+  }
+
+  /*
+  ** Close races with a first entrant after token acquisition. A published
+  ** latch proves its mandatory flush completed; a still-entering actor has not
+  ** made that proof yet, so this descriptor retries without waiting.
+  */
+  if (mt_active_acq(g) != 0)
+    retry = 0;
+  else if (mt_entering_acq(g) != 0)
+    retry = 1;
+  else if (lj_trace_state_load(J) != LJ_TRACE_IDLE)
+    retry = 1;
+  else
+    retry = trace_flushall_direct(L, 0, 0, 1);
+
+  if (acquired)
+    lj_jit_token_release_l(L, J);
+  return retry;
 }
 
 void lj_trace_flushscope_hs(global_State *g, uint32_t work)

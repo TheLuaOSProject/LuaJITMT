@@ -4730,8 +4730,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  mov aword TAB:RC->metatable, 0
     |  mov dword TAB:RC->asize, 0
     |  mov dword TAB:RC->hmask, 0
-    |  mov dword TAB:RC->acap, 0
-    |  mov dword TAB:RC->struct_owner, 0
+    |  mov qword TAB:RC->struct_control, 0
     |  mov qword TAB:RC->weak_record, 0
     |  mov byte TAB:RC->gc2_rescan_state, LJ_TAB_RESCAN_NONE
     |  lea r9, [TMPR+GL_OFS(nilnode)]

@@ -30,21 +30,23 @@ typedef struct TSetMForwardHookCtx {
   int done;
   GCtab *t;
   TValue *oldarray;
-  TValue *newarray;
-  MSize oldasize;
-  MSize newasize;
-  MSize oldacap;
 } TSetMForwardHookCtx;
 
 static TSetMForwardHookCtx *tsetm_forward_hook_ctx;
 
-static const char tset_forward_src[] =
+static const char tsetb_forward_src[] =
+  "local t = tset_forward_t\n"
+  "t[3] = tset_forward_bvalue\n";
+
+static const char tsetv_forward_src[] =
   "local t = tset_forward_t\n"
   "local kv = tset_forward_vkey\n"
-  "local kr = tset_forward_rkey\n"
-  "t[3] = tset_forward_bvalue\n"
-  "t[kv] = tset_forward_vvalue\n"
-  "for i = kr, kr do t[i] = tset_forward_rvalue end\n";
+  "t[kv] = tset_forward_vvalue\n";
+
+static const char tsetr_forward_src[] =
+  "local k = tset_forward_rkey\n"
+  "assert(table.move(tset_forward_src_t, k, k, k, tset_forward_t) ==\n"
+  "       tset_forward_t)\n";
 
 static int tsetm_forward_local_i32(lua_State *L, lua_Debug *ar, int slot,
 				   int32_t want)
@@ -93,22 +95,13 @@ static void tsetm_forward_hook(lua_State *L, lua_Debug *ar)
       lj_tab_resize(L, t, needed, 0);
     assert(lj_tab_array_separated(t));
     ctx->oldarray = lj_tab_array_acq(t);
-    ctx->oldasize = lj_tab_asize_acq(t);
-    ctx->oldacap = t->acap;
-    assert(ctx->oldasize >= (MSize)needed);
-
-    lj_tab_resize(L, t, (uint32_t)ctx->oldasize + 8u, 0);
-    ctx->newarray = lj_tab_array_acq(t);
-    ctx->newasize = lj_tab_asize_acq(t);
-    assert(ctx->newarray != ctx->oldarray);
-    assert(lj_tab_array_nextgen_acq(ctx->oldarray) == ctx->newarray);
+    assert(lj_tab_asize_acq(t) >= (MSize)needed);
+    assert(!lj_tab_array_is_retiring(t, ctx->oldarray));
+    assert(lj_tab_array_nextgen_acq(ctx->oldarray) == NULL);
+    assert(lj_tab_struct_owner_acq(t) == 0);
 
     for (i = 0; i < (MSize)TSETM_FORWARD_N; i++)
       tabfwd_store_forward(&ctx->oldarray[TSETM_FORWARD_START + i]);
-    la_store32_rel(&lj_tab_array_hdrw(ctx->oldarray)->acap,
-		   lj_tab_array_hdr_pack_acap(ctx->oldacap, 0));
-    lj_tab_asize_rel(t, ctx->oldasize);
-    lj_tab_array_rel(t, ctx->oldarray);
     return;
   }
 }
@@ -117,6 +110,7 @@ static void exercise_vm_tsetm_forward_retry(lua_State *L)
 {
   TSetMForwardHookCtx ctx;
   GCtab *t;
+  TValue *newarray;
   MSize i;
   const int32_t want[TSETM_FORWARD_N] = {
     TSETM_FORWARD_VAL0, TSETM_FORWARD_VAL1, TSETM_FORWARD_VAL2
@@ -137,6 +131,12 @@ static void exercise_vm_tsetm_forward_retry(lua_State *L)
     "  16, 17, 18, 19, 20,\n"
     "  vals()\n"
     "}\n");
+  /*
+  ** The hook borrows the current array before TSETM repairs its first marker.
+  ** Keep one outer reader across the hook, repair resize and all retired-array
+  ** assertions. Nested table helpers preserve this exact reader depth.
+  */
+  lj_tab_read_enter(L2TG(L));
   tabfwd_run_loaded(L);
   lua_sethook(L, NULL, 0, 0);
   tsetm_forward_hook_ctx = NULL;
@@ -146,21 +146,120 @@ static void exercise_vm_tsetm_forward_retry(lua_State *L)
   assert(lua_type(L, -1) == LUA_TTABLE);
   t = tabV(L->top-1);
   assert(t == ctx.t);
-  assert(lj_tab_array_acq(t) == ctx.oldarray);
+  newarray = lj_tab_array_acq(t);
+  assert(newarray != ctx.oldarray);
+  assert(lj_tab_array_is_retiring(t, ctx.oldarray));
+  assert(lj_tab_array_nextgen_acq(ctx.oldarray) == newarray);
 
   for (i = 0; i < (MSize)TSETM_FORWARD_N; i++) {
     int32_t key = TSETM_FORWARD_START + (int32_t)i;
     tabfwd_assert_forward(&ctx.oldarray[key]);
-    tabfwd_assert_i32(&ctx.newarray[key], want[i]);
+    tabfwd_assert_i32(&newarray[key], want[i]);
     tabfwd_assert_i32(lj_tab_getint(t, key), want[i]);
   }
 
-  lj_tab_array_rel(t, ctx.newarray);
-  lj_tab_asize_rel(t, ctx.newasize);
-  lj_tab_array_hdr_flags_or_rel(ctx.oldarray, TABARRAY_FLAG_RETIRING);
+  lj_tab_read_leave(L2TG(L));
   lua_pop(L, 1);
   lua_pushnil(L);
   lua_setglobal(L, "tsetm_forward_result");
+}
+
+static void exercise_vm_tset_forward_opcode(lua_State *L, const char *src,
+					     int32_t key, int32_t want)
+{
+  GCtab *t;
+  TValue *oldarray, *newarray;
+  MSize oldasize;
+
+  lua_settop(L, 0);
+  tabfwd_load_lua(L, src);
+  lua_createtable(L, LJ_MAX_COLOSIZE + 16, 0);
+  t = tabV(L->top-1);
+  assert(lj_tab_array_separated(t));
+  tabfwd_set_int(L, t, key, key + 6000);
+  lua_setglobal(L, "tset_forward_t");
+
+  /*
+  ** Capture the generation only after all setup which may allocate. This
+  ** reader starts while oldarray is still current, so it remains valid after
+  ** the stable-FORWARD repair retires that generation.
+  */
+  lj_tab_read_enter(L2TG(L));
+  oldarray = lj_tab_array_acq(t);
+  oldasize = lj_tab_asize_acq(t);
+  assert((MSize)key < oldasize);
+  assert(!lj_tab_array_is_retiring(t, oldarray));
+  assert(lj_tab_array_nextgen_acq(oldarray) == NULL);
+  assert(lj_tab_struct_owner_acq(t) == 0);
+  tabfwd_store_forward(&oldarray[key]);
+
+  tabfwd_run_loaded(L);
+
+  newarray = lj_tab_array_acq(t);
+  assert(newarray != oldarray);
+  assert(lj_tab_array_is_retiring(t, oldarray));
+  assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
+  tabfwd_assert_forward(&oldarray[key]);
+  tabfwd_assert_i32(&newarray[key], want);
+  assert(tabfwd_get_i32(t, key) == want);
+  lj_tab_read_leave(L2TG(L));
+
+  lua_pushnil(L);
+  lua_setglobal(L, "tset_forward_t");
+}
+
+static void exercise_vm_tsetr_forward(lua_State *L, int32_t key,
+				       int32_t want)
+{
+  GCtab *src, *t;
+  TValue *oldarray, *newarray;
+  MSize oldasize;
+
+  lua_settop(L, 0);
+  tabfwd_load_lua(L, tsetr_forward_src);
+
+  lua_createtable(L, LJ_MAX_COLOSIZE + 16, 0);
+  src = tabV(L->top-1);
+  assert(lj_tab_array_separated(src));
+  tabfwd_set_int(L, src, key, want);
+  lua_setglobal(L, "tset_forward_src_t");
+
+  lua_createtable(L, LJ_MAX_COLOSIZE + 16, 0);
+  t = tabV(L->top-1);
+  assert(lj_tab_array_separated(t));
+  tabfwd_set_int(L, t, key, key + 6000);
+  lua_setglobal(L, "tset_forward_t");
+
+  /*
+  ** table.move is generated library bytecode: its raw destination write is
+  ** BC_TSETR. The source table remains ordinary, while only the destination
+  ** slot is made a stable orphan marker.
+  */
+  lj_tab_read_enter(L2TG(L));
+  oldarray = lj_tab_array_acq(t);
+  oldasize = lj_tab_asize_acq(t);
+  assert((MSize)key < oldasize);
+  assert(!lj_tab_array_is_retiring(t, oldarray));
+  assert(lj_tab_array_nextgen_acq(oldarray) == NULL);
+  assert(lj_tab_struct_owner_acq(t) == 0);
+  tabfwd_store_forward(&oldarray[key]);
+
+  tabfwd_run_loaded(L);
+
+  newarray = lj_tab_array_acq(t);
+  assert(newarray != oldarray);
+  assert(lj_tab_array_is_retiring(t, oldarray));
+  assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
+  tabfwd_assert_forward(&oldarray[key]);
+  tabfwd_assert_i32(&newarray[key], want);
+  assert(tabfwd_get_i32(t, key) == want);
+  assert(tabfwd_get_i32(src, key) == want);
+  lj_tab_read_leave(L2TG(L));
+
+  lua_pushnil(L);
+  lua_setglobal(L, "tset_forward_t");
+  lua_pushnil(L);
+  lua_setglobal(L, "tset_forward_src_t");
 }
 
 static void exercise_vm_tset_entering_helpers(lua_State *L)
@@ -222,33 +321,13 @@ static void exercise_vm_tsets_single_thread_direct(lua_State *L)
 int main(void)
 {
   lua_State *L = luaL_newstate();
-  GCtab *t;
-  TValue *oldarray, *newarray;
-  MSize oldasize, newasize, oldacap;
   int32_t key_b = 3, key_v = 4, key_r = 5;
-  int32_t key_helper = 6;
   int32_t val_b = 9103, val_v = 9104, val_r = 9105;
-  int32_t val_helper = 9106;
-  MSize i;
 
   assert(L != NULL);
   luaL_openlibs(L);
   assert(luaL_dostring(L, "jit.off()\n") == 0);
 
-  lua_createtable(L, LJ_MAX_COLOSIZE + 16, 0);
-  t = tabV(L->top-1);
-  assert(lj_tab_array_separated(t));
-  oldarray = lj_tab_array_acq(t);
-  oldasize = lj_tab_asize_acq(t);
-  oldacap = t->acap;
-  assert((MSize)key_r < oldasize);
-  assert((MSize)key_helper < oldasize);
-  for (i = 0; i < oldasize; i++) {
-    int32_t v = (int32_t)i + 6000;
-    tabfwd_set_int(L, t, (int32_t)i, v);
-    lj_tab_storeint(L, &oldarray[i], v);
-  }
-  lua_setglobal(L, "tset_forward_t");
   lua_pushinteger(L, key_v);
   lua_setglobal(L, "tset_forward_vkey");
   lua_pushinteger(L, key_r);
@@ -257,79 +336,10 @@ int main(void)
   lua_setglobal(L, "tset_forward_bvalue");
   lua_pushinteger(L, val_v);
   lua_setglobal(L, "tset_forward_vvalue");
-  lua_pushinteger(L, val_r);
-  lua_setglobal(L, "tset_forward_rvalue");
-  tabfwd_load_lua(L, tset_forward_src);
 
-  lj_tab_resize(L, t, (uint32_t)oldasize + 8u, 0);
-  newarray = lj_tab_array_acq(t);
-  newasize = lj_tab_asize_acq(t);
-  assert(newarray != oldarray);
-  assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
-  assert(tabfwd_get_i32(t, key_b) == key_b + 6000);
-  assert(tabfwd_get_i32(t, key_v) == key_v + 6000);
-  assert(tabfwd_get_i32(t, key_r) == key_r + 6000);
-
-  tabfwd_store_forward(&oldarray[key_b]);
-  tabfwd_store_forward(&oldarray[key_v]);
-  tabfwd_store_forward(&oldarray[key_r]);
-  la_store32_rel(&lj_tab_array_hdrw(oldarray)->acap,
-		 lj_tab_array_hdr_pack_acap(oldacap, 0));
-  lj_tab_asize_rel(t, oldasize);
-  lj_tab_array_rel(t, oldarray);
-  tabfwd_run_loaded(L);
-
-  tabfwd_assert_forward(&oldarray[key_b]);
-  tabfwd_assert_forward(&oldarray[key_v]);
-  tabfwd_assert_forward(&oldarray[key_r]);
-  assert(tabfwd_get_i32(t, key_b) == val_b);
-  assert(tabfwd_get_i32(t, key_v) == val_v);
-  assert(tabfwd_get_i32(t, key_r) == val_r);
-  tabfwd_assert_i32(&newarray[key_b], val_b);
-  tabfwd_assert_i32(&newarray[key_v], val_v);
-  tabfwd_assert_i32(&newarray[key_r], val_r);
-
-  val_b += 100;
-  val_v += 100;
-  val_r += 100;
-  lj_tab_storeint(L, &oldarray[key_b], key_b + 9700);
-  lj_tab_storeint(L, &oldarray[key_v], key_v + 9700);
-  lj_tab_storeint(L, &oldarray[key_r], key_r + 9700);
-  lua_pushinteger(L, val_b);
-  lua_setglobal(L, "tset_forward_bvalue");
-  lua_pushinteger(L, val_v);
-  lua_setglobal(L, "tset_forward_vvalue");
-  lua_pushinteger(L, val_r);
-  lua_setglobal(L, "tset_forward_rvalue");
-  lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
-  tabfwd_load_lua(L, tset_forward_src);
-  tabfwd_run_loaded(L);
-
-  tabfwd_assert_i32(&oldarray[key_b], key_b + 9700);
-  tabfwd_assert_i32(&oldarray[key_v], key_v + 9700);
-  tabfwd_assert_i32(&oldarray[key_r], key_r + 9700);
-  tabfwd_assert_i32(&newarray[key_b], val_b);
-  tabfwd_assert_i32(&newarray[key_v], val_v);
-  tabfwd_assert_i32(&newarray[key_r], val_r);
-
-  {
-    TValue src;
-    TValue *stored;
-    setintV(&src, val_helper);
-    lj_tab_storeint(L, &oldarray[key_helper], key_helper + 9700);
-    stored = lj_tab_storetv_forvm_array(L, t, &oldarray[key_helper], &src,
-					(MSize)key_helper);
-    assert(stored == &newarray[key_helper]);
-    tabfwd_assert_i32(&oldarray[key_helper], key_helper + 9700);
-    tabfwd_assert_i32(&newarray[key_helper], val_helper);
-  }
-
-  lj_tab_array_rel(t, newarray);
-  lj_tab_asize_rel(t, newasize);
-  assert(tabfwd_get_i32(t, key_b) == val_b);
-  assert(tabfwd_get_i32(t, key_v) == val_v);
-  assert(tabfwd_get_i32(t, key_r) == val_r);
-  assert(tabfwd_get_i32(t, key_helper) == val_helper);
+  exercise_vm_tset_forward_opcode(L, tsetb_forward_src, key_b, val_b);
+  exercise_vm_tset_forward_opcode(L, tsetv_forward_src, key_v, val_v);
+  exercise_vm_tsetr_forward(L, key_r, val_r);
 
   exercise_vm_tsets_single_thread_direct(L);
   exercise_vm_tset_entering_helpers(L);

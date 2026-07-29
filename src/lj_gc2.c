@@ -3818,6 +3818,7 @@ static LJ_NOINLINE void gc2_mark_tab_retired_mem(global_State *g)
 {
   TabNodeRetire *ret, *nextret;
   TabArrayRetire *aret, *nextaret;
+  TabResizeDesc *desc, *nextdesc;
   GC2RootCycleGuard guard;
   /*
   ** The SMR reader held by callers keeps registered retire records stable while
@@ -3862,6 +3863,36 @@ static LJ_NOINLINE void gc2_mark_tab_retired_mem(global_State *g)
     }
   }
   if (LJ_UNLIKELY(aret != NULL && !lj_gc2_mem_registered(g, aret)))
+    gc2_root_scan_retry(g);
+  desc = lj_tab_resize_desc_head_acq(g);
+  gc2_root_cycle_guard_init(&guard, desc);
+  while (desc != NULL && lj_gc2_mem_registered(g, desc)) {
+    GCtab *t;
+    nextdesc = lj_tab_resize_desc_next_acq(desc);
+    (void)lj_gc2_markmem(g, desc);
+    /*
+    ** Registry membership is a semantic table edge. It is published before
+    ** any resize marker and survives through terminal SMR grace, so a table
+    ** cannot disappear while a helper resolves its descriptor id. Immutable
+    ** vector/intent payload joins this scan before runtime markers are enabled.
+    */
+    t = lj_tab_resize_desc_tab_acq(desc);
+    if (LJ_UNLIKELY(t == NULL || !lj_gc2_mem_registered(g, t))) {
+      gc2_root_scan_retry(g);
+      break;
+    }
+    if (gc2_phase_acq(g) == LJ_GC2_SWEEP)
+      (void)lj_gc2_preserve_sweep_root(g, obj2gco(t));
+    else
+      (void)lj_gc2_markobj(g, obj2gco(t));
+    (void)lj_tab_resize_desc_maintain_held(g, desc);
+    desc = nextdesc;
+    if (LJ_UNLIKELY(!gc2_root_cycle_guard_step(&guard, desc))) {
+      gc2_root_scan_retry(g);
+      break;
+    }
+  }
+  if (LJ_UNLIKELY(desc != NULL && !lj_gc2_mem_registered(g, desc)))
     gc2_root_scan_retry(g);
 }
 
@@ -6828,6 +6859,40 @@ int lj_gc2_smr_read_try(global_State *g)
       tls->smr_reader_g = g;
       tls->smr_reader_depth = 1;
     }
+    return 1;
+  }
+  (void)gc2_smr_readers_sub(g, 1);
+  return 0;
+}
+
+int lj_gc2_smr_read_tracked_try(global_State *g)
+{
+  LJThrGC2TLS *tls;
+  if (!g)
+    return 1;
+  tls = gc2_tls_current();
+  if (!tls)
+    return 0;
+  if (gc2_smr_reader_tls_active_state(tls, g)) {
+    if (LJ_UNLIKELY(tls->smr_reader_depth == ~(uint32_t)0)) {
+      lj_assertG(0, "gc2 nested tracked SMR reader overflow");
+      abort();
+    }
+    tls->smr_reader_depth++;
+    return 1;
+  }
+  /*
+  ** Ordinary read_try() may count an independent-universe fallback without
+  ** replacing this TLS identity. That is safe for a leaf reader, but a deeper
+  ** blocking read_enter() on g could then self-wait behind its own count.
+  */
+  if (tls->smr_reader_g != NULL ||
+      gc2_smr_reclaiming_acq(g) != LJ_GC2_SMR_OPEN)
+    return 0;
+  (void)gc2_smr_readers_add(g, 1);
+  if (gc2_smr_reclaiming_acq(g) == LJ_GC2_SMR_OPEN) {
+    tls->smr_reader_g = g;
+    tls->smr_reader_depth = 1;
     return 1;
   }
   (void)gc2_smr_readers_sub(g, 1);
