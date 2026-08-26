@@ -27,6 +27,35 @@
 #include "lj_trace.h"
 #include "lj_vm.h"
 
+#if LJ_HASJIT && defined(LJ_GC2_TEST_HELPERS)
+static uint32_t tg_hotcount_attach_pause;
+static uint32_t tg_hotcount_attach_paused;
+
+void lj_tg_test_hotcount_attach_pause(uint32_t enabled)
+{
+  if (enabled)
+    la_store32_rel(&tg_hotcount_attach_paused, 0);
+  la_store32_rel(&tg_hotcount_attach_pause, enabled != 0);
+}
+
+uint32_t lj_tg_test_hotcount_attach_paused(void)
+{
+  return la_load32_acq(&tg_hotcount_attach_paused);
+}
+
+static void tg_hotcount_test_pause_after_catchup(void)
+{
+  if (la_load32_acq(&tg_hotcount_attach_pause) != 0) {
+    la_store32_rel(&tg_hotcount_attach_paused, 1);
+    while (la_load32_acq(&tg_hotcount_attach_pause) != 0)
+      (void)lj_thr_retry_yield(NULL);
+    la_store32_rel(&tg_hotcount_attach_paused, 0);
+  }
+}
+#else
+#define tg_hotcount_test_pause_after_catchup() ((void)0)
+#endif
+
 static void tg_root_anchor_block_init(TGRootAnchorBlock *block)
 {
   uint32_t i;
@@ -279,6 +308,8 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   memset(&tg->jit_event_callback_owner, 0,
 	 sizeof(tg->jit_event_callback_owner));
   la_storeptr_rlx((void **)&tg->jit_trace_flush_reason, NULL);
+  lj_tg_hotcount_reset_word_store_rlx(tg, 0);
+  lj_tg_hotcount_applied_generation_store_rlx(tg, 0);
 #endif
   lj_tg_store_cur_L(tg, L);
   lj_tg_lexstate_rel(tg, NULL);
@@ -321,7 +352,10 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   lj_buf_init(NULL, &tg->tmpbuf);
 #if LJ_HASJIT
   lj_jit_event_sessions_init(tg);
-  memcpy(tg->hotcount, G2GG(g)->hotcount, sizeof(tg->hotcount));
+  /* Secondary TGs start from the current immutable reset generation, not a
+  ** mutable GG mirror. The main TG sees the initial zero generation here and
+  ** receives generation one when luaopen_jit enables hot dispatch. */
+  (void)lj_dispatch_hotcount_apply_tg(g, tg);
 #endif
   memcpy(tg->dispatch, G2GG(g)->dispatch, sizeof(tg->dispatch));
 }
@@ -665,6 +699,7 @@ void lj_tg_attach(global_State *g, TGState *tg)
   lj_tg_reqmask_store_rlx(tg, 0);
   tg_adopt_gc2_phase(g, tg);  /* 09 section 9.3 attach catch-up scaffold. */
   tg_attach_catchup(g, tg);
+  tg_hotcount_test_pause_after_catchup();
   lj_tg_flags_and_rlx(tg, (uint8_t)~TGF_DEAD);
   do {
     TGState *cur;
@@ -677,6 +712,9 @@ void lj_tg_attach(global_State *g, TGState *tg)
 	if (lj_tgregistry_key_valid(&tg->registry_key) &&
 	    !tg_registry_publish_live(tg))
 	  abort();
+#if LJ_HASJIT
+	(void)lj_dispatch_hotcount_apply_tg(g, tg);
+#endif
 	return;
       }
       if (next == cur)
@@ -686,6 +724,16 @@ void lj_tg_attach(global_State *g, TGState *tg)
     lj_tg_next_rel(tg, head);
   } while (!gc2_tg_list_cas(g, &head, tg));  /* 05 section 5.4.1 CAS-prepend. */
   gc2_n_threads_add_rlx(g, 1);  /* Live TG count; list keeps dead nodes. */
+#if LJ_HASJIT
+  /* A reset generation can be published after pre-list catch-up while the
+  ** handshake's final legacy-list scan still misses this TG. Rechecking only
+  ** after the successful list CAS closes that window in both directions. The
+  ** SC fence pairs with the publisher's post-generation fence: either a
+  ** pre-fence publication is consumed here or its handshake sees this list
+  ** insertion and signals the TG. */
+  la_fence_seq();
+  (void)lj_dispatch_hotcount_apply_tg(g, tg);
+#endif
   tg_attach_wait_trace_boundary(g, tg);
   (void)lj_gc_flush_root_pending(g);
   if (lj_tgregistry_key_valid(&tg->registry_key) &&

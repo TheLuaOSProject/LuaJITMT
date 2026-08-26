@@ -123,17 +123,29 @@ LJ_STATIC_ASSERT(GG_DISP2HOT == TG_DISP2HOT);
 #define hotcount_set(gg, pc, val) \
   (hotcount_get((gg), (pc)) = (HotCount)(val))
 #if LJ_HASJIT
-static LJ_AINLINE void hotcount_setg(global_State *g, const BCIns *pc, HotCount val)
+/* Reset one hashed bucket only in the exact lua_State owner's TG. Runtime
+** recorder retry/penalty writes must never race a peer through GG.hotcount or
+** rediscover their owner through ambient TLS. */
+static LJ_AINLINE TGState *hotcount_ownertg(global_State *g, lua_State *L)
 {
+  TGState *tg = L ? L->tg_hint : NULL;
+  if (!g || !L || !tg || tg->gl != g || G(L) != g ||
+      G2TG(g) != tg || lj_tg_load_cur_L(tg) != L ||
+      !lj_tg_owns_state_acq(tg, L))
+    return NULL;
+  return tg;
+}
+
+static LJ_AINLINE int hotcount_setl(global_State *g, lua_State *L,
+				     const BCIns *pc, HotCount val)
+{
+  TGState *tg = hotcount_ownertg(g, L);
   HotCount v = (HotCount)val;
   uint32_t i = (u32ptr(pc)>>2) & (HOTCOUNT_SIZE-1);
-  /*
-  ** Keep GG and main-TG hotcount mirrors synced while the x64 VM still enters
-  ** through the stock GG dispatch shape and MT code records through TG state.
-  */
-  G2GG(g)->hotcount[i] = v;
-  if (G2TG(g))
-    G2TG(g)->hotcount[i] = v;
+  if (!tg)
+    return 0;
+  tg->hotcount[i] = v;
+  return 1;
 }
 #endif
 
@@ -141,6 +153,11 @@ static LJ_AINLINE void hotcount_setg(global_State *g, const BCIns *pc, HotCount 
 LJ_FUNC void lj_dispatch_init(GG_State *GG);
 #if LJ_HASJIT
 LJ_FUNC void lj_dispatch_init_hotcount(global_State *g);
+/* Atomically publish the next universe-global reset template. The returned
+** generation becomes complete only after an HS_RESET_HOTCOUNT handshake has
+** driven every live legacy-list TG's applied generation to it. */
+LJ_FUNC uint64_t lj_dispatch_hotcount_publish(global_State *g);
+LJ_FUNC uint64_t lj_dispatch_hotcount_apply_tg(global_State *g, TGState *tg);
 /* Install/preserve the exact recorder owner's TG-local dispatch overlay.
 ** Both helpers are bounded and never acquire the global dispatch update
 ** claim. */

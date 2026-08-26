@@ -403,6 +403,13 @@ struct TGState {
   ** FLUSH delivery.  Secondary TG copies remain NULL.  Keeping it after the
   ** callback owner preserves every published event-substrate offset. */
   GCstr *jit_trace_flush_reason;
+  /* Append-only hotcount reset publication. The packed desired word in the
+  ** main TG is the universe-global {generation, HotCount template}; secondary
+  ** copies remain zero. Every TG release-publishes applied_generation only
+  ** after its owner (or a certified native-park leader) has filled all buckets.
+  ** Keeping both fields at the tail preserves every established VM/JIT offset. */
+  uint64_t hotcount_reset_word;
+  uint64_t hotcount_applied_generation;
 #endif
 };
 
@@ -412,6 +419,8 @@ LJ_STATIC_ASSERT(offsetof(TGState, profile_request) ==
 		 offsetof(TGState, poll) + sizeof(uint32_t));
 #if LJ_HASJIT
 LJ_STATIC_ASSERT((offsetof(TGState, jit_event_sessions.sequence) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(TGState, hotcount_reset_word) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(TGState, hotcount_applied_generation) & 7u) == 0);
 LJ_STATIC_ASSERT((offsetof(LJJitEventSessions, next_generation) & 7u) == 0);
 LJ_STATIC_ASSERT((offsetof(LJJitEventSessions, active_generation) & 7u) == 0);
 LJ_STATIC_ASSERT((offsetof(LJJitEventSessions, slot[0].generation) & 7u) == 0);
@@ -499,6 +508,12 @@ LJ_STATIC_ASSERT(offsetof(TGState, jit_trace_flush_reason) >=
 LJ_STATIC_ASSERT(offsetof(TGState, jit_trace_flush_reason) +
 		 sizeof(((TGState *)0)->jit_trace_flush_reason) <=
 		 sizeof(TGState));
+LJ_STATIC_ASSERT(offsetof(TGState, hotcount_reset_word) >=
+		 offsetof(TGState, jit_trace_flush_reason) +
+		 sizeof(((TGState *)0)->jit_trace_flush_reason));
+LJ_STATIC_ASSERT(offsetof(TGState, hotcount_applied_generation) >=
+		 offsetof(TGState, hotcount_reset_word) +
+		 sizeof(((TGState *)0)->hotcount_reset_word));
 #if LJ_64
 LJ_STATIC_ASSERT(sizeof(LJJitEventCallbackOwner) == 64u);
 #endif
@@ -512,8 +527,8 @@ LJ_STATIC_ASSERT(offsetof(TGState, vmevent_regkey) +
 		 sizeof(((TGState *)0)->vmevent_regkey) <= sizeof(TGState));
 #if LJ_HASJIT
 LJ_STATIC_ASSERT(sizeof(TGState) -
-		 (offsetof(TGState, jit_trace_flush_reason) +
-		  sizeof(((TGState *)0)->jit_trace_flush_reason)) <
+		 (offsetof(TGState, hotcount_applied_generation) +
+		  sizeof(((TGState *)0)->hotcount_applied_generation)) <
 		 __alignof__(TGState));
 #else
 LJ_STATIC_ASSERT(sizeof(TGState) -
@@ -1279,6 +1294,46 @@ static LJ_AINLINE uint32_t lj_tg_profile_request_xchg_acqrel(TGState *tg,
   return la_xchg32_acqrel(&tg->profile_request, request);
 }
 
+#if LJ_HASJIT
+static LJ_AINLINE uint64_t lj_tg_hotcount_reset_word_acq(const TGState *tg)
+{
+  return la_load64_acq(&tg->hotcount_reset_word);
+}
+
+static LJ_AINLINE void lj_tg_hotcount_reset_word_store_rlx(TGState *tg,
+						    uint64_t word)
+{
+  la_store64_rlx(&tg->hotcount_reset_word, word);
+}
+
+static LJ_AINLINE int lj_tg_hotcount_reset_word_cas(TGState *tg,
+						     uint64_t *oldp,
+						     uint64_t word)
+{
+  return la_cas64(&tg->hotcount_reset_word, oldp, word,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint64_t
+lj_tg_hotcount_applied_generation_acq(const TGState *tg)
+{
+  return la_load64_acq(&tg->hotcount_applied_generation);
+}
+
+static LJ_AINLINE void
+lj_tg_hotcount_applied_generation_store_rlx(TGState *tg,
+						     uint64_t generation)
+{
+  la_store64_rlx(&tg->hotcount_applied_generation, generation);
+}
+
+static LJ_AINLINE void
+lj_tg_hotcount_applied_generation_rel(TGState *tg, uint64_t generation)
+{
+  la_store64_rel(&tg->hotcount_applied_generation, generation);
+}
+#endif
+
 static LJ_AINLINE uint32_t lj_tg_reqmask_acq(const TGState *tg)
 {
   return la_load32_acq(&tg->reqmask);
@@ -1534,5 +1589,9 @@ LJ_FUNC TGState *lj_tg_find_owner(global_State *g, uint32_t owner_tid);
 LJ_FUNC TGState *lj_tg_thread_active(global_State *g, lua_State *L);
 LJ_FUNC void lj_tg_sync_dispatch_tg(global_State *g, TGState *tg);
 LJ_FUNC void lj_tg_sync_dispatch(global_State *g);
+#if LJ_HASJIT && defined(LJ_GC2_TEST_HELPERS)
+LJ_FUNC void lj_tg_test_hotcount_attach_pause(uint32_t enabled);
+LJ_FUNC uint32_t lj_tg_test_hotcount_attach_paused(void);
+#endif
 
 #endif

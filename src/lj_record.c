@@ -3341,7 +3341,13 @@ static void check_call_unroll(jit_State *J, TraceNo lnk)
 	*/
 	(void)lj_trace_flush_unlink(J, lnk);
 	/* Set a small, pseudo-random hotcount for a quick retry of JFUNC*. */
-	hotcount_setg(J2G(J), J->pc+1, lj_prng_u64(&J2TG(J)->prng) & 15u);
+	{
+	  lua_State *owner_L = jit_owner_l_acq(J);
+	  TGState *owner_tg = hotcount_ownertg(J2G(J), owner_L);
+	  if (owner_tg)
+	    (void)hotcount_setl(J2G(J), owner_L, J->pc+1,
+		lj_prng_u64(&owner_tg->prng) & 15u);
+	}
       }
       lj_trace_err(J, LJ_TRERR_CUNROLL);
     }

@@ -162,6 +162,7 @@ static int safepoint_hold_poll_until_leader(global_State *g, uint32_t actions)
   return (actions & (LJ_GC2_HS_SCAN_ROOTS|LJ_GC2_HS_SCAN_OWNER_ROOTS|
 		     LJ_GC2_HS_FLUSH_SSB|
 		     LJ_GC2_HS_RESET_ALLOC|LJ_GC2_HS_RESTORE_ALLOC|
+		     LJ_GC2_HS_RESET_HOTCOUNT|
 		     LJ_GC2_HS_EXIT_TRACES|LJ_GC2_HS_FLUSHJ)) &&
 	 gc2_hs_leader_acq(g) != 0;
 }
@@ -285,6 +286,18 @@ static void safepoint_apply_tg_mode(global_State *g, TGState *tg,
   }
   if (actions & LJ_GC2_HS_REDISPATCH)
     lj_dispatch_sync_tg(g, tg);  /* 03 section 3.6, 07 section 7.3. */
+#if LJ_HASJIT
+  if (actions & LJ_GC2_HS_RESET_HOTCOUNT) {
+    /* Hotcount buckets are owner-private mutable VM state. A foreign leader
+    ** may fill them only on the existing consumed-poll native-park path; an
+    ** attach/ordinary ACK must instead be executing on this exact TLS TG. The
+    ** applied-generation release occurs inside the fill, before hs_pending is
+    ** decremented by safepoint_ack_tg(). hs_epoch_ack is deliberately not a
+    ** completion certificate because the epoch is claimed before actions. */
+    if (native_parked || tg == lj_thr_get_tg())
+      (void)lj_dispatch_hotcount_apply_tg(g, tg);
+  }
+#endif
   if (actions & LJ_GC2_HS_EXIT_TRACES)
     lj_trace_abort(g);  /* 08 section 8.7: no active recorder past ack. */
   if (actions & LJ_GC2_HS_STOPREQ)
@@ -348,6 +361,16 @@ retry:
     return 0;
   }
   epoch = gc2_hs_epoch_acq(g);  /* 05 section 5.4.2 epoch. */
+#if LJ_HASJIT
+  if ((actions & LJ_GC2_HS_RESET_HOTCOUNT) && !native_parked &&
+      tg != lj_thr_get_tg()) {
+    /* A TG-only call from a foreign actor is not an owner acknowledgement.
+    ** Leave its counted slot pending instead of letting hs_pending reach zero
+    ** without an applied-generation publication. */
+    safepoint_requeue_consumed(tg, actions);
+    return 0;
+  }
+#endif
   if (native_parked && lj_tg_hs_epoch_ack_acq(tg) != epoch) {
 #if LJ_HASFFI && LJ_HASJIT
     /* Admission captured this obligation before reqmask consumption. Never

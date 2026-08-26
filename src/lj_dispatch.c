@@ -132,19 +132,86 @@ void lj_dispatch_init(GG_State *GG)
 }
 
 #if LJ_HASJIT
-/* Initialize hotcount table. */
+/* The low 16 bits are the exact HotCount bucket template. The remaining high
+** bits are a non-wrapping generation, published with the template by one
+** 64-bit CAS so attach/ACK readers cannot accept a torn pair. */
+#define HOTCOUNT_RESET_GENERATION_SHIFT 16u
+#define HOTCOUNT_RESET_VALUE_MASK UINT64_C(0xffff)
+#define HOTCOUNT_RESET_GENERATION_MAX \
+  (UINT64_MAX >> HOTCOUNT_RESET_GENERATION_SHIFT)
+
+static LJ_AINLINE uint64_t hotcount_reset_generation(uint64_t word)
+{
+  return word >> HOTCOUNT_RESET_GENERATION_SHIFT;
+}
+
+static LJ_AINLINE HotCount hotcount_reset_value(uint64_t word)
+{
+  return (HotCount)(word & HOTCOUNT_RESET_VALUE_MASK);
+}
+
+uint64_t lj_dispatch_hotcount_publish(global_State *g)
+{
+  TGState *main_tg = g ? g->main_tg : NULL;
+  uint32_t hotloop;
+  HotCount start;
+  uint64_t oldword;
+  if (!main_tg || !G2J(g))
+    return 0;
+  hotloop = (uint32_t)jit_param_acq(G2J(g), JIT_P_hotloop);
+  start = (HotCount)(hotloop * (uint32_t)HOTCOUNT_LOOP - 1u);
+  oldword = lj_tg_hotcount_reset_word_acq(main_tg);
+  for (;;) {
+    uint64_t generation = hotcount_reset_generation(oldword);
+    uint64_t desired;
+    if (LJ_UNLIKELY(generation == HOTCOUNT_RESET_GENERATION_MAX))
+      abort();  /* A wrapped generation could falsely satisfy a stale TG. */
+    generation++;
+    desired = (generation << HOTCOUNT_RESET_GENERATION_SHIFT) |
+      (uint64_t)start;
+    if (lj_tg_hotcount_reset_word_cas(main_tg, &oldword, desired)) {
+      /* Dekker half for generation publication versus TG list attachment.
+      ** The attaching owner fences after its successful list CAS and then
+      ** rechecks this word. Thus either that recheck consumes this generation
+      ** or the following handshake list scan consumes the new TG. */
+      la_fence_seq();
+      return generation;
+    }
+  }
+}
+
+uint64_t lj_dispatch_hotcount_apply_tg(global_State *g, TGState *tg)
+{
+  TGState *main_tg = g ? g->main_tg : NULL;
+  uint64_t word, generation;
+  uint32_t i;
+  if (!main_tg || !tg || tg->gl != g)
+    return 0;
+  for (;;) {
+    HotCount start;
+    word = lj_tg_hotcount_reset_word_acq(main_tg);
+    generation = hotcount_reset_generation(word);
+    if (lj_tg_hotcount_applied_generation_acq(tg) == generation)
+      return generation;
+    start = hotcount_reset_value(word);
+    for (i = 0; i < HOTCOUNT_SIZE; i++)
+      tg->hotcount[i] = start;
+    /* A newer packed publication which raced the plain owner fill requires a
+    ** complete refill. Only the exact word sampled above may authorize the
+    ** applied-generation release publication. */
+    if (lj_tg_hotcount_reset_word_acq(main_tg) == word) {
+      lj_tg_hotcount_applied_generation_rel(tg, generation);
+      return generation;
+    }
+  }
+}
+
+/* Publish a new desired template, then make its completion a normal counted
+** safepoint boundary over the mandatory legacy TG list. */
 void lj_dispatch_init_hotcount(global_State *g)
 {
-  int32_t hotloop = jit_param_acq(G2J(g), JIT_P_hotloop);
-  HotCount start = (HotCount)(hotloop*HOTCOUNT_LOOP - 1);
-  HotCount *hotcount = G2GG(g)->hotcount;
-  TGState *tg = G2TG(g);
-  uint32_t i;
-  for (i = 0; i < HOTCOUNT_SIZE; i++) {
-    hotcount[i] = start;
-    if (tg)
-      tg->hotcount[i] = start;
-  }
+  if (lj_dispatch_hotcount_publish(g) != 0)
+    (void)lj_gc2_handshake(g, LJ_GC2_HS_RESET_HOTCOUNT);
 }
 #endif
 
@@ -303,6 +370,9 @@ static void dispatch_update_wait_no_l(void)
 void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock)
 {
   uint32_t redispatch = 0;
+#if LJ_HASJIT
+  uint32_t reset_hotcount = 0;
+#endif
   uint8_t oldmode, mode;
 retry:
   oldmode = dispatchmode_load_acq(g);
@@ -317,6 +387,13 @@ retry:
     uint8_t claim = (uint8_t)(oldmode | DISPMODE_UPDATE);
     ASMFunction *disp;
     ASMFunction f_forl, f_iterl, f_itern, f_loop, f_funcf, f_funcv;
+#if LJ_HASJIT
+    /* An async profile interruption must never become the publisher of an
+    ** unrelated JIT off->on transition: it cannot run the counted reset
+    ** handshake. The ordinary JIT controller will observe and publish it. */
+    if (nolock > 1 && ((oldmode ^ mode) & DISPMODE_JIT))
+      return;
+#endif
     if (!dispatchmode_cas(g, &oldmode, claim))
       goto retry;
     disp = G2GG(g)->dispatch;
@@ -398,9 +475,9 @@ retry:
     }
 
 #if LJ_HASJIT
-	/* Reset hotcounts for JIT off to on transition. */
+	/* Defer off->on reset publication until DISPMODE_UPDATE is released. */
 	if ((mode & DISPMODE_JIT) && !(oldmode & DISPMODE_JIT))
-	  lj_dispatch_init_hotcount(g);
+	  reset_hotcount = 1;
 #endif
 	if (gc2_n_threads_acq(g) > 1)
 	  redispatch = 1;
@@ -408,12 +485,28 @@ retry:
     if (dispatch_state_mode(g) != mode)
       goto retry;
   }
+#if LJ_HASJIT
+  if (reset_hotcount && !(mode & DISPMODE_JIT))
+    reset_hotcount = 0;
+  if (reset_hotcount && lj_dispatch_hotcount_publish(g) == 0)
+    abort();
+#endif
   /* Never write a live peer's dispatch table here. Refresh only the caller's
   ** TG and perform a fresh exact-owner revalidation before any local recorder
   ** overlay. A foreign recorder is repaired by its REDISPATCH ACK. */
   lj_dispatch_sync_tg(g, G2TG(g));
   if (redispatch && nolock > 1)
     return;  /* Async profile triggers must not run an MT handshake. */
+#if LJ_HASJIT
+  if (reset_hotcount) {
+    /* Publish mode and reset generation before the one combined counted
+    ** boundary. REDISPATCH installs hot opcodes on each stopped TG and the
+    ** reset action fills that same TG before its pending slot is released. */
+    (void)lj_gc2_handshake(g,
+	LJ_GC2_HS_REDISPATCH|LJ_GC2_HS_RESET_HOTCOUNT);
+    return;
+  }
+#endif
   if (redispatch)
     (void)lj_gc2_handshake(g, LJ_GC2_HS_REDISPATCH);
 }

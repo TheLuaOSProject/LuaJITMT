@@ -61,6 +61,7 @@ if grep -n 'GL_J(trace)' "$root/src/vm_arm64.dasc" >/dev/null; then
 fi
 
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_emitter_contract.sh"
+LJ_TEST_ROOT="$root" sh "$root/tools/ci/jit_hotcount_generation_contract.sh"
 
 env LUA_PATH="$lua_path" "$luajit" -e '
 assert(jit.status() == true, "experimental build did not admit JIT APIs")

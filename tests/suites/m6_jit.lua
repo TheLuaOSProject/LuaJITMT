@@ -14,6 +14,7 @@ local shell_quote = utils.shell_quote
 
 local m6_cases = {
   "m6_dispatch_redispatch",
+  "m6_jit_hotcount_generation",
   "m6_jit_token",
   "m6_jit_event_session",
   "m6_jit_event_callback_owner",
@@ -722,6 +723,26 @@ return function(add)
         cflags = gc2_test_cflags
       })
       print("M6 dispatch redispatch behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_hotcount_generation",
+    description = "generation-aware TG-local JIT hotcount reset",
+    run = function(t)
+      local flags = gc2_test_cflags
+      if jit.os == "OSX" and jit.arch == "arm64" then
+        flags = flags ..
+          " -DLUAJIT_MT_ARM64_BOOTSTRAP" ..
+          " -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT"
+      end
+      clean_build(t, { quiet = true, xcflags = flags })
+      build_and_run_c(t, t:tmp("lj_t-jit-hotcount-generation"),
+                      "t-jit-hotcount-generation.c", {
+                        build = false, clean = false, timeout = "30s",
+                        cflags = flags
+                      })
+      print("M6 TG-local JIT hotcount generation passed")
     end
   })
 

@@ -5770,12 +5770,15 @@ static void blacklist_pc(GCproto *pt, BCIns *pc)
 /* Penalize a bytecode instruction. */
 static void penalty_pc(jit_State *J, GCproto *pt, BCIns *pc, TraceError e)
 {
+  lua_State *owner_L = jit_owner_l_acq(J);
+  TGState *owner_tg = hotcount_ownertg(J2G(J), owner_L);
   uint32_t i, val = PENALTY_MIN;
   for (i = 0; i < PENALTY_SLOTS; i++)
     if (mref(J->penalty[i].pc, const BCIns) == pc) {  /* Cache slot found? */
       /* First try to bump its hotcount several times. */
       val = ((uint32_t)J->penalty[i].val << 1) +
-	    (lj_prng_u64(&J2TG(J)->prng) & ((1u<<PENALTY_RNDBITS)-1));
+	    (owner_tg ?
+	     (lj_prng_u64(&owner_tg->prng) & ((1u<<PENALTY_RNDBITS)-1)) : 0);
       if (val > PENALTY_MAX) {
 	blacklist_pc(pt, pc);  /* Blacklist it, if that didn't help. */
 	return;
@@ -5789,7 +5792,7 @@ static void penalty_pc(jit_State *J, GCproto *pt, BCIns *pc, TraceError e)
 setpenalty:
   J->penalty[i].val = (uint16_t)val;
   J->penalty[i].reason = e;
-  hotcount_setg(J2G(J), pc+1, val);
+  (void)hotcount_setl(J2G(J), owner_L, pc+1, val);
 }
 
 static void trace_mark_active_startpt(jit_State *J)
@@ -5928,7 +5931,7 @@ static TraceStartResult trace_start(jit_State *J)
     ** token acquisition remains a bounded try and trace_start() still refuses
     ** to publish anything until the phase is safe. */
     if (J->parent == 0 && J->pc != NULL)
-      hotcount_setg(J2G(J), J->pc+1, 16);
+      (void)hotcount_setl(J2G(J), jit_owner_l_acq(J), J->pc+1, 16);
     return TRACE_START_RESULT_IDLE;
   }
   trace_mark_active_startpt(J);
@@ -6248,7 +6251,7 @@ static TraceAbortResult trace_abort(jit_State *J)
     if (J->exitno == 0) {
       BCIns *startpc = mref(J->cur.startpc, BCIns);
       if (e == LJ_TRERR_RETRY || e == LJ_TRERR_SMRRETRY)
-	hotcount_setg(J2G(J), startpc+1, 1);  /* Immediate retry. */
+	(void)hotcount_setl(J2G(J), jit_owner_l_acq(J), startpc+1, 1);
       else
 	penalty_pc(J, trace_startpt_acq(&J->cur), startpc, e);
     } else {
@@ -6634,7 +6637,8 @@ void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L)
   /* Note: pc is the interpreter bytecode PC here. It's offset by 1. */
   ERRNO_SAVE
   /* Reset hotcount. */
-  hotcount_setg(J2G(J), pc, jit_param_acq(J, JIT_P_hotloop)*HOTCOUNT_LOOP);
+  (void)hotcount_setl(J2G(J), L, pc,
+	jit_param_acq(J, JIT_P_hotloop)*HOTCOUNT_LOOP);
 #if LJ_ARM64_JIT_FAIL_CLOSED
   /* Compile the complete JIT surface without permitting recorder ownership,
   ** trace publication, or native entry during the ARM64 scaffolding phase. */
