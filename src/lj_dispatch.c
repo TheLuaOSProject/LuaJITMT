@@ -855,12 +855,19 @@ static void call_fill_missing(lua_State *L, int *missing)
 #if LJ_HASJIT
 static void call_hot_poll(lua_State *L, int *missing)
 {
-  TGState *tg = L2TG(L);
-  if (tg && lj_tg_poll_acq(tg) != 0) {
+  if (lj_safepoint_owner_poll_pending(L)) {
     call_fill_missing(L, missing);
     lj_safepoint_ack_check(L);
   }
 }
+
+#ifdef LJ_TRACE_TEST_HELPERS
+void lj_dispatch_test_hotcall_poll(lua_State *L)
+{
+  int missing = 0;
+  call_hot_poll(L, &missing);
+}
+#endif
 #endif
 
 /* Call dispatch. Used by call hooks, hot calls or when recording. */

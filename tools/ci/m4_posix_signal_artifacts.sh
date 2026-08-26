@@ -107,8 +107,10 @@ fi
 grep -F '|.define TGPOLL, qword [DISPATCH+DISPATCH_TG(poll)]' \
   "$root/src/vm_x64.dasc" >/dev/null
 grep -F 'lj_profile_owner_poll(L);' "$root/src/lj_safepoint.c" >/dev/null
-grep -F 'lj_tg_profile_request_acq(tg) == 0)' \
+grep -F 'lj_safepoint_owner_poll_pending(L)' \
   "$root/src/lj_safepoint.c" >/dev/null
+grep -F 'lj_tg_profile_request_acq(tg) != 0' \
+  "$root/src/lj_safepoint.h" >/dev/null
 grep -F '|| lj_profile_poll_required(g)' "$root/src/lj_opt_loop.c" >/dev/null
 grep -F 'if (rec_needs_xpoll(J))' "$root/src/lj_record.c" >/dev/null
 grep -F '|| lj_profile_poll_required(g)' "$root/src/lj_record.c" >/dev/null

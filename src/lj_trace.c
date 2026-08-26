@@ -19,6 +19,7 @@
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_err.h"
+#include "lj_oserr.h"
 #include "lj_debug.h"
 #include "lj_str.h"
 #include "lj_frame.h"
@@ -69,6 +70,262 @@ static uint32_t trace_test_findfree_grows;
 static uint32_t trace_test_last_unlinked;
 static uint32_t trace_test_last_findfree;
 static uint32_t trace_test_last_released;
+static uint32_t trace_test_admission_stage;
+static uint32_t trace_test_admission_request;
+static uint32_t trace_test_admission_actions;
+static uint32_t trace_test_admission_hit_count;
+static uint32_t trace_test_admission_clean_release_count;
+static uint32_t trace_test_admission_protected_poll_count;
+static uint32_t trace_test_admission_side_gate_block_count;
+static uint32_t trace_test_admission_side_clean_release_count;
+static uint32_t trace_test_admission_observer_waiting_flag;
+static uint32_t trace_test_admission_hotcount_slot;
+static uint32_t trace_test_admission_hotcount_value;
+static uint32_t trace_test_admission_side_parent;
+static uint32_t trace_test_admission_side_exitno;
+static uint32_t trace_test_admission_side_snapshot_value;
+static uint32_t trace_test_admission_cleanup_errno_clobber;
+
+void lj_trace_test_admission_reset(void)
+{
+  la_store32_rel(&trace_test_admission_stage, 0);
+  la_store32_rel(&trace_test_admission_request, 0);
+  la_store32_rel(&trace_test_admission_actions, 0);
+  la_store32_rel(&trace_test_admission_hit_count, 0);
+  la_store32_rel(&trace_test_admission_clean_release_count, 0);
+  la_store32_rel(&trace_test_admission_protected_poll_count, 0);
+  la_store32_rel(&trace_test_admission_side_gate_block_count, 0);
+  la_store32_rel(&trace_test_admission_side_clean_release_count, 0);
+  la_store32_rel(&trace_test_admission_observer_waiting_flag, 0);
+  la_store32_rel(&trace_test_admission_hotcount_slot, 0);
+  la_store32_rel(&trace_test_admission_hotcount_value, 0);
+  la_store32_rel(&trace_test_admission_side_parent, 0);
+  la_store32_rel(&trace_test_admission_side_exitno, 0);
+  la_store32_rel(&trace_test_admission_side_snapshot_value, 0);
+  la_store32_rel(&trace_test_admission_cleanup_errno_clobber, 0);
+}
+
+void lj_trace_test_admission_arm(uint32_t stage, uint32_t request,
+				 uint32_t actions)
+{
+  if (stage < LJ_TRACE_TEST_ADMISSION_ENTRY ||
+      stage > LJ_TRACE_TEST_ADMISSION_SIDE_AFTER_TOKEN ||
+      (request != LJ_TRACE_TEST_REQUEST_COUNTED &&
+       request != LJ_TRACE_TEST_REQUEST_PROFILE &&
+       request != LJ_TRACE_TEST_REQUEST_OBSERVE) ||
+      (request == LJ_TRACE_TEST_REQUEST_COUNTED && actions == 0) ||
+      (request != LJ_TRACE_TEST_REQUEST_COUNTED && actions != 0))
+    abort();
+  la_store32_rel(&trace_test_admission_request, request);
+  la_store32_rel(&trace_test_admission_actions, actions);
+  la_store32_rel(&trace_test_admission_stage, stage);
+}
+
+void lj_trace_test_admission_clobber_cleanup_errno(uint32_t errnum)
+{
+  if (errnum == 0)
+    abort();
+  la_store32_rel(&trace_test_admission_cleanup_errno_clobber, errnum);
+}
+
+uint32_t lj_trace_test_admission_hits(void)
+{
+  return la_load32_acq(&trace_test_admission_hit_count);
+}
+
+uint32_t lj_trace_test_admission_clean_releases(void)
+{
+  return la_load32_acq(&trace_test_admission_clean_release_count);
+}
+
+uint32_t lj_trace_test_admission_protected_polls(void)
+{
+  return la_load32_acq(&trace_test_admission_protected_poll_count);
+}
+
+uint32_t lj_trace_test_admission_side_gate_blocks(void)
+{
+  return la_load32_acq(&trace_test_admission_side_gate_block_count);
+}
+
+uint32_t lj_trace_test_admission_side_clean_releases(void)
+{
+  return la_load32_acq(&trace_test_admission_side_clean_release_count);
+}
+
+uint32_t lj_trace_test_admission_observer_waiting(void)
+{
+  return la_load32_acq(&trace_test_admission_observer_waiting_flag);
+}
+
+uint32_t lj_trace_test_admission_armed(void)
+{
+  return la_load32_acq(&trace_test_admission_stage);
+}
+
+uint32_t lj_trace_test_admission_hotcount_index(void)
+{
+  return la_load32_acq(&trace_test_admission_hotcount_slot);
+}
+
+uint32_t lj_trace_test_admission_hotcount_before(void)
+{
+  return la_load32_acq(&trace_test_admission_hotcount_value);
+}
+
+TraceNo lj_trace_test_admission_side_parent(void)
+{
+  return (TraceNo)la_load32_acq(&trace_test_admission_side_parent);
+}
+
+ExitNo lj_trace_test_admission_side_exitno(void)
+{
+  return (ExitNo)la_load32_acq(&trace_test_admission_side_exitno);
+}
+
+uint32_t lj_trace_test_admission_side_snapshot_before(void)
+{
+  return la_load32_acq(&trace_test_admission_side_snapshot_value);
+}
+
+static void trace_test_admission_publish(lua_State *L, jit_State *J,
+					 const BCIns *pc, uint32_t stage,
+					 TraceNo parent, ExitNo exitno,
+					 SnapShot *snap)
+{
+  global_State *g;
+  TGState *tg;
+  uint32_t armed = stage;
+  uint32_t request, actions;
+  if (!la_cas32(&trace_test_admission_stage, &armed, 0,
+		LA_ACQ_REL, LA_ACQ))
+    return;
+  if (!L || !J || G(L) != J2G(J) || !(tg = L2TG(L)))
+    abort();
+  g = G(L);
+  request = la_load32_acq(&trace_test_admission_request);
+  actions = la_load32_acq(&trace_test_admission_actions);
+  if (pc) {
+    uint32_t slot = (u32ptr(pc) >> 2) & (HOTCOUNT_SIZE-1u);
+    la_store32_rel(&trace_test_admission_hotcount_slot, slot);
+    la_store32_rel(&trace_test_admission_hotcount_value,
+			   (uint32_t)tg->hotcount[slot]);
+  }
+  if (snap) {
+    if (parent == 0)
+      abort();
+    la_store32_rel(&trace_test_admission_side_parent, (uint32_t)parent);
+    la_store32_rel(&trace_test_admission_side_exitno, (uint32_t)exitno);
+    la_store32_rel(&trace_test_admission_side_snapshot_value,
+		   (uint32_t)snap_count_acq(snap));
+  }
+  if (request == LJ_TRACE_TEST_REQUEST_COUNTED) {
+    uint64_t epoch;
+    if (actions == 0 || gc2_hs_pending_acq(g) != 0 ||
+	lj_tg_reqmask_acq(tg) != 0 || lj_tg_poll_acq(tg) != 0)
+      abort();
+    epoch = gc2_hs_epoch_rlx(g) + 1u;
+    gc2_hs_actions_rel(g, actions);
+    gc2_hs_pending_rel(g, 1);
+    gc2_hs_epoch_rel(g, epoch);
+    lj_tg_reqmask_rel(tg, actions);
+    lj_tg_poll_rel(tg, 1);
+  } else if (request == LJ_TRACE_TEST_REQUEST_PROFILE) {
+    if (actions != 0 || lj_tg_profile_request_acq(tg) != 0)
+      abort();
+    lj_tg_profile_request_rel(tg, 1);
+  } else if (request == LJ_TRACE_TEST_REQUEST_OBSERVE) {
+    /* Expose the exact real-metadata observation point to a publisher thread,
+    ** then wait until its serialized leader is paused after reqmask. This hook
+    ** does not manufacture or acknowledge any request itself. */
+    la_store32_rel(&trace_test_admission_observer_waiting_flag, 1);
+    while (!lj_safepoint_test_signal_paused())
+      la_cpu_pause();
+    la_store32_rel(&trace_test_admission_observer_waiting_flag, 0);
+  } else {
+    abort();
+  }
+  (void)la_add32_acqrel(&trace_test_admission_hit_count, 1);
+}
+
+static void trace_test_admission_inject(lua_State *L, jit_State *J,
+					const BCIns *pc, uint32_t stage)
+{
+  trace_test_admission_publish(L, J, pc, stage, 0, 0, NULL);
+}
+
+static void trace_test_side_admission_inject_held(lua_State *L, jit_State *J,
+						   TraceNo parent,
+						   ExitNo exitno,
+						   SnapShot *snap,
+						   uint32_t stage)
+{
+  trace_test_admission_publish(L, J, NULL, stage, parent, exitno, snap);
+}
+
+static void trace_test_side_admission_inject(lua_State *L, jit_State *J,
+					      TraceNo parent, ExitNo exitno,
+					      uint32_t stage)
+{
+  global_State *g;
+  GCtrace *T;
+  SnapShot *snap;
+  if (la_load32_acq(&trace_test_admission_stage) != stage)
+    return;
+  if (!L || !J || G(L) != J2G(J))
+    abort();
+  g = G(L);
+  if (!lj_gc2_smr_read_try(g))
+    abort();
+  T = traceref_safe(J, parent);
+  if (!trace_runnable_acq(T, parent) || exitno >= trace_nsnap_acq(T)) {
+    lj_gc2_smr_read_leave(g);
+    abort();
+  }
+  snap = &trace_snap_acq(T)[exitno];
+  trace_test_side_admission_inject_held(L, J, parent, exitno, snap, stage);
+  lj_gc2_smr_read_leave(g);
+}
+
+static void trace_test_admission_note_clean_release(lua_State *L,
+					     jit_State *J)
+{
+  if (L && J && lj_trace_state_load(J) == LJ_TRACE_IDLE &&
+      jit_token_acq(J2G(J)) == 0 && jit_owner_l_acq(J) == NULL)
+    (void)la_add32_acqrel(&trace_test_admission_clean_release_count, 1);
+}
+
+static void trace_test_admission_note_protected_poll(void)
+{
+  (void)la_add32_acqrel(&trace_test_admission_protected_poll_count, 1);
+}
+
+static void trace_test_admission_note_side_gate_block(void)
+{
+  (void)la_add32_acqrel(&trace_test_admission_side_gate_block_count, 1);
+}
+
+static void trace_test_admission_note_side_clean_release(lua_State *L,
+						  jit_State *J)
+{
+  global_State *g = J ? J2G(J) : NULL;
+  if (L && J && lj_trace_state_load(J) == LJ_TRACE_IDLE &&
+      jit_token_acq(g) == 0 && jit_owner_l_acq(J) == NULL &&
+      gc2_smr_readers_acq(g) == 0)
+    (void)la_add32_acqrel(&trace_test_admission_side_clean_release_count, 1);
+}
+
+static void trace_test_admission_maybe_clobber_cleanup_oserr(void)
+{
+  uint32_t errnum = la_load32_acq(&trace_test_admission_cleanup_errno_clobber);
+  if (errnum != 0) {
+    LJOSerrState oserr;
+    la_store32_rel(&trace_test_admission_cleanup_errno_clobber, 0);
+    oserr.errnum = (int)errnum;
+    oserr.winerr = errnum;
+    lj_oserr_restore(&oserr);
+  }
+}
 #if LJ_TARGET_ARM64 && LJ_HASJIT
 static uint32_t trace_test_root_entry_pause_stage;
 static uint32_t trace_test_root_entry_pause_waiting;
@@ -211,6 +468,20 @@ static LJ_AINLINE void trace_test_note_findfree_grow(TraceNo traceno)
   la_store32_rel(&trace_test_last_findfree, (uint32_t)traceno);
 }
 #else
+#define trace_test_admission_inject(L, J, pc, stage) \
+  ((void)(L), (void)(J), (void)(pc), (void)(stage))
+#define trace_test_side_admission_inject(L, J, parent, exitno, stage) \
+  ((void)(L), (void)(J), (void)(parent), (void)(exitno), (void)(stage))
+#define trace_test_side_admission_inject_held(L, J, parent, exitno, snap, stage) \
+  ((void)(L), (void)(J), (void)(parent), (void)(exitno), (void)(snap), \
+   (void)(stage))
+#define trace_test_admission_note_clean_release(L, J) \
+  ((void)(L), (void)(J))
+#define trace_test_admission_note_protected_poll() ((void)0)
+#define trace_test_admission_note_side_gate_block() ((void)0)
+#define trace_test_admission_note_side_clean_release(L, J) \
+  ((void)(L), (void)(J))
+#define trace_test_admission_maybe_clobber_cleanup_oserr() ((void)0)
 #define trace_test_note_flush_unlink(T, traceno) \
   ((void)(T), (void)(traceno))
 #define trace_test_note_abort_selflink(traceno)		((void)(traceno))
@@ -6388,6 +6659,15 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
 {
   jit_State *J = (jit_State *)ud;
   UNUSED(dummy);
+  trace_test_admission_inject(L, J, J->pc,
+			      LJ_TRACE_TEST_ADMISSION_TRACE_STATE);
+  if (lj_safepoint_owner_poll_pending(L)) {
+    /* This callback is the first protected boundary after publishing START.
+    ** A fresh STOPREQ must unwind through lj_trace_ins(), whose external-error
+    ** cleanup retires the unpublished recorder and releases its exact owner. */
+    trace_test_admission_note_protected_poll();
+    (void)lj_safepoint_ack_check(L);
+  }
   do {
   retry:
     switch ((uint32_t)lj_trace_state_load(J)) {
@@ -6563,6 +6843,7 @@ void lj_trace_abort_owner(lua_State *L)
   ** not inspect J->pc or walk L's now-different frame chain.
   */
   trace_terminal_release(L, J);
+  trace_test_admission_maybe_clobber_cleanup_oserr();
 }
 
 /* Retire an interrupted recorder before its owner parks outside the recorder
@@ -6611,7 +6892,13 @@ void lj_trace_ins(jit_State *J, const BCIns *pc)
     ** between trace_state() invocations, so discard unpublished owner state
     ** before propagating the original error to the surrounding Lua pcall. */
     if (errcode != LUA_ERRRUN || !tvisnumber(L->top - 1)) {
+      LJOSerrState oserr;
+      /* cpcall has restored the error-edge errno/LastError pair. Recorder
+      ** cleanup may call allocators, dispatch rebuilds or platform teardown;
+      ** carry the authoritative pair across it before throwing outward. */
+      lj_oserr_save(&oserr);
       lj_trace_abort_owner(L);
+      lj_oserr_restore(&oserr);
       lj_err_throw(L, errcode);
     }
     lj_trace_state_store_active(J, LJ_TRACE_ERR);
@@ -6636,6 +6923,13 @@ void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L)
 {
   /* Note: pc is the interpreter bytecode PC here. It's offset by 1. */
   ERRNO_SAVE
+  trace_test_admission_inject(L, J, pc, LJ_TRACE_TEST_ADMISSION_ENTRY);
+  /* vm_hotloop reaches C only after its counter subtraction and deliberately
+  ** does not skip or route the underflowing bytecode through vm_safepoint.
+  ** Service both counted handshakes and profile-only signals here before the
+  ** counter reset or any recorder-token acquisition. */
+  if (lj_safepoint_owner_poll_pending(L))
+    (void)lj_safepoint_ack_check(L);
   /* Reset hotcount. */
   (void)hotcount_setl(J2G(J), L, pc,
 	jit_param_acq(J, JIT_P_hotloop)*HOTCOUNT_LOOP);
@@ -6654,6 +6948,20 @@ void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L)
       lj_jit_trace_stream_idle(J2G(J)) &&
       lj_jit_token_try_l(L, J)) {
     jit_owner_l_rel(J, L);
+    trace_test_admission_inject(L, J, pc,
+				LJ_TRACE_TEST_ADMISSION_AFTER_TOKEN);
+    /* Close the pre-admission check/token-CAS race without acknowledging while
+    ** an otherwise disposable IDLE token is published. A late STOPREQ may
+    ** throw, so clear both the low token and J->L before entering the checked
+    ** owner path. A non-throwing request abandons this hot edge and lets normal
+    ** dispatch retry later. */
+    if (lj_safepoint_owner_poll_pending(L)) {
+      lj_jit_token_release_l(L, J);
+      trace_test_admission_note_clean_release(L, J);
+      (void)lj_safepoint_ack_check(L);
+      ERRNO_RESTORE
+      return;
+    }
     /* Close the idle-snapshot/token-CAS race. A standalone terminal may have
     ** published before releasing the low token we just acquired. */
     if (!lj_jit_trace_stream_idle(J2G(J))) {
@@ -6712,6 +7020,15 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
       goto out;
   }
   snap = &trace_snap_acq(parentT)[exitno];
+  /* The outer trace-exit check precedes this SMR/metadata acquisition. Close
+  ** that window before the first shared snapshot-count CAS. Service remains
+  ** deferred until vm_exit_interp has cleared the jit_base lifetime lease. */
+  if (lj_safepoint_owner_poll_pending(L)) {
+    lj_gc2_smr_read_leave(g);
+    lj_safepoint_owner_rearm_counted_poll(L);
+    trace_test_admission_note_side_gate_block();
+    return;
+  }
   if (!(lj_tg_hookmask_combined_load(g, L2TG(L)) &
 	(HOOK_GC|HOOK_VMEVENT)) &&
       lj_jit_trace_stream_idle(g) &&
@@ -6729,6 +7046,23 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
       goto out;
     if (!lj_jit_token_try_l(L, J))
       goto out;
+    trace_test_side_admission_inject_held(
+	L, J, parent, exitno, snap,
+	LJ_TRACE_TEST_ADMISSION_SIDE_AFTER_TOKEN);
+    /* The pre-exit gate and token CAS are separate publications. Close that
+    ** race before revalidating the stream or performing the post-token
+    ** side-claim snapshot mutation. Pre-threshold count increments above are
+    ** independent atomic CAS operations. Service may throw or park, so first
+    ** drop both the disposable IDLE token and this trace-body SMR read lease.
+    ** The VM exit landing still owns the published jit_base lifetime lease and
+    ** will clear it before servicing TGPOLL; do not acknowledge here. */
+    if (lj_safepoint_owner_poll_pending(L)) {
+      lj_jit_token_release_l(L, J);
+      lj_gc2_smr_read_leave(g);
+      lj_safepoint_owner_rearm_counted_poll(L);
+      trace_test_admission_note_side_clean_release(L, J);
+      return;
+    }
     if (!lj_jit_trace_stream_idle(g)) {
       lj_jit_token_release_l(L, J);
       goto out;
@@ -6764,12 +7098,6 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
   }
 out:
   lj_gc2_smr_read_leave(g);
-}
-
-static int trace_poll_pending(lua_State *L)
-{
-  TGState *tg = L ? L2TG(L) : NULL;
-  return tg && lj_tg_poll_acq(tg) != 0;
 }
 
 /* Stitch a new trace to the previous trace. */
@@ -7027,8 +7355,18 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
 	(void)lj_gc2_fixpoint_round(g, L, LJ_GC2_WORKER_DRAIN_BATCH);
       if (!(hookmask_load(g) & HOOK_GC))
 	lj_gc_step(L);  /* Exited because of GC: drive GC forward. */
-    } else if ((jit_flags_acq(J) & JIT_F_ON) && !trace_poll_pending(L)) {
-      trace_hotside(J, pc, L, parent, exitno);
+    } else if (jit_flags_acq(J) & JIT_F_ON) {
+      trace_test_side_admission_inject(
+	L, J, parent, exitno, LJ_TRACE_TEST_ADMISSION_SIDE_ENTRY);
+      /* Snapshot hotcounts are shared parent metadata. A counted request can
+      ** be visible in reqmask before its poll signal, while SIGPROF uses only
+      ** profile_request; all three publications must block side mutation. */
+      if (lj_safepoint_owner_poll_pending(L)) {
+	lj_safepoint_owner_rearm_counted_poll(L);
+	trace_test_admission_note_side_gate_block();
+      } else {
+	trace_hotside(J, pc, L, parent, exitno);
+      }
     }
   }
   /* Return MULTRES or 0 or -17. */

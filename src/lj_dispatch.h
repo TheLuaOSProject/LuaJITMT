@@ -162,6 +162,9 @@ LJ_FUNC uint64_t lj_dispatch_hotcount_apply_tg(global_State *g, TGState *tg);
 ** Both helpers are bounded and never acquire the global dispatch update
 ** claim. */
 LJ_FUNC int lj_dispatch_record_start(lua_State *L, jit_State *J);
+#ifdef LJ_TRACE_TEST_HELPERS
+LJ_FUNC void lj_dispatch_test_hotcall_poll(lua_State *L);
+#endif
 #endif
 LJ_FUNC void lj_dispatch_sync_tg(global_State *g, TGState *tg);
 LJ_FUNC void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock);

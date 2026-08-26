@@ -27,7 +27,7 @@ printf 'cmd=%s\n' "$0" >"$lock_dir/owner" 2>/dev/null || true
 
 jobs=${JOBS:-${MAKE_JOBS:-$(sysctl -n hw.logicalcpu 2>/dev/null || echo 2)}}
 minver=${MACOSX_DEPLOYMENT_TARGET:-13.0}
-xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_ARM64_EMIT_TEST_HELPERS'
+xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_ARM64_EMIT_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS'
 luajit=$root/src/luajit
 archive=$root/src/libluajit.a
 vm_object=$root/src/lj_vm.o
@@ -62,6 +62,7 @@ fi
 
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_emitter_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/jit_hotcount_generation_contract.sh"
+LJ_TEST_ROOT="$root" sh "$root/tools/ci/jit_recorder_safepoint_contract.sh"
 
 env LUA_PATH="$lua_path" "$luajit" -e '
 assert(jit.status() == true, "experimental build did not admit JIT APIs")

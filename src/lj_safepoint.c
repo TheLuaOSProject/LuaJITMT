@@ -24,6 +24,118 @@
 #include "lj_tg.h"
 #include "lj_trace.h"
 
+#ifdef LJ_TRACE_TEST_HELPERS
+static TGState *safepoint_test_signal_pause_tg;
+static uint32_t safepoint_test_signal_pause_armed;
+static uint32_t safepoint_test_signal_pause_waiting;
+static uint32_t safepoint_test_signal_pause_release;
+static uint32_t safepoint_test_signal_resumed_poll_store_count;
+static uint32_t safepoint_test_signal_consumed_clear_count;
+static uint32_t safepoint_test_signal_clean_before_leave_count;
+
+void lj_safepoint_test_signal_pause_reset(void)
+{
+  la_storeptr_rel((void **)&safepoint_test_signal_pause_tg, NULL);
+  la_store32_rel(&safepoint_test_signal_pause_armed, 0);
+  la_store32_rel(&safepoint_test_signal_pause_waiting, 0);
+  la_store32_rel(&safepoint_test_signal_pause_release, 0);
+  la_store32_rel(&safepoint_test_signal_resumed_poll_store_count, 0);
+  la_store32_rel(&safepoint_test_signal_consumed_clear_count, 0);
+  la_store32_rel(&safepoint_test_signal_clean_before_leave_count, 0);
+}
+
+void lj_safepoint_test_signal_pause_arm(TGState *tg)
+{
+  if (!tg)
+    return;
+  lj_safepoint_test_signal_pause_reset();
+  la_storeptr_rel((void **)&safepoint_test_signal_pause_tg, tg);
+  la_store32_rel(&safepoint_test_signal_pause_armed, 1);
+}
+
+uint32_t lj_safepoint_test_signal_paused(void)
+{
+  return la_load32_acq(&safepoint_test_signal_pause_waiting);
+}
+
+void lj_safepoint_test_signal_pause_release(void)
+{
+  la_store32_rel(&safepoint_test_signal_pause_release, 1);
+}
+
+uint32_t lj_safepoint_test_signal_resumed_poll_stores(void)
+{
+  return la_load32_acq(&safepoint_test_signal_resumed_poll_store_count);
+}
+
+uint32_t lj_safepoint_test_signal_consumed_clears(void)
+{
+  return la_load32_acq(&safepoint_test_signal_consumed_clear_count);
+}
+
+uint32_t lj_safepoint_test_signal_clean_before_leaves(void)
+{
+  return la_load32_acq(&safepoint_test_signal_clean_before_leave_count);
+}
+
+static int safepoint_test_signal_pause_after_reqmask(TGState *tg)
+{
+  TGState *target = (TGState *)la_loadptr_acq(
+	(void *const *)&safepoint_test_signal_pause_tg);
+  uint32_t armed = 1;
+  if (target != tg ||
+      !la_cas32(&safepoint_test_signal_pause_armed, &armed, 0,
+		LA_ACQ_REL, LA_ACQ))
+    return 0;
+  la_store32_rel(&safepoint_test_signal_pause_waiting, 1);
+  while (la_load32_acq(&safepoint_test_signal_pause_release) == 0)
+    la_cpu_pause();
+  la_store32_rel(&safepoint_test_signal_pause_waiting, 0);
+  return 1;
+}
+
+static void safepoint_test_signal_note_resumed_poll(TGState *tg, int paused)
+{
+  TGState *target = (TGState *)la_loadptr_acq(
+	(void *const *)&safepoint_test_signal_pause_tg);
+  if (paused && target == tg)
+    (void)la_add32_acqrel(
+	&safepoint_test_signal_resumed_poll_store_count, 1);
+}
+
+static void safepoint_test_signal_note_consumed_clear(TGState *tg,
+					       uint64_t epoch)
+{
+  TGState *target = (TGState *)la_loadptr_acq(
+	(void *const *)&safepoint_test_signal_pause_tg);
+  if (target == tg && lj_tg_hs_epoch_ack_acq(tg) == epoch &&
+      lj_tg_reqmask_acq(tg) == 0 && lj_tg_poll_acq(tg) == 0 &&
+      la_load32_acq(&safepoint_test_signal_resumed_poll_store_count) != 0)
+    (void)la_add32_acqrel(&safepoint_test_signal_consumed_clear_count, 1);
+}
+
+static void safepoint_test_signal_note_before_leader_leave(global_State *g,
+						    uint64_t epoch)
+{
+  TGState *tg = (TGState *)la_loadptr_acq(
+	(void *const *)&safepoint_test_signal_pause_tg);
+  if (tg && tg->gl == g && gc2_hs_leader_acq(g) != 0 &&
+      lj_tg_hs_epoch_ack_acq(tg) == epoch &&
+      lj_tg_reqmask_acq(tg) == 0 && lj_tg_poll_acq(tg) == 0 &&
+      la_load32_acq(&safepoint_test_signal_consumed_clear_count) != 0)
+    (void)la_add32_acqrel(
+	&safepoint_test_signal_clean_before_leave_count, 1);
+}
+#else
+#define safepoint_test_signal_pause_after_reqmask(tg) ((void)(tg), 0)
+#define safepoint_test_signal_note_resumed_poll(tg, paused) \
+  ((void)(tg), (void)(paused))
+#define safepoint_test_signal_note_consumed_clear(tg, epoch) \
+  ((void)(tg), (void)(epoch))
+#define safepoint_test_signal_note_before_leader_leave(g, epoch) \
+  ((void)(g), (void)(epoch))
+#endif
+
 static uint64_t safepoint_now_ns(void)
 {
   return lj_thr_now_ns();
@@ -176,8 +288,10 @@ static void safepoint_clear_consumed_polls(global_State *g, uint64_t epoch)
     if (lj_tg_flags_test_acq(tg, TGF_DEAD))
       continue;
     if (lj_tg_hs_epoch_ack_acq(tg) == epoch &&
-	lj_tg_reqmask_acq(tg) == 0 && lj_tg_poll_acq(tg) != 0)
+	lj_tg_reqmask_acq(tg) == 0 && lj_tg_poll_acq(tg) != 0) {
       safepoint_clear_poll(tg);
+      safepoint_test_signal_note_consumed_clear(tg, epoch);
+    }
   }
 }
 
@@ -487,17 +601,12 @@ uint32_t lj_safepoint_ack(lua_State *L)
 
 uint32_t lj_safepoint_poll(lua_State *L)
 {
-  TGState *tg;
   if (!L)
-    return 0;
-  tg = L2TG(L);
-  if (!tg)
     return 0;
   /* reqmask owns the counted pending slot. poll is the wake/dispatch signal and
   ** can be consumed independently when a thread catches up with the current
   ** epoch, so a nonzero reqmask must still drive the acknowledgement path. */
-  if (lj_tg_poll_acq(tg) == 0 && lj_tg_reqmask_acq(tg) == 0 &&
-      lj_tg_profile_request_acq(tg) == 0)
+  if (!lj_safepoint_owner_poll_pending(L))
     return 0;
   return lj_safepoint_ack(L);
 }
@@ -656,7 +765,11 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
     ** slots. A later handshake must still publish a fresh reqmask and count
     ** the TG for this epoch; the waiter will see reqmask and retry.
     */
-    lj_tg_poll_rel(tg, 1);  /* 05 section 5.4.2 signal word. */
+    {
+      int test_paused = safepoint_test_signal_pause_after_reqmask(tg);
+      lj_tg_poll_rel(tg, 1);  /* 05 section 5.4.2 signal word. */
+      safepoint_test_signal_note_resumed_poll(tg, test_paused);
+    }
     /* Paired with the native owner close->poll fence. This is the Dekker edge
     ** which forbids both sides observing the old value: either the owner sees
     ** the request and acknowledges itself, or the leader observes native and
@@ -929,6 +1042,7 @@ uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions)
   ** is try-only and backs out rather than waiting on this reader. */
   lj_gc2_smr_read_enter(g);
   safepoint_clear_consumed_polls(g, epoch);
+  safepoint_test_signal_note_before_leader_leave(g, epoch);
   safepoint_leader_leave(g, leader);
   safepoint_rearm_fresh_stopreq_polls(g);
   lj_gc2_smr_read_leave(g);

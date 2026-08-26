@@ -340,7 +340,31 @@ LJ_FUNC ExitNo lj_trace_test_last_exitno(void);
 LJ_FUNC void lj_trace_test_force_event_handoff_failure(uint32_t count);
 #endif
 
+#define LJ_TRACE_TEST_ADMISSION_ENTRY		1u
+#define LJ_TRACE_TEST_ADMISSION_AFTER_TOKEN	2u
+#define LJ_TRACE_TEST_ADMISSION_TRACE_STATE	3u
+#define LJ_TRACE_TEST_ADMISSION_SIDE_ENTRY	4u
+#define LJ_TRACE_TEST_ADMISSION_SIDE_AFTER_TOKEN	5u
+#define LJ_TRACE_TEST_REQUEST_COUNTED		1u
+#define LJ_TRACE_TEST_REQUEST_PROFILE		2u
+#define LJ_TRACE_TEST_REQUEST_OBSERVE		3u
 #ifdef LJ_TRACE_TEST_HELPERS
+LJ_FUNC void lj_trace_test_admission_reset(void);
+LJ_FUNC void lj_trace_test_admission_arm(uint32_t stage, uint32_t request,
+					 uint32_t actions);
+LJ_FUNC void lj_trace_test_admission_clobber_cleanup_errno(uint32_t errnum);
+LJ_FUNC uint32_t lj_trace_test_admission_hits(void);
+LJ_FUNC uint32_t lj_trace_test_admission_clean_releases(void);
+LJ_FUNC uint32_t lj_trace_test_admission_protected_polls(void);
+LJ_FUNC uint32_t lj_trace_test_admission_side_gate_blocks(void);
+LJ_FUNC uint32_t lj_trace_test_admission_side_clean_releases(void);
+LJ_FUNC uint32_t lj_trace_test_admission_observer_waiting(void);
+LJ_FUNC uint32_t lj_trace_test_admission_armed(void);
+LJ_FUNC uint32_t lj_trace_test_admission_hotcount_index(void);
+LJ_FUNC uint32_t lj_trace_test_admission_hotcount_before(void);
+LJ_FUNC TraceNo lj_trace_test_admission_side_parent(void);
+LJ_FUNC ExitNo lj_trace_test_admission_side_exitno(void);
+LJ_FUNC uint32_t lj_trace_test_admission_side_snapshot_before(void);
 LJ_FUNC void lj_trace_test_reset_retention_stats(void);
 LJ_FUNC void lj_trace_test_note_call_unroll_abort(TraceNo lnk);
 LJ_FUNC uint32_t lj_trace_test_call_unroll_aborts(void);

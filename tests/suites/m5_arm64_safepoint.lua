@@ -4,7 +4,8 @@ local bootstrap_cflags =
   "-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_DISABLE_JIT -DLUA_USE_ASSERT"
 local fail_closed_cflags =
   "-DLUAJIT_MT_ARM64_BOOTSTRAP " ..
-  "-DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT"
+  "-DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT " ..
+  "-DLJ_TRACE_TEST_HELPERS"
 
 local function native_bootstrap()
   local ok, jitmod = pcall(require, "jit")
@@ -72,8 +73,17 @@ return function(add)
         return
       end
       run_contract(t, true)
+      t:run({ "sh", t:path("tools", "ci",
+                            "jit_recorder_safepoint_contract.sh") },
+            { timeout = "15s" })
       build.compile_and_run_c(t, t:tmp("lj_t-arm64-jit-fail-closed-safepoint"),
                               "t-vm-safepoint.c", {
+        cflags = fail_closed_cflags,
+        quiet = true,
+        timeout = "30s"
+      })
+      build.compile_and_run_c(t, t:tmp("lj_t-arm64-jit-recorder-safepoint"),
+                              "t-jit-recorder-safepoint.c", {
         cflags = fail_closed_cflags,
         quiet = true,
         timeout = "30s"

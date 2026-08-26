@@ -29,6 +29,41 @@ LJ_FUNCA uint32_t lj_native_leave(lua_State *L);
 LJ_FUNC uint32_t lj_native_leave_tg(TGState *tg);
 LJ_FUNCA void lj_native_enter_l(lua_State *L, LJNativeFrame *frame);
 LJ_FUNCA uint32_t lj_native_leave_l(lua_State *L, LJNativeFrame *frame);
+#ifdef LJ_TRACE_TEST_HELPERS
+LJ_FUNC void lj_safepoint_test_signal_pause_reset(void);
+LJ_FUNC void lj_safepoint_test_signal_pause_arm(TGState *tg);
+LJ_FUNC uint32_t lj_safepoint_test_signal_paused(void);
+LJ_FUNC void lj_safepoint_test_signal_pause_release(void);
+LJ_FUNC uint32_t lj_safepoint_test_signal_resumed_poll_stores(void);
+LJ_FUNC uint32_t lj_safepoint_test_signal_consumed_clears(void);
+LJ_FUNC uint32_t lj_safepoint_test_signal_clean_before_leaves(void);
+#endif
+
+/* Owner-side VM/C admission must treat the counted request, its dispatch
+** signal and the independent SIGPROF publication as three distinct words.
+** reqmask remains authoritative if a consumed-poll race temporarily clears
+** poll; profile_request deliberately has no handshake count at all. */
+static LJ_AINLINE int lj_safepoint_owner_poll_pending(lua_State *L)
+{
+  TGState *tg = L ? L2TG(L) : NULL;
+  return tg && (lj_tg_poll_acq(tg) != 0 ||
+		lj_tg_reqmask_acq(tg) != 0 ||
+		lj_tg_profile_request_acq(tg) != 0);
+}
+
+/* A counted publisher stores reqmask before its later poll signal. An owner
+** which observes that intermediate state while leaving native/JIT execution
+** must make the dispatch signal inevitable before deferring service to the VM
+** landing. The serialized live leader performs the original later poll store
+** before its final consumed-poll cleanup, so an owner which acknowledges this
+** synthetic edge cannot leave an orphan signal behind. Profile-only requests
+** already occupy the adjacent TGPOLL word themselves. */
+static LJ_AINLINE void lj_safepoint_owner_rearm_counted_poll(lua_State *L)
+{
+  TGState *tg = L ? L2TG(L) : NULL;
+  if (tg && lj_tg_reqmask_acq(tg) != 0)
+    lj_tg_poll_rel(tg, 1);
+}
 
 static LJ_AINLINE int lj_safepoint_pending_stopreq(lua_State *L)
 {

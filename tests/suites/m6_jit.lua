@@ -16,6 +16,7 @@ local m6_cases = {
   "m6_dispatch_redispatch",
   "m6_jit_hotcount_generation",
   "m6_jit_token",
+  "m6_jit_recorder_safepoint_admission",
   "m6_jit_event_session",
   "m6_jit_event_callback_owner",
   "m6_jit_flush_stream_gate",
@@ -807,6 +808,24 @@ assert(sum == 3320)
 assert(util.traceinfo(1), "Lua tailcall loop did not trace")
 ]=], { timeout = "20s" })
       print("M6 JIT recorder token behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_recorder_safepoint_admission",
+    description = "recorder hot-loop and hot-call pre-admission safepoints",
+    run = function(t)
+      t:run({ "sh", t:path("tools", "ci",
+                            "jit_recorder_safepoint_contract.sh") },
+            { timeout = "15s" })
+      clean_build(t, build.trace_helper_build_opts({ quiet = true }))
+      build_and_run_c(t, t:tmp("lj_t-jit-recorder-safepoint"),
+                      "t-jit-recorder-safepoint.c",
+                      build.trace_helper_c_opts({
+        build = false,
+        timeout = "30s"
+      }))
+      print("M6 recorder-admission safepoints passed")
     end
   })
 
