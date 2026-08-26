@@ -29,6 +29,21 @@ audit_object=$tmpdir/lj_asm-audit.o
 audit_relocs=$tmpdir/lj_asm-audit.relocs
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_ARM64_EMIT_TEST_HELPERS'
 
+if grep -F 'LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED' \
+     "$root/tests/t-arm64-jit-emitter.c" >/dev/null; then
+  echo "ARM64 emitter fixture still depends on the aggregate recorder gate" >&2
+  exit 1
+fi
+for setting in \
+  'LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED' \
+  'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED' \
+  'LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED'; do
+  grep -F "$setting" "$root/tests/t-arm64-jit-emitter.c" >/dev/null || {
+    echo "ARM64 emitter fixture lost granular setting $setting" >&2
+    exit 1
+  }
+done
+
 test -f "$archive" && test -f "$asm_object" || {
   echo "ARM64 JIT emitter contract requires an existing experimental build" >&2
   exit 1
@@ -188,4 +203,4 @@ if test "$(grep -Ec 'add[[:space:]]+x30, x22' "$disasm")" -ne 1 ||
 fi
 
 grep -E '[[:space:]](add[[:space:]]+x30, x(22|25)|ldar[[:space:]]+[xw][0-5], \[x30\]|stlr[[:space:]]+x2, \[x30\]|dmb[[:space:]]+ish|str[[:space:]]+w30, \[x25)' "$disasm"
-echo "arm64_jit_emitter_contract OK: TG state and 32 bit XPOLL acquire forms verified"
+echo "arm64_jit_emitter_contract OK: constrained recorder config, TG state and XPOLL verified"

@@ -78,6 +78,38 @@ reject_source_region() {
   fi
 }
 
+if grep -F 'LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED' \
+     "$vm_source" "$root/tests/t-vm-safepoint.c" >/dev/null; then
+  echo "ARM64 VM safepoint coverage still uses the aggregate native-entry gate" >&2
+  exit 1
+fi
+if grep -F 'LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED' \
+     "$root/tests/t-vm-safepoint.c" >/dev/null; then
+  echo "ARM64 VM safepoint fixture still uses the aggregate recorder gate" >&2
+  exit 1
+fi
+for gate in \
+  LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED \
+  LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED \
+  LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED; do
+  test "$(grep -Fc "#if $gate" "$vm_source")" -eq 1 || {
+    echo "ARM64 VM must contain exactly one topology gate for $gate" >&2
+    exit 1
+  }
+done
+for gate in \
+  LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED \
+  LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED \
+  LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED \
+  LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED \
+  LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED \
+  LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED; do
+  grep -F "$gate" "$root/tests/t-vm-safepoint.c" >/dev/null || {
+    echo "ARM64 VM safepoint fixture lost granular gate $gate" >&2
+    exit 1
+  }
+done
+
 # The two publications are independent 32-bit words. Pin their natural-width
 # acquire loads and the combined decision instead of accepting x64's adjacent
 # qword shortcut on an architecture where that would not be an acquire load.
@@ -259,7 +291,7 @@ if grep -Eq \
 fi
 
 if test "$source_only" = 1; then
-  echo "arm64_vm_safepoint_contract OK: source acquire and progress edges present"
+  echo "arm64_vm_safepoint_contract OK: granular topology gates and source progress edges present"
   exit 0
 fi
 

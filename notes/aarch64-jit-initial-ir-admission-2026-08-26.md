@@ -193,25 +193,38 @@ and duplicate-left PHIs, oversized PHIs, snapshot offset/PC/base/slot/flag
 corruption, ordinary `SNAP_NORESTORE`, a newer XPOLL snapshot, and unsigned or
 otherwise unsupported comparisons.
 
-The focused native contract and `git diff --check` passed on the final
-worktree. The combined experimental gate is rerun after rebasing this detached
-checkpoint onto the current branch.
+The focused native contract, combined experimental gate, root-entry contract,
+and `git diff --check` passed after integration. The checkpoint was pushed as
+`8d7d5a11` on `codex/aarch64-macos-port`.
 
-## Remaining gates before checked-in execution
+## Subsequent loop-execution tranche
 
-This classifier is pre-register-allocation. It does not prove the positive
-candidate assembles without spills, because register allocation may append
-RENAMEs and assign spill slots after this check. Before default native entry
-opens, a second post-RA/pre-publication gate must require the audited final
-shape, `T->spadjust == 0`, and no allocator spill (`evenspill == SPS_FIRST`,
-`oddspill == 0`). The direct `BC_JLOOP` path must reserve the ARM64 backend's
-16 fixed spill bytes before branching to mcode. A real checked-in positive
-fixture must then assemble, publish, enter, condition-exit, and prove that the
-interpreter C-frame link is unchanged.
+The next checkpoint on the same branch closes the gaps listed in the original
+pre-RA review without widening the admitted IR family:
 
-Root recording must be split from still-closed side/stitch admission; direct
-loop entry must be split from still-closed function/stitch entry. The root
-helper must revalidate self-link topology, zero-spill metadata, bytecode and
-body identity on both passes. Deterministic phase-gate, poll, profile, reqmask,
-flush/retirement, stale-JLOOP, slot-reuse, and successful arm64e PAUTH/BTI
-races remain required before broadening beyond this integer LOOP.
+- a second post-RA/pre-publication pass rechecks the compact semantic IR,
+  bounds the allocator-only suffix to one exact NOP or register-only RENAMEs,
+  requires `T->spadjust == 0`, and rejects every actual spill;
+- a token-private `TRACE_ARM64_INT_LOOP_ADMITTED` marker records that proof
+  before release publication;
+- root recording and direct `BC_JLOOP` entry are independently open, while
+  side/stitch recording and `JFUNCF`/stitch entry remain independently closed;
+- the root helper re-acquires the exact prototype, loop geometry, trace
+  identity, retirement state, entry flags, self-link topology, body pointers,
+  snapshots, code extent, and loop offset on both metadata passes; and
+- successful `BC_JLOOP` entry reserves the ARM64 backend's 16 fixed spill
+  bytes immediately before its authenticated branch.
+
+`tests/t-arm64-jit-native-loop.c` is the ordinary-ARM64 positive proof. It
+records, assembles, publishes, enters, condition-exits, and re-enters the exact
+integer loop five times while checking the result, C-frame link, TG lease,
+trace shape, final IR, snapshots, counters, and absence of spills or sides.
+The direct helper suite separately covers retirement/entry-flag/topology/body
+mutations and phase, poll, profile, and reqmask rejection windows.
+
+Broader IR, actual spills, side/stitch traces, function entry, deterministic
+native flush/retirement and slot-reuse races, and end-to-end arm64e execution
+remain later tranches. The arm64e contracts currently prove compilation,
+BTI, authenticated exit-stub encoding, and enforced fail-closed interpreter
+execution with no trace publication; they are not claimed here as an
+end-to-end native loop execution result.

@@ -79,6 +79,27 @@ reserve_line=$(grep -n 'lj_mcode_reserve(J, &as->mcbot)' "$trace_asm" | cut -d: 
 test -n "$admit_line" && test "$admit_line" -lt "$nextins_line" &&
 test "$admit_line" -lt "$reserve_line"
 grep -F 'lj_trace_err_info(J, LJ_TRERR_NYIIR);' "$trace_asm" >/dev/null
+for required in \
+  'finalview.nins = arm64_semantic_nins;' \
+  'T->spadjust != 0 || as->evenspill != SPS_FIRST || as->oddspill != 0' \
+  'if (ra_hasspill(ir.s))' \
+  'finalnins == arm64_semantic_nins + 1u' \
+  'ir.o == IR_NOP && ir.t.irt == IRT_NIL' \
+  'if (!suffix_ok && finalnins > arm64_semantic_nins &&' \
+  'finalnins - arm64_semantic_nins <= LJ_MAX_PHI' \
+  'ir.o != IR_RENAME || ir.t.irt != IRT_NIL' \
+  'ra_hasspill(ir.s)' \
+  'T->unused1 |= TRACE_ARM64_INT_LOOP_ADMITTED;'; do
+  grep -F "$required" "$trace_asm" >/dev/null || {
+    echo "ARM64 post-RA admission check changed: $required" >&2
+    exit 1
+  }
+done
+if grep -F '} else if (finalnins > arm64_semantic_nins' \
+     "$trace_asm" >/dev/null; then
+  echo "one allocator RENAME is shadowed by the spare-NOP branch" >&2
+  exit 1
+fi
 
 if grep -E 'lj_mcode_|trace_save|traceslot_publish|lj_ir_call|asm_call' \
      "$classifier" >/dev/null; then
@@ -215,8 +236,8 @@ for required in \
   }
 done
 
-# ARM64 now records the already-lowered full XPOLL, but the recorder and root
-# native VM entry remain independently fail-closed.
+# ARM64 records the already-lowered full XPOLL only for root LOOP traces.
+# Side/stitch recording and non-loop native entry remain independently closed.
 test "$(grep -Fc '#if (LJ_TARGET_X64 || LJ_TARGET_ARM64) && LJ_GC64' \
   "$root/src/lj_record.c")" -eq 3
 test "$(grep -Fc '#if (LJ_TARGET_X64 || LJ_TARGET_ARM64) && LJ_GC64' \
@@ -227,10 +248,10 @@ grep -F 'emit_gettg32(as, gate, poll);' "$root/src/lj_asm_arm64.h" >/dev/null
 grep -F 'emit_gettg32(as, profile, profile_request);' \
   "$root/src/lj_asm_arm64.h" >/dev/null
 grep -A24 '^void LJ_FASTCALL lj_trace_hot' "$root/src/lj_trace.c" | \
-  grep -F '#if LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED' >/dev/null
+  grep -F '#if LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED' >/dev/null
 grep -A10 '^void lj_trace_ins' "$root/src/lj_trace.c" | \
-  grep -F '#if LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED' >/dev/null
-grep -F '#if LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED' \
+  grep -F '#if LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED' >/dev/null
+grep -F '#if LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED' \
   "$root/src/vm_arm64.dasc" >/dev/null
 
 # arm64e/BTI compilation catches pointer-auth target drift without executing

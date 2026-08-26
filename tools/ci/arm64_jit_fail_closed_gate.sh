@@ -40,13 +40,13 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
 
 for artifact in "$luajit" "$archive" "$vm_object"; do
   test "$(lipo -archs "$artifact")" = arm64 || {
-    echo "fail-closed artifact is not thin arm64: $artifact" >&2
+    echo "constrained ARM64 artifact is not thin arm64: $artifact" >&2
     exit 1
   }
 done
 
 if ! nm "$archive" | grep -E ' T _lj_trace_(hot|ins)$' >/dev/null; then
-  echo "fail-closed archive does not contain the JIT recorder" >&2
+  echo "constrained ARM64 archive does not contain the JIT recorder" >&2
   exit 1
 fi
 if ! nm "$root/src/lj_mcode.o" | \
@@ -65,18 +65,31 @@ LJ_TEST_ROOT="$root" sh "$root/tools/ci/jit_hotcount_generation_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/jit_recorder_safepoint_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_ir_admission_contract.sh"
 
+# The native-loop tranche may be landed independently of this umbrella gate.
+# Run its executable proof automatically once the companion contract exists.
+native_loop_contract=$root/tools/ci/arm64_jit_native_loop_contract.sh
+if test -f "$native_loop_contract"; then
+  LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
+    sh "$native_loop_contract"
+fi
+
 env LUA_PATH="$lua_path" "$luajit" -e '
 assert(jit.status() == true, "experimental build did not admit JIT APIs")
 local util = require("jit.util")
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
-local sum = 0
+local function unsupported_forl(n)
+  local sum = 0
+  for i = 1, n do sum = sum + i end
+  return sum
+end
+local expected = 4096 * 4097 / 2
 for round = 1, 128 do
-  for i = 1, 4096 do sum = sum + i end
+  assert(unsupported_forl(4096) == expected)
   collectgarbage("step", 64)
 end
-assert(sum == 128 * 4096 * 4097 / 2)
-assert(util.traceinfo(1) == nil, "fail-closed ARM64 build published trace 1")
+assert(util.traceinfo(1) == nil,
+       "unsupported FORL unexpectedly published trace 1")
 '
 
 LJ_ARM64_SAFEPOINT_SOURCE_ONLY=1 \
@@ -87,4 +100,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" LUA_PATH="$lua_path" \
   "$luajit" "$root/tools/test.lua" \
     m5_arm64_jit_fail_closed_safepoint_runtime
 
-echo "arm64_jit_fail_closed_gate OK: JIT linked, zero traces, interpreter safepoints sound"
+echo "arm64_jit_fail_closed_gate OK: unsupported FORL stayed interpreted; constrained LOOP contracts sound"

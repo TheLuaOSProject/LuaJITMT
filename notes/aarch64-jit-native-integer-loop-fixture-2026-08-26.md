@@ -17,11 +17,11 @@ local function f(n)
 end
 ```
 
-The fixture is not a general ARM64 JIT smoke test. It pins all six granular
-gates to the first-loop policy: root recording and loop entry are open; side
-and stitch recording plus `JFUNCF` and stitch entry remain closed. The older
-recorder-admission and native-entry macros are compatibility summaries and are
-not used as behavioral predicates.
+The fixture is not a general ARM64 JIT smoke test. For an ordinary ARM64
+slice, it pins all six granular gates to the first-loop policy: root recording
+and loop entry are open; side and stitch recording plus `JFUNCF` and stitch
+entry remain closed. The older recorder-admission and native-entry macros are
+compatibility summaries and are not used as behavioral predicates.
 
 ## Runtime proof
 
@@ -68,6 +68,31 @@ code. In the successful `BC_JLOOP` arm, `sub sp, sp, #16` must occur before
 area expected by the native exit path; pointer authentication changes the
 branch instruction, not the ordering requirement.
 
+## Current arm64e boundary
+
+The end-to-end result in this note is for an ordinary `-arch arm64` binary.
+The arm64e/BTI contracts compile the same sources and verify the emitted
+authenticated substrate, but they do not yet execute generated trace code
+successfully. Production now enforces that boundary: when `LJ_ABI_PAUTH` is
+true, both root recording and direct loop entry remain fail-closed. The
+arm64e contract runs the interpreter with JIT enabled and requires that no
+trace is published.
+
+Two native arm64e probes fail before trace publication with
+`EXC_ARM_PAC_FAIL`:
+
+- the assertion build first fails inside `_Unwind_Find_FDE` while
+  `lj_err_register_mcode()` verifies the newly registered JIT unwind table;
+- after removing only that assertion from the diagnostic build, assembly
+  fails at `emit_asmfunc_addr()` when an optimized raw address for
+  `lj_vm_exit_handler` reaches `autiza` as though it were a signed function
+  pointer.
+
+The second failure proves that suppressing the unwind assertion is not a
+solution. A later arm64e tranche must fix direct runtime-symbol materialization
+and then return to JIT unwind registration and exception-through-trace tests
+before this fixture can claim an authenticated end-to-end execution result.
+
 ## Validation performed
 
 The complete contract passed natively on Apple ARM64 against a temporary
@@ -82,4 +107,6 @@ After the production root-helper changes landed in the working integration
 tree, the strengthened fixture was also compiled from this isolated worktree
 against those headers and archive and passed natively. That run includes the
 per-call `cframe`, admission-bit, prototype-geometry, and machine-code
-alignment assertions.
+alignment assertions. The contract also executes a second one-PHI loop and
+requires exactly one final `IR_RENAME`, covering the semantic-plus-one case
+without confusing it with the allocator's spare NOP.

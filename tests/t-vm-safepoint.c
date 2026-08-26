@@ -196,21 +196,24 @@ static void load_error_after_publish(lua_State *L)
   }
 }
 
-#if LJ_HASJIT
+#if LJ_HASJIT && !LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED && \
+    !LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED
 static void load_jloop_flush_after_publish(lua_State *L)
 {
   int status = luaL_loadstring(L,
     "jit.flush()\n"
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
-    "local function f(n, flush)\n"
-    "  if flush then publish_flushj(); assert_pending_flushj() end\n"
-    "  local s = 0\n"
-    "  for i = 1, n do s = s + i end\n"
+    "local function f(n)\n"
+    "  local i, s = 0, 0\n"
+    "  while i < n do i = i + 1; s = s + i end\n"
     "  return s\n"
     "end\n"
-    "f(100, false)\n"
+    "assert(f(100) == 5050)\n"
     "jit.opt.start('hotloop=1000000', 'hotexit=1000000')\n"
-    "return f\n");
+    "return function(n, flush)\n"
+    "  if flush then publish_flushj(); assert_pending_flushj() end\n"
+    "  return f(n)\n"
+    "end\n");
   if (status != LUA_OK) {
     fprintf(stderr, "load_jloop_flush_after_publish failed: %s\n",
 	    lua_tostring(L, -1));
@@ -221,18 +224,17 @@ static void load_jloop_flush_after_publish(lua_State *L)
 static void load_trace_stopreq_loop(lua_State *L)
 {
   int status = luaL_loadstring(L,
-    "-- Pre-activation loop traces intentionally omit XPOLL; activating\n"
-    "-- threading first exercises the remotely-polled trace contract.\n"
+    "-- Activate threading before recording so the root LOOP carries XPOLL.\n"
     "local threading = require('threading')\n"
     "assert(({ threading.spawn(function() return true end):join(5) })[1] == true)\n"
     "jit.flush()\n"
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
     "local function f(n)\n"
-    "  local x = 0.0\n"
-    "  while x < n do x = x + 1.0 end\n"
-    "  return x\n"
+    "  local i = 0\n"
+    "  while i < n do i = i + 1 end\n"
+    "  return i\n"
     "end\n"
-    "assert(f(128.0) == 128.0)\n"
+    "assert(f(128) == 128)\n"
     "jit.opt.start('hotloop=1000000', 'hotexit=1000000')\n"
     "return f\n");
   if (status != LUA_OK) {
@@ -248,11 +250,12 @@ static void load_scoped_flush_root(lua_State *L)
     "jit.flush()\n"
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
     "local function f(n)\n"
-    "  local s = 0\n"
-    "  for i = 1, n do s = s + i end\n"
+    "  local i, s = 0, 0\n"
+    "  while i < n do i = i + 1; s = s + i end\n"
     "  return s\n"
     "end\n"
-    "for _ = 1, 20 do assert(f(80) == 3240) end\n"
+    "assert(f(80) == 3240)\n"
+    "assert(f(80) == 3240)\n"
     "jit.opt.start('hotloop=1000000', 'hotexit=1000000')\n"
     "return f\n");
   if (status != LUA_OK) {
@@ -262,14 +265,16 @@ static void load_scoped_flush_root(lua_State *L)
   }
 }
 
+#if !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED
 static void load_scoped_flush_side(lua_State *L)
 {
   int status = luaL_loadstring(L,
     "jit.flush()\n"
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
     "local function f(n, flag)\n"
-    "  local s = 0\n"
-    "  for i = 1, n do\n"
+    "  local i, s = 0, 0\n"
+    "  while i < n do\n"
+    "    i = i + 1\n"
     "    if flag and i == 10 then s = s + 1000 else s = s + i end\n"
     "  end\n"
     "  return s\n"
@@ -285,7 +290,9 @@ static void load_scoped_flush_side(lua_State *L)
     assert(status == LUA_OK);
   }
 }
+#endif
 
+#if !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED
 static void load_funcf_hotcall_after_publish(lua_State *L)
 {
   int status = luaL_loadstring(L,
@@ -304,7 +311,11 @@ static void load_funcf_hotcall_after_publish(lua_State *L)
     assert(status == LUA_OK);
   }
 }
+#endif
 
+#if !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED && \
+    !LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED && \
+    !LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED
 static void load_recorder_call_unroll_flush(lua_State *L)
 {
   int status = luaL_loadstring(L,
@@ -335,7 +346,9 @@ static void load_recorder_call_unroll_flush(lua_State *L)
     assert(status == LUA_OK);
   }
 }
+#endif
 
+#if !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED
 static uint32_t count_traces_with_root(jit_State *J, TraceNo root)
 {
   TraceNo i;
@@ -358,6 +371,7 @@ static TraceNo first_trace_with_root(jit_State *J, TraceNo root)
   }
   return 0;
 }
+#endif
 
 static uint32_t count_scope_flushing_traces(jit_State *J)
 {
@@ -412,7 +426,9 @@ static void assert_acked(global_State *g, TGState *tg, uint64_t epoch0)
   assert(tg->reqmask == 0);
 }
 
-#if LJ_HASJIT
+#if LJ_HASJIT && !LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED && \
+    !LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED && \
+    !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED
 static void assert_acked_at_least(global_State *g, TGState *tg,
 				  uint64_t epoch0)
 {
@@ -493,6 +509,9 @@ static int assert_pending_flushj_c(lua_State *L)
   return 0;
 }
 
+#if !LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED && \
+    !LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED && \
+    !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED
 static void call_jit_flush_trace(lua_State *L, TraceNo traceno)
 {
   int status;
@@ -509,6 +528,7 @@ static void call_jit_flush_trace(lua_State *L, TraceNo traceno)
   }
 }
 #endif
+#endif
 
 int main(void)
 {
@@ -516,7 +536,8 @@ int main(void)
   global_State *g;
   TGState *tg;
   uint64_t epoch0;
-#if LJ_HASJIT
+#if LJ_HASJIT && !LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED && \
+    !LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED
   uint64_t scoped_slots0;
 #endif
   uint32_t actions;
@@ -660,25 +681,23 @@ int main(void)
 		  ~(TGF_STOPREQ|TGF_STOPREQ_FRESH)));
   }
 
-#if LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED
-  /* This stage deliberately stops in lj_trace_hot(). The interpreter half of
-  ** this fixture is still the exact runtime safepoint proof required by the
-  ** scaffolding checkpoint. */
+#if LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED
+  /* A root-closed target still runs the complete interpreter safepoint half. */
   assert(G2J(g)->cur.traceno == 0);
   assert(G2J(g)->freetrace == 0);
   lua_close(L);
-  puts("t-vm-safepoint: ARM64 recorder-admission fail-closed path OK");
+  puts("t-vm-safepoint: root-recorder-closed interpreter path OK");
   return 0;
-#elif LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED
-  /* A future middle stage may open recording while native entry remains
-  ** closed. Do not impose zero-trace assertions, but do not enter the native
-  ** trace/exit half of this fixture until generated execution is admitted. */
+#elif LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED
+  /* Root recording may be open independently. Do not enter the native LOOP
+  ** trace/exit half until its own topology gate is open. */
   lua_close(L);
-  puts("t-vm-safepoint: ARM64 native-entry fail-closed path OK");
+  puts("t-vm-safepoint: LOOP-native-entry-closed interpreter path OK");
   return 0;
 #endif
 
-#if LJ_HASJIT
+#if LJ_HASJIT && !LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED && \
+    !LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED
   load_jloop_flush_after_publish(L);
   assert(lua_pcall(L, 0, 1, 0) == LUA_OK);
   assert(lua_isfunction(L, -1));
@@ -729,8 +748,10 @@ int main(void)
   assert(g->gc2.hs_epoch == epoch0);
   assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
   assert(gc2_jit_scoped_slots_retired_acq(g) == scoped_slots0);
+  assert(count_scope_flushing_traces(G2J(g)) == 0);
   lua_pop(L, 1);
 
+#if !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED
   load_scoped_flush_side(L);
   assert(lua_pcall(L, 0, 1, 0) == LUA_OK);
   assert(lua_isfunction(L, -1));
@@ -813,7 +834,9 @@ int main(void)
   assert(gc2_jit_scoped_slots_retired_acq(g) >
 	 scoped_slots0 + 1u);
   lua_pop(L, 1);
+#endif
 
+#if !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED
   assert(luaL_dostring(L, "jit.flush()") == LUA_OK);
   epoch0 = g->gc2.hs_epoch;
   scoped_slots0 = gc2_jit_scoped_slots_retired_acq(g);
@@ -827,7 +850,11 @@ int main(void)
   ** consumed and no poll/request residue remains.
   */
   assert_acked_at_least(g, tg, epoch0);
+#endif
 
+#if !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED && \
+    !LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED && \
+    !LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED
   load_recorder_call_unroll_flush(L);
   scoped_slots0 = gc2_jit_scoped_slots_retired_acq(g);
   assert(lua_pcall(L, 0, 1, 0) == LUA_OK);
@@ -844,6 +871,7 @@ int main(void)
   assert(tg->reqmask == 0);
   assert(gc2_jit_scoped_slots_retired_acq(g) == scoped_slots0);
   assert(count_scope_flushing_traces(G2J(g)) == 0);
+#endif
 
   load_trace_stopreq_loop(L);
   assert(lua_pcall(L, 0, 1, 0) == LUA_OK);
@@ -858,7 +886,7 @@ int main(void)
     pub.start = 0;
     assert(pthread_create(&th, NULL, stopreq_poll_publisher, &pub) == 0);
     epoch0 = g->gc2.hs_epoch;
-    lua_pushnumber(L, 1e100);
+    lua_pushinteger(L, 1000000000);
     la_store32_rel(&pub.start, 1);
     status = lua_pcall(L, 1, 1, 0);
     assert(pthread_join(th, NULL) == 0);

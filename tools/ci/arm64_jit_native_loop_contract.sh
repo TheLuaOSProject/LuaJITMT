@@ -112,6 +112,39 @@ done
   -o "$fixture"
 "$fixture"
 
+# A one-PHI loop produces exactly one allocator RENAME. This is distinct from
+# both the exact two-RENAME C fixture and the spare-NOP suffix: semantic+1 must
+# fall through to RENAME validation when that sole instruction is not a NOP.
+env LUA_PATH="$root/src/?.lua;$root/src/jit/?.lua;;" "$root/src/luajit" -e '
+  local util = require("jit.util")
+  local vmdef = require("jit.vmdef")
+  local function opname(ot)
+    local op = math.floor(ot / 256)
+    return vmdef.irnames:sub(op * 6 + 1, op * 6 + 6)
+  end
+  jit.flush(); jit.on()
+  jit.opt.start("hotloop=1", "hotexit=1", "maxtrace=2")
+  function __arm64_one_rename(n)
+    local i = 0
+    while i < n do i = i + 1 end
+    return i
+  end
+  assert(__arm64_one_rename(20) == 20)
+  assert(__arm64_one_rename(20) == 20)
+  assert(__arm64_one_rename(20) == 20)
+  assert(__arm64_one_rename(20) == 20)
+  assert(__arm64_one_rename(20) == 20)
+  assert(util.traceinfo(1), "one-RENAME loop did not record")
+  assert(util.traceinfo(2) == nil, "one-RENAME loop published a side trace")
+  local renames = 0
+  for ref = 1, 256 do
+    local _, ot = util.traceir(1, ref)
+    if not ot then break end
+    if opname(ot) == "RENAME" then renames = renames + 1 end
+  end
+  assert(renames == 1, "expected exactly one allocator RENAME")
+'
+
 # The successful JLOOP path must reserve the fixed interpreter spill area
 # before the authenticated trace branch. The generated ordinary-arm64 VM uses
 # BR here; br_trace_auth becomes BRAA with the same ordering on arm64e.

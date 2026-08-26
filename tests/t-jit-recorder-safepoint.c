@@ -48,8 +48,8 @@ static void reset_jit(lua_State *L)
 static int run_hot_loop(lua_State *L)
 {
   int status = luaL_loadstring(L,
-    "local s = 0\n"
-    "for i = 1, 128 do s = s + i end\n"
+    "local s, i = 0, 0\n"
+    "while i < 128 do i = i + 1; s = s + i end\n"
     "return s\n");
   assert(status == LUA_OK);
   status = lua_pcall(L, 0, 1, 0);
@@ -60,12 +60,12 @@ static int run_hot_loop(lua_State *L)
   return status;
 }
 
-#if !LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED
+#if !LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED
 static int run_hot_loop_with_errno(lua_State *L, int errnum)
 {
   int status = luaL_loadstring(L,
-    "local s = 0\n"
-    "for i = 1, 128 do s = s + i end\n"
+    "local s, i = 0, 0\n"
+    "while i < 128 do i = i + 1; s = s + i end\n"
     "return s\n");
   assert(status == LUA_OK);
   errno = errnum;
@@ -88,7 +88,8 @@ static void assert_owner_clean(lua_State *L)
   assert(J->cur.traceno == 0);
 }
 
-#if !LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED
+#if !LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED && \
+    !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED
 typedef struct SideHandshakePublisher {
   global_State *g;
   uint32_t wait_for_observer;
@@ -114,14 +115,17 @@ static void prepare_side_root(lua_State *L)
   ljt_lua_dostring(L,
     "local util = require'jit.util'\n"
     "function lj_m6_admission_side(flag, n)\n"
-    "  local s = 0\n"
-    "  for i = 1, n do\n"
+    "  local s, i = 0, 1\n"
+    "  while i <= n do\n"
     "    if flag then s = s + i * 3 else s = s + i end\n"
+    "    i = i + 1\n"
     "  end\n"
     "  return s\n"
     "end\n"
-    "for r = 1, 32 do\n"
+    "local r = 1\n"
+    "while r <= 32 do\n"
     "  assert(lj_m6_admission_side(false, 80) == 3240)\n"
+    "  r = r + 1\n"
     "end\n"
     "assert(util.traceinfo(1), 'expected side-admission parent trace')\n");
   assert_owner_clean(L);
@@ -222,7 +226,7 @@ static void test_profile_entry_and_hotcall(lua_State *L)
 }
 #endif
 
-#if !LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED
+#if !LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED
 static void test_late_after_token(lua_State *L)
 {
   global_State *g = G(L);
@@ -275,7 +279,7 @@ static void test_late_after_root_token_stopreq(lua_State *L)
   clear_stopreq(tg);
 }
 
-#if LJ_PROFILE_TGLOCAL
+#if !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED && LJ_PROFILE_TGLOCAL
 static void test_profile_side_pre_admission(lua_State *L)
 {
   global_State *g = G(L);
@@ -303,6 +307,7 @@ static void test_profile_side_pre_admission(lua_State *L)
 }
 #endif
 
+#if !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED
 static void test_real_counted_before_poll_side_admission(lua_State *L,
 						 uint32_t stage,
 						 uint32_t gate_blocks,
@@ -364,6 +369,7 @@ static void test_real_counted_before_poll_side_admission(lua_State *L,
   assert(lj_tg_poll_acq(tg) == 0);
   lj_safepoint_test_signal_pause_reset();
 }
+#endif
 
 static void test_protected_trace_state_stopreq(lua_State *L)
 {
@@ -416,9 +422,10 @@ int main(void)
 #if LJ_PROFILE_TGLOCAL
   test_profile_entry_and_hotcall(L);
 #endif
-#if !LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED
+#if !LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED
   test_late_after_token(L);
   test_late_after_root_token_stopreq(L);
+#if !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED
 #if LJ_PROFILE_TGLOCAL
   test_profile_side_pre_admission(L);
 #endif
@@ -426,14 +433,15 @@ int main(void)
     L, LJ_TRACE_TEST_ADMISSION_SIDE_ENTRY, 1, 0);
   test_real_counted_before_poll_side_admission(
     L, LJ_TRACE_TEST_ADMISSION_SIDE_AFTER_TOKEN, 0, 1);
+#endif
   test_protected_trace_state_stopreq(L);
 #else
-  /* The experimental ARM64 build services pre-admission work, then remains
-  ** strictly closed before token ownership or protected recorder entry. */
+  /* A root-closed target services pre-admission work without publishing a
+  ** trace or entering protected recorder state. */
   assert(G2J(G(L))->freetrace == 0);
 #endif
 
   lua_close(L);
-  puts("t-jit-recorder-safepoint OK: recorder admission polls and cleanup verified");
+  puts("t-jit-recorder-safepoint OK: gated root/side admission and cleanup verified");
   return 0;
 }

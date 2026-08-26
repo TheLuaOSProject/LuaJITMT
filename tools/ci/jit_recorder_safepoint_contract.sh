@@ -8,6 +8,7 @@ trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 trace_hot=$tmpdir/trace-hot.c
 trace_state=$tmpdir/trace-state.c
 trace_side=$tmpdir/trace-side.c
+trace_stitch=$tmpdir/trace-stitch.c
 trace_exit=$tmpdir/trace-exit.c
 trace_ins=$tmpdir/trace-ins.c
 hotcall=$tmpdir/hotcall.c
@@ -20,6 +21,8 @@ sed -n '/static TValue \*trace_state/,/void lj_trace_abort_owner/p' \
   "$root/src/lj_trace.c" >"$trace_state"
 sed -n '/static void trace_hotside/,/uint32_t LJ_FASTCALL lj_trace_stitch_probe/p' \
   "$root/src/lj_trace.c" >"$trace_side"
+sed -n '/void LJ_FASTCALL lj_trace_stitch(/,/Tiny struct to pass data/p' \
+  "$root/src/lj_trace.c" >"$trace_stitch"
 sed -n '/\/\* A trace exited/,/\/\* --/p' \
   "$root/src/lj_trace.c" >"$trace_exit"
 sed -n '/void lj_trace_ins/,/static int trace_hot_root_start_valid/p' \
@@ -37,6 +40,25 @@ line_of() {
   occurrence=${3:-1}
   grep -n -F "$pattern" "$file" | sed -n "${occurrence}s/:.*//p"
 }
+
+if grep -F 'LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED' \
+     "$root/src/lj_trace.c" "$root/tests/t-jit-recorder-safepoint.c" \
+     >/dev/null; then
+  echo "recorder safepoint coverage still uses the aggregate recorder gate" >&2
+  exit 1
+fi
+for gate_region in \
+  "LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED:$trace_hot" \
+  "LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED:$trace_ins" \
+  "LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED:$trace_side" \
+  "LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED:$trace_stitch"; do
+  gate=${gate_region%%:*}
+  region=${gate_region#*:}
+  grep -F "#if $gate" "$region" >/dev/null || {
+    echo "recorder safepoint contract lost granular gate $gate" >&2
+    exit 1
+  }
+done
 
 entry_ack=$(line_of "$trace_hot" 'lj_safepoint_ack_check(L)' 1)
 # Match both the current global setter and the generation-aware owner-local
@@ -81,6 +103,7 @@ test "$side_outer_inject" -lt "$side_outer_pending"
 test "$side_outer_pending" -lt "$side_outer_rearm"
 test "$side_outer_rearm" -lt "$side_call"
 
+arm_side_gate=$(line_of "$trace_side" '#if LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED' 1)
 arm_side_return=$(line_of "$trace_side" 'return;' 1)
 side_smr_try=$(line_of "$trace_side" '!lj_gc2_smr_read_try(g)' 1)
 inner_pending=$(line_of "$trace_side" 'lj_safepoint_owner_poll_pending(L)' 1)
@@ -92,7 +115,7 @@ late_smr_leave=$(line_of "$trace_side" 'lj_gc2_smr_read_leave(g)' 2)
 late_rearm=$(line_of "$trace_side" 'lj_safepoint_owner_rearm_counted_poll(L)' 2)
 side_stream_recheck=$(line_of "$trace_side" 'lj_jit_trace_stream_idle(g)' 2)
 second_snap_cas=$(line_of "$trace_side" 'snap_count_cas_acqrel(' 2)
-for value in "$arm_side_return" "$side_smr_try" "$inner_pending" \
+for value in "$arm_side_gate" "$arm_side_return" "$side_smr_try" "$inner_pending" \
              "$first_snap_cas" "$side_token" "$late_pending" \
              "$late_release" "$late_smr_leave" "$late_rearm" \
              "$side_stream_recheck" "$second_snap_cas"; do
@@ -101,6 +124,7 @@ for value in "$arm_side_return" "$side_smr_try" "$inner_pending" \
     exit 1
   }
 done
+test "$arm_side_gate" -lt "$arm_side_return"
 test "$arm_side_return" -lt "$side_smr_try"
 test "$inner_pending" -lt "$first_snap_cas"
 test "$side_token" -lt "$late_pending"
@@ -113,6 +137,12 @@ if grep -F 'lj_safepoint_ack_check(L)' "$trace_side" >/dev/null; then
   echo "trace_hotside acknowledges while jit_base is still published" >&2
   exit 1
 fi
+
+stitch_gate=$(line_of "$trace_stitch" '#if LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED' 1)
+stitch_abort=$(line_of "$trace_stitch" 'lj_trace_abort_owner(L)' 1)
+stitch_return=$(line_of "$trace_stitch" 'return;' 1)
+test -n "$stitch_gate" && test -n "$stitch_abort" && test -n "$stitch_return"
+test "$stitch_gate" -lt "$stitch_abort" && test "$stitch_abort" -lt "$stitch_return"
 
 error_save=$(line_of "$trace_ins" 'lj_oserr_save(&oserr)' 1)
 error_cleanup=$(line_of "$trace_ins" 'lj_trace_abort_owner(L)' 1)
@@ -178,4 +208,4 @@ for vm in vm_x64.dasc vm_arm64.dasc; do
   test -n "$clear" && test -n "$ack" && test "$clear" -lt "$ack"
 done
 
-echo "jit_recorder_safepoint_contract OK: root/side admission and protected cleanup ordered"
+echo "jit_recorder_safepoint_contract OK: granular root/side/stitch gates and cleanup ordered"

@@ -2207,7 +2207,7 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |->cont_stitch:			// Trace stitching.
   |.if JIT
-#if LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED
+#if LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED
   |  // No native trace can create this continuation in the scaffolding build.
   |  bti_jump
   |  b ->cont_nop
@@ -2417,7 +2417,11 @@ static void build_subroutines(BuildCtx *ctx)
   |5:  // Recover the original instruction without dereferencing a stale slot.
   |1:
   |  str BASE, L->base
-  |  ldr INSw, [PC, #-4]
+  |  sub ATMP, PC, #4
+  |  ldar INSw, [ATMP]
+  |  and TMP0w, INSw, #255
+  |  cmp TMP0w, #BC_JLOOP
+  |  bne >6
   |  add CARG1, GL, #GG_G2J_HI
   |  add CARG1, CARG1, #GG_G2J_LO
   |  sub CARG2, PC, #4
@@ -2429,6 +2433,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  beq <1
   |  cbz CRET1w, ->cont_nop
   |  mov INSw, CRET1w
+  |6:  // A concurrent non-JLOOP replacement executes at this restored PC.
   |  add TMP0, GL, INS, uxtb #3
   |   decode_RA RA, INS
   |  ldr RB, [TMP0, #GG_G2DISP+GG_DISP2STATIC]
@@ -4286,13 +4291,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ldr BASE, L->base
     |  cbz CRET1, >1
     |  cbz CARG2, >1
-#if LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED
+#if LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED
     |  // Successful native entry is deliberately unreachable in this tranche.
     |  // Still clear a synthetic helper lease before taking the rejection path.
     |  clear_tg_jit_base
     |  b >1
-    |  br_trace_auth CARG2, CRET1	// Future BRAA target, GCtrace modifier.
 #else
+    |  sub sp, sp, #16	// SPS_FIXED: protect the interpreter C frame.
     |  br_trace_auth CARG2, CRET1
 #endif
     |
@@ -4423,10 +4428,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  ldr BASE, L->base
       |  cbz CRET1, >4
       |  cbz CARG2, >4
-#if LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED
+#if LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED
       |  clear_tg_jit_base
       |  b >4
-      |  br_trace_auth CARG2, CRET1	// Future BRAA target, GCtrace modifier.
 #else
       |  br_trace_auth CARG2, CRET1
 #endif

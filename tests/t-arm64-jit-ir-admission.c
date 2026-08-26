@@ -25,9 +25,13 @@
 #include "lj_asm.h"
 #include "lj_vm.h"
 
-#if !LJ_HASJIT || !LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED || \
-    !LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED
-#error "t-arm64-jit-ir-admission requires fail-closed experimental ARM64 JIT"
+#if !LJ_HASJIT || LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED || \
+    LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED || \
+    !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED || \
+    !LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED || \
+    !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
+    !LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED
+#error "t-arm64-jit-ir-admission requires the initial integer-loop gate split"
 #endif
 
 enum {

@@ -282,14 +282,14 @@ static int arm64_ir_snapshots(const GCtrace *T, IRRef loopref,
   return 1;
 }
 
-static int arm64_ir_phi_marks(const GCtrace *T, IRRef firstphi,
+static int arm64_ir_phi_marks(const GCtrace *T, IRRef firstphi, IRRef end,
 	LJArm64IRReject *reject)
 {
   IRRef ref, phiref;
-  IRRef limit = firstphi ? firstphi : T->nins;
+  IRRef limit = firstphi ? firstphi : end;
   for (ref = REF_FIRST; ref < limit; ref++) {
     int operand = 0;
-    for (phiref = firstphi; phiref && phiref < T->nins; phiref++) {
+    for (phiref = firstphi; phiref && phiref < end; phiref++) {
       const IRIns *phi = &T->ir[phiref];
       if (phi->o != IR_PHI)
 	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE, phiref,
@@ -354,11 +354,12 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE, REF_BASE,
 			   IR_LOOP, (uint16_t)startop);
   startpt = trace_startptgco_acq((GCtrace *)T);
-  if (startpt == NULL || !checkptrGC(startpt) ||
+  if (J->pt == NULL || startpt != obj2gco(J->pt) ||
+      !checkptrGC(startpt) ||
 	startpt->gch.gct != (uint32_t)~LJ_TPROTO)
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE, REF_BASE,
 			   IR_SLOAD, 0);
-  pt = gco2pt(startpt);
+  pt = J->pt;
   root_topslot = pt->framesize;
   if (root_topslot == 0 || J->pt != pt ||
 	J->baseslot != 1 + LJ_FR2 || J->framedepth != 0 || J->retdepth != 0)
@@ -475,7 +476,7 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_XPOLL,
 			   xpollref ? xpollref : loopref, IR_XPOLL,
 			   (uint16_t)((nloop << 8) | nxpoll));
-  if (!arm64_ir_phi_marks(T, firstphi, reject))
+  if (!arm64_ir_phi_marks(T, firstphi, T->nins, reject))
     return 0;
   if (!arm64_ir_snapshots(T, loopref, xpollref, root_topslot, J,
 			  proto_lo, proto_hi, reject))
@@ -3167,6 +3168,9 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
 {
   ASMState as_;
   ASMState *as = &as_;
+#if LJ_TARGET_ARM64
+  IRRef arm64_semantic_nins;
+#endif
 
   /* Remove nops/renames left over from ASM restart due to LJ_TRERR_MCODELM. */
   {
@@ -3189,6 +3193,7 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
       lj_trace_err_info(J, LJ_TRERR_NYIIR);
     }
   }
+  arm64_semantic_nins = T->nins;
 #endif
 
   /* Ensure an initialized instruction beyond the last one for HIOP checks. */
@@ -3337,6 +3342,71 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
   RA_DBG_FLUSH();
   if (as->freeset != RSET_ALL)
     lj_trace_err(as->J, LJ_TRERR_BADRA);  /* Ouch! Should never happen. */
+
+#if LJ_TARGET_ARM64
+  {
+    GCtrace finalview = *T;
+    LJArm64IRReject reject;
+    IRIns *finalir = J->curfinal->ir;
+    IRRef ref;
+    IRRef finalnins = T->nins;
+    int suffix_ok = 0;
+
+    /* Re-run the complete semantic policy against the register-allocated
+    ** compact IR. Header and snapshot authority still comes from the current
+    ** recorder trace; RENAME/NOP capacity lies beyond this semantic view. */
+    finalview.ir = finalir;
+    finalview.nins = arm64_semantic_nins;
+    if (LJ_UNLIKELY(!lj_asm_arm64_ir_admit(J, &finalview, &reject))) {
+      setintV(&J->errinfo, (int32_t)reject.op);
+      lj_trace_err_info(J, LJ_TRERR_NYIIR);
+    }
+
+    /* The first executable surface intentionally excludes actual value
+    ** spills, even though the fixed 16-byte VM reserve can hold slots 0..3.
+    ** Inspect final RegSP metadata rather than treating allocator cursors as
+    ** the architectural stack contract. */
+    if (T->spadjust != 0 || as->evenspill != SPS_FIRST || as->oddspill != 0) {
+      setintV(&J->errinfo, (int32_t)IR_RENAME);
+      lj_trace_err_info(J, LJ_TRERR_NYIIR);
+    }
+    for (ref = REF_BASE; ref < arm64_semantic_nins; ref++) {
+      IRIns ir = ir_load_acq(&finalir[ref]);
+      if (ra_hasspill(ir.s)) {
+        setintV(&J->errinfo, (int32_t)ir.o);
+        lj_trace_err_info(J, LJ_TRERR_NYIIR);
+      }
+    }
+
+    /* A no-rename assembly retains the one exact spare NOP. Otherwise every
+    ** post-semantic instruction must be a bounded, register-only RENAME. */
+    if (finalnins == arm64_semantic_nins + 1u) {
+      IRIns ir = ir_load_acq(&finalir[arm64_semantic_nins]);
+      suffix_ok = ir.o == IR_NOP && ir.t.irt == IRT_NIL &&
+		  ir.op1 == 0 && ir.op2 == 0 && ir.prev == 0;
+    }
+    if (!suffix_ok && finalnins > arm64_semantic_nins &&
+	finalnins - arm64_semantic_nins <= LJ_MAX_PHI) {
+      suffix_ok = 1;
+      for (ref = arm64_semantic_nins; ref < finalnins; ref++) {
+	IRIns ir = ir_load_acq(&finalir[ref]);
+	if (ir.o != IR_RENAME || ir.t.irt != IRT_NIL ||
+	    ir.op1 < REF_FIRST || ir.op1 >= arm64_semantic_nins ||
+	    !arm64_ir_int_ref(&finalview, ir.op1, arm64_semantic_nins) ||
+	    ir.op2 >= T->nsnap || !rset_test(RSET_GPR, ir.r) ||
+	    ra_hasspill(ir.s)) {
+	  setintV(&J->errinfo, (int32_t)ir.o);
+	  lj_trace_err_info(J, LJ_TRERR_NYIIR);
+	}
+      }
+    }
+    if (LJ_UNLIKELY(!suffix_ok)) {
+      setintV(&J->errinfo, (int32_t)IR_RENAME);
+      lj_trace_err_info(J, LJ_TRERR_NYIIR);
+    }
+    T->unused1 |= TRACE_ARM64_INT_LOOP_ADMITTED;
+  }
+#endif
 
   /* Set trace entry point before fixing up tail to allow link to self. */
   T->mcode = as->mcp;

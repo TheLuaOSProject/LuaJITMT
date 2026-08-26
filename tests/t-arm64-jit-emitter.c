@@ -1,10 +1,9 @@
 /*
 ** Focused ARM64 TG-local JIT emitter word contract.
 **
-** The real emitter remains unreachable from recording while
-** recorder admission is fail-closed. This fixture invokes test-only wrappers,
-** checks every emitted word and writes those exact words for Mach-O
-** disassembly by the companion CI gate.
+** This fixture invokes test-only wrappers independently of the admitted root
+** LOOP recorder surface, checks every emitted word and writes those exact
+** words for Mach-O disassembly by the companion CI gate.
 */
 
 #include <assert.h>
@@ -27,8 +26,10 @@
 #include "lj_jit.h"
 #include "lj_asm.h"
 
-#if !LJ_HASJIT || !LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED
-#error "t-arm64-jit-emitter requires fail-closed ARM64 recorder admission"
+#if !LJ_HASJIT || LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED || \
+    !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED || \
+    !LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED
+#error "t-arm64-jit-emitter requires root-open, side/stitch-closed recording"
 #endif
 
 #define ENC_ADDx_IMM(rd, rn, imm) \

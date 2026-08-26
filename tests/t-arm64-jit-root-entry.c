@@ -1,7 +1,7 @@
 /*
-** Direct C contract for the fail-closed ARM64 root-entry helper and VM replay.
-** A test-only validated metadata view reaches the final rejection window, but
-** no generated native target is constructed or executed here.
+** Direct C contract for the strict ARM64 root-entry helper and VM replay.
+** A real-prototype-backed synthetic trace reaches direct helper success, but
+** its inert machine-code target is never executed here.
 */
 
 #include <assert.h>
@@ -32,9 +32,13 @@
 #include "lj_tg.h"
 #include "lj_trace.h"
 
-#if !LJ_HASJIT || !LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED || \
-    !LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED
-#error "t-arm64-jit-root-entry requires fail-closed experimental ARM64 JIT"
+#if !LJ_HASJIT || LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED || \
+    !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED || \
+    !LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED || \
+    LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED || \
+    !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
+    !LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED
+#error "t-arm64-jit-root-entry requires the granular integer-loop gate split"
 #endif
 
 typedef enum RootEntryRaceMode {
@@ -79,8 +83,15 @@ typedef struct RootEntryMetadataFixture {
   TraceVec *saved_tracev;
   MSize saved_sizetrace;
   RootEntryTraceVec2 tracev;
-  MCode mcode[1];
+  IRIns ir[2];
+  SnapShot snap[1];
+  SnapEntry snapmap[2];
+  MCode mcode[4];
 } RootEntryMetadataFixture;
+
+typedef struct RootEntryFrameFixture {
+  TValue saved_func;
+} RootEntryFrameFixture;
 
 static void run_lua(lua_State *L, const char *chunk)
 {
@@ -91,17 +102,20 @@ static void run_lua(lua_State *L, const char *chunk)
   }
 }
 
-static GCproto *global_proto(lua_State *L, const char *name)
+static GCfunc *global_lfunc(lua_State *L, const char *name)
 {
   GCfunc *fn;
-  GCproto *pt;
   lua_getglobal(L, name);
   assert(lua_isfunction(L, -1));
   fn = funcV(L->top - 1);
   assert(isluafunc(fn));
-  pt = funcproto(fn);
   lua_pop(L, 1);
-  return pt;
+  return fn;
+}
+
+static GCproto *global_proto(lua_State *L, const char *name)
+{
+  return funcproto(global_lfunc(L, name));
 }
 
 static RootEntryPatch patch_first_root(lua_State *L, const char *name,
@@ -157,7 +171,23 @@ static void restore_numeric_patch(RootEntryNumericPatch *patch)
   restore_root_patch(&patch->forl);
 }
 
-static void install_root_entry_metadata(jit_State *J, const BCIns *pc,
+static void install_root_entry_frame(lua_State *L, GCfunc *fn,
+				     RootEntryFrameFixture *fixture)
+{
+  assert(fn != NULL && isluafunc(fn));
+  copyTV(L, &fixture->saved_func, L->base-2);
+  setfuncV(L, L->base-2, fn);
+  assert(curr_func(L) == fn);
+}
+
+static void remove_root_entry_frame(lua_State *L,
+				    const RootEntryFrameFixture *fixture)
+{
+  copyTV(L, L->base-2, &fixture->saved_func);
+}
+
+static void install_root_entry_metadata(jit_State *J, GCproto *pt,
+					const RootEntryPatch *loop,
 					RootEntryMetadataFixture *fixture)
 {
   memset(fixture, 0, sizeof(*fixture));
@@ -171,11 +201,30 @@ static void install_root_entry_metadata(jit_State *J, const BCIns *pc,
   J->cur.gct = (uint32_t)~LJ_TTRACE;
   trace_traceno_rel(&J->cur, 1);
   J->cur.root = 0;
-  setmref(J->cur.startpc, pc);
-  J->cur.startins = BCINS_AD(BC_LOOP, 0, 0);
-  fixture->mcode[0] = 0xd503201fu;  /* Unreachable AArch64 NOP. */
+  trace_link_rel(&J->cur, 1);
+  J->cur.linktype = LJ_TRLINK_LOOP;
+  trace_nextside_rel(&J->cur, 0);
+  J->cur.nchild = 0;
+  J->cur.spadjust = 0;
+  J->cur.topslot = pt->framesize;
+  trace_startpt_rel(&J->cur, pt);
+  setmref(J->cur.startpc, loop->pc);
+  J->cur.startins = loop->original;
+  J->cur.ir = fixture->ir;
+  J->cur.nins = REF_FIRST+1;
+  J->cur.nk = REF_TRUE;
+  J->cur.snap = fixture->snap;
+  J->cur.snapmap = fixture->snapmap;
+  J->cur.nsnap = 1;
+  J->cur.nsnapmap = 2;
+  J->cur.unused1 = TRACE_ARM64_INT_LOOP_ADMITTED;
+  fixture->mcode[0] = 0xd503201fu;  /* Unreachable AArch64 NOPs. */
+  fixture->mcode[1] = 0xd503201fu;
+  fixture->mcode[2] = 0xd503201fu;
+  fixture->mcode[3] = 0xd503201fu;
   J->cur.szmcode = (MSize)sizeof(fixture->mcode);
   J->cur.mcode = fixture->mcode;
+  J->cur.mcloop = (MSize)sizeof(MCode);
 #if LJ_ABI_PAUTH
   J->cur.mcauth = lj_ptr_sign((ASMFunction)(void *)fixture->mcode, &J->cur);
 #endif
@@ -227,6 +276,111 @@ static void expect_reject(LJTraceRootEntry entry)
 {
   assert(entry.trace == NULL);
   assert(entry.target == NULL);
+}
+
+static void expect_metadata_reject(lua_State *L, const BCIns *pc)
+{
+  uint32_t publishes = lj_trace_test_root_entry_publishes();
+  uint32_t cleanups = lj_trace_test_root_entry_cleanups();
+  expect_reject(lj_trace_enter_root(L2J(L), pc, 1, L, L->base, BC_JLOOP));
+  assert(lj_tg_load_jit_base(L->tg_hint) == NULL);
+  assert(lj_trace_test_root_entry_publishes() == publishes + 1u);
+  assert(lj_trace_test_root_entry_cleanups() == cleanups + 1u);
+}
+
+static void expect_metadata_success(lua_State *L, const BCIns *pc,
+				    RootEntryMetadataFixture *fixture)
+{
+  lua_State *saved_tmpbuf_L = sbufL(&L->tg_hint->tmpbuf);
+  uint32_t publishes = lj_trace_test_root_entry_publishes();
+  uint32_t cleanups = lj_trace_test_root_entry_cleanups();
+  LJTraceRootEntry entry = lj_trace_enter_root(
+    L2J(L), pc, 1, L, L->base, BC_JLOOP);
+  assert(entry.trace == &L2J(L)->cur);
+  assert(entry.target != NULL);
+  assert((uintptr_t)lj_ptr_strip(entry.target) ==
+	 (uintptr_t)(void *)fixture->mcode);
+  assert(lj_tg_load_jit_base(L->tg_hint) == L->base);
+  assert(lj_trace_test_root_entry_publishes() == publishes + 1u);
+  assert(lj_trace_test_root_entry_cleanups() == cleanups);
+  /* Direct C validation must not execute the inert target. Release its exact
+  ** synthetic entry intent just as a native exit would. */
+  lj_tg_store_jit_base(L->tg_hint, NULL);
+  setsbufL(&L->tg_hint->tmpbuf, saved_tmpbuf_L);
+}
+
+static void test_metadata_mutation_rejections(lua_State *L, GCproto *pt,
+					      RootEntryPatch *loop)
+{
+  jit_State *J = L2J(L);
+  GCtrace *T = &J->cur;
+  IRIns *ir = T->ir;
+  SnapShot *snap = T->snap;
+  BCIns current = (BCIns)la_load32_acq((const uint32_t *)loop->pc);
+
+  trace_link_rel(T, 2);
+  expect_metadata_reject(L, loop->pc);
+  trace_link_rel(T, 1);
+
+  trace_traceno_rel(T, 2);
+  expect_metadata_reject(L, loop->pc);
+  trace_traceno_rel(T, 1);
+
+  T->root = 1;
+  expect_metadata_reject(L, loop->pc);
+  T->root = 0;
+
+  T->linktype = LJ_TRLINK_ROOT;
+  expect_metadata_reject(L, loop->pc);
+  T->linktype = LJ_TRLINK_LOOP;
+
+  T->nchild = 1;
+  expect_metadata_reject(L, loop->pc);
+  T->nchild = 0;
+
+  trace_nextside_rel(T, 1);
+  expect_metadata_reject(L, loop->pc);
+  trace_nextside_rel(T, 0);
+
+  T->spadjust = 16;
+  expect_metadata_reject(L, loop->pc);
+  T->spadjust = 0;
+
+  T->mcloop = 0;
+  expect_metadata_reject(L, loop->pc);
+  T->mcloop = (MSize)sizeof(MCode);
+
+  T->startins = BCINS_AJ(BC_LOOP, bc_a(loop->original), 0);
+  expect_metadata_reject(L, loop->pc);
+  T->startins = loop->original;
+
+  T->unused1 &= (uint8_t)~TRACE_ARM64_INT_LOOP_ADMITTED;
+  expect_metadata_reject(L, loop->pc);
+  T->unused1 |= TRACE_ARM64_INT_LOOP_ADMITTED;
+
+  T->retire_epoch = 1;
+  expect_metadata_reject(L, loop->pc);
+  T->retire_epoch = 0;
+
+  T->unused1 |= TRACE_ENTRY_INVALIDATED;
+  expect_metadata_reject(L, loop->pc);
+  T->unused1 &= (uint8_t)~TRACE_ENTRY_INVALIDATED;
+
+  T->ir = NULL;
+  expect_metadata_reject(L, loop->pc);
+  T->ir = ir;
+
+  T->snap = NULL;
+  expect_metadata_reject(L, loop->pc);
+  T->snap = snap;
+
+  T->topslot = (uint8_t)(pt->framesize-1u);
+  expect_metadata_reject(L, loop->pc);
+  T->topslot = pt->framesize;
+
+  bc_publish(loop->pc, BCINS_AD(BC_JLOOP, bc_a(current), 2));
+  expect_metadata_reject(L, loop->pc);
+  bc_publish(loop->pc, current);
 }
 
 static void wait_for_pause(uint32_t stage, const RootEntryRace *race)
@@ -364,10 +518,12 @@ int main(void)
   global_State *g;
   TGState *tg;
   jit_State *J;
-  BCIns jloop = BCINS_AD(BC_JLOOP, 0, 1);
-  BCIns jfuncf = BCINS_AD(BC_JFUNCF, 0, 1);
+  GCfunc *metadata_fn;
+  GCproto *metadata_pt;
+  RootEntryPatch metadata_loop;
+  RootEntryFrameFixture frame_fixture;
   uint32_t publishes, cleanups;
-  int32_t vmstate;
+  int32_t saved_vmstate;
   lua_State *tmpbuf_L;
 
   assert(L != NULL);
@@ -380,55 +536,123 @@ int main(void)
   assert(lj_tg_load_cur_L(tg) == L && lj_tg_owns_state_acq(tg, L));
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
   assert(gc2_jit_phase_gate_acq(g) != 0);
-  assert(tracevec_acq(J) == NULL); /* Recorder is still fail-closed. */
+  assert(tracevec_acq(J) == NULL); /* No root has recorded yet. */
+  run_lua(L,
+    "jit.off()\n"
+    "function __arm64_root_metadata(n)\n"
+    "  local i, x = 0, 0\n"
+    "  while i < n do i, x = i + 1, x + i + 1 end\n"
+    "  return x\n"
+    "end\n");
+  metadata_fn = global_lfunc(L, "__arm64_root_metadata");
+  metadata_pt = funcproto(metadata_fn);
+  metadata_loop = patch_first_root(L, "__arm64_root_metadata",
+				   BC_LOOP, BC_JLOOP);
+  assert(bc_j(metadata_loop.original) > 0);
+  assert(bc_op(metadata_loop.pc[bc_j(metadata_loop.original)]) == BC_JMP);
   tmpbuf_L = sbufL(&tg->tmpbuf);
   lua_gc(L, LUA_GCSTOP, 0);
   require_idle_reclaim_preflight(g);
   lj_trace_test_root_entry_reset();
+  install_root_entry_frame(L, metadata_fn, &frame_fixture);
+  /* A direct C fixture starts in ~LJ_VMST_C. Emulate the exact VM state in
+  ** which BC_JLOOP invokes this helper, then restore the harness state before
+  ** exercising the real VM callers below. */
+  saved_vmstate = lj_tg_vmstate_load_acq(tg);
+  lj_tg_vmstate_store_rel(tg, (int32_t)~LJ_VMST_INTERP);
 
   /* Invalid calls reject before publication and never clear a foreign lease. */
-  expect_reject(lj_trace_enter_root(NULL, &jloop, 1, L, L->base,
+  expect_reject(lj_trace_enter_root(NULL, metadata_loop.pc, 1, L, L->base,
                                     BC_JLOOP));
   expect_reject(lj_trace_enter_root(
-    (jit_State *)((char *)J + sizeof(void *)), &jloop, 1, L, L->base,
+    (jit_State *)((char *)J + sizeof(void *)), metadata_loop.pc, 1,
+    L, L->base,
     BC_JLOOP));
   expect_reject(lj_trace_enter_root(J, NULL, 1, L, L->base, BC_JLOOP));
-  expect_reject(lj_trace_enter_root(J, &jloop, 0, L, L->base, BC_JLOOP));
-  expect_reject(lj_trace_enter_root(J, &jloop, 1, NULL, L->base,
+  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 0, L, L->base,
                                     BC_JLOOP));
-  expect_reject(lj_trace_enter_root(J, &jloop, 1, L, NULL, BC_JLOOP));
-  expect_reject(lj_trace_enter_root(J, &jloop, 1, L, L->base, BC_JFUNCV));
+  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, NULL, L->base,
+                                    BC_JLOOP));
+  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, NULL,
+                                    BC_JLOOP));
+  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+                                    BC_JFUNCV));
+  {
+    TValue *savedbase = L->base;
+    TValue *stack = mref_acq(L->stack, TValue);
+    assert(stack != NULL && L->top >= stack + LJ_FR2);
+    L->base = stack + LJ_FR2;
+    expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+                                      BC_JLOOP));
+    L->base = savedbase;
+  }
+  {
+    TValue *savedbase = L->base;
+    TValue *savedtop = L->top;
+    TValue *stack = mref_acq(L->stack, TValue);
+    TValue *maxstack = mref_acq(L->maxstack, TValue);
+    TValue saved_func;
+    assert(stack != NULL && maxstack != NULL && maxstack-stack >= 3);
+    assert(metadata_pt->framesize > 1);
+    copyTV(L, &saved_func, maxstack-3);
+    setfuncV(L, maxstack-3, metadata_fn);
+    L->base = maxstack-1;
+    L->top = maxstack;
+    assert(metadata_pt->framesize > (MSize)(maxstack-L->base));
+    expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+                                      BC_JLOOP));
+    L->base = savedbase;
+    L->top = savedtop;
+    copyTV(L, maxstack-3, &saved_func);
+  }
   lj_tg_store_jit_base(tg, L->base);
-  expect_reject(lj_trace_enter_root(J, &jloop, 1, L, L->base, BC_JLOOP));
+  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+                                    BC_JLOOP));
   assert(lj_tg_load_jit_base(tg) == L->base);
   lj_tg_store_jit_base(tg, NULL);
-  vmstate = lj_tg_vmstate_load_acq(tg);
+  assert(lj_tg_vmstate_load_acq(tg) == (int32_t)~LJ_VMST_INTERP);
+  lj_tg_vmstate_store_rel(tg, (int32_t)~LJ_VMST_C);
+  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+                                    BC_JLOOP));
+  lj_tg_vmstate_store_rel(tg, (int32_t)~LJ_VMST_INTERP);
   lj_tg_vmstate_store_rel(tg, 1);
-  expect_reject(lj_trace_enter_root(J, &jloop, 1, L, L->base, BC_JLOOP));
-  lj_tg_vmstate_store_rel(tg, vmstate);
+  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+                                    BC_JLOOP));
+  lj_tg_vmstate_store_rel(tg, (int32_t)~LJ_VMST_INTERP);
   lj_tg_in_native_rel(tg, 1);
-  expect_reject(lj_trace_enter_root(J, &jloop, 1, L, L->base, BC_JLOOP));
+  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+                                    BC_JLOOP));
   lj_tg_in_native_rel(tg, 0);
   lj_tg_poll_rel(tg, 1);
-  expect_reject(lj_trace_enter_root(J, &jloop, 1, L, L->base, BC_JLOOP));
+  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+                                    BC_JLOOP));
   lj_tg_poll_rel(tg, 0);
   lj_tg_reqmask_rel(tg, LJ_GC2_HS_REDISPATCH);
-  expect_reject(lj_trace_enter_root(J, &jloop, 1, L, L->base, BC_JLOOP));
+  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+                                    BC_JLOOP));
   lj_tg_reqmask_rel(tg, 0);
   lj_tg_profile_request_rel(tg, 1);
-  expect_reject(lj_trace_enter_root(J, &jloop, 1, L, L->base, BC_JLOOP));
+  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+                                    BC_JLOOP));
   lj_tg_profile_request_rel(tg, 0);
   assert(lj_trace_test_root_entry_publishes() == 0);
   assert(lj_trace_test_root_entry_cleanups() == 0);
   assert(sbufL(&tg->tmpbuf) == tmpbuf_L);
 
-  /* An open gate admits intent, then absent metadata rejects through the one
-  ** release cleanup path for both root source families. */
-  expect_reject(lj_trace_enter_root(J, &jloop, 1, L, L->base, BC_JLOOP));
-  expect_reject(lj_trace_enter_root(J, &jfuncf, 1, L, L->base, BC_JFUNCF));
+  /* The open loop gate publishes intent before absent metadata reaches the
+  ** one cleanup path. JFUNCF remains closed at the source gate and publishes
+  ** no TG lifetime intent at all. */
+  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+                                    BC_JLOOP));
   assert(lj_tg_load_jit_base(tg) == NULL);
-  assert(lj_trace_test_root_entry_publishes() == 2);
-  assert(lj_trace_test_root_entry_cleanups() == 2);
+  assert(lj_trace_test_root_entry_publishes() == 1);
+  assert(lj_trace_test_root_entry_cleanups() == 1);
+  publishes = lj_trace_test_root_entry_publishes();
+  cleanups = lj_trace_test_root_entry_cleanups();
+  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+                                    BC_JFUNCF));
+  assert(lj_trace_test_root_entry_publishes() == publishes);
+  assert(lj_trace_test_root_entry_cleanups() == cleanups);
   assert(sbufL(&tg->tmpbuf) == tmpbuf_L);
 
   /* A gate owner wins before publication: entry records displacement and does
@@ -438,7 +662,8 @@ int main(void)
   publishes = lj_trace_test_root_entry_publishes();
   cleanups = lj_trace_test_root_entry_cleanups();
   gc2_jit_sweep_displaced_rel(g, 0);
-  expect_reject(lj_trace_enter_root(J, &jloop, 1, L, L->base, BC_JLOOP));
+  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+                                    BC_JLOOP));
   assert(lj_tg_load_jit_base(tg) == NULL);
   assert(gc2_jit_sweep_displaced_acq(g) == 1);
   assert(lj_trace_test_root_entry_publishes() == publishes);
@@ -447,20 +672,25 @@ int main(void)
   lj_gc2_test_idle_reclaim_leave(g);
 
   require_idle_reclaim_preflight(g);
-  run_pause_race(L, &jloop, ROOT_ENTRY_CLOSER_BEFORE_PUBLISH);
+  run_pause_race(L, metadata_loop.pc, ROOT_ENTRY_CLOSER_BEFORE_PUBLISH);
   require_idle_reclaim_preflight(g);
-  run_pause_race(L, &jloop, ROOT_ENTRY_CLOSER_AFTER_PUBLISH);
-  run_pause_race(L, &jloop, ROOT_ENTRY_REQUEST_AFTER_PUBLISH);
+  run_pause_race(L, metadata_loop.pc, ROOT_ENTRY_CLOSER_AFTER_PUBLISH);
+  run_pause_race(L, metadata_loop.pc, ROOT_ENTRY_REQUEST_AFTER_PUBLISH);
   {
     RootEntryMetadataFixture metadata;
-    install_root_entry_metadata(J, &jloop, &metadata);
-    run_pause_race(L, &jloop, ROOT_ENTRY_POLL_AFTER_METADATA);
-    run_pause_race(L, &jloop, ROOT_ENTRY_REQMASK_AFTER_METADATA);
-    run_pause_race(L, &jloop, ROOT_ENTRY_PROFILE_AFTER_METADATA);
+    install_root_entry_metadata(J, metadata_pt, &metadata_loop, &metadata);
+    expect_metadata_success(L, metadata_loop.pc, &metadata);
+    test_metadata_mutation_rejections(L, metadata_pt, &metadata_loop);
+    run_pause_race(L, metadata_loop.pc, ROOT_ENTRY_POLL_AFTER_METADATA);
+    run_pause_race(L, metadata_loop.pc, ROOT_ENTRY_REQMASK_AFTER_METADATA);
+    run_pause_race(L, metadata_loop.pc, ROOT_ENTRY_PROFILE_AFTER_METADATA);
     remove_root_entry_metadata(J, &metadata);
   }
   assert(tracevec_acq(J) == NULL && J->cur.traceno == 0);
   assert(sbufL(&tg->tmpbuf) == tmpbuf_L);
+  remove_root_entry_frame(L, &frame_fixture);
+  restore_root_patch(&metadata_loop);
+  lj_tg_vmstate_store_rel(tg, saved_vmstate);
 
   /* Execute the checked-in BC_JLOOP and BC_JFUNCF VM callers themselves.
   ** The immutable startins sidecar supplies deterministic rejection recovery;
@@ -530,9 +760,8 @@ int main(void)
     assert(lua_toboolean(L, -2) != 0);
     assert(lua_toboolean(L, -1) != 0);
     lua_pop(L, 3);
-    assert(lj_trace_test_root_entry_publishes() != 0);
-    assert(lj_trace_test_root_entry_publishes() ==
-	   lj_trace_test_root_entry_cleanups());
+    assert(lj_trace_test_root_entry_publishes() == 0);
+    assert(lj_trace_test_root_entry_cleanups() == 0);
     assert(lj_tg_load_jit_base(tg) == NULL && tracevec_acq(J) == NULL);
 
     /* Preserve the pre-existing JITERL -> JLOOP tail path: it recovers its
@@ -598,7 +827,7 @@ int main(void)
 
   lj_trace_test_root_entry_reset();
   lua_close(L);
-  puts("arm64_jit_root_entry OK: root, edge-replay and final-request rejection verified");
+  puts("arm64_jit_root_entry OK: strict loop entry, source gates, mutations and request races verified");
   return 0;
 }
 

@@ -535,8 +535,8 @@
 /*
 ** Bring up the Apple ARM64 assembler VM without widening the supported target
 ** contract. The bootstrap opt-in remains interpreter-only. A distinct,
-** experimental opt-in compiles the JIT subsystem, but keeps recording and
-** native entry fail-closed until the ARM64 lockless runtime tranche lands.
+** experimental opt-in compiles the JIT subsystem. Its granular gates open
+** only execution surfaces which have a checked-in lockless runtime proof.
 */
 #if !LJ_TARGET_GC64 || !LJ_TARGET_ARM64 || !LJ_TARGET_OSX || LJ_TARGET_IOS
 #error "LUAJIT_MT_ARM64_BOOTSTRAP requires GC64 on macOS ARM64"
@@ -545,8 +545,19 @@
 #if defined(LUAJIT_DISABLE_JIT)
 #error "LUAJIT_MT_ARM64_JIT_EXPERIMENTAL cannot be combined with LUAJIT_DISABLE_JIT"
 #endif
-#define LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED	1
-#define LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED		1
+#if LJ_ABI_PAUTH
+/* arm64e remains buildable for authenticated-code audits, but direct runtime
+** symbol materialization is not yet safe enough to assemble or enter traces. */
+#define LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED		1
+#define LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED	1
+#else
+#define LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED		0
+#define LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED	0
+#endif
+#define LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED		1
+#define LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED	1
+#define LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED	1
+#define LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED	1
 #elif !defined(LUAJIT_DISABLE_JIT)
 #error "LUAJIT_MT_ARM64_BOOTSTRAP currently requires LUAJIT_DISABLE_JIT"
 #endif
@@ -558,14 +569,38 @@
 
 #endif
 
+#ifndef LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED
+#define LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED		0
+#endif
+#ifndef LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED
+#define LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED		0
+#endif
+#ifndef LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED
+#define LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED	0
+#endif
+#ifndef LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED
+#define LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED	0
+#endif
+#ifndef LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED
+#define LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED	0
+#endif
+#ifndef LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED
+#define LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED	0
+#endif
+/* Conservative compatibility summaries for out-of-tree probes. In-tree gates
+** must name the exact recorder or native-entry boundary explicitly. */
 #ifndef LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED
-#define LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED	0
+#define LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED \
+  (LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED || \
+   LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED || \
+   LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED)
 #endif
 #ifndef LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED
-#define LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED		0
+#define LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED \
+  (LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED || \
+   LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
+   LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED)
 #endif
-/* Conservative compatibility summary for out-of-tree probes. In-tree gates
-** must name the recorder-admission or native-entry boundary explicitly. */
 #ifndef LJ_ARM64_JIT_FAIL_CLOSED
 #define LJ_ARM64_JIT_FAIL_CLOSED \
   (LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED || \
