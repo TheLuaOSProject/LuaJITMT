@@ -1,10 +1,10 @@
 /*
 ** lj_universe.h - dormant exact universe admission primitive.
 **
-** A process-stable slot is named by {slot, incarnation}.  One CX16 word
-** atomically combines the complete universe state and its publication
-** transaction count.  The body publication and monotonically increasing
-** publication-ticket fields are protected by that exact authority.
+** A process-stable slot is named by {slot, incarnation}.  One lock-free
+** 128-bit CAS word atomically combines the complete universe state and its
+** publication transaction count.  The body publication and monotonically
+** increasing publication-ticket fields are protected by that exact authority.
 **
 ** This module is intentionally not integrated into lua_newstate, API entry,
 ** attach/detach, or lua_close yet.  Its slots must currently be allocated by
@@ -17,8 +17,8 @@
 
 #include "lj_atomic.h"
 
-#if !defined(__x86_64__)
-#error "Universe admission tokens currently require the x86-64 CX16 contract"
+#if !LA_HAS_LOCKFREE_CAS128
+#error "Universe admission tokens require a lock-free 128-bit CAS contract"
 #endif
 
 #define LJ_UNIVERSE_STATE_BITS 4u
@@ -219,6 +219,7 @@ lj_universe_body_snap_from_words(uint64_t pointer, uint64_t incarnation)
 LA_INLINE LJUniverseBodySnap
 lj_universe_body_snapshot(const LJUniverseSlot *slot)
 {
+#if LA_USE_SPLIT128_SNAPSHOT
   uint64_t incarnation, pointer, again;
   if (!slot)
     return lj_universe_body_snap_from_words(0, 0);
@@ -228,6 +229,13 @@ lj_universe_body_snapshot(const LJUniverseSlot *slot)
     again = la_load64_acq(&slot->body_value.hi);
   } while (incarnation != again);
   return lj_universe_body_snap_from_words(pointer, incarnation);
+#else
+  la_u128 exact;
+  if (!slot)
+    return lj_universe_body_snap_from_words(0, 0);
+  exact = la_load128_acq(&slot->body_value);
+  return lj_universe_body_snap_from_words(exact.lo, exact.hi);
+#endif
 }
 
 /* Exact CX16 snapshot: epoch zero recurs when one incarnation is recycled. */

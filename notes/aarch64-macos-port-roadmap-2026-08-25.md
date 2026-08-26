@@ -111,6 +111,7 @@ Files:
 - `src/lj_target_arm64.h`
 - `src/lj_emit_arm64.h`
 - `src/vm_arm64.dasc`
+- `dynasm/dasm_arm64.lua`
 - `src/lj_dispatch.[ch]`
 - `src/lj_safepoint.[ch]`
 - `src/lj_frame.h`, `src/lj_err.c`, and state/thread helpers as required
@@ -124,6 +125,9 @@ the same TG-local state and stack epochs as x64.
 The ARM VM has no MT `vm_safepoint` equivalent and its bytecode backedges and
 returns do not poll the TG request word.  Polling and native-entry/exit
 acknowledgement are correctness requirements, not optional optimization.
+The current ARM64 DynASM table cannot spell `ldar`, `stlr`, `dmb`, or `isb`, so
+the assembler grammar and target/emitter opcode tables must be extended before
+the VM or generated traces can express their ordering contracts.
 
 For the first correct ARM path, shared-object operations should call the
 already reviewed C helper protocols.  Architecture-specific inline fast paths
@@ -253,3 +257,37 @@ updates this note or adds a focused note with:
 6. Parity with the current x64 fork is not evidence that all pre-existing
    lockless goals are finished.  Completion claims must distinguish port
    parity from upstream project maturity.
+
+## Checkpoint log
+
+### 1. Native lock-free 128-bit authority substrate
+
+The first source checkpoint adds an explicit Apple AArch64 contract in
+`lj_atomic.h`: aligned 16-byte compare/exchange must be compile-time
+always-lock-free, and the typed struct builtin must lower inline.  ARM64 uses
+exact 128-bit CAS snapshots for the markword, GC2 activation, TG slot, TG body,
+and universe body helpers during bring-up.  The established x86-64 split
+snapshot and inline `cmpxchg16b` paths are unchanged.
+
+The new `tools/ci/arm64_cas128_contract.sh` gate builds for a macOS 11 minimum,
+runs a success/failure/snapshot fixture, verifies the Mach-O architecture and
+deployment metadata, and rejects undefined atomic helper symbols and
+out-of-line calls.  The normal Apple target must emit acquire-release `caspal`;
+a separate `-mcpu=generic` probe must emit an inline `ldaxp`/`stlxp` loop with
+no helper.
+
+Validation passed natively with Apple clang 21:
+
+- ARM64 CAS128 runtime and Mach-O artifact contract;
+- `t-gc2-markword-token`;
+- `t-tgslot-token`;
+- `t-tgregistry-slot`;
+- `t-universe-token`;
+- the exhaustive GC2 root-gate/store model;
+- an x86-64 cross-object still contains inline `cmpxchg16b` and no helper.
+
+The architecture gate intentionally remains x86-64 at this checkpoint.  A
+full ARM64 VM is not yet buildable and must not be advertised merely because
+its authority primitives now pass.  Remaining atomic audit work includes the
+HugeTab split scouts and the overlapping 64/128-bit `GCtab` structural/weak
+descriptor views.

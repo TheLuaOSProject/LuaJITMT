@@ -74,8 +74,27 @@ LA_INLINE int la_casptr(void **p,void **exp,void *des,int mo_s,int mo_f)
 /* 128-bit CAS for tagged pointers (Treiber stacks, 04 §4.5).
 ** x86-64: cmpxchg16b (compile with -mcx16). ARM64: LSE casp or LL/SC pair.
 ** Represented as a 16-byte aligned struct to avoid __int128 strict-alias
-** pitfalls in user code; internally uses __int128 builtin. */
+** pitfalls in user code. Apple AArch64 keeps the builtin operand typed as this
+** struct; the generic fallback below packs through unsigned __int128. */
 typedef struct la_u128 { uint64_t lo, hi; } __attribute__((aligned(16))) la_u128;
+
+#if defined(__x86_64__)
+#define LA_HAS_LOCKFREE_CAS128 1
+#define LA_USE_SPLIT128_SNAPSHOT 1
+#elif defined(__aarch64__) && defined(__APPLE__)
+#define LA_HAS_LOCKFREE_CAS128 1
+#define LA_USE_SPLIT128_SNAPSHOT 0
+/* The supported Apple AArch64 compiler/target contract must inline CASP (or an
+** equivalent lock-free sequence).  Fail at compile time instead of accepting
+** an outlined helper which may hide a lock.  Mach-O artifact tests separately
+** enforce the expected lowering and absence of undefined atomic helpers. */
+typedef char la_assert_cas128_always_lock_free[
+  __atomic_always_lock_free(16, 0) ? 1 : -1];
+#else
+#define LA_HAS_LOCKFREE_CAS128 0
+#define LA_USE_SPLIT128_SNAPSHOT 0
+#endif
+
 LA_INLINE int la_cas128(la_u128 *p, la_u128 *exp, la_u128 des)
 {
 #if defined(__x86_64__)
@@ -89,6 +108,12 @@ LA_INLINE int la_cas128(la_u128 *p, la_u128 *exp, la_u128 des)
                        : "b"(des.lo), "c"(des.hi)
                        : "memory");
   return (int)ok;
+#elif defined(__aarch64__) && defined(__APPLE__)
+  /* Apple Clang lowers the generic aligned-struct builtin to CASPAL on LSE
+  ** CPUs and to an inline LDXP/STXP loop for a generic ARMv8 target.  Keeping
+  ** the operand typed as la_u128 avoids an aliasing cast through __int128. */
+  return __atomic_compare_exchange(p, exp, &des, 0,
+                                   __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE);
 #else
   __extension__ typedef unsigned __int128 u128;
   u128 e = ((u128)exp->hi << 64) | exp->lo;
@@ -98,6 +123,18 @@ LA_INLINE int la_cas128(la_u128 *p, la_u128 *exp, la_u128 des)
   if (!ok) { exp->lo = (uint64_t)e; exp->hi = (uint64_t)(e >> 64); }
   return ok;
 #endif
+}
+
+/* Exact acquire snapshot using the same lock-free 128-bit authority.  A zero
+** comparison necessarily fails for every non-zero value and returns the
+** observed pair.  For the canonical zero value it writes the same value. */
+LA_INLINE la_u128 la_load128_acq(const la_u128 *p)
+{
+  la_u128 observed, zero;
+  observed.lo = observed.hi = 0;
+  zero = observed;
+  (void)la_cas128((la_u128 *)(void *)p, &observed, zero);
+  return observed;
 }
 
 /* ---- fetch ops ------------------------------------------------------ */
@@ -293,5 +330,7 @@ typedef char la_assert_ptr8[sizeof(void *) == 8 ? 1 : -1];
 ** the builtin routes through libatomic, which uses a lock. The required
 ** observable result is the cmpxchg16b instruction in generated code/artifacts;
 ** this comment documents why the flag is part of the x86-64 build contract. */
+/* Apple AArch64: the compile-time assertion above and target artifact tests
+** require an inline lock-free 16-byte compare/exchange. */
 
 #endif /* _LJ_ATOMIC_H */

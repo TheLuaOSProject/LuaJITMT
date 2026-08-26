@@ -2,19 +2,17 @@
 ** lj_tgslot.h - stable TG-slot incarnation and lifetime leases.
 **
 ** A stable external handle is {slot, incarnation}.  The complete lifecycle
-** authority is one CX16 word, so a stale handle can never borrow a reused
-** slot and a reclaimer can close admission without a split-word race.
-**
-** This is intentionally a standalone x86-64 primitive for now.  Runtime TG
-** body pointers and stable-TLS reference tracking will be wired separately.
+** authority is one lock-free 128-bit CAS word, so a stale handle can never
+** borrow a reused slot and a reclaimer can close admission without a
+** split-word race.
 */
 #ifndef _LJ_TGSLOT_H
 #define _LJ_TGSLOT_H
 
 #include "lj_atomic.h"
 
-#if !defined(__x86_64__)
-#error "TG-slot lifecycle tokens currently require the x86-64 CX16 contract"
+#if !LA_HAS_LOCKFREE_CAS128
+#error "TG-slot lifecycle tokens require a lock-free 128-bit CAS contract"
 #endif
 
 #define LJ_TGSLOT_STATE_BITS 3u
@@ -150,12 +148,13 @@ LA_INLINE int lj_tgslot_init_empty_unpublished(LJTGSlotToken *slot,
 }
 
 /*
-** Stable acquire snapshot without a potentially out-of-line 16-byte load.
-** Overlapping 64-bit subloads and CX16 are an explicit x86-64 GCC/Clang,
-** MinGW and Darwin artifact contract, matching markword/activation tokens.
+** Stable acquire snapshot. x86-64 retains its checked overlapping-subload
+** contract. Apple AArch64 takes an exact lock-free 128-bit CAS snapshot
+** instead of racing mixed-width subloads with the complete authority update.
 */
 LA_INLINE LJTGSlotSnap lj_tgslot_snapshot(const LJTGSlotToken *slot)
 {
+#if LA_USE_SPLIT128_SNAPSHOT
   uint64_t hi, incarnation, again;
   do {
     hi = la_load64_acq(&slot->value.hi);
@@ -163,6 +162,10 @@ LA_INLINE LJTGSlotSnap lj_tgslot_snapshot(const LJTGSlotToken *slot)
     again = la_load64_acq(&slot->value.hi);
   } while (hi != again);
   return lj_tgslot_snap_from_words(incarnation, hi);
+#else
+  la_u128 exact = la_load128_acq(&slot->value);
+  return lj_tgslot_snap_from_words(exact.lo, exact.hi);
+#endif
 }
 
 LA_INLINE int lj_tgslot_snap_equal(const LJTGSlotSnap *a,

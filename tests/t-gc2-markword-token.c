@@ -577,6 +577,8 @@ static void test_table_exact_target_token_primitives(void)
   uint64_t control;
   unsigned i;
 
+  memset(&fake_table, 0, sizeof(fake_table));
+
   /* One helper may be delayed until another has transferred and completed D.
   ** Its idempotent transfer must observe NONE(D), not recreate PENDING(D). */
   assert(lj_gc2_table_token_init_unpublished(&token, 0));
@@ -1173,6 +1175,7 @@ static void test_tabledesc_delayed_helper_malformed_race(void)
   pthread_t injector, helper;
   LJGC2TableDescSnap snap;
 
+  memset(&identity, 0, sizeof(identity));
   memset(&race, 0, sizeof(race));
   lj_gc2_tabledesc_init_unpublished(&desc, 31);
   assert(lj_gc2_tabledesc_try_publish(&desc, &identity, &race.ticket,

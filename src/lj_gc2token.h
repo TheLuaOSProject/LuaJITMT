@@ -10,8 +10,8 @@
 
 #include "lj_atomic.h"
 
-#if !defined(__x86_64__)
-#error "GC2 activation tokens currently require the x86-64 CX16 contract"
+#if !LA_HAS_LOCKFREE_CAS128
+#error "GC2 activation tokens require a lock-free 128-bit CAS contract"
 #endif
 
 #define LJ_GC2_ACT_STATE_BITS 3u
@@ -113,20 +113,27 @@ LA_INLINE int lj_gc2_activation_init_unpublished(LJGC2Activation *token,
 }
 
 /*
-** Stable acquire snapshot without a potentially out-of-line 16-byte load.
-** As with markwords, overlapping 64-bit subloads/CX16 are an explicit x86-64
-** GCC/Clang/MinGW/Darwin compiler contract checked in target artifacts.
+** Stable acquire snapshot. x86-64 retains its checked overlapping-subload
+** contract; Apple AArch64 uses an exact lock-free 128-bit CAS snapshot so it
+** does not depend on mixed-width accesses racing the complete authority
+** update.
 */
 LA_INLINE LJGC2ActivationSnap
 lj_gc2_activation_snapshot(const LJGC2Activation *token)
 {
   LJGC2ActivationSnap snap;
+#if LA_USE_SPLIT128_SNAPSHOT
   uint64_t hi, again;
   do {
     hi = la_load64_acq(&token->value.hi);
     snap.mark_epoch = la_load64_acq(&token->value.lo);
     again = la_load64_acq(&token->value.hi);
   } while (hi != again);
+#else
+  la_u128 exact = la_load128_acq(&token->value);
+  uint64_t hi = exact.hi;
+  snap.mark_epoch = exact.lo;
+#endif
   snap.generation = hi >> LJ_GC2_ACT_AUTHORITY_BITS;
   snap.state = (uint8_t)(hi & LJ_GC2_ACT_STATE_MASK);
   snap.gate = (uint8_t)((hi >> LJ_GC2_ACT_GATE_SHIFT) &

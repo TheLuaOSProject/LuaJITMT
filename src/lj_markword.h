@@ -1,18 +1,19 @@
 /*
 ** lj_markword.h - epoch-tagged concurrent bitmap word.
 **
-** A complete {bits, epoch} value is changed with CX16.  This makes lazy epoch
-** reset a single linearizable operation: a stale marker can neither resurrect
-** an old epoch nor overwrite bits published by another marker in the current
-** epoch.  The enclosing bitmap supplies one word per 64 arena cells.
+** A complete {bits, epoch} value is changed with lock-free 128-bit CAS.  This
+** makes lazy epoch reset a single linearizable operation: a stale marker can
+** neither resurrect an old epoch nor overwrite bits published by another
+** marker in the current epoch.  The enclosing bitmap supplies one word per 64
+** arena cells.
 */
 #ifndef _LJ_MARKWORD_H
 #define _LJ_MARKWORD_H
 
 #include "lj_atomic.h"
 
-#if !defined(__x86_64__)
-#error "GC2 epoch markwords currently require the x86-64 CX16 contract"
+#if !LA_HAS_LOCKFREE_CAS128
+#error "GC2 epoch markwords require a lock-free 128-bit CAS contract"
 #endif
 
 #define LJ_ARENA_MARK_EPOCH_NONE UINT64_C(0)
@@ -50,22 +51,27 @@ LA_INLINE int lj_markword_init_unpublished(LJArenaMarkWord *word,
 }
 
 /*
-** A writer changes both halves with CX16.  The epoch/bit/epoch sample avoids a
-** 16-byte load (and therefore any compiler runtime fallback) on the hot read
-** path.  Acquire ordering makes a matching epoch a visibility proof for the
-** sampled bits.  This is an explicit x86-64 compiler contract: aligned 64-bit
-** subloads must remain coherent with the enclosing cmpxchg16b modification.
-** GCC, Clang, MinGW and Darwin artifact tests enforce that lowering.
+** x86-64 keeps the established epoch/bit/epoch hot snapshot contract, where
+** aligned 64-bit subloads remain coherent with cmpxchg16b. Apple AArch64 uses
+** an exact lock-free 128-bit CAS snapshot instead of relying on overlapping
+** mixed-width atomic accesses. Acquire ordering makes a matching epoch a
+** visibility proof for the sampled bits.
 */
 LA_INLINE LJArenaMarkSnap lj_markword_snapshot(const LJArenaMarkWord *word)
 {
   LJArenaMarkSnap snap;
+#if LA_USE_SPLIT128_SNAPSHOT
   uint64_t again;
   do {
     snap.epoch = la_load64_acq(&word->value.hi);
     snap.bits = la_load64_acq(&word->value.lo);
     again = la_load64_acq(&word->value.hi);
   } while (snap.epoch != again);
+#else
+  la_u128 exact = la_load128_acq(&word->value);
+  snap.bits = exact.lo;
+  snap.epoch = exact.hi;
+#endif
   return snap;
 }
 

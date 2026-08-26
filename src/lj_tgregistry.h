@@ -75,14 +75,16 @@ lj_tgregistry_body_snap_from_words(uint64_t pointer, uint64_t incarnation)
   return snap;
 }
 
-/* Stable acquire snapshot without an out-of-line 16-byte load. Publishing a
-** new incarnation changes hi, so hi/lo/hi rejects a split old/new pair. Clear
-** changes only the naturally atomic pointer half and either complete value is
-** a valid snapshot for that same incarnation.
+/* Stable acquire snapshot. Publishing a new incarnation changes hi. x86-64
+** uses the established hi/lo/hi contract; Apple AArch64 uses an exact
+** lock-free 128-bit CAS snapshot rather than overlapping mixed-width accesses.
+** Clear changes only the naturally atomic pointer half and either complete
+** value is valid for the same incarnation.
 */
 LA_INLINE LJTGRegistryBodySnap
 lj_tgregistry_slot_body_snapshot(const LJTGRegistrySlot *slot)
 {
+#if LA_USE_SPLIT128_SNAPSHOT
   uint64_t incarnation, pointer, again;
   if (!slot)
     return lj_tgregistry_body_snap_from_words(0, 0);
@@ -92,6 +94,13 @@ lj_tgregistry_slot_body_snapshot(const LJTGRegistrySlot *slot)
     again = la_load64_acq(&slot->body_value.hi);
   } while (incarnation != again);
   return lj_tgregistry_body_snap_from_words(pointer, incarnation);
+#else
+  la_u128 exact;
+  if (!slot)
+    return lj_tgregistry_body_snap_from_words(0, 0);
+  exact = la_load128_acq(&slot->body_value);
+  return lj_tgregistry_body_snap_from_words(exact.lo, exact.hi);
+#endif
 }
 
 LA_INLINE int
