@@ -602,6 +602,16 @@ static LJ_AINLINE MCode *trace_mcode_acq(const GCtrace *T)
   return (MCode *)la_loadptr_acq((void *const *)&T->mcode);
 }
 
+#if LJ_ABI_PAUTH
+/* The signed entry pointer is published with the trace body. ARM64 entry
+** validation must acquire it independently: a plain field read may race trace
+** retirement even after the raw mcode address has been observed. */
+static LJ_AINLINE ASMFunction trace_mcauth_acq(const GCtrace *T)
+{
+  return (ASMFunction)la_loadptr_acq((void *const *)&T->mcauth);
+}
+#endif
+
 typedef struct TraceMCodeView {
   MCode *mcode;
   MSize szmcode;

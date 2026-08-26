@@ -24,6 +24,23 @@ LJ_FUNC_NORET void lj_trace_err(jit_State *J, TraceError e);
 LJ_FUNC_NORET void lj_trace_err_info(jit_State *J, TraceError e);
 
 /* Trace management. */
+#if LJ_TARGET_ARM64 && LJ_HASJIT
+/* AAPCS64 returns this 16-byte non-HFA aggregate in x0/x1. The ARM64 VM keeps
+** x0 as the exact trace identity (and PAUTH modifier) and branches through x1
+** only after both members are non-NULL. */
+typedef struct LJTraceRootEntry {
+  GCtrace *trace;
+  ASMFunction target;
+} LJTraceRootEntry;
+LJ_STATIC_ASSERT(sizeof(LJTraceRootEntry) == 16);
+LJ_STATIC_ASSERT(offsetof(LJTraceRootEntry, trace) == 0);
+LJ_STATIC_ASSERT(offsetof(LJTraceRootEntry, target) == 8);
+
+LJ_FUNCA LJTraceRootEntry LJ_FASTCALL
+lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
+		    lua_State *L, TValue *base, uint32_t sourceop);
+#endif
+
 LJ_FUNC GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T);
 LJ_FUNC void LJ_FASTCALL lj_trace_free(global_State *g, GCtrace *T);
 LJ_FUNC int LJ_FASTCALL lj_trace_free_gc(global_State *g, GCtrace *T);
@@ -71,6 +88,19 @@ LJ_FUNC int lj_jit_lifecycle_yield_l(lua_State *L, jit_State *J);
 LJ_FUNC int lj_jit_lifecycle_resume_l(lua_State *L, jit_State *J);
 LJ_FUNC int lj_jit_lifecycle_held_l(lua_State *L, jit_State *J);
 LJ_FUNC TGState *lj_jit_owner_tg_l(lua_State *L, jit_State *J);
+
+#if LJ_TARGET_ARM64 && LJ_HASJIT
+#define LJ_TRACE_ROOT_ENTRY_PAUSE_PREPUBLISH 1u
+#define LJ_TRACE_ROOT_ENTRY_PAUSE_POSTPUBLISH 2u
+#ifdef LJ_TRACE_TEST_HELPERS
+LJ_FUNC void lj_trace_test_root_entry_reset(void);
+LJ_FUNC void lj_trace_test_root_entry_pause(uint32_t stage);
+LJ_FUNC uint32_t lj_trace_test_root_entry_paused(void);
+LJ_FUNC void lj_trace_test_root_entry_release(void);
+LJ_FUNC uint32_t lj_trace_test_root_entry_publishes(void);
+LJ_FUNC uint32_t lj_trace_test_root_entry_cleanups(void);
+#endif
+#endif
 
 typedef struct LJJitEventFrozenViewSpec {
   const void *data;

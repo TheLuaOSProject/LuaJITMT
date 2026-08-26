@@ -15,6 +15,7 @@
 
 #include "lj_atomic.h"
 #include "lj_arena.h"
+#include "lj_buf.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_err.h"
@@ -68,6 +69,67 @@ static uint32_t trace_test_findfree_grows;
 static uint32_t trace_test_last_unlinked;
 static uint32_t trace_test_last_findfree;
 static uint32_t trace_test_last_released;
+#if LJ_TARGET_ARM64 && LJ_HASJIT
+static uint32_t trace_test_root_entry_pause_stage;
+static uint32_t trace_test_root_entry_pause_waiting;
+static uint32_t trace_test_root_entry_pause_release;
+static uint32_t trace_test_root_entry_publish_count;
+static uint32_t trace_test_root_entry_cleanup_count;
+
+void lj_trace_test_root_entry_reset(void)
+{
+  la_store32_rel(&trace_test_root_entry_pause_stage, 0);
+  la_store32_rel(&trace_test_root_entry_pause_waiting, 0);
+  la_store32_rel(&trace_test_root_entry_pause_release, 0);
+  la_store32_rel(&trace_test_root_entry_publish_count, 0);
+  la_store32_rel(&trace_test_root_entry_cleanup_count, 0);
+}
+
+void lj_trace_test_root_entry_pause(uint32_t stage)
+{
+  la_store32_rel(&trace_test_root_entry_pause_waiting, 0);
+  la_store32_rel(&trace_test_root_entry_pause_release, 0);
+  la_store32_rel(&trace_test_root_entry_pause_stage, stage);
+}
+
+uint32_t lj_trace_test_root_entry_paused(void)
+{
+  return la_load32_acq(&trace_test_root_entry_pause_waiting);
+}
+
+void lj_trace_test_root_entry_release(void)
+{
+  la_store32_rel(&trace_test_root_entry_pause_release, 1);
+}
+
+uint32_t lj_trace_test_root_entry_publishes(void)
+{
+  return la_load32_acq(&trace_test_root_entry_publish_count);
+}
+
+uint32_t lj_trace_test_root_entry_cleanups(void)
+{
+  return la_load32_acq(&trace_test_root_entry_cleanup_count);
+}
+
+static void trace_test_root_entry_maybe_pause(uint32_t stage)
+{
+  if (la_load32_acq(&trace_test_root_entry_pause_stage) != stage)
+    return;
+  la_store32_rel(&trace_test_root_entry_pause_waiting, stage);
+  while (la_load32_acq(&trace_test_root_entry_pause_release) == 0)
+    la_cpu_pause();
+  la_store32_rel(&trace_test_root_entry_pause_stage, 0);
+  la_store32_rel(&trace_test_root_entry_pause_waiting, 0);
+}
+
+#define trace_test_root_entry_pause_at(stage) \
+  trace_test_root_entry_maybe_pause((stage))
+#define trace_test_root_entry_published() \
+  ((void)la_add32_acqrel(&trace_test_root_entry_publish_count, 1))
+#define trace_test_root_entry_cleaned() \
+  ((void)la_add32_acqrel(&trace_test_root_entry_cleanup_count, 1))
+#endif
 
 #define TRACE_TEST_COUNTER(name) \
 uint32_t lj_trace_test_##name(void) \
@@ -3237,6 +3299,163 @@ int lj_trace_test_proto_pc_candidate(global_State *g, GCobj *o,
   if (pc)
     lj_gc2_lease_release(&lease);
   return valid;
+}
+#else
+#if LJ_TARGET_ARM64 && LJ_HASJIT
+#define trace_test_root_entry_pause_at(stage) ((void)0)
+#define trace_test_root_entry_published() ((void)0)
+#define trace_test_root_entry_cleaned() ((void)0)
+#endif
+#endif
+
+#if LJ_TARGET_ARM64 && LJ_HASJIT
+static LJ_AINLINE int trace_root_entry_source_valid(uint32_t sourceop)
+{
+  return sourceop == (uint32_t)BC_JLOOP ||
+	 sourceop == (uint32_t)BC_JFUNCF;
+}
+
+static LJ_AINLINE int trace_root_entry_start_valid(uint32_t sourceop,
+					    BCIns startins)
+{
+  BCOp op = bc_op(startins);
+  if (sourceop == (uint32_t)BC_JFUNCF)
+    return op == BC_FUNCF;
+  return op == BC_ITERL || op == BC_ITERN || op == BC_LOOP || bc_isret(op);
+}
+
+static LJ_AINLINE GCtrace *trace_root_entry_slot_acq(jit_State *J,
+					      TraceNo traceno,
+					      TraceVec **tvp)
+{
+  TraceVec *tv = tracevec_acq(J);
+  GCobj *o;
+  *tvp = tv;
+  if (traceno == 0 || tv == NULL || (MSize)traceno >= tv->sizetrace)
+    return NULL;
+  o = gcref_acq(tv->slot[traceno]);
+  return traceref_fromgco_safe(o);
+}
+
+static LJ_AINLINE int trace_root_entry_bytecode_valid(const BCIns *pc,
+					       TraceNo traceno,
+					       uint32_t sourceop)
+{
+  BCIns ins = (BCIns)la_load32_acq((const uint32_t *)pc);
+  return (uint32_t)bc_op(ins) == sourceop && (TraceNo)bc_d(ins) == traceno;
+}
+
+/* Validate and publish one root-trace entry intent without allocating,
+** waiting, entering SMR, invoking callbacks or raising an error. The gate
+** close/recheck handshake makes the published TG-local jit_base the lifetime
+** lease for every metadata and mcode load below. Rejection never repairs stale
+** bytecode: the VM caller must reload it and redispatch after this returns. */
+LJTraceRootEntry LJ_FASTCALL
+lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
+		    lua_State *L, TValue *base, uint32_t sourceop)
+{
+  LJTraceRootEntry result = { NULL, NULL };
+  global_State *g;
+  TGState *tg;
+  TValue *stack, *maxstack, *top;
+  uintptr_t basep, stackp, maxstackp, topp, mcodep;
+  TraceVec *tv, *tv2;
+  GCtrace *T, *T2;
+  BCIns startins;
+  MCode *mcode;
+  MSize szmcode;
+  ASMFunction target;
+
+  if (J == NULL || pc == NULL || L == NULL || base == NULL || traceno == 0 ||
+      !trace_root_entry_source_valid(sourceop) ||
+      ((uintptr_t)(const void *)pc & (sizeof(BCIns)-1u)) != 0)
+    return result;
+  g = G(L);
+  if (g == NULL || J != G2J(g) || (tg = L->tg_hint) == NULL || tg->gl != g ||
+      G2TG(g) != tg || lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+      lj_tg_load_cur_L(tg) != L || !lj_tg_owns_state_acq(tg, L) ||
+      lj_tg_actor_acq(tg) != lj_thr_actor_current() || L->base != base)
+    return result;
+  stack = mref_acq(L->stack, TValue);
+  maxstack = mref_acq(L->maxstack, TValue);
+  top = L->top;
+  basep = (uintptr_t)(void *)base;
+  stackp = (uintptr_t)(void *)stack;
+  maxstackp = (uintptr_t)(void *)maxstack;
+  topp = (uintptr_t)(void *)top;
+  if (stack == NULL || maxstack == NULL || maxstackp <= stackp ||
+      basep < stackp || basep >= maxstackp ||
+      top == NULL || topp < basep || topp > maxstackp ||
+      (basep-stackp) % sizeof(TValue) != 0 ||
+      (topp-stackp) % sizeof(TValue) != 0 ||
+      lj_tg_load_jit_base(tg) != NULL || lj_tg_vmstate_load_acq(tg) > 0 ||
+      lj_tg_in_native_acq(tg) != 0)
+    return result;
+
+  if (!lj_gc2_jit_entry_open(g)) {
+    gc2_jit_sweep_displaced_rel(g, 1);
+    return result;
+  }
+  if (gc2_jit_mark_auto_yield_acq(g) != 0)
+    gc2_jit_mark_auto_yield_rel(g, 0);
+  trace_test_root_entry_pause_at(LJ_TRACE_ROOT_ENTRY_PAUSE_PREPUBLISH);
+  lj_tg_store_jit_base(tg, base);
+  trace_test_root_entry_published();
+  la_fence_seq();
+  trace_test_root_entry_pause_at(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTPUBLISH);
+  if (!lj_gc2_jit_entry_open(g)) {
+    gc2_jit_sweep_displaced_rel(g, 1);
+    goto reject_published;
+  }
+
+  T = trace_root_entry_slot_acq(J, traceno, &tv);
+  if (!trace_runnable_acq(T, traceno) || trace_root_acq(T) != 0 ||
+      trace_startpc_acq(T) != pc ||
+      !trace_root_entry_start_valid(sourceop, trace_startins_acq(T)) ||
+      !trace_root_entry_bytecode_valid(pc, traceno, sourceop))
+    goto reject_published;
+  startins = trace_startins_acq(T);
+  mcode = trace_mcode_acq(T);
+  szmcode = trace_szmcode_acq(T);
+  mcodep = (uintptr_t)(void *)mcode;
+  if (mcode == NULL || szmcode == 0 ||
+      ((uintptr_t)szmcode & (sizeof(MCode)-1u)) != 0 ||
+      (mcodep & (sizeof(MCode)-1u)) != 0 ||
+      mcodep > ~(uintptr_t)0-(uintptr_t)szmcode)
+    goto reject_published;
+#if LJ_ABI_PAUTH
+  target = trace_mcauth_acq(T);
+  if (target == NULL || (uintptr_t)lj_ptr_strip(target) != mcodep)
+    goto reject_published;
+#else
+  target = (ASMFunction)(void *)mcode;
+#endif
+
+  /* Reacquire the publication and every field that grants entry after the
+  ** target loads. This catches slot replacement, retirement, repatching and a
+  ** torn body view without extending authority beyond the TG lifetime lease. */
+  T2 = trace_root_entry_slot_acq(J, traceno, &tv2);
+  if (tv2 != tv || T2 != T || !trace_runnable_acq(T2, traceno) ||
+      trace_root_acq(T2) != 0 || trace_startpc_acq(T2) != pc ||
+      trace_startins_acq(T2) != startins ||
+      !trace_root_entry_start_valid(sourceop, startins) ||
+      trace_mcode_acq(T2) != mcode || trace_szmcode_acq(T2) != szmcode ||
+      !trace_root_entry_bytecode_valid(pc, traceno, sourceop))
+    goto reject_published;
+#if LJ_ABI_PAUTH
+  if (trace_mcauth_acq(T2) != target ||
+      (uintptr_t)lj_ptr_strip(target) != mcodep)
+    goto reject_published;
+#endif
+  setsbufL(&tg->tmpbuf, L);
+  result.trace = T;
+  result.target = target;
+  return result;
+
+reject_published:
+  lj_tg_store_jit_base(tg, NULL);
+  trace_test_root_entry_cleaned();
+  return result;
 }
 #endif
 
