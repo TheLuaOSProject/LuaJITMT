@@ -2893,6 +2893,45 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
   lj_mcode_sync(T->mcode, as->mctoporig);
 }
 
+#if LJ_TARGET_ARM64 && defined(LJ_ARM64_EMIT_TEST_HELPERS)
+MSize lj_asm_arm64_emit_test(jit_State *J, MCode *buf, MSize cap,
+			     LJArm64EmitTestOp op, int32_t state)
+{
+  ASMState as_;
+  ASMState *as = &as_;
+  MCode *end;
+  MSize n;
+
+  if (J == NULL || buf == NULL || cap < 8)
+    return 0;
+  memset(as, 0, sizeof(*as));
+  as->J = J;
+  as->mcp = end = buf + cap;
+  switch (op) {
+  case LJ_ARM64_EMIT_TEST_GET_CUR_L:
+    emit_gettg(as, RID_X0, cur_L);
+    break;
+  case LJ_ARM64_EMIT_TEST_GET_JIT_BASE:
+    emit_gettg(as, RID_X1, jit_base);
+    break;
+  case LJ_ARM64_EMIT_TEST_SET_JIT_BASE:
+    emit_settg(as, RID_X2, jit_base);
+    break;
+  case LJ_ARM64_EMIT_TEST_SETVMSTATE:
+    emit_setvmstate(as, state);
+    break;
+  case LJ_ARM64_EMIT_TEST_SETVMSTATE_ROOT:
+    emit_setvmstate_root(as, state);
+    break;
+  default:
+    return 0;
+  }
+  n = (MSize)(end - as->mcp);
+  memmove(buf, as->mcp, n * sizeof(MCode));
+  return n;
+}
+#endif
+
 #undef IR
 
 #endif

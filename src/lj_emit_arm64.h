@@ -343,25 +343,75 @@ static void emit_loadk64(ASMState *as, Reg r, IRIns *ir)
 #define emit_setgl(as, r, field) \
   emit_lsptr(as, A64I_STRx, (r), (void *)&J2G(as->J)->field)
 
-#if LJ_ARM64_JIT_FAIL_CLOSED
-/* These contracts are required by the shared assembler. Until TG-relative
-** ARM64 lowering exists, fail assembly instead of emitting a global-state
-** approximation that could later become reachable by accident. */
-static LJ_NORET void emit_arm64_jit_fail_closed(ASMState *as)
+/* -- TG-local JIT state -------------------------------------------------- */
+
+/* RID_DISPATCH (x25) is the fixed TGState.dispatch carrier. The remotely
+** observed pointer fields use acquire/release instructions. RID_TMP (x30) is
+** already reserved by the ARM64 allocator and is the sole address scratch. */
+LJ_STATIC_ASSERT(RID_DISPATCH == RID_X25);
+LJ_STATIC_ASSERT(RID_TMP == RID_LR);
+LJ_STATIC_ASSERT(sizeof(((TGState *)0)->cur_L) == sizeof(void *));
+LJ_STATIC_ASSERT(sizeof(((TGState *)0)->jit_base) == sizeof(void *));
+LJ_STATIC_ASSERT(sizeof(((TGState *)0)->vmstate) == sizeof(uint32_t));
+LJ_STATIC_ASSERT(DISPATCH_TG(cur_L) >= 0 && DISPATCH_TG(cur_L) <= 4095);
+LJ_STATIC_ASSERT(DISPATCH_TG(jit_base) >= 0 &&
+		 DISPATCH_TG(jit_base) <= 4095);
+LJ_STATIC_ASSERT(DISPATCH_TG(vmstate) >= 0 &&
+		 DISPATCH_TG(vmstate) <= 4095);
+LJ_STATIC_ASSERT((DISPATCH_TG(cur_L) & 7) == 0);
+LJ_STATIC_ASSERT((DISPATCH_TG(jit_base) & 7) == 0);
+LJ_STATIC_ASSERT((DISPATCH_TG(vmstate) & 3) == 0);
+
+static void emit_tgaddr(ASMState *as, int32_t ofs)
 {
-  lj_trace_err(as->J, LJ_TRERR_NYIIR);
+  uint32_t k12 = emit_isk12(ofs);
+  lj_assertA(ofs >= 0 && ofs <= 4095 && k12 != 0,
+	     "TG dispatch offset %d out of range", ofs);
+  emit_dn(as, A64I_ADDx^k12, RID_TMP, RID_DISPATCH);
 }
+
+static void emit_gettg_(ASMState *as, Reg r, int32_t ofs)
+{
+  lj_assertA(r < RID_MAX_GPR && r != RID_DISPATCH,
+	     "bad TG load register %d", r);
+  emit_dn(as, A64I_LDARx, r, RID_TMP);
+  emit_tgaddr(as, ofs);
+}
+
+static void emit_settg_(ASMState *as, Reg r, int32_t ofs)
+{
+  lj_assertA(r < RID_MAX_GPR && r != RID_TMP,
+	     "bad TG store register %d", r);
+  emit_dn(as, A64I_STLRx, r, RID_TMP);
+  emit_tgaddr(as, ofs);
+}
+
 #define emit_gettg(as, r, field) \
-  do { UNUSED(r); emit_arm64_jit_fail_closed(as); } while (0)
+  emit_gettg_((as), (r), DISPATCH_TG(field))
 #define emit_settg(as, r, field) \
-  do { UNUSED(r); emit_arm64_jit_fail_closed(as); } while (0)
+  emit_settg_((as), (r), DISPATCH_TG(field))
+
+/* A direct release store needs two registers for the address and immediate.
+** Keep x25 invariant and x30 as the only scratch by using the equivalent
+** DMB ISH + naturally aligned STRw publication sequence. emit_loadi preserves
+** the exact uint32_t bit pattern for positive trace numbers and complemented
+** negative VM states. */
+static void emit_setvmstate_(ASMState *as, int32_t state)
+{
+  int32_t ofs = DISPATCH_TG(vmstate);
+  lj_assertA(ofs >= 0 && ofs <= 4095 && (ofs & 3) == 0,
+	     "TG vmstate offset %d out of range", ofs);
+  *--as->mcp = A64I_STRw | A64F_D(RID_TMP) | A64F_N(RID_DISPATCH) |
+	       A64F_U12((uint32_t)ofs >> 2);
+  *--as->mcp = A64I_DMB_ISH;
+  emit_loadi(as, RID_TMP, state);
+}
+
 #define emit_setvmstate(as, i) \
-  do { UNUSED(i); emit_arm64_jit_fail_closed(as); } while (0)
+  emit_setvmstate_((as), (int32_t)(i))
 #define emit_setvmstate_root(as, i) emit_setvmstate((as), (i))
-#else
-/* Trace number is determined from pc of exit instruction. */
-#define emit_setvmstate(as, i)	UNUSED(i)
-#endif
+
+/* -- End TG-local JIT state --------------------------------------------- */
 
 /* -- Emit control-flow instructions -------------------------------------- */
 

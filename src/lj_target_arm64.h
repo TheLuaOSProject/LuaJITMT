@@ -245,10 +245,12 @@ typedef enum A64Ins {
   A64I_LDRx = 0xf9400000,
   A64I_LDRLw = 0x18000000,
   A64I_LDRLx = 0x58000000,
+  A64I_LDARx = 0xc8dffc00,
   A64I_STRB = 0x39000000,
   A64I_STRH = 0x79000000,
   A64I_STRw = 0xb9000000,
   A64I_STRx = 0xf9000000,
+  A64I_STLRx = 0xc89ffc00,
   A64I_STPw = 0x29000000,
   A64I_STPx = 0xa9000000,
   A64I_LDPw = 0x29400000,
@@ -271,6 +273,7 @@ typedef enum A64Ins {
   A64I_BTI_J  = 0xd503249f,
   A64I_BTI_JC = 0xd50324df,
 
+  A64I_DMB_ISH = 0xd5033bbf,
   A64I_NOP = 0xd503201f,
 
   /* FP */

@@ -301,9 +301,12 @@ contract.
 
 The widened x64 predicates retain their original x64 branches: x64 remains on
 the existing explicit hot/stitch/exit/snapshot ABI, XPOLL recording/lowering,
-grouped exit stubs and MAP_JIT path. A separate clean x64 build was not run in
-the shared native ARM64 build window; default-x64 compile/runtime CI remains a
-required integration gate.
+grouped exit stubs and MAP_JIT path. Parent integration subsequently
+cross-built `ee5ffe9f` as thin x86_64 with `TARGET_FLAGS=-arch x86_64`; its
+enabled-JIT numeric smoke passed and the stock suite reported 509 passes under
+Rosetta. `t-threading-api.lua -joff` panicked at its caught closed-channel error
+on both `ee5ffe9f` and parent `cc420988`, confirming that failure was
+pre-existing rather than a scaffolding regression.
 
 ## Hard blockers
 

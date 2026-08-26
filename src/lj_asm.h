@@ -12,6 +12,17 @@
 LJ_FUNC void lj_asm_trace(jit_State *J, GCtrace *T);
 LJ_FUNC void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno,
 			      MCode *target);
+#if LJ_TARGET_ARM64 && defined(LJ_ARM64_EMIT_TEST_HELPERS)
+typedef enum {
+  LJ_ARM64_EMIT_TEST_GET_CUR_L,
+  LJ_ARM64_EMIT_TEST_GET_JIT_BASE,
+  LJ_ARM64_EMIT_TEST_SET_JIT_BASE,
+  LJ_ARM64_EMIT_TEST_SETVMSTATE,
+  LJ_ARM64_EMIT_TEST_SETVMSTATE_ROOT
+} LJArm64EmitTestOp;
+LJ_FUNC MSize lj_asm_arm64_emit_test(jit_State *J, MCode *buf, MSize cap,
+				     LJArm64EmitTestOp op, int32_t state);
+#endif
 #endif
 
 #endif
