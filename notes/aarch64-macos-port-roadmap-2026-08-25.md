@@ -382,3 +382,24 @@ is safe to scan.
 The next safe slice is complete stack/result dirty and collectable-root
 publication.  Only after that parity is reviewed may ARM begin acknowledging
 TG safepoint requests.
+
+### 6. Rooted Apple ARM64 table and continuation paths
+
+The active JIT-disabled ARM64 interpreter now routes global/table reads,
+pair-aware table writes, raw integer/range stores, iteration, table length,
+and the corresponding continuation/result slots through the fork's rooted,
+generation-safe helper protocols. Allocating helpers reload the relocated Lua
+stack and re-decode bytecode destinations; TSETR also performs the required
+post-store table barrier, while TSETM uses the self-contained keyed range
+helper.
+
+A clean assert bootstrap, all 387 stock tests, threading/hook/coroutine and FFI
+callback checks, and a 3,000-round GC-worker table/metamethod stress passed on
+the native Apple ARM64 host. The focused rooted-table note records the exact
+paths and ABI rules.
+
+This checkpoint deliberately does not enable safepoint acknowledgement. The
+remaining Stage 2 work is call/return and fast-result topology plus every
+ordinary collectable-producing stack write. Stock ARM metatable/equality fast
+checks and ISNEXT bytecode publication are also retained as explicit
+lockless-interpreter debts rather than hidden by the rooted-table claim.
