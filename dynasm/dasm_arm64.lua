@@ -248,6 +248,13 @@ local map_bti = {
   c = 0x40, j = 0x80, jc = 0xc0,
 }
 
+local map_barrier = {
+  oshld = 0x100, oshst = 0x200, osh = 0x300,
+  nshld = 0x500, nshst = 0x600, nsh = 0x700,
+  ishld = 0x900, ishst = 0xa00, ish = 0xb00,
+  ld = 0xd00, st = 0xe00, sy = 0xf00,
+}
+
 ------------------------------------------------------------------------------
 
 local parse_reg_type
@@ -482,6 +489,47 @@ end
 local function parse_map(expr, map)
   local x = map[expr]
   if not x then werror("bad operand") end
+  return x
+end
+
+local function parse_base_only(expr)
+  local base = match(expr, "^%[%s*(.-)%s*%]$")
+  local tname, ovreg, tp, resolved
+  if not base or base == "" or match(base, "[,!]") then
+    werror("expected base-only address operand `[xN]` or `[sp]`")
+  end
+  tname, ovreg = match(base, "^([%w_]+):(@?%l%d+)$")
+  if not tname then
+    tname, ovreg = match(base, "^([%w_]+):(R[xwqdshb]%b())$")
+  end
+  tp = map_type[tname or base]
+  resolved = tp and (ovreg or tp.reg) or base
+  if tp and not resolved then
+    werror("type `"..(tname or base).."' needs a register override")
+  end
+  if resolved == "@x31" or resolved == "xzr" then
+    werror("zero register is not a valid address base")
+  end
+  return parse_reg_base(base)
+end
+
+local function parse_barrier(expr, is_isb)
+  local x = map_barrier[expr]
+  if is_isb and x and expr ~= "sy" then x = nil end
+  if not x then
+    local imm = match(expr, "^#(.*)$")
+    local n = imm and parse_number(imm)
+    if n and n % 1 == 0 and n >= 0 and n <= 15 then
+      x = shl(n, 8)
+    end
+  end
+  if not x then
+    if is_isb then
+      werror("expected ISB option `sy` or immediate `#0` ... `#15`")
+    else
+      werror("expected DMB option or immediate `#0` ... `#15`")
+    end
+  end
   return x
 end
 
@@ -816,6 +864,14 @@ map_op = {
   ["ldrsw_*"] = "98000000DxB|b8800000DxL",
   -- NOTE: ldur etc. are handled by ldr et al.
 
+  -- Load-acquire/store-release. These only accept base-only addresses.
+  ldar_2  = "88dffc00DaK",
+  ldarb_2 = "08dffc00DwK",
+  ldarh_2 = "48dffc00DwK",
+  stlr_2  = "889ffc00DaK",
+  stlrb_2 = "089ffc00DwK",
+  stlrh_2 = "489ffc00DwK",
+
   ["stp_*"]   = "28000000DAwP|a8000000DAxP|2c000000DAsP|6c000000DAdP|ac000000DAqP",
   ["ldp_*"]   = "28400000DAwP|a8400000DAxP|2c400000DAsP|6c400000DAdP|ac400000DAqP",
   ["ldpsw_*"] = "68400000DAxP",
@@ -854,7 +910,10 @@ map_op = {
   -- TODO: hlt, hvc, smc, svc, eret, dcps[123], drps, mrs, msr
   -- TODO: sys, sysl, ic, dc, at, tlbi
   -- TODO: hint, yield, wfe, wfi, sev, sevl
-  -- TODO: clrex, dsb, dmb, isb
+  -- TODO: clrex, dsb
+  dmb_1  = "d50330bfY",
+  isb_0  = "d5033fdf",
+  isb_1  = "d50330dfy",
   nop_0  = "d503201f",
   brk_0  = "d4200000",
   brk_1  = "d4200000W",
@@ -955,6 +1014,13 @@ local function parse_template(params, template, nparams, pos)
 	werror("bad register type")
       end
       parse_reg_type = false
+    elseif p == "a" then
+      if parse_reg_type == "x" then
+	op = op + 0x40000000
+      elseif parse_reg_type ~= "w" then
+	werror("bad register type")
+      end
+      parse_reg_type = false
     elseif p == "f" then
       if parse_reg_type == "d" then
 	op = op + 0x00400000
@@ -972,6 +1038,8 @@ local function parse_template(params, template, nparams, pos)
       op = parse_load(params, nparams, n, op)
     elseif p == "P" then
       op = parse_load_pair(params, nparams, n, op)
+    elseif p == "K" then
+      op = op + parse_base_only(q); n = n + 1
 
     elseif p == "B" then
       local mode, v, s = parse_label(q, false); n = n + 1
@@ -1018,6 +1086,10 @@ local function parse_template(params, template, nparams, pos)
       op = op + parse_cond(q, 1); n = n + 1
     elseif p == "t" then
       op = op + parse_map(q, map_bti); n = n + 1
+    elseif p == "Y" then
+      op = op + parse_barrier(q, false); n = n + 1
+    elseif p == "y" then
+      op = op + parse_barrier(q, true); n = n + 1
 
     else
       assert(false)
@@ -1245,4 +1317,3 @@ end
 return _M
 
 ------------------------------------------------------------------------------
-
