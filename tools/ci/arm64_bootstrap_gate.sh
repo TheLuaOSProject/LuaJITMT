@@ -126,7 +126,7 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
   LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
   "$luajit" "$root/tools/test.lua" \
     m5_arm64_root_publication_runtime m5_arm64_safepoint_runtime \
-    m5_arm64_pcall_anchor_runtime
+    m5_arm64_pcall_anchor_runtime m5_arm64_capi_meta_roots
 
 (
   cd "$root/tests/stock/test"

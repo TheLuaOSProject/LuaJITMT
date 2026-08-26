@@ -23,7 +23,8 @@ local suites = {
   suite("m5_arm64_meta"),
   suite("m5_arm64_isnext"),
   suite("m5_arm64_safepoint"),
-  suite("m5_arm64_pcall_anchor")
+  suite("m5_arm64_pcall_anchor"),
+  suite("m5_arm64_capi")
 }
 
 local tests = {}
