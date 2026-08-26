@@ -933,9 +933,10 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov CARG1, L
   |   str PC, SAVE_PC
   |  uxtb CARG4w, INSw
-  |  bl extern lj_meta_comp  // (lua_State *L, TValue *o1, *o2, int op)
+  |  bl extern lj_meta_comp_rooted  // (lua_State *L, TValue *o1, *o2, int op)
   |  // Returns 0/1 or TValue * (metamethod).
   |3:
+  |  ldr BASE, L->base			// Rooted helper may relocate the stack.
   |  cmp CRET1, #1
   |  bhi ->vmeta_binop
   |4:
@@ -977,13 +978,12 @@ static void build_subroutines(BuildCtx *ctx)
   |  b <4
   |
   |->vmeta_equal:
-  |  // CARG2, CARG3, CARG4 are already set by BC_ISEQV/BC_ISNEV.
-  |  and TAB:CARG3, CARG3, #LJ_GCVMASK
+  |  // CARG2/CARG3 are authoritative stack roots, CARG4 is ne.
   |  sub PC, PC, #4
   |   str BASE, L->base
   |   mov CARG1, L
   |  str PC, SAVE_PC
-  |  bl extern lj_meta_equal  // (lua_State *L, GCobj *o1, *o2, int ne)
+  |  bl extern lj_meta_equal_rooted  // (lua_State *L, TValue *o1, *o2, int ne)
   |  // Returns 0/1 or TValue * (metamethod).
   |  b <3
   |
@@ -2704,20 +2704,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     } else {
       |  bhi ->BC_ISEQV_Z		// Reuse code from opposite instruction.
     }
-    |  // Different tables or userdatas. Need to check __eq metamethod.
-    |  // Field metatable must be at same offset for GCtab and GCudata!
-    |  and TAB:CARG2, CARG1, #LJ_GCVMASK
-    |  ldr TAB:TMP2, TAB:CARG2->metatable
+    |  // Different tables or userdatas. Resolve __eq from rooted stack slots.
+    |  add CARG2, BASE, RA, lsl #3
+    |  mov CARG3, RC
     if (vk) {
-      |  cbz TAB:TMP2, <1		// No metatable?
-      |  ldrb TMP1w, TAB:TMP2->nomm
-      |   mov CARG4, #0			// ne = 0
-      |  tbnz TMP1w, #MM_eq, <1		// 'no __eq' flag set: done.
+      |  mov CARG4, #0			// ne = 0
     } else {
-      |  cbz TAB:TMP2, ->BC_ISEQV_Z	// No metatable?
-      |  ldrb TMP1w, TAB:TMP2->nomm
-      |   mov CARG4, #1			// ne = 1.
-      |  tbnz TMP1w, #MM_eq, ->BC_ISEQV_Z	// 'no __eq' flag set: done.
+      |  mov CARG4, #1			// ne = 1.
     }
     |  b ->vmeta_equal
     break;

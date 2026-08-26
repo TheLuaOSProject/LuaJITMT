@@ -826,11 +826,13 @@ static TValue *meta_stale_error_operand(lua_State *L,
 ** mmcall() release-publishes the function and both arguments before returning;
 ** advance top only after that complete handoff and before dropping the anchors
 ** which fed it. */
-static void meta_chain_mmcall(lua_State *L, ASMFunction cont, cTValue *method,
-			      cTValue *receiver, cTValue *key)
+static TValue *meta_chain_mmcall(lua_State *L, ASMFunction cont,
+				 cTValue *method, cTValue *receiver,
+				 cTValue *key)
 {
   TValue *base = mmcall(L, cont, method, receiver, key);
   L->top = base;
+  return base;
 }
 
 /* Shared rooted implementation for TGET*. __index chain and metamethod. */
@@ -1474,6 +1476,57 @@ TValue * LJ_FASTCALL lj_meta_len(lua_State *L, cTValue *o)
 }
 
 /* Helper for equality comparisons. __eq metamethod. */
+TValue *lj_meta_equal_rooted(lua_State *L, cTValue *o1, cTValue *o2, int ne)
+{
+  MetaChainRoots roots;
+  MetaSourceRef o1ref = meta_source_ref(L, o1);
+  MetaSourceRef o2ref = meta_source_ref(L, o2);
+  TValue *lhs, *rhs, *method, *method2, *base;
+  int capture;
+
+  meta_chain_roots_init(L, &roots);
+  capture = meta_chain_capture_inputs(L, &roots, &o1ref, &o2ref);
+  if (LJ_UNLIKELY(capture != META_CAPTURE_VALID)) {
+    meta_chain_roots_fini(&roots);
+    return (TValue *)(intptr_t)ne;
+  }
+
+  lhs = meta_chain_root(&roots, META_CHAIN_RECEIVER);
+  rhs = meta_chain_root(&roots, META_CHAIN_KEY);
+  if (LJ_UNLIKELY(itype(lhs) != itype(rhs) ||
+		  !(tvistab(lhs) || tvisudata(lhs)))) {
+    meta_chain_roots_fini(&roots);
+    return (TValue *)(intptr_t)ne;
+  }
+  if (LJ_UNLIKELY(lj_obj_equal(lhs, rhs))) {
+    meta_chain_roots_fini(&roots);
+    return (TValue *)(intptr_t)!ne;
+  }
+
+  /* Equality requires the exact same handler on both operands in Lua 5.1 and
+  ** Lua 5.2 compatibility mode. Keep the two independently captured methods
+  ** in distinct anchors across every lookup retry. */
+  method = meta_chain_root(&roots, META_CHAIN_METHOD);
+  method2 = meta_chain_root(&roots, META_CHAIN_RESULT);
+  (void)lj_meta_lookuptv(L, method, lhs, MM_eq);
+  (void)lj_meta_lookuptv(L, method2, rhs, MM_eq);
+  method = meta_chain_root(&roots, META_CHAIN_METHOD);
+  method2 = meta_chain_root(&roots, META_CHAIN_RESULT);
+  if (tvisnil(method) || tvisnil(method2) ||
+      !lj_obj_equal(method, method2)) {
+    meta_chain_roots_fini(&roots);
+    return (TValue *)(intptr_t)ne;
+  }
+
+  lhs = meta_chain_root(&roots, META_CHAIN_RECEIVER);
+  rhs = meta_chain_root(&roots, META_CHAIN_KEY);
+  base = meta_chain_mmcall(L, ne ? lj_cont_condf : lj_cont_condt,
+			   method, lhs, rhs);
+  meta_chain_roots_fini(&roots);
+  return base;
+}
+
+/* Legacy naked-object ABI retained for the existing x64 VM caller. */
 TValue *lj_meta_equal(lua_State *L, GCobj *o1, GCobj *o2, int ne)
 {
   /* Field metatable must be at same offset for GCtab and GCudata! */
@@ -1533,7 +1586,118 @@ TValue * LJ_FASTCALL lj_meta_equal_cd(lua_State *L, BCIns ins)
 }
 #endif
 
-/* Helper for ordered comparisons. String compare, __lt/__le metamethods. */
+/* Rooted ARM helper for ordered comparisons. String compare and __lt/__le. */
+TValue *lj_meta_comp_rooted(lua_State *L, cTValue *o1, cTValue *o2, int op)
+{
+  MetaChainRoots roots;
+  MetaSourceRef o1ref = meta_source_ref(L, o1);
+  MetaSourceRef o2ref = meta_source_ref(L, o2);
+  TValue *lhs, *rhs, *method, *base;
+#if !LJ_52
+  TValue *method2;
+#endif
+  int capture;
+  int swapped = 0;
+
+  meta_chain_roots_init(L, &roots);
+  capture = meta_chain_capture_inputs(L, &roots, &o1ref, &o2ref);
+  if (LJ_UNLIKELY(capture != META_CAPTURE_VALID)) {
+    cTValue *err1 = meta_source_current(L, &o1ref);
+    cTValue *err2 = meta_source_current(L, &o2ref);
+    meta_chain_roots_fini(&roots);
+    lj_err_comp(L, err1, err2);
+    return NULL;  /* unreachable */
+  }
+
+  lhs = meta_chain_root(&roots, META_CHAIN_RECEIVER);
+  rhs = meta_chain_root(&roots, META_CHAIN_KEY);
+  method = meta_chain_root(&roots, META_CHAIN_METHOD);
+  if (LJ_HASFFI && (tviscdata(lhs) || tviscdata(rhs))) {
+    ASMFunction cont = (op & 1) ? lj_cont_condf : lj_cont_condt;
+    MMS mm = (op & 2) ? MM_le : MM_lt;
+    (void)lj_meta_lookuptv(L, method,
+			   tviscdata(lhs) ? lhs : rhs, mm);
+    method = meta_chain_root(&roots, META_CHAIN_METHOD);
+    if (LJ_UNLIKELY(tvisnil(method))) goto err;
+    lhs = meta_chain_root(&roots, META_CHAIN_RECEIVER);
+    rhs = meta_chain_root(&roots, META_CHAIN_KEY);
+    base = meta_chain_mmcall(L, cont, method, lhs, rhs);
+    meta_chain_roots_fini(&roots);
+    return base;
+  } else if (LJ_52 || itype(lhs) == itype(rhs)) {
+    /* Never called with two numbers. */
+    if (tvisstr(lhs) && tvisstr(rhs)) {
+      int32_t res = lj_str_cmp(strV(lhs), strV(rhs));
+      TValue *ret = (TValue *)(intptr_t)
+	(((op&2) ? res <= 0 : res < 0) ^ (op&1));
+      meta_chain_roots_fini(&roots);
+      return ret;
+    } else {
+    trymt:
+      while (1) {
+	ASMFunction cont = (op & 1) ? lj_cont_condf : lj_cont_condt;
+	MMS mm = (op & 2) ? MM_le : MM_lt;
+	lhs = meta_chain_root(&roots, swapped ? META_CHAIN_KEY :
+					      META_CHAIN_RECEIVER);
+	rhs = meta_chain_root(&roots, swapped ? META_CHAIN_RECEIVER :
+					      META_CHAIN_KEY);
+	method = meta_chain_root(&roots, META_CHAIN_METHOD);
+	(void)lj_meta_lookuptv(L, method, lhs, mm);
+#if LJ_52
+	method = meta_chain_root(&roots, META_CHAIN_METHOD);
+	if (tvisnil(method)) {
+	  (void)lj_meta_lookuptv(L, method, rhs, mm);
+	  method = meta_chain_root(&roots, META_CHAIN_METHOD);
+	}
+	if (tvisnil(method))
+#else
+	method2 = meta_chain_root(&roots, META_CHAIN_RESULT);
+	(void)lj_meta_lookuptv(L, method2, rhs, mm);
+	method = meta_chain_root(&roots, META_CHAIN_METHOD);
+	method2 = meta_chain_root(&roots, META_CHAIN_RESULT);
+	if (tvisnil(method) || tvisnil(method2) ||
+	    !lj_obj_equal(method, method2))
+#endif
+	{
+	  if (op & 2) {  /* MM_le not found: retry with MM_lt. */
+	    swapped = !swapped;
+	    op ^= 3;  /* Use LT and flip condition. */
+	    continue;
+	  }
+	  goto err;
+	}
+	lhs = meta_chain_root(&roots, swapped ? META_CHAIN_KEY :
+					      META_CHAIN_RECEIVER);
+	rhs = meta_chain_root(&roots, swapped ? META_CHAIN_RECEIVER :
+					      META_CHAIN_KEY);
+	base = meta_chain_mmcall(L, cont, method, lhs, rhs);
+	meta_chain_roots_fini(&roots);
+	return base;
+      }
+    }
+  } else if (tvisbool(lhs) && tvisbool(rhs)) {
+    goto trymt;
+  } else {
+  err:
+    {
+      TValue err1, err2;
+      lhs = meta_chain_root(&roots, swapped ? META_CHAIN_KEY :
+					      META_CHAIN_RECEIVER);
+      rhs = meta_chain_root(&roots, swapped ? META_CHAIN_RECEIVER :
+					      META_CHAIN_KEY);
+      /* lj_err_comp() only consumes the two type tags before it can allocate.
+      ** Snapshot those raw words, then explicitly release the private anchors:
+      ** ARM fast pcall frames do not carry the x64 root-anchor checkpoint. */
+      tv_rawstore(&err1, tv_rawload_acq(lhs));
+      tv_rawstore(&err2, tv_rawload_acq(rhs));
+      meta_chain_roots_fini(&roots);
+      lj_err_comp(L, &err1, &err2);
+    }
+    return NULL;
+  }
+}
+
+/* Legacy comparison ABI retained for API and non-ARM VM callers. */
 TValue *lj_meta_comp(lua_State *L, cTValue *o1, cTValue *o2, int op)
 {
   lj_gc_pubroot(L, o1);

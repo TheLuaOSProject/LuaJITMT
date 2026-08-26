@@ -499,3 +499,31 @@ The raw C API `lua_getmetatable` remains a separate concurrency debt; this
 checkpoint only certifies the protected base-library operation. Rooted distinct
 equality/comparison and target-first full-word `ISNEXT` despecialization remain
 the final lockless-interpreter pieces before Stage 2 safepoint work.
+
+### 11. Apple ARM64 rooted equality and comparison
+
+Distinct table/userdata equality and ordered comparisons now enter dedicated
+ARM helpers with authoritative frame-relative operand roots. Both operands and
+both candidate methods remain in TG anchors through retry-capable exact
+metamethod lookup and release-publication of the complete call frame. ARM no
+longer reads table/userdata metatable pointers or the negative metamethod cache
+inline for equality, and the shared comparison return path reloads a relocated
+`BASE` before dispatch.
+
+The equality helper enforces Lua 5.1's exact same-handler rule for both
+operands. The comparison helper preserves exact-handler `__lt`/`__le` rules and
+the swapped-and-negated `not (rhs < lhs)` fallback. Caught comparison errors
+raw-copy only their type tags and explicitly release all anchors before
+throwing, because ARM fast protected-call frames do not carry the x64 anchor
+checkpoint.
+
+The clean native assert bootstrap, all 387 stock tests, threading/hook/
+coroutine checks, 320 FFI callback rounds, the strengthened source/object
+contract, nested full-GC retention, equality/fallback semantics, and repeated
+`pcall`/`xpcall` comparison-error anchor restoration passed. Legacy API and
+non-ARM comparison/equality entry points remain isolated; C pseudo-index
+capture is recorded as separate API debt.
+
+Target-first full-word `ISNEXT` despecialization is now the remaining known
+JIT-off interpreter mutation gap before Stage 2 can close and ARM safepoint
+acknowledgement can begin.
