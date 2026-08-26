@@ -345,8 +345,40 @@ fork's local-cell bytecodes, coroutine ownership claims, protected C-call ABI,
 and TG-local FFI callback runtime.  Darwin callback stack decoding now follows
 the packed scalar ABI rather than assuming eight-byte stack slots.
 
-This is deliberately not the P1 exit gate.  ARM still uses global dispatch,
-hook, and VM-state fields; it has no TG safepoint polling; and ordinary
-bytecode stack/result stores do not yet have complete dirty-epoch/root
-publication parity.  `notes/aarch64-interpreter-ffi-bootstrap-2026-08-26.md`
+This was deliberately not the P1 exit gate.  At that checkpoint ARM still
+used global dispatch, hook, and VM-state fields; it had no TG safepoint
+polling; and ordinary bytecode stack/result stores lacked complete dirty-
+epoch/root publication parity.  The focused interpreter/FFI bootstrap note
 records the exact validation, ABI scope, and next root-publication hotspots.
+
+### 5. TG-local Apple ARM64 interpreter dispatch
+
+The JIT-disabled ARM64 interpreter now dedicates callee-saved `x25` to the
+current `TGState.dispatch` table.  Every active VM entry, unwind landing, and
+FFI callback entry reconstructs that pointer from the running state's
+`tg_hint`; dynamic and static bytecode dispatch and hot counters no longer
+index the universe-global dispatch table.  `x22` remains the global-state
+register, and the old `TISNUMhi` cache is materialized in scratch only at its
+six type checks.
+
+Current-state and VM-state publication now use release stores to the TG
+fields, with the universe-global VM-state word retained only as a transitional
+mirror.  Hook dispatch acquire-loads and combines the TG-local and global hook
+masks.  The shared hook counter is decremented by an assembly-callable atomic
+C helper, because a raw ARM load/sub/store would lose decrements between
+workers.  A first runtime pass exposed and fixed a post-helper register-
+liveness bug in static redispatch.
+
+`tools/ci/arm64_tg_dispatch_contract.sh` verifies the fixed-register ABI and
+generated acquire/release/RMW instructions, rejects active JIT-off
+`GG_G2DISP` addressing, and rejects atomic runtime helpers.  The integrated
+bootstrap gate passed a clean assert build, the 387 stock tests, threading API
+and hook tests, coroutine handoff/dead-resume coverage, and 320 FFI callback
+rounds.  Six consecutive focused hook runs also passed.  The existing VM
+safepoint fixture remains intentionally red at its first acknowledgement:
+Stage 1 changes dispatch authority only and does not claim that the ARM stack
+is safe to scan.
+
+The next safe slice is complete stack/result dirty and collectable-root
+publication.  Only after that parity is reviewed may ARM begin acknowledging
+TG safepoint requests.

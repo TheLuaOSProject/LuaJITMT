@@ -40,6 +40,7 @@ enum {
   RID_LPC = RID_X21,		/* Interpreter PC. */
   RID_GL = RID_X22,		/* Interpreter GL. */
   RID_LREG = RID_X23,		/* Interpreter L. */
+  RID_DISPATCH = RID_X25,	/* Interpreter TG dispatch table. */
 
   /* Register ranges [min, max) and number of registers. */
   RID_MIN_GPR = RID_X0,
@@ -55,10 +56,10 @@ enum {
 
 /* -- Register sets ------------------------------------------------------- */
 
-/* Make use of all registers, except for x18, fp, lr and sp. */
+/* Keep the platform registers, GL and the TG dispatch carrier fixed. */
 #define RSET_FIXED \
   (RID2RSET(RID_X18)|RID2RSET(RID_FP)|RID2RSET(RID_LR)|RID2RSET(RID_SP)|\
-   RID2RSET(RID_GL))
+   RID2RSET(RID_GL)|RID2RSET(RID_DISPATCH))
 #define RSET_GPR	(RSET_RANGE(RID_MIN_GPR, RID_MAX_GPR) - RSET_FIXED)
 #define RSET_FPR	RSET_RANGE(RID_MIN_FPR, RID_MAX_FPR)
 #define RSET_ALL	(RSET_GPR|RSET_FPR)

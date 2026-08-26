@@ -34,7 +34,7 @@
 |.define GLREG,		x22	// Global state.
 |.define LREG,		x23	// Register holding lua_State (also in SAVE_L).
 |.define TISNUM,	x24	// Constant LJ_TISNUM << 47.
-|.define TISNUMhi,	x25	// Constant LJ_TISNUM << 15.
+|.define DISPATCH,	x25	// Current TG dispatch table.
 |.define TISNIL,	x26	// Constant -1LL.
 |.define fp,		x29	// Yes, we have to maintain a frame pointer.
 |
@@ -50,6 +50,7 @@
 |.define INS,		x16
 |.define INSw,		w16
 |.define ITYPE,		x15
+|.define ATMP,		x14	// Address scratch for acquire/release accesses.
 |.define TMP0,		x8
 |.define TMP1,		x9
 |.define TMP2,		x10
@@ -233,9 +234,9 @@
 |// Instruction decode+dispatch.
 |.macro ins_NEXT
 |  ldr INSw, [PC], #4
-|  add TMP1, GL, INS, uxtb #3
+|  add TMP1, DISPATCH, INS, uxtb #3
 |   decode_RA RA, INS
-|  ldr TMP0, [TMP1, #GG_G2DISP]
+|  ldr TMP0, [TMP1]
 |   decode_RD RC, INS
 |  br_auth TMP0
 |.endmacro
@@ -262,9 +263,9 @@
 |  // BASE = new base, CARG3 = LFUNC/CFUNC, RC = nargs*8, FRAME_PC(BASE) = PC
 |  ldr PC, LFUNC:CARG3->pc
 |  ldr INSw, [PC], #4
-|  add TMP1, GL, INS, uxtb #3
+|  add TMP1, DISPATCH, INS, uxtb #3
 |   decode_RA RA, INS
-|  ldr TMP0, [TMP1, #GG_G2DISP]
+|  ldr TMP0, [TMP1]
 |   add RA, BASE, RA, lsl #3
 |  br_auth TMP0
 |.endmacro
@@ -293,23 +294,26 @@
 |.macro checkstr, reg, target; checktp reg, LJ_TSTR, target; .endmacro
 |.macro checktab, reg, target; checktp reg, LJ_TTAB, target; .endmacro
 |.macro checkfunc, reg, target; checktp reg, LJ_TFUNC, target; .endmacro
+|.macro cmp_tisnumhi, reg
+|  movz ITYPE, #(LJ_TISNUM>>1)&0xffff, lsl #16
+|  cmp ITYPE, reg, lsr #32
+|.endmacro
 |.macro checkint, reg, target
-|  cmp TISNUMhi, reg, lsr #32
+|  cmp_tisnumhi reg
 |  bne target
 |.endmacro
 |.macro checknum, reg, target
-|  cmp TISNUMhi, reg, lsr #32
+|  cmp_tisnumhi reg
 |  bls target
 |.endmacro
 |.macro checknumber, reg, target
-|  cmp TISNUMhi, reg, lsr #32
+|  cmp_tisnumhi reg
 |  blo target
 |.endmacro
 |
 |.macro init_constants
 |  movn TISNIL, #0
 |  movz TISNUM, #(LJ_TISNUM>>1)&0xffff, lsl #48
-|  movz TISNUMhi, #(LJ_TISNUM>>1)&0xffff, lsl #16
 |.endmacro
 |
 |.macro mov_false, reg; movn reg, #0x8000, lsl #32; .endmacro
@@ -319,16 +323,55 @@
 |.macro add_TISNUM, dst, src; add dst, src, TISNUM; .endmacro
 |
 #define GL_J(field)	(GG_G2J + (int)offsetof(jit_State, field))
+#define GL_OFS(field)	((int)offsetof(global_State, field))
+#define L_OFS(field)	((int)offsetof(lua_State, field))
+#define TG_OFS_DISPATCH	((int)offsetof(TGState, dispatch))
+
+LJ_STATIC_ASSERT(L_OFS(tg_hint) >= 0 && L_OFS(tg_hint) <= 4095);
+LJ_STATIC_ASSERT(TG_OFS_DISPATCH >= 0 && TG_OFS_DISPATCH <= 4095);
+LJ_STATIC_ASSERT(DISPATCH_TG(cur_L) >= 0 && DISPATCH_TG(cur_L) <= 4095);
+LJ_STATIC_ASSERT(DISPATCH_TG(vmstate) >= 0 && DISPATCH_TG(vmstate) <= 4095);
+LJ_STATIC_ASSERT(DISPATCH_TG(hookmask_th) >= 0 &&
+		 DISPATCH_TG(hookmask_th) <= 4095);
+LJ_STATIC_ASSERT(DISPATCH_TG(gl) >= 0 && DISPATCH_TG(gl) <= 4095);
+LJ_STATIC_ASSERT(GL_OFS(vmstate) >= 0 && GL_OFS(vmstate) <= 4095);
+LJ_STATIC_ASSERT(GL_OFS(hookmask) >= 0 && GL_OFS(hookmask) <= 4095);
+
+|// DISPATCH is relative to TGState.dispatch. Published owner identity and VM
+|// state use release stores because C-side observers sample them with acquire.
+|.macro load_DISPATCH, lreg
+|  add ATMP, lreg, #L_OFS(tg_hint)
+|  ldar DISPATCH, [ATMP]
+|  add DISPATCH, DISPATCH, #TG_OFS_DISPATCH
+|.endmacro
+|.macro load_G, reg
+|  ldr reg, [DISPATCH, #DISPATCH_TG(gl)]
+|.endmacro
+|.macro st_tg_cur_L, lreg
+|  add ATMP, DISPATCH, #DISPATCH_TG(cur_L)
+|  stlr lreg, [ATMP]
+|.endmacro
+|.macro ld_tg_cur_L, lreg
+|  add ATMP, DISPATCH, #DISPATCH_TG(cur_L)
+|  ldar lreg, [ATMP]
+|.endmacro
+|.macro arm64_vm_hookmask_acq, dst, tmp
+|  add ATMP, DISPATCH, #DISPATCH_TG(hookmask_th)
+|  ldarb dst, [ATMP]
+|  add ATMP, GL, #GL_OFS(hookmask)
+|  ldarb tmp, [ATMP]
+|  orr dst, dst, tmp
+|.endmacro
 |
 #define PC2PROTO(field)  ((int)offsetof(GCproto, field)-(int)sizeof(GCproto))
 |
 |.macro hotcheck, delta
 |  lsr CARG1, PC, #1
 |  and CARG1, CARG1, #126
-|  add CARG1, CARG1, #GG_G2DISP+GG_DISP2HOT
-|  ldrh CARG2w, [GL, CARG1]
+|  sub TMP0, DISPATCH, #-TG_DISP2HOT
+|  ldrh CARG2w, [TMP0, CARG1]
 |  subs CARG2, CARG2, #delta
-|  strh CARG2w, [GL, CARG1]
+|  strh CARG2w, [TMP0, CARG1]
 |.endmacro
 |
 |.macro hotloop
@@ -343,7 +386,12 @@
 |
 |// Set current VM state.
 |.macro mv_vmstate, reg, st; movn reg, #LJ_VMST_..st; .endmacro
-|.macro st_vmstate, reg; str reg, GL->vmstate; .endmacro
+|.macro st_vmstate, reg
+|  add ATMP, DISPATCH, #DISPATCH_TG(vmstate)
+|  stlr reg, [ATMP]
+|  add ATMP, GL, #GL_OFS(vmstate)
+|  stlr reg, [ATMP]
+|.endmacro
 |
 |// Move table write barrier back. Overwrites mark and tmp.
 |.macro barrierback, tab, mark, tmp
@@ -458,10 +506,11 @@ static void build_subroutines(BuildCtx *ctx)
   |  add fp, CARG1, # SAVE_FP_LR_
   |  mov sp, CARG1
   |  mov CRET1, CARG2
-  |  ldr L, SAVE_L
-  |  ldr GL, L->glref
   |->vm_unwind_c_eh:			// Landing pad for external unwinder.
   |  bti_tailcall
+  |  ldr L, SAVE_L
+  |  load_DISPATCH L
+  |  load_G GL
   |   mv_vmstate TMP0w, C
   |   st_vmstate TMP0w
   |  b ->vm_leave_unw
@@ -471,11 +520,12 @@ static void build_subroutines(BuildCtx *ctx)
   |  bti_tailcall
   |  add fp, CARG1, # SAVE_FP_LR_
   |  mov sp, CARG1
-  |  ldr L, SAVE_L
-  |    init_constants
-  |   ldr GL, L->glref			// Setup pointer to global state.
   |->vm_unwind_ff_eh:			// Landing pad for external unwinder.
   |  bti_tailcall
+  |  ldr L, SAVE_L
+  |    init_constants
+  |   load_DISPATCH L			// Setup pointer to TG dispatch table.
+  |   load_G GL				// Setup pointer to global state.
   |    mov RC, #16			// 2 results: false + error message.
   |  ldr BASE, L->base
   |    mov_false TMP0
@@ -521,7 +571,8 @@ static void build_subroutines(BuildCtx *ctx)
   |  // (lua_State *L, TValue *base, int nres1 = 0, ptrdiff_t ef = 0)
   |  saveregs
   |  mov L, CARG1
-  |    ldr GL, L->glref			// Setup pointer to global state.
+  |    load_DISPATCH L			// Setup pointer to TG dispatch table.
+  |    load_G GL				// Setup pointer to global state.
   |  mov BASE, CARG2
   |   str L, SAVE_L
   |  mov PC, #FRAME_CP
@@ -535,7 +586,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  cbz TMP1w, >3
   |
   |  // Resume after yield (like a return).
-  |  str L, GL->cur_L
+  |  st_tg_cur_L L
   |  mov RA, BASE
   |   ldp BASE, CARG1, L->base
   |    init_constants
@@ -566,7 +617,8 @@ static void build_subroutines(BuildCtx *ctx)
   |   str CARG3w, SAVE_NRES
   |    mov L, CARG1
   |   str CARG1, SAVE_L
-  |    ldr GL, L->glref			// Setup pointer to global state.
+  |    load_DISPATCH L			// Setup pointer to TG dispatch table.
+  |    load_G GL				// Setup pointer to global state.
   |     mov BASE, CARG2
   |   str CARG1, SAVE_PC		// Any value outside of bytecode is ok.
   |  add TMP0, sp, #0
@@ -574,7 +626,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  str TMP0, L->cframe		// Add our C frame to cframe chain.
   |
   |3:  // Entry point for vm_cpcall/vm_resume (BASE = base, PC = ftype).
-  |  str L, GL->cur_L
+  |  st_tg_cur_L L
   |  ldp RB, CARG1, L->base		// RB = old base (for vmeta_call).
   |  add PC, PC, BASE
   |    init_constants
@@ -597,7 +649,8 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov L, CARG1
   |   ldr RA, L:CARG1->stack
   |  str CARG1, SAVE_L
-  |    ldr GL, L->glref			// Setup pointer to global state.
+  |    load_DISPATCH L			// Setup pointer to TG dispatch table.
+  |    load_G GL				// Setup pointer to global state.
   |   ldr RB, L->top
   |  str CARG1, SAVE_PC			// Any value outside of bytecode is ok.
   |  ldr RC, L->cframe
@@ -607,7 +660,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  add TMP0, sp, #0
   |   str RC, SAVE_CFRAME
   |  str TMP0, L->cframe		// Add our C frame to cframe chain.
-  |    str L, GL->cur_L
+  |    st_tg_cur_L L
   |  blr_auth CARG4		// (lua_State *L, lua_CFunction func, void *ud)
   |  mov BASE, CRET1
   |   mov PC, #FRAME_CP
@@ -1243,7 +1296,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  cmp TMP1, TMP2
   |  blo ->fff_fallback
   |   cmp NARGS8:RC, #8
-  |  ldrb TMP0w, GL->hookmask
+  |  arm64_vm_hookmask_acq TMP0w, TMP3w
   |   blo ->fff_fallback
   |   sub NARGS8:RC, NARGS8:RC, #8
   |    mov RB, BASE
@@ -1266,7 +1319,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  cmp TMP1, TMP2
   |  blo ->fff_fallback
   |     ldp CARG1, CARG2, [BASE]
-  |  ldrb TMP0w, GL->hookmask
+  |  arm64_vm_hookmask_acq TMP0w, TMP3w
   |   subs NARGS8:TMP1, NARGS8:RC, #16
   |   blo ->fff_fallback
   |    mov RB, BASE
@@ -1340,7 +1393,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  ldp CARG3, CARG4, L:RA->base
   |   cmp CRET1, #LUA_YIELD
   |  ldr BASE, L->base
-  |    str L, GL->cur_L
+  |    st_tg_cur_L L
   |    st_vmstate ST_INTERP
   |   bhi >8
   |  sub RC, CARG4, CARG3
@@ -1446,7 +1499,7 @@ static void build_subroutines(BuildCtx *ctx)
   |   cmp NARGS8:RC, #8
   |  ldr d0, [BASE]
   |   blo ->fff_fallback
-  |  cmp TISNUMhi, CARG1, lsr #32
+  |  cmp_tisnumhi CARG1
   |  beq ->fff_restv
   |  blo ->fff_fallback
   |  round d0, d0
@@ -1875,39 +1928,38 @@ static void build_subroutines(BuildCtx *ctx)
   |->vm_record:				// Dispatch target for recording phase.
   |.if JIT
   |  bti_jump
-  |  ldrb CARG1w, GL->hookmask
+  |  arm64_vm_hookmask_acq CARG1w, CARG2w
   |  tst CARG1, #HOOK_VMEVENT		// No recording while in vmevent.
   |  bne >5
   |  // Decrement the hookcount for consistency, but always do the call.
-  |   ldr CARG2w, GL->hookcount
   |  tst CARG1, #HOOK_ACTIVE
   |  bne >1
-  |   sub CARG2w, CARG2w, #1
   |  tst CARG1, #LUA_MASKLINE|LUA_MASKCOUNT
   |  beq >1
-  |   str CARG2w, GL->hookcount
+  |   mov CARG1, GL
+  |   bl extern lj_dispatch_hookcount_dec
   |  b >1
   |.endif
   |
   |->vm_rethook:			// Dispatch target for return hooks.
   |  bti_jump
-  |  ldrb TMP2w, GL->hookmask
+  |  arm64_vm_hookmask_acq TMP2w, TMP3w
   |  tbz TMP2w, #HOOK_ACTIVE_SHIFT, >1	// Hook already active?
   |5:  // Re-dispatch to static ins.
-  |  ldr TMP0, [TMP1, #GG_G2DISP+GG_DISP2STATIC]
+  |  ldr TMP0, [TMP1, #GG_DISP2STATIC]
   |  br_auth TMP0
   |
   |->vm_inshook:			// Dispatch target for instr/line hooks.
   |  bti_jump
-  |  ldrb TMP2w, GL->hookmask
-  |   ldr TMP3w, GL->hookcount
+  |  arm64_vm_hookmask_acq TMP2w, TMP3w
   |  tbnz TMP2w, #HOOK_ACTIVE_SHIFT, <5	// Hook already active?
   |  tst TMP2w, #LUA_MASKLINE|LUA_MASKCOUNT
   |  beq <5
-  |   sub TMP3w, TMP3w, #1
-  |   str TMP3w, GL->hookcount
-  |   cbz TMP3w, >1
-  |  tbz TMP2w, #LUA_HOOKLINE, <5
+  |   mov CARG1, GL
+  |   bl extern lj_dispatch_hookcount_dec
+  |   cbz CRET1w, >1
+  |  arm64_vm_hookmask_acq TMP2w, TMP3w
+  |  tbz TMP2w, #LUA_HOOKLINE, >4	// Helper clobbered TMP1; rebuild it.
   |1:
   |  mov CARG1, L
   |   str BASE, L->base
@@ -1918,9 +1970,9 @@ static void build_subroutines(BuildCtx *ctx)
   |  ldr BASE, L->base
   |4:  // Re-dispatch to static ins.
   |  ldr INSw, [PC, #-4]
-  |  add TMP1, GL, INS, uxtb #3
+  |  add TMP1, DISPATCH, INS, uxtb #3
   |   decode_RA RA, INS
-  |  ldr TMP0, [TMP1, #GG_G2DISP+GG_DISP2STATIC]
+  |  ldr TMP0, [TMP1, #GG_DISP2STATIC]
   |   decode_RD RC, INS
   |  br_auth TMP0
   |
@@ -2073,7 +2125,7 @@ static void build_subroutines(BuildCtx *ctx)
   |    mv_vmstate CARG4w, EXIT
   |   stp xzr, CARG3, [sp, #62*8]	// Store 0/sp in RID_LR/RID_SP.
   |  sub CARG1, CARG1, lr
-  |   ldr L, GL->cur_L
+  |   ld_tg_cur_L L
   |  lsr CARG1, CARG1, #2
   |   ldr BASE, GL->jit_base
   |  sub CARG1, CARG1, #2
@@ -2356,9 +2408,11 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov CARG3, KBASE
   |  bl extern lj_ccallback_enter	// (CTState *cts, void *cf, CCallbackRuntime *cb)
   |  // Returns lua_State *.
-  |  ldp BASE, RC, L:CRET1->base
-  |   init_constants
   |   mov L, CRET1
+  |  load_DISPATCH L			// Setup callback carrier TG dispatch.
+  |  load_G GL
+  |  ldp BASE, RC, L->base
+  |   init_constants
   |  ldr LFUNC:CARG3, [BASE, FRAME_FUNC]
   |  sub RC, RC, BASE
   |   st_vmstate ST_INTERP
@@ -2496,7 +2550,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |    ldr FARG1, [BASE, RA, lsl #3]
     |  blo ->vmeta_comp
     |    ldr FARG2, [BASE, RC, lsl #3]
-    |   cmp TISNUMhi, CARG2, lsr #32
+    |   cmp_tisnumhi CARG2
     |   bhi >5
     |   bne ->vmeta_comp
     |  // RA number, RC int.
@@ -2650,7 +2704,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.endif
     |    ldr FARG1, [BASE, RA, lsl #3]
     |    ldr FARG2, [RC]
-    |   cmp TISNUMhi, CARG3, lsr #32
+    |   cmp_tisnumhi CARG3
     |   bne >5
     |  // RA number, RC int.
     |  scvtf FARG2, CARG3w
@@ -4258,7 +4312,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  blr_auth CARG4			// (lua_State *L [, lua_CFunction f])
     |  // Returns nresults.
     |  ldp BASE, TMP1, L->base
-    |    str L, GL->cur_L
+    |    st_tg_cur_L L
     |   sbfiz RC, CRET1, #3, #32
     |    st_vmstate ST_INTERP
     |  ldr PC, [BASE, FRAME_PC]

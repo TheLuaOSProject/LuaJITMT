@@ -150,6 +150,9 @@ LJ_FUNC void lj_dispatch_sync_tg(global_State *g, TGState *tg);
 LJ_FUNC void LJ_FASTCALL lj_dispatch_update(global_State *g, int nolock);
 
 /* Instruction dispatch callback for hooks or when recording. */
+#if LJ_TARGET_ARM64
+LJ_FUNCA int32_t LJ_FASTCALL lj_dispatch_hookcount_dec(global_State *g);
+#endif
 LJ_FUNCA void LJ_FASTCALL lj_dispatch_ins(lua_State *L, const BCIns *pc);
 LJ_FUNCA ASMFunction LJ_FASTCALL lj_dispatch_call(lua_State *L, const BCIns*pc);
 #if LJ_HASJIT

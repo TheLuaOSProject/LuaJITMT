@@ -667,6 +667,16 @@ static BCReg cur_topslot(GCproto *pt, const BCIns *pc, uint32_t nres)
 }
 
 /* Instruction dispatch. Used by instr/line/return hooks or when recording. */
+#if LJ_TARGET_ARM64
+int32_t LJ_FASTCALL lj_dispatch_hookcount_dec(global_State *g)
+{
+  /* Global hook count is shared by all TG dispatch overlays. Match the x64
+  ** locked decrement and return the post-decrement value without a signed
+  ** overflow in the C expression. */
+  return (int32_t)(la_sub32_acqrel((uint32_t *)&g->hookcount, 1) - 1u);
+}
+#endif
+
 void LJ_FASTCALL lj_dispatch_ins(lua_State *L, const BCIns *pc)
 {
   ERRNO_SAVE
