@@ -307,17 +307,33 @@ static MSize CALLBACK_OFS2SLOT(MSize ofs)
 /* Convert callback slot number to callback function pointer. */
 static void *callback_slot2ptr(CTState *cts, MSize slot)
 {
-  return (uint8_t *)ctype_cb_mcode_acq(cts) + CALLBACK_SLOT2OFS(slot);
+  void *p = (uint8_t *)ctype_cb_mcode_acq(cts) + CALLBACK_SLOT2OFS(slot);
+#if LJ_ABI_PAUTH
+  /* Generated callback slots are raw code addresses. Export them with the
+  ** normal C function-pointer signature expected by an indirect call. */
+  return lj_ptr_sign(p, 0);
+#else
+  return p;
+#endif
 }
 
 /* Convert callback function pointer to slot number. */
 MSize lj_ccallback_ptr2slot(CTState *cts, void *p)
 {
   uint8_t *mcode = (uint8_t *)ctype_cb_mcode_acq(cts);
-  uintptr_t ofs = (uintptr_t)((uint8_t *)p - mcode);
+  uintptr_t addr, base;
+  uintptr_t ofs;
+  if (mcode == NULL || p == NULL)
+    return ~0u;
+  addr = (uintptr_t)lj_ptr_strip(p);
+  base = (uintptr_t)mcode;
+  if (addr < base)
+    return ~0u;
+  ofs = addr - base;
   if (ofs < CALLBACK_MCODE_SIZE) {
     MSize slot = CALLBACK_OFS2SLOT((MSize)ofs);
-    if (CALLBACK_SLOT2OFS(slot) == (MSize)ofs)
+    if (slot < CALLBACK_MAX_SLOT &&
+	CALLBACK_SLOT2OFS(slot) == (MSize)ofs)
       return slot;
   }
   return ~0u;  /* Not a known callback function pointer. */
