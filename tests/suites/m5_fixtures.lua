@@ -6,6 +6,18 @@ local compile_and_run_sources = build.compile_and_run_sources
 
 return function(add)
   add({
+    name = "m5_arm64_bootstrap_gate",
+    description = "native macOS ARM64 interpreter/FFI bootstrap gate",
+    run = function(t)
+      t:run({ "sh", t:path("tools", "ci",
+                           "arm64_bootstrap_gate.sh") }, {
+        env = { LJ_TEST_RUN_LOCK_HELD = "1" },
+        timeout = os.getenv("LJ_ARM64_BOOTSTRAP_GATE_TIMEOUT") or "300s"
+      })
+    end
+  })
+
+  add({
     name = "m5_arm64_tab_pair_contract",
     description = "Apple ARM64 exact GCtab structural/weak pair contract",
     run = function(t)
