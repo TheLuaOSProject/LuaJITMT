@@ -10,12 +10,24 @@ fi
 
 lock_dir=$root/src/.lj-test-run.lock
 lock_held=0
+restore_needed=0
 cleanup() {
+  status=$?
+  trap - EXIT HUP INT TERM
+  if test "$restore_needed" = 1; then
+    env MACOSX_DEPLOYMENT_TARGET="$minver" \
+      make -C "$root/src" clean TARGET_FLAGS='-arch arm64' \
+        XCFLAGS="$xcflags" >/dev/null 2>&1 || status=1
+    env MACOSX_DEPLOYMENT_TARGET="$minver" \
+      make -C "$root/src" -j"$jobs" TARGET_FLAGS='-arch arm64' \
+        XCFLAGS="$xcflags" >/dev/null 2>&1 || status=1
+  fi
   if test "$lock_held" = 1; then
     rm -f "$lock_dir/owner"
     rmdir "$lock_dir" 2>/dev/null || true
   fi
   rm -rf "$tmpdir"
+  exit "$status"
 }
 
 while ! mkdir "$lock_dir" 2>/dev/null; do sleep 0.2; done
@@ -48,6 +60,7 @@ jfuncv_region=$tmpdir/vm-jfuncv.txt
 pauth_macros=$tmpdir/macros-arm64e.txt
 pauth_vm_disasm=$tmpdir/vm-arm64e.disasm
 pauth_jloop_region=$tmpdir/vm-arm64e-jloop.txt
+restore_needed=1
 
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" XCFLAGS="$xcflags" clean
@@ -350,9 +363,8 @@ env LUA_PATH="$root/src/?.lua;$root/src/jit/?.lua;;" "$root/src/luajit" -e '
   assert(util.traceinfo(2) == nil, "closed side/stitch surface published trace 2")
 '
 
-# Arm64e/BTI remains buildable, but both root recording and LOOP native entry
-# are deliberately closed until authenticated trace symbols can be published
-# safely. Do not compile the ordinary open-helper fixture under this ABI.
+# Arm64e/BTI admits the same exact root recorder and LOOP entry, while the
+# side/stitch/JFUNCF surfaces remain independently closed.
 env MACOSX_DEPLOYMENT_TARGET="$minver" make -C "$root/src" clean
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" -j"$jobs" \
@@ -365,9 +377,19 @@ otool -hv "$vm_object" | grep -E 'ARM64[[:space:]]+E' >/dev/null
   -dM -E -include lj_arch.h -x c /dev/null >"$pauth_macros"
 grep -E '^#define LJ_ABI_PAUTH[[:space:]]+1$' \
   "$pauth_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
+grep -E '^#define LJ_ABI_BRANCH_TRACK[[:space:]]+1$' \
   "$pauth_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+1$' \
+grep -E '^#define LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
+  "$pauth_macros" >/dev/null
+grep -E '^#define LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+0$' \
+  "$pauth_macros" >/dev/null
+grep -E '^#define LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
+  "$pauth_macros" >/dev/null
+grep -E '^#define LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
+  "$pauth_macros" >/dev/null
+grep -E '^#define LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+1$' \
+  "$pauth_macros" >/dev/null
+grep -E '^#define LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+1$' \
   "$pauth_macros" >/dev/null
 
 otool -tvV "$vm_object" >"$pauth_vm_disasm"
@@ -376,16 +398,18 @@ awk '/^_lj_BC_JLOOP:/ { copy=1 }
      copy && /^_lj_BC_JMP:/ { exit }' \
   "$pauth_vm_disasm" >"$pauth_jloop_region"
 test -s "$pauth_jloop_region"
-grep -E 'stlr[[:space:]]+xzr, \[x14\]' "$pauth_jloop_region" >/dev/null
-if grep -E 'braa[[:space:]]|br[[:space:]]+x1$|sub[[:space:]]+sp, sp, #0x10' \
-     "$pauth_jloop_region" >/dev/null; then
-  echo "closed ARM64e JLOOP still contains a native trace-entry path" >&2
-  exit 1
-fi
+grep -E 'bti[[:space:]]+j' "$pauth_jloop_region" >/dev/null
+grep -E 'sub[[:space:]]+sp, sp, #0x10' "$pauth_jloop_region" >/dev/null
+grep -E 'braa[[:space:]]+x1, x0$' "$pauth_jloop_region" >/dev/null
+pauth_sub=$(grep -nE 'sub[[:space:]]+sp, sp, #0x10' \
+  "$pauth_jloop_region" | sed -n '1p' | cut -d: -f1)
+pauth_branch=$(grep -nE 'braa[[:space:]]+x1, x0$' \
+  "$pauth_jloop_region" | sed -n '1p' | cut -d: -f1)
+test "$pauth_sub" -lt "$pauth_branch"
 
-# Exercise a genuinely hot interpreter loop with JIT enabled. The closed root
-# recorder must leave the trace table empty, and completing the process proves
-# that the arm64e VM does not stray into an unauthenticated native target.
+# Exercise a genuinely hot loop with JIT enabled. The authenticated JLOOP must
+# execute the exact root, while the closed side/stitch surfaces leave slot 2
+# empty.
 env LUA_PATH="$root/src/?.lua;$root/src/jit/?.lua;;" "$root/src/luajit" -e '
   local util = require("jit.util")
   jit.flush(); jit.on(); assert(jit.status())
@@ -396,13 +420,17 @@ env LUA_PATH="$root/src/?.lua;$root/src/jit/?.lua;;" "$root/src/luajit" -e '
     return x
   end
   for _ = 1, 8 do assert(f(20) == 210) end
-  assert(util.traceinfo(1) == nil,
-         "closed arm64e root recorder unexpectedly published a trace")
+  assert(util.traceinfo(1), "open arm64e integer-loop root did not record")
+  assert(util.traceinfo(2) == nil,
+         "closed arm64e side/stitch surface published trace 2")
 '
 
 # Leave the isolated checkout in its ordinary native experimental mode.
-env MACOSX_DEPLOYMENT_TARGET="$minver" make -C "$root/src" clean
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" -j"$jobs" XCFLAGS="$xcflags"
+  make -C "$root/src" clean TARGET_FLAGS='-arch arm64' XCFLAGS="$xcflags"
+env MACOSX_DEPLOYMENT_TARGET="$minver" \
+  make -C "$root/src" -j"$jobs" TARGET_FLAGS='-arch arm64' \
+    XCFLAGS="$xcflags"
+restore_needed=0
 
-echo "arm64_jit_root_entry_contract OK: ordinary strict-loop entry and ARM64e fail-closed interpreter verified"
+echo "arm64_jit_root_entry_contract OK: strict LOOP entry open on ARM64 and authenticated ARM64e"

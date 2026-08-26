@@ -10,8 +10,19 @@ fi
 
 lock_dir=$root/src/.lj-test-run.lock
 lock_held=0
+restore_needed=0
 tmpdir=
 cleanup() {
+  status=$?
+  trap - EXIT HUP INT TERM
+  if test "$restore_needed" = 1; then
+    env MACOSX_DEPLOYMENT_TARGET="$minver" \
+      make -C "$root/src" clean TARGET_FLAGS='-arch arm64' \
+        XCFLAGS="$xcflags" >/dev/null 2>&1 || status=1
+    env MACOSX_DEPLOYMENT_TARGET="$minver" \
+      make -C "$root/src" -j"$jobs" TARGET_FLAGS='-arch arm64' \
+        XCFLAGS="$xcflags" >/dev/null 2>&1 || status=1
+  fi
   if test "$lock_held" = 1; then
     rm -f "$lock_dir/owner"
     rmdir "$lock_dir" 2>/dev/null || true
@@ -19,6 +30,7 @@ cleanup() {
   if test -n "$tmpdir"; then
     rm -rf "$tmpdir"
   fi
+  exit "$status"
 }
 
 trap cleanup EXIT HUP INT TERM
@@ -63,16 +75,22 @@ tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lj-arm64-native-loop.XXXXXX")
 jobs=${JOBS:-${MAKE_JOBS:-$(sysctl -n hw.logicalcpu 2>/dev/null || echo 2)}}
 cc=${CC:-clang}
 minver=${MACOSX_DEPLOYMENT_TARGET:-13.0}
-xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_TRACE_TEST_HELPERS'
+xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_TRACE_TEST_HELPERS -DLUAJIT_MCODE_TEST'
+pauth_xcflags="$xcflags -DLUAJIT_ENABLE_CET_BR"
 archive=$root/src/libluajit.a
 vm_object=$root/src/lj_vm.o
 fixture=$tmpdir/t-arm64-jit-native-loop
 fixture_obj=$tmpdir/t-arm64-jit-native-loop.o
 macros=$tmpdir/macros.txt
+pauth_fixture=$tmpdir/t-arm64-jit-native-loop-arm64e
+pauth_macros=$tmpdir/macros-arm64e.txt
 jloop_source=$tmpdir/vm-jloop.dasc
 jloop_open=$tmpdir/vm-jloop-open.dasc
 vm_disasm=$tmpdir/vm.disasm
 jloop_disasm=$tmpdir/vm-jloop.disasm
+pauth_vm_disasm=$tmpdir/vm-arm64e.disasm
+pauth_jloop_disasm=$tmpdir/vm-arm64e-jloop.disasm
+restore_needed=1
 
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" XCFLAGS="$xcflags" clean
@@ -110,7 +128,7 @@ done
   -mmacosx-version-min="$minver" $xcflags -I"$root/src" \
   "$root/tests/t-arm64-jit-native-loop.c" "$archive" -lm -pthread \
   -o "$fixture"
-"$fixture"
+"$fixture" direct
 
 # A one-PHI loop produces exactly one allocator RENAME. This is distinct from
 # both the exact two-RENAME C fixture and the spare-NOP suffix: semantic+1 must
@@ -201,7 +219,12 @@ for required in \
   'TRACE_ARM64_INT_LOOP_ADMITTED' \
   'trace_spadjust_acq(T) == 0' \
   'trace_topslot_acq(T) == (MSize)pt->framesize' \
-  'szmcode == 168' \
+  '168 + (LJ_ABI_BRANCH_TRACK ? sizeof(MCode) : 0)' \
+  'trace_mcode_acq(T)[0] == A64I_BTI_J' \
+  'exitstub_trace_addr(T, 0)' \
+  'A64I_BLRAAZ' \
+  'run_lua(L, "jit.flush()")' \
+  'proto_trace_acq(pt) == 0' \
   'trace_mcloop_acq(T) & (sizeof(MCode)-1u)' \
   'bc_op(back) == BC_JMP' \
   'bc_j(back) < 0' \
@@ -224,4 +247,70 @@ test "$(grep -Fc 'call_sum_and_check_cframe(L, 20, 210)' \
   exit 1
 }
 
-echo "arm64_jit_native_loop_contract OK: exact integer BC_LOOP recorded, assembled, published, entered and exited natively"
+# Execute the identical strict root under the authenticated ABI. The normal
+# placement must use the real direct exit-handler stub. Randomized mcode hints
+# then force the actual trace outside direct BL range, so all five entries and
+# exits execute through the K64 load plus BLRAAZ path as well.
+env MACOSX_DEPLOYMENT_TARGET="$minver" \
+  make -C "$root/src" clean \
+    TARGET_FLAGS='-arch arm64e -mbranch-protection=bti' \
+    XCFLAGS="$pauth_xcflags"
+env MACOSX_DEPLOYMENT_TARGET="$minver" \
+  make -C "$root/src" -j"$jobs" \
+    TARGET_FLAGS='-arch arm64e -mbranch-protection=bti' \
+    XCFLAGS="$pauth_xcflags"
+
+# shellcheck disable=SC2086 # pauth_xcflags intentionally expands.
+"$cc" -arch arm64e -mbranch-protection=bti \
+  -mmacosx-version-min="$minver" $pauth_xcflags -I"$root/src" \
+  -dM -E -x c -include lj_arch.h /dev/null >"$pauth_macros"
+for setting in \
+  'LJ_ABI_PAUTH 1' \
+  'LJ_ABI_BRANCH_TRACK 1' \
+  'LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED 0' \
+  'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1' \
+  'LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED 1' \
+  'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED 0' \
+  'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED 1' \
+  'LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED 1'; do
+  grep -F "#define $setting" "$pauth_macros" >/dev/null || {
+    echo "ARM64e native-loop gate mismatch: $setting" >&2
+    exit 1
+  }
+done
+
+# shellcheck disable=SC2086 # pauth_xcflags intentionally expands.
+"$cc" -std=gnu11 -O2 -Wall -Wextra -Werror -arch arm64e \
+  -mbranch-protection=bti -mmacosx-version-min="$minver" \
+  $pauth_xcflags -I"$root/src" \
+  "$root/tests/t-arm64-jit-native-loop.c" "$archive" -lm -pthread \
+  -o "$pauth_fixture"
+otool -hv "$pauth_fixture" | grep -E 'ARM64[[:space:]]+E' >/dev/null
+"$pauth_fixture" direct
+LUAJIT_MCODE_TEST=R "$pauth_fixture" indirect
+
+otool -tvV "$vm_object" >"$pauth_vm_disasm"
+awk '/^_lj_BC_JLOOP:/ { copy=1 }
+     copy { print }
+     copy && /^_lj_BC_JMP:/ { exit }' \
+  "$pauth_vm_disasm" >"$pauth_jloop_disasm"
+test -s "$pauth_jloop_disasm"
+grep -E 'bti[[:space:]]+j' "$pauth_jloop_disasm" >/dev/null
+grep -E 'sub[[:space:]]+sp, sp, #0x10' \
+  "$pauth_jloop_disasm" >/dev/null
+grep -E 'braa[[:space:]]+x1, x0' "$pauth_jloop_disasm" >/dev/null
+sub_line=$(grep -nE 'sub[[:space:]]+sp, sp, #0x10' \
+  "$pauth_jloop_disasm" | sed -n '1p' | cut -d: -f1)
+branch_line=$(grep -nE 'braa[[:space:]]+x1, x0' \
+  "$pauth_jloop_disasm" | sed -n '1p' | cut -d: -f1)
+test "$sub_line" -lt "$branch_line"
+
+# Leave the shared checkout in ordinary native experimental mode.
+env MACOSX_DEPLOYMENT_TARGET="$minver" \
+  make -C "$root/src" clean TARGET_FLAGS='-arch arm64' XCFLAGS="$xcflags"
+env MACOSX_DEPLOYMENT_TARGET="$minver" \
+  make -C "$root/src" -j"$jobs" \
+    TARGET_FLAGS='-arch arm64' XCFLAGS="$xcflags"
+restore_needed=0
+
+echo "arm64_jit_native_loop_contract OK: strict ARM64 and ARM64e/BTI BC_LOOP executed direct and authenticated far exits"

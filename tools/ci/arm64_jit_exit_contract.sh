@@ -10,13 +10,25 @@ fi
 
 lock_dir=$root/src/.lj-test-run.lock
 lock_held=0
+restore_needed=0
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lj-arm64-jit-exit.XXXXXX")
 cleanup() {
+  status=$?
+  trap - EXIT HUP INT TERM
+  if test "$restore_needed" = 1; then
+    env MACOSX_DEPLOYMENT_TARGET="$minver" \
+      make -C "$root/src" clean TARGET_FLAGS='-arch arm64' \
+        XCFLAGS="$xcflags" >/dev/null 2>&1 || status=1
+    env MACOSX_DEPLOYMENT_TARGET="$minver" \
+      make -C "$root/src" -j"$jobs" TARGET_FLAGS='-arch arm64' \
+        XCFLAGS="$xcflags" >/dev/null 2>&1 || status=1
+  fi
   if test "$lock_held" = 1; then
     rm -f "$lock_dir/owner"
     rmdir "$lock_dir" 2>/dev/null || true
   fi
   rm -rf "$tmpdir"
+  exit "$status"
 }
 trap cleanup EXIT HUP INT TERM
 while ! mkdir "$lock_dir" 2>/dev/null; do sleep 0.2; done
@@ -47,6 +59,8 @@ pauth_stub_object=$tmpdir/exit-stubs-arm64e.o
 pauth_stub_disasm=$tmpdir/exit-stubs-arm64e.disasm
 pauth_vm_disasm=$tmpdir/vm-arm64e.disasm
 pauth_jloop_region=$tmpdir/vm-arm64e-jloop.txt
+pauth_macros=$tmpdir/macros-arm64e.txt
+restore_needed=1
 
 if grep -F 'LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED' \
      "$root/tests/t-arm64-jit-exit.c" >/dev/null; then
@@ -184,15 +198,30 @@ test "$(grep -Fc 'emit_asmlabel_addr(lj_vm_exit_interp)' \
 grep -F 'ptrauth_auth_data(ptrauth_nop_cast(char *, target)' \
   "$root/src/lj_emit_arm64.h" >/dev/null
 
-# Rebuild the same contract for the arm64e/BTI slice. This proves that direct
-# VM-label arithmetic stays raw, genuine function pointers authenticate,
-# indirect stubs use BLRAAZ, and the two VM landing pads have the right BTI kind.
+# Rebuild the same contract for the arm64e/BTI slice. This proves that LOOP
+# entry is authenticated, indirect exit stubs use BLRAAZ, and the two VM
+# landing pads have the right BTI kind.
 env MACOSX_DEPLOYMENT_TARGET="$minver" make -C "$root/src" clean
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" -j"$jobs" \
     TARGET_FLAGS='-arch arm64e -mbranch-protection=bti' \
     XCFLAGS="$pauth_xcflags"
 otool -hv "$root/src/lj_vm.o" | grep -E 'ARM64[[:space:]]+E' >/dev/null
+# shellcheck disable=SC2086 # pauth_xcflags intentionally expands.
+"$cc" -arch arm64e -mbranch-protection=bti \
+  -mmacosx-version-min="$minver" $pauth_xcflags -I"$root/src" \
+  -dM -E -include lj_arch.h -x c /dev/null >"$pauth_macros"
+for setting in \
+  'LJ_ABI_PAUTH 1' \
+  'LJ_ABI_BRANCH_TRACK 1' \
+  'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED 0' \
+  'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED 1' \
+  'LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED 1'; do
+  grep -F "#define $setting" "$pauth_macros" >/dev/null || {
+    echo "ARM64e exit gate mismatch: $setting" >&2
+    exit 1
+  }
+done
 # shellcheck disable=SC2086 # pauth_xcflags intentionally expands.
 "$cc" -std=gnu11 -O2 -Wall -Wextra -Werror -arch arm64e \
   -mbranch-protection=bti -mmacosx-version-min="$minver" \
@@ -211,17 +240,15 @@ awk '/^_lj_BC_JLOOP:/ { copy=1 }
      copy && /^_lj_BC_JMP:/ { exit }' \
   "$pauth_vm_disasm" >"$pauth_jloop_region"
 test -s "$pauth_jloop_region"
-if grep -E '(braa(z)?[[:space:]]+x1([,[:space:]]|$)|br[[:space:]]+x1$)' \
-     "$pauth_jloop_region" >/dev/null; then
-  echo "arm64e JLOOP unexpectedly contains a native helper-target entry" >&2
-  exit 1
-fi
-if grep -E 'sub[[:space:]]+sp, sp, #0x10' \
-     "$pauth_jloop_region" >/dev/null; then
-  echo "arm64e JLOOP unexpectedly reserves a native trace frame" >&2
-  exit 1
-fi
-grep -E 'stlr[[:space:]]+xzr, \[x14\]' "$pauth_jloop_region" >/dev/null
+grep -E 'sub[[:space:]]+sp, sp, #0x10' \
+  "$pauth_jloop_region" >/dev/null
+test "$(grep -Ec 'braa[[:space:]]+x1, x0$' \
+  "$pauth_jloop_region")" = 1
+pauth_sub=$(grep -nE 'sub[[:space:]]+sp, sp, #0x10' \
+  "$pauth_jloop_region" | sed -n '1p' | cut -d: -f1)
+pauth_branch=$(grep -nE 'braa[[:space:]]+x1, x0$' \
+  "$pauth_jloop_region" | sed -n '1p' | cut -d: -f1)
+test "$pauth_sub" -lt "$pauth_branch"
 awk '/^_lj_vm_exit_handler:/ { getline; exit($0 ~ /bti[[:space:]]+c/ ? 0 : 1) }' \
   "$pauth_vm_disasm"
 awk '/^_lj_vm_exit_interp:/ { getline; exit($0 ~ /bti[[:space:]]+j/ ? 0 : 1) }' \
@@ -229,8 +256,11 @@ awk '/^_lj_vm_exit_interp:/ { getline; exit($0 ~ /bti[[:space:]]+j/ ? 0 : 1) }' 
 otool -tvV "$root/src/lj_asm.o" | grep -E '[[:space:]]autiz?a[[:space:]]' >/dev/null
 
 # Leave the isolated checkout in its ordinary native experimental mode.
-env MACOSX_DEPLOYMENT_TARGET="$minver" make -C "$root/src" clean
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" -j"$jobs" XCFLAGS="$xcflags"
+  make -C "$root/src" clean TARGET_FLAGS='-arch arm64' XCFLAGS="$xcflags"
+env MACOSX_DEPLOYMENT_TARGET="$minver" \
+  make -C "$root/src" -j"$jobs" TARGET_FLAGS='-arch arm64' \
+    XCFLAGS="$xcflags"
+restore_needed=0
 
-echo "arm64_jit_exit_contract OK: arm64 LOOP-open and arm64e LOOP-closed exit policies verified"
+echo "arm64_jit_exit_contract OK: arm64 and arm64e LOOP-open exit policies verified"

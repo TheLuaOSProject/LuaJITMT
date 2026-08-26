@@ -215,16 +215,17 @@ pre-RA review without widening the admitted IR family:
 - successful `BC_JLOOP` entry reserves the ARM64 backend's 16 fixed spill
   bytes immediately before its authenticated branch.
 
-`tests/t-arm64-jit-native-loop.c` is the ordinary-ARM64 positive proof. It
+`tests/t-arm64-jit-native-loop.c` is the ordinary-ARM64 and ARM64e/BTI positive proof. It
 records, assembles, publishes, enters, condition-exits, and re-enters the exact
 integer loop five times while checking the result, C-frame link, TG lease,
 trace shape, final IR, snapshots, counters, and absence of spills or sides.
+The ARM64e contract executes both the normal direct exit-handler `BL` and a
+forced-far K64 plus `BLRAAZ` trace, then flushes the authenticated trace and
+checks bytecode, prototype, slot, and TG-base quiescence.
 The direct helper suite separately covers retirement/entry-flag/topology/body
 mutations and phase, poll, profile, and reqmask rejection windows.
 
 Broader IR, actual spills, side/stitch traces, function entry, deterministic
-native flush/retirement and slot-reuse races, and end-to-end arm64e execution
-remain later tranches. The arm64e contracts currently prove compilation,
-BTI, authenticated exit-stub encoding, and enforced fail-closed interpreter
-execution with no trace publication; they are not claimed here as an
-end-to-end native loop execution result.
+native flush/retirement and slot-reuse races remain later tranches. The
+ARM64e result is limited to this exact integer-loop family; an error-capable
+published trace still needs a later end-to-end `lj_trace_unwind()` proof.

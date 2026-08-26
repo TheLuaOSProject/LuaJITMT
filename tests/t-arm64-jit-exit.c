@@ -1,10 +1,10 @@
 /*
 ** Synthetic contract for the constrained ARM64 trace-exit substrate.
 **
-** Ordinary arm64 admits native LOOP entry; arm64e keeps it closed until direct
-** runtime symbol materialization is authenticated. This fixture checks the
-** exit-stub writer independently under both policies and repeats the TG
-** lifetime-lease/reclaimer ordering implemented by the VM exit path.
+** Both ordinary arm64 and arm64e admit the strict native LOOP entry. This
+** fixture checks the exit-stub writer independently under both ABIs and
+** repeats the TG lifetime-lease/reclaimer ordering implemented by the VM exit
+** path.
 ** Linked-image disassembly is checked separately.
 */
 
@@ -31,11 +31,10 @@
 #include "lj_tg.h"
 #include "lj_asm.h"
 
-#if !LJ_HASJIT || \
-    (LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED != LJ_ABI_PAUTH) || \
+#if !LJ_HASJIT || LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED || \
     !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED
-#error "t-arm64-jit-exit requires ABI-policy LOOP entry and closed JFUNCF/stitch"
+#error "t-arm64-jit-exit requires open LOOP entry and closed JFUNCF/stitch"
 #endif
 
 #define EXIT_RACE_ROUNDS 128u
@@ -223,7 +222,7 @@ int main(int argc, char **argv)
   test_profile_ack_after_quiescence(L);
   lua_close(L);
 #if LJ_ABI_PAUTH
-  puts("t-arm64-jit-exit OK: arm64e LOOP-closed stubs and lease races verified");
+  puts("t-arm64-jit-exit OK: arm64e LOOP-open stubs and lease races verified");
 #else
   puts("t-arm64-jit-exit OK: arm64 LOOP-open stubs and lease races verified");
 #endif

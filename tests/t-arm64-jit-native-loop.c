@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -205,7 +206,38 @@ static void expect_loop_geometry(const GCtrace *T, const GCproto *pt)
   assert(trace_topslot_acq(T) == (MSize)pt->framesize);
 }
 
-static void expect_only_root_trace(jit_State *J, GCproto *pt)
+static void expect_exit_stub_path(jit_State *J, const GCtrace *T,
+	int expect_indirect)
+{
+  MCode *e = exitstub_trace_addr(T, 0);
+  MCode strlr = A64I_STRx | A64F_D(RID_LR) | A64F_N(RID_SP);
+  MCode movtrace = A64I_MOVZw | A64F_U16(1);
+
+  assert(e != NULL);
+  assert(e[-1] == movtrace);
+  if (expect_indirect) {
+    intptr_t k64ofs =
+      (intptr_t)((char *)&J->k64[LJ_K64_VM_EXIT_HANDLER] -
+		 (char *)&J2GG(J)->g);
+    MCode ldrhandler;
+    assert(k64ofs >= 0 && (k64ofs & 7) == 0 &&
+	   (k64ofs >> 3) < 4096);
+    ldrhandler = A64I_LDRx | A64F_D(RID_LR) | A64F_N(RID_GL) |
+		 A64F_U12((uint32_t)(k64ofs >> 3));
+    assert(e[-4] == strlr);
+    assert(e[-3] == ldrhandler);
+    assert(e[-2] == (A64I_BLR_AUTH | A64F_N(RID_LR)));
+#if LJ_ABI_PAUTH
+    assert(e[-2] == (A64I_BLRAAZ | A64F_N(RID_LR)));
+#endif
+  } else {
+    assert(e[-3] == strlr);
+    assert((e[-2] & 0xfc000000u) == A64I_BL);
+  }
+}
+
+static void expect_only_root_trace(jit_State *J, GCproto *pt,
+	int expect_indirect)
 {
   TraceNo traceno;
   GCtrace *T = traceref_safe(J, 1);
@@ -234,12 +266,16 @@ static void expect_only_root_trace(jit_State *J, GCproto *pt)
 	  TRACE_ARM64_INT_LOOP_ADMITTED) != 0);
   assert(trace_mcode_acq(T) != NULL);
   szmcode = trace_szmcode_acq(T);
-  assert(szmcode == 168);
+  assert(szmcode == 168 + (LJ_ABI_BRANCH_TRACK ? sizeof(MCode) : 0));
+#if LJ_ABI_BRANCH_TRACK
+  assert(trace_mcode_acq(T)[0] == A64I_BTI_J);
+#endif
   assert(((uintptr_t)(const void *)trace_mcode_acq(T) &
 	  (sizeof(MCode)-1u)) == 0);
   assert((szmcode & (sizeof(MCode)-1u)) == 0);
   assert(trace_mcloop_acq(T) > 0 && trace_mcloop_acq(T) < szmcode);
   assert((trace_mcloop_acq(T) & (sizeof(MCode)-1u)) == 0);
+  expect_exit_stub_path(J, T, expect_indirect);
   expect_ir_shape(T);
   expect_snapshot_shape(T);
 
@@ -247,7 +283,7 @@ static void expect_only_root_trace(jit_State *J, GCproto *pt)
     assert(!trace_runnable_acq(traceref_safe(J, traceno), traceno));
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
   lua_State *L = luaL_newstate();
   jit_State *J;
@@ -255,6 +291,14 @@ int main(void)
   GCproto *pt;
   void *saved_cframe;
   int32_t saved_vmstate;
+  int expect_indirect = 0;
+
+  assert(argc == 1 || argc == 2);
+  if (argc == 2) {
+    assert(strcmp(argv[1], "direct") == 0 ||
+	   strcmp(argv[1], "indirect") == 0);
+    expect_indirect = strcmp(argv[1], "indirect") == 0;
+  }
 
   assert(L != NULL);
   luaL_openlibs(L);
@@ -296,7 +340,19 @@ int main(void)
   assert(lj_tg_vmstate_load_acq(tg) == saved_vmstate);
 
   pt = global_proto(L, "__arm64_native_integer_loop");
-  expect_only_root_trace(J, pt);
+  expect_only_root_trace(J, pt, expect_indirect);
+  {
+    const BCIns *pc = trace_startpc_acq(traceref_safe(J, 1));
+    BCIns startins = trace_startins_acq(traceref_safe(J, 1));
+    GCtrace *after;
+    run_lua(L, "jit.flush()");
+    assert((BCIns)la_load32_acq((const uint32_t *)pc) == startins);
+    assert(bc_op(startins) == BC_LOOP);
+    assert(proto_trace_acq(pt) == 0);
+    after = traceref_safe(J, 1);
+    assert(after == NULL || !trace_runnable_acq(after, 1));
+    assert(lj_tg_load_jit_base(tg) == NULL);
+  }
   lua_close(L);
   puts("t-arm64-jit-native-loop OK");
   return 0;

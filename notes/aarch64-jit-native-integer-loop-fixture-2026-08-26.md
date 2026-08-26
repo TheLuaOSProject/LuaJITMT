@@ -17,8 +17,8 @@ local function f(n)
 end
 ```
 
-The fixture is not a general ARM64 JIT smoke test. For an ordinary ARM64
-slice, it pins all six granular gates to the first-loop policy: root recording
+The fixture is not a general ARM64 JIT smoke test. For both ordinary ARM64 and
+ARM64e/BTI, it pins all six granular gates to the first-loop policy: root recording
 and loop entry are open; side and stitch recording plus `JFUNCF` and stitch
 entry remain closed. The older recorder-admission and native-entry macros are
 compatibility summaries and are not used as behavioral predicates.
@@ -40,8 +40,9 @@ The entry/exit test hooks then require:
 - the exact root prototype, original `BC_LOOP`, patched `BC_JLOOP 1`, forward
   loop extent, backward `BC_JMP`, prototype frame extent, and
   `TRACE_ARM64_INT_LOOP_ADMITTED` publication bit;
-- non-null aligned machine code, an exact 168-byte body, an aligned loop
-  offset strictly inside the body, and zero `spadjust`;
+- non-null aligned machine code, an exact 168-byte body plus one `BTI J` word
+  when branch tracking is enabled, an aligned loop offset strictly inside the
+  body, and zero `spadjust`;
 - no allocated spill slot in any final IR instruction.
 
 The semantic IR contract has one integer constant (`+1`) plus the canonical
@@ -64,19 +65,17 @@ cannot conceal a semantic IR or exit-topology change.
 build, compiles and runs the fixture, and checks both source and generated VM
 code. In the successful `BC_JLOOP` arm, `sub sp, sp, #16` must occur before
 `br_trace_auth CARG2, CRET1`. The ordinary ARM64 disassembly must likewise put
-`sub sp, sp, #0x10` before `br x1`. This restores the fixed interpreter spill
-area expected by the native exit path; pointer authentication changes the
-branch instruction, not the ordering requirement.
+`sub sp, sp, #0x10` before `br x1`; ARM64e must put it before
+`braa x1, x0`. This restores the fixed interpreter spill area expected by the
+native exit path; pointer authentication changes the branch instruction, not
+the ordering requirement.
 
-## ARM64e target-materialization checkpoint
+## ARM64e execution checkpoint
 
-The end-to-end result in this note is for an ordinary `-arch arm64` binary.
-The arm64e/BTI contracts compile the same sources and verify the emitted
-authenticated substrate, but they do not yet execute generated trace code
-successfully. Production now enforces that boundary: when `LJ_ABI_PAUTH` is
-true, both root recording and direct loop entry remain fail-closed. The
-arm64e contract runs the interpreter with JIT enabled and requires that no
-trace is published.
+The same exact root now executes end to end in an assertion-enabled
+`-arch arm64e -mbranch-protection=bti` build. Production opens root recording
+and `BC_LOOP` native entry for both ARM64 ABIs. Side and stitch recording,
+`JFUNCF` entry, and stitch entry remain independently fail-closed.
 
 Two earlier native arm64e probes exposed independent failures before trace
 publication:
@@ -113,19 +112,47 @@ that the signed bits survive unchanged. Relocations at the real
 `lj_vm_exit_handler` and `lj_vm_exit_interp` assembler callsites are raw
 `PAGE21`/`PAGOF12` pairs.
 
-This checkpoint removes the known direct-symbol PAC trap, but does not claim
-an ARM64e native-loop result. The production gates remain closed until a
-separate diagnostic can execute the full fixture after the unwind-table work.
-Exception propagation through JIT code remains unverified.
+The unwind failure is handled separately by
+`tools/ci/arm64e_jit_unwind_contract.sh`. That executable proof registers a
+real JIT FDE, reaches its personality in search and cleanup phases, installs
+an authenticated landing, executes it, and deregisters the FDE. It also
+proves the interpreter landing. The hardened macOS ARM64e
+`_Unwind_Find_FDE` assertion is excluded only on this ABI because that API
+authenticates its caller-supplied PC with an unavailable cursor-SP
+discriminator; production registration and deregistration are unchanged.
+
+The native-loop fixture pins the ARM64e differences rather than treating them
+as ordinary ARM64:
+
+- branch tracking adds one leading `BTI J` word, so the exact body is 172
+  bytes instead of 168;
+- the VM reserves the same 16-byte fixed spill area and then enters with
+  `BRAA x1, x0`, authenticating the trace pointer with its `GCtrace` address;
+- normal mcode placement executes all five exits through the direct `BL`
+  exit-handler stub;
+- a second process, built with `LUAJIT_MCODE_TEST` and run with
+  `LUAJIT_MCODE_TEST=R`, forces the real trace out of direct range, asserts the
+  K64 handler load plus `BLRAAZ` encoding, and executes the same five entries,
+  results, and exits; and
+- a final `jit.flush()` restores the original `BC_LOOP`, clears the prototype
+  root, makes trace slot 1 non-runnable, and leaves the TG-local JIT base clear.
+
+This remains a deliberately narrow integer-loop result. It does not open or
+claim side traces, function/stitch entry, spills, general scalar IR, or an
+error-capable published trace. The focused unwind contract proves the lower
+level FDE/personality path, but this loop has no throwing operation with which
+to exercise `lj_trace_unwind()` from a published `GCtrace`.
 
 ## Validation performed
 
-The complete contract passed natively on Apple ARM64 against a temporary
-integration overlay while the granular entry work was in flight:
+The complete contract passed natively on Apple ARM64 for ordinary ARM64 and
+for real ARM64e/BTI direct and forced-far exit-handler placements:
 
 ```text
 t-arm64-jit-native-loop OK
-arm64_jit_native_loop_contract OK: exact integer BC_LOOP recorded, assembled, published, entered and exited natively
+t-arm64-jit-native-loop OK          # ARM64e direct exit-handler BL
+t-arm64-jit-native-loop OK          # ARM64e K64 plus BLRAAZ forced far path
+arm64_jit_native_loop_contract OK: strict ARM64 and ARM64e/BTI BC_LOOP executed direct and authenticated far exits
 ```
 
 After the production root-helper changes landed in the working integration
@@ -142,4 +169,11 @@ The focused pointer-authentication checkpoint also passed natively:
 t-arm64-pauth-emit-target OK          # ordinary ARM64
 t-arm64-pauth-emit-target OK          # ARM64e plus BTI
 arm64_pauth_emit_target_contract OK: direct and signed runtime targets normalize on ARM64e
+```
+
+The focused dynamic-unwind proof also passed in an ARM64e/BTI assertion build:
+
+```text
+t-arm64e-jit-unwind OK: registered personality handled and landed
+arm64e_jit_unwind_contract OK: interpreter and registered JIT personalities installed authenticated landings
 ```

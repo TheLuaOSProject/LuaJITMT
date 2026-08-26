@@ -545,15 +545,11 @@
 #if defined(LUAJIT_DISABLE_JIT)
 #error "LUAJIT_MT_ARM64_JIT_EXPERIMENTAL cannot be combined with LUAJIT_DISABLE_JIT"
 #endif
-#if LJ_ABI_PAUTH
-/* arm64e remains buildable for authenticated-code audits, but direct runtime
-** symbol materialization is not yet safe enough to assemble or enter traces. */
-#define LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED		1
-#define LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED	1
-#else
+/* The exact spill-free integer BC_LOOP root is executable under both the
+** ordinary ARM64 and authenticated ARM64e ABIs. All wider recorder and entry
+** surfaces remain independently fail-closed below. */
 #define LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED		0
 #define LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED	0
-#endif
 #define LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED		1
 #define LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED	1
 #define LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED	1
@@ -660,6 +656,9 @@
 
 #ifndef LJ_ABI_PAUTH
 #define LJ_ABI_PAUTH		0
+#endif
+#ifndef LJ_ABI_BRANCH_TRACK
+#define LJ_ABI_BRANCH_TRACK	0
 #endif
 
 #if LJ_ARCH_ENDIAN == LUAJIT_BE
