@@ -1275,7 +1275,7 @@ static void test_rootdesc_scalar_lifecycle_and_aba(void)
 
   assert(sizeof(desc) == 96);
   assert(((uintptr_t)&desc & 15u) == 0);
-  assert(lj_gc2_rootdesc_init_unpublished(&desc, 7));
+  assert(lj_gc2_rootdesc_init_unpublished(&desc, 7, NULL));
   memset(&view, 0, sizeof(view));
   assert(lj_gc2_rootdesc_snapshot(&desc, &view) ==
          LJ_GC2_ROOTDESC_SNAPSHOT_IDLE);
@@ -1284,6 +1284,7 @@ static void test_rootdesc_scalar_lifecycle_and_aba(void)
          LJ_GC2_ROOTDESC_OK);
   assert(lj_gc2_rootdesc_snapshot(&desc, &view) ==
          LJ_GC2_ROOTDESC_SNAPSHOT_ACTIVE);
+  assert(view.closing_generation == 0);
   assert(view.generation == 8);
   assert(view.flags == spec.flags);
   assert(view.old_root == spec.old_root);
@@ -1306,9 +1307,9 @@ static void test_rootdesc_scalar_lifecycle_and_aba(void)
 
 static void test_rootdesc_table_store_coverage(void)
 {
-  LJGC2Activation activation;
+  LJGC2Activation activation, activation2;
   LJGC2ActivationSnap open, closing, commit, pending, reopened, closing2;
-  LJGC2ActivationSnap observed;
+  LJGC2ActivationSnap observed, open_other, closing_other;
   LJGC2RootDesc desc;
   LJGC2RootDesc desc2;
   LJGC2RootDescSpec spec = rootdesc_table_store_spec(
@@ -1325,8 +1326,12 @@ static void test_rootdesc_table_store_coverage(void)
   assert(offsetof(LJGC2RootDesc, aux_root) <
          offsetof(LJGC2RootDesc, range));
   assert(offsetof(LJGC2RootDesc, range) <
+         offsetof(LJGC2RootDesc, activation_owner));
+  assert(offsetof(LJGC2RootDesc, activation_owner) <
          offsetof(LJGC2RootDesc, coverage));
-  assert(lj_gc2_rootdesc_init_unpublished(&desc, 7));
+  assert(lj_gc2_activation_init_unpublished(&activation, 31, 20,
+                                             LJ_GC2_ACT_WEAK));
+  assert(lj_gc2_rootdesc_init_unpublished(&desc, 7, &activation));
   coverage = lj_gc2_rootdesc_coverage_snapshot(&desc);
   assert(coverage.descriptor_control == 0);
   assert(coverage.activation_generation == 0);
@@ -1338,17 +1343,36 @@ static void test_rootdesc_table_store_coverage(void)
   assert(view.new_root == spec.new_root);
   assert(view.aux_root == spec.aux_root);
 
-  assert(lj_gc2_activation_init_unpublished(&activation, 31, 20,
-                                             LJ_GC2_ACT_WEAK));
   open = lj_gc2_activation_snapshot(&activation);
   assert(lj_gc2_activation_try_gate(&activation, &open,
            LJ_GC2_ROOT_GATE_CLOSING, &closing) == LJ_GC2_TRANSITION_OK);
+  /* A raw ACTIVE snapshot is not proof that this scanning thread crossed the
+  ** exact CLOSING StoreLoad boundary. It must fail closed for coverage. */
+  assert(lj_gc2_rootdesc_cover_after_trace(
+           &desc, &view, &activation, &closing) ==
+         LJ_GC2_ROOTDESC_INVALID);
+  assert(lj_gc2_rootdesc_snapshot_closing(
+           &desc, &activation, &closing, &view) ==
+         LJ_GC2_ROOTDESC_SNAPSHOT_ACTIVE);
+  assert(view.closing_generation == closing.generation);
+  /* Equal generations from a different universe are not the same authority. */
+  assert(lj_gc2_activation_init_unpublished(&activation2, 31, 20,
+                                             LJ_GC2_ACT_WEAK));
+  open_other = lj_gc2_activation_snapshot(&activation2);
+  assert(lj_gc2_activation_try_gate(&activation2, &open_other,
+           LJ_GC2_ROOT_GATE_CLOSING, &closing_other) ==
+         LJ_GC2_TRANSITION_OK);
+  assert(closing_other.generation == closing.generation);
+  assert(lj_gc2_rootdesc_cover_after_trace(
+           &desc, &view, &activation2, &closing_other) ==
+         LJ_GC2_ROOTDESC_INVALID);
   /* A view is bound to its descriptor identity, not merely its common first
   ** ACTIVE generation. This rejects a cross-TG/cross-descriptor certificate. */
-  assert(lj_gc2_rootdesc_init_unpublished(&desc2, 7));
+  assert(lj_gc2_rootdesc_init_unpublished(&desc2, 7, &activation));
   assert(lj_gc2_rootdesc_publish(&desc2, &spec, &ticket2) ==
          LJ_GC2_ROOTDESC_OK);
-  assert(lj_gc2_rootdesc_snapshot(&desc2, &view2) ==
+  assert(lj_gc2_rootdesc_snapshot_closing(
+           &desc2, &activation, &closing, &view2) ==
          LJ_GC2_ROOTDESC_SNAPSHOT_ACTIVE);
   assert(view2.generation == view.generation);
   assert(lj_gc2_rootdesc_cover_after_trace(
@@ -1361,9 +1385,13 @@ static void test_rootdesc_table_store_coverage(void)
   assert(lj_gc2_rootdesc_cover_after_trace(
            &desc, &view, &activation, &closing) ==
          LJ_GC2_ROOTDESC_OK);
+  view2 = view;  /* Retain a view bound to the first close generation. */
   coverage = lj_gc2_rootdesc_coverage_snapshot(&desc);
   assert(coverage.descriptor_control == ticket.control);
   assert(coverage.activation_generation == closing.generation);
+  assert(lj_gc2_rootdesc_covered(
+           &desc, &activation2, &closing_other) ==
+         LJ_GC2_ROOTDESC_PINNED);
   assert(lj_gc2_rootdesc_covered(&desc, &activation, &closing) ==
          LJ_GC2_ROOTDESC_OK);
 
@@ -1385,6 +1413,9 @@ static void test_rootdesc_table_store_coverage(void)
            LJ_GC2_ROOT_GATE_CLOSING, &closing2) == LJ_GC2_TRANSITION_OK);
   assert(lj_gc2_rootdesc_covered(&desc, &activation, &closing2) ==
          LJ_GC2_ROOTDESC_BUSY);
+  assert(lj_gc2_rootdesc_snapshot_closing(
+           &desc, &activation, &closing2, &view) ==
+         LJ_GC2_ROOTDESC_SNAPSHOT_ACTIVE);
   assert(lj_gc2_rootdesc_cover_after_trace(
            &desc, &view, &activation, &closing2) ==
          LJ_GC2_ROOTDESC_OK);
@@ -1394,7 +1425,7 @@ static void test_rootdesc_table_store_coverage(void)
 
   /* A helper delayed from the first close cannot move coverage backwards. */
   assert(lj_gc2_rootdesc_cover_after_trace(
-           &desc, &view, &activation, &closing) ==
+           &desc, &view2, &activation, &closing) ==
          LJ_GC2_ROOTDESC_BUSY);
   coverage = lj_gc2_rootdesc_coverage_snapshot(&desc);
   assert(coverage.activation_generation == closing2.generation);
@@ -1410,7 +1441,7 @@ static void test_rootdesc_table_store_coverage(void)
   /* A torn/malformed certificate is a sticky descriptor failure, never an
   ** invitation to overwrite the evidence and authorize close. */
   spec = rootdesc_table_store_spec(1, 2, 3);
-  assert(lj_gc2_rootdesc_init_unpublished(&desc, 0));
+  assert(lj_gc2_rootdesc_init_unpublished(&desc, 0, &activation));
   assert(lj_gc2_rootdesc_publish(&desc, &spec, &ticket) ==
          LJ_GC2_ROOTDESC_OK);
   {
@@ -1441,7 +1472,7 @@ static void test_rootdesc_table_store_coverage(void)
   /* Both non-wrapping identities may be certified at their final valid value;
   ** the next activation edge then selects sticky NO_RECLAIM, never wrap. */
   assert(lj_gc2_rootdesc_init_unpublished(
-           &desc, LJ_GC2_ROOTDESC_MAX_GENERATION - 1u));
+           &desc, LJ_GC2_ROOTDESC_MAX_GENERATION - 1u, &activation));
   assert(lj_gc2_rootdesc_publish(&desc, &spec, &ticket) ==
          LJ_GC2_ROOTDESC_OK);
   assert(lj_gc2_rootdesc_snapshot(&desc, &view) ==
@@ -1454,6 +1485,9 @@ static void test_rootdesc_table_store_coverage(void)
   assert(lj_gc2_activation_try_gate(&activation, &open,
            LJ_GC2_ROOT_GATE_CLOSING, &closing) == LJ_GC2_TRANSITION_OK);
   assert(closing.generation == LJ_GC2_ACT_MAX_GENERATION);
+  assert(lj_gc2_rootdesc_snapshot_closing(
+           &desc, &activation, &closing, &view) ==
+         LJ_GC2_ROOTDESC_SNAPSHOT_ACTIVE);
   assert(lj_gc2_rootdesc_cover_after_trace(
            &desc, &view, &activation, &closing) == LJ_GC2_ROOTDESC_OK);
   assert(lj_gc2_rootdesc_covered(&desc, &activation, &closing) ==
@@ -1481,7 +1515,7 @@ static void test_rootdesc_ranges_and_sticky_failure(void)
   spec.range[1].lo = &slots[0];
   spec.range[1].hi = &slots[10];
   assert(lj_gc2_rootdesc_spec_valid(&spec));
-  assert(lj_gc2_rootdesc_init_unpublished(&desc, 0));
+  assert(lj_gc2_rootdesc_init_unpublished(&desc, 0, NULL));
   assert(lj_gc2_rootdesc_publish(&desc, &spec, &ticket) ==
          LJ_GC2_ROOTDESC_OK);
   assert(lj_gc2_rootdesc_snapshot(&desc, &view) ==
@@ -1516,21 +1550,22 @@ static void test_rootdesc_ranges_and_sticky_failure(void)
   spec.range[1].hi = &slots[9];
   assert(!lj_gc2_rootdesc_spec_valid(&spec));
 
-  assert(lj_gc2_rootdesc_init_unpublished(&desc, 10));
+  assert(lj_gc2_rootdesc_init_unpublished(&desc, 10, NULL));
   assert(lj_gc2_rootdesc_publish(&desc, &spec, &ticket) ==
          LJ_GC2_ROOTDESC_PINNED);
   assert(lj_gc2_rootdesc_snapshot(&desc, NULL) ==
          LJ_GC2_ROOTDESC_SNAPSHOT_NO_RECLAIM);
 
   assert(lj_gc2_rootdesc_init_unpublished(&desc,
-                                           LJ_GC2_ROOTDESC_MAX_GENERATION));
+                                           LJ_GC2_ROOTDESC_MAX_GENERATION,
+                                           NULL));
   spec = rootdesc_scalar_spec(1, 2);
   assert(lj_gc2_rootdesc_publish(&desc, &spec, &ticket) ==
          LJ_GC2_ROOTDESC_PINNED);
   assert(lj_gc2_rootdesc_snapshot(&desc, NULL) ==
          LJ_GC2_ROOTDESC_SNAPSHOT_NO_RECLAIM);
   assert(!lj_gc2_rootdesc_init_unpublished(
-      &desc, LJ_GC2_ROOTDESC_MAX_GENERATION + 1u));
+      &desc, LJ_GC2_ROOTDESC_MAX_GENERATION + 1u, NULL));
 }
 
 static void test_concurrent_rootdesc_coverage(void)
@@ -1547,16 +1582,19 @@ static void test_concurrent_rootdesc_coverage(void)
   uint32_t ready = 0, go = 0;
   unsigned i;
 
-  assert(lj_gc2_rootdesc_init_unpublished(&desc, 0));
+  assert(lj_gc2_activation_init_unpublished(&activation, 8, 2,
+                                             LJ_GC2_ACT_MARK));
+  assert(lj_gc2_rootdesc_init_unpublished(&desc, 0, &activation));
   assert(lj_gc2_rootdesc_publish(&desc, &spec, &ticket) ==
          LJ_GC2_ROOTDESC_OK);
   assert(lj_gc2_rootdesc_snapshot(&desc, &view) ==
          LJ_GC2_ROOTDESC_SNAPSHOT_ACTIVE);
-  assert(lj_gc2_activation_init_unpublished(&activation, 8, 2,
-                                             LJ_GC2_ACT_MARK));
   open = lj_gc2_activation_snapshot(&activation);
   assert(lj_gc2_activation_try_gate(&activation, &open,
            LJ_GC2_ROOT_GATE_CLOSING, &closing) == LJ_GC2_TRANSITION_OK);
+  assert(lj_gc2_rootdesc_snapshot_closing(
+           &desc, &activation, &closing, &view) ==
+         LJ_GC2_ROOTDESC_SNAPSHOT_ACTIVE);
   memset(cover, 0, sizeof(cover));
   for (i = 0; i < 2; i++) {
     cover[i].desc = &desc;
@@ -1581,10 +1619,11 @@ static void test_concurrent_rootdesc_coverage(void)
 
   /* A sticky pin racing coverage always wins close authority. Coverage may
   ** finish first, but it can never make the final pinned descriptor usable. */
-  assert(lj_gc2_rootdesc_init_unpublished(&desc, 0));
+  assert(lj_gc2_rootdesc_init_unpublished(&desc, 0, &activation));
   assert(lj_gc2_rootdesc_publish(&desc, &spec, &ticket) ==
          LJ_GC2_ROOTDESC_OK);
-  assert(lj_gc2_rootdesc_snapshot(&desc, &view) ==
+  assert(lj_gc2_rootdesc_snapshot_closing(
+           &desc, &activation, &closing, &view) ==
          LJ_GC2_ROOTDESC_SNAPSHOT_ACTIVE);
   memset(&cover[0], 0, sizeof(cover[0]));
   memset(&pin, 0, sizeof(pin));
@@ -1619,20 +1658,28 @@ static void test_concurrent_rootdesc_coverage(void)
 static void test_rootdesc_pin_wins_delayed_activation(void)
 {
   LJGC2RootDesc desc;
-  uint64_t idle, publishing, active, expected;
+  uint64_t idle, active;
 
-  assert(lj_gc2_rootdesc_init_unpublished(&desc, 3));
+  /* A pin before the same-value claim prevents any payload mutation. */
+  assert(lj_gc2_rootdesc_init_unpublished(&desc, 3, NULL));
   idle = la_load64_acq(&desc.control);
-  publishing = lj_gc2_rootdesc_pack_control(
-    4, LJ_GC2_ROOTDESC_PUBLISHING);
   active = lj_gc2_rootdesc_pack_control(4, LJ_GC2_ROOTDESC_ACTIVE);
-  expected = idle;
-  assert(la_cas64(&desc.control, &expected, publishing,
-                  LA_ACQ_REL, LA_ACQ));
+  assert(lj_gc2_rootdesc_pin(&desc, idle) == LJ_GC2_ROOTDESC_PINNED);
+  assert(lj_gc2_rootdesc_try_claim(&desc, idle) == LJ_GC2_ROOTDESC_PINNED);
+  assert(lj_gc2_rootdesc_try_activate(&desc, idle, active) ==
+         LJ_GC2_ROOTDESC_PINNED);
+  assert(lj_gc2_rootdesc_state(la_load64_acq(&desc.control)) ==
+         LJ_GC2_ROOTDESC_NO_RECLAIM);
+
+  /* A pin after the claim still wins activation. The same-value RMW leaves
+  ** IDLE visible, so a paused owner never becomes a close-progress blocker. */
+  assert(lj_gc2_rootdesc_init_unpublished(&desc, 3, NULL));
+  idle = la_load64_acq(&desc.control);
+  assert(lj_gc2_rootdesc_try_claim(&desc, idle) == LJ_GC2_ROOTDESC_OK);
   assert(lj_gc2_rootdesc_snapshot(&desc, NULL) ==
-         LJ_GC2_ROOTDESC_SNAPSHOT_RETRY);
-  assert(lj_gc2_rootdesc_pin(&desc, publishing) == LJ_GC2_ROOTDESC_PINNED);
-  assert(lj_gc2_rootdesc_try_activate(&desc, publishing, active) ==
+         LJ_GC2_ROOTDESC_SNAPSHOT_IDLE);
+  assert(lj_gc2_rootdesc_pin(&desc, idle) == LJ_GC2_ROOTDESC_PINNED);
+  assert(lj_gc2_rootdesc_try_activate(&desc, idle, active) ==
          LJ_GC2_ROOTDESC_PINNED);
   assert(lj_gc2_rootdesc_state(la_load64_acq(&desc.control)) ==
          LJ_GC2_ROOTDESC_NO_RECLAIM);
@@ -1719,7 +1766,7 @@ static void test_concurrent_rootdesc_snapshots(void)
   unsigned i;
 
   memset(&stress, 0, sizeof(stress));
-  assert(lj_gc2_rootdesc_init_unpublished(&stress.desc, 0));
+  assert(lj_gc2_rootdesc_init_unpublished(&stress.desc, 0, NULL));
   assert(pthread_create(&writer, NULL, rootdesc_writer, &stress) == 0);
   for (i = 0; i < NREADER; i++)
     assert(pthread_create(&readers[i], NULL, rootdesc_reader, &stress) == 0);

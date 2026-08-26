@@ -2,7 +2,9 @@
 ** t-gc2-root-gate-store-model.c - exhaustive GC2 root/store cutover model.
 **
 ** Build & run:
-**   cc -std=gnu11 -O2 -Wall -Wextra -Werror -pthread -mcx16 -Isrc \
+**   LJ_CAS128_CFLAGS=-mcx16  # Use an empty value for an arm64 target.
+**   cc -std=gnu11 -O2 -Wall -Wextra -Werror -pthread \
+**      $LJ_CAS128_CFLAGS -Isrc \
 **      tests/t-gc2-root-gate-store-model.c -o /tmp/t-gc2-root-gate && \
 **      /tmp/t-gc2-root-gate
 **
@@ -121,13 +123,15 @@ static void model_init(ModelState *state, ModelVariant variant)
   state->variant = variant;
   assert(lj_gc2_activation_init_unpublished(&state->activation, 41, 100,
                                              LJ_GC2_ACT_WEAK));
-  assert(lj_gc2_rootdesc_init_unpublished(&state->descriptor, 0));
+  assert(lj_gc2_rootdesc_init_unpublished(
+           &state->descriptor, 0, &state->activation));
   assert(lj_gc2_rootdesc_publish(&state->descriptor, &stale_spec,
                                  &stale_ticket) == LJ_GC2_ROOTDESC_OK);
   open = lj_gc2_activation_snapshot(&state->activation);
   closing = gate_to(&state->activation, &open,
                     LJ_GC2_ROOT_GATE_CLOSING);
-  assert(lj_gc2_rootdesc_snapshot(&state->descriptor, &stale_view) ==
+  assert(lj_gc2_rootdesc_snapshot_closing(
+           &state->descriptor, &state->activation, &closing, &stale_view) ==
          LJ_GC2_ROOTDESC_SNAPSHOT_ACTIVE);
   assert(lj_gc2_rootdesc_cover_after_trace(&state->descriptor, &stale_view,
                                             &state->activation, &closing) ==
@@ -264,8 +268,15 @@ static char closer_step(ModelState *state)
     return 'C';
   case 1:
     memset(&state->view, 0, sizeof(state->view));
-    snapshot_result =
-      lj_gc2_rootdesc_snapshot(&state->descriptor, &state->view);
+    snapshot_result = lj_gc2_rootdesc_snapshot_closing(
+      &state->descriptor, &state->activation, &state->closing,
+      &state->view);
+    if (snapshot_result == LJ_GC2_ROOTDESC_SNAPSHOT_RETRY ||
+        snapshot_result == LJ_GC2_ROOTDESC_SNAPSHOT_NO_RECLAIM) {
+      state->snapshot_active = 0;
+      state->closer_pc = 7;
+      return 'N';
+    }
     assert(snapshot_result == LJ_GC2_ROOTDESC_SNAPSHOT_IDLE ||
            snapshot_result == LJ_GC2_ROOTDESC_SNAPSHOT_ACTIVE);
     state->snapshot_active =
@@ -383,11 +394,19 @@ static void collect_evidence(const ModelState *state, ModelStats *stats)
 static void model_state_copy(ModelState *to, const ModelState *from)
 {
   *to = *from;
+  if (from->descriptor.activation_owner != NULL) {
+    assert(from->descriptor.activation_owner == &from->activation);
+    to->descriptor.activation_owner = &to->activation;
+  }
   /* RootDescView intentionally binds object identity. Rebase the pointer when
   ** the value-model state is copied to its next DFS node. */
   if (from->view.descriptor != NULL) {
     assert(from->view.descriptor == &from->descriptor);
     to->view.descriptor = &to->descriptor;
+  }
+  if (from->view.closing_activation != NULL) {
+    assert(from->view.closing_activation == &from->activation);
+    to->view.closing_activation = &to->activation;
   }
 }
 
@@ -534,8 +553,8 @@ static void test_descriptor_identity_and_full_store_shape(void)
 
   assert(lj_gc2_activation_init_unpublished(&activation, 7, 10,
                                              LJ_GC2_ACT_WEAK));
-  assert(lj_gc2_rootdesc_init_unpublished(&a, 0));
-  assert(lj_gc2_rootdesc_init_unpublished(&b, 0));
+  assert(lj_gc2_rootdesc_init_unpublished(&a, 0, &activation));
+  assert(lj_gc2_rootdesc_init_unpublished(&b, 0, &activation));
   assert(lj_gc2_rootdesc_publish(&a, &sa, &ta) == LJ_GC2_ROOTDESC_OK);
   assert(lj_gc2_rootdesc_publish(&b, &sb, &tb) == LJ_GC2_ROOTDESC_OK);
   assert(lj_gc2_rootdesc_snapshot(&a, &va) ==
@@ -550,6 +569,12 @@ static void test_descriptor_identity_and_full_store_shape(void)
          vb.aux_root != va.aux_root);
   open = lj_gc2_activation_snapshot(&activation);
   closing = gate_to(&activation, &open, LJ_GC2_ROOT_GATE_CLOSING);
+  assert(lj_gc2_rootdesc_snapshot_closing(
+           &a, &activation, &closing, &va) ==
+         LJ_GC2_ROOTDESC_SNAPSHOT_ACTIVE);
+  assert(lj_gc2_rootdesc_snapshot_closing(
+           &b, &activation, &closing, &vb) ==
+         LJ_GC2_ROOTDESC_SNAPSHOT_ACTIVE);
   /* An address-only/generation-only helper mutant would accept this. */
   assert(lj_gc2_rootdesc_cover_after_trace(&a, &vb, &activation, &closing) ==
          LJ_GC2_ROOTDESC_INVALID);
@@ -570,12 +595,14 @@ static void test_same_close_turnover_and_pin(void)
 
   assert(lj_gc2_activation_init_unpublished(&activation, 8, 20,
                                              LJ_GC2_ACT_WEAK));
-  assert(lj_gc2_rootdesc_init_unpublished(&descriptor, 0));
+  assert(lj_gc2_rootdesc_init_unpublished(
+           &descriptor, 0, &activation));
   assert(lj_gc2_rootdesc_publish(&descriptor, &spec, &first) ==
          LJ_GC2_ROOTDESC_OK);
   open = lj_gc2_activation_snapshot(&activation);
   closing = gate_to(&activation, &open, LJ_GC2_ROOT_GATE_CLOSING);
-  assert(lj_gc2_rootdesc_snapshot(&descriptor, &view) ==
+  assert(lj_gc2_rootdesc_snapshot_closing(
+           &descriptor, &activation, &closing, &view) ==
          LJ_GC2_ROOTDESC_SNAPSHOT_ACTIVE);
   /* Concurrent same-close helpers may linearize in any order; every loser
   ** observes the exact certificate and succeeds idempotently. */
@@ -591,7 +618,8 @@ static void test_same_close_turnover_and_pin(void)
          LJ_GC2_ROOTDESC_OK);
   assert(lj_gc2_rootdesc_covered(&descriptor, &activation, &closing) ==
          LJ_GC2_ROOTDESC_BUSY);
-  assert(lj_gc2_rootdesc_snapshot(&descriptor, &view) ==
+  assert(lj_gc2_rootdesc_snapshot_closing(
+           &descriptor, &activation, &closing, &view) ==
          LJ_GC2_ROOTDESC_SNAPSHOT_ACTIVE);
   assert(lj_gc2_rootdesc_cover_after_trace(&descriptor, &view, &activation,
                                             &closing) == LJ_GC2_ROOTDESC_OK);
@@ -611,7 +639,7 @@ static void test_malformed_winner_between_snapshot_and_cas(void)
   LJGC2RootDescSpec spec = table_store_spec(1, 2, 3);
   la_u128 stale, winner, malformed;
 
-  assert(lj_gc2_rootdesc_init_unpublished(&descriptor, 0));
+  assert(lj_gc2_rootdesc_init_unpublished(&descriptor, 0, NULL));
   assert(lj_gc2_rootdesc_publish(&descriptor, &spec, &ticket) ==
          LJ_GC2_ROOTDESC_OK);
   stale.lo = stale.hi = 0;

@@ -420,7 +420,8 @@ static void test_ticket_pin_before_revalidate(void)
   desc_generation = lj_gc2_rootdesc_generation(
     la_load64_acq(&f.tg->root_desc.control));
   assert(lj_gc2_rootdesc_init_unpublished(&f.tg->root_desc,
-                                           desc_generation));
+                                           desc_generation,
+                                           &f.g->gc2.activation));
   repair_activation_idle(&f);
   fixture_close(&f);
 }

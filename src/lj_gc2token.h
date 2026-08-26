@@ -957,8 +957,7 @@ LA_INLINE LJGC2TableTopologyResult lj_gc2_table_topology_changed(
 typedef enum LJGC2RootDescState {
   LJ_GC2_ROOTDESC_IDLE = 0,
   LJ_GC2_ROOTDESC_ACTIVE = 1,
-  LJ_GC2_ROOTDESC_NO_RECLAIM = 2,
-  LJ_GC2_ROOTDESC_PUBLISHING = 3
+  LJ_GC2_ROOTDESC_NO_RECLAIM = 2
 } LJGC2RootDescState;
 
 enum {
@@ -990,6 +989,9 @@ typedef struct LJGC2RootDesc {
   ** means helpers scan their merged overlap high-to-low, MOVE_UP low-to-high.
   */
   LJGC2RootRange range[2];
+  /* Immutable after the containing TG is published. This fills the existing
+  ** alignment hole before coverage and binds certificates to one universe. */
+  const LJGC2Activation *activation_owner;
   /* Helpers publish {exact ACTIVE control, activation generation}. The
   ** certificate is never cleared or moved backwards; a later descriptor or
   ** close generation invalidates it by exact comparison. Keep helper-written
@@ -1009,6 +1011,10 @@ typedef struct LJGC2RootDescSpec {
 typedef struct LJGC2RootDescView {
   const LJGC2RootDesc *descriptor;
   uint64_t generation;
+  /* Set only when snapshot_closing bound this view to an exact close.
+  ** Transfer to a different tracing thread still requires release/acquire. */
+  const LJGC2Activation *closing_activation;
+  uint64_t closing_generation;
   uint32_t flags;
   uint64_t old_root;
   uint64_t new_root;
@@ -1114,7 +1120,8 @@ LA_INLINE int lj_gc2_rootdesc_spec_valid(const LJGC2RootDescSpec *spec)
 
 /* Only valid before the containing TG is published. */
 LA_INLINE int lj_gc2_rootdesc_init_unpublished(LJGC2RootDesc *desc,
-                                                uint64_t generation)
+                                                uint64_t generation,
+                                                const LJGC2Activation *owner)
 {
   if (generation > LJ_GC2_ROOTDESC_MAX_GENERATION)
     return 0;
@@ -1129,6 +1136,7 @@ LA_INLINE int lj_gc2_rootdesc_init_unpublished(LJGC2RootDesc *desc,
   la_storeptr_rlx(&desc->range[0].hi, NULL);
   la_storeptr_rlx(&desc->range[1].lo, NULL);
   la_storeptr_rlx(&desc->range[1].hi, NULL);
+  la_storeptr_rlx((void **)&desc->activation_owner, (void *)owner);
   la_store64_rlx(&desc->control,
       lj_gc2_rootdesc_pack_control(generation, LJ_GC2_ROOTDESC_IDLE));
   return 1;
@@ -1150,29 +1158,45 @@ lj_gc2_rootdesc_pin(LJGC2RootDesc *desc, uint64_t control)
 }
 
 LA_INLINE LJGC2RootDescResult
-lj_gc2_rootdesc_try_activate(LJGC2RootDesc *desc, uint64_t publishing,
+lj_gc2_rootdesc_try_activate(LJGC2RootDesc *desc, uint64_t idle,
                              uint64_t active)
 {
-  uint64_t expected = publishing;
-  if (la_cas64(&desc->control, &expected, active, LA_ACQ_REL, LA_ACQ))
+  uint64_t expected = idle;
+  if (la_cas64(&desc->control, &expected, active, LA_ACQ_REL, LA_ACQ)) {
+    /* Publisher half of the descriptor/gate StoreLoad boundary. Every closer
+    ** scan executes the matching fence after acquiring exact CLOSING. */
+#if !defined(__x86_64__)
+    la_fence_seq();
+#endif
+    return LJ_GC2_ROOTDESC_OK;
+  }
+  return lj_gc2_rootdesc_pin(desc, expected);
+}
+
+LA_INLINE LJGC2RootDescResult
+lj_gc2_rootdesc_try_claim(LJGC2RootDesc *desc, uint64_t idle)
+{
+  uint64_t expected = idle;
+  if (la_cas64(&desc->control, &expected, idle, LA_ACQ_REL, LA_ACQ))
     return LJ_GC2_ROOTDESC_OK;
   return lj_gc2_rootdesc_pin(desc, expected);
 }
 
 /*
-** Owner-only begin. Claiming PUBLISHING before touching the reused payload is
-** the first half of a portable seqlock: its acquire edge prevents later
-** payload stores from becoming visible before the control transition. The
-** release activation publishes the complete payload. A concurrent pin can
-** replace either PUBLISHING or ACTIVE with sticky NO_RECLAIM.
+** Owner-only begin. The same-value IDLE RMW is a control modification-order
+** event without a paused-owner state. Its following release fence pairs
+** through any subsequently observed payload store with the reader's acquire
+** fence. Thus a reader that sees even one new payload field cannot validate
+** an older ACTIVE control word. The final release activation publishes the
+** complete payload.
 */
 LA_INLINE LJGC2RootDescResult
 lj_gc2_rootdesc_publish(LJGC2RootDesc *desc,
                         const LJGC2RootDescSpec *spec,
                         LJGC2RootDescTicket *ticket)
 {
-  uint64_t control, publishing, active, generation, expected;
-  LJGC2RootDescResult activate;
+  uint64_t control, active, generation;
+  LJGC2RootDescResult claim, activate;
   if (!desc || !ticket || !spec)
     return LJ_GC2_ROOTDESC_INVALID;
   control = la_load64_acq(&desc->control);
@@ -1186,15 +1210,14 @@ lj_gc2_rootdesc_publish(LJGC2RootDesc *desc,
   if (generation == LJ_GC2_ROOTDESC_MAX_GENERATION)
     return lj_gc2_rootdesc_pin(desc, control);
 
-  publishing = lj_gc2_rootdesc_pack_control(
-    generation + 1u, LJ_GC2_ROOTDESC_PUBLISHING);
-  expected = control;
-  if (!la_cas64(&desc->control, &expected, publishing,
-                LA_ACQ_REL, LA_ACQ))
-    return lj_gc2_rootdesc_pin(desc, expected);
+  claim = lj_gc2_rootdesc_try_claim(desc, control);
+  if (claim != LJ_GC2_ROOTDESC_OK)
+    return claim;
+
   /* Paired with the reader's post-payload acquire fence. If any relaxed
-  ** payload load observes this generation, PUBLISHING happens-before the
-  ** final control load, which therefore cannot accept an older ACTIVE word. */
+  ** payload load observes this generation, the same-value IDLE RMW happens
+  ** before the final control load. Atomic write-read coherence then forbids
+  ** that load from accepting the preceding ACTIVE word. */
   la_fence_rel();
 
   la_store32_rlx(&desc->flags, spec->flags);
@@ -1216,7 +1239,7 @@ lj_gc2_rootdesc_publish(LJGC2RootDesc *desc,
                     spec->range[1].hi : NULL);
   active = lj_gc2_rootdesc_pack_control(generation + 1u,
                                         LJ_GC2_ROOTDESC_ACTIVE);
-  activate = lj_gc2_rootdesc_try_activate(desc, publishing, active);
+  activate = lj_gc2_rootdesc_try_activate(desc, control, active);
   if (activate != LJ_GC2_ROOTDESC_OK)
     return activate;
   ticket->control = active;
@@ -1226,8 +1249,7 @@ lj_gc2_rootdesc_publish(LJGC2RootDesc *desc,
 /*
 ** Portable control/payload/control snapshot. The first acquire keeps payload
 ** reads after ACTIVE; the acquire fence keeps them before the final control
-** validation. PUBLISHING is a transient retry, never a readable payload.
-** NO_RECLAIM obligates the caller to pin global activation too.
+** validation. NO_RECLAIM obligates the caller to pin global activation too.
 */
 LA_INLINE LJGC2RootDescSnapshotResult
 lj_gc2_rootdesc_snapshot(const LJGC2RootDesc *desc, LJGC2RootDescView *view)
@@ -1235,17 +1257,20 @@ lj_gc2_rootdesc_snapshot(const LJGC2RootDesc *desc, LJGC2RootDescView *view)
   LJGC2RootDescSpec spec;
   uint64_t before, after;
   uint8_t state;
+  if (view) {
+    view->descriptor = desc;
+    view->generation = 0;
+    view->closing_activation = NULL;
+    view->closing_generation = 0;
+  }
   before = la_load64_acq(&desc->control);
   state = lj_gc2_rootdesc_state(before);
   if (state == LJ_GC2_ROOTDESC_IDLE) {
     if (view) {
-      view->descriptor = desc;
       view->generation = lj_gc2_rootdesc_generation(before);
     }
     return LJ_GC2_ROOTDESC_SNAPSHOT_IDLE;
   }
-  if (state == LJ_GC2_ROOTDESC_PUBLISHING)
-    return LJ_GC2_ROOTDESC_SNAPSHOT_RETRY;
   if (state != LJ_GC2_ROOTDESC_ACTIVE)
     return LJ_GC2_ROOTDESC_SNAPSHOT_NO_RECLAIM;
 
@@ -1266,7 +1291,6 @@ lj_gc2_rootdesc_snapshot(const LJGC2RootDesc *desc, LJGC2RootDescView *view)
   if (!lj_gc2_rootdesc_spec_valid(&spec))
     return LJ_GC2_ROOTDESC_SNAPSHOT_NO_RECLAIM;
   if (view) {
-    view->descriptor = desc;
     view->generation = lj_gc2_rootdesc_generation(before);
     view->flags = spec.flags;
     view->old_root = spec.old_root;
@@ -1323,6 +1347,63 @@ lj_gc2_rootdesc_closing_snapshot_valid(const LJGC2ActivationSnap *closing)
          closing->gate == LJ_GC2_ROOT_GATE_CLOSING;
 }
 
+/*
+** Enter one descriptor scan under an exact CLOSING authority. Every scanning
+** thread must execute this after its own acquire observation of CLOSING and
+** before its first descriptor load. A precomputed snapshot or bound view may
+** cross threads only through a real release/acquire handoff.
+*/
+LA_INLINE LJGC2RootDescResult
+lj_gc2_rootdesc_closing_scan_enter(const LJGC2Activation *activation,
+                                   const LJGC2ActivationSnap *closing)
+{
+  LJGC2ActivationSnap current;
+  if (!activation || !lj_gc2_rootdesc_closing_snapshot_valid(closing))
+    return LJ_GC2_ROOTDESC_INVALID;
+  current = lj_gc2_activation_snapshot(activation);
+  if (!lj_gc2_activation_equal(&current, closing))
+    return current.state == LJ_GC2_ACT_NO_RECLAIM ?
+           LJ_GC2_ROOTDESC_PINNED : LJ_GC2_ROOTDESC_BUSY;
+  /* Publisher ACTIVE -> fence -> gate sample pairs with this exact CLOSING
+  ** acquire -> fence -> descriptor sample. x86 locked RMW plus TSO already
+  ** supplies the cross-object order without a redundant mfence. */
+#if !defined(__x86_64__)
+  la_fence_seq();
+#endif
+  return LJ_GC2_ROOTDESC_OK;
+}
+
+LA_INLINE LJGC2RootDescSnapshotResult
+lj_gc2_rootdesc_snapshot_closing(const LJGC2RootDesc *desc,
+                                 const LJGC2Activation *activation,
+                                 const LJGC2ActivationSnap *closing,
+                                 LJGC2RootDescView *view)
+{
+  LJGC2RootDescResult entered;
+  LJGC2RootDescSnapshotResult result;
+  if (view) {
+    view->descriptor = desc;
+    view->generation = 0;
+    view->closing_activation = NULL;
+    view->closing_generation = 0;
+  }
+  if (!desc || la_loadptr_acq(
+        (void *const *)&desc->activation_owner) != activation)
+    return LJ_GC2_ROOTDESC_SNAPSHOT_NO_RECLAIM;
+  entered = lj_gc2_rootdesc_closing_scan_enter(activation, closing);
+  if (entered == LJ_GC2_ROOTDESC_PINNED ||
+      entered == LJ_GC2_ROOTDESC_INVALID)
+    return LJ_GC2_ROOTDESC_SNAPSHOT_NO_RECLAIM;
+  if (entered != LJ_GC2_ROOTDESC_OK)
+    return LJ_GC2_ROOTDESC_SNAPSHOT_RETRY;
+  result = lj_gc2_rootdesc_snapshot(desc, view);
+  if (result == LJ_GC2_ROOTDESC_SNAPSHOT_ACTIVE && view) {
+    view->closing_activation = activation;
+    view->closing_generation = closing->generation;
+  }
+  return result;
+}
+
 /* Advance a helper certificate from one exact CX16 observation. A failed CAS
 ** replaces |expected| with the winning pair, which is validated on every loop
 ** iteration before it can be compared or overwritten. Keeping this primitive
@@ -1360,10 +1441,11 @@ lj_gc2_rootdesc_coverage_advance(LJGC2RootDesc *desc, uint64_t control,
 
 /*
 ** Publish helper coverage only after conservatively tracing a stable ACTIVE
-** view captured under the supplied CLOSING snapshot. Coverage is monotonic by
-** activation generation and then exact descriptor control, so a delayed helper
-** cannot overwrite a newer close certificate. Exact descriptor and activation
-** rechecks make any post-trace race a retry, never a false certificate.
+** view captured by snapshot_closing under the supplied CLOSING snapshot.
+** Coverage is monotonic by activation generation and then exact descriptor
+** control, so a delayed helper cannot overwrite a newer close certificate.
+** Exact descriptor and activation rechecks make any post-trace race a retry,
+** never a false certificate.
 */
 LA_INLINE LJGC2RootDescResult
 lj_gc2_rootdesc_cover_after_trace(LJGC2RootDesc *desc,
@@ -1377,6 +1459,8 @@ lj_gc2_rootdesc_cover_after_trace(LJGC2RootDesc *desc,
   LJGC2RootDescResult advance;
   if (!desc || !view || view->descriptor != desc || !activation ||
       !lj_gc2_rootdesc_closing_snapshot_valid(closing) ||
+      view->closing_activation != activation ||
+      view->closing_generation != closing->generation ||
       view->generation == 0 ||
       view->generation > LJ_GC2_ROOTDESC_MAX_GENERATION)
     return LJ_GC2_ROOTDESC_INVALID;
@@ -1434,11 +1518,8 @@ lj_gc2_rootdesc_covered(LJGC2RootDesc *desc,
   if (!desc || !activation ||
       !lj_gc2_rootdesc_closing_snapshot_valid(closing))
     return LJ_GC2_ROOTDESC_INVALID;
-  current = lj_gc2_activation_snapshot(activation);
-  if (!lj_gc2_activation_equal(&current, closing))
-    return current.state == LJ_GC2_ACT_NO_RECLAIM ?
-           LJ_GC2_ROOTDESC_PINNED : LJ_GC2_ROOTDESC_BUSY;
-  result = lj_gc2_rootdesc_snapshot(desc, &view);
+  result = lj_gc2_rootdesc_snapshot_closing(
+    desc, activation, closing, &view);
   if (result == LJ_GC2_ROOTDESC_SNAPSHOT_NO_RECLAIM)
     return LJ_GC2_ROOTDESC_PINNED;
   if (result == LJ_GC2_ROOTDESC_SNAPSHOT_RETRY)

@@ -301,7 +301,8 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   tg->strid_next = 0;
   tg->strid_end = 0;
   tg->strnum_credit = 0;
-  (void)lj_gc2_rootdesc_init_unpublished(&tg->root_desc, 0);
+  (void)lj_gc2_rootdesc_init_unpublished(
+    &tg->root_desc, 0, &g->gc2.activation);
   tg->registry_key.slot = NULL;
   tg->registry_key.incarnation = LJ_TGSLOT_INCARNATION_NONE;
   lj_tg_registry_shadow_missed_rel(tg, 0);
