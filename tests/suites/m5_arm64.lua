@@ -1,4 +1,5 @@
 local build = require("suite_build")
+local runtime = require("suite_runtime")
 
 local bootstrap_cflags =
   "-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_DISABLE_JIT -DLUA_USE_ASSERT"
@@ -11,6 +12,12 @@ end
 
 local function skip(name)
   print(name .. " SKIP: requires a native macOS arm64 disabled-JIT bootstrap build")
+end
+
+local function run_tmpbuf_contract(t)
+  t:run({ "sh", t:path("tools", "ci", "arm64_tmpbuf_contract.sh") }, {
+    timeout = "30s"
+  })
 end
 
 return function(add)
@@ -38,6 +45,32 @@ return function(add)
         cflags = bootstrap_cflags,
         quiet = true,
         timeout = "45s"
+      })
+    end
+  })
+
+  add({
+    name = "m5_arm64_tmpbuf_contract",
+    description = "ARM64 string fast functions use the running TG tmpbuf",
+    run = function(t)
+      run_tmpbuf_contract(t)
+    end
+  })
+
+  add({
+    name = "m5_arm64_tmpbuf_runtime",
+    description = "ARM64 concurrent reverse/lower/upper TG tmpbuf regression",
+    deps = { "m5_arm64_tmpbuf_contract" },
+    run = function(t)
+      if not native_bootstrap() then
+        skip("m5_arm64_tmpbuf_runtime")
+        return
+      end
+      -- Recheck freshness because this script exercises the inspected VM.
+      run_tmpbuf_contract(t)
+      runtime.luajit_script(t, "t-arm64-tmpbuf-thread.lua", nil, {
+        joff = true,
+        timeout = "90s"
       })
     end
   })

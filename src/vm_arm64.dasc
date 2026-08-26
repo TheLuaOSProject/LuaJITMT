@@ -357,6 +357,13 @@ LJ_STATIC_ASSERT(DISPATCH_TG(gl) >= 0 && DISPATCH_TG(gl) <= 4095);
 LJ_STATIC_ASSERT(DISPATCH_TG(root_anchor_top) >= 0 &&
 		 DISPATCH_TG(root_anchor_top) <= 0xffffff);
 LJ_STATIC_ASSERT((DISPATCH_TG(root_anchor_top) & 3) == 0);
+LJ_STATIC_ASSERT(DISPATCH_TG(tmpbuf) >= 0 &&
+		 DISPATCH_TG(tmpbuf) <= 0xffffff);
+LJ_STATIC_ASSERT(offsetof(SBuf, w) == 0);
+LJ_STATIC_ASSERT(offsetof(SBuf, b) <= 4095 &&
+		 (offsetof(SBuf, b) & 7) == 0);
+LJ_STATIC_ASSERT(offsetof(SBuf, L) <= 32760 &&
+		 (offsetof(SBuf, L) & 7) == 0);
 LJ_STATIC_ASSERT(GL_OFS(vmstate) >= 0 && GL_OFS(vmstate) <= 4095);
 LJ_STATIC_ASSERT(GL_OFS(hookmask) >= 0 && GL_OFS(hookmask) <= 4095);
 LJ_STATIC_ASSERT(FRAME_TYPEP == 7);
@@ -1901,12 +1908,14 @@ static void build_subroutines(BuildCtx *ctx)
   |  ccmn ITYPE, #-LJ_TSTR, #0, hs
   |   and STR:CARG2, CARG2, #LJ_GCVMASK
   |  bne ->fff_fallback
-  |  ldr TMP0, GL->tmpbuf.b
-  |   add SBUF:CARG1, GL, #offsetof(global_State, tmpbuf)
+  |  add ATMP, DISPATCH, #(DISPATCH_TG(tmpbuf)&0xfff000)
+  |   add SBUF:CARG1, ATMP, #(DISPATCH_TG(tmpbuf)&0xfff)
+  |  add ATMP, CARG1, #offsetof(SBuf, b)
+  |  ldar TMP0, [ATMP]
   |   str BASE, L->base
   |   str PC, SAVE_PC
-  |   str L, GL->tmpbuf.L
-  |  str TMP0, GL->tmpbuf.w
+  |   str L, SBUF:CARG1->L
+  |  stlr TMP0, [CARG1]
   |  bl extern lj_buf_putstr_ .. name
   |  bl extern lj_buf_tostr
   |  b ->fff_resstr

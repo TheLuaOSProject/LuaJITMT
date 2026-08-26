@@ -106,6 +106,8 @@ LJ_ARM64_DISPATCH_OBJECT="$root/src/lj_dispatch.o" \
 LJ_ARM64_VM_OBJECT="$vm_object" \
   sh "$root/tools/ci/arm64_root_publication_contract.sh"
 LJ_ARM64_VM_OBJECT="$vm_object" LJ_ARM64_ARCHIVE="$archive" \
+  sh "$root/tools/ci/arm64_tmpbuf_contract.sh"
+LJ_ARM64_VM_OBJECT="$vm_object" LJ_ARM64_ARCHIVE="$archive" \
   sh "$root/tools/ci/arm64_vm_safepoint_contract.sh"
 LJ_ARM64_VM_OBJECT="$vm_object" LJ_ARM64_ARCHIVE="$archive" \
   sh "$root/tools/ci/arm64_pcall_anchor_contract.sh"
@@ -127,6 +129,7 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
   "$luajit" "$root/tools/test.lua" \
     m5_arm64_root_publication_runtime m5_arm64_safepoint_runtime \
     m5_arm64_pcall_anchor_runtime m5_arm64_capi_meta_roots \
+    m5_arm64_tmpbuf_runtime \
     m4_posix_signal_arm64_gate
 
 (
