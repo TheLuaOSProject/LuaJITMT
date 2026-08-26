@@ -1,6 +1,7 @@
 local runtime = require("suite_runtime")
 
 local m5_concurrent_cases = {
+  "m5_arm64_tab_pair_contract",
   "m5_nbtab_model",
   "m5_tab_emptyhash",
   "m5_tab_nodehdr",

@@ -291,3 +291,48 @@ full ARM64 VM is not yet buildable and must not be advertised merely because
 its authority primitives now pass.  Remaining atomic audit work includes the
 HugeTab split scouts and the overlapping 64/128-bit `GCtab` structural/weak
 descriptor views.
+
+### 2. Exact Apple ARM64 HugeTab scouts
+
+Every production read of a `LJHugeEnt` address or metadata half now goes
+through an architecture-aware accessor.  x86-64 retains the existing aligned
+64-bit subload/CX16 contract and generated path.  Apple AArch64 instead takes
+each scout from an exact lock-free 128-bit snapshot, so a CASP update never
+races an overlapping 64-bit load in the compiler model.  The later full-slot
+CAS still supplies the operation's linearization point where the protocol
+requires one.
+
+This is intentionally a conservative correctness-first path: an ARM64 scout
+is currently a no-op compare/exchange and is more expensive than a plain
+load.  It may be optimized only after an ARM-positive mixed-width or seqlock
+artifact and stress contract proves an alternative.
+
+Validation passed with Apple clang 21 for a macOS 11 minimum:
+
+- the standalone `t-arena-hugetab` state-machine and concurrency fixture;
+- the native object contains inline `caspal` instructions and no undefined
+  atomic helper;
+- an x86-64 cross-object still contains inline `cmpxchg16b` and no helper.
+
+The overlapping `GCtab.struct_control`/`weak_record` views remain the next
+128-bit audit boundary.
+
+### 3. Exact Apple ARM64 GCtab structural/weak pair
+
+Published Apple AArch64 accesses to the overlapping
+`GCtab.struct_control`/`weak_record` union now use the complete 128-bit
+authority.  Control and weak-record updates retry a full-pair CAS while
+preserving the other logical half; reads take an exact snapshot.  The two
+64-bit relaxed stores remain only in the private table initializer, before the
+table can be discovered.  x86-64 retains its existing independent 64-bit
+operations and pair-CX16 descriptor cutover.
+
+`tools/ci/arm64_tab_pair_contract.sh` starts three contending workers: 200,000
+structural-owner updates, 200,000 weak-cycle/capacity updates, and 200,000
+same-value full-pair CAS operations.  It checks both capacity mirrors and final
+values.  Separate no-inline probes cover every published helper; the Mach-O
+gate rejects atomic runtime calls or any memory access other than inline
+`caspal` in those probes.  The fixture passes natively with Apple clang 21 at a
+macOS 11 minimum, including ASan+UBSan and TSan builds.  ARM64 and x86-64
+cross-compiles of the production table object also contain their expected
+inline `caspal`/`cmpxchg16b` instructions with no helper import.

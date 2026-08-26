@@ -1173,6 +1173,31 @@ LJ_STATIC_ASSERT(sizeof(LJHugeEnt) == 16u);
 LJ_STATIC_ASSERT(offsetof(LJHugeTabHdr, ent) == 16u);
 LJ_STATIC_ASSERT((offsetof(LJHugeTabHdr, ent) & 15u) == 0);
 
+/*
+** x86-64 retains the established coherent subload/CX16 artifact contract.
+** Apple AArch64 deliberately avoids overlapping 64-bit loads while a slot is
+** updated with CASP: each half scout is taken from an exact lock-free pair
+** snapshot. This is conservative during bring-up, but keeps the C/compiler
+** contract independent of mixed-width atomic aliasing.
+*/
+static LJ_AINLINE uint64_t hugetab_slot_addr_acq(const LJHugeEnt *e)
+{
+#if LA_USE_SPLIT128_SNAPSHOT
+  return la_load64_acq(&e->slot.lo);
+#else
+  return la_load128_acq(&e->slot).lo;
+#endif
+}
+
+static LJ_AINLINE uint64_t hugetab_slot_meta_acq(const LJHugeEnt *e)
+{
+#if LA_USE_SPLIT128_SNAPSHOT
+  return la_load64_acq(&e->slot.hi);
+#else
+  return la_load128_acq(&e->slot).hi;
+#endif
+}
+
 /* INVALID/PINNED deliberately does not suppress allocator progress. The
 ** absorbing scanner veto remains fail-closed while heap mutations continue. */
 static LJ_AINLINE LJGC2TableTopology *
@@ -2080,12 +2105,12 @@ static int hugetab_search(LJHugeTabHdr *h, uint64_t addr,
   uint32_t n;
   for (n = 0; n < cap; n++, i = (i + 1u) & h->mask) {
     LJHugeEnt *e = &h->ent[i];
-    uint64_t ea = la_load64_acq(&e->slot.lo);  /* 04 §4.5.1 publish edge. */
+    uint64_t ea = hugetab_slot_addr_acq(e);  /* 04 §4.5.1 publish edge. */
     if (ea == LJ_HUGETAB_EMPTY)
       return 0;
     if (ea == addr) {
-      uint64_t meta = la_load64_acq(&e->slot.hi);  /* 04 §4.5.1 metadata. */
-      if (la_load64_acq(&e->slot.lo) == addr) {  /* Stable found snapshot. */
+      uint64_t meta = hugetab_slot_meta_acq(e);  /* 04 §4.5.1 metadata. */
+      if (hugetab_slot_addr_acq(e) == addr) {  /* Stable found snapshot. */
 	if (ep)
 	  *ep = e;
 	if (metap)
@@ -2136,10 +2161,10 @@ static int hugetab_cert_lease_release(LJHugeEnt *e, uint64_t addr,
   for (;;) {
     uint64_t meta, next;
     int progress;
-    if (la_load64_acq(&e->slot.lo) != addr)
+    if (hugetab_slot_addr_acq(e) != addr)
       return 0;
-    meta = la_load64_acq(&e->slot.hi);
-    if (la_load64_acq(&e->slot.lo) != addr ||
+    meta = hugetab_slot_meta_acq(e);
+    if (hugetab_slot_addr_acq(e) != addr ||
 	hugetab_readers(meta) == 0 || hugetab_admission_closed(meta))
       return 0;
     next = meta - LJ_HUGETAB_READER_ONE;
@@ -2164,10 +2189,10 @@ static int hugetab_cert_lease_defer(LJHugeEnt *e, uint64_t addr,
   for (;;) {
     uint64_t meta, next;
     int progress;
-    if (la_load64_acq(&e->slot.lo) != addr)
+    if (hugetab_slot_addr_acq(e) != addr)
       return 0;
-    meta = la_load64_acq(&e->slot.hi);
-    if (la_load64_acq(&e->slot.lo) != addr ||
+    meta = hugetab_slot_meta_acq(e);
+    if (hugetab_slot_addr_acq(e) != addr ||
 	hugetab_readers(meta) == 0 || hugetab_admission_closed(meta))
       return 0;
     next = (meta - LJ_HUGETAB_READER_ONE) | LJ_HUGEF_DEFER_FREE;
@@ -2197,10 +2222,10 @@ static int hugetab_cert_lease_close(LJHugeEnt *e, uint64_t addr,
 {
   for (;;) {
     uint64_t current, closed;
-    if (la_load64_acq(&e->slot.lo) != addr)
+    if (hugetab_slot_addr_acq(e) != addr)
       return 0;
-    current = la_load64_acq(&e->slot.hi);
-    if (la_load64_acq(&e->slot.lo) != addr ||
+    current = hugetab_slot_meta_acq(e);
+    if (hugetab_slot_addr_acq(e) != addr ||
 	hugetab_readers(current) != 1 || hugetab_admission_closed(current))
       return 0;
     closed = (current & ~(uint64_t)LJ_HUGETAB_READER_MASK) |
@@ -2224,10 +2249,10 @@ static int hugetab_admission_reopen(LJHugeEnt *e, uint64_t addr,
   for (;;) {
     uint64_t current, next;
     int progress;
-    if (la_load64_acq(&e->slot.lo) != addr)
+    if (hugetab_slot_addr_acq(e) != addr)
       return 0;
-    current = la_load64_acq(&e->slot.hi);
-    if (la_load64_acq(&e->slot.lo) != addr ||
+    current = hugetab_slot_meta_acq(e);
+    if (hugetab_slot_addr_acq(e) != addr ||
 	!hugetab_admission_closed(current))
       return 0;
     next = current & ~(uint64_t)LJ_HUGETAB_READER_MASK;
@@ -2249,7 +2274,7 @@ static int hugetab_has_lifetime_claim(LJHugeTabHdr *h)
   cap = h->mask + 1u;
   for (i = 0; i < cap; i++) {
     LJHugeEnt *e = &h->ent[i];
-    uint64_t addr = la_load64_acq(&e->slot.lo);
+    uint64_t addr = hugetab_slot_addr_acq(e);
     /* Ordinary fini only releases an empty side table. Any live slot is an
     ** authoritative locator regardless of its transient metadata, and must
     ** be transferred/tombstoned by the terminal owner before table unmap. */
@@ -2345,14 +2370,14 @@ int lj_arena_hugetab_fini_all_try(HugeTab *ht, uint32_t *unmappedp)
   for (i = 0; i < cap; i++) {
     LJHugeEnt *e = &h->ent[i];
     for (;;) {
-      uint64_t addr = la_load64_acq(&e->slot.lo);
+      uint64_t addr = hugetab_slot_addr_acq(e);
       uint64_t meta, leased, closed;
       int lease, removed = 0;
       la_u128 exp, des;
       if (addr <= LJ_HUGETAB_TOMBSTONE)
 	break;
-      meta = la_load64_acq(&e->slot.hi);
-      if (la_load64_acq(&e->slot.lo) != addr)
+      meta = hugetab_slot_meta_acq(e);
+      if (hugetab_slot_addr_acq(e) != addr)
 	continue;
       if (hugetab_recovery_pending(meta) || hugetab_root_pending(meta) ||
 	  hugetab_readers(meta) != 0) {
@@ -2373,8 +2398,8 @@ int lj_arena_hugetab_fini_all_try(HugeTab *ht, uint32_t *unmappedp)
 	break;
       }
       for (;;) {
-	uint64_t current = la_load64_acq(&e->slot.hi);
-	if (la_load64_acq(&e->slot.lo) != addr ||
+	uint64_t current = hugetab_slot_meta_acq(e);
+	if (hugetab_slot_addr_acq(e) != addr ||
 	    !hugetab_admission_closed(current) ||
 	    hugetab_recovery_pending(current) ||
 	    hugetab_root_pending(current) ||
@@ -2438,12 +2463,12 @@ int lj_arena_hugetab_terminal_certificate_ready(HugeTab *ht)
   for (i = 0; i < cap; i++) {
     LJHugeEnt *e = &h->ent[i];
     for (;;) {
-      uint64_t addr = la_load64_acq(&e->slot.lo);
+      uint64_t addr = hugetab_slot_addr_acq(e);
       uint64_t meta;
       if (addr <= LJ_HUGETAB_TOMBSTONE)
 	break;
-      meta = la_load64_acq(&e->slot.hi);
-      if (la_load64_acq(&e->slot.lo) != addr)
+      meta = hugetab_slot_meta_acq(e);
+      if (hugetab_slot_addr_acq(e) != addr)
 	continue;
       /* Root/recovery/destructor lanes are intentionally left for freeall,
       ** but an ordinary counted reader is external byte authority. Recovery
@@ -2475,13 +2500,13 @@ int lj_arena_hugetab_terminal_ready(HugeTab *ht)
   for (i = 0; i < cap; i++) {
     LJHugeEnt *e = &h->ent[i];
     for (;;) {
-      uint64_t addr = la_load64_acq(&e->slot.lo);
+      uint64_t addr = hugetab_slot_addr_acq(e);
       uint64_t meta, leased;
       int lease, clear;
       if (addr <= LJ_HUGETAB_TOMBSTONE)
 	break;
-      meta = la_load64_acq(&e->slot.hi);
-      if (la_load64_acq(&e->slot.lo) != addr)
+      meta = hugetab_slot_meta_acq(e);
+      if (hugetab_slot_addr_acq(e) != addr)
 	continue;
       if (hugetab_recovery_pending(meta) || hugetab_root_pending(meta) ||
 	  hugetab_readers(meta) != 0)
@@ -2541,8 +2566,8 @@ static int hugetab_forget_terminal(HugeTab *ht, const void *p,
       return 0;
     }
     for (;;) {
-      uint64_t current = la_load64_acq(&e->slot.hi);
-      if (la_load64_acq(&e->slot.lo) != addr ||
+      uint64_t current = hugetab_slot_meta_acq(e);
+      if (hugetab_slot_addr_acq(e) != addr ||
 	  !hugetab_admission_closed(current) ||
 	  hugetab_recovery_pending(current) ||
 	  (!allow_root && hugetab_root_pending(current)) ||
@@ -2594,11 +2619,11 @@ static int hugetab_insert(HugeTab *ht, void *p, size_t size,
     la_u128 freeval, des;
     for (n = 0; n < cap; n++, i = (i + 1u) & h->mask) {
       LJHugeEnt *e = &h->ent[i];
-      uint64_t ea = la_load64_acq(&e->slot.lo);  /* 04 §4.5.1 slot state. */
+      uint64_t ea = hugetab_slot_addr_acq(e);  /* 04 §4.5.1 slot state. */
       if (ea == addr)
 	return 0;
       if (ea == LJ_HUGETAB_EMPTY || ea == LJ_HUGETAB_TOMBSTONE) {
-	uint64_t emeta = la_load64_acq(&e->slot.hi);  /* 04 §4.5.1 CAS pair. */
+	uint64_t emeta = hugetab_slot_meta_acq(e);  /* 04 §4.5.1 CAS pair. */
 	if (!freeent) {
 	  freeent = e;
 	  freeval.lo = ea;
@@ -2931,8 +2956,8 @@ int lj_arena_hugetab_recovery_discard_terminal(HugeTab *ht, const void *p,
 	return LJ_ARENA_HUGE_RECOVERY_TERMINAL_LOST;
       }
       for (;;) {
-	uint64_t current = la_load64_acq(&e->slot.hi);
-	if (la_load64_acq(&e->slot.lo) != addr ||
+	uint64_t current = hugetab_slot_meta_acq(e);
+	if (hugetab_slot_addr_acq(e) != addr ||
 	    !hugetab_admission_closed(current) ||
 	    !hugetab_recovery_pending(current) ||
 	    !(current & LJ_HUGEF_DEFER_FREE) ||
@@ -2973,11 +2998,11 @@ int lj_arena_hugetab_next(HugeTab *ht, uint32_t *cursor, void **pp,
   cap = h->mask + 1u;
   for (i = *cursor; i < cap;) {
     LJHugeEnt *e = &h->ent[i];
-    uint64_t addr = la_load64_acq(&e->slot.lo);
+    uint64_t addr = hugetab_slot_addr_acq(e);
     if (addr > LJ_HUGETAB_TOMBSTONE) {
-      uint64_t meta = la_load64_acq(&e->slot.hi);
+      uint64_t meta = hugetab_slot_meta_acq(e);
       la_u128 exp, des;
-      if (la_load64_acq(&e->slot.lo) != addr)
+      if (hugetab_slot_addr_acq(e) != addr)
 	continue;
       exp.lo = addr;
       exp.hi = meta;
@@ -3022,11 +3047,11 @@ int lj_arena_hugetab_slot_snapshot_bounded(
   if (!h || slot > h->mask)
     return LJ_ARENA_HUGETAB_SLOT_EMPTY;
   e = &h->ent[slot];
-  addr = la_load64_acq(&e->slot.lo);
+  addr = hugetab_slot_addr_acq(e);
   if (addr <= LJ_HUGETAB_TOMBSTONE)
     return LJ_ARENA_HUGETAB_SLOT_EMPTY;
-  meta = la_load64_acq(&e->slot.hi);
-  if (la_load64_acq(&e->slot.lo) != addr)
+  meta = hugetab_slot_meta_acq(e);
+  if (hugetab_slot_addr_acq(e) != addr)
     return LJ_ARENA_HUGETAB_SLOT_BUSY;
   exp.lo = addr;
   exp.hi = meta;
@@ -3095,10 +3120,10 @@ int lj_arena_hugetab_range_lookup(HugeTab *ht, const void *p, void **basep,
   cap = h->mask + 1u;
   for (i = 0; i < cap; i++) {
     LJHugeEnt *e = &h->ent[i];
-    uint64_t addr = la_load64_acq(&e->slot.lo);  /* 04 §4.5.1 slot state. */
+    uint64_t addr = hugetab_slot_addr_acq(e);  /* 04 §4.5.1 slot state. */
     if (addr > LJ_HUGETAB_TOMBSTONE) {
-      uint64_t meta = la_load64_acq(&e->slot.hi);  /* 04 §4.5.1 metadata. */
-      if (la_load64_acq(&e->slot.lo) == addr) {  /* Stable snapshot. */
+      uint64_t meta = hugetab_slot_meta_acq(e);  /* 04 §4.5.1 metadata. */
+      if (hugetab_slot_addr_acq(e) == addr) {  /* Stable snapshot. */
 	size_t size = hugetab_size(meta);
 	if (target >= addr && target - addr < (uint64_t)size) {
 	  if (basep)
@@ -3205,13 +3230,13 @@ static int hugetab_mark_range_entry(LJHugeEnt *e, uint64_t target,
 {
   for (;;) {
     la_u128 exp, des;
-    uint64_t addr = la_load64_acq(&e->slot.lo);
+    uint64_t addr = hugetab_slot_addr_acq(e);
     uint64_t meta, next, size;
     int result;
     if (addr <= LJ_HUGETAB_TOMBSTONE)
       return -2;
-    meta = la_load64_acq(&e->slot.hi);
-    if (la_load64_acq(&e->slot.lo) != addr)
+    meta = hugetab_slot_meta_acq(e);
+    if (hugetab_slot_addr_acq(e) != addr)
       continue;
     size = (uint64_t)hugetab_size(meta);
     if (target < addr || target - addr >= size)
@@ -3390,13 +3415,13 @@ static int hugetab_reader_entry(LJHugeTabHdr *h, LJHugeEnt *e, uint64_t target,
 {
   for (;;) {
     la_u128 exp, des;
-    uint64_t addr = la_load64_acq(&e->slot.lo);
+    uint64_t addr = hugetab_slot_addr_acq(e);
     uint64_t meta, next, size;
     int result;
     if (addr <= LJ_HUGETAB_TOMBSTONE)
       return LJ_HUGE_READER_NOT_CONTAINING;
-    meta = la_load64_acq(&e->slot.hi);
-    if (la_load64_acq(&e->slot.lo) != addr)
+    meta = hugetab_slot_meta_acq(e);
+    if (hugetab_slot_addr_acq(e) != addr)
       continue;
     size = (uint64_t)hugetab_size(meta);
     if (target < addr || target - addr >= size)
@@ -3579,11 +3604,11 @@ int lj_arena_hugetab_table_token_slot_lease_acquire_bounded(
       lease->size || lease->body_authorized)
     return LJ_ARENA_HUGE_TOKEN_LEASE_MISSING;
   e = &h->ent[slot];
-  addr = la_load64_acq(&e->slot.lo);
+  addr = hugetab_slot_addr_acq(e);
   if (addr <= LJ_HUGETAB_TOMBSTONE)
     return LJ_ARENA_HUGE_TOKEN_LEASE_MISSING;
-  meta = la_load64_acq(&e->slot.hi);
-  if (la_load64_acq(&e->slot.lo) != addr)
+  meta = hugetab_slot_meta_acq(e);
+  if (hugetab_slot_addr_acq(e) != addr)
     return LJ_ARENA_HUGE_TOKEN_LEASE_BUSY;
   exp.lo = addr;
   exp.hi = meta;
@@ -3884,10 +3909,10 @@ void lj_arena_hugetab_clear_marks(HugeTab *ht)
   cap = h->mask + 1u;
   for (i = 0; i < cap; i++) {
     LJHugeEnt *e = &h->ent[i];
-    uint64_t addr = la_load64_acq(&e->slot.lo);
+    uint64_t addr = hugetab_slot_addr_acq(e);
     while (addr > LJ_HUGETAB_TOMBSTONE &&
-	   la_load64_acq(&e->slot.lo) == addr) {
-      uint64_t meta = la_load64_acq(&e->slot.hi);
+	   hugetab_slot_addr_acq(e) == addr) {
+      uint64_t meta = hugetab_slot_meta_acq(e);
       if (!(meta & LJ_HUGEF_MARK) || hugetab_recovery_pending(meta) ||
 	  hugetab_cas_meta(e, addr, meta,
 			   meta & ~(uint64_t)LJ_HUGEF_MARK))
@@ -3905,18 +3930,18 @@ void lj_arena_hugetab_prepare_sweep(HugeTab *ht)
   cap = h->mask + 1u;
   for (i = 0; i < cap; i++) {
     LJHugeEnt *e = &h->ent[i];
-    uint64_t addr = la_load64_acq(&e->slot.lo);
+    uint64_t addr = hugetab_slot_addr_acq(e);
     if (addr > LJ_HUGETAB_TOMBSTONE) {
-      uint64_t meta = la_load64_acq(&e->slot.hi);
+      uint64_t meta = hugetab_slot_meta_acq(e);
       while ((meta & LJ_HUGEF_TRAVERSABLE) != 0 &&
 	     !(meta & (LJ_HUGEF_RETIRED|LJ_HUGEF_FREEING|
 		       LJ_HUGEF_TICKET|LJ_HUGEF_BUSY))) {
 	uint64_t next = meta | LJ_HUGEF_SWEEP_OLD;
 	if (hugetab_cas_meta(e, addr, meta, next))
 	  break;
-	if (la_load64_acq(&e->slot.lo) != addr)
+	if (hugetab_slot_addr_acq(e) != addr)
 	  break;
-	meta = la_load64_acq(&e->slot.hi);
+	meta = hugetab_slot_meta_acq(e);
       }
     }
   }
@@ -3931,10 +3956,10 @@ void lj_arena_hugetab_abort_sweep(HugeTab *ht)
   cap = h->mask + 1u;
   for (i = 0; i < cap; i++) {
     LJHugeEnt *e = &h->ent[i];
-    uint64_t addr = la_load64_acq(&e->slot.lo);
+    uint64_t addr = hugetab_slot_addr_acq(e);
     if (addr > LJ_HUGETAB_TOMBSTONE) {
-      uint64_t meta = la_load64_acq(&e->slot.hi);
-      while (la_load64_acq(&e->slot.lo) == addr &&
+      uint64_t meta = hugetab_slot_meta_acq(e);
+      while (hugetab_slot_addr_acq(e) == addr &&
 	     (meta & LJ_HUGEF_SWEEP_OLD) &&
 	     !(meta & (LJ_HUGEF_RETIRED|LJ_HUGEF_FREEING|
 		       LJ_HUGEF_TICKET|LJ_HUGEF_BUSY|
@@ -3943,9 +3968,9 @@ void lj_arena_hugetab_abort_sweep(HugeTab *ht)
 			~(uint64_t)LJ_HUGEF_SWEEP_OLD;
 	if (hugetab_cas_meta(e, addr, meta, next))
 	  break;
-	if (la_load64_acq(&e->slot.lo) != addr)
+	if (hugetab_slot_addr_acq(e) != addr)
 	  break;
-	meta = la_load64_acq(&e->slot.hi);
+	meta = hugetab_slot_meta_acq(e);
       }
     }
   }
@@ -3961,14 +3986,14 @@ void lj_arena_hugetab_finish_sweep(HugeTab *ht, int preserve_marks)
   for (i = 0; i < cap; i++) {
     LJHugeEnt *e = &h->ent[i];
     for (;;) {
-      uint64_t addr = la_load64_acq(&e->slot.lo);
+      uint64_t addr = hugetab_slot_addr_acq(e);
       uint64_t meta;
       int lease;
       const void *p;
       if (addr <= LJ_HUGETAB_TOMBSTONE)
 	break;
-      meta = la_load64_acq(&e->slot.hi);
-      if (la_load64_acq(&e->slot.lo) != addr)
+      meta = hugetab_slot_meta_acq(e);
+      if (hugetab_slot_addr_acq(e) != addr)
 	continue;
       if (!(meta & (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_MARK)) ||
 	  (meta & (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_MARK)) !=
@@ -3984,10 +4009,10 @@ void lj_arena_hugetab_finish_sweep(HugeTab *ht, int preserve_marks)
 	break;
       p = (const void *)(uintptr_t)addr;
       for (;;) {
-	uint64_t current = la_load64_acq(&e->slot.hi);
+	uint64_t current = hugetab_slot_meta_acq(e);
 	uint64_t next;
 	GCArena *a;
-	if (la_load64_acq(&e->slot.lo) != addr ||
+	if (hugetab_slot_addr_acq(e) != addr ||
 	    hugetab_readers(current) == 0)
 	  break;
 	if ((current & (LJ_HUGEF_SWEEP_OLD|LJ_HUGEF_MARK)) !=
@@ -4033,11 +4058,11 @@ int lj_arena_hugetab_sweep_next(HugeTab *ht, uint32_t *cursor,
   cap = h->mask + 1u;
   for (i = *cursor; i < cap; i++) {
     LJHugeEnt *e = &h->ent[i];
-    uint64_t addr = la_load64_acq(&e->slot.lo);
+    uint64_t addr = hugetab_slot_addr_acq(e);
     *cursor = i + 1u;
     if (addr > LJ_HUGETAB_TOMBSTONE) {
-      uint64_t meta = la_load64_acq(&e->slot.hi);
-      if (la_load64_acq(&e->slot.lo) == addr &&
+      uint64_t meta = hugetab_slot_meta_acq(e);
+      if (hugetab_slot_addr_acq(e) == addr &&
 	  (meta & LJ_HUGEF_SWEEP_OLD) &&
 	  (meta & (LJ_HUGEF_TRAVERSABLE|LJ_HUGEF_FREEING))) {
 	if (pp)
@@ -4116,9 +4141,9 @@ int lj_arena_hugetab_retire(HugeTab *ht, const void *p, const void *obj,
 	  arena_progress_wake(lj_arena_of(p));
 	return (next & LJ_HUGEF_MARK) ? 2 : 1;
       }
-      if (la_load64_acq(&e->slot.lo) != addr)
+      if (hugetab_slot_addr_acq(e) != addr)
 	return 0;
-      busy = la_load64_acq(&e->slot.hi);
+      busy = hugetab_slot_meta_acq(e);
       if (!(busy & LJ_HUGEF_BUSY))
 	return 0;
     }
@@ -4158,9 +4183,9 @@ int lj_arena_hugetab_claim_freeing(HugeTab *ht, const void *p,
       return 0;
     }
     for (;;) {
-      uint64_t current = la_load64_acq(&e->slot.hi);
+      uint64_t current = hugetab_slot_meta_acq(e);
       uint64_t prior, next;
-      if (la_load64_acq(&e->slot.lo) != addr ||
+      if (hugetab_slot_addr_acq(e) != addr ||
 	  hugetab_readers(current) == 0)
 	return 0;
       if (hugetab_readers(current) != 1 ||
@@ -4180,9 +4205,9 @@ int lj_arena_hugetab_claim_freeing(HugeTab *ht, const void *p,
       /* BUSY atomically replaces the counted lease. Recheck the independent
       ** descriptor/token word before returning semantic body ownership. */
       for (;;) {
-	uint64_t owned = la_load64_acq(&e->slot.hi);
+	uint64_t owned = hugetab_slot_meta_acq(e);
 	uint64_t publish;
-	if (la_load64_acq(&e->slot.lo) != addr ||
+	if (hugetab_slot_addr_acq(e) != addr ||
 	    (owned & (LJ_HUGEF_FREEING|LJ_HUGEF_BUSY)) !=
 	      (LJ_HUGEF_FREEING|LJ_HUGEF_BUSY))
 	  return 0;
@@ -4278,10 +4303,10 @@ static int hugetab_destruct_abandon(LJHugeEnt *e, uint64_t addr,
 				    uint64_t prior)
 {
   for (;;) {
-    uint64_t current = la_load64_acq(&e->slot.hi);
+    uint64_t current = hugetab_slot_meta_acq(e);
     uint64_t restore;
     int wake = 0;
-    if (la_load64_acq(&e->slot.lo) != addr ||
+    if (hugetab_slot_addr_acq(e) != addr ||
 	(current & (LJ_HUGEF_FREEING|LJ_HUGEF_BUSY)) !=
 	  (LJ_HUGEF_FREEING|LJ_HUGEF_BUSY))
       return 0;
@@ -4344,9 +4369,9 @@ int lj_arena_hugetab_destruct_acquire(HugeTab *ht, const void *p,
 	return LJ_ARENA_DESTRUCT_LOST;
     }
     for (;;) {
-	uint64_t current = la_load64_acq(&e->slot.hi);
+	uint64_t current = hugetab_slot_meta_acq(e);
 	uint64_t prior, next;
-	if (la_load64_acq(&e->slot.lo) != addr ||
+	if (hugetab_slot_addr_acq(e) != addr ||
 	    hugetab_readers(current) == 0)
 	  return LJ_ARENA_DESTRUCT_LOST;
 	if (hugetab_readers(current) != 1 ||
@@ -4431,9 +4456,9 @@ static int hugetab_claim_external_free(HugeTab *ht, const void *p,
       return LJ_HUGE_EXT_CONTENDED;
     }
     for (;;) {
-      uint64_t current = la_load64_acq(&e->slot.hi);
+      uint64_t current = hugetab_slot_meta_acq(e);
       uint64_t prior, next;
-      if (la_load64_acq(&e->slot.lo) != addr ||
+      if (hugetab_slot_addr_acq(e) != addr ||
 	  hugetab_readers(current) == 0)
 	return LJ_HUGE_EXT_CONTENDED;
       /* Any owner admitted after our counted pin wins body access. The free
@@ -4459,10 +4484,10 @@ static int hugetab_claim_external_free(HugeTab *ht, const void *p,
 	** still hand the logical free to sweep; lawful publishers would instead
 	** have changed the reader count and defeated the claim CAS above. */
 	for (;;) {
-	  uint64_t owned = la_load64_acq(&e->slot.hi);
+	  uint64_t owned = hugetab_slot_meta_acq(e);
 	  uint64_t deferred;
 	  int progress;
-	  if (la_load64_acq(&e->slot.lo) != addr ||
+	  if (hugetab_slot_addr_acq(e) != addr ||
 	      (owned & (LJ_HUGEF_FREEING|LJ_HUGEF_BUSY)) !=
 		(LJ_HUGEF_FREEING|LJ_HUGEF_BUSY))
 	    return LJ_HUGE_EXT_CONTENDED;
@@ -4772,10 +4797,10 @@ int lj_arena_hugetab_retry_deferred(HugeTab *ht, const void *p,
     ** fold samples the independent certificate. Its exact CAS consumes that
     ** count and either retains the durable marker or publishes FREEING. */
     for (;;) {
-      uint64_t current = la_load64_acq(&e->slot.hi);
+      uint64_t current = hugetab_slot_meta_acq(e);
       uint64_t next;
       int progress;
-      if (la_load64_acq(&e->slot.lo) != addr ||
+      if (hugetab_slot_addr_acq(e) != addr ||
 	  hugetab_readers(current) == 0)
 	return 0;
       next = current - LJ_HUGETAB_READER_ONE;
@@ -4823,10 +4848,10 @@ uint64_t lj_arena_hugetab_live_bytes(HugeTab *ht, uint32_t required_flags)
   cap = h->mask + 1u;
   for (i = 0; i < cap; i++) {
     LJHugeEnt *e = &h->ent[i];
-    uint64_t addr = la_load64_acq(&e->slot.lo);  /* 04 §4.5.1 slot state. */
+    uint64_t addr = hugetab_slot_addr_acq(e);  /* 04 §4.5.1 slot state. */
     if (addr > LJ_HUGETAB_TOMBSTONE) {
-      uint64_t meta = la_load64_acq(&e->slot.hi);  /* 04 §4.5.1 metadata. */
-      if (la_load64_acq(&e->slot.lo) == addr) {  /* Stable snapshot. */
+      uint64_t meta = hugetab_slot_meta_acq(e);  /* 04 §4.5.1 metadata. */
+      if (hugetab_slot_addr_acq(e) == addr) {  /* Stable snapshot. */
 	uint32_t hflags = (uint32_t)(meta & LJ_HUGETAB_META_MASK);
 	if ((hflags & required_flags) == required_flags) {
 	  size_t size = hugetab_size(meta);
@@ -4859,10 +4884,10 @@ int lj_arena_hugetab_transfer(HugeTab *dst, HugeTab *src, uint32_t owner_tid)
   cap = h->mask + 1u;
   for (i = 0; i < cap; i++) {
     LJHugeEnt *e = &h->ent[i];
-    uint64_t addr = la_load64_acq(&e->slot.lo);
+    uint64_t addr = hugetab_slot_addr_acq(e);
     if (addr > LJ_HUGETAB_TOMBSTONE) {
-      uint64_t meta = la_load64_acq(&e->slot.hi);
-      if (la_load64_acq(&e->slot.lo) == addr) {
+      uint64_t meta = hugetab_slot_meta_acq(e);
+      if (hugetab_slot_addr_acq(e) == addr) {
 	void *p = (void *)(uintptr_t)addr;
 	size_t size;
 	uint32_t hflags;
@@ -4966,8 +4991,8 @@ int lj_arena_hugetab_delete(HugeTab *ht, const void *p, LJHugeInfo *hi)
     ** token or still-ACTIVE exact descriptor, and no later publisher can enter
     ** between the successful validation and tombstone CAS. */
     for (;;) {
-      uint64_t current = la_load64_acq(&e->slot.hi);
-      if (la_load64_acq(&e->slot.lo) != addr ||
+      uint64_t current = hugetab_slot_meta_acq(e);
+      if (hugetab_slot_addr_acq(e) != addr ||
 	  !hugetab_admission_closed(current)) {
 	(void)hugetab_admission_reopen(e, addr, p, NULL);
 	return 0;
@@ -6479,11 +6504,11 @@ int lj_arena_hugetab_rescue_slot_enter_bounded(
   if (!h || slot > h->mask || !a)
     return LJ_ARENA_RESCUE_RETRY;
   e = &h->ent[slot];
-  addr = la_load64_acq(&e->slot.lo);
+  addr = hugetab_slot_addr_acq(e);
   if (addr != (uint64_t)(uintptr_t)a)
     return LJ_ARENA_RESCUE_RETRY;
-  meta = la_load64_acq(&e->slot.hi);
-  if (la_load64_acq(&e->slot.lo) != addr ||
+  meta = hugetab_slot_meta_acq(e);
+  if (hugetab_slot_addr_acq(e) != addr ||
       (meta & (LJ_HUGEF_FREEING|LJ_HUGEF_DEFER_FREE|LJ_HUGEF_BUSY)) ||
       hugetab_admission_closed(meta) ||
       hugetab_readers(meta) == LJ_HUGETAB_READER_MAX)

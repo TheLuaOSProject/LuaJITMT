@@ -6,6 +6,17 @@ local compile_and_run_sources = build.compile_and_run_sources
 
 return function(add)
   add({
+    name = "m5_arm64_tab_pair_contract",
+    description = "Apple ARM64 exact GCtab structural/weak pair contract",
+    run = function(t)
+      t:run({ "sh", t:path("tools", "ci",
+                           "arm64_tab_pair_contract.sh") }, {
+        timeout = "30s"
+      })
+    end
+  })
+
+  add({
     name = "m5_nbtab_model",
     description = "concurrent table protocol standalone C model",
     run = function(t)

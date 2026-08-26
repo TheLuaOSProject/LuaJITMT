@@ -944,9 +944,21 @@ LJ_STATIC_ASSERT(TABARRAY_ACAP_BITS == 28);
 LJ_STATIC_ASSERT((LJ_TAB_WEAK_RECORD_ACAP_MASK &
 		  LJ_TAB_WEAK_RECORD_SEMANTIC_MASK) == 0);
 
+#if !LA_USE_SPLIT128_SNAPSHOT
+static LJ_AINLINE la_u128
+lj_tab_struct_weak_pair_snapshot_acq(const GCtab *t)
+{
+  return la_load128_acq(&t->struct_weak_pair);
+}
+#endif
+
 static LJ_AINLINE uint64_t lj_tab_weak_record_raw_acq(const GCtab *t)
 {
+#if LA_USE_SPLIT128_SNAPSHOT
   return la_load64_acq(&t->weak_record);
+#else
+  return lj_tab_struct_weak_pair_snapshot_acq(t).hi;
+#endif
 }
 
 static LJ_AINLINE MSize
@@ -958,6 +970,7 @@ lj_tab_weak_record_raw_acap(uint64_t record)
 
 static LJ_AINLINE void lj_tab_weak_acap_rel(GCtab *t, MSize acap)
 {
+#if LA_USE_SPLIT128_SNAPSHOT
   uint64_t current = lj_tab_weak_record_raw_acq(t);
   uint64_t bits;
   lj_assertX(acap <= TABARRAY_ACAP_MASK, "invalid table array capacity");
@@ -967,6 +980,18 @@ static LJ_AINLINE void lj_tab_weak_acap_rel(GCtab *t, MSize acap)
     if (la_cas64(&t->weak_record, &current, desired, LA_ACQ_REL, LA_ACQ))
       return;
   }
+#else
+  la_u128 current = lj_tab_struct_weak_pair_snapshot_acq(t);
+  uint64_t bits;
+  lj_assertX(acap <= TABARRAY_ACAP_MASK, "invalid table array capacity");
+  bits = (uint64_t)acap << LJ_TAB_WEAK_RECORD_ACAP_SHIFT;
+  for (;;) {
+    la_u128 desired = current;
+    desired.hi = (current.hi & ~LJ_TAB_WEAK_RECORD_ACAP_MASK) | bits;
+    if (la_cas128(&t->struct_weak_pair, &current, desired))
+      return;
+  }
+#endif
 }
 
 static LJ_AINLINE void
@@ -1051,19 +1076,55 @@ lj_tab_struct_control_desc(uint64_t word)
 
 static LJ_AINLINE uint64_t lj_tab_struct_control_acq(const GCtab *t)
 {
+#if LA_USE_SPLIT128_SNAPSHOT
   return la_load64_acq(&t->struct_control);
+#else
+  return lj_tab_struct_weak_pair_snapshot_acq(t).lo;
+#endif
 }
 
 static LJ_AINLINE int lj_tab_struct_control_cas(GCtab *t, uint64_t *oldp,
 						uint64_t control)
 {
+#if LA_USE_SPLIT128_SNAPSHOT
   return la_cas64(&t->struct_control, oldp, control, LA_ACQ_REL, LA_ACQ);
+#else
+  la_u128 current = lj_tab_struct_weak_pair_snapshot_acq(t);
+  uint64_t expected = *oldp;
+  for (;;) {
+    la_u128 desired;
+    if (current.lo != expected) {
+      *oldp = current.lo;
+      return 0;
+    }
+    desired = current;
+    desired.lo = control;
+    if (la_cas128(&t->struct_weak_pair, &current, desired))
+      return 1;
+  }
+#endif
+}
+
+static LJ_AINLINE void lj_tab_struct_control_rel(GCtab *t, uint64_t control)
+{
+#if LA_USE_SPLIT128_SNAPSHOT
+  la_store64_rel(&t->struct_control, control);
+#else
+  la_u128 current = lj_tab_struct_weak_pair_snapshot_acq(t);
+  for (;;) {
+    la_u128 desired = current;
+    desired.lo = control;
+    if (la_cas128(&t->struct_weak_pair, &current, desired))
+      return;
+  }
+#endif
 }
 
 static LJ_AINLINE void lj_tab_struct_control_store_rlx(GCtab *t,
 							uint32_t acap,
 							uint32_t owner)
 {
+  /* Unpublished initialization; the weak half is initialized separately. */
   la_store64_rlx(&t->struct_control,
 		 lj_tab_struct_control_pack(acap, owner));
 }
@@ -1101,7 +1162,7 @@ static LJ_AINLINE void lj_tab_acap_rel(GCtab *t, MSize acap)
   */
   lj_assertX(!lj_tab_struct_control_is_desc(control),
 	     "array capacity store during descriptor resize");
-  la_store64_rel(&t->struct_control, lj_tab_struct_control_pack(
+  lj_tab_struct_control_rel(t, lj_tab_struct_control_pack(
     (uint32_t)acap, lj_tab_struct_control_owner(control)));
 }
 
@@ -1115,6 +1176,7 @@ static LJ_AINLINE uint32_t lj_tab_struct_owner_acq(const GCtab *t)
 static LJ_AINLINE void lj_tab_struct_owner_store_rlx(GCtab *t, uint32_t owner)
 {
   uint64_t control = la_load64_rlx(&t->struct_control);
+  /* Unpublished/test-only initialization; no pair CAS may race this store. */
   lj_assertX(!lj_tab_struct_control_is_desc(control),
 	     "owner initialization during descriptor resize");
   la_store64_rlx(&t->struct_control, lj_tab_struct_control_pack(
@@ -1126,7 +1188,7 @@ static LJ_AINLINE void lj_tab_struct_owner_rel(GCtab *t, uint32_t owner)
   uint64_t control = lj_tab_struct_control_acq(t);
   lj_assertX(!lj_tab_struct_control_is_desc(control),
 	     "legacy owner store during descriptor resize");
-  la_store64_rel(&t->struct_control, lj_tab_struct_control_pack(
+  lj_tab_struct_control_rel(t, lj_tab_struct_control_pack(
     lj_tab_struct_control_acap(control), owner));
 }
 
@@ -1187,6 +1249,7 @@ static LJ_AINLINE uint64_t lj_tab_weak_record_acq(const GCtab *t)
 static LJ_AINLINE void lj_tab_weak_record_store_rlx(GCtab *t,
 						     uint64_t record)
 {
+#if LA_USE_SPLIT128_SNAPSHOT
   uint64_t current = la_load64_rlx(&t->weak_record);
   record &= LJ_TAB_WEAK_RECORD_SEMANTIC_MASK;
   for (;;) {
@@ -1194,11 +1257,22 @@ static LJ_AINLINE void lj_tab_weak_record_store_rlx(GCtab *t,
     if (la_cas64(&t->weak_record, &current, desired, LA_RLX, LA_RLX))
       return;
   }
+#else
+  la_u128 current = lj_tab_struct_weak_pair_snapshot_acq(t);
+  record &= LJ_TAB_WEAK_RECORD_SEMANTIC_MASK;
+  for (;;) {
+    la_u128 desired = current;
+    desired.hi = (current.hi & LJ_TAB_WEAK_RECORD_ACAP_MASK) | record;
+    if (la_cas128(&t->struct_weak_pair, &current, desired))
+      return;
+  }
+#endif
 }
 
 static LJ_AINLINE int lj_tab_weak_record_cas(GCtab *t, uint64_t *oldp,
 					      uint64_t record)
 {
+#if LA_USE_SPLIT128_SNAPSHOT
   uint64_t expected = *oldp & LJ_TAB_WEAK_RECORD_SEMANTIC_MASK;
   uint64_t current = lj_tab_weak_record_raw_acq(t);
   record &= LJ_TAB_WEAK_RECORD_SEMANTIC_MASK;
@@ -1213,6 +1287,23 @@ static LJ_AINLINE int lj_tab_weak_record_cas(GCtab *t, uint64_t *oldp,
     if (la_cas64(&t->weak_record, &current, desired, LA_ACQ_REL, LA_ACQ))
       return 1;
   }
+#else
+  uint64_t expected = *oldp & LJ_TAB_WEAK_RECORD_SEMANTIC_MASK;
+  la_u128 current = lj_tab_struct_weak_pair_snapshot_acq(t);
+  record &= LJ_TAB_WEAK_RECORD_SEMANTIC_MASK;
+  for (;;) {
+    uint64_t semantic = current.hi & LJ_TAB_WEAK_RECORD_SEMANTIC_MASK;
+    la_u128 desired;
+    if (semantic != expected) {
+      *oldp = semantic;
+      return 0;
+    }
+    desired = current;
+    desired.hi = (current.hi & LJ_TAB_WEAK_RECORD_ACAP_MASK) | record;
+    if (la_cas128(&t->struct_weak_pair, &current, desired))
+      return 1;
+  }
+#endif
 }
 
 /* White-box compatibility accessors used by the recycled-inline-TNEW test. */
