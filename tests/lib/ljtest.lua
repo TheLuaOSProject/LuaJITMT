@@ -13,8 +13,10 @@ local write_file = utils.write_file
 local file_exists = utils.file_exists
 local command_succeeded = utils.command_succeeded
 
-local function build_profile_signature(xcflags)
-  return "default\nXCFLAGS=" .. (xcflags or "") .. "\n"
+local function build_profile_signature(xcflags, env)
+  local deploy = env and env.MACOSX_DEPLOYMENT_TARGET or ""
+  return "default\nXCFLAGS=" .. (xcflags or "") ..
+         "\nMACOSX_DEPLOYMENT_TARGET=" .. deploy .. "\n"
 end
 
 local function build_signature_path(self)
@@ -250,8 +252,18 @@ end
 function Test:build(opts)
   opts = opts or {}
   local args = {}
+  local build_env = {}
+  if opts.env then
+    for k, v in pairs(opts.env) do build_env[k] = v end
+  end
+  if jit and jit.os == "OSX" and
+     build_env.MACOSX_DEPLOYMENT_TARGET == nil then
+    build_env.MACOSX_DEPLOYMENT_TARGET =
+      getenv("MACOSX_DEPLOYMENT_TARGET", "13.0")
+  end
+  if next(build_env) == nil then build_env = nil end
   local stamp = build_signature_path(self)
-  local signature = build_profile_signature(opts.xcflags)
+  local signature = build_profile_signature(opts.xcflags, build_env)
   local disk_signature = self.build_signature
   local have_outputs = file_exists(self:path("src", "luajit")) and
     file_exists(self:path("src", "libluajit.a"))
@@ -264,12 +276,24 @@ function Test:build(opts)
     return
   end
   if opts.clean or disk_signature ~= signature then
-    self:make({ "clean" }, { quiet = opts.quiet, jobs = false })
+    local clean_args = { "clean" }
+    -- Target selection happens while parsing the Makefile, even for `clean`.
+    -- Preserve the requested build profile so opt-in architectures do not hit
+    -- the default target guard before their stale artifacts are removed.
+    if opts.xcflags then
+      clean_args[#clean_args + 1] = "XCFLAGS=" .. opts.xcflags
+    end
+    self:make(clean_args, {
+      quiet = opts.quiet,
+      jobs = false,
+      env = build_env
+    })
   end
   if opts.xcflags then args[#args + 1] = "XCFLAGS=" .. opts.xcflags end
   self:make(args, {
     quiet = opts.quiet,
     jobs = opts.jobs,
+    env = build_env,
     keep_build_signature = true
   })
   write_file(stamp, signature)
