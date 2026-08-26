@@ -123,15 +123,6 @@ test "$(grep -Fc 'emit_asmfunc_addr((ASMFunction)lj_vm_exit_interp)' \
 grep -F 'ptrauth_auth_data((char *)target' \
   "$root/src/lj_emit_arm64.h" >/dev/null
 
-LUA_PATH="$root/src/?.lua;$root/src/jit/?.lua;;" "$root/src/luajit" -e '
-  local util = require("jit.util")
-  jit.flush(); jit.on(); jit.opt.start("hotloop=1", "hotexit=1")
-  local n = 0
-  for r = 1, 96 do for i = 1, 2048 do n = n + i end end
-  assert(n == 96 * 2048 * 2049 / 2)
-  assert(util.traceinfo(1) == nil, "exit tranche enabled native recording")
-'
-
 # Rebuild the same contract for the arm64e/BTI slice. This proves that direct
 # target arithmetic compiles through authenticated code-address normalization,
 # indirect stubs use BLRAAZ, and the two VM landing pads have the right BTI kind.
@@ -165,4 +156,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" make -C "$root/src" clean
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" -j"$jobs" XCFLAGS="$xcflags"
 
-echo "arm64_jit_exit_contract OK: stubs, TG lease, VM quiescence, arm64e/BTI and fail-closed runtime verified"
+echo "arm64_jit_exit_contract OK: stubs, TG lease, VM quiescence and arm64e/BTI verified"

@@ -66,11 +66,13 @@
 |.define CARG3,		x2
 |.define CARG4,		x3
 |.define CARG5,		x4
+|.define CARG6,		x5
 |.define CARG1w,	w0
 |.define CARG2w,	w1
 |.define CARG3w,	w2
 |.define CARG4w,	w3
 |.define CARG5w,	w4
+|.define CARG6w,	w5
 |
 |.define FARG1,		d0
 |.define FARG2,		d1
@@ -85,11 +87,13 @@
 |.macro sp_auth; pacibsp; .endmacro
 |.macro br_auth, reg; braaz reg; .endmacro
 |.macro blr_auth, reg; blraaz reg; .endmacro
+|.macro br_trace_auth, target, trace; braa target, trace; .endmacro
 |.macro ret_auth; retab; .endmacro
 |.else
 |.macro sp_auth; .endmacro
 |.macro br_auth, reg; br reg; .endmacro
 |.macro blr_auth, reg; blr reg; .endmacro
+|.macro br_trace_auth, target, trace; br target; .endmacro
 |.macro ret_auth; ret; .endmacro
 |.endif
 |
@@ -2203,7 +2207,7 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |->cont_stitch:			// Trace stitching.
   |.if JIT
-#if LJ_ARM64_JIT_FAIL_CLOSED
+#if LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED
   |  // No native trace can create this continuation in the scaffolding build.
   |  bti_jump
   |  b ->cont_nop
@@ -4189,7 +4193,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     if (op == BC_FORI) {
       |  csel PC, RC, PC, hi
     } else if (op == BC_JFORI) {
-      |  ldrh RCw, [RC, #-4+OFS_RD]
+      |  mov PC, RC
+      |  ldrh RCw, [PC, #-4+OFS_RD]
       |  bls =>BC_JLOOP
     } else if (op == BC_IFORL) {
       |  csel PC, RC, PC, ls
@@ -4262,11 +4267,43 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
   case BC_JLOOP:
     |.if JIT
-    |  // The scaffolding build never enters mcode. Recover any stale patch
-    |  // through TraceVec/retired metadata and redispatch the original word.
-    |1:
+    |  // JFOR*/JITERL also tail here after performing their edge semantics.
+    |  // Only a directly dispatched JLOOP is a strict root admission site.
+    |  and TMP0w, INSw, #255
+    |  cmp TMP0w, #BC_JLOOP
+    |  bne >5
+    |  // Validate entry through the common C gate. AAPCS64 returns the exact
+    |  // GCtrace identity in x0 and its target in x1.
     |  str BASE, L->base
-    |  ldr INSw, [PC, #-4]
+    |  add CARG1, GL, #GG_G2J_HI
+    |  add CARG1, CARG1, #GG_G2J_LO
+    |  sub CARG2, PC, #4
+    |  decode_RD CARG3, INS
+    |  mov CARG4, L
+    |  mov CARG5, BASE
+    |  mov CARG6w, #BC_JLOOP
+    |  bl extern lj_trace_enter_root
+    |  ldr BASE, L->base
+    |  cbz CRET1, >1
+    |  cbz CARG2, >1
+#if LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED
+    |  // Successful native entry is deliberately unreachable in this tranche.
+    |  // Still clear a synthetic helper lease before taking the rejection path.
+    |  clear_tg_jit_base
+    |  b >1
+    |  br_trace_auth CARG2, CRET1	// Future BRAA target, GCtrace modifier.
+#else
+    |  br_trace_auth CARG2, CRET1
+#endif
+    |
+    |1:  // Helper rejection: acquire-reload mutable bytecode before recovery.
+    |  sub ATMP, PC, #4
+    |  ldar INSw, [ATMP]
+    |  and TMP0w, INSw, #255
+    |  cmp TMP0w, #BC_JLOOP
+    |  bne >4
+    |2:
+    |  str BASE, L->base
     |  add CARG1, GL, #GG_G2J_HI
     |  add CARG1, CARG1, #GG_G2J_LO
     |  sub CARG2, PC, #4
@@ -4275,14 +4312,66 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  bl extern lj_trace_stale_startins
     |  ldr BASE, L->base
     |  cmn CRET1w, #1
-    |  beq <1
+    |  bne >3
+    |  sub ATMP, PC, #4
+    |  ldar INSw, [ATMP]
+    |  and TMP0w, INSw, #255
+    |  cmp TMP0w, #BC_JLOOP
+    |  beq <2
+    |  b >4
+    |3:
     |  cbz CRET1w, ->cont_nop
     |  mov INSw, CRET1w
-    |  add TMP0, GL, INS, uxtb #3
+    |4:
+    |  add TMP0, DISPATCH, INS, uxtb #3
     |   decode_RA RA, INS
-    |  ldr RB, [TMP0, #GG_G2DISP+GG_DISP2STATIC]
+    |  ldr RB, [TMP0, #GG_DISP2STATIC]
     |   decode_RD RC, INS
     |  br_auth RB
+    |
+    |5:  // JFOR*/JITERL already tested/updated the edge: recover branch only.
+    |  str BASE, L->base
+    |  add CARG1, GL, #GG_G2J_HI
+    |  add CARG1, CARG1, #GG_G2J_LO
+    |  sub CARG2, PC, #4
+    |  mov CARG3w, RCw
+    |  mov CARG4, L
+    |  bl extern lj_trace_stale_startins
+    |  ldr BASE, L->base
+    |  cmn CRET1w, #1
+    |  bne >6
+    |7:  // Retry must classify the newly acquired bytecode generation.
+    |  sub ATMP, PC, #4
+    |  ldar INSw, [ATMP]
+    |  and TMP0w, INSw, #255
+    |  cmp TMP0w, #BC_JFORL
+    |  beq >9
+    |  cmp TMP0w, #BC_JITERL
+    |  beq >9
+    |  cmp TMP0w, #BC_FORL
+    |  beq >8
+    |  cmp TMP0w, #BC_ITERL
+    |  beq >8
+    |  b <4
+    |9:
+    |  decode_RD RC, INS
+    |  b <5
+    |6:
+    |  cbz CRET1w, ->cont_nop
+    |  mov INSw, CRET1w
+    |  and TMP0w, INSw, #255
+    |  cmp TMP0w, #BC_FORL
+    |  beq >8
+    |  cmp TMP0w, #BC_ITERL
+    |  bne <4
+    |8:
+    |  // FORL/ITERL's condition/update/control-variable work is complete.
+    |  decode_RD RC, INS
+    |  add TMP0, PC, RC, lsl #2
+    |  sub PC, TMP0, #0x20000
+    |  arm64_vm_poll_acq TMP0w, TMP1w
+    |  cbnz TMP0w, ->vm_safepoint
+    |  ins_next
     |.endif
     break;
 
@@ -4320,8 +4409,62 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp NARGS8:RC, TMP1, lsl #3	// Check for missing parameters.
     |  blo >3
     if (op == BC_JFUNCF) {
-      |  decode_RD RC, INS
-      |  b =>BC_JLOOP
+      |.if JIT
+      |  // Missing fixed arguments are authoritative before native admission.
+      |  str BASE, L->base
+      |  add CARG1, GL, #GG_G2J_HI
+      |  add CARG1, CARG1, #GG_G2J_LO
+      |  sub CARG2, PC, #4
+      |  decode_RD CARG3, INS
+      |  mov CARG4, L
+      |  mov CARG5, BASE
+      |  mov CARG6w, #BC_JFUNCF
+      |  bl extern lj_trace_enter_root
+      |  ldr BASE, L->base
+      |  cbz CRET1, >4
+      |  cbz CARG2, >4
+#if LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED
+      |  clear_tg_jit_base
+      |  b >4
+      |  br_trace_auth CARG2, CRET1	// Future BRAA target, GCtrace modifier.
+#else
+      |  br_trace_auth CARG2, CRET1
+#endif
+      |
+      |4:  // Rejected header entry: reload, recover, then static redispatch.
+      |  sub ATMP, PC, #4
+      |  ldar INSw, [ATMP]
+      |  and TMP0w, INSw, #255
+      |  cmp TMP0w, #BC_JFUNCF
+      |  bne >8
+      |5:
+      |  str BASE, L->base
+      |  add CARG1, GL, #GG_G2J_HI
+      |  add CARG1, CARG1, #GG_G2J_LO
+      |  sub CARG2, PC, #4
+      |  decode_RD CARG3, INS
+      |  mov CARG4, L
+      |  bl extern lj_trace_stale_startins
+      |  ldr BASE, L->base
+      |  cmn CRET1w, #1
+      |  bne >6
+      |  sub ATMP, PC, #4
+      |  ldar INSw, [ATMP]
+      |  and TMP0w, INSw, #255
+      |  cmp TMP0w, #BC_JFUNCF
+      |  beq <5
+      |  b >8
+      |6:
+      |  cbz CRET1w, ->cont_nop
+      |  mov INSw, CRET1w
+      |8:
+      |  add TMP0, DISPATCH, INS, uxtb #3
+      |   decode_RA RA, INS
+      |  ldr RB, [TMP0, #GG_DISP2STATIC]
+      |  // Preserve callee-save RC: it still carries the actual nargs bytes,
+      |  // whereas JFUNCF.D and recovered FUNCF.D are not call arguments.
+      |  br_auth RB
+      |.endif
     } else {
       |  arm64_vm_poll_acq TMP0w, TMP1w
       |  cbnz TMP0w, ->vm_safepoint

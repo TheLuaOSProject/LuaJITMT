@@ -92,6 +92,7 @@ LJ_FUNC TGState *lj_jit_owner_tg_l(lua_State *L, jit_State *J);
 #if LJ_TARGET_ARM64 && LJ_HASJIT
 #define LJ_TRACE_ROOT_ENTRY_PAUSE_PREPUBLISH 1u
 #define LJ_TRACE_ROOT_ENTRY_PAUSE_POSTPUBLISH 2u
+#define LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA 3u
 #ifdef LJ_TRACE_TEST_HELPERS
 LJ_FUNC void lj_trace_test_root_entry_reset(void);
 LJ_FUNC void lj_trace_test_root_entry_pause(uint32_t stage);
@@ -99,6 +100,8 @@ LJ_FUNC uint32_t lj_trace_test_root_entry_paused(void);
 LJ_FUNC void lj_trace_test_root_entry_release(void);
 LJ_FUNC uint32_t lj_trace_test_root_entry_publishes(void);
 LJ_FUNC uint32_t lj_trace_test_root_entry_cleanups(void);
+LJ_FUNC void lj_trace_test_root_entry_retry_restore(BCIns *pc, BCIns ins);
+LJ_FUNC uint32_t lj_trace_test_root_entry_startins_calls(void);
 #endif
 #endif
 

@@ -29,8 +29,8 @@
 #include "lj_tg.h"
 #include "lj_asm.h"
 
-#if !LJ_HASJIT || !LJ_ARM64_JIT_FAIL_CLOSED
-#error "t-arm64-jit-exit requires the fail-closed experimental ARM64 JIT"
+#if !LJ_HASJIT || !LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED
+#error "t-arm64-jit-exit requires fail-closed ARM64 native entry"
 #endif
 
 #define EXIT_RACE_ROUNDS 128u

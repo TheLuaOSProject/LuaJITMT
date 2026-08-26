@@ -332,6 +332,9 @@ static uint32_t trace_test_root_entry_pause_waiting;
 static uint32_t trace_test_root_entry_pause_release;
 static uint32_t trace_test_root_entry_publish_count;
 static uint32_t trace_test_root_entry_cleanup_count;
+static uint32_t trace_test_root_entry_startins_call_count;
+static BCIns *trace_test_root_entry_retry_restore_pc;
+static BCIns trace_test_root_entry_retry_restore_ins;
 
 void lj_trace_test_root_entry_reset(void)
 {
@@ -340,6 +343,9 @@ void lj_trace_test_root_entry_reset(void)
   la_store32_rel(&trace_test_root_entry_pause_release, 0);
   la_store32_rel(&trace_test_root_entry_publish_count, 0);
   la_store32_rel(&trace_test_root_entry_cleanup_count, 0);
+  la_store32_rel(&trace_test_root_entry_startins_call_count, 0);
+  trace_test_root_entry_retry_restore_pc = NULL;
+  trace_test_root_entry_retry_restore_ins = 0;
 }
 
 void lj_trace_test_root_entry_pause(uint32_t stage)
@@ -369,6 +375,33 @@ uint32_t lj_trace_test_root_entry_cleanups(void)
   return la_load32_acq(&trace_test_root_entry_cleanup_count);
 }
 
+void lj_trace_test_root_entry_retry_restore(BCIns *pc, BCIns ins)
+{
+  trace_test_root_entry_retry_restore_ins = ins;
+  trace_test_root_entry_retry_restore_pc = pc;
+}
+
+uint32_t lj_trace_test_root_entry_startins_calls(void)
+{
+  return la_load32_acq(&trace_test_root_entry_startins_call_count);
+}
+
+static void trace_test_root_entry_startins_called(void)
+{
+  (void)la_add32_acqrel(&trace_test_root_entry_startins_call_count, 1);
+}
+
+static void trace_test_root_entry_restore_at_retry(void)
+{
+  BCIns *pc = trace_test_root_entry_retry_restore_pc;
+  if (pc != NULL) {
+    BCIns ins = trace_test_root_entry_retry_restore_ins;
+    trace_test_root_entry_retry_restore_pc = NULL;
+    trace_test_root_entry_retry_restore_ins = 0;
+    bc_publish(pc, ins);
+  }
+}
+
 static void trace_test_root_entry_maybe_pause(uint32_t stage)
 {
   if (la_load32_acq(&trace_test_root_entry_pause_stage) != stage)
@@ -386,6 +419,10 @@ static void trace_test_root_entry_maybe_pause(uint32_t stage)
   ((void)la_add32_acqrel(&trace_test_root_entry_publish_count, 1))
 #define trace_test_root_entry_cleaned() \
   ((void)la_add32_acqrel(&trace_test_root_entry_cleanup_count, 1))
+#define trace_test_root_entry_startins_note() \
+  trace_test_root_entry_startins_called()
+#define trace_test_root_entry_retry_restore_now() \
+  trace_test_root_entry_restore_at_retry()
 #endif
 
 #define TRACE_TEST_COUNTER(name) \
@@ -3616,6 +3653,12 @@ static LJ_AINLINE int trace_root_entry_bytecode_valid(const BCIns *pc,
   return (uint32_t)bc_op(ins) == sourceop && (TraceNo)bc_d(ins) == traceno;
 }
 
+static LJ_AINLINE int trace_root_entry_request_pending(const TGState *tg)
+{
+  return lj_tg_poll_acq(tg) != 0 || lj_tg_reqmask_acq(tg) != 0 ||
+	 lj_tg_profile_request_acq(tg) != 0;
+}
+
 /* Validate and publish one root-trace entry intent without allocating,
 ** waiting, entering SMR, invoking callbacks or raising an error. The gate
 ** close/recheck handshake makes the published TG-local jit_base the lifetime
@@ -3660,7 +3703,7 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
       (basep-stackp) % sizeof(TValue) != 0 ||
       (topp-stackp) % sizeof(TValue) != 0 ||
       lj_tg_load_jit_base(tg) != NULL || lj_tg_vmstate_load_acq(tg) > 0 ||
-      lj_tg_in_native_acq(tg) != 0)
+      lj_tg_in_native_acq(tg) != 0 || trace_root_entry_request_pending(tg))
     return result;
 
   if (!lj_gc2_jit_entry_open(g)) {
@@ -3678,6 +3721,8 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
     gc2_jit_sweep_displaced_rel(g, 1);
     goto reject_published;
   }
+  if (trace_root_entry_request_pending(tg))
+    goto reject_published;
 
   T = trace_root_entry_slot_acq(J, traceno, &tv);
   if (!trace_runnable_acq(T, traceno) || trace_root_acq(T) != 0 ||
@@ -3717,6 +3762,15 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
   if (trace_mcauth_acq(T2) != target ||
       (uintptr_t)lj_ptr_strip(target) != mcodep)
     goto reject_published;
+#endif
+  trace_test_root_entry_pause_at(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA);
+  if (trace_root_entry_request_pending(tg))
+    goto reject_published;
+#if LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED
+  /* The VM caller is wired in this tranche, but generated code is not yet an
+  ** admitted execution surface. Exercise the complete validation/cleanup
+  ** protocol while making a successful native result impossible. */
+  goto reject_published;
 #endif
   setsbufL(&tg->tmpbuf, L);
   result.trace = T;
@@ -5318,8 +5372,15 @@ BCIns LJ_FASTCALL lj_trace_stale_startins(jit_State *J, const BCIns *pc,
   global_State *g = J2G(J);
   BCIns startins = 0;
   GCproto *owner = NULL;
-  if (trace_test_take_startins_retry())
+#if defined(LJ_TRACE_TEST_HELPERS) && LJ_TARGET_ARM64 && LJ_HASJIT
+  trace_test_root_entry_startins_note();
+#endif
+  if (trace_test_take_startins_retry()) {
+#if defined(LJ_TRACE_TEST_HELPERS) && LJ_TARGET_ARM64 && LJ_HASJIT
+    trace_test_root_entry_retry_restore_now();
+#endif
     return LJ_TRACE_STARTINS_RETRY;
+  }
   startins = trace_stale_startins_shadow(L, pc, &owner);
   if (startins != 0)
     return startins;
@@ -6868,7 +6929,7 @@ void lj_trace_abort_owner_before_park(lua_State *L)
 /* A bytecode instruction is about to be executed. Record it. */
 void lj_trace_ins(jit_State *J, const BCIns *pc)
 {
-#if LJ_ARM64_JIT_FAIL_CLOSED
+#if LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED
   /* Defensive recorder ingress: direct/stale dispatch must not be able to
   ** bypass lj_trace_hot() and leave an unpublished token-owned trace behind. */
   UNUSED(pc);
@@ -6933,7 +6994,7 @@ void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L)
   /* Reset hotcount. */
   (void)hotcount_setl(J2G(J), L, pc,
 	jit_param_acq(J, JIT_P_hotloop)*HOTCOUNT_LOOP);
-#if LJ_ARM64_JIT_FAIL_CLOSED
+#if LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED
   /* Compile the complete JIT surface without permitting recorder ownership,
   ** trace publication, or native entry during the ARM64 scaffolding phase. */
   UNUSED(L);
@@ -6994,7 +7055,7 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
   SnapShot *snap;
   uint32_t hotexit = (uint32_t)jit_param_acq(J, JIT_P_hotexit);
   uint8_t count;
-#if LJ_ARM64_JIT_FAIL_CLOSED
+#if LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED
   UNUSED(pc); UNUSED(L); UNUSED(parent); UNUSED(exitno);
   return;
 #endif
@@ -7116,7 +7177,7 @@ uint32_t LJ_FASTCALL lj_trace_stitch_probe(jit_State *J, GCtrace *T)
 void LJ_FASTCALL lj_trace_stitch(jit_State *J, const BCIns *pc, lua_State *L,
 				 TraceNo traceno)
 {
-#if LJ_ARM64_JIT_FAIL_CLOSED
+#if LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED
   /* This ingress currently has no producer, but keep it independently closed
   ** so a stale continuation cannot start or retain recorder state. */
   UNUSED(pc); UNUSED(traceno);

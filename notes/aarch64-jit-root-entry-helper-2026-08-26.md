@@ -1,5 +1,10 @@
 # ARM64 root-entry helper checkpoint (2026-08-26)
 
+Historical status: the follow-up VM rejection checkpoint now calls this helper
+from `BC_JLOOP` and `BC_JFUNCF`; see
+`aarch64-jit-vm-root-entry-rejection-2026-08-26.md`. Native entry remains
+compile-time disabled.
+
 This checkpoint adds only the C half of the macOS ARM64 root-trace entry
 protocol. Recording and native entry remain fail-closed, `vm_arm64.dasc` is
 unchanged, and no successful trace entry is constructed or executed.

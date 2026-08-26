@@ -60,7 +60,7 @@ static int run_hot_loop(lua_State *L)
   return status;
 }
 
-#if !LJ_ARM64_JIT_FAIL_CLOSED
+#if !LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED
 static int run_hot_loop_with_errno(lua_State *L, int errnum)
 {
   int status = luaL_loadstring(L,
@@ -88,7 +88,7 @@ static void assert_owner_clean(lua_State *L)
   assert(J->cur.traceno == 0);
 }
 
-#if !LJ_ARM64_JIT_FAIL_CLOSED
+#if !LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED
 typedef struct SideHandshakePublisher {
   global_State *g;
   uint32_t wait_for_observer;
@@ -222,7 +222,7 @@ static void test_profile_entry_and_hotcall(lua_State *L)
 }
 #endif
 
-#if !LJ_ARM64_JIT_FAIL_CLOSED
+#if !LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED
 static void test_late_after_token(lua_State *L)
 {
   global_State *g = G(L);
@@ -416,7 +416,7 @@ int main(void)
 #if LJ_PROFILE_TGLOCAL
   test_profile_entry_and_hotcall(L);
 #endif
-#if !LJ_ARM64_JIT_FAIL_CLOSED
+#if !LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED
   test_late_after_token(L);
   test_late_after_root_token_stopreq(L);
 #if LJ_PROFILE_TGLOCAL

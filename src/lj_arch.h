@@ -545,7 +545,8 @@
 #if defined(LUAJIT_DISABLE_JIT)
 #error "LUAJIT_MT_ARM64_JIT_EXPERIMENTAL cannot be combined with LUAJIT_DISABLE_JIT"
 #endif
-#define LJ_ARM64_JIT_FAIL_CLOSED	1
+#define LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED	1
+#define LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED		1
 #elif !defined(LUAJIT_DISABLE_JIT)
 #error "LUAJIT_MT_ARM64_BOOTSTRAP currently requires LUAJIT_DISABLE_JIT"
 #endif
@@ -557,8 +558,18 @@
 
 #endif
 
+#ifndef LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED
+#define LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED	0
+#endif
+#ifndef LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED
+#define LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED		0
+#endif
+/* Conservative compatibility summary for out-of-tree probes. In-tree gates
+** must name the recorder-admission or native-entry boundary explicitly. */
 #ifndef LJ_ARM64_JIT_FAIL_CLOSED
-#define LJ_ARM64_JIT_FAIL_CLOSED	0
+#define LJ_ARM64_JIT_FAIL_CLOSED \
+  (LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED || \
+   LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED)
 #endif
 
 /* 64 bit GC references are the only runtime representation. */

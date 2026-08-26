@@ -660,14 +660,21 @@ int main(void)
 		  ~(TGF_STOPREQ|TGF_STOPREQ_FRESH)));
   }
 
-#if LJ_ARM64_JIT_FAIL_CLOSED
-  /* The experimental ARM64 admission build deliberately stops in
-  ** lj_trace_hot(). The interpreter half of this fixture is still the exact
-  ** runtime safepoint proof required by the scaffolding checkpoint. */
+#if LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED
+  /* This stage deliberately stops in lj_trace_hot(). The interpreter half of
+  ** this fixture is still the exact runtime safepoint proof required by the
+  ** scaffolding checkpoint. */
   assert(G2J(g)->cur.traceno == 0);
   assert(G2J(g)->freetrace == 0);
   lua_close(L);
-  puts("t-vm-safepoint: ARM64 JIT fail-closed interpreter path OK");
+  puts("t-vm-safepoint: ARM64 recorder-admission fail-closed path OK");
+  return 0;
+#elif LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED
+  /* A future middle stage may open recording while native entry remains
+  ** closed. Do not impose zero-trace assertions, but do not enter the native
+  ** trace/exit half of this fixture until generated execution is admitted. */
+  lua_close(L);
+  puts("t-vm-safepoint: ARM64 native-entry fail-closed path OK");
   return 0;
 #endif
 
