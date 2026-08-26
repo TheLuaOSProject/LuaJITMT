@@ -19,7 +19,8 @@ local suites = {
   suite("m7_ffi"),
   suite("m8_weak"),
   suite("m9_m10_gc"),
-  suite("release")
+  suite("release"),
+  suite("m5_arm64_meta")
 }
 
 local tests = {}
