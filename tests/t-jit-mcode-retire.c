@@ -12,6 +12,7 @@
 
 #include "lj_obj.h"
 #include "lj_arena.h"
+#include "lj_func.h"
 #include "lj_state.h"
 #include "lj_jit.h"
 #include "lj_gc.h"
@@ -20,6 +21,18 @@
 #include "lj_trace.h"
 
 #include "lib/lua_fixture_helpers.h"
+
+#if LJ_TARGET_ARM64 && defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL) && \
+    LJ_HASJIT && !LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED && \
+    LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED && \
+    LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED && \
+    !LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED && \
+    LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED && \
+    LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED
+#define MCODE_RETIRE_ARM64_ADMITTED 1
+#else
+#define MCODE_RETIRE_ARM64_ADMITTED 0
+#endif
 
 #if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
 typedef struct FailAllocCtx {
@@ -74,6 +87,51 @@ static GCtrace *trace_retired_find(jit_State *J, GCtrace *needle)
       return T;
   return NULL;
 }
+
+#if MCODE_RETIRE_ARM64_ADMITTED
+static void arm64_call_integer_loop(lua_State *L, const char *name)
+{
+  int status;
+  lua_getglobal(L, name);
+  assert(lua_isfunction(L, -1));
+  lua_pushinteger(L, 20);
+  status = lua_pcall(L, 1, 1, 0);
+  if (status != LUA_OK) {
+    fprintf(stderr, "ARM64 mcode-retirement call failed: %s\n",
+	    lua_tostring(L, -1));
+    assert(status == LUA_OK);
+  }
+  assert(lua_tointeger(L, -1) == 210);
+  lua_pop(L, 1);
+}
+
+static GCtrace *arm64_admitted_root_trace(lua_State *L, jit_State *J,
+	const char *name)
+{
+  GCfunc *fn;
+  GCproto *pt;
+  GCtrace *T;
+  TraceNo tr;
+
+  lua_getglobal(L, name);
+  assert(lua_isfunction(L, -1));
+  fn = funcV(L->top-1);
+  assert(isluafunc(fn));
+  pt = funcproto(fn);
+  lua_pop(L, 1);
+
+  tr = proto_trace_acq(pt);
+  assert(tr != 0);
+  T = traceref_safe(J, tr);
+  assert(T != NULL);
+  assert(trace_runnable_acq(T, tr));
+  assert(trace_root_acq(T) == 0);
+  assert(trace_startpt_acq(T) == pt);
+  assert((la_load8_acq(&T->unused1) & TRACE_ARM64_INT_LOOP_ADMITTED) != 0);
+  assert(trace_mcode_acq(T) != NULL);
+  return T;
+}
+#endif
 
 static GCtrace *pin_trace_in_mcode_area(global_State *g, MCode *area,
 					 size_t size)
@@ -148,6 +206,11 @@ int main(void)
   MCode *oldmc;
   MCodeRetire *ret;
   GCtrace *pinned_trace;
+#if MCODE_RETIRE_ARM64_ADMITTED
+  GCtrace *admitted_trace;
+  GCtrace *peer_trace;
+  uint32_t calls;
+#endif
   size_t oldmc_size, szall;
   uint64_t epoch;
 #if !LJ_GC2_INTERNAL_ALLOCATOR_ONLY
@@ -159,6 +222,33 @@ int main(void)
   assert(mcode_active_head_acq(J) == NULL);
   assert(mcode_retired_head_acq(J) == NULL);
 
+#if MCODE_RETIRE_ARM64_ADMITTED
+  /* ARM64 retirement trace workload: exact admitted integer BC_LOOP root. */
+  ljt_lua_dostring(L,
+    "jit.flush()\n"
+    "jit.on()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1', 'maxtrace=4')\n"
+    "function __arm64_mcode_retire_loop(n)\n"
+    "  local i,x=0,0\n"
+    "  while i<n do i=i+1 x=x+i end\n"
+    "  return x\n"
+    "end\n"
+    "function __arm64_mcode_retire_peer(n)\n"
+    "  local i,x=0,0\n"
+    "  while i<n do i=i+1 x=x+i end\n"
+    "  return x\n"
+    "end\n");
+  for (calls = 0; calls < 40; calls++)
+    arm64_call_integer_loop(L, "__arm64_mcode_retire_loop");
+  for (calls = 0; calls < 40; calls++)
+    arm64_call_integer_loop(L, "__arm64_mcode_retire_peer");
+  admitted_trace = arm64_admitted_root_trace(L, J,
+	"__arm64_mcode_retire_loop");
+  peer_trace = arm64_admitted_root_trace(L, J,
+	"__arm64_mcode_retire_peer");
+  assert(peer_trace != admitted_trace);
+  assert(trace_native_pins_acq(peer_trace) == 0);
+#else
   ljt_lua_dostring(L,
     "jit.flush()\n"
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
@@ -168,6 +258,7 @@ int main(void)
     "  return s\n"
     "end\n"
     "for _ = 1, 40 do assert(f(120) == 7260) end\n");
+#endif
 
   oldmc = J->mcarea;
   szall = J->szallmcarea;
@@ -181,6 +272,10 @@ int main(void)
   assert(oldmc_size != 0 && oldmc_size <= szall);
   pinned_trace = pin_trace_in_mcode_area(g, oldmc, oldmc_size);
   assert(pinned_trace != NULL);
+#if MCODE_RETIRE_ARM64_ADMITTED
+  assert(pinned_trace == admitted_trace);
+  assert(trace_native_pins_acq(peer_trace) == 0);
+#endif
   assert((uintptr_t)trace_mcode_acq(pinned_trace) >= (uintptr_t)oldmc);
   assert((uintptr_t)trace_mcode_acq(pinned_trace) <
 	 (uintptr_t)oldmc + oldmc_size);
@@ -243,6 +338,9 @@ int main(void)
   ret = retired_find(J, oldmc);
   assert(ret != NULL);
   assert(trace_retired_find(J, pinned_trace) == pinned_trace);
+#if MCODE_RETIRE_ARM64_ADMITTED
+  assert(trace_retired_find(J, peer_trace) == peer_trace);
+#endif
 
   epoch = ret->retire_epoch;
   assert(epoch == g->gc2.hs_epoch);
@@ -277,6 +375,9 @@ int main(void)
     assert(lj_jit_token_try(J));
     (void)lj_trace_reclaim_retired(g, epoch + LJ_FLUSH_EPOCHS);
     assert(trace_retired_find(J, pinned_trace) == pinned_trace);
+#if MCODE_RETIRE_ARM64_ADMITTED
+    assert(trace_retired_find(J, peer_trace) == NULL);
+#endif
     assert(trace_native_pins_acq(pinned_trace) == 1u);
     assert(J->trace_reclaim_epoch == epoch + LJ_FLUSH_EPOCHS);
     assert(lj_mcode_reclaim_retired(g, epoch + LJ_FLUSH_EPOCHS) == 0);
