@@ -44,6 +44,9 @@ LJ_FUNCA cTValue *lj_meta_tgettv_rooted(lua_State *L, cTValue *o,
 					cTValue *k, TValue *out);
 LJ_FUNCA cTValue *lj_meta_tgetenv_rooted(lua_State *L, cTValue *fnroot,
 					 cTValue *k, TValue *out);
+LJ_FUNCA TValue *lj_meta_getmt_protected_rooted(lua_State *L,
+					 cTValue *objroot,
+					 TValue *outroot);
 LJ_FUNCA TValue *lj_meta_tset(lua_State *L, cTValue *o, cTValue *k);
 LJ_FUNCA TValue *lj_meta_tsettv_pair(lua_State *L, cTValue *o, cTValue *k,
 				     cTValue *v);

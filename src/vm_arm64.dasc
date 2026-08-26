@@ -1197,62 +1197,19 @@ static void build_subroutines(BuildCtx *ctx)
   |//-- Base library: getters and setters ---------------------------------
   |
   |.ffunc_1 getmetatable
-  |  asr ITYPE, CARG1, #47
-  |  cmn ITYPE, #-LJ_TTAB
-  |  ccmn ITYPE, #-LJ_TUDATA, #4, ne
-  |   and TAB:CARG1, CARG1, #LJ_GCVMASK
-  |  bne >6
-  |1:  // Field metatable must be at same offset for GCtab and GCudata!
-  |  ldr TAB:RB, TAB:CARG1->metatable
-  |2:
-  |   mov_nil CARG1
-  |   ldr STR:RC, GL->gcroot[GCROOT_MMNAME+MM_metatable]
-  |  cbz TAB:RB, ->fff_restv
-  |  ldr TMP1w, TAB:RB->hmask
-  |   ldr TMP2w, STR:RC->sid
-  |    ldr NODE:CARG3, TAB:RB->node
-  |  and TMP1w, TMP1w, TMP2w		// idx = str->sid & tab->hmask
-  |  add TMP1, TMP1, TMP1, lsl #1
-  |  movn CARG4, #~LJ_TSTR
-  |    add NODE:CARG3, NODE:CARG3, TMP1, lsl #3  // node = tab->node + idx*3*8
-  |  add CARG4, STR:RC, CARG4, lsl #47	// Tagged key to look for.
-  |3:  // Rearranged logic, because we expect _not_ to find the key.
-  |  ldp CARG1, TMP0, NODE:CARG3->val
-  |   ldr NODE:CARG3, NODE:CARG3->next
-  |  cmp TMP0, CARG4
-  |  beq >5
-  |  cbnz NODE:CARG3, <3
-  |4:
-  |  mov CARG1, RB			// Use metatable as default result.
-  |  movk CARG1, #(LJ_TTAB>>1)&0xffff, lsl #48
-  |  b ->fff_restv
-  |5:
-  |  cmp_nil TMP0
-  |  bne ->fff_restv
-  |  b <4
-  |
-  |6:
-  |  movn TMP0, #~LJ_TISNUM
-  |  cmp ITYPE, TMP0
-  |  csel ITYPE, ITYPE, TMP0, hs
-  |  sub TMP1, GL, ITYPE, lsl #3
-  |  ldr TAB:RB, [TMP1, #offsetof(global_State, gcroot[GCROOT_BASEMT])-8]
-  |  b <2
+  |  ldr PC, [BASE, FRAME_PC]
+  |   str BASE, L->base
+  |  str PC, SAVE_PC
+  |  mov CARG1, L
+  |  mov CARG2, BASE			// Authoritative object TValue root.
+  |  sub CARG3, BASE, #16		// Result replaces the fast function.
+  |  bl extern lj_meta_getmt_protected_rooted
+  |  ldr BASE, L->base			// Rooted helper may relocate the stack.
+  |  ldr PC, [BASE, FRAME_PC]
+  |  b ->fff_res1
   |
   |.ffunc_2 setmetatable
-  |  // Fast path: no mt for table yet and not clearing the mt.
-  |  checktp TMP1, CARG1, LJ_TTAB, ->fff_fallback
-  |   ldr TAB:TMP0, TAB:TMP1->metatable
-  |  asr ITYPE, CARG2, #47
-  |   ldrb TMP2w, TAB:TMP1->marked
-  |  cmn ITYPE, #-LJ_TTAB
-  |    and TAB:CARG2, CARG2, #LJ_GCVMASK
-  |  ccmp TAB:TMP0, #0, #0, eq
-  |  bne ->fff_fallback
-  |    str TAB:CARG2, TAB:TMP1->metatable
-  |   tbz TMP2w, #2, ->fff_restv	// isblack(table)
-  |  barrierback TAB:TMP1, TMP2w, TMP0
-  |  b ->fff_restv
+  |  b ->fff_fallback
   |
   |.ffunc rawget
   |  ldr CARG2, [BASE]

@@ -464,6 +464,150 @@ static LJ_AINLINE TValue *meta_output_current(lua_State *L,
   return ref->stack ? restorestack(L, ref->ofs) : ref->tv;
 }
 
+/* Return the protected metatable view from one admitted metatable generation.
+** The object/result roots may move while a retry wait services a safepoint, so
+** preserve stack offsets and rebind both on every attempt. In particular, do
+** not overwrite outroot until no further wait is possible: the ARM fast
+** function uses its current callable slot as the eventual result root. */
+TValue *lj_meta_getmt_protected_rooted(lua_State *L, cTValue *objroot,
+					      TValue *outroot)
+{
+  global_State *g = G(L);
+  MetaSourceRef objref = meta_source_ref(L, objroot);
+  MetaOutputRef outref = meta_output_ref(L, outroot);
+  TValue osnap, mtv, result;
+  for (;;) {
+    LJGC2Lease objlease, mtlease, resultlease;
+    cTValue *obj;
+    TValue *out;
+    GCtab *mt;
+    int objstatus, mtstatus, lookupstatus, resultstatus;
+
+    /* Admit the exact receiver before following its replaceable metatable
+    ** edge. Source SMR prevents replacement-to-reuse ABA until the captured
+    ** metatable generation owns its own exact lease. */
+    if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g))) {
+      lj_tab_wait_l(L);
+      continue;
+    }
+    obj = meta_source_current(L, &objref);
+    lj_tv_load_acq(&osnap, obj);
+    objstatus = lj_gc2_tv_lease_acquire(g, &osnap, &objlease);
+    if (LJ_UNLIKELY(objstatus != LJ_GC2_TV_EDGE_VALID)) {
+      lj_gc2_smr_read_leave(g);
+      if (objstatus == LJ_GC2_TV_EDGE_RETRY) {
+	lj_tab_wait_l(L);
+	continue;
+      }
+      setnilV(&result);
+      out = meta_output_current(L, &outref);
+      copyTVrel(L, out, &result);
+      if (outref.stack)
+	lj_state_stack_pubtv(L, L, out);
+      else
+	lj_gc_pubroot(L, out);
+      return meta_output_current(L, &outref);
+    }
+    if (tvistab(&osnap))
+      mt = lj_tab_metatable_acq(tabV(&osnap));
+    else if (tvisudata(&osnap))
+      mt = lj_udata_metatable_acq(udataV(&osnap));
+    else
+      mt = lj_basemt_obj_acq(g, &osnap);
+    meta_test_pause_after_mt_capture(&osnap, mt);
+    if (!mt) {
+      lj_gc2_smr_read_leave(g);
+      lj_gc2_lease_release(&objlease);
+      setnilV(&result);
+      out = meta_output_current(L, &outref);
+      copyTVrel(L, out, &result);
+      if (outref.stack)
+	lj_state_stack_pubtv(L, L, out);
+      else
+	lj_gc_pubroot(L, out);
+      return meta_output_current(L, &outref);
+    }
+    setgcVraw(&mtv, obj2gco(mt), LJ_TTAB);
+    mtstatus = lj_gc2_tv_lease_acquire(g, &mtv, &mtlease);
+    if (mtstatus == LJ_GC2_TV_EDGE_VALID)
+      meta_test_pause_after_mt_lease(mt);
+    lj_gc2_smr_read_leave(g);
+    if (LJ_UNLIKELY(mtstatus != LJ_GC2_TV_EDGE_VALID)) {
+      lj_gc2_lease_release(&objlease);
+      if (mtstatus == LJ_GC2_TV_EDGE_RETRY) {
+	lj_tab_wait_l(L);
+	continue;
+      }
+      setnilV(&result);
+      out = meta_output_current(L, &outref);
+      copyTVrel(L, out, &result);
+      if (outref.stack)
+	lj_state_stack_pubtv(L, L, out);
+      else
+	lj_gc_pubroot(L, out);
+      return meta_output_current(L, &outref);
+    }
+
+    /* The held lookup is bounded and cannot wait while the object/metatable
+    ** leases are live. Acquire any collectable protected result before closing
+    ** its vector SMR interval. */
+    if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g))) {
+      lj_gc2_lease_release(&mtlease);
+      lj_gc2_lease_release(&objlease);
+      lj_tab_wait_l(L);
+      continue;
+    }
+    lookupstatus = lj_tab_getstr_held_try(g, mt,
+						mmname_str(g, MM_metatable),
+						&result);
+    if (lookupstatus == LJ_TAB_GC_LOOKUP_FOUND &&
+	LJ_UNLIKELY(tvistabinternal(&result)))
+      lookupstatus = LJ_TAB_GC_LOOKUP_RETRY;
+    resultstatus = lookupstatus == LJ_TAB_GC_LOOKUP_FOUND ?
+      lj_gc2_tv_lease_acquire(g, &result, &resultlease) :
+      LJ_GC2_TV_EDGE_VALID;
+
+    if (lookupstatus == LJ_TAB_GC_LOOKUP_FOUND &&
+	resultstatus == LJ_GC2_TV_EDGE_VALID) {
+      out = meta_output_current(L, &outref);
+      copyTVrel(L, out, &result);
+      lj_gc2_smr_read_leave(g);
+      if (outref.stack)
+	lj_state_stack_pubtv(L, L, out);
+      else
+	lj_gc_pubroot(L, out);
+      lj_gc2_lease_release(&resultlease);
+      lj_gc2_lease_release(&mtlease);
+      lj_gc2_lease_release(&objlease);
+      return meta_output_current(L, &outref);
+    }
+    if (lookupstatus == LJ_TAB_GC_LOOKUP_ABSENT ||
+	(lookupstatus == LJ_TAB_GC_LOOKUP_FOUND &&
+	 resultstatus == LJ_GC2_TV_EDGE_STALE)) {
+      /* Nil/absent protection exposes this same captured metatable, never a
+      ** second generation loaded after a concurrent replacement. */
+      out = meta_output_current(L, &outref);
+      copyTVrel(L, out, &mtv);
+      lj_gc2_smr_read_leave(g);
+      if (outref.stack)
+	lj_state_stack_pubtv(L, L, out);
+      else
+	lj_gc_pubroot(L, out);
+      lj_gc2_lease_release(&mtlease);
+      lj_gc2_lease_release(&objlease);
+      return meta_output_current(L, &outref);
+    }
+
+    lj_gc2_smr_read_leave(g);
+    lj_gc2_lease_release(&mtlease);
+    lj_gc2_lease_release(&objlease);
+    lj_assertL(lookupstatus == LJ_TAB_GC_LOOKUP_RETRY ||
+	       resultstatus == LJ_GC2_TV_EDGE_RETRY,
+	       "bad protected metatable lookup status");
+    lj_tab_wait_l(L);
+  }
+}
+
 static LJ_AINLINE TValue *meta_chain_root(const MetaChainRoots *roots,
 					   uint32_t which)
 {

@@ -478,3 +478,24 @@ natively. The metatable contract remains deliberately red at the next missing
 piece: rooted protected `getmetatable`. Rooted distinct equality/comparison,
 the unconditional `setmetatable` C fallback, and `ISNEXT` publication also
 remain before Stage 2 can close.
+
+### 10. Apple ARM64 rooted protected metatables
+
+ARM64 `getmetatable` now passes the authoritative argument and result stack
+roots to a C helper which admits the receiver, captures and leases one exact
+metatable generation, performs a non-waiting held `__metatable` lookup, and
+leases any collectable protection value before publishing it. Stable absence,
+nil, or stale protection exposes that same captured raw metatable, so concurrent
+replacement cannot splice a protection decision from one generation to a raw
+table from another. All retry paths release SMR and leases before waiting and
+rebase both stack roots afterward.
+
+ARM64 `setmetatable` now always uses the C implementation for protection,
+replacement/clear, release publication, and GC barriers. The clean normal
+assert bootstrap and full native gates passed, as did an amalgamated ARM64
+assert build and focused raw/protected/full-GC semantics.
+
+The raw C API `lua_getmetatable` remains a separate concurrency debt; this
+checkpoint only certifies the protected base-library operation. Rooted distinct
+equality/comparison and target-first full-word `ISNEXT` despecialization remain
+the final lockless-interpreter pieces before Stage 2 safepoint work.
