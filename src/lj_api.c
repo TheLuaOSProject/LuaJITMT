@@ -654,21 +654,6 @@ static void api_checkstack1_claimed(lua_State *L, lua_State *errL,
   }
 }
 
-static void api_checkstackn_claimed(lua_State *L, lua_State *errL,
-				    LJStateClaim *claim, MSize need)
-{
-  if ((mref(L->maxstack, char) - (char *)L->top) <=
-      (ptrdiff_t)need*(ptrdiff_t)sizeof(TValue)) {
-    int status = lj_state_cpgrowstack(L, need);
-    if (status != LUA_OK) {
-      if (L->top > L->base) L->top--;
-      lj_state_dropresumeclaim(claim);
-      lj_err_callermsg(errL, status == LUA_ERRMEM ?
-		       "not enough memory" : "stack overflow");
-    }
-  }
-}
-
 /* api_checkclaim() uses tryclaim rather than resumeclaim and therefore does
 ** not save/replace an ownerless coroutine's tg_hint. Its failure cleanup must
 ** only release ownership; dropresumeclaim() would incorrectly clear an
@@ -695,24 +680,6 @@ static void api_checkstack1_gcroot_claimed(lua_State *L, lua_State *errL,
   if ((mref(L->maxstack, char) - (char *)L->top) <=
       (ptrdiff_t)sizeof(TValue)) {
     int status = lj_state_cpgrowstack(L, 1);
-    if (status != LUA_OK) {
-      if (L->top > L->base) L->top--;
-      lj_state_dropresumeclaim(claim);
-      api_gcroot_release(root);
-      lj_err_callermsg(errL, status == LUA_ERRMEM ?
-		       "not enough memory" : "stack overflow");
-    }
-  }
-}
-
-static void api_checkstackn_gcroot_claimed(lua_State *L, lua_State *errL,
-					   LJStateClaim *claim,
-					   ApiGCRoot *root,
-					   MSize need)
-{
-  if ((mref(L->maxstack, char) - (char *)L->top) <=
-      (ptrdiff_t)need*(ptrdiff_t)sizeof(TValue)) {
-    int status = lj_state_cpgrowstack(L, need);
     if (status != LUA_OK) {
       if (L->top > L->base) L->top--;
       lj_state_dropresumeclaim(claim);
@@ -847,6 +814,159 @@ static void api_vm_call_claimed(lua_State *L, TValue *base, int nres1,
   } else {
     lj_vm_call(L, base, nres1);
   }
+}
+
+typedef struct ApiResumeError {
+  lua_State *L;
+  ptrdiff_t topofs;
+  uint8_t active;
+} ApiResumeError;
+
+/* Reserve carrier capacity before acquiring an ownerless target. Do not
+** change errL->top yet: errL can still alias L and negative API indices must
+** retain their original meaning until resumeclaim proves the target was
+** temporarily acquired. */
+static void api_resume_error_reserve(lua_State *L, lua_State *errL,
+				     ApiResumeError *error)
+{
+  memset(error, 0, sizeof(*error));
+  if (errL == L)
+    return;
+  if ((mref(errL->maxstack, char) - (char *)errL->top) <=
+      (ptrdiff_t)sizeof(TValue))
+    lj_state_growstack(errL, 1);  /* No target claim is live yet. */
+  error->L = errL;
+  error->topofs = savestack(errL, errL->top);
+}
+
+static void api_resume_error_activate(ApiResumeError *error)
+{
+  TValue *slot;
+  if (!error->L)
+    return;
+  slot = restorestack(error->L, error->topofs);
+  if (error->L->top != slot)
+    abort();
+  setnilV(slot);
+  lj_state_stack_pubtv(error->L, error->L, slot);
+  error->L->top = slot+1;
+  error->active = 1;
+}
+
+static void api_resume_error_discard(ApiResumeError *error)
+{
+  if (error->active) {
+    error->L->top = restorestack(error->L, error->topofs);
+    error->active = 0;
+  }
+}
+
+static void api_resumeclaim_prepare(lua_State *L, lua_State *errL,
+				    LJStateClaim *claim,
+				    ApiResumeError *error)
+{
+  api_resume_error_reserve(L, errL, error);
+  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), claim))
+    lj_err_callermsg(errL, "thread busy");
+  if (claim->release)
+    api_resume_error_activate(error);
+}
+
+/* Run only the allocation/wait/error-capable preparation which precedes an
+** actual metamethod call. A temporary ownerless claim gets its own protected
+** C frame. If that frame catches an error, transfer the exact error TValue to
+** the pre-reserved caller stack before restoring and releasing the target.
+** Already-owned states execute directly and retain the ordinary throw path. */
+static int api_vm_prepare_claimed(lua_State *L, lua_State *errL,
+				  LJStateClaim *claim,
+				  ApiResumeError *error, void *ud,
+				  lua_CPFunction cp)
+{
+  LJStateResumeBoundary boundary;
+  ptrdiff_t topofs;
+  void *cframe;
+  int status;
+  if (!claim->release) {
+    (void)cp(L, NULL, ud);
+    return LUA_OK;
+  }
+  topofs = savestack(L, L->top);
+  cframe = L->cframe;
+  lj_state_resumeboundary_begin(claim, &boundary);
+  status = lj_vm_cpcall(L, NULL, ud, cp);
+  if (L->cframe != cframe)
+    abort();
+  if (status != LUA_OK) {
+    TValue *dst;
+    if (!error->active || errL == L) {
+      /* There is no distinct protected caller to receive this error. This is
+      ** the legacy terminal panic path; retain claim authority while it runs. */
+      lj_state_resumeboundary_restore(claim, &boundary, status);
+      lj_err_throw(L, status);
+    }
+    lj_assertL(L->top > restorestack(L, topofs),
+	       "protected API preparation lost its error value");
+    dst = restorestack(errL, error->topofs);
+    copyTVrel(errL, dst, L->top-1);
+    lj_state_stack_pubtv(L, errL, dst);
+    L->top = restorestack(L, topofs);
+    lj_state_resumeboundary_restore(claim, &boundary, status);
+    lj_state_dropresumeclaim(claim);
+    error->active = 0;  /* The caller's protected unwind owns this slot now. */
+    errL->top = dst+1;
+    return status;
+  }
+  lj_state_resumeboundary_restore(claim, &boundary, status);
+  return LUA_OK;
+}
+
+/* Protected actual-call edge for the ownerless rooted meta APIs below. Keep
+** the caller carrier live until the call has completed: pcall leaves both the
+** physical TG current-state mirror and any caught error on the target. */
+static int api_vm_call_prepared_claimed(lua_State *L, TValue *base, int nres1,
+					LJStateClaim *claim,
+					ApiResumeError *error,
+					lua_State *errL,
+					ptrdiff_t entrytopofs)
+{
+  LJStateResumeBoundary boundary;
+  void *cframe;
+  int status;
+  if (!claim->release) {
+    lj_vm_call(L, base, nres1);
+    return LUA_OK;
+  }
+  cframe = L->cframe;
+  lj_state_resumeboundary_begin(claim, &boundary);
+  {
+    global_State *g = G(L);
+    uint8_t oldh = hook_save(g);
+    status = lj_vm_pcall_unwind(L, base, nres1, 0);
+    if (status)
+      hook_restore(g, oldh);
+  }
+  if (L->cframe != cframe)
+    abort();
+  if (status != LUA_OK) {
+    TValue *dst;
+    if (!error->active || errL == L) {
+      lj_state_resumeboundary_restore(claim, &boundary, status);
+      lj_err_throw(L, status);  /* Legacy terminal panic path. */
+    }
+    lj_assertL(L->top > restorestack(L, entrytopofs),
+	       "protected API call lost its error value");
+    dst = restorestack(errL, error->topofs);
+    copyTVrel(errL, dst, L->top-1);
+    lj_state_stack_pubtv(L, errL, dst);
+    L->top = restorestack(L, entrytopofs);
+    lj_state_resumeboundary_restore(claim, &boundary, status);
+    lj_state_dropresumeclaim(claim);
+    error->active = 0;
+    errL->top = dst+1;
+    return status;
+  }
+  lj_state_resumeboundary_restore(claim, &boundary, status);
+  return LUA_OK;
 }
 
 /* -- Miscellaneous API functions ----------------------------------------- */
@@ -1180,124 +1300,207 @@ LUA_API int lua_isuserdata(lua_State *L, int idx)
   return ok;
 }
 
+typedef struct ApiComparePrepare {
+  ApiIndexRef ref1, ref2;
+  ptrdiff_t topofs;
+  ptrdiff_t callbaseofs;
+  int idx1, idx2;
+  int ok;
+  uint8_t call;
+} ApiComparePrepare;
+
+static TValue *api_rawequal_prepare_cp(lua_State *L, lua_CFunction dummy,
+				       void *ud)
+{
+  ApiComparePrepare *ctx = (ApiComparePrepare *)ud;
+  TValue *o1, *o2;
+  UNUSED(dummy);
+  api_indexref_resolve(L, ctx->idx1, &ctx->ref1);
+  api_indexref_resolve(L, ctx->idx2, &ctx->ref2);
+  if (!api_indexref_valid(&ctx->ref1) ||
+      !api_indexref_valid(&ctx->ref2)) {
+    ctx->ok = 0;
+    return NULL;
+  }
+  if ((mref(L->maxstack, char) - (char *)L->top) <=
+      2*(ptrdiff_t)sizeof(TValue))
+    lj_state_growstack(L, 2);
+  ctx->topofs = savestack(L, L->top);
+  (void)api_stackroot_push_indexref(L, &ctx->ref1, 1);
+  (void)api_stackroot_push_indexref(L, &ctx->ref2, 1);
+  o1 = restorestack(L, ctx->topofs);
+  o2 = o1+1;
+  ctx->ok = lj_obj_equal(o1, o2);
+  L->top = o1;
+  return NULL;
+}
+
+static TValue *api_equal_prepare_cp(lua_State *L, lua_CFunction dummy,
+				    void *ud)
+{
+  ApiComparePrepare *ctx = (ApiComparePrepare *)ud;
+  TValue *o1, *o2;
+  UNUSED(dummy);
+  api_indexref_resolve(L, ctx->idx1, &ctx->ref1);
+  api_indexref_resolve(L, ctx->idx2, &ctx->ref2);
+  if (!api_indexref_valid(&ctx->ref1) ||
+      !api_indexref_valid(&ctx->ref2)) {
+    ctx->ok = 0;
+    return NULL;
+  }
+  if ((mref(L->maxstack, char) - (char *)L->top) <=
+      2*(ptrdiff_t)sizeof(TValue))
+    lj_state_growstack(L, 2);
+  ctx->topofs = savestack(L, L->top);
+  (void)api_stackroot_push_indexref(L, &ctx->ref1, 1);
+  (void)api_stackroot_push_indexref(L, &ctx->ref2, 1);
+  o1 = restorestack(L, ctx->topofs);
+  o2 = o1+1;
+  if (tvisint(o1) && tvisint(o2)) {
+    ctx->ok = intV(o1) == intV(o2);
+  } else if (tvisnumber(o1) && tvisnumber(o2)) {
+    ctx->ok = numberVnum(o1) == numberVnum(o2);
+  } else if (itype(o1) != itype(o2)) {
+    ctx->ok = 0;
+  } else if (tvispri(o1)) {
+    ctx->ok = 1;
+  } else if (gcrefeq(o1->gcr, o2->gcr)) {
+    ctx->ok = 1;
+  } else if (!tvistabud(o1)) {
+    ctx->ok = 0;
+  } else {
+    TValue *base = lj_meta_equal_rooted(L, o1, o2, 0);
+    if ((uintptr_t)base <= 1) {
+      ctx->ok = (int)(uintptr_t)base;
+    } else {
+      L->top = base+2;
+      ctx->callbaseofs = savestack(L, base);
+      ctx->call = 1;
+      return NULL;
+    }
+  }
+  L->top = restorestack(L, ctx->topofs);
+  return NULL;
+}
+
+static TValue *api_lessthan_prepare_cp(lua_State *L, lua_CFunction dummy,
+				       void *ud)
+{
+  ApiComparePrepare *ctx = (ApiComparePrepare *)ud;
+  TValue *o1, *o2;
+  UNUSED(dummy);
+  api_indexref_resolve(L, ctx->idx1, &ctx->ref1);
+  api_indexref_resolve(L, ctx->idx2, &ctx->ref2);
+  if (!api_indexref_valid(&ctx->ref1) ||
+      !api_indexref_valid(&ctx->ref2)) {
+    ctx->ok = 0;
+    return NULL;
+  }
+  if ((mref(L->maxstack, char) - (char *)L->top) <=
+      2*(ptrdiff_t)sizeof(TValue))
+    lj_state_growstack(L, 2);
+  ctx->topofs = savestack(L, L->top);
+  (void)api_stackroot_push_indexref(L, &ctx->ref1, 1);
+  (void)api_stackroot_push_indexref(L, &ctx->ref2, 1);
+  o1 = restorestack(L, ctx->topofs);
+  o2 = o1+1;
+  if (tvisint(o1) && tvisint(o2)) {
+    ctx->ok = intV(o1) < intV(o2);
+  } else if (tvisnumber(o1) && tvisnumber(o2)) {
+    ctx->ok = numberVnum(o1) < numberVnum(o2);
+  } else {
+    TValue *base = lj_meta_comp_rooted(L, o1, o2, 0);
+    if ((uintptr_t)base <= 1) {
+      ctx->ok = (int)(uintptr_t)base;
+    } else {
+      L->top = base+2;
+      ctx->callbaseofs = savestack(L, base);
+      ctx->call = 1;
+      return NULL;
+    }
+  }
+  L->top = restorestack(L, ctx->topofs);
+  return NULL;
+}
+
 LUA_API int lua_rawequal(lua_State *L, int idx1, int idx2)
 {
   LJStateClaim claim;
+  ApiResumeError error;
+  ApiComparePrepare ctx;
   lua_State *errL = api_errstate(L);
-  ApiIndexRef ref1, ref2;
-  TValue *o1, *o2;
-  ptrdiff_t topofs;
-  int ok;
-  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
-    lj_err_callermsg(errL, "thread busy");
-  api_indexref_resolve(L, idx1, &ref1);
-  api_indexref_resolve(L, idx2, &ref2);
-  if (!api_indexref_valid(&ref1) || !api_indexref_valid(&ref2)) {
-    lj_state_dropresumeclaim(&claim);
-    return 0;
-  }
-  api_checkstackn_claimed(L, errL, &claim, 2);
-  topofs = savestack(L, L->top);
-  (void)api_stackroot_push_indexref(L, &ref1, 1);
-  (void)api_stackroot_push_indexref(L, &ref2, 1);
-  o1 = restorestack(L, topofs);
-  o2 = o1+1;
-  ok = lj_obj_equal(o1, o2);
-  L->top = o1;
+  int status;
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.idx1 = idx1;
+  ctx.idx2 = idx2;
+  api_resumeclaim_prepare(L, errL, &claim, &error);
+  status = api_vm_prepare_claimed(L, errL, &claim, &error, &ctx,
+				  api_rawequal_prepare_cp);
+  if (status)
+    lj_err_throw(errL, status);
+  api_resume_error_discard(&error);
   lj_state_dropresumeclaim(&claim);
-  return ok;
+  return ctx.ok;
 }
 
 LUA_API int lua_equal(lua_State *L, int idx1, int idx2)
 {
   LJStateClaim claim;
+  ApiResumeError error;
+  ApiComparePrepare ctx;
   lua_State *errL = api_errstate(L);
-  ApiIndexRef ref1, ref2;
-  TValue *o1, *o2;
-  ptrdiff_t topofs;
-  int ok;
-  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
-    lj_err_callermsg(errL, "thread busy");
-  api_indexref_resolve(L, idx1, &ref1);
-  api_indexref_resolve(L, idx2, &ref2);
-  if (!api_indexref_valid(&ref1) || !api_indexref_valid(&ref2)) {
-    lj_state_dropresumeclaim(&claim);
-    return 0;
+  int status;
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.idx1 = idx1;
+  ctx.idx2 = idx2;
+  api_resumeclaim_prepare(L, errL, &claim, &error);
+  status = api_vm_prepare_claimed(L, errL, &claim, &error, &ctx,
+				  api_equal_prepare_cp);
+  if (status)
+    lj_err_throw(errL, status);
+  if (ctx.call) {
+    TValue *base = restorestack(L, ctx.callbaseofs);
+    status = api_vm_call_prepared_claimed(L, base, 1+1, &claim, &error,
+					  errL, ctx.topofs);
+    if (status)
+      lj_err_throw(errL, status);
+    L->top -= 2+LJ_FR2;
+    ctx.ok = tvistruecond(L->top+1+LJ_FR2);
+    L->top = restorestack(L, ctx.topofs);
   }
-  api_checkstackn_claimed(L, errL, &claim, 2);
-  topofs = savestack(L, L->top);
-  (void)api_stackroot_push_indexref(L, &ref1, 1);
-  (void)api_stackroot_push_indexref(L, &ref2, 1);
-  o1 = restorestack(L, topofs);
-  o2 = o1+1;
-  if (tvisint(o1) && tvisint(o2)) {
-    ok = intV(o1) == intV(o2);
-  } else if (tvisnumber(o1) && tvisnumber(o2)) {
-    ok = numberVnum(o1) == numberVnum(o2);
-  } else if (itype(o1) != itype(o2)) {
-    ok = 0;
-  } else if (tvispri(o1)) {
-    ok = 1;
-  } else if (gcrefeq(o1->gcr, o2->gcr)) {
-    ok = 1;
-  } else if (!tvistabud(o1)) {
-    ok = 0;
-  } else {
-    TValue *base = lj_meta_equal_rooted(L, o1, o2, 0);
-    if ((uintptr_t)base <= 1) {
-      ok = (int)(uintptr_t)base;
-    } else {
-      L->top = base+2;
-      api_vm_call_claimed(L, base, 1+1, &claim);
-      L->top -= 2+LJ_FR2;
-      ok = tvistruecond(L->top+1+LJ_FR2);
-    }
-  }
-  L->top = restorestack(L, topofs);
+  api_resume_error_discard(&error);
   lj_state_dropresumeclaim(&claim);
-  return ok;
+  return ctx.ok;
 }
 
 LUA_API int lua_lessthan(lua_State *L, int idx1, int idx2)
 {
   LJStateClaim claim;
+  ApiResumeError error;
+  ApiComparePrepare ctx;
   lua_State *errL = api_errstate(L);
-  ApiIndexRef ref1, ref2;
-  TValue *o1, *o2;
-  ptrdiff_t topofs;
-  int ok;
-  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
-    lj_err_callermsg(errL, "thread busy");
-  api_indexref_resolve(L, idx1, &ref1);
-  api_indexref_resolve(L, idx2, &ref2);
-  if (!api_indexref_valid(&ref1) || !api_indexref_valid(&ref2)) {
-    lj_state_dropresumeclaim(&claim);
-    return 0;
+  int status;
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.idx1 = idx1;
+  ctx.idx2 = idx2;
+  api_resumeclaim_prepare(L, errL, &claim, &error);
+  status = api_vm_prepare_claimed(L, errL, &claim, &error, &ctx,
+				  api_lessthan_prepare_cp);
+  if (status)
+    lj_err_throw(errL, status);
+  if (ctx.call) {
+    TValue *base = restorestack(L, ctx.callbaseofs);
+    status = api_vm_call_prepared_claimed(L, base, 1+1, &claim, &error,
+					  errL, ctx.topofs);
+    if (status)
+      lj_err_throw(errL, status);
+    L->top -= 2+LJ_FR2;
+    ctx.ok = tvistruecond(L->top+1+LJ_FR2);
+    L->top = restorestack(L, ctx.topofs);
   }
-  api_checkstackn_claimed(L, errL, &claim, 2);
-  topofs = savestack(L, L->top);
-  (void)api_stackroot_push_indexref(L, &ref1, 1);
-  (void)api_stackroot_push_indexref(L, &ref2, 1);
-  o1 = restorestack(L, topofs);
-  o2 = o1+1;
-  if (tvisint(o1) && tvisint(o2)) {
-    ok = intV(o1) < intV(o2);
-  } else if (tvisnumber(o1) && tvisnumber(o2)) {
-    ok = numberVnum(o1) < numberVnum(o2);
-  } else {
-    TValue *base = lj_meta_comp_rooted(L, o1, o2, 0);
-    if ((uintptr_t)base <= 1) {
-      ok = (int)(uintptr_t)base;
-    } else {
-      L->top = base+2;
-      api_vm_call_claimed(L, base, 1+1, &claim);
-      L->top -= 2+LJ_FR2;
-      ok = tvistruecond(L->top+1+LJ_FR2);
-    }
-  }
-  L->top = restorestack(L, topofs);
+  api_resume_error_discard(&error);
   lj_state_dropresumeclaim(&claim);
-  return ok;
+  return ctx.ok;
 }
 
 LUA_API lua_Number lua_tonumber(lua_State *L, int idx)
@@ -2324,55 +2527,148 @@ LUA_API void lua_rawgeti(lua_State *L, int idx, int n)
   lj_state_dropresumeclaim(&claim);
 }
 
-LUA_API int lua_getmetatable(lua_State *L, int idx)
-{
-  LJStateClaim claim;
-  lua_State *errL = api_errstate(L);
+typedef struct ApiGetmetatablePrepare {
   ApiIndexRef ref;
+  int idx;
+  int ok;
+} ApiGetmetatablePrepare;
+
+typedef struct ApiGetmetafieldPrepare {
+  cTValue *fieldroot;
+  ptrdiff_t topofs;
+  ptrdiff_t callbaseofs;
+  int idx;
+  int ok;
+  uint8_t keep_receiver;
+} ApiGetmetafieldPrepare;
+
+static int api_getmetafield_key_claimed(lua_State *L, int idx,
+					cTValue *fieldroot,
+					int keep_receiver);
+
+static TValue *api_getmetatable_prepare_cp(lua_State *L,
+					   lua_CFunction dummy, void *ud)
+{
+  ApiGetmetatablePrepare *ctx = (ApiGetmetatablePrepare *)ud;
   TValue *root;
-  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
-    lj_err_callermsg(errL, "thread busy");
-  api_indexref_resolve(L, idx, &ref);
-  if (!api_indexref_valid(&ref)) {
-    lj_state_dropresumeclaim(&claim);
-    return 0;
+  UNUSED(dummy);
+  api_indexref_resolve(L, ctx->idx, &ctx->ref);
+  if (!api_indexref_valid(&ctx->ref)) {
+    ctx->ok = 0;
+    return NULL;
   }
-  api_checkstack1_claimed(L, errL, &claim);
-  root = api_stackroot_push_indexref(L, &ref, 1);
+  if ((mref(L->maxstack, char) - (char *)L->top) <=
+      (ptrdiff_t)sizeof(TValue))
+    lj_state_growstack(L, 1);
+  root = api_stackroot_push_indexref(L, &ctx->ref, 1);
   root = api_getmt_raw_rooted(L, root, root);
   if (tvisnil(root)) {
     L->top--;
-    lj_state_dropresumeclaim(&claim);
-    return 0;
+    ctx->ok = 0;
+  } else {
+    lj_assertL(tvistab(root), "raw metatable helper returned non-table");
+    ctx->ok = 1;
   }
-  lj_assertL(tvistab(root), "raw metatable helper returned non-table");
+  return NULL;
+}
+
+static TValue *api_getmetafield_prepare_cp(lua_State *L,
+					   lua_CFunction dummy, void *ud)
+{
+  ApiGetmetafieldPrepare *ctx = (ApiGetmetafieldPrepare *)ud;
+  MSize need = ctx->keep_receiver ? 3u : 1u;
+  UNUSED(dummy);
+  ctx->topofs = savestack(L, L->top);
+  if ((mref(L->maxstack, char) - (char *)L->top) <=
+      (ptrdiff_t)need*(ptrdiff_t)sizeof(TValue))
+    lj_state_growstack(L, need);
+  ctx->ok = api_getmetafield_key_claimed(L, ctx->idx, ctx->fieldroot,
+					 ctx->keep_receiver);
+  if (ctx->ok && ctx->keep_receiver) {
+    TValue *receiver = L->top-3;
+    TValue *method = receiver+1;
+    TValue *scratch = receiver+2;
+    TValue *base;
+    /* Publish every destination before removing its old semantic root. On
+    ** FR2 the scratch slot is the eventual receiver argument; without FR2 it
+    ** first retains the method while receiver/method swap places. */
+    if (LJ_FR2) {
+      copyTV(L, scratch, receiver);
+      lj_state_stack_pubtv(L, L, scratch);
+      copyTV(L, receiver, method);
+      lj_state_stack_pubtv(L, L, receiver);
+      setnilV(method);
+      base = scratch;
+    } else {
+      copyTV(L, scratch, method);
+      lj_state_stack_pubtv(L, L, scratch);
+      copyTV(L, method, receiver);
+      lj_state_stack_pubtv(L, L, method);
+      copyTV(L, receiver, scratch);
+      lj_state_stack_pubtv(L, L, receiver);
+      L->top = scratch;
+      base = method;
+    }
+    ctx->callbaseofs = savestack(L, base);
+  }
+  return NULL;
+}
+
+LUA_API int lua_getmetatable(lua_State *L, int idx)
+{
+  LJStateClaim claim;
+  ApiResumeError error;
+  ApiGetmetatablePrepare ctx;
+  lua_State *errL = api_errstate(L);
+  int status;
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.idx = idx;
+  api_resumeclaim_prepare(L, errL, &claim, &error);
+  status = api_vm_prepare_claimed(L, errL, &claim, &error, &ctx,
+				  api_getmetatable_prepare_cp);
+  if (status)
+    lj_err_throw(errL, status);
+  api_resume_error_discard(&error);
   lj_state_dropresumeclaim(&claim);
-  return 1;
+  return ctx.ok;
 }
 
 LUALIB_API int luaL_getmetafield(lua_State *L, int idx, const char *field)
 {
   LJStateClaim preclaim, claim;
   ApiGCRoot root = { NULL, 0 };
+  ApiResumeError error;
+  ApiGetmetafieldPrepare ctx;
   lua_State *errL;
   cTValue *keyroot;
-  int ok;
+  int status;
   api_checkclaim(L, &preclaim);
   lj_state_dropclaim(&preclaim);
   errL = api_errstate(L);
   (void)api_str_newz_rooted(errL, field, &root);
+  api_resume_error_reserve(L, errL, &error);
   if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim)) {
     api_gcroot_release(&root);
     lj_err_callermsg(errL, "thread busy");
   }
-  api_checkstack1_gcroot_claimed(L, errL, &claim, &root);
+  if (claim.release)
+    api_resume_error_activate(&error);
   keyroot = lj_tg_root_anchor_slot_acq(root.tg, root.idx);
   lj_assertL(keyroot != NULL && tvisstr(keyroot),
 	     "lost API metafield key root");
-  ok = api_getmetafield_key_claimed(L, idx, keyroot, 0);
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.idx = idx;
+  ctx.fieldroot = keyroot;
+  status = api_vm_prepare_claimed(L, errL, &claim, &error, &ctx,
+				  api_getmetafield_prepare_cp);
+  if (status) {
+    api_gcroot_release(&root);
+    lj_err_throw(errL, status);
+  }
+  api_resume_error_discard(&error);
   api_gcroot_release(&root);
   lj_state_dropresumeclaim(&claim);
-  return ok;
+  return ctx.ok;
 }
 
 static int api_getmetafield_key_claimed(lua_State *L, int idx,
@@ -3088,54 +3384,46 @@ LUALIB_API int luaL_callmeta(lua_State *L, int idx, const char *field)
 {
   LJStateClaim preclaim, claim;
   ApiGCRoot root = { NULL, 0 };
+  ApiResumeError error;
+  ApiGetmetafieldPrepare ctx;
   lua_State *errL;
   cTValue *keyroot;
+  int status;
   api_checkclaim(L, &preclaim);
   lj_state_dropclaim(&preclaim);
   errL = api_errstate(L);
   (void)api_str_newz_rooted(errL, field, &root);
+  api_resume_error_reserve(L, errL, &error);
   if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim)) {
     api_gcroot_release(&root);
     lj_err_callermsg(errL, "thread busy");
   }
-  /* receiver, method/result and overlap-safe call-frame scratch */
-  api_checkstackn_gcroot_claimed(L, errL, &claim, &root, 3);
+  if (claim.release)
+    api_resume_error_activate(&error);
   keyroot = lj_tg_root_anchor_slot_acq(root.tg, root.idx);
   lj_assertL(keyroot != NULL && tvisstr(keyroot),
 	     "lost API callmeta key root");
-  if (api_getmetafield_key_claimed(L, idx, keyroot, 1)) {
-    TValue *receiver = L->top-3;
-    TValue *method = receiver+1;
-    TValue *scratch = receiver+2;
-    TValue *base;
-    /* Publish every destination before removing its old semantic root. On
-    ** FR2 the scratch slot is the eventual receiver argument; without FR2 it
-    ** first retains the method while receiver/method swap places. */
-    if (LJ_FR2) {
-      copyTV(L, scratch, receiver);
-      lj_state_stack_pubtv(L, L, scratch);
-      copyTV(L, receiver, method);
-      lj_state_stack_pubtv(L, L, receiver);
-      setnilV(method);
-      base = scratch;
-    } else {
-      copyTV(L, scratch, method);
-      lj_state_stack_pubtv(L, L, scratch);
-      copyTV(L, method, receiver);
-      lj_state_stack_pubtv(L, L, method);
-      copyTV(L, receiver, scratch);
-      lj_state_stack_pubtv(L, L, receiver);
-      L->top = scratch;  /* Pop the now-redundant third root. */
-      base = method;
-    }
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.idx = idx;
+  ctx.fieldroot = keyroot;
+  ctx.keep_receiver = 1;
+  status = api_vm_prepare_claimed(L, errL, &claim, &error, &ctx,
+				  api_getmetafield_prepare_cp);
+  if (status) {
     api_gcroot_release(&root);
-    api_vm_call_claimed(L, base, 1+1, &claim);
-    lj_state_dropresumeclaim(&claim);
-    return 1;
+    lj_err_throw(errL, status);
   }
   api_gcroot_release(&root);
+  if (ctx.ok) {
+    TValue *base = restorestack(L, ctx.callbaseofs);
+    status = api_vm_call_prepared_claimed(L, base, 1+1, &claim, &error,
+					  errL, ctx.topofs);
+    if (status)
+      lj_err_throw(errL, status);
+  }
+  api_resume_error_discard(&error);
   lj_state_dropresumeclaim(&claim);
-  return 0;
+  return ctx.ok;
 }
 
 /* -- Coroutine yield and resume ------------------------------------------ */

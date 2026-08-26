@@ -57,6 +57,15 @@ typedef struct LJStateClaim {
   uint8_t release;
 } LJStateClaim;
 
+/* Physical TG state displaced by a protected preparation step on a
+** temporarily resumed coroutine. The exact resume claim stays live until the
+** caller has transferred any caught error away from the target stack. */
+typedef struct LJStateResumeBoundary {
+  TGState *owner_tg;
+  lua_State *cur_L;
+  uint32_t root_anchor_top;
+} LJStateResumeBoundary;
+
 /* Stable TG TLS operations move already-admitted registry borrow handles.
 ** They are dormant until lifecycle callers publish exact keys before roots.
 */
@@ -426,6 +435,11 @@ LJ_FUNC int lj_state_claim(lua_State *L, uint32_t tid);
 LJ_FUNC int lj_state_tryclaim(lua_State *L, uint32_t tid, LJStateClaim *claim);
 LJ_FUNC int lj_state_resumeclaim(lua_State *L, uint32_t tid,
 				 LJStateClaim *claim);
+LJ_FUNC void lj_state_resumeboundary_begin(const LJStateClaim *claim,
+					   LJStateResumeBoundary *boundary);
+LJ_FUNC void lj_state_resumeboundary_restore(const LJStateClaim *claim,
+					     LJStateResumeBoundary *boundary,
+					     int status);
 LJ_FUNC int lj_state_gcscan_claim(lua_State *L, LJStateClaim *claim);
 LJ_FUNC void lj_state_dropclaim(LJStateClaim *claim);
 LJ_FUNC void lj_state_dropresumeclaim(LJStateClaim *claim);

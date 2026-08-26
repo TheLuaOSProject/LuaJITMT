@@ -28,7 +28,7 @@ end
 return function(add)
   add({
     name = "m5_arm64_capi_meta_roots",
-    description = "ARM64 rooted C API equality, comparison and metatable paths",
+    description = "ARM64 rooted C API meta paths and ownerless claim unwind",
     run = function(t)
       if not native_arm64_macos() then
         print("m5_arm64_capi_meta_roots SKIP: requires native macOS arm64")

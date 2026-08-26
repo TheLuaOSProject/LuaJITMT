@@ -84,10 +84,12 @@ third root as a method handoff for the same reason.
 - a one-shot publication hook which removes the receiver's only metatable edge
   and performs a full cycle after the metatable result root is published;
 - the same edge removal during `luaL_getmetafield` and `luaL_callmeta`;
-- successful ownerless-state calls and busy foreign-state rejection;
+- successful ownerless-state calls with exact physical `TG.cur_L`
+  restoration, plus busy foreign-state rejection for every covered API;
 - semantic comparison errors with exact top/root-anchor restoration; and
-- a synthetic STOPREQ from the rooted metafield boundary, proving fast-pcall
-  rollback removes the generated-key anchor and temporary stack shape.
+- ownerless semantic comparison, forced root-anchor OOM, synthetic STOPREQ,
+  and metamethod-body errors with exact error text and owner word, saved hint,
+  target top/cframe, root-anchor depth, and caller `TG.cur_L` restoration.
 
 Focused validation command:
 
@@ -102,25 +104,33 @@ The helper-enabled native VM built successfully. The focused fixture completed
 with `arm64 C API meta roots: OK`. The registered suite entry is
 `m5_arm64_capi_meta_roots`.
 
-## Remaining cross-file STOPREQ boundary
+## Ownerless protected preparation and call boundary
 
-The current-state protected paths are covered, including semantic errors and a
-synthetic STOPREQ. One narrower foreign-state boundary is not closed by this
-`lj_api.c`-only tranche: if an ownerless target was resume-claimed by a C API
-caller and an error is thrown before `api_vm_call_claimed` has a callable frame,
-the target's stack roots unwind and `MetaChainRoots` roll back, but the
-stack-local `LJStateClaim` is not itself an unwind action. This includes a fresh
-STOPREQ from a `lj_tab_wait_l()` retry, anchor-reservation OOM, and a semantic
-comparison error such as ordering two values without a valid metamethod.
+`LJStateResumeBoundary` is deliberately narrower than a general longjmp
+cleanup record. It is installed only after `lj_state_resumeclaim()` reports a
+temporary acquisition. It records the exact owner TG's physical `cur_L` and
+root-anchor depth while the exact owner word remains in `LJStateClaim`.
 
-A sound fix needs cross-file support rather than a naked `lj_vm_cpcall()` on a
-suspended target (explicitly forbidden by the established state-claim design):
+The caller reserves capacity on the already-running error state before trying
+to claim the target, without incrementing either stack top. Once a distinct
+ownerless target is proven, one nil carrier slot is published on the caller's
+natural stack. The allocation/wait/semantic-error preparation then runs under
+`lj_vm_cpcall()`. On a caught status, the VM and boundary roll anchors back to
+the exact entry depth; while the target is still claimed, the API copies and
+publishes its exact error TValue into the caller carrier, restores target top
+and cframe plus physical TG `cur_L`, and only then drops the temporary claim.
+The original status is rethrown on the pre-captured caller state. Already-owned
+states execute directly and never acquire or release an extra claim.
 
-- either register an exact resume-claim cleanup record in the protected frame
-  and consume it from `lj_err.c`, alongside the root-anchor checkpoint; or
-- add nonthrowing, single-attempt rooted meta/table helpers so the API can drop
-  the ownerless claim, service the retry/STOPREQ on the current error state,
-  reacquire, and restart from freshly resolved authoritative descriptors.
+`lua_equal`, `lua_lessthan`, and `luaL_callmeta` retain the same carrier across
+their actual protected metamethod call. Their success and error edges restore
+physical `cur_L` and the entry root depth; caught errors also restore the API
+entry target top before releasing ownership. This avoids using the older
+generic `api_vm_call_claimed()` error edge in these paths.
 
-Until that follow-up lands, the fixture validates ownerless success and busy
-rejection, but does not claim ownerless pre-call STOPREQ cleanup.
+This is not a claim that every generic ownerless metamethod call is fixed.
+`lua_gettable`, `lua_getfield`, `lua_settable`, `lua_setfield`, and
+`lua_concat` still use the generic claimed-call boundary and need an explicit
+follow-up migration before their ownerless actual-call error/success edges can
+make the same guarantee. A caught error with no distinct protected caller
+state remains the legacy terminal panic case rather than a recoverable transfer.

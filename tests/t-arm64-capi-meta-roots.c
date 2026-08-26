@@ -34,6 +34,20 @@ static uint32_t lt_calls;
 static uint32_t raw_mt_hook_calls;
 static int raw_mt_hook_object;
 static lua_State *last_busy_state;
+static lua_State *ownerless_error_target;
+static lua_State *ownerless_success_target;
+static TGState *ownerless_error_hint;
+static LJStateOwner ownerless_error_owner;
+static ptrdiff_t ownerless_error_topofs;
+static void *ownerless_error_cframe;
+
+enum {
+  OWNERLESS_ERROR_COMPARE,
+  OWNERLESS_ERROR_STOPREQ,
+  OWNERLESS_ERROR_OOM,
+  OWNERLESS_ERROR_METACALL
+};
+static int ownerless_error_mode;
 
 static void full_cycle(lua_State *L)
 {
@@ -355,10 +369,27 @@ static void test_error_cleanup(lua_State *L)
   lua_pushcfunction(L, invoke_metafield_stop);
   top = lua_gettop(L)-1;
   assert(lua_pcall(L, 0, 0, 0) == LUA_ERRRUN);
-  assert(strstr(lua_tostring(L, -1), "thread interrupted") != NULL);
+  assert(strstr(lua_tostring(L, -1),
+		"thread interrupted: VM shutdown") != NULL);
   assert(lua_gettop(L) == top+1);
   lua_pop(L, 1);
   assert(lj_tg_root_anchor_top_acq(tg) == roots);
+}
+
+static int invoke_ownerless_success_curL(lua_State *L)
+{
+  lua_State *co = ownerless_success_target;
+  TGState *tg = L2TG(L);
+  assert(co != NULL && lj_tg_load_cur_L(tg) == L);
+  assert(lua_equal(co, 1, 2) == 1);
+  assert(lj_tg_load_cur_L(tg) == L);
+  assert(lua_lessthan(co, 1, 2) == 1);
+  assert(lj_tg_load_cur_L(tg) == L);
+  assert(luaL_callmeta(co, 1, "__probe") == 1);
+  assert(lj_tg_load_cur_L(tg) == L);
+  assert(lua_tointeger(co, -1) == 88);
+  lua_pop(co, 1);
+  return 0;
 }
 
 static void test_ownerless_success(lua_State *L)
@@ -379,12 +410,110 @@ static void test_ownerless_success(lua_State *L)
   assert(lua_lessthan(co, 1, 2) == 1);
   assert(lua_getmetatable(co, 1) == 1);
   lua_pop(co, 1);
+  assert(luaL_getmetafield(co, 1, "__probe") == 1);
+  lua_pop(co, 1);
   assert(luaL_callmeta(co, 1, "__probe") == 1);
   assert(lua_tointeger(co, -1) == 88);
   lua_pop(co, 1);
   assert(lua_gettop(co) == 2);
   assert(lj_state_owner_acq(co) == 0);
+  ownerless_success_target = co;
+  lua_pushcfunction(L, invoke_ownerless_success_curL);
+  assert(lua_pcall(L, 0, 0, 0) == LUA_OK);
+  ownerless_success_target = NULL;
   lua_pop(L, 1);
+}
+
+static void snapshot_ownerless_target(lua_State *caller)
+{
+  lua_State *co = ownerless_error_target;
+  TGState *tg = L2TG(caller);
+  assert(co != NULL && lj_tg_load_cur_L(tg) == caller);
+  ownerless_error_hint = co->tg_hint;
+  ownerless_error_owner = lj_state_owner_word_acq(co);
+  ownerless_error_topofs = savestack(co, co->top);
+  ownerless_error_cframe = co->cframe;
+  assert(lj_state_owner_tid(ownerless_error_owner) == 0);
+}
+
+static int invoke_ownerless_prepare_error(lua_State *L)
+{
+  TGState *tg = L2TG(L);
+  snapshot_ownerless_target(L);
+  if (ownerless_error_mode == OWNERLESS_ERROR_COMPARE) {
+    (void)lua_lessthan(ownerless_error_target, 1, 2);
+  } else if (ownerless_error_mode == OWNERLESS_ERROR_STOPREQ) {
+    lj_api_test_set_raw_mt_publish_hook(raw_mt_stop_hook);
+    (void)luaL_getmetafield(ownerless_error_target, 1, "__probe");
+  } else if (ownerless_error_mode == OWNERLESS_ERROR_OOM) {
+    TValue nilv;
+    uint32_t pushed = 0;
+    setnilV(&nilv);
+    /* Reach the first not-yet-allocated anchor block. The protected API
+    ** boundary starts after these ambient roots and must preserve that exact
+    ** depth while catching the forced MetaChainRoots allocation failure. */
+    while ((lj_tg_root_anchor_top_acq(tg) % TG_ROOT_ANCHOR_SLOTS) != 0 ||
+           lj_tg_root_anchor_slot_acq(
+	     tg, lj_tg_root_anchor_top_acq(tg)) != NULL) {
+      assert(pushed++ < 512u);
+      assert(lj_tg_root_anchor_push(L, tg, &nilv, NULL) != NULL);
+    }
+    lj_tg_root_test_fail_reserve_after(1);
+    (void)lua_equal(ownerless_error_target, 1, 2);
+  } else {
+    (void)lua_equal(ownerless_error_target, 1, 2);
+  }
+  assert(0 && "ownerless preparation error returned");
+  return 0;
+}
+
+static void assert_ownerless_target_restored(lua_State *L,
+					      uint32_t roots)
+{
+  lua_State *co = ownerless_error_target;
+  assert(lj_state_owner_word_acq(co) == ownerless_error_owner);
+  assert(co->tg_hint == ownerless_error_hint);
+  assert(savestack(co, co->top) == ownerless_error_topofs);
+  assert(co->cframe == ownerless_error_cframe);
+  assert(lj_tg_load_cur_L(L2TG(L)) == L);
+  assert(lj_tg_root_anchor_top_acq(L2TG(L)) == roots);
+  assert(lua_rawequal(co, 1, 2) == 0);
+  assert(lj_state_owner_word_acq(co) == ownerless_error_owner);
+}
+
+static void run_ownerless_error(lua_State *L, const char *chunk, int mode,
+				const char *message)
+{
+  uint32_t roots = lj_tg_root_anchor_top_acq(L2TG(L));
+  lua_settop(L, 0);
+  ownerless_error_target = lua_newthread(L);
+  assert(luaL_loadstring(ownerless_error_target, chunk) == LUA_OK);
+  lua_call(ownerless_error_target, 0, mode == OWNERLESS_ERROR_STOPREQ ? 1 : 2);
+  assert(lj_state_owner_acq(ownerless_error_target) == 0);
+  ownerless_error_mode = mode;
+  lua_pushcfunction(L, invoke_ownerless_prepare_error);
+  assert(lua_pcall(L, 0, 0, 0) ==
+	 (mode == OWNERLESS_ERROR_OOM ? LUA_ERRMEM : LUA_ERRRUN));
+  assert(lua_tostring(L, -1) != NULL);
+  assert(strstr(lua_tostring(L, -1), message) != NULL);
+  assert_ownerless_target_restored(L, roots);
+  lua_settop(L, 0);
+  ownerless_error_target = NULL;
+}
+
+static void test_ownerless_error_unwind(lua_State *L)
+{
+  run_ownerless_error(L, "return {}, {}", OWNERLESS_ERROR_COMPARE,
+		      "attempt to compare two table values");
+  run_ownerless_error(L,
+    "return setmetatable({}, {__probe={tag='rooted'}})",
+    OWNERLESS_ERROR_STOPREQ, "thread interrupted: VM shutdown");
+  run_ownerless_error(L, "return {}, {}", OWNERLESS_ERROR_OOM,
+		      "not enough memory");
+  run_ownerless_error(L,
+    "local mt={__eq=function() error('intentional ownerless metamethod error') end}; "
+    "return setmetatable({}, mt), setmetatable({}, mt)",
+    OWNERLESS_ERROR_METACALL, "intentional ownerless metamethod error");
 }
 
 static uint32_t foreign_tid(lua_State *L)
@@ -441,6 +570,13 @@ static int busy_callmeta(lua_State *L)
   return 0;
 }
 
+static int busy_getmetafield(lua_State *L)
+{
+  lua_State *co = busy_state(L);
+  (void)luaL_getmetafield(co, 1, "__probe");
+  return 0;
+}
+
 static void expect_busy(lua_State *L, lua_CFunction fn)
 {
   const char *msg;
@@ -461,6 +597,7 @@ static void test_busy(lua_State *L)
   expect_busy(L, busy_equal);
   expect_busy(L, busy_less);
   expect_busy(L, busy_getmetatable);
+  expect_busy(L, busy_getmetafield);
   expect_busy(L, busy_callmeta);
 }
 
@@ -481,6 +618,7 @@ int main(void)
   test_raw_metatable_and_metafield_gc(L);
   test_error_cleanup(L);
   test_ownerless_success(L);
+  test_ownerless_error_unwind(L);
   test_busy(L);
 
   lua_settop(L, 0);

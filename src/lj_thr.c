@@ -1936,6 +1936,37 @@ int lj_state_resumeclaim(lua_State *L, uint32_t tid, LJStateClaim *claim)
   return 1;
 }
 
+void lj_state_resumeboundary_begin(const LJStateClaim *claim,
+				    LJStateResumeBoundary *boundary)
+{
+  if (!claim || !boundary || !claim->release || !claim->owner_tg)
+    abort();
+  boundary->owner_tg = claim->owner_tg;
+  boundary->cur_L = lj_tg_load_cur_L(claim->owner_tg);
+  boundary->root_anchor_top =
+    lj_tg_root_anchor_top_acq(claim->owner_tg);
+}
+
+void lj_state_resumeboundary_restore(const LJStateClaim *claim,
+				      LJStateResumeBoundary *boundary,
+				      int status)
+{
+  if (!claim || !boundary || !claim->release ||
+      boundary->owner_tg != claim->owner_tg ||
+      lj_state_owner_word_acq(claim->L) != claim->owner_word)
+    abort();
+  if (status)
+    lj_tg_root_anchor_rollback(boundary->owner_tg,
+			       boundary->root_anchor_top);
+  else if (lj_tg_root_anchor_top_acq(boundary->owner_tg) !=
+	   boundary->root_anchor_top)
+    abort();
+  lj_tg_store_cur_L(boundary->owner_tg, boundary->cur_L);
+  boundary->owner_tg = NULL;
+  boundary->cur_L = NULL;
+  boundary->root_anchor_top = 0;
+}
+
 int lj_state_gcscan_claim(lua_State *L, LJStateClaim *claim)
 {
   LJStateOwner current, desired;
