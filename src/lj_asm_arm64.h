@@ -570,7 +570,7 @@ static void asm_retf(ASMState *as, IRIns *ir)
   as->topslot -= (BCReg)delta;
   if ((int32_t)as->topslot < 0) as->topslot = 0;
   irt_setmark(IR(REF_BASE)->t);  /* Children must not coalesce with BASE reg. */
-  emit_setgl(as, base, jit_base);
+  emit_settg(as, base, jit_base);
   emit_addptr(as, base, -8*delta);
   asm_guardcc(as, CC_NE);
   emit_nm(as, A64I_CMPx, RID_TMP,
@@ -588,7 +588,7 @@ static void asm_bufhdr_write(ASMState *as, Reg sb)
   irgc.ot = IRT(0, IRT_PGC);  /* GC type. */
   emit_storeofs(as, &irgc, RID_TMP, sb, offsetof(SBuf, L));
   emit_dn(as, A64I_BFMx | A64F_IMMS(lj_fls(SBUF_MASK_FLAG)) | A64F_IMMR(0), RID_TMP, tmp);
-  emit_getgl(as, RID_TMP, cur_L);
+  emit_gettg(as, RID_TMP, cur_L);
   emit_loadofs(as, &irgc, tmp, sb, offsetof(SBuf, L));
 }
 #endif
@@ -1774,11 +1774,11 @@ static void asm_stack_check(ASMState *as, BCReg topslot,
   emit_lso(as, A64I_LDRx, RID_TMP, RID_TMP,
 	   (int32_t)offsetof(lua_State, maxstack));
   if (pbase & 0x40) {
-    emit_getgl(as, (pbase & 31), jit_base);
+    emit_gettg(as, (pbase & 31), jit_base);
     if (pbase & 0x80)  /* Save temp register. */
       emit_lso(as, A64I_STRx, (pbase & 31), RID_SP, 0);
   }
-  emit_getgl(as, RID_TMP, cur_L);
+  emit_gettg(as, RID_TMP, cur_L);
 }
 
 /* Restore Lua stack from on-trace state. */
@@ -1905,7 +1905,7 @@ static Reg asm_head_side_base(ASMState *as, IRIns *irp)
       emit_movrr(as, ir, r, irp->r);
       return irp->r;
     } else {
-      emit_getgl(as, r, jit_base);  /* Otherwise reload BASE. */
+      emit_gettg(as, r, jit_base);  /* Otherwise reload BASE. */
     }
   }
   return RID_NONE;

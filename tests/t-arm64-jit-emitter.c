@@ -99,6 +99,10 @@ int main(int argc, char **argv)
   FILE *fp;
 
   assert(argc == 2);
+  assert(RID_DISPATCH == RID_X25 && RID_TMP == RID_LR);
+  assert(!rset_test(RSET_GPR, RID_DISPATCH));
+  assert(!rset_test(RSET_GPR, RID_TMP));
+  assert(rset_test(RSET_GPR, RID_BASE));
   L = luaL_newstate();
   assert(L != NULL && L2J(L) != NULL);
   check_emit(L2J(L), LJ_ARM64_EMIT_TEST_GET_CUR_L, 0,

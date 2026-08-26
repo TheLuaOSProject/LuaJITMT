@@ -22,7 +22,10 @@ empty_object=$tmpdir/empty.o
 disasm=$tmpdir/emitted.disasm
 region=$tmpdir/emitter-region.txt
 fixed_region=$tmpdir/fixed-register-region.txt
+asm_arm64_globals=$tmpdir/asm-arm64-global-accesses.txt
 archive_object=$tmpdir/lj_asm.archive.o
+audit_object=$tmpdir/lj_asm-audit.o
+audit_relocs=$tmpdir/lj_asm-audit.relocs
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_ARM64_EMIT_TEST_HELPERS'
 
 test -f "$archive" && test -f "$asm_object" || {
@@ -60,6 +63,58 @@ awk '
 if ! grep 'RID2RSET(RID_DISPATCH)' "$fixed_region" >/dev/null ||
    ! grep 'RID2RSET(RID_LR)' "$fixed_region" >/dev/null; then
   echo "ARM64 TG carrier or emitter scratch escaped RSET_FIXED" >&2
+  exit 1
+fi
+
+if grep -En 'emit_(get|set)gl\([^;]*(cur_L|jit_base|vmstate)' \
+     "$root/src/lj_asm_arm64.h" >"$asm_arm64_globals"; then
+  echo "ARM64 assembler still routes per-executor state through global_State" >&2
+  cat "$asm_arm64_globals" >&2
+  exit 1
+fi
+if test "$(grep -Ec '^[[:space:]]*emit_(get|set)tg' \
+     "$root/src/lj_asm_arm64.h")" -ne 5 ||
+   test "$(grep -Fc 'emit_gettg(as, RID_TMP, cur_L);' \
+     "$root/src/lj_asm_arm64.h")" -ne 2; then
+  echo "ARM64 assembler TG callsite inventory changed" >&2
+  exit 1
+fi
+for required in \
+  'emit_settg(as, base, jit_base);' \
+  'emit_gettg(as, (pbase & 31), jit_base);' \
+  'emit_gettg(as, r, jit_base);'; do
+  grep -F "$required" "$root/src/lj_asm_arm64.h" >/dev/null || {
+    echo "ARM64 assembler is missing TG callsite: $required" >&2
+    exit 1
+  }
+done
+if test "$(grep -Ec '^[[:space:]]*emit_(get|set)gl' \
+     "$root/src/lj_asm_arm64.h")" -ne 4; then
+  echo "ARM64 assembler global-field allowlist changed" >&2
+  exit 1
+fi
+for required in \
+  'emit_setgl(as, tab, gc.grayagain);' \
+  'emit_getgl(as, link, gc.grayagain);' \
+  'emit_getgl(as, tmp2, gc.threshold);' \
+  'emit_getgl(as, RID_TMP, gc.total);'; do
+  grep -F "$required" "$root/src/lj_asm_arm64.h" >/dev/null || {
+    echo "ARM64 assembler global-field allowlist is missing: $required" >&2
+    exit 1
+  }
+done
+
+# Compile without inlining so the artifact exposes every selected TG helper
+# call as a BR26 relocation. The expected totals include generic assembler,
+# ARM64-specific assembler and test-only wrapper callsites.
+# shellcheck disable=SC2086 # xcflags intentionally expands to arguments.
+"$cc" -std=gnu11 -O0 -Wall -Wextra -Werror -arch arm64 \
+  -mmacosx-version-min="$minver" $xcflags -I"$root/src" \
+  -c "$root/src/lj_asm.c" -o "$audit_object"
+otool -rv "$audit_object" >"$audit_relocs"
+if test "$(grep -Ec '_emit_gettg_$' "$audit_relocs")" -ne 8 ||
+   test "$(grep -Ec '_emit_settg_$' "$audit_relocs")" -ne 3; then
+  echo "ARM64 assembler artifact has the wrong TG helper call inventory" >&2
   exit 1
 fi
 
