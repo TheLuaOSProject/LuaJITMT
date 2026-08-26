@@ -4,6 +4,7 @@
 */
 
 #include <assert.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -22,10 +23,13 @@
 #include "lj_bc.h"
 #include "lj_dispatch.h"
 #include "lj_func.h"
+#include "lj_gc2.h"
 #include "lj_ir.h"
 #include "lj_jit.h"
+#include "lj_profile.h"
 #include "lj_target.h"
 #include "lj_tg.h"
+#include "lj_thr.h"
 #include "lj_trace.h"
 
 #if !LJ_HASJIT || LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED || \
@@ -35,6 +39,10 @@
     !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED
 #error "t-arm64-jit-native-loop requires the exact first-loop ARM64 gates"
+#endif
+
+#if !LJ_HASPROFILE || !LJ_PROFILE_TGLOCAL
+#error "t-arm64-jit-native-loop requires ARM64 TG-local profile polling"
 #endif
 
 enum {
@@ -89,6 +97,77 @@ static void call_sum_and_check_cframe(lua_State *L, lua_Integer n,
   assert(lua_tointeger(L, -1) == expected);
   lua_pop(L, 1);
   assert(L->cframe == saved_cframe);
+}
+
+typedef enum PostAdmissionRequest {
+  POSTADMISSION_PROFILE,
+  POSTADMISSION_STOPREQ
+} PostAdmissionRequest;
+
+typedef struct PostAdmissionPublisher {
+  global_State *g;
+  TGState *tg;
+  uint64_t epoch;
+  PostAdmissionRequest request;
+  uint32_t saw_stage;
+  uint32_t saw_jit_base;
+  uint32_t published;
+} PostAdmissionPublisher;
+
+static void clear_stopreq(TGState *tg)
+{
+  (void)lj_tg_flags_and_rlx(tg,
+	(uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH));
+}
+
+static void wait_for_postadmission(PostAdmissionPublisher *publisher)
+{
+  uint32_t i;
+  for (i = 0; i < 10000000u; i++) {
+    if (lj_trace_test_root_entry_paused() ==
+	LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION) {
+      la_store32_rel(&publisher->saw_stage, 1);
+      return;
+    }
+    (void)lj_thr_retry_yield(NULL);
+  }
+  assert(!"ARM64 root entry did not reach post-admission pause");
+}
+
+static void *publish_postadmission_request(void *arg)
+{
+  PostAdmissionPublisher *publisher = (PostAdmissionPublisher *)arg;
+  global_State *g = publisher->g;
+  TGState *tg = publisher->tg;
+
+  wait_for_postadmission(publisher);
+  assert(gc2_hs_epoch_acq(g) == publisher->epoch);
+  assert(lj_tg_hs_epoch_ack_acq(tg) == publisher->epoch);
+  assert(gc2_hs_pending_acq(g) == 0);
+  assert(lj_tg_reqmask_acq(tg) == 0);
+  assert(lj_tg_poll_acq(tg) == 0);
+  assert(lj_tg_profile_request_acq(tg) == 0);
+  if (lj_tg_load_jit_base(tg) != NULL)
+    la_store32_rel(&publisher->saw_jit_base, 1);
+  assert(la_load32_acq(&publisher->saw_jit_base) == 1);
+
+  if (publisher->request == POSTADMISSION_PROFILE) {
+    /* SIGPROF publishes only this TG-local word. Native XPOLL must route the
+    ** owner through profile consumption without inventing a counted epoch. */
+    lj_tg_profile_request_rel(tg, 1);
+  } else {
+    assert(publisher->request == POSTADMISSION_STOPREQ);
+    /* Manual one-TG form of the production counted publication order. The
+    ** paused owner is the sole participant, so there is no leader sentinel. */
+    gc2_hs_actions_rel(g, LJ_GC2_HS_STOPREQ);
+    gc2_hs_pending_rel(g, 1);
+    gc2_hs_epoch_rel(g, publisher->epoch + 1u);
+    lj_tg_reqmask_rel(tg, LJ_GC2_HS_STOPREQ);
+    lj_tg_poll_rel(tg, 1);
+  }
+  la_store32_rel(&publisher->published, 1);
+  lj_trace_test_root_entry_release();
+  return NULL;
 }
 
 static GCproto *global_proto(lua_State *L, const char *name)
@@ -283,6 +362,147 @@ static void expect_only_root_trace(jit_State *J, GCproto *pt,
     assert(!trace_runnable_acq(traceref_safe(J, traceno), traceno));
 }
 
+static void expect_single_exit(ExitNo exitno)
+{
+  assert(lj_trace_test_root_entry_publishes() == 1);
+  assert(lj_trace_test_root_entry_cleanups() == 0);
+  assert(lj_trace_test_exit_calls() == 1);
+  assert(lj_trace_test_first_exit_parent() == 1);
+  assert(lj_trace_test_first_exitno() == exitno);
+  assert(lj_trace_test_last_exit_parent() == 1);
+  assert(lj_trace_test_last_exitno() == exitno);
+}
+
+static void expect_profile_exit_and_reentry(void)
+{
+  /* Snapshot 5 restores the interrupted loop at its JLOOP site. After owner
+  ** profile consumption, that same call re-enters and finishes at snapshot 8.
+  ** Preserve both facts so the recovery exit cannot hide the XPOLL exit. */
+  assert(lj_trace_test_root_entry_publishes() == 2);
+  assert(lj_trace_test_root_entry_cleanups() == 0);
+  assert(lj_trace_test_exit_calls() == 2);
+  assert(lj_trace_test_first_exit_parent() == 1);
+  assert(lj_trace_test_first_exitno() == 5);
+  assert(lj_trace_test_last_exit_parent() == 1);
+  assert(lj_trace_test_last_exitno() == 8);
+}
+
+static void run_postadmission_profile(lua_State *L, jit_State *J, TGState *tg,
+	GCproto *pt, int expect_indirect)
+{
+  global_State *g = G(L);
+  uint64_t epoch = gc2_hs_epoch_acq(g);
+  void *saved_cframe = L->cframe;
+  int32_t saved_vmstate = lj_tg_vmstate_load_acq(tg);
+  PostAdmissionPublisher publisher = {
+    g, tg, epoch, POSTADMISSION_PROFILE, 0, 0, 0
+  };
+  pthread_t worker;
+
+  assert(lj_tg_hs_epoch_ack_acq(tg) == epoch);
+  assert(gc2_hs_leader_acq(g) == 0);
+  assert(gc2_hs_pending_acq(g) == 0);
+  assert(lj_tg_reqmask_acq(tg) == 0);
+  assert(lj_tg_poll_acq(tg) == 0);
+  assert(lj_tg_profile_request_acq(tg) == 0);
+  assert((lj_tg_flags_acq(tg) &
+	  (TGF_STOPREQ|TGF_STOPREQ_FRESH)) == 0);
+
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  lj_trace_test_root_entry_pause(
+	LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION);
+  assert(pthread_create(&worker, NULL, publish_postadmission_request,
+		&publisher) == 0);
+  call_sum_and_check_cframe(L, 20, 210);
+  assert(pthread_join(worker, NULL) == 0);
+
+  assert(la_load32_acq(&publisher.saw_stage) == 1);
+  assert(la_load32_acq(&publisher.saw_jit_base) == 1);
+  assert(la_load32_acq(&publisher.published) == 1);
+  assert(lj_trace_test_root_entry_paused() == 0);
+  /* IR_XPOLL inherits the IR_LOOP snapshot. Admission had already completed,
+  ** so this exit proves the helper did not catch the late profile request. */
+  expect_profile_exit_and_reentry();
+  assert(gc2_hs_epoch_acq(g) == epoch);
+  assert(lj_tg_hs_epoch_ack_acq(tg) == epoch);
+  assert(gc2_hs_leader_acq(g) == 0);
+  assert(gc2_hs_pending_acq(g) == 0);
+  assert(lj_tg_reqmask_acq(tg) == 0);
+  assert(lj_tg_poll_acq(tg) == 0);
+  assert(lj_tg_profile_request_acq(tg) == 0);
+  assert((lj_tg_flags_acq(tg) &
+	  (TGF_STOPREQ|TGF_STOPREQ_FRESH)) == 0);
+  assert(lj_tg_load_jit_base(tg) == NULL);
+  assert(L->cframe == saved_cframe);
+  assert(lj_tg_vmstate_load_acq(tg) == saved_vmstate);
+  expect_only_root_trace(J, pt, expect_indirect);
+}
+
+static void run_postadmission_stopreq(lua_State *L, jit_State *J, TGState *tg,
+	GCproto *pt, int expect_indirect)
+{
+  global_State *g = G(L);
+  uint64_t epoch = gc2_hs_epoch_acq(g);
+  void *saved_cframe = L->cframe;
+  int32_t saved_vmstate = lj_tg_vmstate_load_acq(tg);
+  PostAdmissionPublisher publisher = {
+    g, tg, epoch, POSTADMISSION_STOPREQ, 0, 0, 0
+  };
+  pthread_t worker;
+  int status;
+
+  clear_stopreq(tg);
+  assert(lj_tg_hs_epoch_ack_acq(tg) == epoch);
+  assert(gc2_hs_leader_acq(g) == 0);
+  assert(gc2_hs_pending_acq(g) == 0);
+  assert(lj_tg_reqmask_acq(tg) == 0);
+  assert(lj_tg_poll_acq(tg) == 0);
+  assert(lj_tg_profile_request_acq(tg) == 0);
+
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  lj_trace_test_root_entry_pause(
+	LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION);
+  assert(pthread_create(&worker, NULL, publish_postadmission_request,
+		&publisher) == 0);
+  lua_getglobal(L, "__arm64_native_integer_loop");
+  assert(lua_isfunction(L, -1));
+  lua_pushinteger(L, 20);
+  status = lua_pcall(L, 1, 1, 0);
+  assert(pthread_join(worker, NULL) == 0);
+  assert(status == LUA_ERRRUN);
+  assert(lua_isstring(L, -1));
+  assert(strstr(lua_tostring(L, -1),
+		"thread interrupted: VM shutdown") != NULL);
+  lua_pop(L, 1);
+
+  assert(la_load32_acq(&publisher.saw_stage) == 1);
+  assert(la_load32_acq(&publisher.saw_jit_base) == 1);
+  assert(la_load32_acq(&publisher.published) == 1);
+  assert(lj_trace_test_root_entry_paused() == 0);
+  /* One admitted entry and XPOLL exit at snapshot 5 prove that the helper's
+  ** new stage is after its last request check. vm_exit_interp owns the ACK. */
+  expect_single_exit(5);
+  assert(gc2_hs_actions_acq(g) == LJ_GC2_HS_STOPREQ);
+  assert(gc2_hs_epoch_acq(g) == epoch + 1u);
+  assert(lj_tg_hs_epoch_ack_acq(tg) == epoch + 1u);
+  assert(gc2_hs_leader_acq(g) == 0);
+  assert(gc2_hs_pending_acq(g) == 0);
+  assert(lj_tg_reqmask_acq(tg) == 0);
+  assert(lj_tg_poll_acq(tg) == 0);
+  assert(lj_tg_profile_request_acq(tg) == 0);
+  assert((lj_tg_flags_acq(tg) & TGF_STOPREQ) != 0);
+  assert((lj_tg_flags_acq(tg) & TGF_STOPREQ_FRESH) == 0);
+  assert(lj_tg_load_jit_base(tg) == NULL);
+  assert(L->cframe == saved_cframe);
+  assert(lj_tg_vmstate_load_acq(tg) == saved_vmstate);
+  clear_stopreq(tg);
+  assert((lj_tg_flags_acq(tg) &
+	  (TGF_STOPREQ|TGF_STOPREQ_FRESH)) == 0);
+  expect_only_root_trace(J, pt, expect_indirect);
+}
+
 int main(int argc, char **argv)
 {
   lua_State *L = luaL_newstate();
@@ -322,25 +542,29 @@ int main(int argc, char **argv)
     "end "
     "__arm64_native_integer_loop=f");
 
+  /* First create and validate the exact constrained root independently of the
+  ** lifecycle probes. Their counters start only after admission is proven. */
   call_sum_and_check_cframe(L, 20, 210);
-  call_sum_and_check_cframe(L, 20, 210);
-  call_sum_and_check_cframe(L, 20, 210);
-  call_sum_and_check_cframe(L, 20, 210);
-  call_sum_and_check_cframe(L, 20, 210);
-
-  /* Every call reaches the direct VM JLOOP site and exits through the loop
-  ** condition snapshot. Successful entry leaves cleanup to the exit stub. */
   assert(L->cframe == saved_cframe);
-  assert(lj_trace_test_root_entry_publishes() == 5);
-  assert(lj_trace_test_root_entry_cleanups() == 0);
-  assert(lj_trace_test_exit_calls() == 5);
-  assert(lj_trace_test_last_exit_parent() == 1);
-  assert(lj_trace_test_last_exitno() == 8);
   assert(lj_tg_load_jit_base(tg) == NULL);
   assert(lj_tg_vmstate_load_acq(tg) == saved_vmstate);
-
   pt = global_proto(L, "__arm64_native_integer_loop");
   expect_only_root_trace(J, pt, expect_indirect);
+
+  run_postadmission_profile(L, J, tg, pt, expect_indirect);
+  run_postadmission_stopreq(L, J, tg, pt, expect_indirect);
+
+  /* A handled STOPREQ never invalidates the admitted trace. Reset the probe
+  ** counters and require the ordinary loop-condition exit on the next call. */
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  call_sum_and_check_cframe(L, 20, 210);
+  expect_single_exit(8);
+  assert(lj_tg_load_jit_base(tg) == NULL);
+  assert(L->cframe == saved_cframe);
+  assert(lj_tg_vmstate_load_acq(tg) == saved_vmstate);
+  expect_only_root_trace(J, pt, expect_indirect);
+
   {
     const BCIns *pc = trace_startpc_acq(traceref_safe(J, 1));
     BCIns startins = trace_startins_acq(traceref_safe(J, 1));

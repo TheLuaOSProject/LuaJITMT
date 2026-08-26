@@ -82,6 +82,7 @@ vm_object=$root/src/lj_vm.o
 fixture=$tmpdir/t-arm64-jit-native-loop
 fixture_obj=$tmpdir/t-arm64-jit-native-loop.o
 macros=$tmpdir/macros.txt
+entry_helper=$tmpdir/root-entry-helper.c
 pauth_fixture=$tmpdir/t-arm64-jit-native-loop-arm64e
 pauth_macros=$tmpdir/macros-arm64e.txt
 jloop_source=$tmpdir/vm-jloop.dasc
@@ -208,14 +209,52 @@ grep -A20 '^void LJ_FASTCALL lj_trace_stitch' "$root/src/lj_trace.c" | \
 grep -F '#if LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED' \
   "$jloop_source" >/dev/null
 
+# The post-admission test pause is deliberately after the helper's final
+# request/bytecode recheck. A publisher released from this stage can therefore
+# be observed only by native XPOLL (or a later VM poll), never by admission.
+awk '/^lj_trace_enter_root\(/ { copy=1 }
+     copy { print }
+     copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$entry_helper"
+test -s "$entry_helper"
+final_pending=$(grep -n 'trace_root_entry_request_pending(tg)' \
+  "$entry_helper" | sed -n '3p' | cut -d: -f1)
+postadmission=$(grep -n 'LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION' \
+  "$entry_helper" | sed -n '1p' | cut -d: -f1)
+tmpbuf=$(grep -n 'setsbufL(&tg->tmpbuf, L)' "$entry_helper" | \
+  sed -n '1p' | cut -d: -f1)
+test -n "$final_pending" && test -n "$postadmission" && test -n "$tmpbuf"
+test "$final_pending" -lt "$postadmission"
+test "$postadmission" -lt "$tmpbuf"
+test "$(grep -Fc 'trace_root_entry_request_pending(tg)' \
+  "$entry_helper")" = 3
+
 fixture_source=$root/tests/t-arm64-jit-native-loop.c
 for required in \
   "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2')" \
   'while i<n do i=i+1 x=x+i end' \
-  'lj_trace_test_root_entry_publishes() == 5' \
+  'LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION' \
+  'POSTADMISSION_PROFILE' \
+  'POSTADMISSION_STOPREQ' \
+  'lj_tg_profile_request_rel(tg, 1)' \
+  'gc2_hs_actions_rel(g, LJ_GC2_HS_STOPREQ)' \
+  'gc2_hs_pending_rel(g, 1)' \
+  'gc2_hs_epoch_rel(g, publisher->epoch + 1u)' \
+  'lj_tg_reqmask_rel(tg, LJ_GC2_HS_STOPREQ)' \
+  'lj_tg_poll_rel(tg, 1)' \
+  'expect_single_exit(5)' \
+  'expect_profile_exit_and_reentry()' \
+  'expect_single_exit(8)' \
+  'thread interrupted: VM shutdown' \
+  'lj_trace_test_root_entry_publishes() == 1' \
   'lj_trace_test_root_entry_cleanups() == 0' \
-  'lj_trace_test_exit_calls() == 5' \
-  'lj_trace_test_last_exitno() == 8' \
+  'lj_trace_test_exit_calls() == 1' \
+  'lj_trace_test_exit_calls() == 2' \
+  'lj_trace_test_first_exitno() == 5' \
+  'lj_trace_test_last_exitno() == exitno' \
+  'lj_tg_hs_epoch_ack_acq(tg) == epoch + 1u' \
+  'gc2_hs_pending_acq(g) == 0' \
+  'lj_tg_profile_request_acq(tg) == 0' \
+  '(TGF_STOPREQ|TGF_STOPREQ_FRESH)' \
   'TRACE_ARM64_INT_LOOP_ADMITTED' \
   'trace_spadjust_acq(T) == 0' \
   'trace_topslot_acq(T) == (MSize)pt->framesize' \
@@ -242,8 +281,8 @@ if grep -E 'LJ_ARM64_JIT_(RECORDER_ADMISSION|NATIVE_ENTRY)_FAIL_CLOSED|LJ_ARM64_
   exit 1
 fi
 test "$(grep -Fc 'call_sum_and_check_cframe(L, 20, 210)' \
-  "$fixture_source")" = 5 || {
-  echo "ARM64 native-loop fixture must check exactly five repeated entries" >&2
+  "$fixture_source")" = 3 || {
+  echo "ARM64 native-loop fixture must check record, profile and recovery calls" >&2
   exit 1
 }
 
@@ -313,4 +352,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
     TARGET_FLAGS='-arch arm64' XCFLAGS="$xcflags"
 restore_needed=0
 
-echo "arm64_jit_native_loop_contract OK: strict ARM64 and ARM64e/BTI BC_LOOP executed direct and authenticated far exits"
+echo "arm64_jit_native_loop_contract OK: strict ARM64 and ARM64e/BTI BC_LOOP executed XPOLL lifecycle, direct and authenticated far exits"

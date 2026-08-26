@@ -532,6 +532,8 @@ static LJ_AINLINE void trace_test_note_findfree_grow(TraceNo traceno)
 static uint32_t trace_test_retire_publish_calls;
 static uint32_t trace_test_force_startins_retries;
 static uint32_t trace_test_exit_calls;
+static uint32_t trace_test_first_exit_parent;
+static uint32_t trace_test_first_exitno;
 static uint32_t trace_test_last_exit_parent;
 static uint32_t trace_test_last_exitno;
 static uint32_t trace_test_force_event_handoff_failures;
@@ -585,6 +587,8 @@ uint32_t lj_trace_test_retire_publish_calls(void)
 void lj_trace_test_reset_exit_stats(void)
 {
   la_store32_rel(&trace_test_exit_calls, 0);
+  la_store32_rel(&trace_test_first_exit_parent, 0);
+  la_store32_rel(&trace_test_first_exitno, 0);
   la_store32_rel(&trace_test_last_exit_parent, 0);
   la_store32_rel(&trace_test_last_exitno, 0);
 }
@@ -592,6 +596,16 @@ void lj_trace_test_reset_exit_stats(void)
 uint32_t lj_trace_test_exit_calls(void)
 {
   return la_load32_acq(&trace_test_exit_calls);
+}
+
+TraceNo lj_trace_test_first_exit_parent(void)
+{
+  return (TraceNo)la_load32_acq(&trace_test_first_exit_parent);
+}
+
+ExitNo lj_trace_test_first_exitno(void)
+{
+  return (ExitNo)la_load32_acq(&trace_test_first_exitno);
 }
 
 TraceNo lj_trace_test_last_exit_parent(void)
@@ -606,9 +620,13 @@ ExitNo lj_trace_test_last_exitno(void)
 
 static void trace_test_note_exit(TraceNo parent, ExitNo exitno)
 {
+  uint32_t call = la_add32_acqrel(&trace_test_exit_calls, 1);
+  if (call == 0) {
+    la_store32_rel(&trace_test_first_exit_parent, (uint32_t)parent);
+    la_store32_rel(&trace_test_first_exitno, (uint32_t)exitno);
+  }
   la_store32_rel(&trace_test_last_exit_parent, (uint32_t)parent);
   la_store32_rel(&trace_test_last_exitno, (uint32_t)exitno);
-  (void)la_add32_acqrel(&trace_test_exit_calls, 1);
 }
 #else
 #define trace_test_take_startins_retry() 0
@@ -3896,6 +3914,10 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
   if (trace_root_entry_request_pending(tg) ||
       !trace_root_entry_bytecode_valid(pc, traceno, sourceop))
     goto reject_published;
+  /* Test-only boundary after the final admission recheck. A request published
+  ** here must be observed by native XPOLL, not retroactively rejected by this
+  ** helper before the VM branches to the already validated target. */
+  trace_test_root_entry_pause_at(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION);
   setsbufL(&tg->tmpbuf, L);
   result.trace = T;
   result.target = target;

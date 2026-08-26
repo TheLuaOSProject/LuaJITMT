@@ -93,6 +93,7 @@ LJ_FUNC TGState *lj_jit_owner_tg_l(lua_State *L, jit_State *J);
 #define LJ_TRACE_ROOT_ENTRY_PAUSE_PREPUBLISH 1u
 #define LJ_TRACE_ROOT_ENTRY_PAUSE_POSTPUBLISH 2u
 #define LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA 3u
+#define LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION 4u
 #ifdef LJ_TRACE_TEST_HELPERS
 LJ_FUNC void lj_trace_test_root_entry_reset(void);
 LJ_FUNC void lj_trace_test_root_entry_pause(uint32_t stage);
@@ -338,6 +339,8 @@ LJ_FUNC uint32_t lj_trace_test_retire_publish_calls(void);
 LJ_FUNC void lj_trace_test_force_startins_retry(uint32_t count);
 LJ_FUNC void lj_trace_test_reset_exit_stats(void);
 LJ_FUNC uint32_t lj_trace_test_exit_calls(void);
+LJ_FUNC TraceNo lj_trace_test_first_exit_parent(void);
+LJ_FUNC ExitNo lj_trace_test_first_exitno(void);
 LJ_FUNC TraceNo lj_trace_test_last_exit_parent(void);
 LJ_FUNC ExitNo lj_trace_test_last_exitno(void);
 LJ_FUNC void lj_trace_test_force_event_handoff_failure(uint32_t count);
