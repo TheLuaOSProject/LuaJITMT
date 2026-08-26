@@ -4178,6 +4178,12 @@ static void trace_exittab_reset(jit_State *J, GCtrace *T)
     return;
   for (i = 0; i < trace_nsnap_acq(T); i++)
     trace_exittarget_rel(T, i, exitstub_addr(J, i));
+#elif LJ_TARGET_ARM64
+  ExitNo i;
+  if (trace_exittab_acq(T) == NULL)
+    return;
+  for (i = 0; i < trace_nsnap_acq(T); i++)
+    trace_exittarget_rel(T, i, exitstub_trace_addr(T, i));
 #else
   UNUSED(J); UNUSED(T);
 #endif
@@ -4478,13 +4484,25 @@ static uint32_t trace_flushside(jit_State *J, GCtrace *T, int scoped)
     */
     if (marked && parent && trace_traceno_acq(parent) == parentno &&
 	trace_exittab_acq(parent) && exitno < trace_nsnap_acq(parent))
-      trace_exittarget_rel(parent, exitno, exitstub_addr(J, exitno));
+      trace_exittarget_rel(parent, exitno,
+#if LJ_TARGET_ARM64
+			   exitstub_trace_addr(parent, exitno)
+#else
+			   exitstub_addr(J, exitno)
+#endif
+			   );
     return marked;
   }
   trace_exittab_reset(J, T);
   if (parent && trace_traceno_acq(parent) == parentno &&
       trace_exittab_acq(parent) && exitno < trace_nsnap_acq(parent))
-    trace_exittarget_rel(parent, exitno, exitstub_addr(J, exitno));
+    trace_exittarget_rel(parent, exitno,
+#if LJ_TARGET_ARM64
+			 exitstub_trace_addr(parent, exitno)
+#else
+			 exitstub_addr(J, exitno)
+#endif
+			 );
   return 1;
 }
 
@@ -5354,7 +5372,9 @@ void lj_trace_initstate(global_State *g)
   tv[1].u64 = U64x(80000000,00000000);
 
   /* Initialize 32/64 bit constants. */
+#if LJ_TARGET_X64 || LJ_TARGET_MIPS64
   J->k64[LJ_K64_M2P64].u64 = U64x(c3f00000,00000000);
+#endif
 #if LJ_TARGET_X86ORX64
   J->k64[LJ_K64_TOBIT].u64 = U64x(43380000,00000000);
   J->k64[LJ_K64_2P64].u64 = U64x(43f00000,00000000);
@@ -6345,6 +6365,14 @@ void lj_trace_abort_owner_before_park(lua_State *L)
 /* A bytecode instruction is about to be executed. Record it. */
 void lj_trace_ins(jit_State *J, const BCIns *pc)
 {
+#if LJ_ARM64_JIT_FAIL_CLOSED
+  /* Defensive recorder ingress: direct/stale dispatch must not be able to
+  ** bypass lj_trace_hot() and leave an unpublished token-owned trace behind. */
+  UNUSED(pc);
+  UNUSED(trace_state);  /* Keep the complete recorder compiled for this gate. */
+  lj_trace_abort_owner(J->L);
+  return;
+#else
   lua_State *L = J->L;
   int errcode;
   /* Note: J->L must already be set. pc is the true bytecode PC here. */
@@ -6366,6 +6394,7 @@ void lj_trace_ins(jit_State *J, const BCIns *pc)
     }
     lj_trace_state_store_active(J, LJ_TRACE_ERR);
   }
+#endif
 }
 
 static int trace_hot_root_start_valid(const BCIns *pc)
@@ -6387,6 +6416,13 @@ void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L)
   ERRNO_SAVE
   /* Reset hotcount. */
   hotcount_setg(J2G(J), pc, jit_param_acq(J, JIT_P_hotloop)*HOTCOUNT_LOOP);
+#if LJ_ARM64_JIT_FAIL_CLOSED
+  /* Compile the complete JIT surface without permitting recorder ownership,
+  ** trace publication, or native entry during the ARM64 scaffolding phase. */
+  UNUSED(L);
+  ERRNO_RESTORE
+  return;
+#endif
   /* Only start a new trace if not recording or inside __gc call or vmevent. */
   if ((jit_flags_acq(J) & JIT_F_ON) &&
       lj_trace_state_load(J) == LJ_TRACE_IDLE &&
@@ -6427,6 +6463,10 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
   SnapShot *snap;
   uint32_t hotexit = (uint32_t)jit_param_acq(J, JIT_P_hotexit);
   uint8_t count;
+#if LJ_ARM64_JIT_FAIL_CLOSED
+  UNUSED(pc); UNUSED(L); UNUSED(parent); UNUSED(exitno);
+  return;
+#endif
   /* Side recording is speculative. If an exclusive trace reclaimer won the
   ** body gate, stay in the interpreter instead of waiting at a hot exit. */
   if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g)))
@@ -6525,9 +6565,18 @@ uint32_t LJ_FASTCALL lj_trace_stitch_probe(jit_State *J, GCtrace *T)
 void LJ_FASTCALL lj_trace_stitch(jit_State *J, const BCIns *pc, lua_State *L,
 				 TraceNo traceno)
 {
+#if LJ_ARM64_JIT_FAIL_CLOSED
+  /* This ingress currently has no producer, but keep it independently closed
+  ** so a stale continuation cannot start or retain recorder state. */
+  UNUSED(pc); UNUSED(traceno);
+  lj_trace_abort_owner(L);
+  UNUSED(J);
+  return;
+#else
   UNUSED(L); UNUSED(traceno);
   UNUSED(J); UNUSED(pc);
   return;
+#endif
 }
 
 
@@ -6549,7 +6598,7 @@ static TValue *trace_exit_cp(lua_State *L, lua_CFunction dummy, void *ud)
   /* Always catch error here and don't call error function. */
   cframe_errfunc(L->cframe) = 0;
   cframe_nres(L->cframe) = -2*LUAI_MAXSTACK*(int)sizeof(TValue);
-#if LJ_TARGET_X64
+#if LJ_TARGET_X64 || LJ_TARGET_ARM64
   exd->pc = lj_snap_restore_exit(exd->J, exd->exptr, exd->L,
 				 exd->T, exd->parent, exd->exitno);
 #else
@@ -6610,7 +6659,7 @@ static TraceNo trace_exit_find(jit_State *J, MCode *pc, GCtrace **Tp)
 #if LJ_TARGET_X64 && LJ_ABI_WIN
 int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr, lua_State *L,
 			      uint32_t exitpair)
-#elif LJ_TARGET_X64
+#elif LJ_TARGET_X64 || LJ_TARGET_ARM64
 int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr, lua_State *L,
 			      TraceNo parent, ExitNo exitno)
 #else
@@ -6627,7 +6676,7 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
   LJ_STATIC_ASSERT(sizeof(((GCtrace *)0)->nsnap) == sizeof(uint16_t));
   TraceNo parent = (TraceNo)(exitpair >> 16);
   ExitNo exitno = (ExitNo)(exitpair & 0xffffu);
-#elif !LJ_TARGET_X64
+#elif !(LJ_TARGET_X64 || LJ_TARGET_ARM64)
   lua_State *L = J->L;
   TraceNo parent = J->parent;
   ExitNo exitno = J->exitno;

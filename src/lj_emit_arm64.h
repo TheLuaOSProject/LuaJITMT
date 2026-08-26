@@ -343,8 +343,25 @@ static void emit_loadk64(ASMState *as, Reg r, IRIns *ir)
 #define emit_setgl(as, r, field) \
   emit_lsptr(as, A64I_STRx, (r), (void *)&J2G(as->J)->field)
 
+#if LJ_ARM64_JIT_FAIL_CLOSED
+/* These contracts are required by the shared assembler. Until TG-relative
+** ARM64 lowering exists, fail assembly instead of emitting a global-state
+** approximation that could later become reachable by accident. */
+static LJ_NORET void emit_arm64_jit_fail_closed(ASMState *as)
+{
+  lj_trace_err(as->J, LJ_TRERR_NYIIR);
+}
+#define emit_gettg(as, r, field) \
+  do { UNUSED(r); emit_arm64_jit_fail_closed(as); } while (0)
+#define emit_settg(as, r, field) \
+  do { UNUSED(r); emit_arm64_jit_fail_closed(as); } while (0)
+#define emit_setvmstate(as, i) \
+  do { UNUSED(i); emit_arm64_jit_fail_closed(as); } while (0)
+#define emit_setvmstate_root(as, i) emit_setvmstate((as), (i))
+#else
 /* Trace number is determined from pc of exit instruction. */
 #define emit_setvmstate(as, i)	UNUSED(i)
+#endif
 
 /* -- Emit control-flow instructions -------------------------------------- */
 
@@ -477,4 +494,3 @@ static void emit_addptr(ASMState *as, Reg r, int32_t ofs)
 }
 
 #define emit_spsub(as, ofs)	emit_addptr(as, RID_SP, -(ofs))
-

@@ -327,11 +327,20 @@
 |.macro cmp_nil, reg; cmp reg, TISNIL; .endmacro
 |.macro add_TISNUM, dst, src; add dst, src, TISNUM; .endmacro
 |
+#if LJ_HASJIT
 #define GL_J(field)	(GG_G2J + (int)offsetof(jit_State, field))
+#define GG_G2J_HI	(GG_G2J & ~0xfff)
+#define GG_G2J_LO	(GG_G2J & 0xfff)
+#endif
 #define GL_OFS(field)	((int)offsetof(global_State, field))
 #define L_OFS(field)	((int)offsetof(lua_State, field))
 #define TG_OFS_DISPATCH	((int)offsetof(TGState, dispatch))
 
+#if LJ_HASJIT
+LJ_STATIC_ASSERT(GG_G2J_HI >= 0 && GG_G2J_HI <= 0xfff000 &&
+		 (GG_G2J_HI & 0xfff) == 0);
+LJ_STATIC_ASSERT(GG_G2J_LO >= 0 && GG_G2J_LO <= 0xfff);
+#endif
 LJ_STATIC_ASSERT(L_OFS(tg_hint) >= 0 && L_OFS(tg_hint) <= 4095);
 LJ_STATIC_ASSERT(TG_OFS_DISPATCH >= 0 && TG_OFS_DISPATCH <= 4095);
 LJ_STATIC_ASSERT(DISPATCH_TG(cur_L) >= 0 && DISPATCH_TG(cur_L) <= 4095);
@@ -2125,17 +2134,18 @@ static void build_subroutines(BuildCtx *ctx)
   |->vm_hotloop:			// Hot loop counter underflow.
   |.if JIT
   |  ldr LFUNC:CARG3, [BASE, FRAME_FUNC]  // Same as curr_topL(L).
-  |   add CARG1, GL, #GG_G2DISP+GG_DISP2J
+  |   add CARG1, GL, #GG_G2J_HI
+  |   add CARG1, CARG1, #GG_G2J_LO
   |  and LFUNC:CARG3, CARG3, #LJ_GCVMASK
   |   str PC, SAVE_PC
   |  ldr CARG3, LFUNC:CARG3->pc
   |   mov CARG2, PC
-  |   str L, [GL, #GL_J(L)]
   |  ldrb CARG3w, [CARG3, #PC2PROTO(framesize)]
   |   str BASE, L->base
   |  add CARG3, BASE, CARG3, lsl #3
   |  str CARG3, L->top
-  |  bl extern lj_trace_hot		// (jit_State *J, const BCIns *pc)
+  |  mov CARG3, L
+  |  bl extern lj_trace_hot		// (jit_State *J, const BCIns *pc, lua_State *L)
   |  b <3
   |.endif
   |
@@ -2169,6 +2179,11 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |->cont_stitch:			// Trace stitching.
   |.if JIT
+#if LJ_ARM64_JIT_FAIL_CLOSED
+  |  // No native trace can create this continuation in the scaffolding build.
+  |  bti_jump
+  |  b ->cont_nop
+#else
   |  // RA = resultptr, CARG4 = meta base
   |  bti_jump
   |   ldr RBw, SAVE_MULTRES
@@ -2205,9 +2220,12 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov CARG1, #GL_J(L)
   |  str L, [GL, CARG1]
   |  str BASE, L->base
-  |  add CARG1, GL, #GG_G2J
+  |  add CARG1, GL, #GG_G2J_HI
+  |  add CARG1, CARG1, #GG_G2J_LO
   |  mov CARG2, PC
-  |  bl extern lj_dispatch_stitch	// (jit_State *J, const BCIns *pc)
+  |  mov CARG3, L
+  |  mov CARG4w, RAw
+  |  bl extern lj_dispatch_stitch	// (jit_State *, pc, L, traceno)
   |  ldr BASE, L->base
   |  b ->cont_nop
   |
@@ -2215,6 +2233,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  str TISNIL, [BASE, RC, lsl #3]
   |  add RC, RC, #1
   |  b <3
+#endif
   |.endif
   |
   |->vm_profhook:			// Dispatch target for profiler hook.
@@ -2275,13 +2294,14 @@ static void build_subroutines(BuildCtx *ctx)
   |.endif
   |   str BASE, L->base
   |  ubfx CARG2w, CARG2w, #5, #16
-  |  str CARG1w, [GL, #GL_J(exitno)]
-  |   str CARG2w, [GL, #GL_J(parent)]
-  |   str L, [GL, #GL_J(L)]
+  |  mov CARG5w, CARG1w
+  |   mov CARG4w, CARG2w
   |  str xzr, GL->jit_base
-  |  add CARG1, GL, #GG_G2J
+  |  add CARG1, GL, #GG_G2J_HI
+  |  add CARG1, CARG1, #GG_G2J_LO
   |  mov CARG2, sp
-  |  bl extern lj_trace_exit		// (jit_State *J, ExitState *ex)
+  |  mov CARG3, L
+  |  bl extern lj_trace_exit		// (J, ex, L, parent, exitno)
   |  // Returns MULTRES (unscaled) or negated error code.
   |  ldr CARG2, L->cframe
   |   ldr BASE, L->base
@@ -2355,11 +2375,21 @@ static void build_subroutines(BuildCtx *ctx)
   |  ldr KBASE, [CARG3, #PC2PROTO(k)]
   |  b <2
   |
-  |5:  // Dispatch to static entry of original ins replaced by BC_JLOOP.
-  |  ldr RA, [GL, #GL_J(trace)]
-  |  decode_RD RC, INS
-  |  ldr TRACE:RA, [RA, RC, lsl #3]
-  |  ldr INSw, TRACE:RA->startins
+  |5:  // Recover the original instruction without dereferencing a stale slot.
+  |1:
+  |  str BASE, L->base
+  |  ldr INSw, [PC, #-4]
+  |  add CARG1, GL, #GG_G2J_HI
+  |  add CARG1, CARG1, #GG_G2J_LO
+  |  sub CARG2, PC, #4
+  |  decode_RD CARG3, INS
+  |  mov CARG4, L
+  |  bl extern lj_trace_stale_startins
+  |  ldr BASE, L->base
+  |  cmn CRET1w, #1
+  |  beq <1
+  |  cbz CRET1w, ->cont_nop
+  |  mov INSw, CRET1w
   |  add TMP0, GL, INS, uxtb #3
   |   decode_RA RA, INS
   |  ldr RB, [TMP0, #GG_G2DISP+GG_DISP2STATIC]
@@ -3780,21 +3810,48 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |
     |5:  // Despecialize bytecode if any of the checks fail.
     |.if JIT
-    |  ldrb TMP2w, [RC, # OFS_OP]
-    |  mov TMP0, #BC_JMP
-    |   mov TMP1, #BC_ITERC
-    |  strb TMP0w, [PC, #-4+OFS_OP]
+    |  str BASE, L->base
+    |  str PC, SAVE_PC
+    |2:  // Publish only against the exact target word inspected here.
+    |  ldr RAw, [RC]
+    |  and TMP2w, RAw, #255
+    |  cmp TMP2w, #BC_ITERC
+    |  beq >8
     |  cmp TMP2w, #BC_ITERN
-    |  bne >6
-    |   strb TMP1w, [RC, # OFS_OP]
-    |  b <1
-    |6:  // Unpatch JLOOP.
-    |  ldr RA, [GL, #GL_J(trace)]
-    |  ldrh TMP2w, [RC, # OFS_RD]
-    |  ldr TRACE:RA, [RA, TMP2, lsl #3]
-    |  ldr TMP2w, TRACE:RA->startins
-    |  bfxil TMP2w, TMP1w, #0, #8
-    |  str TMP2w, [RC]
+    |  beq >6
+    |  cmp TMP2w, #BC_JLOOP
+    |  bne >9
+    |  add CARG1, GL, #GG_G2J_HI
+    |  add CARG1, CARG1, #GG_G2J_LO
+    |  mov CARG2, RC
+    |  lsr CARG3w, RAw, #16
+    |  mov CARG4, L
+    |  bl extern lj_trace_invalidate_itern
+    |  cmn CRET1w, #1
+    |  beq <2
+    |  cbz CRET1w, <2
+    |  and TMP2w, CRET1w, #255
+    |  cmp TMP2w, #BC_ITERN
+    |  bne <2
+    |  mov CARG3w, CRET1w
+    |  b >7
+    |6:
+    |  mov CARG3w, RAw
+    |7:
+    |  mov TMP0w, #BC_ITERC
+    |  bfxil CARG3w, TMP0w, #0, #8
+    |  mov CARG1, RC
+    |  mov CARG2w, RAw
+    |  bl extern lj_bc_publish_cas_vm
+    |  and TMP2w, CRET1w, #255
+    |  cmp TMP2w, #BC_ITERC
+    |  bne <2
+    |8:  // The generic target must be visible before publishing JMP.
+    |  sub CARG1, PC, #4
+    |  mov CARG2w, #BC_JMP
+    |  bl extern lj_bc_publish_op_vm
+    |9:
+    |  ldr BASE, L->base
     |  b <1
     |.else
     |  // Publish the generic target before retiring the specialization
@@ -4156,23 +4213,27 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
   case BC_JLOOP:
     |.if JIT
-    |  // RA = base (ignored), RC = traceno
-    |  ldr CARG1, [GL, #GL_J(trace)]
-    |   st_vmstate wzr  // Traces on ARM64 don't store the trace #, so use 0.
-    |  ldr TRACE:RC, [CARG1, RC, lsl #3]
-    |.if PAUTH
-    |  ldr RA, TRACE:RC->mcauth
-    |.else
-    |  ldr RA, TRACE:RC->mcode
-    |.endif
-    |   str BASE, GL->jit_base
-    |   str L, GL->tmpbuf.L
-    |  sub sp, sp, #16	// See SPS_FIXED. Avoids sp adjust in every root trace.
-    |.if PAUTH
-    |  braa RA, RC
-    |.else
-    |  br RA
-    |.endif
+    |  // The scaffolding build never enters mcode. Recover any stale patch
+    |  // through TraceVec/retired metadata and redispatch the original word.
+    |1:
+    |  str BASE, L->base
+    |  ldr INSw, [PC, #-4]
+    |  add CARG1, GL, #GG_G2J_HI
+    |  add CARG1, CARG1, #GG_G2J_LO
+    |  sub CARG2, PC, #4
+    |  decode_RD CARG3, INS
+    |  mov CARG4, L
+    |  bl extern lj_trace_stale_startins
+    |  ldr BASE, L->base
+    |  cmn CRET1w, #1
+    |  beq <1
+    |  cbz CRET1w, ->cont_nop
+    |  mov INSw, CRET1w
+    |  add TMP0, GL, INS, uxtb #3
+    |   decode_RA RA, INS
+    |  ldr RB, [TMP0, #GG_G2DISP+GG_DISP2STATIC]
+    |   decode_RD RC, INS
+    |  br_auth RB
     |.endif
     break;
 

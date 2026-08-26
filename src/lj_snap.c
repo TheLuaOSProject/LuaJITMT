@@ -1276,7 +1276,7 @@ const BCIns *lj_snap_restore(jit_State *J, void *exptr)
   return snap_restore(J, exptr, J->L, NULL, J->parent, J->exitno);
 }
 
-#if LJ_TARGET_X64
+#if LJ_TARGET_X64 || LJ_TARGET_ARM64
 const BCIns *lj_snap_restore_exit(jit_State *J, void *exptr, lua_State *L,
 				  GCtrace *T, TraceNo parent, ExitNo exitno)
 {

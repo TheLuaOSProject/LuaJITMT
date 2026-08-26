@@ -526,16 +526,27 @@
 /* Lockless multithreaded runtime is the primary build path. */
 #define LJ_MT			1
 
+#if defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL) && \
+    !defined(LUAJIT_MT_ARM64_BOOTSTRAP)
+#error "LUAJIT_MT_ARM64_JIT_EXPERIMENTAL requires LUAJIT_MT_ARM64_BOOTSTRAP"
+#endif
+
 #if defined(LUAJIT_MT_ARM64_BOOTSTRAP)
 /*
 ** Bring up the Apple ARM64 assembler VM without widening the supported target
-** contract.  This opt-in is deliberately interpreter-only until the ARM64 VM,
-** FFI and JIT paths have their lockless invariants audited and validated.
+** contract. The bootstrap opt-in remains interpreter-only. A distinct,
+** experimental opt-in compiles the JIT subsystem, but keeps recording and
+** native entry fail-closed until the ARM64 lockless runtime tranche lands.
 */
 #if !LJ_TARGET_GC64 || !LJ_TARGET_ARM64 || !LJ_TARGET_OSX || LJ_TARGET_IOS
 #error "LUAJIT_MT_ARM64_BOOTSTRAP requires GC64 on macOS ARM64"
 #endif
-#if !defined(LUAJIT_DISABLE_JIT)
+#if defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+#if defined(LUAJIT_DISABLE_JIT)
+#error "LUAJIT_MT_ARM64_JIT_EXPERIMENTAL cannot be combined with LUAJIT_DISABLE_JIT"
+#endif
+#define LJ_ARM64_JIT_FAIL_CLOSED	1
+#elif !defined(LUAJIT_DISABLE_JIT)
 #error "LUAJIT_MT_ARM64_BOOTSTRAP currently requires LUAJIT_DISABLE_JIT"
 #endif
 #else
@@ -543,6 +554,11 @@
     !(LJ_TARGET_LINUX || LJ_TARGET_OSX || LJ_TARGET_WINDOWS)
 #error "lockless runtime requires GC64 on x86-64 Linux, macOS or Windows"
 #endif
+
+#endif
+
+#ifndef LJ_ARM64_JIT_FAIL_CLOSED
+#define LJ_ARM64_JIT_FAIL_CLOSED	0
 #endif
 
 /* 64 bit GC references are the only runtime representation. */

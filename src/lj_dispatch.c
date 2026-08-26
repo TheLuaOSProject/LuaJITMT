@@ -792,7 +792,7 @@ ASMFunction LJ_FASTCALL lj_dispatch_call(lua_State *L, const BCIns *pc)
     op = bc_op(pc[-1]);
     if (op != BC_FUNCF && op != BC_FUNCV)
       goto out;  /* Another thread patched this function header first. */
-#if LJ_TARGET_X64
+#if LJ_TARGET_X64 || LJ_TARGET_ARM64
     lj_trace_hot(J, pc, L);
 #else
     jit_owner_l_rel(J, L);
@@ -843,14 +843,14 @@ out:
 
 #if LJ_HASJIT
 /* Stitch a new trace. */
-#if LJ_TARGET_X64
+#if LJ_TARGET_X64 || LJ_TARGET_ARM64
 void LJ_FASTCALL lj_dispatch_stitch(jit_State *J, const BCIns *pc, lua_State *L,
 				    TraceNo traceno)
 #else
 void LJ_FASTCALL lj_dispatch_stitch(jit_State *J, const BCIns *pc)
 #endif
 {
-#if !LJ_TARGET_X64
+#if !(LJ_TARGET_X64 || LJ_TARGET_ARM64)
   lua_State *L = jit_owner_l_acq(J);
 #endif
   if (!(lj_tg_hookmask_combined_load(J2G(J), L2TG(L)) & HOOK_VMEVENT)) {
@@ -860,7 +860,7 @@ void LJ_FASTCALL lj_dispatch_stitch(jit_State *J, const BCIns *pc)
     setcframe_pc(cf, pc);
     /* Before dispatch, have to bias PC by 1. */
     L->top = L->base + cur_topslot(curr_proto(L), pc+1, cframe_multres_n(cf));
-#if LJ_TARGET_X64
+#if LJ_TARGET_X64 || LJ_TARGET_ARM64
     lj_trace_stitch(J, pc-1, L, traceno);  /* Point to the CALL instruction. */
 #else
     lj_trace_stitch(J, pc-1);  /* Point to the CALL instruction. */

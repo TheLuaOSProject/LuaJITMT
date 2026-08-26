@@ -3368,12 +3368,16 @@ static void rec_func_setup(jit_State *J)
 
 static void rec_func_xpoll(jit_State *J)
 {
+#if LJ_TARGET_X64 && LJ_GC64
   if (J->framedepth >= LJ_TRACE_FUNCF_XPOLL_DEPTH) {
     /* Bind the guard to the exact inlined-frame continuation, not the prior
     ** caller snapshot. See the terminal XPOLL ordering in lj_record_stop(). */
     lj_snap_add(J);
     emitir_raw(IRTG(IR_XPOLL, IRT_NIL), rec_needs_xpoll(J), 0);
   }
+#else
+  UNUSED(J);
+#endif
 }
 
 /* Record Lua vararg function setup. */
@@ -3553,12 +3557,17 @@ static void rec_varg(jit_State *J, BCReg dst, ptrdiff_t nresults)
 
 static int rec_bufstr_is_tg_tmpbuf(jit_State *J, IRIns *ir)
 {
+#if LJ_TARGET_X86ORX64
   IRIns *hdr;
-  if (!LJ_TARGET_X86ORX64 || ir->o != IR_BUFSTR)
+  if (ir->o != IR_BUFSTR)
     return 0;
   hdr = IR(ir->op2);
   return hdr->o == IR_BUFHDR && hdr->op2 == IRBUFHDR_RESET &&
 	 IR(hdr->op1)->o == IR_LREF;
+#else
+  UNUSED(J); UNUSED(ir);
+  return 0;
+#endif
 }
 
 /* -- Record allocations -------------------------------------------------- */

@@ -336,7 +336,7 @@ LJ_FUNC int lj_trace_test_stale_startins_candidate(global_State *g, GCobj *o);
 
 /* Event handling. */
 LJ_FUNC void lj_trace_ins(jit_State *J, const BCIns *pc);
-#if LJ_TARGET_X64
+#if LJ_TARGET_X64 || LJ_TARGET_ARM64
 LJ_FUNCA void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc,
 				       lua_State *L);
 LJ_FUNCA uint32_t LJ_FASTCALL lj_trace_stitch_probe(jit_State *J, GCtrace *T);
@@ -349,7 +349,7 @@ LJ_FUNCA void LJ_FASTCALL lj_trace_stitch(jit_State *J, const BCIns *pc);
 #if LJ_TARGET_X64 && LJ_ABI_WIN
 LJ_FUNCA int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr,
 				       lua_State *L, uint32_t exitpair);
-#elif LJ_TARGET_X64
+#elif LJ_TARGET_X64 || LJ_TARGET_ARM64
 LJ_FUNCA int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr, lua_State *L,
 				       TraceNo parent, ExitNo exitno);
 #else

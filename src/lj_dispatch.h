@@ -156,7 +156,7 @@ LJ_FUNCA int32_t LJ_FASTCALL lj_dispatch_hookcount_dec(global_State *g);
 LJ_FUNCA void LJ_FASTCALL lj_dispatch_ins(lua_State *L, const BCIns *pc);
 LJ_FUNCA ASMFunction LJ_FASTCALL lj_dispatch_call(lua_State *L, const BCIns*pc);
 #if LJ_HASJIT
-#if LJ_TARGET_X64
+#if LJ_TARGET_X64 || LJ_TARGET_ARM64
 LJ_FUNCA void LJ_FASTCALL lj_dispatch_stitch(jit_State *J, const BCIns *pc,
 					     lua_State *L, TraceNo traceno);
 #else

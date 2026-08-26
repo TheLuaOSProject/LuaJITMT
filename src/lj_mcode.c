@@ -78,7 +78,8 @@ void lj_mcode_sync(void *start, void *end)
 #endif
 
 /* Use stable MAP_JIT mcode on macOS 11+. */
-#if LJ_TARGET_OSX && LJ_TARGET_X64 && LUAJIT_SECURITY_MCODE != 0 && \
+#if LJ_TARGET_OSX && (LJ_TARGET_X64 || LJ_TARGET_ARM64) && \
+    !LJ_TARGET_IOS && LUAJIT_SECURITY_MCODE != 0 && \
     defined(MAP_JIT) && defined(__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__) && \
     __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ >= 110000
 #define LJ_MCODE_MAPJIT	1
@@ -407,10 +408,10 @@ static void mcode_set_area_mode(jit_State *J, MCode *area, int prot)
 
 #if (defined(__linux__) && LJ_TARGET_X64) || LJ_MCODE_MAPJIT
 /* M6 bridge: keep published mcode execute-stable for peer TGs. The Linux/x64
-** path uses a memfd dual-map W^X write view. The macOS/x64 path uses MAP_JIT
-** to avoid toggling execute permission out from under peer threads; on Intel
-** macOS the pthread write-protect toggle may be a no-op, so this is an
-** execute-stability path, not a separated W^X map guarantee. */
+** path uses a memfd dual-map W^X write view. The desktop macOS x64/ARM64 path
+** uses MAP_JIT to avoid toggling execute permission out from under peer
+** threads. The pthread write-protect toggle may be a no-op on Intel, so this
+** is an execute-stability path, not a separated W^X map guarantee there. */
 #define LJ_MCODE_EXEC_STABLE	1
 #endif
 

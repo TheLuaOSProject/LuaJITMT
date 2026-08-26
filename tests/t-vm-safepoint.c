@@ -660,6 +660,17 @@ int main(void)
 		  ~(TGF_STOPREQ|TGF_STOPREQ_FRESH)));
   }
 
+#if LJ_ARM64_JIT_FAIL_CLOSED
+  /* The experimental ARM64 admission build deliberately stops in
+  ** lj_trace_hot(). The interpreter half of this fixture is still the exact
+  ** runtime safepoint proof required by the scaffolding checkpoint. */
+  assert(G2J(g)->cur.traceno == 0);
+  assert(G2J(g)->freetrace == 0);
+  lua_close(L);
+  puts("t-vm-safepoint: ARM64 JIT fail-closed interpreter path OK");
+  return 0;
+#endif
+
 #if LJ_HASJIT
   load_jloop_flush_after_publish(L);
   assert(lua_pcall(L, 0, 1, 0) == LUA_OK);
