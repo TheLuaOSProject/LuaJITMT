@@ -454,3 +454,27 @@ because the surrounding call/return envelope also advances the dirty epoch.
 Stage 2 is still open at C-built metamethod frames, generation-safe protected
 metatable lookup, rooted distinct equality/comparison, and `ISNEXT` bytecode
 publication. ARM safepoint acknowledgement and the JIT remain disabled.
+
+### 9. Apple ARM64 C-built metamethod frames
+
+The C helpers behind ARM64 arithmetic, length, comparison/equality,
+concatenation, and callable-object dispatch now release/root-publish every
+method and operand slot in their manually assembled VM frames. Direct string
+concatenation preserves its destination as a stack offset across allocation
+and publishes the fresh result before a possible GC step. Callable-object
+argument shifting remains high-to-low and publishes each destination before
+the final method overwrite, so the transition may duplicate roots but never
+drops one.
+
+The shared `lj_state_stack_pubtv` abstraction was corrected to perform its
+release self-store before dirty-epoch invalidation and its GC barrier last.
+This restores the ordering promised to callers that make an owner-private
+plain store before invoking the helper.
+
+The clean assert bootstrap, deterministic root contract, all 387 stock tests,
+threading/hook/coroutine and 320-callback checks, the focused metamethod fixture
+under GC-worker pressure, and a 1,000-round full-GC metamethod stress passed
+natively. The metatable contract remains deliberately red at the next missing
+piece: rooted protected `getmetatable`. Rooted distinct equality/comparison,
+the unconditional `setmetatable` C fallback, and `ISNEXT` publication also
+remain before Stage 2 can close.

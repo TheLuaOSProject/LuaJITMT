@@ -360,13 +360,20 @@ static TValue *mmcall(lua_State *L, ASMFunction cont, cTValue *mo,
   ** next PC:  [func slots ...]
   */
   TValue *top = L->top;
+  TValue *metafunc;
   if (curr_funcisL(L)) top = curr_topL(L);
   setcont(top++, cont);  /* Assembler VM stores PC in upper word or FR2. */
   if (LJ_FR2) setnilV(top++);
+  metafunc = top;
   copyTV(L, top++, mo);  /* Store metamethod and two arguments. */
   if (LJ_FR2) setnilV(top++);
   copyTV(L, top, a);
   copyTV(L, top+1, b);
+  /* The VM has not advanced L->top yet. Publish every collectable slot in the
+  ** manual frame before returning its argument base to assembler dispatch. */
+  lj_state_stack_pubtv(L, L, metafunc);
+  lj_state_stack_pubtv(L, L, top);
+  lj_state_stack_pubtv(L, L, top+1);
   return top;  /* Return new base. */
 }
 
@@ -671,23 +678,15 @@ static TValue *meta_stale_error_operand(lua_State *L,
   return slot;
 }
 
-/* Materialize a function-valued chain result in the VM continuation frame and
-** publish every collectable slot before dropping the anchor roots which fed
-** it. The returned base points at the first argument; the function is one
-** TValue (plus the FR2 companion) below it. L->top deliberately remains at
-** that first argument until the VM/C caller completes the call frame, but all
-** three values receive release stack publication and a root barrier here.
-** Remote/native/JIT-current scanners conservatively cover maxstack in this
-** owner-private transition window, and the owner executes no local safepoint
-** between anchor release and return to the caller which advances top. */
+/* Materialize a function-valued chain result in the VM continuation frame.
+** mmcall() release-publishes the function and both arguments before returning;
+** advance top only after that complete handoff and before dropping the anchors
+** which fed it. */
 static void meta_chain_mmcall(lua_State *L, ASMFunction cont, cTValue *method,
 			      cTValue *receiver, cTValue *key)
 {
   TValue *base = mmcall(L, cont, method, receiver, key);
   L->top = base;
-  lj_state_stack_pubtv(L, L, base - 1 - LJ_FR2);
-  lj_state_stack_pubtv(L, L, base);
-  lj_state_stack_pubtv(L, L, base + 1);
 }
 
 /* Shared rooted implementation for TGET*. __index chain and metamethod. */
@@ -1221,6 +1220,7 @@ TValue *lj_meta_cat(lua_State *L, TValue *top, int left)
     if (!fromc && L->top < top+1)
       L->top = top+1;
     if (!meta_cat_compat(L, top) || !meta_cat_compat(L, top-1)) {
+      TValue *metafunc, *metaarg1, *metaarg2;
       cTValue *mo = lj_meta_lookuptv(L, &motv, top-1, MM_concat);
       if (tvisnil(mo)) {
 	mo = lj_meta_lookuptv(L, &motv, top, MM_concat);
@@ -1241,11 +1241,17 @@ TValue *lj_meta_cat(lua_State *L, TValue *top, int left)
       ** after mm:  [...][CAT stack ...] <--push-- [result]
       ** next step: [...][CAT stack .............]
       */
-      copyTV(L, top+2*LJ_FR2+2, top);  /* Carefully ordered stack copies! */
-      copyTV(L, top+2*LJ_FR2+1, top-1);
-      copyTV(L, top+LJ_FR2, mo);
+      metafunc = top+LJ_FR2;
+      metaarg1 = top+2*LJ_FR2+1;
+      metaarg2 = top+2*LJ_FR2+2;
+      copyTV(L, metaarg2, top);  /* Carefully ordered stack copies! */
+      copyTV(L, metaarg1, top-1);
+      copyTV(L, metafunc, mo);
       setcont(top-1, lj_cont_cat);
       if (LJ_FR2) { setnilV(top); setnilV(top+2); top += 2; }
+      lj_state_stack_pubtv(L, L, metafunc);
+      lj_state_stack_pubtv(L, L, metaarg1);
+      lj_state_stack_pubtv(L, L, metaarg2);
       return top+1;  /* Trigger metamethod call. */
     } else {
       /* Pick as many strings as possible from the top and concatenate them:
@@ -1256,9 +1262,11 @@ TValue *lj_meta_cat(lua_State *L, TValue *top, int left)
       ** next step: [...][CAT stack ............]
       */
       TValue *e = top, *o = top, *r;
+      ptrdiff_t topofs;
       MSize blen;
       uint64_t tlen = 0;
       SBuf *sb;
+      GCstr *s;
       do {
 	o--;
       } while (--left > 0 && meta_cat_compat(L, o-1));
@@ -1294,7 +1302,11 @@ TValue *lj_meta_cat(lua_State *L, TValue *top, int left)
 	  (void)meta_buf_putmem(L, sb, o);
 	}
       }
-      setstrV(L, top, lj_buf_str(L, sb));
+      topofs = savestack(L, top);
+      s = lj_buf_str(L, sb);
+      top = restorestack(L, topofs);
+      setstrV(L, top, s);
+      lj_state_stack_pubtv(L, L, top);
     }
   } while (left >= 1);
   if (LJ_UNLIKELY(lj_gc_should_step(G(L)))) {
@@ -1451,9 +1463,16 @@ void lj_meta_call(lua_State *L, TValue *func, TValue *top)
   lj_gc_pubroot(L, mo);
   if (!tvisfunc(mo))
     lj_err_optype_call(L, func);
-  for (p = top; p > func+2*LJ_FR2; p--) copyTV(L, p, p-1);
-  if (LJ_FR2) copyTV(L, func+2, func);
+  for (p = top; p > func+2*LJ_FR2; p--) {
+    copyTV(L, p, p-1);
+    lj_state_stack_pubtv(L, L, p);
+  }
+  if (LJ_FR2) {
+    copyTV(L, func+2, func);
+    lj_state_stack_pubtv(L, L, func+2);
+  }
   copyTV(L, func, mo);
+  lj_state_stack_pubtv(L, L, func);
 }
 
 /* Helper for FORI. Coercion. */

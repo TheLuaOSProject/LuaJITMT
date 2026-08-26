@@ -310,9 +310,12 @@ void lj_state_stack_dirty_vm(lua_State *L)
 void lj_state_stack_pubtv(lua_State *L, lua_State *target, cTValue *tv)
 {
   TGState *tg = target ? L2TG(target) : (L ? L2TG(L) : NULL);
+  /* The complete TValue must become visible before invalidating a prior stack
+  ** scan certificate. Many callers deliberately use a plain owner-private
+  ** store and make this release self-store the publication point. */
+  tv_rawstore_rel((TValue *)tv, tv_rawload(tv));
   if (tg)
     (void)lj_tg_stack_dirty_epoch_add_rlx(tg, 1);
-  tv_rawstore_rel((TValue *)tv, tv_rawload(tv));
   lj_gc_pubroot(L, tv);
 }
 
