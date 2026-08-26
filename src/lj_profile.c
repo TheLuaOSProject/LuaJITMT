@@ -29,6 +29,13 @@
 #include "lj_profile.h"
 #include "lj_vm.h"
 
+/* Every admitted SIGPROF signal cache must select TG-local publication. This
+** pins the coordinated cache => profiler target widening at compile time while
+** preserving the legacy 32-bit x86 TG-local backend without this cache. */
+#if LJ_THR_TG_SIGNAL_CACHE && LJ_PROFILE_SIGPROF && !LJ_PROFILE_TGLOCAL
+#error "SIGPROF TG signal cache requires TG-local profiling"
+#endif
+
 #include "luajit.h"
 
 #include <limits.h>
@@ -310,11 +317,12 @@ static LJ_AINLINE int32_t profile_sample_vmstate_tg(global_State *g,
 	 st == ~LJ_VMST_GC ? 'G' : 'J';
 }
 
-#if LJ_HASJIT && LJ_THR_TG_SIGNAL_CACHE
 #if LJ_PROFILE_SIGPROF && defined(LJ_PROFILE_TIMER_TEST_HELPERS)
 static uint32_t profile_test_fail_trace_flush_after;
 static int profile_test_fail_now(uint32_t *count);
 #endif
+
+#if LJ_HASJIT && LJ_THR_TG_SIGNAL_CACHE
 
 typedef struct ProfileTraceFlushCtx {
   int status;
@@ -522,8 +530,8 @@ int lj_profile_pending(lua_State *L)
 #endif
 }
 
-/* Trigger profile hook on legacy timer backends. The x86-64 SIGPROF path uses
-** the atomic-only publisher below instead. */
+/* Trigger profile hook on legacy timer backends. Signal-cache SIGPROF targets
+** use the atomic-only publisher below instead. */
 #if !LJ_THR_TG_SIGNAL_CACHE
 static void profile_trigger(ProfileState *ps)
 {

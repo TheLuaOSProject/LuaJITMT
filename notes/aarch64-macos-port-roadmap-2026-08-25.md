@@ -606,3 +606,28 @@ be caught by an inner fast protected frame without reaching the outer C
 wrapper. ARM64 JIT execution remains deferred. A matching full-width delta bug
 was identified in x64 `vm_call_tail`; it is documented in the focused note and
 is intentionally left for a separate x64 invariant commit and native test.
+
+### 15. Apple ARM64 signal cache and interpreter profile publication
+
+Desktop macOS ARM64 now admits the process-stable TG signal cache and TG-local
+`SIGPROF` publication used by the x64 port. iOS remains excluded. The handler
+saves and restores `errno`, finds the current TG through eagerly initialized
+`getpid` and `pthread_self` entry cells, and publishes only samples plus the
+separate `profile_request` word. Normal-context owner polling consumes the
+request and installs the profile dispatch overlay.
+
+The Apple `pthread_self()` signal-handler dependency is explicitly
+implementation-specific rather than a portable POSIX claim. Native runtime
+coverage and a thin-Mach-O gate prove the current ARM64 host path has exactly
+the intended two indirect identity calls, no TLS/TLV, allocation, loader,
+scheduler, compiler-atomic, stack-check, sanitizer, or AArch64 runtime-helper
+edge, and only the expected handler calls to `___error` and the profile getter.
+The same gate and runtime suite were also rerun on thin x86-64 artifacts under
+Rosetta to preserve the established backend.
+
+The aggregate ARM64 suite covers signal-cache/fork lifecycle, timer rollback,
+all four DSO pin modes, and a real fixed-function interpreter entry with only
+`profile_request` set. That request is consumed without changing the handshake
+epoch or poll word. This remains a JIT-disabled interpreter checkpoint: ARM64
+trace recording, XPOLL lowering, compiled-loop polling, and trace execution are
+not claimed here.

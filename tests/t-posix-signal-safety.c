@@ -127,7 +127,13 @@ static int profile_dso_loader_main(const char *path, const char *mode)
     assert(!profile_active(L) && !pinned() && !installed());
     close_state(L);
     assert(dlclose(handle) == 0);
+#if !LJ_TARGET_OSX
     assert(!loader_noload(path));
+#else
+    /* Darwin never unloads an image containing compiler TLS, even without a
+    ** retained dlopen reference. The logical !pinned/!installed checks above
+    ** and the post-close fork remain the available negative proof there. */
+#endif
     child = fork();
     assert(child >= 0);
     if (child == 0)
@@ -171,6 +177,9 @@ static void sample_handler(int signo)
 {
   int saved_errno = errno;
   (void)signo;
+  /* On Darwin this is positive current-host coverage for the Apple ABI's
+  ** implementation-specific pthread_self() signal behavior. POSIX itself does
+  ** not make that portability guarantee. */
   la_storeuptr_rel(&sampled_signal_body,
                    (uintptr_t)lj_thr_get_tg_signal());
   errno = saved_errno;
@@ -632,6 +641,7 @@ static void test_profile_timer(void)
   luaL_openlibs(L);
 #endif
 
+#if LJ_HASJIT
   /* Never arm while an active GC hook prevents the mandatory pre-policy trace
   ** flush. The recording flag is rolled back together with STARTING. */
   lj_profile_timer_test_reset();
@@ -642,7 +652,6 @@ static void test_profile_timer(void)
   assert(lj_profile_timer_test_sigaction_calls() == 0u);
   (void)hookmask_update(G(L), HOOK_GC, 0);
 
-#if LJ_HASJIT
   /* The Lua wrapper roots its hidden callback state before entering the low-
   ** level lifecycle. It must clear both roots if that lifecycle throws. */
   lj_profile_timer_test_reset();

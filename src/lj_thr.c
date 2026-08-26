@@ -234,9 +234,11 @@ static LJ_AINLINE uintptr_t lj_thr_signal_process(void)
 
 static LJ_AINLINE uintptr_t lj_thr_signal_owner(void)
 {
-  /* pthread_self() is async-signal-safe on the supported targets. Both ABIs
-  ** represent pthread_t in one pointer-sized scalar; no TLS address is
-  ** taken. */
+  /* Linux x64 and the current Apple x86-64/ARM64 ABIs represent pthread_t in
+  ** one pointer-sized scalar; no compiler TLS address is taken here. Apple
+  ** does not make this a portable POSIX guarantee: calling pthread_self() from
+  ** a signal handler is an implementation-specific Darwin ABI dependency,
+  ** covered by native-host runtime and Mach-O artifact checks. */
   return (uintptr_t)lj_thr_signal_pthread_self_fn();
 }
 
@@ -331,7 +333,7 @@ static void lj_thr_signal_process_advance(uintptr_t process)
   la_storeuptr_rel(&lj_tg_signal_process_cached, process);
 }
 
-/* pthread_atfork child hook. Only async-signal-safe, lock-free x86-64 atomics
+/* pthread_atfork child hook. Only async-signal-safe, lock-free target atomics
 ** and the eagerly relocated getpid entry are reachable from here. Resetting a
 ** copied BUILDING state prevents a child from waiting for a vanished builder. */
 static void lj_thr_signal_atfork_child(void)

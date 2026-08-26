@@ -574,9 +574,9 @@ int main(void)
   assert(tg->alloc.alloc_black == 0);
 
 #if LJ_PROFILE_TGLOCAL
-  /* x64 signal-cache builds publish profile_request without the handshake
-  ** poll word. Keep this coverage architecture-neutral, but ARM64 does not
-  ** enable it until its separate signal-cache/profile publication port. */
+  /* Signal-cache targets publish profile_request without the handshake poll
+  ** word. On ARM64 this fixture validates the real no-JIT interpreter poll;
+  ** it makes no ARM64 JIT or XPOLL claim. */
   load_fixed_entry(L);
   lua_pushinteger(L, 11);
   epoch0 = g->gc2.hs_epoch;

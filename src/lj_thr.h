@@ -68,11 +68,13 @@ typedef enum LJThrTGResult {
   LJ_THR_TG_CORRUPT = -3
 } LJThrTGResult;
 
-/* The signal cache is deliberately narrower than generic POSIX support.  Its
-** pthread_t representation and generated-code contract are checked for the
-** two x86-64 targets in scope. */
+/* The signal cache is deliberately narrower than generic POSIX support. Its
+** pthread identity and generated-code contracts are checked for x86-64 Linux,
+** x86-64 macOS and native macOS ARM64. The Apple ARM64 admission is desktop
+** only: iOS remains outside this implementation-specific signal ABI proof. */
 #define LJ_THR_TG_SIGNAL_CACHE \
-  (LJ_TARGET_X64 && (LJ_TARGET_LINUX || LJ_TARGET_OSX))
+  ((LJ_TARGET_X64 && (LJ_TARGET_LINUX || LJ_TARGET_OSX)) || \
+   (LJ_TARGET_ARM64 && LJ_TARGET_OSX && !LJ_TARGET_IOS))
 
 /* Exact TLS ownership result matrix:
 **

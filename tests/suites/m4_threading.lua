@@ -7,6 +7,69 @@ local getenv = utils.getenv
 local with_temp_paths = utils.with_temp_paths
 local compile_and_run_sources = build.compile_and_run_sources
 
+local signal_helpers =
+  "-DLJ_THR_SIGNAL_TEST_HELPERS -DLJ_PROFILE_TIMER_TEST_HELPERS"
+local arm64_bootstrap_cflags =
+  "-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_DISABLE_JIT -DLUA_USE_ASSERT"
+
+local function native_macos_arm64()
+  return jit and jit.os == "OSX" and jit.arch == "arm64"
+end
+
+local function signal_build_cflags()
+  if native_macos_arm64() then
+    return arm64_bootstrap_cflags .. " " .. signal_helpers
+  end
+  return signal_helpers
+end
+
+local function signal_restore_cflags()
+  return native_macos_arm64() and arm64_bootstrap_cflags or nil
+end
+
+local function with_signal_build_restore(t, fn)
+  local ok, err = xpcall(fn, debug.traceback)
+  local restore_ok, restore_err = xpcall(function()
+    t:build({ clean = true, quiet = true,
+              xcflags = signal_restore_cflags() })
+  end, debug.traceback)
+  if not ok then
+    if not restore_ok then
+      err = err .. "\n\n(signal build restore also failed)\n" .. restore_err
+    end
+    error(err, 0)
+  end
+  if not restore_ok then error(restore_err, 0) end
+end
+
+local function run_signal_safety_fixture(t, flags)
+  compile_and_run_sources(t, t:tmp("lj_t-posix-signal-safety"),
+    { t:path("tests", "t-posix-signal-safety.c") }, {
+    cflags = flags,
+    timeout = native_macos_arm64() and "30s" or "20s"
+  })
+end
+
+local function run_signal_dso_modes(t)
+  local loader_flags = "-DLJ_PROFILE_DSO_LOADER"
+  local loader = t:tmp("lj_t-posix-signal-dso-loader")
+  local image = t:path("src", "libluajit.so")
+  if native_macos_arm64() then
+    loader_flags = loader_flags .. " " .. arm64_bootstrap_cflags
+  end
+  t:cc(loader, { t:path("tests", "t-posix-signal-safety.c") }, {
+    cflags = loader_flags,
+    include_src = true,
+    link_luajit = false,
+    libs = { "-ldl", os.getenv("PTHREAD") or "-pthread" }
+  })
+  for _, mode in ipairs({
+    "pin-failure", "pin-mismatch", "success", "stop-failure"
+  }) do
+    t:run({ loader, image, mode }, { timeout = "20s" })
+  end
+end
+
 return function(add)
   local terminal_orphan_libs = {
     "-lm", "-ldl", os.getenv("PTHREAD") or "-pthread",
@@ -76,26 +139,25 @@ return function(add)
 
   add({
     name = "m4_posix_signal_artifacts",
-    description = "x86-64 signal getter disassembly and relocation contract",
+    description = "POSIX signal getter disassembly and relocation contract",
     run = function(t)
       if jit and jit.os == "Linux" and jit.arch == "x64" then
-        build.with_default_build_restore(t, function()
+        with_signal_build_restore(t, function()
           t:build({
             clean = true,
-            xcflags = "-DLJ_THR_SIGNAL_TEST_HELPERS " ..
-                       "-DLJ_PROFILE_TIMER_TEST_HELPERS"
+            xcflags = signal_build_cflags()
           })
           t:run({ "sh", t:path("tools", "ci",
                                "m4_posix_signal_artifacts.sh") }, {
             timeout = "20s"
           })
         end)
-      elseif jit and jit.os == "OSX" and jit.arch == "x64" then
-        build.with_default_build_restore(t, function()
+      elseif jit and jit.os == "OSX" and
+             (jit.arch == "x64" or jit.arch == "arm64") then
+        with_signal_build_restore(t, function()
           t:build({
             clean = true,
-            xcflags = "-DLJ_THR_SIGNAL_TEST_HELPERS " ..
-                       "-DLJ_PROFILE_TIMER_TEST_HELPERS"
+            xcflags = signal_build_cflags()
           })
           t:run({ "sh", t:path("tools", "ci",
                                "m4_posix_signal_macho_artifacts.sh") }, {
@@ -233,21 +295,6 @@ return function(add)
       message = "M4 exact TG TLS binding tests passed"
     },
     {
-      name = "m4_posix_signal_safety",
-      description = "exact POSIX TG signal cache and SIGPROF lifecycle fixture",
-      output = "lj_t-posix-signal-safety",
-      cfile = "t-posix-signal-safety.c",
-      opts = {
-        clean = true,
-        xcflags = "-DLJ_THR_SIGNAL_TEST_HELPERS " ..
-                  "-DLJ_PROFILE_TIMER_TEST_HELPERS",
-        cflags = "-DLJ_THR_SIGNAL_TEST_HELPERS " ..
-                 "-DLJ_PROFILE_TIMER_TEST_HELPERS",
-        timeout = "20s"
-      },
-      message = "M4 POSIX signal cache/timer lifecycle tests passed"
-    },
-    {
       name = "m4_tg_terminal_orphan",
       description = "capacity-independent terminal TG allocator drain fixture",
       output = "lj_t-tg-terminal-orphan",
@@ -261,29 +308,59 @@ return function(add)
   })
 
   add({
+    name = "m4_posix_signal_safety",
+    description = "exact POSIX TG signal cache and SIGPROF lifecycle fixture",
+    run = function(t)
+      with_signal_build_restore(t, function()
+        local flags = signal_build_cflags()
+        t:build({ clean = true, quiet = true, xcflags = flags })
+        run_signal_safety_fixture(t, flags)
+      end)
+      print("M4 POSIX signal cache/timer lifecycle tests passed")
+    end
+  })
+
+  add({
     name = "m4_posix_signal_dso_lifetime",
     description = "SIGPROF containing-image permanent pin across dlclose",
     run = function(t)
-      if jit and (jit.os == "Linux" or jit.os == "OSX") and
-         jit.arch == "x64" then
-        local helpers = "-DLJ_THR_SIGNAL_TEST_HELPERS " ..
-                        "-DLJ_PROFILE_TIMER_TEST_HELPERS"
-        local loader = t:tmp("lj_t-posix-signal-dso-loader")
-        local image = t:path("src", "libluajit.so")
-        t:build({ clean = true, xcflags = helpers })
-        t:cc(loader, { t:path("tests", "t-posix-signal-safety.c") }, {
-          cflags = "-DLJ_PROFILE_DSO_LOADER",
-          include_src = true,
-          link_luajit = false,
-          libs = { "-ldl", os.getenv("PTHREAD") or "-pthread" }
-        })
-        for _, mode in ipairs({
-          "pin-failure", "pin-mismatch", "success", "stop-failure"
-        }) do
-          t:run({ loader, image, mode }, { timeout = "20s" })
-        end
+      if jit and ((jit.os == "Linux" and jit.arch == "x64") or
+                  (jit.os == "OSX" and
+                   (jit.arch == "x64" or jit.arch == "arm64"))) then
+        with_signal_build_restore(t, function()
+          local flags = signal_build_cflags()
+          t:build({ clean = true, xcflags = flags })
+          run_signal_dso_modes(t)
+        end)
       end
       print("M4 POSIX signal containing-image lifetime tests passed")
+    end
+  })
+
+  add({
+    name = "m4_posix_signal_arm64_gate",
+    description = "native macOS ARM64 signal cache, profile and VM poll gate",
+    run = function(t)
+      if not native_macos_arm64() then
+        print("m4_posix_signal_arm64_gate SKIP: requires native macOS arm64")
+        return
+      end
+      with_signal_build_restore(t, function()
+        local flags = signal_build_cflags()
+        t:build({ clean = true, quiet = true, xcflags = flags })
+        t:run({ "sh", t:path("tools", "ci",
+                             "m4_posix_signal_macho_artifacts.sh") }, {
+          timeout = "20s"
+        })
+        run_signal_safety_fixture(t, flags)
+        run_signal_dso_modes(t)
+        compile_and_run_sources(t, t:tmp("lj_t-arm64-profile-vm-poll"),
+          { t:path("tests", "t-vm-safepoint.c") }, {
+          cflags = flags,
+          timeout = "45s"
+        })
+      end)
+      print("M4 macOS ARM64 signal/profile interpreter-poll gate passed")
     end
   })
 
