@@ -262,6 +262,10 @@
 |.macro ins_callt
 |  // BASE = new base, CARG3 = LFUNC/CFUNC, RC = nargs*8, FRAME_PC(BASE) = PC
 |  ldr PC, LFUNC:CARG3->pc
+|  bl ->vm_call_publish
+|  arm64_vm_stack_dirty
+|  ldr LFUNC:CARG3, [BASE, FRAME_FUNC]
+|  and LFUNC:CARG3, CARG3, #LJ_GCVMASK
 |  ldr INSw, [PC], #4
 |  add TMP1, DISPATCH, INS, uxtb #3
 |   decode_RA RA, INS
@@ -272,7 +276,8 @@
 |
 |.macro ins_call
 |  // BASE = new base, CARG3 = LFUNC/CFUNC, RC = nargs*8, PC = caller PC
-|  str PC, [BASE, FRAME_PC]
+|  sub ATMP, BASE, #8
+|  stlr PC, [ATMP]
 |  ins_callt
 |.endmacro
 |
@@ -418,6 +423,20 @@ static void build_subroutines(BuildCtx *ctx)
 {
   |.code_sub
   |
+  |->vm_call_publish:
+  |  bti_call
+  |  // Publish the complete function/PC/argument frame. Keeping this loop out
+  |  // of ins_callt avoids leaking numeric local labels into its call sites.
+  |  sub TMP3, BASE, #16
+  |  add TMP2, BASE, NARGS8:RC
+  |->vm_call_publish_loop:
+  |  ldr TMP0, [TMP3]
+  |  stlr TMP0, [TMP3]
+  |  add TMP3, TMP3, #8
+  |  cmp TMP3, TMP2
+  |  blo ->vm_call_publish_loop
+  |  ret
+  |
   |//-----------------------------------------------------------------------
   |//-- Return handling ----------------------------------------------------
   |//-----------------------------------------------------------------------
@@ -431,7 +450,9 @@ static void build_subroutines(BuildCtx *ctx)
   |   mov_true TMP0
   |  mov BASE, RB
   |  // Prepending may overwrite the pcall frame, so do it at the end.
-  |   str TMP0, [RA, #-8]!		// Prepend true to results.
+  |  sub RA, RA, #8
+  |  stlr TMP0, [RA]			// Release-publish prepended true.
+  |  arm64_vm_stack_dirty
   |
   |->vm_returnc:
   |  adds RC, RC, #8			// RC = (nresults+1)*8.
@@ -444,12 +465,16 @@ static void build_subroutines(BuildCtx *ctx)
   |->vm_return:
   |  // BASE = base, RA = resultptr, RC/MULTRES = (nresults+1)*8, PC = return
   |  // CARG1 = PC & FRAME_TYPE
+  |  // Invalidate any scan which admitted the frame before its return
+  |  // topology changed. CARG1 is caller-clobbered, so reconstruct it below.
+  |  arm64_vm_stack_dirty
+  |  ands CARG1, PC, #FRAME_TYPE
   |  and RB, PC, #~FRAME_TYPEP
   |   cmp CARG1, #FRAME_C
   |  sub RB, BASE, RB			// RB = previous base.
   |   bne ->vm_returnp
   |
-  |  str RB, L->base
+  |  mov KBASE, RB			// Preserve previous base through publication.
   |   ldrsw CARG2, SAVE_NRES		// CARG2 = nresults+1.
   |    mv_vmstate TMP0w, C
   |   sub BASE, BASE, #16
@@ -459,12 +484,20 @@ static void build_subroutines(BuildCtx *ctx)
   |1:
   |  subs TMP2, TMP2, #8
   |   ldr TMP0, [RA], #8
-  |   str TMP0, [BASE], #8
+  |   stlr TMP0, [BASE]
+  |   add BASE, BASE, #8
   |  bne <1
   |2:
+  |  // Publish the complete C-result move before a nil-fill grow can make
+  |  // the source frame cease to be the authoritative root range.
+  |  arm64_vm_stack_dirty
+  |  str KBASE, L->base			// Retire the source frame only afterwards.
+  |  ldrsw CARG2, SAVE_NRES
   |  cmp RC, CARG2, lsl #3		// More/less results wanted?
   |  bne >6
   |3:
+  |  // Also cover any release-published nil-fill suffix.
+  |  arm64_vm_stack_dirty
   |  str BASE, L->top			// Store new top.
   |
   |->vm_leave_cp:
@@ -482,9 +515,10 @@ static void build_subroutines(BuildCtx *ctx)
   |  ldr CARG3, L->maxstack
   |  cmp BASE, CARG3
   |  bhs >8
-  |   str TISNIL, [BASE], #8
+  |   stlr TISNIL, [BASE]
+  |   add BASE, BASE, #8
   |  add RC, RC, #8
-  |  b <2
+  |  b >4
   |
   |7:  // Less results wanted.
   |  cbz CARG2, <3			// LUA_MULTRET+1 case?
@@ -497,12 +531,17 @@ static void build_subroutines(BuildCtx *ctx)
   |  // - A C function grows the stack (a lot).
   |  // - The GC shrinks the stack in between.
   |  // - A return back from a lua_call() with (high) nresults adjustment.
+  |  arm64_vm_stack_dirty		// Publish any nil prefix before growstack.
   |  str BASE, L->top			// Save current top held in BASE (yes).
+  |  ldrsw CARG2, SAVE_NRES		// Publication clobbered the grow count.
   |  mov CARG1, L
   |  bl extern lj_state_growstack	// (lua_State *L, int n)
   |  ldr BASE, L->top			// Need the (realloced) L->top in BASE.
   |  ldrsw CARG2, SAVE_NRES
-  |  b <2
+  |4:
+  |  cmp RC, CARG2, lsl #3		// Continue result-count adjustment.
+  |  bne <6
+  |  b <3
   |
   |->vm_unwind_c:			// Unwind C stack, return from vm_pcall.
   |  // (void *cframe, int errcode)
@@ -535,7 +574,9 @@ static void build_subroutines(BuildCtx *ctx)
   |    mov_false TMP0
   |  sub RA, BASE, #8			// Results start at BASE-8.
   |  ldr PC, [BASE, FRAME_PC]		// Fetch PC of previous frame.
-  |    str TMP0, [BASE, #-8]		// Prepend false to error message.
+  |  sub ATMP, BASE, #8
+  |  stlr TMP0, [ATMP]			// Release-publish prepended false.
+  |  arm64_vm_stack_dirty
   |   st_vmstate ST_INTERP
   |  b ->vm_returnc
   |
@@ -1599,8 +1640,20 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov RC, #(1+1)*8
   |->fff_res:
   |  // RC = (nresults+1)*8, PC = return.
-  |  ands CARG1, PC, #FRAME_TYPE
   |   str RCw, SAVE_MULTRES
+  |  // Release-publish every completed result before either returning through
+  |  // vm_return or relocating BASE to the Lua caller frame.
+  |  sub TMP2, RC, #8
+  |  sub TMP3, BASE, #16
+  |  cbz TMP2, >4
+  |1:
+  |  ldr TMP0, [TMP3]
+  |  stlr TMP0, [TMP3]
+  |  add TMP3, TMP3, #8
+  |  subs TMP2, TMP2, #8
+  |  bne <1
+  |4:
+  |  ands CARG1, PC, #FRAME_TYPE
   |   sub RA, BASE, #16
   |  bne ->vm_return
   |  ldr INSw, [PC, #-4]
@@ -1610,13 +1663,16 @@ static void build_subroutines(BuildCtx *ctx)
   |  blo >6
   |  decode_RA TMP1, INS
   |  // Adjust BASE. KBASE is assumed to be set for the calling frame.
-  |  sub BASE, RA, TMP1, lsl #3
+  |  sub RA, RA, TMP1, lsl #3
+  |  arm64_vm_stack_dirty
+  |  mov BASE, RA
   |  ins_next
   |
   |6:  // Fill up results with nil.
   |  add TMP1, RA, RC
   |   add RC, RC, #8
-  |  str TISNIL, [TMP1, #-8]
+  |  sub ATMP, TMP1, #8
+  |  stlr TISNIL, [ATMP]
   |  b <5
   |
   |.macro math_extern, func
@@ -3579,13 +3635,15 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  tst PC, #FRAME_TYPE
     |  bne >7
     |1:
-    |  str TMP1, [BASE, FRAME_FUNC]	// Copy function down, but keep PC.
+    |  sub ATMP, BASE, #16
+    |  stlr TMP1, [ATMP]		// Release-publish function, keep PC.
     |  cbz NARGS8:RC, >3
     |2:
     |  ldr TMP0, [RA, RB]
     |   add TMP1, RB, #8
     |   cmp TMP1, NARGS8:RC
-    |  str TMP0, [BASE, RB]
+    |  add ATMP, BASE, RB
+    |  stlr TMP0, [ATMP]
     |    mov RB, TMP1
     |   bne <2
     |3:
@@ -3619,12 +3677,21 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  // RA = base, (RB = nresults+1, RC = nargs+1 (2+1))
     |  add RA, BASE, RA, lsl #3
     |  ldr CARG3, [RA, #-24]
-    |    mov RB, BASE			// Save old BASE for vmeta_call.
     |   ldp CARG1, CARG2, [RA, #-16]
-    |    add BASE, RA, #16
-    |    mov NARGS8:RC, #16		// Iterators get 2 arguments.
-    |  str CARG3, [RA]			// Copy callable.
-    |   stp CARG1, CARG2, [RA, #16]	// Copy state and control var.
+    |  stlr CARG3, [RA]			// Release-publish copied callable.
+    |  add ATMP, RA, #16
+    |  stlr CARG1, [ATMP]		// Release-publish copied state.
+    |  add ATMP, ATMP, #8
+    |  stlr CARG2, [ATMP]		// Release-publish copied control.
+    |  arm64_vm_stack_dirty
+    |  add BASE, RA, #16
+    |  // Reconstruct caller-clobbered call state after publication.
+    |  ldr CARG3, [BASE, FRAME_FUNC]
+    |  ldr INSw, [PC, #-4]
+    |  decode_RA TMP1, INS
+    |  sub RB, BASE, TMP1, lsl #3
+    |  sub RB, RB, #16			// Old BASE for vmeta_call.
+    |  mov NARGS8:RC, #16		// Iterators get 2 arguments.
     |  checkfunc CARG3, ->vmeta_call
     |  ins_call
     break;
@@ -3726,9 +3793,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ldr TMP0, [RA], #8
     |  csinv TMP0, TMP0, xzr, lo	// TISNIL = ~xzr
     |   cmp RC, TMP2
-    |  str TMP0, [RC], #8
+    |  stlr TMP0, [RC]
+    |  add RC, RC, #8
     |   blo <1
     |2:
+    |  arm64_vm_stack_dirty		// Publish the completed destination range.
     |  ins_next
     |
     |5:  // Copy all varargs.
@@ -3743,12 +3812,26 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  bhi >7
     |6:
     |  ldr TMP0, [RA], #8
-    |  str TMP0, [RC], #8
+    |  stlr TMP0, [RC]
+    |  add RC, RC, #8
     |  cmp RA, TMP3
     |  blo <6
     |  b <2
     |
     |7:  // Grow stack for varargs.
+    |  // No destination has been copied yet on this path, but publish the
+    |  // current topology before L->top and a relocating helper can change it.
+    |  arm64_vm_stack_dirty
+    |  ldr INSw, [PC, #-4]
+    |  decode_RA TMP1, INS
+    |  decode_RC TMP2, INS
+    |  ldr TMP0, [BASE, FRAME_PC]
+    |  add RA, BASE, TMP2, lsl #3
+    |  add RA, RA, #FRAME_VARG
+    |  sub RA, RA, TMP0			// Reconstructed vbase.
+    |  sub TMP3, BASE, #16		// Reconstructed vtop.
+    |  sub TMP2, TMP3, RA		// Number of bytes to copy.
+    |  add RC, BASE, TMP1, lsl #3	// Reconstructed destination.
     |  lsr CARG2, TMP2, #3
     |   stp BASE, RC, L->base
     |  mov CARG1, L
@@ -3794,18 +3877,20 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ldr TMP0, [RA], #8
     |   add BASE, BASE, #8
     |   sub TMP1, TMP1, #8
-    |  str TMP0, [BASE, #-24]
+    |  sub ATMP, BASE, #24
+    |  stlr TMP0, [ATMP]
     |   cbnz TMP1, <2
     |3:
-    |  decode_RA RA, INS
-    |  sub CARG4, CARG3, RA, lsl #3
+    |  decode_RA TMP2, INS
+    |  sub RA, CARG3, TMP2, lsl #3	// Caller BASE after publication.
     |   decode_RB RB, INS
-    |  ldr LFUNC:CARG1, [CARG4, FRAME_FUNC]
     |5:
     |  cmp RC, RB, lsl #3		// More results expected?
     |  blo >6
+    |  arm64_vm_stack_dirty		// Publish result move/nil-fill range.
+    |  mov BASE, RA
+    |  ldr LFUNC:CARG1, [BASE, FRAME_FUNC]
     |  and LFUNC:CARG1, CARG1, #LJ_GCVMASK
-    |  mov BASE, CARG4
     |  ldr CARG2, LFUNC:CARG1->pc
     |  ldr KBASE, [CARG2, #PC2PROTO(k)]
     |   ins_next
@@ -3813,7 +3898,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |6:  // Fill up results with nil.
     |  add BASE, BASE, #8
     |   add RC, RC, #8
-    |  str TISNIL, [BASE, #-24]
+    |  sub ATMP, BASE, #24
+    |  stlr TISNIL, [ATMP]
     |  b <5
     |
     |->BC_RETV1_Z:  // Non-standard return case.
@@ -3840,16 +3926,19 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  ldr TMP0, [BASE, RA, lsl #3]
     }
     |  sub CARG4, BASE, #16
-    |   decode_RA RA, INS
-    |  sub BASE, CARG4, RA, lsl #3
+    |   decode_RA TMP1, INS
+    |  sub RA, CARG4, TMP1, lsl #3	// Caller BASE after publication.
     if (op == BC_RET1) {
-      |  str TMP0, [CARG4], #8
+      |  stlr TMP0, [CARG4]
+      |  add CARG4, CARG4, #8
     }
     |   decode_RB RB, INS
-    |  ldr LFUNC:CARG1, [BASE, FRAME_FUNC]
     |5:
     |  cmp RC, RB, lsl #3
     |  blo >6
+    |  arm64_vm_stack_dirty		// Publish result/nil range before BASE moves.
+    |  mov BASE, RA
+    |  ldr LFUNC:CARG1, [BASE, FRAME_FUNC]
     |  and LFUNC:CARG1, CARG1, #LJ_GCVMASK
     |  ldr CARG2, LFUNC:CARG1->pc
     |  ldr KBASE, [CARG2, #PC2PROTO(k)]
@@ -3857,7 +3946,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |
     |6:  // Fill up results with nil.
     |  add RC, RC, #8
-    |  str TISNIL, [CARG4], #8
+    |  stlr TISNIL, [CARG4]
+    |  add CARG4, CARG4, #8
     |  b <5
     break;
 
@@ -4083,37 +4173,47 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
   case BC_IFUNCV:
     |  // BASE = new base, RA = BASE+framesize*8, CARG3 = LFUNC, RC = nargs*8
-    |  ldr CARG1, L->maxstack
     |   movn TMP0, #~LJ_TFUNC
     |   add TMP2, BASE, RC
     |   add LFUNC:CARG3, CARG3, TMP0, lsl #47
     |  add RA, RA, RC
-    |  sub CARG1, CARG1, #8
     |   add TMP0, RC, #16+FRAME_VARG
-    |   str LFUNC:CARG3, [TMP2], #8	// Store (tagged) copy of LFUNC.
-    |    ldr KBASE, [PC, #-4+PC2PROTO(k)]
+    |  stlr LFUNC:CARG3, [TMP2]		// Publish tagged LFUNC header.
+    |  add TMP2, TMP2, #8
+    |  stlr TMP0, [TMP2]			// Publish delta + FRAME_VARG.
+    |  add TMP2, TMP2, #8
+    |  arm64_vm_stack_dirty		// Header is visible before growstack.
+    |  ldr CARG1, L->maxstack
+    |  add TMP2, BASE, RC
+    |  add TMP2, TMP2, #16		// Rebuild header end after C call.
+    |  sub CARG1, CARG1, #8
     |  cmp RA, CARG1
-    |   str TMP0, [TMP2], #8		// Store delta + FRAME_VARG.
     |  bhs ->vm_growstack_l
     |   sub RC, TMP2, #16
     |  ldrb TMP1w, [PC, #-4+PC2PROTO(numparams)]
     |   mov RA, BASE
-    |   mov BASE, TMP2
+    |  mov KBASE, TMP2			// Hold new BASE until publication.
     |  cbz TMP1, >2
     |1:
     |  cmp RA, RC			// Less args than parameters?
     |  bhs >3
     |   ldr TMP0, [RA]
     |  sub TMP1, TMP1, #1
-    |    str TISNIL, [RA], #8		// Clear old fixarg slot (help the GC).
-    |   str TMP0, [TMP2], #8
+    |  stlr TMP0, [TMP2]			// Publish moved fixarg first.
+    |  add TMP2, TMP2, #8
+    |  stlr TISNIL, [RA]			// Then release-clear old root.
+    |  add RA, RA, #8
     |  cbnz TMP1, <1
     |2:
+    |  arm64_vm_stack_dirty		// Publish completed move/clear range.
+    |  mov BASE, KBASE
+    |  ldr KBASE, [PC, #-4+PC2PROTO(k)]
     |  ins_next
     |
     |3:
     |  sub TMP1, TMP1, #1
-    |   str TISNIL, [TMP2], #8
+    |  stlr TISNIL, [TMP2]
+    |  add TMP2, TMP2, #8
     |  cbz TMP1, <2
     |  b <3
     break;

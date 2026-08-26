@@ -403,3 +403,32 @@ remaining Stage 2 work is call/return and fast-result topology plus every
 ordinary collectable-producing stack write. Stock ARM metatable/equality fast
 checks and ISNEXT bytecode publication are also retained as explicit
 lockless-interpreter debts rather than hidden by the rooted-table claim.
+
+### 7. Apple ARM64 frame topology and result ranges
+
+The JIT-disabled ARM64 VM now release-publishes complete call frames and the
+result ranges moved by C returns, fast-function returns, Lua returns, generic
+iterator calls, vararg copies, and vararg-function setup. The dirty-epoch
+invalidation follows the completed release stores, and C-return source frames
+are not retired through `L->base` until their replacement results are visible.
+`IFUNCV` additionally copies each fixed argument to its destination before
+release-clearing the old source root.
+
+A shared `vm_call_publish` subroutine self-publishes the function/PC/argument
+range before every interpreter call. This is deliberately conservative and
+also avoids numeric-label collisions from expanding a range loop inside
+`ins_callt`; the discarded inline form produced a reproducible SIGBUS in a
+recursive vararg tailcall.
+
+The clean assert bootstrap, all 387 stock tests, threading/hook/coroutine
+checks, 320 FFI callback rounds, recursive tailcall/protected-call smoke, and
+the focused full-GC result-retention fixture passed natively. The focused note
+records the exact ordering and an important test boundary: compound dirty
+deltas are currently influenced by the newly published call/return envelope,
+so the deterministic Stage 2 contract remains red at the first deferred leaf
+write rather than claiming per-opcode runtime attribution.
+
+The next checkpoint must finish ordinary leaf writes, C-built metamethod
+frames, generation-safe metatable/equality handling, and ISNEXT bytecode
+publication. Safepoint acknowledgement remains disabled until that complete
+gate is green.
