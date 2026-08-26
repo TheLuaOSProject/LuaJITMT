@@ -177,15 +177,15 @@ done
 grep -F '#if LJ_TARGET_X64 || LJ_TARGET_ARM64' "$root/src/lj_err.c" >/dev/null
 grep -F 'lj_tg_jit_exitcode_rel(G2TG(g), errcode);' \
   "$root/src/lj_err.c" >/dev/null
-test "$(grep -Fc 'emit_asmfunc_addr((ASMFunction)lj_vm_' \
+test "$(grep -Fc 'emit_asmlabel_addr(lj_vm_' \
   "$root/src/lj_asm_arm64.h")" = 3
-test "$(grep -Fc 'emit_asmfunc_addr((ASMFunction)lj_vm_exit_interp)' \
+test "$(grep -Fc 'emit_asmlabel_addr(lj_vm_exit_interp)' \
   "$root/src/lj_asm_arm64.h")" = 2
-grep -F 'ptrauth_auth_data((char *)target' \
+grep -F 'ptrauth_auth_data(ptrauth_nop_cast(char *, target)' \
   "$root/src/lj_emit_arm64.h" >/dev/null
 
 # Rebuild the same contract for the arm64e/BTI slice. This proves that direct
-# target arithmetic compiles through authenticated code-address normalization,
+# VM-label arithmetic stays raw, genuine function pointers authenticate,
 # indirect stubs use BLRAAZ, and the two VM landing pads have the right BTI kind.
 env MACOSX_DEPLOYMENT_TARGET="$minver" make -C "$root/src" clean
 env MACOSX_DEPLOYMENT_TARGET="$minver" \

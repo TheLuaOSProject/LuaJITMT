@@ -510,17 +510,44 @@ static void emit_cnb(ASMState *as, A64Ins ai, Reg r, MCode *target)
 
 #define emit_jmp(as, target)	emit_branch(as, A64I_B, (target))
 
-/* Authenticate C function pointers before using their address arithmetically.
-** arm64e function pointers are signed data values, not raw code addresses. */
+/* VM assembler labels are raw code addresses declared as byte arrays. They
+** have no function-pointer PAC and must never pass through authentication. */
+static LJ_AINLINE char *emit_asmlabel_addr(const char *target)
+{
+  return (char *)(void *)target;
+}
+
+/* Authenticate genuine C function pointers before using their address
+** arithmetically. A normal function-to-data cast may authenticate implicitly,
+** so preserve the original signed bit pattern for the explicit operation.
+** emit_call() keeps the original signed target for its indirect BLRAAZ path. */
 static LJ_AINLINE char *emit_asmfunc_addr(ASMFunction target)
 {
 #if LJ_ABI_PAUTH
-  return ptrauth_auth_data((char *)target,
+  return ptrauth_auth_data(ptrauth_nop_cast(char *, target),
 			   ptrauth_key_function_pointer, 0);
 #else
   return (char *)target;
 #endif
 }
+
+#if defined(LJ_ARM64_PAUTH_EMIT_TEST_HELPERS)
+LJ_NOINLINE char *lj_asm_arm64_emit_target_direct_test(void)
+{
+  return emit_asmlabel_addr(lj_vm_exit_handler);
+}
+
+LJ_NOINLINE char *lj_asm_arm64_emit_target_runtime_test(ASMFunction target)
+{
+  return emit_asmfunc_addr(target);
+}
+
+LJ_NOINLINE uint64_t
+lj_asm_arm64_emit_target_indirect_bits_test(ASMFunction target)
+{
+  return (uint64_t)i64ptr(target);
+}
+#endif
 
 static void emit_call(ASMState *as, ASMFunction target)
 {

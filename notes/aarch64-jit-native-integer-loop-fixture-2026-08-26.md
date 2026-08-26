@@ -68,7 +68,7 @@ code. In the successful `BC_JLOOP` arm, `sub sp, sp, #16` must occur before
 area expected by the native exit path; pointer authentication changes the
 branch instruction, not the ordering requirement.
 
-## Current arm64e boundary
+## ARM64e target-materialization checkpoint
 
 The end-to-end result in this note is for an ordinary `-arch arm64` binary.
 The arm64e/BTI contracts compile the same sources and verify the emitted
@@ -78,20 +78,45 @@ true, both root recording and direct loop entry remain fail-closed. The
 arm64e contract runs the interpreter with JIT enabled and requires that no
 trace is published.
 
-Two native arm64e probes fail before trace publication with
-`EXC_ARM_PAC_FAIL`:
+Two earlier native arm64e probes exposed independent failures before trace
+publication:
 
 - the assertion build first fails inside `_Unwind_Find_FDE` while
   `lj_err_register_mcode()` verifies the newly registered JIT unwind table;
-- after removing only that assertion from the diagnostic build, assembly
-  fails at `emit_asmfunc_addr()` when an optimized raw address for
-  `lj_vm_exit_handler` reaches `autiza` as though it were a signed function
-  pointer.
+- after removing only that assertion from the diagnostic build, the release
+  probe fails at `lj_asm_trace+468`: an optimized raw address for the
+  `lj_vm_exit_handler` byte-array label reaches `autiza` as though it were a
+  signed function pointer.
 
-The second failure proves that suppressing the unwind assertion is not a
-solution. A later arm64e tranche must fix direct runtime-symbol materialization
-and then return to JIT unwind registration and exception-through-trace tests
-before this fixture can claim an authenticated end-to-end execution result.
+The target-materialization failure is now fixed without changing ordinary
+ARM64. Raw VM assembler labels use `emit_asmlabel_addr()` and never enter a
+pointer-authentication operation. Genuine runtime `ASMFunction` values retain
+their signed representation through `ptrauth_nop_cast()` and are then
+explicitly authenticated for address arithmetic. The out-of-range indirect
+call path continues to embed the original signed value for `BLRAAZ`.
+
+`tools/ci/arm64_pauth_emit_target_contract.sh` builds and executes the focused
+proof once as ordinary ARM64 and once as a real ARM64e/BTI executable (using
+`-arch arm64e -mbranch-protection=bti`). Both runs print:
+
+```text
+t-arm64-pauth-emit-target OK
+```
+
+The ordinary ARM64 wrappers contain no `AUT`, `PAC`, or `XPAC` instruction.
+In the ARM64e object, direct `lj_vm_exit_handler` materialization is an
+`adrp`/`add` sequence with no pointer-authentication instruction, while a
+runtime-loaded signed function pointer executes `autiza` followed by the
+compiler's `xpaci` identity check. The indirect-bit wrapper contains no
+authentication or stripping operation, and its executable assertion proves
+that the signed bits survive unchanged. Relocations at the real
+`lj_vm_exit_handler` and `lj_vm_exit_interp` assembler callsites are raw
+`PAGE21`/`PAGOF12` pairs.
+
+This checkpoint removes the known direct-symbol PAC trap, but does not claim
+an ARM64e native-loop result. The production gates remain closed until a
+separate diagnostic can execute the full fixture after the unwind-table work.
+Exception propagation through JIT code remains unverified.
 
 ## Validation performed
 
@@ -110,3 +135,11 @@ per-call `cframe`, admission-bit, prototype-geometry, and machine-code
 alignment assertions. The contract also executes a second one-PHI loop and
 requires exactly one final `IR_RENAME`, covering the semantic-plus-one case
 without confusing it with the allocator's spare NOP.
+
+The focused pointer-authentication checkpoint also passed natively:
+
+```text
+t-arm64-pauth-emit-target OK          # ordinary ARM64
+t-arm64-pauth-emit-target OK          # ARM64e plus BTI
+arm64_pauth_emit_target_contract OK: direct and signed runtime targets normalize on ARM64e
+```
