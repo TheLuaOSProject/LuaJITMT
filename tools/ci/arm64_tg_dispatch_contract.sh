@@ -89,6 +89,10 @@ tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lj-arm64-tg-dispatch.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 vm_disasm=$tmpdir/vm.disasm
 dispatch_disasm=$tmpdir/dispatch.disasm
+vm_nm=$tmpdir/vm.nm
+dispatch_nm=$tmpdir/dispatch.nm
+nm -n "$vm_object" >"$vm_nm"
+nm -n "$dispatch_object" >"$dispatch_nm"
 otool -tvV "$vm_object" >"$vm_disasm"
 otool -tvV "$dispatch_object" >"$dispatch_disasm"
 
@@ -97,12 +101,41 @@ require_symbol_pattern() {
   symbol=$2
   pattern=$3
   description=$4
-  if ! awk -v label="_$symbol:" -v pattern="$pattern" '
-    $0 == label { inside = 1; next }
-    inside && /^_/ { exit found ? 0 : 1 }
-    inside && $0 ~ pattern { found = 1 }
-    END { if (!inside || !found) exit 1 }
-  ' "$disasm"; then
+  if test "$disasm" = "$vm_disasm"; then
+    symbol_nm=$vm_nm
+  else
+    symbol_nm=$dispatch_nm
+  fi
+  # otool prints only one label for symbols which alias the same address (for
+  # example no-JIT FUNCC/JFUNCV). Resolve the requested range from nm instead
+  # of making the textual label spelling part of the contract.
+  if ! awk -v symbol="_$symbol" -v pattern="$pattern" '
+    function normhex(s, z) {
+      sub(/^0x/, "", s)
+      z = "0000000000000000" s
+      return substr(z, length(z)-15)
+    }
+    FNR == NR {
+      if ($1 ~ /^[[:xdigit:]]+$/ && $2 ~ /^[Tt]$/) {
+        addr = normhex($1)
+        if ($3 == symbol) {
+          start = addr
+          found_symbol = 1
+        } else if (found_symbol && end == "" && ("x" addr) > ("x" start)) {
+          end = addr
+        }
+      }
+      next
+    }
+    $1 ~ /^[[:xdigit:]]+$/ {
+      addr = normhex($1)
+      if (found_symbol && end != "" &&
+          ("x" addr) >= ("x" start) && ("x" addr) < ("x" end) &&
+          $0 ~ pattern)
+        found = 1
+    }
+    END { exit(found_symbol && end != "" && found ? 0 : 1) }
+  ' "$symbol_nm" "$disasm"; then
     echo "ARM64 $symbol lacks $description" >&2
     exit 1
   fi
@@ -114,12 +147,41 @@ require_symbol_count() {
   pattern=$3
   minimum=$4
   description=$5
-  if ! awk -v label="_$symbol:" -v pattern="$pattern" -v minimum="$minimum" '
-    $0 == label { inside = 1; next }
-    inside && /^_/ { exit count >= minimum ? 0 : 1 }
-    inside && $0 ~ pattern { count++ }
-    END { if (!inside || count < minimum) exit 1 }
-  ' "$disasm"; then
+  if test "$disasm" = "$vm_disasm"; then
+    symbol_nm=$vm_nm
+  else
+    symbol_nm=$dispatch_nm
+  fi
+  if ! awk -v symbol="_$symbol" -v pattern="$pattern" \
+      -v minimum="$minimum" '
+    function normhex(s, z) {
+      sub(/^0x/, "", s)
+      z = "0000000000000000" s
+      return substr(z, length(z)-15)
+    }
+    FNR == NR {
+      if ($1 ~ /^[[:xdigit:]]+$/ && $2 ~ /^[Tt]$/) {
+        addr = normhex($1)
+        if ($3 == symbol) {
+          start = addr
+          found_symbol = 1
+        } else if (found_symbol && end == "" && ("x" addr) > ("x" start)) {
+          end = addr
+        }
+      }
+      next
+    }
+    $1 ~ /^[[:xdigit:]]+$/ {
+      addr = normhex($1)
+      if (found_symbol && end != "" &&
+          ("x" addr) >= ("x" start) && ("x" addr) < ("x" end) &&
+          $0 ~ pattern)
+        count++
+    }
+    END {
+      exit(found_symbol && end != "" && count >= minimum ? 0 : 1)
+    }
+  ' "$symbol_nm" "$disasm"; then
     echo "ARM64 $symbol lacks $description" >&2
     exit 1
   fi

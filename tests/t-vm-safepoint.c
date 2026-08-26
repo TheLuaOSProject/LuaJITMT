@@ -1,5 +1,5 @@
 /*
-** Focused test for x64 VM safepoint polling.
+** Focused test for generated VM safepoint polling.
 */
 
 #include <assert.h>
@@ -10,12 +10,15 @@
 #include "lua.h"
 #include "lauxlib.h"
 #include "lualib.h"
+#include "luajit.h"
 
 #include "lib/test_sleep.h"
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
+#include "lj_bc.h"
 #include "lj_gc2.h"
+#include "lj_profile.h"
 #include "lj_tg.h"
 #if LJ_HASJIT
 #include "lj_dispatch.h"
@@ -30,6 +33,45 @@ static void publish_manual(global_State *g, TGState *tg, uint32_t actions)
   la_store64_rel(&g->gc2.hs_epoch, epoch);  /* 05 section 5.4.2. */
   la_store32_rel(&tg->reqmask, actions);  /* 05 section 5.4.2. */
   la_store32_rel(&tg->poll, 1);  /* 05 section 5.4.2 signal word. */
+}
+
+typedef struct VMPollPublisher {
+  global_State *g;
+  TGState *tg;
+  uint32_t start;
+} VMPollPublisher;
+
+static void *stopreq_poll_publisher(void *arg)
+{
+  VMPollPublisher *p = (VMPollPublisher *)arg;
+  while (la_load32_acq(&p->start) == 0)
+    la_cpu_pause();
+  /* Let the owner enter the deliberately non-terminating numeric loop. */
+  sleep_ns(1000000);
+  publish_manual(p->g, p->tg, LJ_GC2_HS_STOPREQ);
+  return NULL;
+}
+
+static int proto_has_op(const GCproto *pt, BCOp wanted)
+{
+  BCPos pc;
+  for (pc = 0; pc < pt->sizebc; pc++) {
+    if (bc_op(proto_bc(pt)[pc]) == wanted)
+      return 1;
+  }
+  return 0;
+}
+
+static void assert_top_lua_header(lua_State *L, BCOp wanted)
+{
+  GCfunc *fn;
+  GCproto *pt;
+  assert(tvisfunc(L->top - 1));
+  fn = funcV(L->top - 1);
+  assert(isluafunc(fn));
+  pt = funcproto(fn);
+  assert(pt->sizebc != 0);
+  assert(bc_op(proto_bc(pt)[0]) == wanted);
 }
 
 static void load_loop(lua_State *L)
@@ -69,6 +111,62 @@ static void load_return_after_publish(lua_State *L)
   }
 }
 
+static void load_fixed_entry(lua_State *L)
+{
+  int status = luaL_loadstring(L,
+    "return function(a, b, c)\n"
+    "  if b ~= nil or c ~= nil then return -1 end\n"
+    "  return a + 31\n"
+    "end\n");
+  if (status == LUA_OK)
+    status = lua_pcall(L, 0, 1, 0);
+  if (status != LUA_OK) {
+    fprintf(stderr, "load_fixed_entry failed: %s\n", lua_tostring(L, -1));
+    assert(status == LUA_OK);
+  }
+  assert_top_lua_header(L, BC_FUNCF);
+}
+
+static void load_vararg_entry(lua_State *L)
+{
+  int status = luaL_loadstring(L,
+    "return function(a, b, ...)\n"
+    "  return a + b + select('#', ...)\n"
+    "end\n");
+  if (status == LUA_OK)
+    status = lua_pcall(L, 0, 1, 0);
+  if (status != LUA_OK) {
+    fprintf(stderr, "load_vararg_entry failed: %s\n", lua_tostring(L, -1));
+    assert(status == LUA_OK);
+  }
+  assert_top_lua_header(L, BC_FUNCV);
+}
+
+static void load_numeric_for_stopreq(lua_State *L)
+{
+  int status = luaL_loadstring(L,
+    "return function()\n"
+    "  local n = 0\n"
+    "  for _ = 1, 1e100 do n = n + 1 end\n"
+    "  return n\n"
+    "end\n");
+  GCproto *pt;
+  if (status == LUA_OK)
+    status = lua_pcall(L, 0, 1, 0);
+  if (status != LUA_OK) {
+    fprintf(stderr, "load_numeric_for_stopreq failed: %s\n",
+	    lua_tostring(L, -1));
+    assert(status == LUA_OK);
+  }
+  assert(tvisfunc(L->top - 1) && isluafunc(funcV(L->top - 1)));
+  pt = funcproto(funcV(L->top - 1));
+  assert(proto_has_op(pt, BC_FORL));
+#if LJ_HASJIT
+  /* Exercise the ordinary interpreter handlers in a JIT-capable build too. */
+  assert(luaJIT_setmode(L, -1, LUAJIT_MODE_FUNC|LUAJIT_MODE_OFF));
+#endif
+}
+
 static void load_iter_after_publish(lua_State *L)
 {
   int status = luaL_loadstring(L,
@@ -99,23 +197,6 @@ static void load_error_after_publish(lua_State *L)
 }
 
 #if LJ_HASJIT
-typedef struct TracePollPublisher {
-  global_State *g;
-  TGState *tg;
-  uint32_t start;
-} TracePollPublisher;
-
-
-static void *trace_poll_publisher(void *arg)
-{
-  TracePollPublisher *p = (TracePollPublisher *)arg;
-  while (la_load32_acq(&p->start) == 0)
-    la_cpu_pause();
-  sleep_ns(1000000);
-  publish_manual(p->g, p->tg, LJ_GC2_HS_STOPREQ);
-  return NULL;
-}
-
 static void load_jloop_flush_after_publish(lua_State *L)
 {
   int status = luaL_loadstring(L,
@@ -292,15 +373,21 @@ static uint32_t count_scope_flushing_traces(jit_State *J)
 }
 #endif
 
-static void call_expect(lua_State *L, int expected, const char *name)
+static void call_expect_args(lua_State *L, int nargs, int expected,
+			     const char *name)
 {
-  int status = lua_pcall(L, 0, 1, 0);
+  int status = lua_pcall(L, nargs, 1, 0);
   if (status != LUA_OK) {
     fprintf(stderr, "%s failed: %s\n", name, lua_tostring(L, -1));
     assert(status == LUA_OK);
   }
   assert(lua_tointeger(L, -1) == expected);
   lua_pop(L, 1);
+}
+
+static void call_expect(lua_State *L, int expected, const char *name)
+{
+  call_expect_args(L, 0, expected, name);
 }
 
 static void call_expect_error(lua_State *L, const char *name)
@@ -311,6 +398,8 @@ static void call_expect_error(lua_State *L, const char *name)
 	    lua_tostring(L, -1));
     assert(status == LUA_ERRRUN);
   }
+  assert(lua_isstring(L, -1));
+  assert(strstr(lua_tostring(L, -1), "published error") != NULL);
   lua_pop(L, 1);
 }
 
@@ -323,6 +412,7 @@ static void assert_acked(global_State *g, TGState *tg, uint64_t epoch0)
   assert(tg->reqmask == 0);
 }
 
+#if LJ_HASJIT
 static void assert_acked_at_least(global_State *g, TGState *tg,
 				  uint64_t epoch0)
 {
@@ -332,6 +422,7 @@ static void assert_acked_at_least(global_State *g, TGState *tg,
   assert(tg->poll == 0);
   assert(tg->reqmask == 0);
 }
+#endif
 
 static void assert_pending(global_State *g, TGState *tg, uint64_t epoch0,
 			   uint32_t actions)
@@ -425,7 +516,9 @@ int main(void)
   global_State *g;
   TGState *tg;
   uint64_t epoch0;
+#if LJ_HASJIT
   uint64_t scoped_slots0;
+#endif
   uint32_t actions;
 
   assert(L != NULL);
@@ -451,6 +544,50 @@ int main(void)
   lua_setglobal(L, "publish_flushj");
   lua_pushcfunction(L, assert_pending_flushj_c);
   lua_setglobal(L, "assert_pending_flushj");
+#endif
+
+  /* A disabled-JIT fixed-argument header must acknowledge only after it has
+  ** filled all missing parameter slots and published the complete frame. */
+  load_fixed_entry(L);
+  lua_pushinteger(L, 11);
+  epoch0 = g->gc2.hs_epoch;
+  actions = LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK;
+  publish_manual(g, tg, actions);
+  call_expect_args(L, 1, 42, "call_fixed_entry");
+  assert_acked(g, tg, epoch0);
+  assert(tg->mark_active == 1);
+  assert(tg->alloc.alloc_black == 1);
+
+  /* The vararg header publishes its relocated fixed arguments and new BASE
+  ** before acknowledging the request. */
+  load_vararg_entry(L);
+  lua_pushinteger(L, 10);
+  lua_pushinteger(L, 20);
+  lua_pushinteger(L, 30);
+  lua_pushinteger(L, 40);
+  epoch0 = g->gc2.hs_epoch;
+  actions = LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE;
+  publish_manual(g, tg, actions);
+  call_expect_args(L, 4, 32, "call_vararg_entry");
+  assert_acked(g, tg, epoch0);
+  assert(tg->mark_active == 0);
+  assert(tg->alloc.alloc_black == 0);
+
+#if LJ_PROFILE_TGLOCAL
+  /* x64 signal-cache builds publish profile_request without the handshake
+  ** poll word. Keep this coverage architecture-neutral, but ARM64 does not
+  ** enable it until its separate signal-cache/profile publication port. */
+  load_fixed_entry(L);
+  lua_pushinteger(L, 11);
+  epoch0 = g->gc2.hs_epoch;
+  assert(tg->poll == 0);
+  assert(tg->reqmask == 0);
+  lj_tg_profile_request_rel(tg, 1);
+  call_expect_args(L, 1, 42, "call_profile_only_entry");
+  assert(g->gc2.hs_epoch == epoch0);
+  assert(tg->poll == 0);
+  assert(tg->reqmask == 0);
+  assert(lj_tg_profile_request_acq(tg) == 0);
 #endif
 
   load_loop(L);
@@ -491,6 +628,37 @@ int main(void)
   assert_acked(g, tg, epoch0);
   assert(tg->mark_active == 0);
   assert(tg->alloc.alloc_black == 0);
+
+  /* Publish after entry into a deliberately non-terminating numeric FORL.
+  ** This cannot be satisfied accidentally by a function-entry poll. The
+  ** function itself is JIT-disabled even in an otherwise JIT-capable build. */
+  load_numeric_for_stopreq(L);
+  {
+    VMPollPublisher pub;
+    pthread_t th;
+    int status;
+    pub.g = g;
+    pub.tg = tg;
+    pub.start = 0;
+    assert(pthread_create(&th, NULL, stopreq_poll_publisher, &pub) == 0);
+    epoch0 = g->gc2.hs_epoch;
+    la_store32_rel(&pub.start, 1);
+    status = lua_pcall(L, 0, 1, 0);
+    assert(pthread_join(th, NULL) == 0);
+    if (status != LUA_ERRRUN) {
+      fprintf(stderr, "numeric_for_stopreq unexpected status %d: %s\n",
+	      status, lua_tostring(L, -1));
+      assert(status == LUA_ERRRUN);
+    }
+    assert(strstr(lua_tostring(L, -1),
+		  "thread interrupted: VM shutdown") != NULL);
+    lua_pop(L, 1);
+    assert_acked(g, tg, epoch0);
+    assert((la_load8_acq(&tg->tg_flags) & TGF_STOPREQ) != 0);
+    la_store8_rel(&tg->tg_flags,
+	(uint8_t)(la_load8_acq(&tg->tg_flags) &
+		  ~(TGF_STOPREQ|TGF_STOPREQ_FRESH)));
+  }
 
 #if LJ_HASJIT
   load_jloop_flush_after_publish(L);
@@ -664,13 +832,13 @@ int main(void)
   assert(lua_isfunction(L, -1));
   assert(traceref(G2J(g), 1) != NULL || G2J(g)->freetrace > 0);
   {
-    TracePollPublisher pub;
+    VMPollPublisher pub;
     pthread_t th;
     int status;
     pub.g = g;
     pub.tg = tg;
     pub.start = 0;
-    assert(pthread_create(&th, NULL, trace_poll_publisher, &pub) == 0);
+    assert(pthread_create(&th, NULL, stopreq_poll_publisher, &pub) == 0);
     epoch0 = g->gc2.hs_epoch;
     lua_pushnumber(L, 1e100);
     la_store32_rel(&pub.start, 1);
@@ -692,6 +860,6 @@ int main(void)
 
   lua_close(L);
 
-  printf("t-vm-safepoint OK: x64 loop, trace-loop, trace-entry, return, unwind polls acked\n");
+  printf("t-vm-safepoint OK: loop, entry, return and unwind polls acked\n");
   return 0;
 }
