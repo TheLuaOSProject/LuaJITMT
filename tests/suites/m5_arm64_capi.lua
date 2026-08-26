@@ -46,4 +46,25 @@ return function(add)
       end)
     end
   })
+
+  add({
+    name = "m5_arm64_capi_generic_meta_calls",
+    description = "ARM64 ownerless generic C API metamethod call unwind",
+    run = function(t)
+      if not native_arm64_macos() then
+        print("m5_arm64_capi_generic_meta_calls SKIP: requires native macOS arm64")
+        return
+      end
+      with_bootstrap_restore(t, function()
+        t:build({ clean = true, quiet = true, xcflags = flags })
+        build.compile_and_run_c(t, t:tmp("lj_t-arm64-capi-generic-meta"),
+                                "t-arm64-capi-generic-meta.c", {
+          cflags = flags,
+          env = { LJ_TEST_ROOT = t.root },
+          quiet = true,
+          timeout = "60s"
+        })
+      end)
+    end
+  })
 end

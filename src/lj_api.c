@@ -697,10 +697,23 @@ static int api_getmetafield_key_claimed(lua_State *L, int idx,
 #if defined(LJ_API_ROOT_TEST_HELPERS)
 typedef void (*LJApiRawMetatablePublishHook)(lua_State *L, TValue *result);
 static LJApiRawMetatablePublishHook api_test_raw_mt_publish_hook;
+static uint32_t api_test_field_key_fail_after;
 
 void lj_api_test_set_raw_mt_publish_hook(LJApiRawMetatablePublishHook hook)
 {
   api_test_raw_mt_publish_hook = hook;
+}
+
+void lj_api_test_fail_field_key_alloc(uint32_t nth)
+{
+  api_test_field_key_fail_after = nth;
+}
+
+static void api_test_field_key_alloc(lua_State *L)
+{
+  if (api_test_field_key_fail_after != 0 &&
+      --api_test_field_key_fail_after == 0)
+    lj_err_mem(L);
 }
 
 static void api_test_raw_mt_publish(lua_State *L, TValue *result)
@@ -713,6 +726,7 @@ static void api_test_raw_mt_publish(lua_State *L, TValue *result)
 }
 #else
 #define api_test_raw_mt_publish(L, result) ((void)(L), (void)(result))
+#define api_test_field_key_alloc(L) ((void)(L))
 #endif
 
 /* Transfer the raw metatable of an authoritative object root into an
@@ -798,24 +812,6 @@ static TValue *api_getmt_raw_rooted(lua_State *L, cTValue *objroot,
   }
 }
 
-static void api_vm_call_claimed(lua_State *L, TValue *base, int nres1,
-				LJStateClaim *claim)
-{
-  if (claim && claim->release) {
-    global_State *g = G(L);
-    uint8_t oldh = hook_save(g);
-    int status = lj_vm_pcall_unwind(L, base, nres1, 0);
-    if (status)
-      hook_restore(g, oldh);
-    if (status) {
-      lj_state_dropresumeclaim(claim);
-      lj_err_throw(L, status);
-    }
-  } else {
-    lj_vm_call(L, base, nres1);
-  }
-}
-
 typedef struct ApiResumeError {
   lua_State *L;
   ptrdiff_t topofs;
@@ -877,10 +873,11 @@ static void api_resumeclaim_prepare(lua_State *L, lua_State *errL,
 ** C frame. If that frame catches an error, transfer the exact error TValue to
 ** the pre-reserved caller stack before restoring and releasing the target.
 ** Already-owned states execute directly and retain the ordinary throw path. */
-static int api_vm_prepare_claimed(lua_State *L, lua_State *errL,
-				  LJStateClaim *claim,
-				  ApiResumeError *error, void *ud,
-				  lua_CPFunction cp)
+static int api_vm_prepare_entry_claimed(lua_State *L, lua_State *errL,
+					LJStateClaim *claim,
+					ApiResumeError *error,
+					ptrdiff_t entrytopofs, void *ud,
+					lua_CPFunction cp)
 {
   LJStateResumeBoundary boundary;
   ptrdiff_t topofs;
@@ -909,7 +906,7 @@ static int api_vm_prepare_claimed(lua_State *L, lua_State *errL,
     dst = restorestack(errL, error->topofs);
     copyTVrel(errL, dst, L->top-1);
     lj_state_stack_pubtv(L, errL, dst);
-    L->top = restorestack(L, topofs);
+    L->top = restorestack(L, entrytopofs);
     lj_state_resumeboundary_restore(claim, &boundary, status);
     lj_state_dropresumeclaim(claim);
     error->active = 0;  /* The caller's protected unwind owns this slot now. */
@@ -918,6 +915,15 @@ static int api_vm_prepare_claimed(lua_State *L, lua_State *errL,
   }
   lj_state_resumeboundary_restore(claim, &boundary, status);
   return LUA_OK;
+}
+
+static int api_vm_prepare_claimed(lua_State *L, lua_State *errL,
+				  LJStateClaim *claim,
+				  ApiResumeError *error, void *ud,
+				  lua_CPFunction cp)
+{
+  return api_vm_prepare_entry_claimed(L, errL, claim, error,
+				      savestack(L, L->top), ud, cp);
 }
 
 /* Protected actual-call edge for the ownerless rooted meta APIs below. Keep
@@ -2390,107 +2396,202 @@ LUA_API void *lua_newuserdata(lua_State *L, size_t size)
   return uddata(ud);
 }
 
+typedef struct ApiConcatPrepare {
+  ptrdiff_t callbaseofs;
+  int n;
+  uint8_t started;
+  uint8_t call;
+  uint8_t done;
+} ApiConcatPrepare;
+
+static TValue *api_concat_prepare_cp(lua_State *L, lua_CFunction dummy,
+				     void *ud)
+{
+  ApiConcatPrepare *ctx = (ApiConcatPrepare *)ud;
+  TValue *top;
+  UNUSED(dummy);
+  ctx->call = 0;
+  if (!ctx->started) {
+    lj_checkapi_slot(ctx->n);
+    ctx->started = 1;
+    if (ctx->n == 0) {
+      setstrV(L, L->top, &G(L)->strempty);
+      lj_state_stack_pubtv(L, L, L->top);
+      incr_top(L);
+      ctx->done = 1;
+      return NULL;
+    } else if (ctx->n <= 1) {
+      ctx->done = 1;
+      return NULL;
+    }
+    ctx->n--;
+  }
+  top = lj_meta_cat(L, L->top-1, -ctx->n);
+  if (top == NULL) {
+    L->top -= ctx->n;
+    ctx->done = 1;
+    return NULL;
+  }
+  ctx->n -= (int)(L->top - (top - 2*LJ_FR2));
+  L->top = top+2;
+  ctx->callbaseofs = savestack(L, top);
+  ctx->call = 1;
+  return NULL;
+}
+
 LUA_API void lua_concat(lua_State *L, int n)
 {
   LJStateClaim claim;
-  lj_checkapi_slot(n);
-  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
-    lj_err_callermsg(api_errstate(L), "thread busy");
-  if (n >= 2) {
-    n--;
-    do {
-      TValue *top = lj_meta_cat(L, L->top-1, -n);
-      if (top == NULL) {
-	L->top -= n;
-	break;
-      }
-      n -= (int)(L->top - (top - 2*LJ_FR2));
-      L->top = top+2;
-      api_vm_call_claimed(L, top, 1+1, &claim);
-      L->top -= 1+LJ_FR2;
-      copyTV(L, L->top-1, L->top+LJ_FR2);
-      lj_state_stack_pubtv(L, L, L->top-1);
-    } while (--n > 0);
-  } else if (n == 0) {  /* Push empty string. */
-    setstrV(L, L->top, &G(L)->strempty);
-    lj_state_stack_pubtv(L, L, L->top);
-    incr_top(L);
-  }
-  /* else n == 1: nothing to do. */
+  ApiResumeError error;
+  ApiConcatPrepare ctx;
+  lua_State *errL = api_errstate(L);
+  ptrdiff_t entrytopofs;
+  int status;
+  api_resumeclaim_prepare(L, errL, &claim, &error);
+  entrytopofs = savestack(L, L->top);
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.n = n;
+  do {
+    TValue *top;
+    status = api_vm_prepare_entry_claimed(
+      L, errL, &claim, &error, entrytopofs, &ctx, api_concat_prepare_cp);
+    if (status)
+      lj_err_throw(errL, status);
+    if (ctx.done)
+      break;
+    lj_assertL(ctx.call, "concat preparation produced no action");
+    top = restorestack(L, ctx.callbaseofs);
+    status = api_vm_call_prepared_claimed(
+      L, top, 1+1, &claim, &error, errL, entrytopofs);
+    if (status)
+      lj_err_throw(errL, status);
+    L->top -= 1+LJ_FR2;
+    copyTV(L, L->top-1, L->top+LJ_FR2);
+    lj_state_stack_pubtv(L, L, L->top-1);
+  } while (--ctx.n > 0);
+  api_resume_error_discard(&error);
   lj_state_dropresumeclaim(&claim);
 }
 
 /* -- Object getters ------------------------------------------------------ */
 
-LUA_API void lua_gettable(lua_State *L, int idx)
+typedef struct ApiGetPrepare {
+  const char *field;
+  ptrdiff_t callbaseofs;
+  int idx;
+  uint8_t receiver_root;
+  uint8_t call;
+} ApiGetPrepare;
+
+static TValue *api_get_prepare_cp(lua_State *L, lua_CFunction dummy, void *ud)
 {
-  LJStateClaim claim;
-  lua_State *errL = api_errstate(L);
+  ApiGetPrepare *ctx = (ApiGetPrepare *)ud;
   TValue *out;
   cTValue *t, *v;
-  int receiver_root = api_index_is_envroot(idx);
-  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
-    lj_err_callermsg(errL, "thread busy");
-  if (receiver_root) {
-    api_checkstack1_claimed(L, errL, &claim);
+  int idx = ctx->idx;
+  MSize need = (MSize)ctx->receiver_root + (ctx->field != NULL ? 1u : 0u);
+  UNUSED(dummy);
+  if (need != 0 &&
+      (mref(L->maxstack, char) - (char *)L->top) <=
+      (ptrdiff_t)need*(ptrdiff_t)sizeof(TValue))
+    lj_state_growstack(L, need);
+  if (ctx->field != NULL) {
+    api_test_field_key_alloc(L);
+    setstrV(L, L->top, lj_str_newz(L, ctx->field));
+    lj_state_stack_pubtv(L, L, L->top);
+    L->top++;
+  }
+  if (ctx->receiver_root) {
     t = api_stackroot_push_index(L, idx);
   } else {
+    if (ctx->field != NULL && idx < 0 && idx > LUA_REGISTRYINDEX)
+      idx--;
     t = index2adr_check(L, idx);
   }
-  out = L->top - (receiver_root ? 2 : 1);
+  out = L->top - (ctx->receiver_root ? 2 : 1);
   v = lj_meta_tgettv_rooted(L, t, out, out);
   if (v == NULL) {
     L->top += 2;
-    api_vm_call_claimed(L, L->top-2, 1+1, &claim);
-    L->top -= 2+LJ_FR2;
-    v = L->top+1+LJ_FR2;
+    ctx->callbaseofs = savestack(L, L->top-2);
+    ctx->call = 1;
+    return NULL;
   }
-  out = L->top - (receiver_root ? 2 : 1);
   copyTV(L, out, v);
   lj_state_stack_pubtv(L, L, out);
-  if (receiver_root)
-    L->top--;  /* Pop the temporary receiver; the result replaced the key. */
+  if (ctx->receiver_root)
+    L->top--;
+  return NULL;
+}
+
+static void api_get_finish_call(lua_State *L, const ApiGetPrepare *ctx)
+{
+  TValue *out;
+  cTValue *v;
+  L->top -= 2+LJ_FR2;
+  v = L->top+1+LJ_FR2;
+  out = L->top - (ctx->receiver_root ? 2 : 1);
+  copyTV(L, out, v);
+  lj_state_stack_pubtv(L, L, out);
+  if (ctx->receiver_root)
+    L->top--;
+}
+
+LUA_API void lua_gettable(lua_State *L, int idx)
+{
+  LJStateClaim claim;
+  ApiResumeError error;
+  ApiGetPrepare ctx;
+  lua_State *errL = api_errstate(L);
+  ptrdiff_t entrytopofs;
+  int status;
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.idx = idx;
+  ctx.receiver_root = (uint8_t)api_index_is_envroot(idx);
+  api_resumeclaim_prepare(L, errL, &claim, &error);
+  entrytopofs = savestack(L, L->top);
+  status = api_vm_prepare_entry_claimed(
+    L, errL, &claim, &error, entrytopofs, &ctx, api_get_prepare_cp);
+  if (status)
+    lj_err_throw(errL, status);
+  if (ctx.call) {
+    TValue *base = restorestack(L, ctx.callbaseofs);
+    status = api_vm_call_prepared_claimed(
+      L, base, 1+1, &claim, &error, errL, entrytopofs);
+    if (status)
+      lj_err_throw(errL, status);
+    api_get_finish_call(L, &ctx);
+  }
+  api_resume_error_discard(&error);
   lj_state_dropresumeclaim(&claim);
 }
 
 LUA_API void lua_getfield(lua_State *L, int idx, const char *k)
 {
   LJStateClaim claim;
+  ApiResumeError error;
+  ApiGetPrepare ctx;
   lua_State *errL = api_errstate(L);
-  TValue *out;
-  cTValue *v, *t;
-  int receiver_root = api_index_is_envroot(idx);
-  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
-    lj_err_callermsg(errL, "thread busy");
-  api_checkstack1_claimed(L, errL, &claim);
-  /* Materialize the key first, then resolve the authoritative table edge
-  ** immediately before rooted meta capture. This avoids a durable API anchor
-  ** across a throwing allocation. Ordinary negative indices move down by one
-  ** when the key is pushed; pseudo and positive indices do not. */
-  setstrV(L, L->top, lj_str_newz(L, k));
-  lj_state_stack_pubtv(L, L, L->top);
-  L->top++;
-  if (receiver_root) {
-    api_checkstack1_claimed(L, errL, &claim);
-    t = api_stackroot_push_index(L, idx);
-  } else {
-    if (idx < 0 && idx > LUA_REGISTRYINDEX)
-      idx--;
-    t = index2adr_check(L, idx);
+  ptrdiff_t entrytopofs;
+  int status;
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.idx = idx;
+  ctx.field = k;
+  ctx.receiver_root = (uint8_t)api_index_is_envroot(idx);
+  api_resumeclaim_prepare(L, errL, &claim, &error);
+  entrytopofs = savestack(L, L->top);
+  status = api_vm_prepare_entry_claimed(
+    L, errL, &claim, &error, entrytopofs, &ctx, api_get_prepare_cp);
+  if (status)
+    lj_err_throw(errL, status);
+  if (ctx.call) {
+    TValue *base = restorestack(L, ctx.callbaseofs);
+    status = api_vm_call_prepared_claimed(
+      L, base, 1+1, &claim, &error, errL, entrytopofs);
+    if (status)
+      lj_err_throw(errL, status);
+    api_get_finish_call(L, &ctx);
   }
-  out = L->top - (receiver_root ? 2 : 1);
-  v = lj_meta_tgettv_rooted(L, t, out, out);
-  if (v == NULL) {
-    L->top += 2;
-    api_vm_call_claimed(L, L->top-2, 1+1, &claim);
-    L->top -= 2+LJ_FR2;
-    v = L->top+1+LJ_FR2;
-  }
-  out = L->top - (receiver_root ? 2 : 1);
-  copyTV(L, out, v);
-  lj_state_stack_pubtv(L, L, out);
-  if (receiver_root)
-    L->top--;
+  api_resume_error_discard(&error);
   lj_state_dropresumeclaim(&claim);
 }
 
@@ -2950,96 +3051,126 @@ LUALIB_API void *luaL_checkudata(lua_State *L, int idx, const char *tname)
 
 /* -- Object setters ------------------------------------------------------ */
 
-LUA_API void lua_settable(lua_State *L, int idx)
+typedef struct ApiSetPrepare {
+  const char *field;
+  ptrdiff_t keyofs;
+  ptrdiff_t valofs;
+  ptrdiff_t callbaseofs;
+  int idx;
+  uint8_t receiver_root;
+  uint8_t call;
+} ApiSetPrepare;
+
+static TValue *api_set_prepare_cp(lua_State *L, lua_CFunction dummy, void *ud)
 {
-  LJStateClaim claim;
-  lua_State *errL = api_errstate(L);
+  ApiSetPrepare *ctx = (ApiSetPrepare *)ud;
+  TValue valtmp;
   TValue *key, *val;
   cTValue *t;
-  ptrdiff_t keyofs, valofs;
-  int receiver_root = api_index_is_envroot(idx);
-  lj_checkapi_slot(2);
-  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
-    lj_err_callermsg(errL, "thread busy");
-  if (receiver_root) {
-    api_checkstack1_claimed(L, errL, &claim);
+  int idx = ctx->idx;
+  MSize need = (MSize)ctx->receiver_root + (ctx->field != NULL ? 1u : 0u);
+  UNUSED(dummy);
+  lj_checkapi_slot(ctx->field != NULL ? 1 : 2);
+  if (need != 0 &&
+      (mref(L->maxstack, char) - (char *)L->top) <=
+      (ptrdiff_t)need*(ptrdiff_t)sizeof(TValue))
+    lj_state_growstack(L, need);
+  if (ctx->field != NULL) {
+    api_test_field_key_alloc(L);
+    setstrV(L, L->top, lj_str_newz(L, ctx->field));
+    lj_state_stack_pubtv(L, L, L->top);
+    L->top++;
+    copyTV(L, &valtmp, L->top-2);
+    copyTVrel(L, L->top-2, L->top-1);
+    copyTVrel(L, L->top-1, &valtmp);
+    lj_state_stack_pubtv(L, L, L->top-2);
+    lj_state_stack_pubtv(L, L, L->top-1);
+  }
+  if (ctx->receiver_root) {
     t = api_stackroot_push_index(L, idx);
   } else {
+    if (ctx->field != NULL) {
+      if (idx < 0 && idx > LUA_REGISTRYINDEX && idx != -1)
+	idx--;
+      else if (idx > 0 && idx == (int)(L->top - L->base) - 1)
+	idx++;
+    }
     t = index2adr_check(L, idx);
   }
-  key = L->top - (receiver_root ? 3 : 2);
-  val = key + 1;
-  keyofs = savestack(L, key);
-  valofs = savestack(L, val);
+  key = L->top - (ctx->receiver_root ? 3 : 2);
+  val = key+1;
+  ctx->keyofs = savestack(L, key);
+  ctx->valofs = savestack(L, val);
   if (lj_meta_tsettv_pair(L, t, key, val)) {
-    L->top = restorestack(L, keyofs);
-    lj_state_dropresumeclaim(&claim);
-    return;
+    L->top = restorestack(L, ctx->keyofs);
+    return NULL;
   }
   {
     TValue *base = L->top;
-    copyTV(L, base+2, restorestack(L, valofs));
+    copyTV(L, base+2, restorestack(L, ctx->valofs));
     L->top = base+3;
-    api_vm_call_claimed(L, base, 0+1, &claim);
-    L->top = restorestack(L, keyofs);
+    ctx->callbaseofs = savestack(L, base);
+    ctx->call = 1;
   }
+  return NULL;
+}
+
+LUA_API void lua_settable(lua_State *L, int idx)
+{
+  LJStateClaim claim;
+  ApiResumeError error;
+  ApiSetPrepare ctx;
+  lua_State *errL = api_errstate(L);
+  ptrdiff_t entrytopofs;
+  int status;
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.idx = idx;
+  ctx.receiver_root = (uint8_t)api_index_is_envroot(idx);
+  api_resumeclaim_prepare(L, errL, &claim, &error);
+  entrytopofs = savestack(L, L->top);
+  status = api_vm_prepare_entry_claimed(
+    L, errL, &claim, &error, entrytopofs, &ctx, api_set_prepare_cp);
+  if (status)
+    lj_err_throw(errL, status);
+  if (ctx.call) {
+    TValue *base = restorestack(L, ctx.callbaseofs);
+    status = api_vm_call_prepared_claimed(
+      L, base, 0+1, &claim, &error, errL, entrytopofs);
+    if (status)
+      lj_err_throw(errL, status);
+    L->top = restorestack(L, ctx.keyofs);
+  }
+  api_resume_error_discard(&error);
   lj_state_dropresumeclaim(&claim);
 }
 
 LUA_API void lua_setfield(lua_State *L, int idx, const char *k)
 {
   LJStateClaim claim;
+  ApiResumeError error;
+  ApiSetPrepare ctx;
   lua_State *errL = api_errstate(L);
-  TValue valtmp;
-  TValue *key, *val;
-  cTValue *t;
-  ptrdiff_t keyofs, valofs;
-  int receiver_root = api_index_is_envroot(idx);
-  lj_checkapi_slot(1);
-  if (!lj_state_resumeclaim(L, lj_thr_current_id(G(L)), &claim))
-    lj_err_callermsg(errL, "thread busy");
-  api_checkstack1_claimed(L, errL, &claim);
-  /* Materialize |key|value| on the real stack. This roots both operands across
-  ** stale-generation waits and gives __newindex the same frame contract as
-  ** lua_settable(). Resolve the table only after this shuffle, so no durable
-  ** API anchor spans string allocation or a catchable metamethod error. */
-  setstrV(L, L->top, lj_str_newz(L, k));
-  lj_state_stack_pubtv(L, L, L->top);
-  L->top++;
-  copyTV(L, &valtmp, L->top-2);
-  copyTVrel(L, L->top-2, L->top-1);
-  copyTVrel(L, L->top-1, &valtmp);
-  lj_state_stack_pubtv(L, L, L->top-2);
-  lj_state_stack_pubtv(L, L, L->top-1);
-  /* Pushing the key moves an older ordinary negative index down one slot. The
-  ** valid -1 extreme is special: its selected table/value moved with the
-  ** shuffle and is still the new top-1 value slot. */
-  if (receiver_root) {
-    api_checkstack1_claimed(L, errL, &claim);
-    t = api_stackroot_push_index(L, idx);
-  } else {
-    if (idx < 0 && idx > LUA_REGISTRYINDEX && idx != -1)
-      idx--;
-    else if (idx > 0 && idx == (int)(L->top - L->base) - 1)
-      idx++;  /* Positive index named the old top value, now at new top-1. */
-    t = index2adr_check(L, idx);
+  ptrdiff_t entrytopofs;
+  int status;
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.idx = idx;
+  ctx.field = k;
+  ctx.receiver_root = (uint8_t)api_index_is_envroot(idx);
+  api_resumeclaim_prepare(L, errL, &claim, &error);
+  entrytopofs = savestack(L, L->top);
+  status = api_vm_prepare_entry_claimed(
+    L, errL, &claim, &error, entrytopofs, &ctx, api_set_prepare_cp);
+  if (status)
+    lj_err_throw(errL, status);
+  if (ctx.call) {
+    TValue *base = restorestack(L, ctx.callbaseofs);
+    status = api_vm_call_prepared_claimed(
+      L, base, 0+1, &claim, &error, errL, entrytopofs);
+    if (status)
+      lj_err_throw(errL, status);
+    L->top = restorestack(L, ctx.keyofs);
   }
-  key = L->top - (receiver_root ? 3 : 2);
-  val = key + 1;
-  keyofs = savestack(L, key);
-  valofs = savestack(L, val);
-  if (lj_meta_tsettv_pair(L, t, key, val)) {
-    L->top = restorestack(L, keyofs);
-    lj_state_dropresumeclaim(&claim);
-    return;
-  }
-  {
-    TValue *base = L->top;
-    copyTV(L, base+2, restorestack(L, valofs));
-    L->top = base+3;
-    api_vm_call_claimed(L, base, 0+1, &claim);
-    L->top = restorestack(L, keyofs);
-  }
+  api_resume_error_discard(&error);
   lj_state_dropresumeclaim(&claim);
 }
 
