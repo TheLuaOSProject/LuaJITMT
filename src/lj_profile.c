@@ -407,9 +407,10 @@ static LJ_AINLINE int profile_tg_eligible(global_State *g, TGState *tg)
 }
 #endif
 
-/* Consume a signal publication in ordinary owner context. The x64 VM's
-** combined poll/request word routes here before resuming dispatch. SIGPROF
-** never writes hook masks or function pointers. */
+/* Consume a TG-local signal publication in ordinary owner context. The VM's
+** architecture-specific poll/request check routes here before resuming
+** dispatch. Unsupported signal-cache targets compile this as a no-op;
+** SIGPROF never writes hook masks or function pointers. */
 void LJ_FASTCALL lj_profile_owner_poll(lua_State *L)
 {
 #if LJ_PROFILE_TGLOCAL
@@ -1051,8 +1052,8 @@ PROFILE_SIGNAL_SCOPE void profile_signal(int sig)
   }
 #endif
   /* The handler publishes only atomics. profile_request is the final release
-  ** edge; the owner VM's combined poll load enters normal context, exchanges
-  ** the request, and only there installs a dispatch overlay. */
+  ** edge; the owner VM's poll/request acquire check enters normal context,
+  ** exchanges the request, and only there installs a dispatch overlay. */
   g = profile_g_load_acq(ps);
   if (g && profile_state_active_g(ps, g) && profile_tg_eligible(g, tg)) {
     lj_tg_profile_samples_add(tg, 1);

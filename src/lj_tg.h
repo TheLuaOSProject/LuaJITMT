@@ -293,9 +293,10 @@ struct TGState {
   HotCount hotcount[HOTCOUNT_SIZE];
   ASMFunction dispatch[GG_LEN_DISP];
   uint32_t poll;
-  /* SIGPROF publishes this word only. The x64 VM reads {poll,profile_request}
-  ** as one aligned qword and enters normal owner context before dispatch is
-  ** changed. Keep this field immediately after poll. */
+  /* TG-local SIGPROF publishes this word only. The x64 VM reads the adjacent
+  ** pair as one aligned qword; ARM64 uses separate naturally sized acquire
+  ** loads, but its signal publisher remains disabled until the ARM64 signal
+  ** cache is ported. Keep this field immediately after poll. */
   uint32_t profile_request;
   uint32_t mark_active;
   global_State *gl;

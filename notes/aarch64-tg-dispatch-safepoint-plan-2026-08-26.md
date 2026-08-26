@@ -119,7 +119,8 @@ table.  Required interpreter poll edges include:
 - leave-to-C and unwind-to-C;
 - ITERN/IITERL taken paths;
 - ILOOP and JMP backedges;
-- no-JIT IFUNCF/IFUNCV entries;
+- ordinary IFUNCF/IFUNCV entries, including interpreter execution inside a
+  future JIT-capable binary;
 - the numeric FORL/IFORL taken backedge, which x86 historically omitted but
   can otherwise run indefinitely without a C/native boundary.
 
@@ -141,3 +142,7 @@ JFOR/JITER/JLOOP, trace exit/rethrow, and XPOLL are deferred to the JIT phase.
   state-owner, and FFI callback suites.
 - Cross-build x86-64 and verify `vm_x64.dasc` and the existing dispatch ABI are
   unchanged.
+
+Implementation status: the interpreter portion of Stage 3 is implemented and
+recorded in `aarch64-vm-safepoint-2026-08-26.md`. ARM64 signal-cache profiling
+and every JIT/native-trace poll remain outside this checkpoint.

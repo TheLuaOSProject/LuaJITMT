@@ -10,6 +10,9 @@
 
 #if LJ_HASPROFILE
 
+/* ARM64 stays on the legacy signal path until LJ_THR_TG_SIGNAL_CACHE has a
+** verified pthread_t/generated-code contract there. VM request loads alone
+** are not sufficient to make signal publication safe. */
 #define LJ_PROFILE_TGLOCAL	(LJ_PROFILE_SIGPROF && LJ_TARGET_X86ORX64)
 
 LJ_FUNC void LJ_FASTCALL lj_profile_interpreter(lua_State *L);

@@ -552,3 +552,32 @@ This closes the known JIT-disabled interpreter publication gate. ARM
 safepoint polling and acknowledgement are next. The JIT-enabled
 `ISNEXT`/`JLOOP` path is preserved but remains explicitly deferred with the
 rest of the ARM64 JIT port.
+
+### 13. Apple ARM64 interpreter safepoints
+
+The ARM64 VM now acquire-loads `TG.poll` and `TG.profile_request` as separate
+32-bit words and routes nonzero requests through a common
+`lj_safepoint_ack_check` boundary. Taken iterator and numeric-for paths,
+`ILOOP`, `JMP`, and fixed/vararg interpreter entry provide bounded progress.
+The numeric `IFORL` check is on the taken integer or floating-point backedge,
+so a pure loop cannot postpone a remotely published STOPREQ indefinitely.
+
+Leave-to-C polls before restoring the previous C frame. Unwind-to-C rebuilds
+TG dispatch, polls before publishing VM state C, and preserves the incoming
+error status across the helper. Ordinary `IFORL`, `IFUNCF`, and `IFUNCV` polls
+are compiled unconditionally so their semantics remain present when a future
+JIT-capable ARM64 runtime executes interpreter bytecode with JIT disabled; the
+separate J bytecodes and native trace paths remain deferred.
+
+The assert bootstrap build passed the strengthened VM fixture, including fixed
+and vararg entry, iterator and return boundaries, exact unwind behavior, and an
+asynchronously interrupted allocation-free numeric loop. Generated-object
+inspection found nine distinct 32-bit acquire poll/request pairs and exactly
+three helper relocations for common redispatch, leave, and unwind. The prior
+root-publication, metamethod, and ISNEXT runtime fixtures also remained green.
+
+ARM64 TG-local SIGPROF publication is explicitly not enabled here.
+`LJ_THR_TG_SIGNAL_CACHE` still covers only x64 Linux/macOS, so
+`LJ_PROFILE_TGLOCAL` remains off on ARM64 and the profiler uses its legacy
+signal path. JIT-capable ARM64 runtime validation, trace polling/XPOLL, and the
+exact ARM64 signal-cache port remain later checkpoints.

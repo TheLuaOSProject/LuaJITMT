@@ -336,6 +336,12 @@ LJ_STATIC_ASSERT(L_OFS(tg_hint) >= 0 && L_OFS(tg_hint) <= 4095);
 LJ_STATIC_ASSERT(TG_OFS_DISPATCH >= 0 && TG_OFS_DISPATCH <= 4095);
 LJ_STATIC_ASSERT(DISPATCH_TG(cur_L) >= 0 && DISPATCH_TG(cur_L) <= 4095);
 LJ_STATIC_ASSERT(DISPATCH_TG(vmstate) >= 0 && DISPATCH_TG(vmstate) <= 4095);
+LJ_STATIC_ASSERT(DISPATCH_TG(poll) >= 0 && DISPATCH_TG(poll) <= 4095);
+LJ_STATIC_ASSERT(DISPATCH_TG(profile_request) >= 0 &&
+		 DISPATCH_TG(profile_request) <= 4095);
+LJ_STATIC_ASSERT((DISPATCH_TG(poll) & 3) == 0);
+LJ_STATIC_ASSERT(DISPATCH_TG(profile_request) ==
+		 DISPATCH_TG(poll) + (int)sizeof(uint32_t));
 LJ_STATIC_ASSERT(DISPATCH_TG(hookmask_th) >= 0 &&
 		 DISPATCH_TG(hookmask_th) <= 4095);
 LJ_STATIC_ASSERT(DISPATCH_TG(gl) >= 0 && DISPATCH_TG(gl) <= 4095);
@@ -359,6 +365,16 @@ LJ_STATIC_ASSERT(GL_OFS(hookmask) >= 0 && GL_OFS(hookmask) <= 4095);
 |.macro ld_tg_cur_L, lreg
 |  add ATMP, DISPATCH, #DISPATCH_TG(cur_L)
 |  ldar lreg, [ATMP]
+|.endmacro
+|// poll and profile_request are distinct 32 bit release publications. ARM64
+|// must acquire them at their natural widths instead of copying x64's
+|// overlapping qword test.
+|.macro arm64_vm_poll_acq, dst, tmp
+|  add ATMP, DISPATCH, #DISPATCH_TG(poll)
+|  ldar dst, [ATMP]
+|  add ATMP, DISPATCH, #DISPATCH_TG(profile_request)
+|  ldar tmp, [ATMP]
+|  orr dst, dst, tmp
 |.endmacro
 |.macro arm64_vm_hookmask_acq, dst, tmp
 |  add ATMP, DISPATCH, #DISPATCH_TG(hookmask_th)
@@ -422,6 +438,14 @@ LJ_STATIC_ASSERT(GL_OFS(hookmask) >= 0 && GL_OFS(hookmask) <= 4095);
 static void build_subroutines(BuildCtx *ctx)
 {
   |.code_sub
+  |
+  |->vm_safepoint:
+  |  str BASE, L->base
+  |  str PC, SAVE_PC
+  |  mov CARG1, L
+  |  bl extern lj_safepoint_ack_check
+  |  ldr BASE, L->base
+  |  ins_next
   |
   |->vm_call_publish:
   |  bti_call
@@ -501,6 +525,12 @@ static void build_subroutines(BuildCtx *ctx)
   |  str BASE, L->top			// Store new top.
   |
   |->vm_leave_cp:
+  |  arm64_vm_poll_acq TMP0w, TMP1w
+  |  cbz TMP0w, >9
+  |  str L, SAVE_PC			// Outside bytecode while returning to C.
+  |  mov CARG1, L
+  |  bl extern lj_safepoint_ack_check
+  |9:
   |  ldr RC, SAVE_CFRAME		// Restore previous C frame.
   |   mov CRET1, #0			// Ok return status for vm_pcall.
   |  str RC, L->cframe
@@ -554,6 +584,14 @@ static void build_subroutines(BuildCtx *ctx)
   |  ldr L, SAVE_L
   |  load_DISPATCH L
   |  load_G GL
+  |  arm64_vm_poll_acq TMP0w, TMP1w
+  |  cbz TMP0w, >9
+  |  str CRET1w, SAVE_ERRF
+  |  str L, SAVE_PC			// Outside bytecode while unwinding to C.
+  |  mov CARG1, L
+  |  bl extern lj_safepoint_ack_check
+  |  ldr CRET1w, SAVE_ERRF
+  |9:
   |   mv_vmstate TMP0w, C
   |   st_vmstate TMP0w
   |  b ->vm_leave_unw
@@ -3695,6 +3733,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  decode_RD TMP3, INS
     |  add TMP3, PC, TMP3, lsl #2
     |  sub PC, TMP3, #0x20000
+    |  arm64_vm_poll_acq TMP0w, TMP1w
+    |  cbnz TMP0w, ->vm_safepoint
     |3:
     |  ins_next
     break;
@@ -3994,6 +4034,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     if (op == BC_JFORI || op == BC_JFORL) {
       |  ble =>BC_JLOOP
     }
+    if (op == BC_IFORL) {
+      |  ble >8				// Poll only on the taken backedge.
+    }
     |2:
     |   ins_next
     |
@@ -4029,11 +4072,20 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     } else {
       |  bls =>BC_JLOOP
     }
+    if (op == BC_IFORL) {
+      |  bls >8				// Poll only on the taken backedge.
+    }
     |  b <2
     |
     |7:  // Invert check for negative step.
     |  fcmp d1, d0
     |  b <6
+    if (op == BC_IFORL) {
+      |8:
+      |  arm64_vm_poll_acq TMP0w, TMP1w
+      |  cbnz TMP0w, ->vm_safepoint
+      |  b <2
+    }
     break;
 
   case BC_ITERL:
@@ -4060,6 +4112,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  add TMP0, PC, RC, lsl #2	// Otherwise save control var + branch.
       |  sub PC, TMP0, #0x20000
       |  str CARG1, [TMP1, #-8]
+      |  arm64_vm_poll_acq TMP0w, TMP1w
+      |  cbnz TMP0w, ->vm_safepoint
     }
     |1:
     |  ins_next
@@ -4077,6 +4131,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
   case BC_ILOOP:
     |  // RA = base, RC = target (loop extent)
+    |  arm64_vm_poll_acq TMP0w, TMP1w
+    |  cbnz TMP0w, ->vm_safepoint
     |  ins_next
     break;
 
@@ -4106,6 +4162,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  // RA = base (only used by trace recorder), RC = target
     |  add RC, PC, RC, lsl #2
     |  sub PC, RC, #0x20000
+    |  arm64_vm_poll_acq TMP0w, TMP1w
+    |  cbnz TMP0w, ->vm_safepoint
     |  ins_next
     break;
 
@@ -4137,6 +4195,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  decode_RD RC, INS
       |  b =>BC_JLOOP
     } else {
+      |  arm64_vm_poll_acq TMP0w, TMP1w
+      |  cbnz TMP0w, ->vm_safepoint
       |  ins_next
     }
     |
@@ -4190,6 +4250,8 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  arm64_vm_stack_dirty		// Publish completed move/clear range.
     |  mov BASE, KBASE
     |  ldr KBASE, [PC, #-4+PC2PROTO(k)]
+    |  arm64_vm_poll_acq TMP0w, TMP1w
+    |  cbnz TMP0w, ->vm_safepoint
     |  ins_next
     |
     |3:
