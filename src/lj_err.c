@@ -755,6 +755,23 @@ extern void _Unwind_SetIP(_Unwind_Context *, uintptr_t);
 extern void _Unwind_DeleteException(_Unwind_Exception *);
 extern int _Unwind_RaiseException(_Unwind_Exception *);
 
+#if LJ_TARGET_OSX && LJ_TARGET_ARM64 && LJ_ABI_PAUTH
+/* Apple's arm64e unwinder treats an IP installed through _Unwind_SetIP() as
+** an authenticated return address for the current cursor SP. Passing a raw VM
+** or JIT address makes unw_set_reg() authenticate it with key B and trap before
+** the new context can be installed. */
+#define LJ_ERR_UNWIND_SP_REG	(-2)  /* libunwind's UNW_REG_SP. */
+static LJ_AINLINE uintptr_t err_unwind_sign_ip(_Unwind_Context *ctx,
+						uintptr_t ip)
+{
+  return (uintptr_t)ptrauth_sign_unauthenticated((void *)ip,
+	 ptrauth_key_return_address,
+	 _Unwind_GetGR(ctx, LJ_ERR_UNWIND_SP_REG));
+}
+#else
+#define err_unwind_sign_ip(ctx, ip) ((uintptr_t)(ip))
+#endif
+
 #define _UA_SEARCH_PHASE	1
 #define _UA_CLEANUP_PHASE	2
 #define _UA_HANDLER_FRAME	4
@@ -842,7 +859,8 @@ LJ_FUNCA int lj_err_unwind_dwarf(int version, int actions,
 #if LJ_TARGET_X64
       err_uex_install_x64(ctx, uexclass, uex, &err, ip);
 #else
-      _Unwind_SetIP(ctx, (uintptr_t)lj_ptr_strip(ip));
+      _Unwind_SetIP(ctx,
+	err_unwind_sign_ip(ctx, (uintptr_t)lj_ptr_strip(ip)));
 #endif
       return err_uex_os_leave(uexclass, uex, &err,
 			      _URC_INSTALL_CONTEXT);
@@ -903,6 +921,51 @@ void lj_err_verify(void)
 #endif
 
 #if LJ_UNWIND_JIT
+#if LJ_TARGET_OSX && LJ_TARGET_ARM64 && LJ_ABI_PAUTH && \
+    defined(LJ_ERR_UNWIND_TEST_HELPERS)
+/* Test-only arm64e landing override. It still uses the production JIT CIE,
+** registered FDE and personality. Only the trace lookup/exit-stub tail is
+** replaced so a focused fixture can raise a real LuaJIT exception through a
+** tiny synthetic mcode frame without constructing a fake GCtrace. */
+typedef struct ErrArm64eUnwindTest {
+  uintptr_t start;
+  uintptr_t end;
+  uintptr_t landing;
+  uint32_t searches;
+  uint32_t cleanups;
+  uint32_t installs;
+  uint32_t armed;
+} ErrArm64eUnwindTest;
+
+static LJ_TLS ErrArm64eUnwindTest err_arm64e_unwind_test;
+
+LJ_FUNCA void lj_err_test_arm64e_unwind_arm(uintptr_t start, uintptr_t end,
+					     uintptr_t landing)
+{
+  ErrArm64eUnwindTest *t = &err_arm64e_unwind_test;
+  lj_assertX(start < landing && landing < end,
+	     "invalid arm64e JIT unwind test range");
+  lj_assertX(!t->armed, "nested arm64e JIT unwind test");
+  memset(t, 0, sizeof(*t));
+  t->start = start;
+  t->end = end;
+  t->landing = landing;
+  t->armed = 1;
+}
+
+LJ_FUNCA uint32_t lj_err_test_arm64e_unwind_disarm(void)
+{
+  ErrArm64eUnwindTest *t = &err_arm64e_unwind_test;
+  uint32_t result;
+  lj_assertX(t->armed, "inactive arm64e JIT unwind test");
+  lj_assertX(t->searches <= 0xff && t->cleanups <= 0xff &&
+	     t->installs <= 0xff, "arm64e JIT unwind test counter overflow");
+  result = (t->searches << 16) | (t->cleanups << 8) | t->installs;
+  memset(t, 0, sizeof(*t));
+  return result;
+}
+#endif
+
 /* DWARF2 personality handler for JIT-compiled code. */
 static int err_unwind_jit(int version, int actions,
   uint64_t uexclass, _Unwind_Exception *uex, _Unwind_Context *ctx)
@@ -913,6 +976,27 @@ static int err_unwind_jit(int version, int actions,
   if (version != 1 || !LJ_UEXCLASS_CHECK(uexclass))
     return err_uex_os_leave(uexclass, uex, &err,
 			    _URC_FATAL_PHASE1_ERROR);
+#if LJ_TARGET_OSX && LJ_TARGET_ARM64 && LJ_ABI_PAUTH && \
+    defined(LJ_ERR_UNWIND_TEST_HELPERS)
+  {
+    ErrArm64eUnwindTest *t = &err_arm64e_unwind_test;
+    uintptr_t ip = _Unwind_GetIP(ctx);
+    if (t->armed && ip > t->start && ip <= t->end) {
+      if ((actions & _UA_SEARCH_PHASE)) {
+	t->searches++;
+	return err_uex_os_leave(uexclass, uex, &err, _URC_HANDLER_FOUND);
+      }
+      if ((actions & _UA_CLEANUP_PHASE)) {
+	t->cleanups++;
+	_Unwind_SetGR(ctx, 0, 0x4a17u);
+	_Unwind_SetIP(ctx, err_unwind_sign_ip(ctx, t->landing));
+	t->installs++;
+	return err_uex_os_leave(uexclass, uex, &err,
+				_URC_INSTALL_CONTEXT);
+      }
+    }
+  }
+#endif
   if ((actions & _UA_SEARCH_PHASE)) {
     return err_uex_os_leave(uexclass, uex, &err, _URC_HANDLER_FOUND);
   }
@@ -936,7 +1020,7 @@ static int err_unwind_jit(int version, int actions,
       err_uex_install_x64(ctx, uexclass, uex, &err,
 			  (ASMFunction)(uintptr_t)stub);
 #else
-      _Unwind_SetIP(ctx, stub);
+      _Unwind_SetIP(ctx, err_unwind_sign_ip(ctx, stub));
 #endif
       return err_uex_os_leave(uexclass, uex, &err,
 			      _URC_INSTALL_CONTEXT);
@@ -1021,11 +1105,20 @@ uint8_t *lj_err_register_mcode(void *base, size_t sz, uint8_t *info,
     (uint32_t)(sz - sizeof(err_frame_jit_template) - (info - (uint8_t *)base));
   __register_frame(info + ERR_FRAME_JIT_OFS_REGISTER);
 #ifdef LUA_USE_ASSERT
+#if !(LJ_TARGET_OSX && LJ_TARGET_ARM64 && LJ_ABI_PAUTH)
   {
     struct dwarf_eh_bases ehb;
     lj_assertX(_Unwind_Find_FDE(info + sizeof(err_frame_jit_template)+1, &ehb),
 	       "bad JIT unwind table registration");
   }
+#else
+  /* On arm64e, macOS implements _Unwind_Find_FDE() by putting the caller's
+  ** PC into a live cursor with unw_set_reg(). The hardened setter authenticates
+  ** that value as a key-B return address using a cursor-private SP, so neither
+  ** a raw code address nor a normal signed function pointer can be supplied by
+  ** this caller without a PAC failure. Actual exception traversal is the only
+  ** viable registration verifier on this ABI. */
+#endif
 #endif
   return info + sizeof(err_frame_jit_template);
 }
