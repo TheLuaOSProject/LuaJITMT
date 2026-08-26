@@ -103,6 +103,8 @@ fi
 LJ_ARM64_VM_OBJECT="$vm_object" \
 LJ_ARM64_DISPATCH_OBJECT="$root/src/lj_dispatch.o" \
   sh "$root/tools/ci/arm64_tg_dispatch_contract.sh"
+LJ_ARM64_VM_OBJECT="$vm_object" \
+  sh "$root/tools/ci/arm64_root_publication_contract.sh"
 
 run_lua() {
   env LUA_PATH="$lua_path" "$luajit" "$@"
@@ -115,6 +117,10 @@ assert(jit.status() == false, "bootstrap unexpectedly enabled the JIT")
 assert(jit.opt == nil, "disabled JIT unexpectedly exposes optimizer controls")
 assert(type(require("ffi")) == "table")
 '
+
+env MACOSX_DEPLOYMENT_TARGET="$minver" \
+  LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
+  "$luajit" "$root/tools/test.lua" m5_arm64_root_publication_runtime
 
 (
   cd "$root/tests/stock/test"

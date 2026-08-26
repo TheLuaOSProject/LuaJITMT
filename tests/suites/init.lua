@@ -8,6 +8,7 @@ local suites = {
   suite("m2_arena"),
   suite("m3_gc"),
   suite("m4_threading"),
+  suite("m5_arm64"),
   suite("m5_fixtures"),
   suite("m5_aggregate"),
   suite("m5_publication"),
