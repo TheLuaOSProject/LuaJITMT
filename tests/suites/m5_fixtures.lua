@@ -15,7 +15,8 @@ return function(add)
         include_src = false,
         link_luajit = false,
         libs = {},
-        cflags = "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread -mcx16"
+        cflags = t:with_target_arch_flags(
+          "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread")
       })
       print("M5 nbtab model tests passed")
     end

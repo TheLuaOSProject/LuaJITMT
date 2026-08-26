@@ -2,7 +2,9 @@
 ** t-tgslot-token.c - standalone stable TG-slot lifecycle/lease model.
 **
 ** Build & run:
-**   cc -std=gnu11 -O2 -Wall -Wextra -Werror -pthread -mcx16 -Isrc \
+**   LJ_CAS128_CFLAGS=-mcx16  # Use an empty value for an arm64 target.
+**   cc -std=gnu11 -O2 -Wall -Wextra -Werror -pthread \
+**      $LJ_CAS128_CFLAGS -Isrc \
 **      tests/t-tgslot-token.c -o /tmp/t-tgslot-token && \
 **      /tmp/t-tgslot-token
 */

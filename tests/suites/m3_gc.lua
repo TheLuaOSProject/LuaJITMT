@@ -75,7 +75,8 @@ return function(add)
         include_src = true,
         link_luajit = false,
         libs = {},
-        cflags = "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread -mcx16"
+        cflags = t:with_target_arch_flags(
+          "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread")
       })
       print("M3 GC2 markword and activation model passed")
     end
@@ -91,7 +92,8 @@ return function(add)
         include_src = true,
         link_luajit = false,
         libs = {},
-        cflags = "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread -mcx16"
+        cflags = t:with_target_arch_flags(
+          "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread")
       })
       print("M3 GC2 root-gate/store exhaustive model passed")
     end

@@ -303,10 +303,10 @@ print("bulk fill ok")
                         "t-ffi-callback-auto-unwind.cpp", {
         build = false,
         default_cflags = false,
-        cflags = table.concat({
+        cflags = t:with_target_arch_flags(table.concat({
           "-std=gnu++11", "-O2", "-Wall", "-Wextra", "-Werror",
-          "-mcx16", "-fexceptions", "-funwind-tables"
-        }, " "),
+          "-fexceptions", "-funwind-tables"
+        }, " ")),
         timeout = "20s"
       })
       run_luajit_script(t, "t-ffi-callback-runtime.lua", {

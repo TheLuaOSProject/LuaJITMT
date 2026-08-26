@@ -1,6 +1,7 @@
 local runtime = require("suite_runtime")
 local build = require("suite_build")
 local utils = require("suite_utils")
+local ljtest = require("ljtest")
 
 local shell_quote = utils.shell_quote
 
@@ -199,6 +200,25 @@ return function(add)
     description = "vendored LuaJIT stock cleanup suite",
     run = function(t, args)
       runtime.run_stock_cli(t, args)
+    end
+  })
+
+  add({
+    name = "m0_target_arch_flags",
+    description = "test compiler target selects only its required ISA flags",
+    run = function(t)
+      assert(ljtest.target_arch_flags("x64") == "-mcx16")
+      assert(ljtest.target_arch_flags("arm64") == "")
+      assert(not pcall(ljtest.target_arch_flags, "unknown"))
+      assert(t.target_arch == "x64" or t.target_arch == "arm64")
+      assert(t.target_arch_flags == ljtest.target_arch_flags(t.target_arch))
+      local flags = t:with_target_arch_flags("-std=gnu11")
+      if t.target_arch == "x64" then
+        assert(flags == "-std=gnu11 -mcx16")
+      else
+        assert(flags == "-std=gnu11")
+      end
+      print("M0 " .. t.target_arch .. " test compiler flags passed")
     end
   })
 

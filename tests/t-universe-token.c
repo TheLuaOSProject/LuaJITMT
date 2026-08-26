@@ -2,7 +2,9 @@
 ** t-universe-token.c - dormant exact universe admission/epoch model.
 **
 ** Build & run:
-**   cc -std=gnu11 -O2 -Wall -Wextra -Werror -pthread -mcx16 -Isrc \
+**   LJ_CAS128_CFLAGS=-mcx16  # Use an empty value for an arm64 target.
+**   cc -std=gnu11 -O2 -Wall -Wextra -Werror -pthread \
+**      $LJ_CAS128_CFLAGS -Isrc \
 **      tests/t-universe-token.c src/lj_universe.c \
 **      -o /tmp/t-universe-token && /tmp/t-universe-token
 */

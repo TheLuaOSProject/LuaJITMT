@@ -2,7 +2,9 @@
 ** t-tgregistry-slot.c - stable external TG registry-slot model.
 **
 ** Build & run:
-**   cc -std=gnu11 -O2 -Wall -Wextra -Werror -pthread -mcx16 -Isrc \
+**   LJ_CAS128_CFLAGS=-mcx16  # Use an empty value for an arm64 target.
+**   cc -std=gnu11 -O2 -Wall -Wextra -Werror -pthread \
+**      $LJ_CAS128_CFLAGS -Isrc \
 **      tests/t-tgregistry-slot.c -o /tmp/t-tgregistry-slot && \
 **      /tmp/t-tgregistry-slot
 */

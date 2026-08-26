@@ -83,11 +83,73 @@ local function append_flags(parts, flags)
   end
 end
 
+local function normalize_target_arch(arch)
+  if arch == "x64" or arch == "x86_64" or arch == "amd64" then
+    return "x64"
+  elseif arch == "arm64" or arch == "aarch64" then
+    return "arm64"
+  end
+  return nil
+end
+
+local function detect_compiler_target_arch(compiler)
+  local override = getenv("LJ_TEST_TARGET_ARCH", nil)
+  if override then
+    local arch = normalize_target_arch(override:lower())
+    if not arch then
+      error("unsupported LJ_TEST_TARGET_ARCH: " .. override ..
+            " (expected x64 or arm64)", 2)
+    end
+    return arch
+  end
+
+  -- Probe the compiler command, rather than the machine running the harness.
+  -- This keeps `CC="clang --target=..."` and prefixed cross compilers honest.
+  local cmd = compiler .. " -dM -E -x c /dev/null"
+  local ok, defines = pcall(utils.capture_command, cmd, { stderr = true })
+  if not ok then
+    error("cannot detect the test compiler target; set " ..
+          "LJ_TEST_TARGET_ARCH=x64 or arm64\n" .. tostring(defines), 2)
+  end
+  if defines:find("#define __x86_64__ 1", 1, true) or
+     defines:find("#define _M_X64 ", 1, true) then
+    return "x64"
+  elseif defines:find("#define __aarch64__ 1", 1, true) or
+         defines:find("#define _M_ARM64 ", 1, true) then
+    return "arm64"
+  end
+  error("unsupported test compiler target; set " ..
+        "LJ_TEST_TARGET_ARCH=x64 or arm64", 2)
+end
+
+local function target_arch_flags(arch)
+  -- CMPXCHG16B must be enabled explicitly on the fork's x64 baseline. ARM64
+  -- has native paired/exclusive 128-bit CAS and rejects the x86-only option.
+  if arch == "x64" then return "-mcx16" end
+  if arch == "arm64" then return "" end
+  error("unsupported test target architecture: " .. tostring(arch), 2)
+end
+
+local function join_flags(flags, extra)
+  if flags == nil or flags == "" then return extra or "" end
+  if extra == nil or extra == "" then return flags end
+  return flags .. " " .. extra
+end
+
+M.target_arch_flags = target_arch_flags
+
 function M.new(root)
+  local compiler = getenv("CC", "cc")
+  local target_arch = detect_compiler_target_arch(compiler)
+  local arch_flags = target_arch_flags(target_arch)
+  local default_cflags = join_flags(
+    "-std=gnu11 -O2 -Wall -Wextra -Werror", arch_flags)
   local self = {
     root = root,
-    compiler = getenv("CC", "cc"),
-    cflags = getenv("CFLAGS", "-std=gnu11 -O2 -Wall -Wextra -Werror -mcx16"),
+    compiler = compiler,
+    target_arch = target_arch,
+    target_arch_flags = arch_flags,
+    cflags = getenv("CFLAGS", default_cflags),
     jobs = getenv("JOBS", getenv("MAKE_JOBS", utils.detect_jobs())),
     tmpdir = getenv("TMPDIR", "/tmp"),
     build_signature = nil
@@ -101,6 +163,10 @@ function Test:path(...)
     out = out .. "/" .. select(i, ...)
   end
   return out
+end
+
+function Test:with_target_arch_flags(flags)
+  return join_flags(flags, self.target_arch_flags)
 end
 
 function Test:tmp(name)

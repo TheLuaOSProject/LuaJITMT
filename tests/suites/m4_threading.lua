@@ -26,7 +26,8 @@ return function(add)
         include_src = true,
         link_luajit = false,
         libs = {},
-        cflags = "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread -mcx16",
+        cflags = t:with_target_arch_flags(
+          "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread"),
         timeout = "20s"
       })
       print("M4 stable TG-slot token model passed")
@@ -43,7 +44,8 @@ return function(add)
         include_src = true,
         link_luajit = false,
         libs = {},
-        cflags = "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread -mcx16",
+        cflags = t:with_target_arch_flags(
+          "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread"),
         timeout = "30s"
       })
       print("M4 stable external TG registry-slot model passed")
@@ -63,8 +65,9 @@ return function(add)
         include_src = true,
         link_luajit = false,
         libs = {},
-        cflags = "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread -mcx16 " ..
-                 "-DLJ_UNIVERSE_TEST_HELPERS",
+        cflags = t:with_target_arch_flags(
+          "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread " ..
+          "-DLJ_UNIVERSE_TEST_HELPERS"),
         timeout = "30s"
       })
       print("M4 exact universe admission token model passed")
@@ -391,9 +394,9 @@ return function(add)
     name = "m4_tsan_drivers",
     description = "M4 C unit drivers under ThreadSanitizer",
     run = function(t)
-      local cflags = getenv("CFLAGS",
-        "-std=gnu11 -O1 -g -Wall -Wextra -Wno-tsan -mcx16 " ..
-        "-fsanitize=thread -fno-omit-frame-pointer")
+      local cflags = getenv("CFLAGS", t:with_target_arch_flags(
+        "-std=gnu11 -O1 -g -Wall -Wextra -Wno-tsan " ..
+        "-fsanitize=thread -fno-omit-frame-pointer"))
       local target_cflags = getenv("TARGET_TSAN_CFLAGS",
         "-O1 -g -Wno-tsan -fsanitize=thread -fno-omit-frame-pointer")
       local target_ldflags = getenv("TARGET_TSAN_LDFLAGS",
