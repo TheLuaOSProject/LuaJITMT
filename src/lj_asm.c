@@ -1820,7 +1820,7 @@ static void asm_phi(ASMState *as, IRIns *ir)
 }
 
 static void asm_loop_fixup(ASMState *as);
-#if LJ_TARGET_X86ORX64
+#if LJ_TARGET_X86ORX64 || LJ_TARGET_ARM64
 static void asm_xpoll(ASMState *as, IRIns *ir);
 #else
 #define asm_xpoll(as, ir)	((void)0)
@@ -2922,6 +2922,15 @@ MSize lj_asm_arm64_emit_test(jit_State *J, MCode *buf, MSize cap,
     break;
   case LJ_ARM64_EMIT_TEST_SETVMSTATE_ROOT:
     emit_setvmstate_root(as, state);
+    break;
+  case LJ_ARM64_EMIT_TEST_GET_POLL:
+    emit_gettg32(as, RID_X3, poll);
+    break;
+  case LJ_ARM64_EMIT_TEST_GET_PROFILE_REQUEST:
+    emit_gettg32(as, RID_X4, profile_request);
+    break;
+  case LJ_ARM64_EMIT_TEST_GET_JIT_GATE:
+    emit_getgl32acq(as, RID_X5, gc2.jit_phase_gate);
     break;
   default:
     return 0;

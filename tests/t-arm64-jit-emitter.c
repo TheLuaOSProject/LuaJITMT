@@ -8,6 +8,7 @@
 */
 
 #include <assert.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,6 +36,8 @@
    ((uint32_t)(rn) << 5) | (uint32_t)(rd))
 #define ENC_LDARx(rt, rn) \
   (0xc8dffc00u | ((uint32_t)(rn) << 5) | (uint32_t)(rt))
+#define ENC_LDARw(rt, rn) \
+  (0x88dffc00u | ((uint32_t)(rn) << 5) | (uint32_t)(rt))
 #define ENC_STLRx(rt, rn) \
   (0xc89ffc00u | ((uint32_t)(rn) << 5) | (uint32_t)(rt))
 #define ENC_MOVZw(rd, imm) \
@@ -44,6 +47,11 @@
 #define ENC_STRw(rt, rn, ofs) \
   (0xb9000000u | (((uint32_t)(ofs) >> 2) << 10) | \
    ((uint32_t)(rn) << 5) | (uint32_t)(rt))
+#define ENC_ADDx_IMM_SHIFT12(rd, rn, imm12) \
+  (0x91400000u | ((uint32_t)(imm12) << 10) | \
+   ((uint32_t)(rn) << 5) | (uint32_t)(rd))
+#define ENC_MOVx(rd, rm) \
+  (0xaa0003e0u | ((uint32_t)(rm) << 16) | (uint32_t)(rd))
 
 static size_t append_words(MCode *all, size_t nall, const MCode *words,
 			   MSize n)
@@ -93,7 +101,20 @@ int main(int argc, char **argv)
     0xd5033bbfu,
     ENC_STRw(RID_TMP, RID_DISPATCH, DISPATCH_TG(vmstate))
   };
-  MCode all[32];
+  const MCode get_poll[] = {
+    ENC_ADDx_IMM(RID_TMP, RID_DISPATCH, DISPATCH_TG(poll)),
+    ENC_LDARw(RID_X3, RID_TMP)
+  };
+  const MCode get_profile_request[] = {
+    ENC_ADDx_IMM(RID_TMP, RID_DISPATCH, DISPATCH_TG(profile_request)),
+    ENC_LDARw(RID_X4, RID_TMP)
+  };
+  MCode get_jit_gate[3];
+  MSize n_get_jit_gate = 0;
+  uint32_t gate_ofs = (uint32_t)offsetof(global_State, gc2.jit_phase_gate);
+  uint32_t gate_hi = gate_ofs & 0xfff000u;
+  uint32_t gate_lo = gate_ofs & 0xfffu;
+  MCode all[64];
   size_t nall = 0;
   lua_State *L;
   FILE *fp;
@@ -103,6 +124,20 @@ int main(int argc, char **argv)
   assert(!rset_test(RSET_GPR, RID_DISPATCH));
   assert(!rset_test(RSET_GPR, RID_TMP));
   assert(rset_test(RSET_GPR, RID_BASE));
+  assert(gate_ofs <= 0xffffffu && (gate_ofs & 3u) == 0);
+  if (gate_hi != 0) {
+    get_jit_gate[n_get_jit_gate++] =
+      ENC_ADDx_IMM_SHIFT12(RID_TMP, RID_GL, gate_hi >> 12);
+    if (gate_lo != 0)
+      get_jit_gate[n_get_jit_gate++] =
+        ENC_ADDx_IMM(RID_TMP, RID_TMP, gate_lo);
+  } else if (gate_lo != 0) {
+    get_jit_gate[n_get_jit_gate++] =
+      ENC_ADDx_IMM(RID_TMP, RID_GL, gate_lo);
+  } else {
+    get_jit_gate[n_get_jit_gate++] = ENC_MOVx(RID_TMP, RID_GL);
+  }
+  get_jit_gate[n_get_jit_gate++] = ENC_LDARw(RID_X5, RID_TMP);
   L = luaL_newstate();
   assert(L != NULL && L2J(L) != NULL);
   check_emit(L2J(L), LJ_ARM64_EMIT_TEST_GET_CUR_L, 0,
@@ -119,6 +154,12 @@ int main(int argc, char **argv)
 	     setvm_positive, 3, all, &nall);
   check_emit(L2J(L), LJ_ARM64_EMIT_TEST_SETVMSTATE_ROOT, negative,
 	     setvm_negative, 3, all, &nall);
+  check_emit(L2J(L), LJ_ARM64_EMIT_TEST_GET_POLL, 0,
+	     get_poll, 2, all, &nall);
+  check_emit(L2J(L), LJ_ARM64_EMIT_TEST_GET_PROFILE_REQUEST, 0,
+	     get_profile_request, 2, all, &nall);
+  check_emit(L2J(L), LJ_ARM64_EMIT_TEST_GET_JIT_GATE, 0,
+	     get_jit_gate, n_get_jit_gate, all, &nall);
   lua_close(L);
 
   fp = fopen(argv[1], "wb");

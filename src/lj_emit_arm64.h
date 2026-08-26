@@ -353,14 +353,21 @@ LJ_STATIC_ASSERT(RID_TMP == RID_LR);
 LJ_STATIC_ASSERT(sizeof(((TGState *)0)->cur_L) == sizeof(void *));
 LJ_STATIC_ASSERT(sizeof(((TGState *)0)->jit_base) == sizeof(void *));
 LJ_STATIC_ASSERT(sizeof(((TGState *)0)->vmstate) == sizeof(uint32_t));
+LJ_STATIC_ASSERT(sizeof(((TGState *)0)->poll) == sizeof(uint32_t));
+LJ_STATIC_ASSERT(sizeof(((TGState *)0)->profile_request) == sizeof(uint32_t));
 LJ_STATIC_ASSERT(DISPATCH_TG(cur_L) >= 0 && DISPATCH_TG(cur_L) <= 4095);
 LJ_STATIC_ASSERT(DISPATCH_TG(jit_base) >= 0 &&
 		 DISPATCH_TG(jit_base) <= 4095);
 LJ_STATIC_ASSERT(DISPATCH_TG(vmstate) >= 0 &&
 		 DISPATCH_TG(vmstate) <= 4095);
+LJ_STATIC_ASSERT(DISPATCH_TG(poll) >= 0 && DISPATCH_TG(poll) <= 4095);
+LJ_STATIC_ASSERT(DISPATCH_TG(profile_request) >= 0 &&
+		 DISPATCH_TG(profile_request) <= 4095);
 LJ_STATIC_ASSERT((DISPATCH_TG(cur_L) & 7) == 0);
 LJ_STATIC_ASSERT((DISPATCH_TG(jit_base) & 7) == 0);
 LJ_STATIC_ASSERT((DISPATCH_TG(vmstate) & 3) == 0);
+LJ_STATIC_ASSERT((DISPATCH_TG(poll) & 3) == 0);
+LJ_STATIC_ASSERT((DISPATCH_TG(profile_request) & 3) == 0);
 
 static void emit_tgaddr(ASMState *as, int32_t ofs)
 {
@@ -378,6 +385,15 @@ static void emit_gettg_(ASMState *as, Reg r, int32_t ofs)
   emit_tgaddr(as, ofs);
 }
 
+static void emit_gettg32_(ASMState *as, Reg r, int32_t ofs)
+{
+  lj_assertA(r < RID_MAX_GPR && r != RID_DISPATCH,
+	     "bad TG 32 bit load register %d", r);
+  lj_assertA((ofs & 3) == 0, "unaligned TG 32 bit load offset %d", ofs);
+  emit_dn(as, A64I_LDARw, r, RID_TMP);
+  emit_tgaddr(as, ofs);
+}
+
 static void emit_settg_(ASMState *as, Reg r, int32_t ofs)
 {
   lj_assertA(r < RID_MAX_GPR && r != RID_TMP,
@@ -388,6 +404,8 @@ static void emit_settg_(ASMState *as, Reg r, int32_t ofs)
 
 #define emit_gettg(as, r, field) \
   emit_gettg_((as), (r), DISPATCH_TG(field))
+#define emit_gettg32(as, r, field) \
+  emit_gettg32_((as), (r), DISPATCH_TG(field))
 #define emit_settg(as, r, field) \
   emit_settg_((as), (r), DISPATCH_TG(field))
 
@@ -412,6 +430,41 @@ static void emit_setvmstate_(ASMState *as, int32_t state)
 #define emit_setvmstate_root(as, i) emit_setvmstate((as), (i))
 
 /* -- End TG-local JIT state --------------------------------------------- */
+
+/* Form a global_State field address without a literal pool, then load one
+** remotely published 32 bit word with acquire semantics. The two-ADD form is
+** layout-stable for the large GC2 block and keeps x30 as the only scratch. */
+LJ_STATIC_ASSERT(offsetof(global_State, gc2.jit_phase_gate) <= 0xffffff);
+LJ_STATIC_ASSERT((offsetof(global_State, gc2.jit_phase_gate) & 3) == 0);
+
+static void emit_gladdr24(ASMState *as, int32_t ofs)
+{
+  uint32_t hi = (uint32_t)ofs & 0xfff000u;
+  uint32_t lo = (uint32_t)ofs & 0xfffu;
+  lj_assertA(ofs >= 0 && ofs <= 0xffffff,
+	     "global address offset %d out of range", ofs);
+  if (hi != 0) {
+    if (lo != 0)
+      emit_dn(as, A64I_ADDx^emit_isk12((int32_t)lo), RID_TMP, RID_TMP);
+    emit_dn(as, A64I_ADDx^emit_isk12((int32_t)hi), RID_TMP, RID_GL);
+  } else if (lo != 0) {
+    emit_dn(as, A64I_ADDx^emit_isk12((int32_t)lo), RID_TMP, RID_GL);
+  } else {
+    emit_dm(as, A64I_MOVx, RID_TMP, RID_GL);
+  }
+}
+
+static void emit_getgl32acq_(ASMState *as, Reg r, int32_t ofs)
+{
+  lj_assertA(r < RID_MAX_GPR && r != RID_GL && r != RID_DISPATCH,
+	     "bad global 32 bit load register %d", r);
+  lj_assertA((ofs & 3) == 0, "unaligned global 32 bit load offset %d", ofs);
+  emit_dn(as, A64I_LDARw, r, RID_TMP);
+  emit_gladdr24(as, ofs);
+}
+
+#define emit_getgl32acq(as, r, field) \
+  emit_getgl32acq_((as), (r), (int32_t)offsetof(global_State, field))
 
 /* -- Emit control-flow instructions -------------------------------------- */
 

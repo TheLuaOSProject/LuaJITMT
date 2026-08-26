@@ -1851,6 +1851,27 @@ static void asm_gc_check(ASMState *as)
 
 /* -- Loop handling ------------------------------------------------------- */
 
+/* Exit through the current snapshot when GC2 closes native entry, or when
+** this executor has an asynchronous safepoint/profile request. ARM64 fields
+** are distinct 32 bit publications and must not use x64's overlapping qword
+** load. Reverse emission yields gate load/check first, then the optional TG
+** poll/profile check at runtime. */
+static void asm_xpoll(ASMState *as, IRIns *ir)
+{
+  Reg gate = ra_scratch(as, RSET_GPR);
+  if (ir->op1) {
+    Reg profile = ra_scratch(as, rset_exclude(RSET_GPR, gate));
+    asm_guardcc(as, CC_NE);
+    emit_nm(as, A64I_CMPw, gate, RID_ZERO);
+    emit_dnm(as, A64I_ORRw, gate, gate, profile);
+    emit_gettg32(as, profile, profile_request);
+    emit_gettg32(as, gate, poll);
+  }
+  asm_guardcc(as, CC_EQ);
+  emit_nm(as, A64I_CMPw, gate, RID_ZERO);
+  emit_getgl32acq(as, gate, gc2.jit_phase_gate);
+}
+
 /* Fixup the loop branch. */
 static void asm_loop_fixup(ASMState *as)
 {
