@@ -2891,18 +2891,21 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cmp TMP0, TMP1
     |   sub RB, RB, #0x20000
     if (op == BC_ISTC || op == BC_IST) {
-      if (op == BC_ISTC) {
-	|  csel RA, RA, RC, lo
-      }
       |  csel PC, RB, PC, lo
-    } else {
-      if (op == BC_ISFC) {
-	|  csel RA, RA, RC, hs
+      if (op == BC_ISTC) {
+	|  bhs >1			// The non-copy fallthrough did not mutate RA.
       }
+    } else {
       |  csel PC, RB, PC, hs
+      if (op == BC_ISFC) {
+	|  blo >1			// The non-copy fallthrough did not mutate RA.
+      }
     }
     if (op == BC_ISTC || op == BC_ISFC) {
-      |  str TMP0, [BASE, RA, lsl #3]
+      |  add ATMP, BASE, RA, lsl #3
+      |  stlr TMP0, [ATMP]		// Release-publish the taken test-copy.
+      |  arm64_vm_stack_dirty
+      |1:
     }
     |  ins_next
     break;
@@ -2926,7 +2929,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_MOV:
     |  // RA = dst, RC = src
     |  ldr TMP0, [BASE, RC, lsl #3]
-    |  str TMP0, [BASE, RA, lsl #3]
+    |  add ATMP, BASE, RA, lsl #3
+    |  stlr TMP0, [ATMP]
+    |  arm64_vm_stack_dirty
     |  ins_next
     break;
   case BC_NOT:
@@ -3165,7 +3170,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ldr TMP0, [KBASE, RC, lsl #3]
     |   movn TMP1, #~LJ_TSTR
     |  add TMP0, TMP0, TMP1, lsl #47
-    |  str TMP0, [BASE, RA, lsl #3]
+    |  add ATMP, BASE, RA, lsl #3
+    |  stlr TMP0, [ATMP]
+    |  arm64_vm_stack_dirty
     |  ins_next
     break;
   case BC_KCDATA:
@@ -3175,7 +3182,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ldr TMP0, [KBASE, RC, lsl #3]
     |   movn TMP1, #~LJ_TCDATA
     |  add TMP0, TMP0, TMP1, lsl #47
-    |  str TMP0, [BASE, RA, lsl #3]
+    |  add ATMP, BASE, RA, lsl #3
+    |  stlr TMP0, [ATMP]
+    |  arm64_vm_stack_dirty
     |  ins_next
     |.endif
     break;
@@ -3220,7 +3229,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ldr UPVAL:CARG2, [LFUNC:CARG2, RC, lsl #3]
     |  ldr CARG2, UPVAL:CARG2->v
     |  ldar TMP0, [CARG2]
-    |  str TMP0, [BASE, RA, lsl #3]
+    |  add ATMP, BASE, RA, lsl #3
+    |  stlr TMP0, [ATMP]
+    |  arm64_vm_stack_dirty
     |  ins_next
     break;
   case BC_CNEW:
@@ -3440,9 +3451,16 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  bl extern lj_func_newL_gc
     |  // Returns GCfuncL *.
     |  ldr BASE, L->base
+    |   ldrb RAw, [PC, #-4+OFS_RA]	// Re-decode after the allocator.
     |   movn TMP0, #~LJ_TFUNC
     |   add CRET1, CRET1, TMP0, lsl #47
-    |  str CRET1, [BASE, RA, lsl #3]
+    |  add RA, BASE, RA, lsl #3
+    |  stlr CRET1, [RA]			// Release-publish the new closure root.
+    |  mov CARG3, RA
+    |  mov CARG2, L
+    |  mov CARG1, L
+    |  bl extern lj_state_stack_pubtv	// Barrier the new collectable root.
+    |  ldr BASE, L->base
     |  ins_next
     break;
 
@@ -3473,8 +3491,11 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  // Returns GCtab *.
     }
     |  ldr BASE, L->base
+    |   ldrb RAw, [PC, #-4+OFS_RA]	// Re-decode after the allocator.
     |   movk CRET1, #(LJ_TTAB>>1)&0xffff, lsl #48
-    |  str CRET1, [BASE, RA, lsl #3]
+    |  add ATMP, BASE, RA, lsl #3
+    |  stlr CRET1, [ATMP]		// Constructors own new-table publication.
+    |  arm64_vm_stack_dirty
     |  ins_next
     |
     |5:

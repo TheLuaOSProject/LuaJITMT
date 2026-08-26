@@ -432,3 +432,25 @@ The next checkpoint must finish ordinary leaf writes, C-built metamethod
 frames, generation-safe metatable/equality handling, and ISNEXT bytecode
 publication. Safepoint acknowledgement remains disabled until that complete
 gate is green.
+
+### 8. Apple ARM64 ordinary leaf stack publication
+
+The active JIT-disabled ARM64 interpreter now release-publishes the result of
+`ISTC`/`ISFC`, `MOV`, `KSTR`, `KCDATA`, `UGET`, `FNEW`, `TNEW`, and `TDUP` and
+invalidates the TG stack-scan stamp after the completed write. The conditional
+test-copy bytecodes skip both publication and dirtying when their copy branch
+is not taken. Allocation paths reload the potentially relocated stack and
+re-decode RA after returning from C; fresh closures additionally use the
+collectable-root publication helper, while fresh-table constructors retain
+their existing object-publication responsibility.
+
+The clean native assert bootstrap passed the deterministic source/emitted-
+object contract, the focused full-GC root-retention fixture, all 387 stock
+tests, threading/hook/coroutine checks, and 320 concurrent FFI callback
+rounds. The runtime fixture owns semantic/reachability and retention coverage;
+the static/emitted contract owns exact per-opcode store and dirty attribution
+because the surrounding call/return envelope also advances the dirty epoch.
+
+Stage 2 is still open at C-built metamethod frames, generation-safe protected
+metatable lookup, rooted distinct equality/comparison, and `ISNEXT` bytecode
+publication. ARM safepoint acknowledgement and the JIT remain disabled.
