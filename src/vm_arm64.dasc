@@ -190,6 +190,10 @@
 |.type PROTO,		GCproto
 |.type UPVAL,		GCupval
 |.type NODE,		Node
+|.type TG,		TGState
+|.if FFI
+|.type CBACK,		CCallbackRuntime
+|.endif
 |.type NARGS8,		int
 |.type TRACE,		GCtrace
 |.type SBUF,		SBuf
@@ -587,7 +591,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  ins_call
   |  // BASE = new base, CARG3 = func, RC = nargs*8, PC = caller PC
   |
-  |->vm_cpcall:				// Setup protected C frame, call C.
+  |->vm_cpcall_asm:			// Setup protected C frame, call C.
   |  // (lua_State *L, lua_CFunction func, void *ud, lua_CPFunction cp)
   |  saveregs
   |  mov L, CARG1
@@ -1290,12 +1294,18 @@ static void build_subroutines(BuildCtx *ctx)
   |.endif
   |   ldr PC, [BASE, FRAME_PC]
   |     str BASE, L->base
+  |   str PC, SAVE_PC
+  |  mov CARG2, CARG1
+  |  mov CARG1, L
+  |  bl extern lj_ffh_coroutine_claim	// (lua_State *L, lua_State *co)
+  |  cbz CRET1, ->coro_claim_busy_ .. resume
+  |  str CRET1, TMPD			// Tagged co pointer: low bit owns claim.
+  |  and L:CARG1, CRET1, #-2
   |  ldp RB, CARG2, L:CARG1->base
   |   ldrb TMP1w, L:CARG1->status
   |  add TMP0, CARG2, TMP1
-  |   str PC, SAVE_PC
   |  cmp TMP0, RB
-  |  beq ->fff_fallback
+  |  beq ->coro_claim_fallback_ .. resume
   |   cmp TMP1, #LUA_YIELD
   |    add TMP0, CARG2, #8
   |   csel CARG2, CARG2, TMP0, hs
@@ -1304,7 +1314,7 @@ static void build_subroutines(BuildCtx *ctx)
   |    ldr RB, L:CARG1->cframe
   |   ccmp CARG3, CARG4, #2, ls
   |    ccmp RB, #0, #2, ls
-  |    bhi ->fff_fallback
+  |    bhi ->coro_claim_fallback_ .. resume
   |.if resume
   |  sub CARG3, CARG3, #8		// Keep resumed thread in stack for GC.
   |  add BASE, BASE, #8
@@ -1321,11 +1331,12 @@ static void build_subroutines(BuildCtx *ctx)
   |  bne <2
   |3:
   |  mov CARG3, #0
-  |   mov L:RA, L:CARG1
   |  mov CARG4, #0
   |  bl ->vm_resume			// (lua_State *L, TValue *base, 0, 0)
   |  // Returns thread status.
   |4:
+  |  ldr L:RA, TMPD
+  |  and L:RA, RA, #-2
   |  ldp CARG3, CARG4, L:RA->base
   |   cmp CRET1, #LUA_YIELD
   |  ldr BASE, L->base
@@ -1359,6 +1370,17 @@ static void build_subroutines(BuildCtx *ctx)
   |   mov RA, BASE
   |   add RC, RC, #8
   |.endif
+  |->coro_release_return_ .. resume:
+  |  ldr TMP0, TMPD
+  |  tbz TMP0, #0, ->coro_release_done_ .. resume
+  |  mov CARG3w, RCw
+  |   and L:CARG1, TMP0, #-2
+  |  ldr TG:CARG2, L:CARG1->tg_hint
+  |  add CARG2, CARG2, #(offsetof(TGState, tid)&0xfff000)
+  |  ldr CARG2w, [CARG2, #(offsetof(TGState, tid)&0xfff)]
+  |  bl extern lj_state_resume_release_result
+  |  mov RCw, CRET1w
+  |->coro_release_done_ .. resume:
   |  ands CARG1, PC, #FRAME_TYPE
   |   str PC, SAVE_PC
   |   str RCw, SAVE_MULTRES
@@ -1375,7 +1397,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  b <7
   |.else
   |  mov CARG1, L
-  |  mov CARG2, L:RA
+  |  ldr CARG2, TMPD
   |  bl extern lj_ffh_coroutine_wrap_err  // (lua_State *L, lua_State *co)
   |  // Never returns.
   |.endif
@@ -1386,6 +1408,21 @@ static void build_subroutines(BuildCtx *ctx)
   |  bl extern lj_state_growstack	// (lua_State *L, int n)
   |  mov CRET1, #0
   |  b <4
+  |
+  |->coro_claim_fallback_ .. resume:
+  |  ldr TMP0, TMPD
+  |  tbz TMP0, #0, ->coro_claim_fallback_done_ .. resume
+  |  mov CARG3w, RCw
+  |   and L:CARG1, TMP0, #-2
+  |  ldr TG:CARG2, L:CARG1->tg_hint
+  |  add CARG2, CARG2, #(offsetof(TGState, tid)&0xfff000)
+  |  ldr CARG2w, [CARG2, #(offsetof(TGState, tid)&0xfff)]
+  |  bl extern lj_state_resume_release_result
+  |  mov RCw, CRET1w
+  |->coro_claim_fallback_done_ .. resume:
+  |  b ->fff_fallback
+  |->coro_claim_busy_ .. resume:
+  |  b ->fff_fallback
   |.endmacro
   |
   |  coroutine_resume_wrap 1		// coroutine.resume
@@ -2087,9 +2124,11 @@ static void build_subroutines(BuildCtx *ctx)
   |    st_vmstate CARG4w
   |  cmn CARG1w, #17			// Static dispatch?
   |  beq >5
-  |  cmp RBw, #BC_FUNCC+2		// Fast function?
+  |  cmp RBw, #BC__MAX			// Fast function?
   |   add TMP1, GL, INS, uxtb #3
   |  bhs >4
+  |  cmp RBw, #BC_FUNCCW
+  |  bhi >6				// Local cell ops are ordinary bytecode.
   |2:
   |  cmp RBw, #BC_FUNCF			// Function header?
   |  add TMP0, GL, RB, uxtb #3
@@ -2103,6 +2142,12 @@ static void build_subroutines(BuildCtx *ctx)
   |   add RA, BASE, RA, lsl #3	// Yes: RA = BASE+framesize*8, RC = nargs*8
   |   and LFUNC:CARG3, CARG3, #LJ_GCVMASK
   |3:
+  |  br_auth RB
+  |
+  |6:  // Dispatch a local cell opcode without function-header reshaping.
+  |  ldr RB, [TMP1, #GG_G2DISP]
+  |   decode_RA RA, INS
+  |   lsr RC, INS, #16
   |  br_auth RB
   |
   |4:  // Check frame below fast function.
@@ -2267,23 +2312,49 @@ static void build_subroutines(BuildCtx *ctx)
   |.if FFI
   |.type CTSTATE, CTState, PC
   |  saveregs
-  |  ldr CTSTATE, GL:x10->ctype_state
   |  mov GL, x10
-  |    add x10, sp, # CFRAME_SPACE
-  |  str w9, CTSTATE->cb.slot
-  |  stp x0, x1, CTSTATE->cb.gpr[0]
-  |   stp d0, d1, CTSTATE->cb.fpr[0]
-  |  stp x2, x3, CTSTATE->cb.gpr[2]
-  |   stp d2, d3, CTSTATE->cb.fpr[2]
-  |  stp x4, x5, CTSTATE->cb.gpr[4]
-  |   stp d4, d5, CTSTATE->cb.fpr[4]
-  |  stp x6, x7, CTSTATE->cb.gpr[6]
-  |   stp d6, d7, CTSTATE->cb.fpr[6]
-  |    str x10, CTSTATE->cb.stack
+  |  mov KBASE, x9			// Preserve callback slot across helpers.
+  |  sub sp, sp, #128
+  |  stp x0, x1, [sp, #0]
+  |   stp d0, d1, [sp, #64]
+  |  stp x2, x3, [sp, #16]
+  |   stp d2, d3, [sp, #80]
+  |  stp x4, x5, [sp, #32]
+  |   stp d4, d5, [sp, #96]
+  |  stp x6, x7, [sp, #48]
+  |   stp d6, d7, [sp, #112]
+  |  mov CARG1, GL
+  |  bl extern lj_ctype_ctsG_acq	// (global_State *g)
+  |  mov CTSTATE, CRET1
+  |  mov CARG1, CTSTATE
+  |  mov CARG2w, w20
+  |  bl extern lj_ccallback_prepare	// (CTState *cts, MSize slot)
+  |  mov KBASE, CRET1
+  |  cbz KBASE, ->vm_ffi_callback_dead
+  |  ldp TMP0, TMP1, [sp, #0]
+  |   ldp d0, d1, [sp, #64]
+  |  stp TMP0, TMP1, CBACK:KBASE->gpr[0]
+  |   stp d0, d1, CBACK:KBASE->fpr[0]
+  |  ldp TMP0, TMP1, [sp, #16]
+  |   ldp d0, d1, [sp, #80]
+  |  stp TMP0, TMP1, CBACK:KBASE->gpr[2]
+  |   stp d0, d1, CBACK:KBASE->fpr[2]
+  |  ldp TMP0, TMP1, [sp, #32]
+  |   ldp d0, d1, [sp, #96]
+  |  stp TMP0, TMP1, CBACK:KBASE->gpr[4]
+  |   stp d0, d1, CBACK:KBASE->fpr[4]
+  |  ldp TMP0, TMP1, [sp, #48]
+  |   ldp d0, d1, [sp, #112]
+  |  stp TMP0, TMP1, CBACK:KBASE->gpr[6]
+  |   stp d0, d1, CBACK:KBASE->fpr[6]
+  |  add sp, sp, #128
+  |    add TMP0, sp, # CFRAME_SPACE
+  |    str TMP0, CBACK:KBASE->stack
   |  mov CARG1, CTSTATE
   |   str CTSTATE, SAVE_PC		// Any value outside of bytecode is ok.
   |  mov CARG2, sp
-  |  bl extern lj_ccallback_enter	// (CTState *cts, void *cf)
+  |  mov CARG3, KBASE
+  |  bl extern lj_ccallback_enter	// (CTState *cts, void *cf, CCallbackRuntime *cb)
   |  // Returns lua_State *.
   |  ldp BASE, RC, L:CRET1->base
   |   init_constants
@@ -2297,14 +2368,27 @@ static void build_subroutines(BuildCtx *ctx)
   |
   |->cont_ffi_callback:			// Return from FFI callback.
   |.if FFI
-  |  ldr CTSTATE, GL->ctype_state
   |   stp BASE, CARG4, L->base
-  |  str L, CTSTATE->L
+  |  mov CARG1, GL
+  |  bl extern lj_ctype_ctsG_acq	// (global_State *g)
+  |  mov CTSTATE, CRET1
+  |  ldr TG:KBASE, L->tg_hint
+  |  add KBASE, KBASE, #(offsetof(TGState, cb)&0xfff000)
+  |  add KBASE, KBASE, #(offsetof(TGState, cb)&0xfff)
   |  mov CARG1, CTSTATE
   |  mov CARG2, RA
-  |  bl extern lj_ccallback_leave       // (CTState *cts, TValue *o)
-  |  ldp x0, x1, CTSTATE->cb.gpr[0]
-  |   ldp d0, d1, CTSTATE->cb.fpr[0]
+  |  mov CARG3, KBASE
+  |  bl extern lj_ccallback_leave       // (CTState *cts, TValue *o, CCallbackRuntime *cb)
+  |  ldp x0, x1, CBACK:KBASE->gpr[0]
+  |   ldp d0, d1, CBACK:KBASE->fpr[0]
+  |  b ->vm_leave_unw
+  |
+  |->vm_ffi_callback_dead:
+  |  add sp, sp, #128
+  |  mov x0, xzr
+  |  mov x1, xzr
+  |  fmov d0, xzr
+  |  fmov d1, xzr
   |  b ->vm_leave_unw
   |.endif
   |
@@ -2940,8 +3024,77 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  and LFUNC:CARG2, CARG2, #LJ_GCVMASK
     |  ldr UPVAL:CARG2, [LFUNC:CARG2, RC, lsl #3]
     |  ldr CARG2, UPVAL:CARG2->v
-    |  ldr TMP0, [CARG2]
+    |  ldar TMP0, [CARG2]
     |  str TMP0, [BASE, RA, lsl #3]
+    |  ins_next
+    break;
+  case BC_CNEW:
+    |  // RA = dst
+    |  str BASE, L->base
+    |  str PC, SAVE_PC
+    |  mov CARG1, L
+    |  bl extern lj_func_newuvcell	// (lua_State *L)
+    |  ldr BASE, L->base
+    |  ldrb RAw, [PC, #-4+OFS_RA]
+    |  movn TMP0, #~LJ_TUPVAL
+    |  add TMP0, CRET1, TMP0, lsl #47
+    |  add RA, BASE, RA, lsl #3
+    |  str TMP0, [RA]
+    |  mov CARG1, L
+    |  mov CARG2, L
+    |  mov CARG3, RA
+    |  bl extern lj_state_stack_pubtv	// (lua_State *L, lua_State *target, cTValue *tv)
+    |  ldr BASE, L->base
+    |  ins_next
+    break;
+  case BC_CGET:
+    |  // RA = dst, RC = local cell/raw slot
+    |  ldr TMP0, [BASE, RC, lsl #3]
+    |  checktp UPVAL:TMP1, TMP0, LJ_TUPVAL, >1
+    |  ldr TMP1, UPVAL:TMP1->v
+    |  ldar TMP0, [TMP1]
+    |1:
+    |  add RA, BASE, RA, lsl #3
+    |  str TMP0, [RA]
+    |  str BASE, L->base
+    |  str PC, SAVE_PC
+    |  mov CARG1, L
+    |  mov CARG2, L
+    |  mov CARG3, RA
+    |  bl extern lj_state_stack_pubtv	// (lua_State *L, lua_State *target, cTValue *tv)
+    |  ldr BASE, L->base
+    |  ins_next
+    break;
+  case BC_CSET:
+    |  // RA = local cell/raw slot, RC = src
+    |  ldr TMP0, [BASE, RA, lsl #3]
+    |  checktp UPVAL:TMP1, TMP0, LJ_TUPVAL, >3
+    |  ldrb TMP2w, UPVAL:TMP1->closed
+    |  ldr CARG2, UPVAL:TMP1->v
+    |  cbz TMP2w, >4
+    |  str BASE, L->base
+    |  str PC, SAVE_PC
+    |  mov CARG1, L
+    |  add CARG3, BASE, RC, lsl #3
+    |  bl extern lj_func_storeuv_pub	// (lua_State *L, TValue *tv, const TValue *src)
+    |  ldr BASE, L->base
+    |  ins_next
+    |
+    |3:  // Raw local slot.
+    |  add RA, BASE, RA, lsl #3
+    |  b >5
+    |4:  // Defensive open-cell fallback.
+    |  mov RA, CARG2
+    |5:
+    |  ldr TMP0, [BASE, RC, lsl #3]
+    |  str TMP0, [RA]
+    |  str BASE, L->base
+    |  str PC, SAVE_PC
+    |  mov CARG1, L
+    |  mov CARG2, L
+    |  mov CARG3, RA
+    |  bl extern lj_state_stack_pubtv	// (lua_State *L, lua_State *target, cTValue *tv)
+    |  ldr BASE, L->base
     |  ins_next
     break;
   case BC_USETV:
@@ -2950,29 +3103,28 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |   add RA, RA, #offsetof(GCfuncL, uvptr)/8
     |  and LFUNC:CARG2, CARG2, #LJ_GCVMASK
     |  ldr UPVAL:CARG1, [LFUNC:CARG2, RA, lsl #3]
-    |   ldr CARG3, [BASE, RC, lsl #3]
     |    ldr CARG2, UPVAL:CARG1->v
-    |  ldrb TMP2w, UPVAL:CARG1->marked
     |  ldrb TMP0w, UPVAL:CARG1->closed
-    |    asr ITYPE, CARG3, #47
-    |   str CARG3, [CARG2]
-    |    add ITYPE, ITYPE, #-LJ_TISGCV
-    |  tst TMP2w, #LJ_GC_BLACK		// isblack(uv)
-    |  ccmp TMP0w, #0, #4, ne		// && uv->closed
-    |    ccmn ITYPE, #-(LJ_TNUMX - LJ_TISGCV), #0, ne	// && tvisgcv(v)
-    |  bhi >2
-    |1:
+    |  cbz TMP0w, >1
+    |  str BASE, L->base
+    |  str PC, SAVE_PC
+    |  mov CARG1, L
+    |  add CARG3, BASE, RC, lsl #3
+    |  bl extern lj_func_storeuv_pub	// (lua_State *L, TValue *tv, const TValue *src)
+    |  ldr BASE, L->base
     |  ins_next
     |
-    |2:  // Check if new value is white.
-    |  and GCOBJ:CARG3, CARG3, #LJ_GCVMASK
-    |  ldrb TMP1w, GCOBJ:CARG3->gch.marked
-    |  tst TMP1w, #LJ_GC_WHITES		// iswhite(str)
-    |  beq <1
-    |  // Crossed a write barrier. Move the barrier forward.
-    |  mov CARG1, GL
-    |  bl extern lj_gc_barrieruv	// (global_State *g, TValue *tv)
-    |  b <1
+    |1:
+    |  ldr TMP0, [BASE, RC, lsl #3]
+    |  str TMP0, [CARG2]
+    |  str BASE, L->base
+    |  str PC, SAVE_PC
+    |  mov CARG3, CARG2
+    |  mov CARG2, L
+    |  mov CARG1, L
+    |  bl extern lj_state_stack_pubtv	// (lua_State *L, lua_State *target, cTValue *tv)
+    |  ldr BASE, L->base
+    |  ins_next
     break;
   case BC_USETS:
     |  // RA = uvnum, RC = str_const (~)
@@ -2981,36 +3133,58 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |    mvn RC, RC
     |  and LFUNC:CARG2, CARG2, #LJ_GCVMASK
     |  ldr UPVAL:CARG1, [LFUNC:CARG2, RA, lsl #3]
-    |   ldr STR:CARG3, [KBASE, RC, lsl #3]
-    |   movn TMP0, #~LJ_TSTR
+    |   ldr STR:RA, [KBASE, RC, lsl #3]
     |    ldr CARG2, UPVAL:CARG1->v
-    |  ldrb TMP2w, UPVAL:CARG1->marked
-    |   add TMP0, STR:CARG3, TMP0, lsl #47
-    |    ldrb TMP1w, STR:CARG3->marked
-    |   str TMP0, [CARG2]
-    |  tbnz TMP2w, #2, >2		// isblack(uv)
-    |1:
+    |  ldrb TMP0w, UPVAL:CARG1->closed
+    |  cbz TMP0w, >1
+    |  str BASE, L->base
+    |  str PC, SAVE_PC
+    |  mov CARG1, L
+    |  mov CARG3, STR:RA
+    |  bl extern lj_func_storeuvstr_pub	// (lua_State *L, TValue *tv, GCstr *str)
+    |  ldr BASE, L->base
     |  ins_next
     |
-    |2:  // Check if string is white and ensure upvalue is closed.
-    |  ldrb TMP0w, UPVAL:CARG1->closed
-    |    tst TMP1w, #LJ_GC_WHITES	// iswhite(str)
-    |  ccmp TMP0w, #0, #4, ne
-    |  beq <1
-    |  // Crossed a write barrier. Move the barrier forward.
-    |  mov CARG1, GL
-    |  bl extern lj_gc_barrieruv	// (global_State *g, TValue *tv)
-    |  b <1
+    |1:
+    |  movn TMP0, #~LJ_TSTR
+    |  add TMP0, STR:RA, TMP0, lsl #47
+    |  str TMP0, [CARG2]
+    |  str BASE, L->base
+    |  str PC, SAVE_PC
+    |  mov CARG3, CARG2
+    |  mov CARG2, L
+    |  mov CARG1, L
+    |  bl extern lj_state_stack_pubtv	// (lua_State *L, lua_State *target, cTValue *tv)
+    |  ldr BASE, L->base
+    |  ins_next
     break;
   case BC_USETN:
     |  // RA = uvnum, RC = num_const
     |  ldr LFUNC:CARG2, [BASE, FRAME_FUNC]
     |   add RA, RA, #offsetof(GCfuncL, uvptr)/8
     |  and LFUNC:CARG2, CARG2, #LJ_GCVMASK
-    |  ldr UPVAL:CARG2, [LFUNC:CARG2, RA, lsl #3]
-    |   ldr TMP0, [KBASE, RC, lsl #3]
-    |  ldr CARG2, UPVAL:CARG2->v
-    |   str TMP0, [CARG2]
+    |  ldr UPVAL:CARG1, [LFUNC:CARG2, RA, lsl #3]
+    |  ldr CARG2, UPVAL:CARG1->v
+    |  ldrb TMP0w, UPVAL:CARG1->closed
+    |  cbz TMP0w, >1
+    |  str BASE, L->base
+    |  str PC, SAVE_PC
+    |  mov CARG1, L
+    |  add CARG3, KBASE, RC, lsl #3
+    |  bl extern lj_func_storeuvnum_pub	// (lua_State *L, TValue *tv, const lua_Number *np)
+    |  ldr BASE, L->base
+    |  ins_next
+    |
+    |1:
+    |  ldr TMP0, [KBASE, RC, lsl #3]
+    |  str TMP0, [CARG2]
+    |  str BASE, L->base
+    |  str PC, SAVE_PC
+    |  mov CARG3, CARG2
+    |  mov CARG2, L
+    |  mov CARG1, L
+    |  bl extern lj_state_stack_pubtv	// (lua_State *L, lua_State *target, cTValue *tv)
+    |  ldr BASE, L->base
     |  ins_next
     break;
   case BC_USETP:
@@ -3018,10 +3192,28 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ldr LFUNC:CARG2, [BASE, FRAME_FUNC]
     |   add RA, RA, #offsetof(GCfuncL, uvptr)/8
     |  and LFUNC:CARG2, CARG2, #LJ_GCVMASK
-    |  ldr UPVAL:CARG2, [LFUNC:CARG2, RA, lsl #3]
-    |   mvn TMP0, RC, lsl #47
-    |  ldr CARG2, UPVAL:CARG2->v
-    |   str TMP0, [CARG2]
+    |  ldr UPVAL:CARG1, [LFUNC:CARG2, RA, lsl #3]
+    |  ldr CARG2, UPVAL:CARG1->v
+    |  ldrb TMP0w, UPVAL:CARG1->closed
+    |  cbz TMP0w, >1
+    |  str BASE, L->base
+    |  str PC, SAVE_PC
+    |  mov CARG1, L
+    |  mov CARG3w, RCw
+    |  bl extern lj_func_storeuvpri_pub	// (lua_State *L, TValue *tv, uint32_t pri)
+    |  ldr BASE, L->base
+    |  ins_next
+    |
+    |1:
+    |  mvn TMP0, RC, lsl #47
+    |  str TMP0, [CARG2]
+    |  str BASE, L->base
+    |  str PC, SAVE_PC
+    |  mov CARG3, CARG2
+    |  mov CARG2, L
+    |  mov CARG1, L
+    |  bl extern lj_state_stack_pubtv	// (lua_State *L, lua_State *target, cTValue *tv)
+    |  ldr BASE, L->base
     |  ins_next
     break;
 

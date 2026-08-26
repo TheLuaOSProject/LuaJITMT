@@ -526,9 +526,23 @@
 /* Lockless multithreaded runtime is the primary build path. */
 #define LJ_MT			1
 
+#if defined(LUAJIT_MT_ARM64_BOOTSTRAP)
+/*
+** Bring up the Apple ARM64 assembler VM without widening the supported target
+** contract.  This opt-in is deliberately interpreter-only until the ARM64 VM,
+** FFI and JIT paths have their lockless invariants audited and validated.
+*/
+#if !LJ_TARGET_GC64 || !LJ_TARGET_ARM64 || !LJ_TARGET_OSX || LJ_TARGET_IOS
+#error "LUAJIT_MT_ARM64_BOOTSTRAP requires GC64 on macOS ARM64"
+#endif
+#if !defined(LUAJIT_DISABLE_JIT)
+#error "LUAJIT_MT_ARM64_BOOTSTRAP currently requires LUAJIT_DISABLE_JIT"
+#endif
+#else
 #if !LJ_TARGET_GC64 || !LJ_TARGET_X64 || \
     !(LJ_TARGET_LINUX || LJ_TARGET_OSX || LJ_TARGET_WINDOWS)
 #error "lockless runtime requires GC64 on x86-64 Linux, macOS or Windows"
+#endif
 #endif
 
 /* 64 bit GC references are the only runtime representation. */

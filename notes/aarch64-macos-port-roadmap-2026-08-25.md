@@ -336,3 +336,17 @@ gate rejects atomic runtime calls or any memory access other than inline
 macOS 11 minimum, including ASan+UBSan and TSan builds.  ARM64 and x86-64
 cross-compiles of the production table object also contain their expected
 inline `caspal`/`cmpxchg16b` instructions with no helper import.
+
+### 4. Experimental Apple ARM64 interpreter/FFI bootstrap
+
+The opt-in `LUAJIT_MT_ARM64_BOOTSTRAP` profile now produces a native macOS
+ARM64 interpreter when combined with `LUAJIT_DISABLE_JIT`.  It includes the
+fork's local-cell bytecodes, coroutine ownership claims, protected C-call ABI,
+and TG-local FFI callback runtime.  Darwin callback stack decoding now follows
+the packed scalar ABI rather than assuming eight-byte stack slots.
+
+This is deliberately not the P1 exit gate.  ARM still uses global dispatch,
+hook, and VM-state fields; it has no TG safepoint polling; and ordinary
+bytecode stack/result stores do not yet have complete dirty-epoch/root
+publication parity.  `notes/aarch64-interpreter-ffi-bootstrap-2026-08-26.md`
+records the exact validation, ABI scope, and next root-publication hotspots.

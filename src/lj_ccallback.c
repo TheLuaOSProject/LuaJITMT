@@ -1162,10 +1162,25 @@ static void callback_conv_args(CTState *cts, lua_State *L,
       CALLBACK_HANDLE_REGARG  /* Handle register arguments. */
 
       /* Otherwise pass argument on stack. */
+#if CCALL_PACK_STACKARG
+      {
+	/* Darwin/AArch64 packs stack arguments by their actual size instead of
+	** assigning an eight-byte slot to every argument. Keep nsp byte-based
+	** here to mirror ccall_set_args(); aggregate stack arguments retain the
+	** ABI's minimum pointer alignment. */
+	MSize align = (1u << ctype_align(ainfo)) - 1;
+	if (ctype_isstruct(ainfo) && align < CTSIZE_PTR-1)
+	  align = CTSIZE_PTR-1;
+	nsp = (nsp + align) & ~align;
+	sp = (void *)((uint8_t *)stack + nsp);
+	nsp += asize;
+      }
+#else
       if (CCALL_ALIGN_STACKARG && LJ_32 && sz == 8)
 	nsp = (nsp + 1) & ~1u;  /* Align 64 bit argument on stack. */
       sp = &stack[nsp];
       nsp += n;
+#endif
 
     done:
       if (LJ_BE && asize < CTSIZE_PTR

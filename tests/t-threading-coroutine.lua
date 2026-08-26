@@ -19,6 +19,21 @@ do
   assert(co(10) == 20)
 end
 
+-- A failed resume of a dead coroutine must restore the caller's VM registers.
+-- In particular, the ARM64 fallback path used to leave KBASE holding a tagged
+-- coroutine pointer, so the first constant load after the error crashed.
+do
+  local co = coroutine.create(function()
+    return "done"
+  end)
+  local ok, value = coroutine.resume(co)
+  assert(ok and value == "done", tostring(value))
+  local resumed, err = coroutine.resume(co)
+  assert(resumed == false and tostring(err):match("cannot resume dead coroutine"))
+  local sentinel = "post-dead-resume-sentinel"
+  assert(sentinel == "post-dead-resume-sentinel")
+end
+
 do
   local co = coroutine.create(function()
     local from_a = coroutine.yield("first")
