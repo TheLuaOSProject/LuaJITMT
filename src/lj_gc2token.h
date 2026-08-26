@@ -957,7 +957,8 @@ LA_INLINE LJGC2TableTopologyResult lj_gc2_table_topology_changed(
 typedef enum LJGC2RootDescState {
   LJ_GC2_ROOTDESC_IDLE = 0,
   LJ_GC2_ROOTDESC_ACTIVE = 1,
-  LJ_GC2_ROOTDESC_NO_RECLAIM = 2
+  LJ_GC2_ROOTDESC_NO_RECLAIM = 2,
+  LJ_GC2_ROOTDESC_PUBLISHING = 3
 } LJGC2RootDescState;
 
 enum {
@@ -1149,26 +1150,28 @@ lj_gc2_rootdesc_pin(LJGC2RootDesc *desc, uint64_t control)
 }
 
 LA_INLINE LJGC2RootDescResult
-lj_gc2_rootdesc_try_activate(LJGC2RootDesc *desc, uint64_t idle,
+lj_gc2_rootdesc_try_activate(LJGC2RootDesc *desc, uint64_t publishing,
                              uint64_t active)
 {
-  uint64_t expected = idle;
+  uint64_t expected = publishing;
   if (la_cas64(&desc->control, &expected, active, LA_ACQ_REL, LA_ACQ))
     return LJ_GC2_ROOTDESC_OK;
   return lj_gc2_rootdesc_pin(desc, expected);
 }
 
 /*
-** Owner-only begin.  Payload stores precede the mandatory locked CAS, which
-** supplies the x86 StoreLoad edge needed before the owner samples the gate
-** without allowing a concurrent NO_RECLAIM pin to be overwritten.
+** Owner-only begin. Claiming PUBLISHING before touching the reused payload is
+** the first half of a portable seqlock: its acquire edge prevents later
+** payload stores from becoming visible before the control transition. The
+** release activation publishes the complete payload. A concurrent pin can
+** replace either PUBLISHING or ACTIVE with sticky NO_RECLAIM.
 */
 LA_INLINE LJGC2RootDescResult
 lj_gc2_rootdesc_publish(LJGC2RootDesc *desc,
                         const LJGC2RootDescSpec *spec,
                         LJGC2RootDescTicket *ticket)
 {
-  uint64_t control, active, generation;
+  uint64_t control, publishing, active, generation, expected;
   LJGC2RootDescResult activate;
   if (!desc || !ticket || !spec)
     return LJ_GC2_ROOTDESC_INVALID;
@@ -1182,6 +1185,17 @@ lj_gc2_rootdesc_publish(LJGC2RootDesc *desc,
   generation = lj_gc2_rootdesc_generation(control);
   if (generation == LJ_GC2_ROOTDESC_MAX_GENERATION)
     return lj_gc2_rootdesc_pin(desc, control);
+
+  publishing = lj_gc2_rootdesc_pack_control(
+    generation + 1u, LJ_GC2_ROOTDESC_PUBLISHING);
+  expected = control;
+  if (!la_cas64(&desc->control, &expected, publishing,
+                LA_ACQ_REL, LA_ACQ))
+    return lj_gc2_rootdesc_pin(desc, expected);
+  /* Paired with the reader's post-payload acquire fence. If any relaxed
+  ** payload load observes this generation, PUBLISHING happens-before the
+  ** final control load, which therefore cannot accept an older ACTIVE word. */
+  la_fence_rel();
 
   la_store32_rlx(&desc->flags, spec->flags);
   la_store32_rlx(&desc->reserved, 0);
@@ -1202,7 +1216,7 @@ lj_gc2_rootdesc_publish(LJGC2RootDesc *desc,
                     spec->range[1].hi : NULL);
   active = lj_gc2_rootdesc_pack_control(generation + 1u,
                                         LJ_GC2_ROOTDESC_ACTIVE);
-  activate = lj_gc2_rootdesc_try_activate(desc, control, active);
+  activate = lj_gc2_rootdesc_try_activate(desc, publishing, active);
   if (activate != LJ_GC2_ROOTDESC_OK)
     return activate;
   ticket->control = active;
@@ -1210,9 +1224,10 @@ lj_gc2_rootdesc_publish(LJGC2RootDesc *desc,
 }
 
 /*
-** As with the activation snapshot, control/payload/control collection is an
-** explicit x86-64 GCC/Clang/MinGW artifact contract, not a portable C11
-** seqlock. NO_RECLAIM obligates the caller to pin global activation too.
+** Portable control/payload/control snapshot. The first acquire keeps payload
+** reads after ACTIVE; the acquire fence keeps them before the final control
+** validation. PUBLISHING is a transient retry, never a readable payload.
+** NO_RECLAIM obligates the caller to pin global activation too.
 */
 LA_INLINE LJGC2RootDescSnapshotResult
 lj_gc2_rootdesc_snapshot(const LJGC2RootDesc *desc, LJGC2RootDescView *view)
@@ -1229,6 +1244,8 @@ lj_gc2_rootdesc_snapshot(const LJGC2RootDesc *desc, LJGC2RootDescView *view)
     }
     return LJ_GC2_ROOTDESC_SNAPSHOT_IDLE;
   }
+  if (state == LJ_GC2_ROOTDESC_PUBLISHING)
+    return LJ_GC2_ROOTDESC_SNAPSHOT_RETRY;
   if (state != LJ_GC2_ROOTDESC_ACTIVE)
     return LJ_GC2_ROOTDESC_SNAPSHOT_NO_RECLAIM;
 
@@ -1242,6 +1259,7 @@ lj_gc2_rootdesc_snapshot(const LJGC2RootDesc *desc, LJGC2RootDescView *view)
   spec.range[1].hi = la_loadptr_rlx((void *const *)&desc->range[1].hi);
   if (la_load32_rlx(&desc->reserved) != 0)
     return LJ_GC2_ROOTDESC_SNAPSHOT_NO_RECLAIM;
+  la_fence_acq();
   after = la_load64_acq(&desc->control);
   if (before != after)
     return LJ_GC2_ROOTDESC_SNAPSHOT_RETRY;

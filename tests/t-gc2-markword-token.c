@@ -2,7 +2,9 @@
 ** t-gc2-markword-token.c - standalone GC2 markword/activation model.
 **
 ** Build & run:
-**   cc -std=gnu11 -O2 -Wall -Wextra -Werror -pthread -mcx16 -Isrc \
+**   LJ_CAS128_CFLAGS=-mcx16  # Use an empty value for an arm64 target.
+**   cc -std=gnu11 -O2 -Wall -Wextra -Werror -pthread \
+**      $LJ_CAS128_CFLAGS -Isrc \
 **      tests/t-gc2-markword-token.c -o /tmp/t-gc2-markword-token && \
 **      /tmp/t-gc2-markword-token
 */
@@ -10,6 +12,7 @@
 #include <assert.h>
 #include <inttypes.h>
 #include <pthread.h>
+#include <sched.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -410,7 +413,7 @@ static void test_activation_root_gate(void)
   assert(lj_gc2_activation_try_gate(&token, &open,
            LJ_GC2_ROOT_GATE_CLOSING, &closing) == LJ_GC2_TRANSITION_OK);
 
-  /* A late publisher changes the same CX16 authority as close/commit. */
+  /* A late publisher changes the same 128-bit CAS authority as close/commit. */
   assert(lj_gc2_activation_try_gate(&token, &closing,
            LJ_GC2_ROOT_GATE_PENDING, &pending) == LJ_GC2_TRANSITION_OK);
   assert(lj_gc2_activation_try_gate(&token, &closing,
@@ -1417,7 +1420,7 @@ static void test_rootdesc_table_store_coverage(void)
     malformed.lo = ticket.control;
     malformed.hi = 0;
     assert(la_cas128(&desc.coverage, &winner, malformed));
-    /* The failed internal CX16 returns the malformed winner. It must be
+    /* The failed internal 128-bit CAS returns the malformed winner. It must be
     ** validated before a retry can overwrite it with a plausible certificate.
     */
     assert(lj_gc2_rootdesc_coverage_advance(
@@ -1616,13 +1619,20 @@ static void test_concurrent_rootdesc_coverage(void)
 static void test_rootdesc_pin_wins_delayed_activation(void)
 {
   LJGC2RootDesc desc;
-  uint64_t idle, active;
+  uint64_t idle, publishing, active, expected;
 
   assert(lj_gc2_rootdesc_init_unpublished(&desc, 3));
   idle = la_load64_acq(&desc.control);
+  publishing = lj_gc2_rootdesc_pack_control(
+    4, LJ_GC2_ROOTDESC_PUBLISHING);
   active = lj_gc2_rootdesc_pack_control(4, LJ_GC2_ROOTDESC_ACTIVE);
-  assert(lj_gc2_rootdesc_pin(&desc, idle) == LJ_GC2_ROOTDESC_PINNED);
-  assert(lj_gc2_rootdesc_try_activate(&desc, idle, active) ==
+  expected = idle;
+  assert(la_cas64(&desc.control, &expected, publishing,
+                  LA_ACQ_REL, LA_ACQ));
+  assert(lj_gc2_rootdesc_snapshot(&desc, NULL) ==
+         LJ_GC2_ROOTDESC_SNAPSHOT_RETRY);
+  assert(lj_gc2_rootdesc_pin(&desc, publishing) == LJ_GC2_ROOTDESC_PINNED);
+  assert(lj_gc2_rootdesc_try_activate(&desc, publishing, active) ==
          LJ_GC2_ROOTDESC_PINNED);
   assert(lj_gc2_rootdesc_state(la_load64_acq(&desc.control)) ==
          LJ_GC2_ROOTDESC_NO_RECLAIM);
@@ -1661,8 +1671,12 @@ static void *rootdesc_writer(void *ud)
     spec.aux_root = i + UINT64_C(0x5a5a5a5a);
     assert(lj_gc2_rootdesc_publish(&stress->desc, &spec, &ticket) ==
            LJ_GC2_ROOTDESC_OK);
-    for (pause = 0; pause < 8; pause++)
+    /* Keep ACTIVE observable long enough to exercise concurrent snapshots on
+    ** fast ARM cores instead of letting the owner finish in one timeslice. */
+    for (pause = 0; pause < 64; pause++)
       la_cpu_pause();
+    if ((i & 63u) == 0)
+      (void)sched_yield();
     assert(lj_gc2_rootdesc_finish(&stress->desc, &ticket) ==
            LJ_GC2_ROOTDESC_OK);
   }
