@@ -96,7 +96,7 @@ test "$(grep -Fc 'StrictLoop loop = strict_loop_new();' \
   "$fixture_source")" = 3
 test "$(grep -Fc 'while i<n do i=i+1 x=x+i end' \
   "$fixture_source")" = 1
-if grep -E "require\(|ffi\.|'[[:space:]]*for[[:space:]]" \
+if grep -E 'require\(|ffi\.|"[[:space:]]*for[[:space:]]' \
      "$fixture_source" >/dev/null; then
   echo "ARM64 phase-gate fixture gained an unsupported Lua workload" >&2
   exit 1
