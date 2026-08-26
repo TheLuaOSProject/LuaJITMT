@@ -142,6 +142,13 @@ return function(add)
 
   runtime.add_luajit_c_fixture_cases(add, {
     {
+      name = "m4_state_stack_dirty_vm",
+      description = "assembly-callable VM stack certification invalidation",
+      output = "lj_t-state-stack-dirty-vm",
+      cfile = "t-state-stack-dirty-vm.c",
+      message = "M4 VM stack dirty helper tests passed"
+    },
+    {
       name = "m4_thr_substrate",
       description = "focused M4 thread substrate C fixture",
       output = "lj_t-thr-substrate",

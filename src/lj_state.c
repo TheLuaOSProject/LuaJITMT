@@ -298,11 +298,20 @@ static void stack_init(lua_State *L1, lua_State *L)
     lj_err_mem(L);
 }
 
+/* VM owner-side stack certification invalidation. The caller separately
+** release-publishes the changed TValue and notifies any new collectable root. */
+void lj_state_stack_dirty_vm(lua_State *L)
+{
+  TGState *tg = L ? L2TG(L) : NULL;
+  if (tg)
+    (void)lj_tg_stack_dirty_epoch_add_rlx(tg, 1);
+}
+
 void lj_state_stack_pubtv(lua_State *L, lua_State *target, cTValue *tv)
 {
   TGState *tg = target ? L2TG(target) : (L ? L2TG(L) : NULL);
   if (tg)
-    lj_tg_stack_dirty_epoch_add_rlx(tg, 1);
+    (void)lj_tg_stack_dirty_epoch_add_rlx(tg, 1);
   tv_rawstore_rel((TValue *)tv, tv_rawload(tv));
   lj_gc_pubroot(L, tv);
 }

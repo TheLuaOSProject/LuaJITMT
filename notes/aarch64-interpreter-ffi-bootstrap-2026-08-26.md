@@ -146,7 +146,17 @@ publish new collectable roots.  Owner-private stack reads do not all need
 `ldar`; acquire is required at shared cells and other externally published
 edges.
 
-The next implementation slice is TG-local ARM dispatch and VM-state
-publication, followed by safepoint polling and complete stack-dirty/root-scan
-certification.  Only after that gate passes should the bootstrap macro become
+`lj_state_stack_dirty_vm(L)` is the bounded substrate for those hot paths.  It
+selects the state's owning TG with `L2TG(L)` and performs exactly one relaxed
+atomic increment of `stack_dirty_epoch`.  It cannot allocate, enter GC, wait,
+or touch a TValue, so it is safe at an owner-authorized VM call boundary.  The
+relaxed increment invalidates only the TG's stack-scan certification: the ARM
+caller must still release-publish the slot (for example with `stlr`) before the
+invalidation and must call `lj_gc_pubtvroot_vm` when a new collectable root
+needs notification.
+
+TG-local ARM dispatch and VM-state publication have now landed.  The next
+implementation slice is complete stack-dirty/result-root publication,
+followed by safepoint polling and root-scan certification.  Only after that
+gate passes should the bootstrap macro become
 a supported ARM interpreter target or JIT work begin.
