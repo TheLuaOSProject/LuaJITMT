@@ -344,6 +344,10 @@ LJ_STATIC_ASSERT(GG_G2J_LO >= 0 && GG_G2J_LO <= 0xfff);
 LJ_STATIC_ASSERT(L_OFS(tg_hint) >= 0 && L_OFS(tg_hint) <= 4095);
 LJ_STATIC_ASSERT(TG_OFS_DISPATCH >= 0 && TG_OFS_DISPATCH <= 4095);
 LJ_STATIC_ASSERT(DISPATCH_TG(cur_L) >= 0 && DISPATCH_TG(cur_L) <= 4095);
+LJ_STATIC_ASSERT(DISPATCH_TG(jit_base) >= 0 &&
+		 DISPATCH_TG(jit_base) <= 4095);
+LJ_STATIC_ASSERT((DISPATCH_TG(jit_base) & 7) == 0);
+LJ_STATIC_ASSERT(sizeof(((TGState *)0)->jit_base) == sizeof(void *));
 LJ_STATIC_ASSERT(DISPATCH_TG(vmstate) >= 0 && DISPATCH_TG(vmstate) <= 4095);
 LJ_STATIC_ASSERT(DISPATCH_TG(poll) >= 0 && DISPATCH_TG(poll) <= 4095);
 LJ_STATIC_ASSERT(DISPATCH_TG(profile_request) >= 0 &&
@@ -385,6 +389,17 @@ LJ_STATIC_ASSERT(FRAME_TYPEP == 7);
 |.macro ld_tg_cur_L, lreg
 |  add ATMP, DISPATCH, #DISPATCH_TG(cur_L)
 |  ldar lreg, [ATMP]
+|.endmacro
+|// jit_base is the TG-local trace lifetime lease. It remains published from
+|// native entry through snapshot restore and is release-cleared only once the
+|// interpreter base is authoritative again.
+|.macro ld_tg_jit_base, breg
+|  add ATMP, DISPATCH, #DISPATCH_TG(jit_base)
+|  ldar breg, [ATMP]
+|.endmacro
+|.macro clear_tg_jit_base
+|  add ATMP, DISPATCH, #DISPATCH_TG(jit_base)
+|  stlr xzr, [ATMP]
 |.endmacro
 |// poll and profile_request are distinct 32 bit release publications. ARM64
 |// must acquire them at their natural widths instead of copying x64's
@@ -2294,7 +2309,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  sub CARG1, CARG1, lr
   |   ld_tg_cur_L L
   |  lsr CARG1, CARG1, #2
-  |   ldr BASE, GL->jit_base
+  |   ld_tg_jit_base BASE
   |  sub CARG1, CARG1, #2
   |   ldr CARG2w, [lr]		// Load trace number.
   |    st_vmstate CARG4w
@@ -2305,7 +2320,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  ubfx CARG2w, CARG2w, #5, #16
   |  mov CARG5w, CARG1w
   |   mov CARG4w, CARG2w
-  |  str xzr, GL->jit_base
+  |  // Keep the TG jit_base lease through restore, SMR and TEXIT delivery.
   |  add CARG1, GL, #GG_G2J_HI
   |  add CARG1, CARG1, #GG_G2J_LO
   |  mov CARG2, sp
@@ -2335,13 +2350,24 @@ static void build_subroutines(BuildCtx *ctx)
   |   str RCw, SAVE_MULTRES
   |   str BASE, L->base
   |  ldr CARG2, LFUNC:CARG2->pc
-  |   str xzr, GL->jit_base
+  |   clear_tg_jit_base
   |    mv_vmstate CARG4w, INTERP
   |  ldr KBASE, [CARG2, #PC2PROTO(k)]
+  |   st_vmstate CARG4w
+  |  arm64_vm_poll_acq TMP0w, TMP1w
+  |  cbz TMP0w, >7
+  |  str CARG1w, SAVE_ERRF
+  |  str PC, SAVE_PC
+  |  mov CARG1, L
+  |  bl extern lj_safepoint_ack_check
+  |  ldr L, SAVE_L
+  |  ldr BASE, L->base
+  |  ldr CARG1w, SAVE_ERRF
+  |  lsl RC, CARG1, #3
+  |7:
   |  // Modified copy of ins_next which handles function header dispatch, too.
   |  ldrb RBw, [PC, # OFS_OP]
   |   ldr INSw, [PC], #4
-  |    st_vmstate CARG4w
   |  cmn CARG1w, #17			// Static dispatch?
   |  beq >5
   |  cmp RBw, #BC__MAX			// Fast function?
@@ -2406,8 +2432,22 @@ static void build_subroutines(BuildCtx *ctx)
   |  br_auth RB
   |
   |9:  // Rethrow error from the right C frame.
-  |  neg CARG2w, CARG1w
+  |  str BASE, L->base
+  |  clear_tg_jit_base
+  |  mv_vmstate CARG4w, INTERP
+  |  st_vmstate CARG4w
+  |  str CARG1w, SAVE_ERRF
+  |  arm64_vm_poll_acq TMP0w, TMP1w
+  |  cbz TMP0w, >8
+  |  str PC, SAVE_PC
   |  mov CARG1, L
+  |  bl extern lj_safepoint_ack_check
+  |  ldr L, SAVE_L
+  |  ldr BASE, L->base
+  |8:
+  |  ldr CARG2w, SAVE_ERRF
+  |  mov CARG1, L
+  |  neg CARG2w, CARG2w
   |  bl extern lj_err_trace		// (lua_State *L, int errcode)
   |.endif
   |

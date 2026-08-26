@@ -2941,6 +2941,34 @@ MSize lj_asm_arm64_emit_test(jit_State *J, MCode *buf, MSize cap,
 }
 #endif
 
+#if LJ_TARGET_ARM64 && defined(LJ_ARM64_EXIT_TEST_HELPERS)
+MSize lj_asm_arm64_exitstub_test(jit_State *J, MCode *buf, MSize cap,
+				 TraceNo traceno, ExitNo nexits, int indirect)
+{
+  ASMState as_;
+  ASMState *as = &as_;
+  GCtrace T;
+  MSize need;
+
+  if (J == NULL || buf == NULL || traceno == 0 || nexits == 0 ||
+      (indirect != 0 && indirect != 1))
+    return 0;
+  need = (MSize)nexits + 3u + (MSize)indirect;
+  if (cap <= need)
+    return 0;
+  memset(as, 0, sizeof(*as));
+  memset(&T, 0, sizeof(T));
+  T.traceno = traceno;
+  as->J = J;
+  as->T = &T;
+  as->mctop = buf + need;
+  /* The synthetic direct call targets the first word after the stub. */
+  asm_exitstub_write(as, nexits, buf + need, indirect);
+  lj_assertA(as->mctop == buf, "bad synthetic exit-stub size");
+  return need;
+}
+#endif
+
 #undef IR
 
 #endif

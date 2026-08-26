@@ -129,6 +129,42 @@ require_source_sequence "$vm_source" '[|]->vm_unwind_c_eh:' \
   'bl extern lj_safepoint_ack_check' \
   'ldr CRET1w, SAVE_ERRF'
 
+# A native trace exit becomes quiescent before acknowledging either request.
+# Both the successful redispatch and non-returning error path preserve their
+# result across the checked call and reload relocatable interpreter state.
+require_source_sequence "$vm_source" '[|]->vm_exit_interp:' \
+  '[|]5:.*Recover the original instruction' \
+  'normal trace-exit quiescence and checked poll sequence' \
+  'str BASE, L->base' \
+  'clear_tg_jit_base' \
+  'mv_vmstate CARG4w, INTERP' \
+  'st_vmstate CARG4w' \
+  'arm64_vm_poll_acq TMP0w, TMP1w' \
+  'cbz TMP0w, >7' \
+  'str CARG1w, SAVE_ERRF' \
+  'str PC, SAVE_PC' \
+  'mov CARG1, L' \
+  'bl extern lj_safepoint_ack_check' \
+  'ldr L, SAVE_L' \
+  'ldr BASE, L->base' \
+  'ldr CARG1w, SAVE_ERRF'
+
+require_source_sequence "$vm_source" '[|]9:.*Rethrow error' \
+  '[|]->vm_modi:' 'error trace-exit quiescence and checked poll sequence' \
+  'str BASE, L->base' \
+  'clear_tg_jit_base' \
+  'mv_vmstate CARG4w, INTERP' \
+  'st_vmstate CARG4w' \
+  'str CARG1w, SAVE_ERRF' \
+  'arm64_vm_poll_acq TMP0w, TMP1w' \
+  'cbz TMP0w, >8' \
+  'str PC, SAVE_PC' \
+  'mov CARG1, L' \
+  'bl extern lj_safepoint_ack_check' \
+  'ldr L, SAVE_L' \
+  'ldr BASE, L->base' \
+  'ldr CARG2w, SAVE_ERRF'
+
 # Interpreter progress edges. Poll only after each edge has published the
 # frame/control state which the owner scan will treat as authoritative.
 require_source_sequence "$vm_source" 'case BC_ITERN:' 'case BC_ISNEXT:' \
@@ -211,8 +247,8 @@ reject_source_region "$vm_source" 'case BC_IFUNCV:' 'case BC_FUNCC:' \
 checked_calls=$(grep -Ec \
   '^[[:space:]]*[|][[:space:]]+bl extern lj_safepoint_ack_check' \
   "$vm_source" || true)
-if test "$checked_calls" -ne 3; then
-  echo "ARM64 VM must have exactly three checked safepoint helper call sites" >&2
+if test "$checked_calls" -ne 5; then
+  echo "ARM64 VM must have exactly five checked safepoint helper call sites" >&2
   exit 1
 fi
 if grep -Eq \
@@ -338,11 +374,17 @@ reloc_count=$(awk '
     print count + 0
   }
 ' "$relocs")
-if test "$reloc_count" -ne 3; then
-  echo "ARM64 VM must emit exactly three BR26 checked safepoint calls" >&2
+object_checked_calls=3
+reloc_symbols='lj_vm_safepoint lj_vm_leave_cp lj_vm_unwind_c_eh'
+if nm "$archive" | grep -E ' T _lj_trace_exit$' >/dev/null; then
+  object_checked_calls=5
+  reloc_symbols="$reloc_symbols lj_vm_exit_interp"
+fi
+if test "$reloc_count" -ne "$object_checked_calls"; then
+  echo "ARM64 VM emitted the wrong checked safepoint call inventory" >&2
   exit 1
 fi
-for reloc_symbol in lj_vm_safepoint lj_vm_leave_cp lj_vm_unwind_c_eh; do
+for reloc_symbol in $reloc_symbols; do
   require_symbol_relocation "$reloc_symbol" '_lj_safepoint_ack_check$' \
     'an in-bounds checked safepoint helper relocation'
 done

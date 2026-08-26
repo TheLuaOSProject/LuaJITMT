@@ -24,7 +24,12 @@ typedef enum {
   LJ_ARM64_EMIT_TEST_GET_JIT_GATE
 } LJArm64EmitTestOp;
 LJ_FUNC MSize lj_asm_arm64_emit_test(jit_State *J, MCode *buf, MSize cap,
-				     LJArm64EmitTestOp op, int32_t state);
+			     LJArm64EmitTestOp op, int32_t state);
+#endif
+#if LJ_TARGET_ARM64 && defined(LJ_ARM64_EXIT_TEST_HELPERS)
+LJ_FUNC MSize lj_asm_arm64_exitstub_test(jit_State *J, MCode *buf, MSize cap,
+					 TraceNo traceno, ExitNo nexits,
+					 int indirect);
 #endif
 #endif
 

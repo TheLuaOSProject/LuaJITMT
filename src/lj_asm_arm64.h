@@ -47,16 +47,12 @@ static Reg ra_alloc2(ASMState *as, IRIns *ir, RegSet allow)
 
 /* -- Guard handling ------------------------------------------------------ */
 
-/* Setup all needed exit stubs. */
-static void asm_exitstub_setup(ASMState *as, ExitNo nexits)
+/* Write the fixed per-trace exit-stub layout. */
+static void asm_exitstub_write(ASMState *as, ExitNo nexits, MCode *target,
+			       int ind)
 {
   ExitNo i;
-  int ind;
-  MCode *target = (MCode *)(void *)lj_vm_exit_handler;
   MCode *mxp = as->mctop;
-  if (mxp - (nexits + 4 + MCLIM_REDZONE) < as->mclim)
-    asm_mclimit(as);
-  ind = !A64F_S_OK(target - (mxp - nexits - 2), 26);
   /* !ind: 1: str lr,[sp]; bl ->vm_exit_handler; movz w0,traceno;
   **  ind: 1: str lr,[sp]; ldr lr, [gl, K64_VXH]; blr lr; movz w0,traceno;
   **          bl <1; bl <1; ...
@@ -74,6 +70,22 @@ static void asm_exitstub_setup(ASMState *as, ExitNo nexits)
   }
   *--mxp = A64I_LE(A64I_STRx | A64F_D(RID_LR) | A64F_N(RID_SP));
   as->mctop = mxp;
+}
+
+/* Setup all needed exit stubs. */
+static void asm_exitstub_setup(ASMState *as, ExitNo nexits)
+{
+  MCode *target = (MCode *)(void *)
+    emit_asmfunc_addr((ASMFunction)lj_vm_exit_handler);
+  MCode *mxp = as->mctop;
+  int ind;
+  LJ_STATIC_ASSERT(sizeof(((GCtrace *)0)->traceno) == sizeof(uint16_t));
+  LJ_STATIC_ASSERT(sizeof(((GCtrace *)0)->nsnap) == sizeof(uint16_t));
+  if (mxp - (nexits + 4 + MCLIM_REDZONE) < as->mclim)
+    asm_mclimit(as);
+  mxp = as->mctop;
+  ind = !A64F_S_OK(target - (mxp - nexits - 2), 26);
+  asm_exitstub_write(as, nexits, target, ind);
 }
 
 static MCode *asm_exitstub_addr(ASMState *as, ExitNo exitno)
@@ -1947,7 +1959,8 @@ static void asm_tail_fixup(ASMState *as, TraceNo lnk)
     *mcp++ = (A64I_ADDx^k) | A64F_D(RID_SP) | A64F_N(RID_SP);
   }
   /* Emit exit branch. */
-  target = lnk ? traceref(as->J, lnk)->mcode : (MCode *)(void *)lj_vm_exit_interp;
+  target = lnk ? traceref(as->J, lnk)->mcode : (MCode *)(void *)
+    emit_asmfunc_addr((ASMFunction)lj_vm_exit_interp);
   if (lnk || A64F_S_OK(target - mcp, 26)) {
     *mcp = A64I_B | A64F_S26(target - mcp); mcp++;
   } else {
@@ -1965,7 +1978,8 @@ static void asm_tail_prep(ASMState *as, TraceNo lnk)
     as->invmcp = as->mcp = p;
   } else {
     if (!lnk) {
-      MCode *target = (MCode *)(void *)lj_vm_exit_interp;
+      MCode *target = (MCode *)(void *)
+	emit_asmfunc_addr((ASMFunction)lj_vm_exit_interp);
       if (!A64F_S_OK(target - p, 26) || !A64F_S_OK(target - (p+1), 26)) p--;
     }
     p--;  /* Leave room for stack pointer adjustment. */

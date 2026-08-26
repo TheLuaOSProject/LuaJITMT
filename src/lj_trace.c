@@ -6901,7 +6901,7 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
   ExitNo exitno = J->exitno;
 #endif
   trace_test_note_exit(parent, exitno);
-#if LJ_TARGET_X64
+#if LJ_TARGET_X64 || LJ_TARGET_ARM64
   /* Error unwind publishes exitcode in the currently executing TG, not in the
   ** lua_State's migratable owner hint. A coroutine can move between TGs after
   ** that hint was last sampled; use the same TLS/fallback route as unwind.
@@ -6911,7 +6911,7 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
   ExitState *ex = (ExitState *)exptr;
   ExitDataCP exd;
   int errcode;
-#if LJ_TARGET_X64
+#if LJ_TARGET_X64 || LJ_TARGET_ARM64
   int exitcode = lj_tg_jit_exitcode_acq(tg);
 #else
   int exitcode = J->exitcode;
@@ -6924,7 +6924,7 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
 
   setnilV(&exiterr);
   if (exitcode) {  /* Trace unwound with error code. */
-#if LJ_TARGET_X64
+#if LJ_TARGET_X64 || LJ_TARGET_ARM64
     lj_tg_jit_exitcode_rel(tg, 0);
 #else
     J->exitcode = 0;
@@ -7014,7 +7014,7 @@ int LJ_FASTCALL lj_trace_exit(jit_State *J, void *exptr)
       ** itself waiting to enter the serialized handshake. vm_exit_interp clears
       ** the same field again after this function returns.
       */
-#if LJ_TARGET_X64
+#if LJ_TARGET_X64 || LJ_TARGET_ARM64
       lj_tg_store_jit_base(tg, NULL);
 #else
       lj_tg_store_jit_base(L2TG(L), NULL);

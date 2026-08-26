@@ -510,15 +510,22 @@ static void emit_cnb(ASMState *as, A64Ins ai, Reg r, MCode *target)
 
 #define emit_jmp(as, target)	emit_branch(as, A64I_B, (target))
 
+/* Authenticate C function pointers before using their address arithmetically.
+** arm64e function pointers are signed data values, not raw code addresses. */
+static LJ_AINLINE char *emit_asmfunc_addr(ASMFunction target)
+{
+#if LJ_ABI_PAUTH
+  return ptrauth_auth_data((char *)target,
+			   ptrauth_key_function_pointer, 0);
+#else
+  return (char *)target;
+#endif
+}
+
 static void emit_call(ASMState *as, ASMFunction target)
 {
   MCode *p = --as->mcp;
-#if LJ_ABI_PAUTH
-  char *targetp = ptrauth_auth_data((char *)target,
-				    ptrauth_key_function_pointer, 0);
-#else
-  char *targetp = (char *)target;
-#endif
+  char *targetp = emit_asmfunc_addr(target);
   ptrdiff_t delta = targetp - (char *)p;
   if (A64F_S_OK(delta>>2, 26)) {
     *p = A64I_BL | A64F_S26(delta>>2);

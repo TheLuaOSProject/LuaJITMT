@@ -104,6 +104,15 @@ typedef struct {
   int32_t spill[256];		/* Spill slots. */
 } ExitState;
 
+/* Keep the VM's fixed 512 byte register-save prefix in lockstep with C. */
+LJ_STATIC_ASSERT(RID_NUM_FPR == 32);
+LJ_STATIC_ASSERT(RID_NUM_GPR == 32);
+LJ_STATIC_ASSERT(offsetof(ExitState, fpr) == 0);
+LJ_STATIC_ASSERT(offsetof(ExitState, gpr) == 32 * sizeof(lua_Number));
+LJ_STATIC_ASSERT(offsetof(ExitState, spill) ==
+		 32 * sizeof(lua_Number) + 32 * sizeof(intptr_t));
+LJ_STATIC_ASSERT(offsetof(ExitState, spill) == 512);
+
 /* Highest exit + 1 indicates stack check. */
 #define EXITSTATE_CHECKEXIT	1
 

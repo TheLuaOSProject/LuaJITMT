@@ -620,7 +620,7 @@ static void err_unwind_win_jit(global_State *g, int errcode,
 	lj_tg_jit_exitcode_rel(G2TG(g), errcode);
 #else
 	ctx.CONTEXT_REG_PC = stub;
-	G2J(g)->exitcode = errcode;
+	lj_tg_jit_exitcode_rel(G2TG(g), errcode);
 #endif
 	/* RtlRestoreContext itself may touch platform TLS. The x64 trampoline
 	** performs the authoritative restore after context installation. */
@@ -923,7 +923,7 @@ static int err_unwind_jit(int version, int actions,
     uintptr_t stub = lj_trace_unwind(G2J(g), addr - sizeof(MCode), &exitno);
     lj_assertG(lj_tg_jit_base(g), "unexpected throw across mcode frame");
     if (stub) {  /* Jump to side exit to unwind the trace. */
-#if LJ_TARGET_X64
+#if LJ_TARGET_X64 || LJ_TARGET_ARM64
       lj_tg_jit_exitcode_rel(G2TG(g), LJ_UEXCLASS_ERRCODE(uexclass));
 #else
       G2J(g)->exitcode = LJ_UEXCLASS_ERRCODE(uexclass);
