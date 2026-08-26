@@ -127,11 +127,15 @@ unsigned='UNSIGND|UNSIGNED|X86_64_RELOC_UNSIGNED|ARM64_RELOC_UNSIGNED'
 test "$(grep -Ec "($unsigned)[[:space:]].*_getpid$" "$relocs" || true)" -eq 1
 test "$(grep -Ec "($unsigned)[[:space:]].*_pthread_self$" "$relocs" || true)" -eq 1
 
+# The complete image must not outsource the atomics that make the signal cache
+# lock-free. Stack/sanitizer helpers are rejected above only in the bounded
+# getter/handler bodies, so unrelated hardening elsewhere does not invalidate
+# this call-graph contract.
 for artifact in "$object" "$root/src/lj_profile.o" \
                 "$root/src/lj_profile_dyn.o" "$final"; do
   test -f "$artifact" || continue
   if nm -u "$artifact" | grep -E \
-      '(__atomic|__sync|libatomic|__aarch64_|stack_chk|chkstk|__asan|__ubsan|__tsan|__sanitizer)' \
+      '(__atomic|__sync|libatomic|__aarch64_)' \
       >/dev/null; then
     echo "Mach-O signal artifact imports an atomic/runtime helper: $artifact" >&2
     exit 1

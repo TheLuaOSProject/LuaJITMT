@@ -12,30 +12,45 @@ local signal_helpers =
 local arm64_bootstrap_cflags =
   "-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_DISABLE_JIT -DLUA_USE_ASSERT"
 
-local function native_macos_arm64()
-  return jit and jit.os == "OSX" and jit.arch == "arm64"
+local function assert_signal_runner_target(t)
+  if jit and t.target_arch ~= jit.arch then
+    error("signal suites require the test compiler target (" ..
+          tostring(t.target_arch) .. ") to match the LuaJIT runner (" ..
+          tostring(jit.arch) .. ")", 2)
+  end
 end
 
-local function signal_build_cflags()
-  if native_macos_arm64() then
+local function native_macos_arm64(t)
+  return jit and jit.os == "OSX" and jit.arch == "arm64" and
+         t.target_arch == "arm64"
+end
+
+local function signal_build_cflags(t)
+  if native_macos_arm64(t) then
     return arm64_bootstrap_cflags .. " " .. signal_helpers
   end
   return signal_helpers
 end
 
-local function signal_restore_cflags()
-  return native_macos_arm64() and arm64_bootstrap_cflags or nil
+local function signal_canonical_reset_cflags(t)
+  return native_macos_arm64(t) and arm64_bootstrap_cflags or nil
 end
 
-local function with_signal_build_restore(t, fn)
+-- A make invocation does not expose the XCFLAGS used to create an arbitrary
+-- incoming runner. These build-mutating signal suites therefore reset to the
+-- repository's canonical profile: the assert/no-JIT bootstrap on native Apple
+-- ARM64 and the default profile elsewhere.
+local function with_signal_canonical_reset(t, fn)
+  assert_signal_runner_target(t)
   local ok, err = xpcall(fn, debug.traceback)
   local restore_ok, restore_err = xpcall(function()
     t:build({ clean = true, quiet = true,
-              xcflags = signal_restore_cflags() })
+              xcflags = signal_canonical_reset_cflags(t) })
   end, debug.traceback)
   if not ok then
     if not restore_ok then
-      err = err .. "\n\n(signal build restore also failed)\n" .. restore_err
+      err = err .. "\n\n(signal canonical reset also failed)\n" ..
+            restore_err
     end
     error(err, 0)
   end
@@ -46,7 +61,7 @@ local function run_signal_safety_fixture(t, flags)
   compile_and_run_sources(t, t:tmp("lj_t-posix-signal-safety"),
     { t:path("tests", "t-posix-signal-safety.c") }, {
     cflags = flags,
-    timeout = native_macos_arm64() and "30s" or "20s"
+    timeout = native_macos_arm64(t) and "30s" or "20s"
   })
 end
 
@@ -54,7 +69,7 @@ local function run_signal_dso_modes(t)
   local loader_flags = "-DLJ_PROFILE_DSO_LOADER"
   local loader = t:tmp("lj_t-posix-signal-dso-loader")
   local image = t:path("src", "libluajit.so")
-  if native_macos_arm64() then
+  if native_macos_arm64(t) then
     loader_flags = loader_flags .. " " .. arm64_bootstrap_cflags
   end
   t:cc(loader, { t:path("tests", "t-posix-signal-safety.c") }, {
@@ -141,11 +156,11 @@ return function(add)
     name = "m4_posix_signal_artifacts",
     description = "POSIX signal getter disassembly and relocation contract",
     run = function(t)
-      if jit and jit.os == "Linux" and jit.arch == "x64" then
-        with_signal_build_restore(t, function()
+      if jit and jit.os == "Linux" and t.target_arch == "x64" then
+        with_signal_canonical_reset(t, function()
           t:build({
             clean = true,
-            xcflags = signal_build_cflags()
+            xcflags = signal_build_cflags(t)
           })
           t:run({ "sh", t:path("tools", "ci",
                                "m4_posix_signal_artifacts.sh") }, {
@@ -153,11 +168,11 @@ return function(add)
           })
         end)
       elseif jit and jit.os == "OSX" and
-             (jit.arch == "x64" or jit.arch == "arm64") then
-        with_signal_build_restore(t, function()
+             (t.target_arch == "x64" or t.target_arch == "arm64") then
+        with_signal_canonical_reset(t, function()
           t:build({
             clean = true,
-            xcflags = signal_build_cflags()
+            xcflags = signal_build_cflags(t)
           })
           t:run({ "sh", t:path("tools", "ci",
                                "m4_posix_signal_macho_artifacts.sh") }, {
@@ -311,8 +326,8 @@ return function(add)
     name = "m4_posix_signal_safety",
     description = "exact POSIX TG signal cache and SIGPROF lifecycle fixture",
     run = function(t)
-      with_signal_build_restore(t, function()
-        local flags = signal_build_cflags()
+      with_signal_canonical_reset(t, function()
+        local flags = signal_build_cflags(t)
         t:build({ clean = true, quiet = true, xcflags = flags })
         run_signal_safety_fixture(t, flags)
       end)
@@ -324,11 +339,12 @@ return function(add)
     name = "m4_posix_signal_dso_lifetime",
     description = "SIGPROF containing-image permanent pin across dlclose",
     run = function(t)
-      if jit and ((jit.os == "Linux" and jit.arch == "x64") or
+      if jit and ((jit.os == "Linux" and t.target_arch == "x64") or
                   (jit.os == "OSX" and
-                   (jit.arch == "x64" or jit.arch == "arm64"))) then
-        with_signal_build_restore(t, function()
-          local flags = signal_build_cflags()
+                   (t.target_arch == "x64" or
+                    t.target_arch == "arm64"))) then
+        with_signal_canonical_reset(t, function()
+          local flags = signal_build_cflags(t)
           t:build({ clean = true, xcflags = flags })
           run_signal_dso_modes(t)
         end)
@@ -341,12 +357,13 @@ return function(add)
     name = "m4_posix_signal_arm64_gate",
     description = "native macOS ARM64 signal cache, profile and VM poll gate",
     run = function(t)
-      if not native_macos_arm64() then
+      assert_signal_runner_target(t)
+      if not native_macos_arm64(t) then
         print("m4_posix_signal_arm64_gate SKIP: requires native macOS arm64")
         return
       end
-      with_signal_build_restore(t, function()
-        local flags = signal_build_cflags()
+      with_signal_canonical_reset(t, function()
+        local flags = signal_build_cflags(t)
         t:build({ clean = true, quiet = true, xcflags = flags })
         t:run({ "sh", t:path("tools", "ci",
                              "m4_posix_signal_macho_artifacts.sh") }, {

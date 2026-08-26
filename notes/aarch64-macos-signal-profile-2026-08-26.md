@@ -54,8 +54,9 @@ For each architecture it proves:
   loader, atfork, scheduler, dispatch-update, atomic-library, AArch64 runtime,
   stack-check, or sanitizer helper edge; and
 - the checked objects/final image do not import atomic/runtime helper families
-  such as `__atomic*`, `__sync*`, `__aarch64_*`, stack checks, or sanitizer
-  helpers.
+  such as `__atomic*`, `__sync*`, or `__aarch64_*`. Stack-check and sanitizer
+  helpers are forbidden in the bounded getter/handler bodies, but unrelated
+  hardening elsewhere in the image does not fail this call-graph gate.
 
 The ARM64 source-side half of this gate checks the interpreter poll macro and
 its `profile_request` load. It deliberately does not inspect or assert an ARM64
@@ -116,6 +117,13 @@ ok m4_posix_signal_arm64_gate
 The suite restored the ordinary assert-enabled ARM64 interpreter bootstrap.
 The restored artifacts are thin ARM64 and report `jit.os == "OSX"`,
 `jit.arch == "arm64"`, `jit.status() == false`, and `jit.opt == nil`.
+
+These signal cases mutate the source-tree build and intentionally reset it to a
+canonical profile rather than claiming to recover arbitrary incoming
+`XCFLAGS`: the assert/no-JIT bootstrap on native Apple ARM64 and the repository
+default elsewhere. They also reject a test compiler whose detected target
+architecture differs from the running LuaJIT, because such a build could not
+be exercised or reliably restored by the same process.
 
 ## x86-64 preservation validation
 
