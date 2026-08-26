@@ -417,9 +417,15 @@ static void canonicalize_slots(jit_State *J)
   }
 }
 
-#if LJ_TARGET_X64 && LJ_GC64
+#if (LJ_TARGET_X64 || LJ_TARGET_ARM64) && LJ_GC64
 static LJ_AINLINE int rec_needs_xpoll(jit_State *J)
 {
+#if LJ_TARGET_ARM64
+  /* The initial ARM64 IR admission contract requires the full TG poll/profile
+  ** check on every trace. Do not rely on activation-time elision yet. */
+  UNUSED(J);
+  return 1;
+#else
   global_State *g = J2G(J);
   /* Keep this policy in step with loop_needs_xpoll(). Optimized self-loops get
   ** their poll next to IR_LOOP; every other trace needs a guarded tail poll so
@@ -431,6 +437,7 @@ static LJ_AINLINE int rec_needs_xpoll(jit_State *J)
 	 || lj_profile_poll_required(g)
 #endif
 	 ;
+#endif
 }
 #endif
 
@@ -452,7 +459,7 @@ void lj_record_stop(jit_State *J, TraceLink linktype, TraceNo lnk)
       J->cur.link = J->cur.root;
   }
   canonicalize_slots(J);
-#if LJ_TARGET_X64 && LJ_GC64
+#if (LJ_TARGET_X64 || LJ_TARGET_ARM64) && LJ_GC64
   /* A guard consumes the newest snapshot whose ref is at or before the guard
   ** IR. Publish the terminal continuation snapshot first so the tail XPOLL
   ** cannot inherit the preceding loop-condition exit (which may leave a
@@ -3374,7 +3381,7 @@ static void rec_func_setup(jit_State *J)
 
 static void rec_func_xpoll(jit_State *J)
 {
-#if LJ_TARGET_X64 && LJ_GC64
+#if (LJ_TARGET_X64 || LJ_TARGET_ARM64) && LJ_GC64
   if (J->framedepth >= LJ_TRACE_FUNCF_XPOLL_DEPTH) {
     /* Bind the guard to the exact inlined-frame continuation, not the prior
     ** caller snapshot. See the terminal XPOLL ordering in lj_record_stop(). */

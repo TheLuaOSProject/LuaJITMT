@@ -302,9 +302,15 @@ typedef struct LoopState {
   MSize sizesubst;
 } LoopState;
 
-#if LJ_TARGET_X64 && LJ_GC64
+#if (LJ_TARGET_X64 || LJ_TARGET_ARM64) && LJ_GC64
 static LJ_AINLINE int loop_needs_xpoll(jit_State *J)
 {
+#if LJ_TARGET_ARM64
+  /* Match the initial ARM64 admission policy: every loop executes the full
+  ** TG poll/profile check as well as the global JIT phase-gate check. */
+  UNUSED(J);
+  return 1;
+#else
   global_State *g = J2G(J);
   /* A loop poll is needed only after another TG can participate in a
   ** safepoint handshake or while SIGPROF owner requests are enabled. First
@@ -318,6 +324,7 @@ static LJ_AINLINE int loop_needs_xpoll(jit_State *J)
 	 || lj_profile_poll_required(g)
 #endif
 	 ;
+#endif
 }
 #endif
 
@@ -344,7 +351,7 @@ static void loop_unroll(LoopState *lps)
 
   /* LOOP separates the pre-roll from the loop body. */
   emitir_raw(IRTG(IR_LOOP, IRT_NIL), 0, 0);
-#if LJ_TARGET_X64 && LJ_GC64
+#if (LJ_TARGET_X64 || LJ_TARGET_ARM64) && LJ_GC64
   emitir_raw(IRTG(IR_XPOLL, IRT_NIL), loop_needs_xpoll(J), 0);
 #endif
 
