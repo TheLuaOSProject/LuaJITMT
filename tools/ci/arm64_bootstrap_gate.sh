@@ -107,6 +107,8 @@ LJ_ARM64_VM_OBJECT="$vm_object" \
   sh "$root/tools/ci/arm64_root_publication_contract.sh"
 LJ_ARM64_VM_OBJECT="$vm_object" LJ_ARM64_ARCHIVE="$archive" \
   sh "$root/tools/ci/arm64_vm_safepoint_contract.sh"
+LJ_ARM64_VM_OBJECT="$vm_object" LJ_ARM64_ARCHIVE="$archive" \
+  sh "$root/tools/ci/arm64_pcall_anchor_contract.sh"
 
 run_lua() {
   env LUA_PATH="$lua_path" "$luajit" "$@"
@@ -123,7 +125,8 @@ assert(type(require("ffi")) == "table")
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
   LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
   "$luajit" "$root/tools/test.lua" \
-    m5_arm64_root_publication_runtime m5_arm64_safepoint_runtime
+    m5_arm64_root_publication_runtime m5_arm64_safepoint_runtime \
+    m5_arm64_pcall_anchor_runtime
 
 (
   cd "$root/tests/stock/test"

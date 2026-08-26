@@ -345,8 +345,12 @@ LJ_STATIC_ASSERT(DISPATCH_TG(profile_request) ==
 LJ_STATIC_ASSERT(DISPATCH_TG(hookmask_th) >= 0 &&
 		 DISPATCH_TG(hookmask_th) <= 4095);
 LJ_STATIC_ASSERT(DISPATCH_TG(gl) >= 0 && DISPATCH_TG(gl) <= 4095);
+LJ_STATIC_ASSERT(DISPATCH_TG(root_anchor_top) >= 0 &&
+		 DISPATCH_TG(root_anchor_top) <= 0xffffff);
+LJ_STATIC_ASSERT((DISPATCH_TG(root_anchor_top) & 3) == 0);
 LJ_STATIC_ASSERT(GL_OFS(vmstate) >= 0 && GL_OFS(vmstate) <= 4095);
 LJ_STATIC_ASSERT(GL_OFS(hookmask) >= 0 && GL_OFS(hookmask) <= 4095);
+LJ_STATIC_ASSERT(FRAME_TYPEP == 7);
 
 |// DISPATCH is relative to TGState.dispatch. Published owner identity and VM
 |// state use release stores because C-side observers sample them with acquire.
@@ -382,6 +386,16 @@ LJ_STATIC_ASSERT(GL_OFS(hookmask) >= 0 && GL_OFS(hookmask) <= 4095);
 |  add ATMP, GL, #GL_OFS(hookmask)
 |  ldarb tmp, [ATMP]
 |  orr dst, dst, tmp
+|.endmacro
+|// Pack the physical owner's lexical root-anchor checkpoint above a completed
+|// 32 bit fast-protected-call delta/type word. The split address construction
+|// follows TGState layout changes without relying on a single ADD immediate.
+|// None of these instructions changes flags needed by the pending call branch.
+|.macro arm64_vm_pcall_anchor, frame, top, topw
+|  add ATMP, DISPATCH, #(DISPATCH_TG(root_anchor_top)&0xfff000)
+|  add ATMP, ATMP, #(DISPATCH_TG(root_anchor_top)&0xfff)
+|  ldar topw, [ATMP]
+|  orr frame, frame, top, lsl #32
 |.endmacro
 |
 #define PC2PROTO(field)  ((int)offsetof(GCproto, field)-(int)sizeof(GCproto))
@@ -493,7 +507,8 @@ static void build_subroutines(BuildCtx *ctx)
   |  // topology changed. CARG1 is caller-clobbered, so reconstruct it below.
   |  arm64_vm_stack_dirty
   |  ands CARG1, PC, #FRAME_TYPE
-  |  and RB, PC, #~FRAME_TYPEP
+  |  // Delta frames use only the low word. Lua return PCs remain full pointers.
+  |  and RB, PC, #0xfffffff8
   |   cmp CARG1, #FRAME_C
   |  sub RB, BASE, RB			// RB = previous base.
   |   bne ->vm_returnp
@@ -1409,6 +1424,7 @@ static void build_subroutines(BuildCtx *ctx)
   |    add BASE, BASE, #16
   |  ubfx TMP0w, TMP0w, #HOOK_ACTIVE_SHIFT, #1
   |  add PC, TMP0, #16+FRAME_PCALL
+  |  arm64_vm_pcall_anchor PC, TMP3, TMP3w
   |   beq ->vm_call_dispatch
   |1:
   |   add TMP2, BASE, NARGS8:RC
@@ -1433,6 +1449,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  ubfx TMP0w, TMP0w, #HOOK_ACTIVE_SHIFT, #1
   |     cmn ITYPE, #-LJ_TFUNC
   |  add PC, TMP0, #24+FRAME_PCALL
+  |  arm64_vm_pcall_anchor PC, TMP3, TMP3w
   |     bne ->fff_fallback		// Traceback must be a function.
   |   mov NARGS8:RC, NARGS8:TMP1
   |    add BASE, BASE, #24
@@ -2010,7 +2027,8 @@ static void build_subroutines(BuildCtx *ctx)
   |// Reconstruct previous base for vmeta_call during tailcall.
   |->vm_call_tail:
   |  ands TMP0, PC, #FRAME_TYPE
-  |   and TMP1, PC, #~FRAME_TYPEP
+  |   // Protected delta frames carry an unrelated checkpoint in their high word.
+  |   and TMP1, PC, #0xfffffff8
   |  bne >3
   |  ldrb RAw, [PC, #-4+OFS_RA]
   |  lsl RA, RA, #3

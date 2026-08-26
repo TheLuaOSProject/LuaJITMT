@@ -581,3 +581,28 @@ ARM64 TG-local SIGPROF publication is explicitly not enabled here.
 `LJ_PROFILE_TGLOCAL` remains off on ARM64 and the profiler uses its legacy
 signal path. JIT-capable ARM64 runtime validation, trace polling/XPOLL, and the
 exact ARM64 signal-cache port remain later checkpoints.
+
+### 14. Apple ARM64 fast protected-frame anchor checkpoints
+
+Fast `pcall`/`xpcall` delta frames now acquire the physical DISPATCH TG's
+dynamic-root depth and pack it into their unused upper 32 bits. The address is
+formed from split layout-relative immediates because `root_anchor_top` is well
+beyond one AArch64 add-immediate. Common return and fast-fallback tail-call
+reconstruction mask to the low word before delta arithmetic; Lua return PCs
+remain complete 64-bit pointers. Shared C frame walkers, error rollback, and
+the recorded-pcall runtime guard are enabled for ARM64 through the existing
+FR2 invariant.
+
+The dedicated no-JIT fixture holds two otherwise weak sentinel tables in
+nested ambient anchors, covers successful pcall/xpcall returns, direct
+`tostring` fallback tail-calls, and nested STOPREQ/OOM/table-overflow catches,
+then proves exact depth restoration and collection. The source/object gate
+resolves the current TG layout, verifies both acquire-pack sequences and both
+low-word consumers, and checks the inspected object is the archive member.
+
+This closes the dynamic-anchor unwind hole required by interpreter STOPREQ
+correctness: a STOPREQ thrown from `lj_tab_wait_l()` inside a rooted helper can
+be caught by an inner fast protected frame without reaching the outer C
+wrapper. ARM64 JIT execution remains deferred. A matching full-width delta bug
+was identified in x64 `vm_call_tail`; it is documented in the focused note and
+is intentionally left for a separate x64 invariant commit and native test.

@@ -22,7 +22,8 @@ local suites = {
   suite("release"),
   suite("m5_arm64_meta"),
   suite("m5_arm64_isnext"),
-  suite("m5_arm64_safepoint")
+  suite("m5_arm64_safepoint"),
+  suite("m5_arm64_pcall_anchor")
 }
 
 local tests = {}

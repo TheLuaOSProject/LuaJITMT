@@ -342,9 +342,9 @@ static void *err_unwind(lua_State *L, void *stopcf, int errcode)
 	}
 	/* A fast pcall is an in-VM catch boundary: an outer lua_pcall() can
 	** therefore return success and never see anchors abandoned by this
-	** error. x64 delta frames carry their entry depth in the unused upper
-	** word, so restore it before exposing the caught error to Lua. Rollback
-	** only nils already-published slots and cannot allocate or throw. */
+	** error. Packed 64-bit delta frames carry their entry depth in the unused
+	** upper word, so restore it before exposing the caught error to Lua.
+	** Rollback only nils already-published slots and cannot allocate or throw. */
 #if LJ_FRAME_PCALL_ROOT_ANCHOR
 	/* The checkpoint came from the VM's physical DISPATCH TG. A coroutine's
 	** tg_hint is migratable ownership metadata and is not authoritative for
