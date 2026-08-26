@@ -527,3 +527,28 @@ capture is recorded as separate API debt.
 Target-first full-word `ISNEXT` despecialization is now the remaining known
 JIT-off interpreter mutation gap before Stage 2 can close and ARM safepoint
 acknowledgement can begin.
+
+### 12. Apple ARM64 JIT-off ISNEXT publication
+
+Failed `ISNEXT` specialization now release-publishes the complete target word
+as `ITERC` before release-publishing the complete guard word as `JMP`. The
+full-word helper acquire-loads the current instruction and replaces only its
+opcode, preserving all operands and eliminating both the old guard-first
+`JMP+ITERN` window and byte-store/full-word lost updates.
+
+The transition keeps guard and target addresses in callee-saved ARM registers,
+saves the authoritative Lua BASE and PC across both C calls, reloads BASE, and
+redispatches at the target. The guard's decoded RD field supplies the target
+address, preserving ARM's data/address-dependency ordering after guard
+publication.
+
+The clean combined interpreter gate passed all 387 stock tests, threading/
+hook/coroutine and 320-callback checks, the strengthened metamethod gate, exact
+source/object/archive `ISNEXT` checks, a deliberately executed
+`ISNEXT+ITERC` intermediate state, and a separate authentic failure followed
+by exact-word verification, full GC, and generic rerun.
+
+This closes the known JIT-disabled interpreter publication gate. ARM
+safepoint polling and acknowledgement are next. The JIT-enabled
+`ISNEXT`/`JLOOP` path is preserved but remains explicitly deferred with the
+rest of the ARM64 JIT port.

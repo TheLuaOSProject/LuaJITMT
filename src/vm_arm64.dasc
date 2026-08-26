@@ -3723,17 +3723,13 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |5:  // Despecialize bytecode if any of the checks fail.
     |.if JIT
     |  ldrb TMP2w, [RC, # OFS_OP]
-    |.endif
     |  mov TMP0, #BC_JMP
     |   mov TMP1, #BC_ITERC
     |  strb TMP0w, [PC, #-4+OFS_OP]
-    |.if JIT
     |  cmp TMP2w, #BC_ITERN
     |  bne >6
-    |.endif
     |   strb TMP1w, [RC, # OFS_OP]
     |  b <1
-    |.if JIT
     |6:  // Unpatch JLOOP.
     |  ldr RA, [GL, #GL_J(trace)]
     |  ldrh TMP2w, [RC, # OFS_RD]
@@ -3741,6 +3737,21 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ldr TMP2w, TRACE:RA->startins
     |  bfxil TMP2w, TMP1w, #0, #8
     |  str TMP2w, [RC]
+    |  b <1
+    |.else
+    |  // Publish the generic target before retiring the specialization
+    |  // guard. The intermediate ISNEXT+ITERC pair is executable, whereas
+    |  // publishing JMP first would expose the unsupported JMP+ITERN pair.
+    |  sub RA, PC, #4
+    |   str BASE, L->base
+    |  str PC, SAVE_PC
+    |  mov CARG1, RC
+    |  mov CARG2w, #BC_ITERC
+    |  bl extern lj_bc_publish_op_vm
+    |  mov CARG1, RA
+    |  mov CARG2w, #BC_JMP
+    |  bl extern lj_bc_publish_op_vm
+    |  ldr BASE, L->base
     |  b <1
     |.endif
     break;
