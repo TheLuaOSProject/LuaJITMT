@@ -58,7 +58,9 @@ awk '/^static int arm64_ir_int_value_op/ { copying = 1 }
   "$root/src/lj_asm.c" >"$value_region"
 grep -F 'case IR_SLOAD: case IR_ADDOV: case IR_SUBOV: case IR_MULOV:' \
   "$value_region" >/dev/null
-if grep -E 'case IR_(CONV|ADD|SUB|MUL|DIV|LT|GE|LE|GT|EQ|NE|USE|PHI|LOOP|XPOLL):' \
+grep -F 'case IR_ADD:' "$value_region" >/dev/null
+grep -F 'return allow_add;' "$value_region" >/dev/null
+if grep -E 'case IR_(CONV|SUB|MUL|DIV|LT|GE|LE|GT|EQ|NE|USE|PHI|LOOP|XPOLL):' \
      "$value_region" >/dev/null; then
   echo "non-value IR entered the ARM64 integer producer set" >&2
   exit 1
@@ -108,17 +110,19 @@ for required in \
   'postraview.spadjust = T->spadjust;' \
   'postraview.proto_sizebc = J->pt->sizebc;' \
   'postraview.root_topslot = T->topslot;' \
+  'postraview.startins = T->startins;' \
   'postraview.base_delta = (uint8_t)(J->baseslot-2u);' \
   '!lj_asm_arm64_postra_admit(' \
   'validated_semantic_nins != arm64_semantic_nins' \
-  'T->unused1 |= TRACE_ARM64_INT_LOOP_ADMITTED;'; do
+  'T->unused1 |= bc_op(T->startins) == BC_FORL ?' \
+  'TRACE_ARM64_INT_FORL_ADMITTED : TRACE_ARM64_INT_LOOP_ADMITTED;'; do
   grep -F "$required" "$trace_asm" >/dev/null || {
     echo "ARM64 post-RA admission check changed: $required" >&2
     exit 1
   }
 done
 postra_line=$(grep -n '!lj_asm_arm64_postra_admit(' "$trace_asm" | cut -d: -f1)
-marker_line=$(grep -n 'T->unused1 |= TRACE_ARM64_INT_LOOP_ADMITTED;' "$trace_asm" | cut -d: -f1)
+marker_line=$(grep -n 'T->unused1 |= bc_op(T->startins) == BC_FORL ?' "$trace_asm" | cut -d: -f1)
 test -n "$postra_line" && test -n "$marker_line" &&
 test "$postra_line" -lt "$marker_line"
 if grep -F 'T->spadjust != 0 || as->evenspill' "$trace_asm" >/dev/null; then
@@ -139,6 +143,7 @@ for required in \
   'if (last.o == IR_NOP)' \
   'nrename == 0 || nrename > LJ_MAX_PHI' \
   'case IR_SLOAD: case IR_ADDOV: case IR_SUBOV: case IR_MULOV:' \
+  'case IR_ADD:' \
   'case IR_LT: case IR_GE: case IR_LE: case IR_GT:' \
   'case IR_EQ: case IR_NE:' \
   'case IR_LOOP: case IR_XPOLL:' \
@@ -147,7 +152,7 @@ for required in \
   'spadjust != expected || highest_end > capacity' \
   'ren.op2 >= nsnap || ren.r >= RID_MAX_GPR ||' \
   '!rset_test(RSET_GPR, ren.r) || ren.s != SPS_NONE' \
-  'if (!arm64_postra_int_value(source))' \
+  'if (!arm64_postra_int_value(source, rootop, forl_idxslot, maxslots))' \
   'mapofs != expected_mapofs || nent > nextofs-mapofs' \
   'nextofs-mapofs-nent != 1u+LJ_FR2' \
   'snapat < REF_FIRST || snapat >= semantic_nins' \
@@ -156,9 +161,10 @@ for required in \
   'nslots > view->root_topslot+1u+LJ_FR2' \
   'slot >= nslots || (n != 0 &&' \
   'sn == SNAP(1, SNAP_FRAME|SNAP_NORESTORE, REF_NIL)' \
-  'slot < 1u+LJ_FR2 || flags != 0' \
-  'valueref < view->nk || valueref >= REF_TRUE' \
+  '(flags != 0 && flags != SNAP_NORESTORE)' \
+  'flags != 0 || valueref < view->nk || valueref >= REF_TRUE' \
   'valueref < REF_FIRST || valueref >= snapat' \
+  'slot != forl_idxslot && slot != forl_idxslot+FORL_STOP' \
   'rs = source.prev;' \
   'for (renref = view->nins; renref-- > semantic_nins; )' \
   'if (ren.op1 == valueref && ren.op2 <= snapno)' \
@@ -205,6 +211,7 @@ for cases in \
   'case IR_LT: case IR_GE: case IR_LE: case IR_GT:' \
   'case IR_EQ: case IR_NE:' \
   'case IR_ADDOV: case IR_SUBOV: case IR_MULOV:' \
+  'case IR_ADD:' \
   'case IR_PHI:' \
   'case IR_LOOP:' \
   'case IR_XPOLL:' \
@@ -227,7 +234,7 @@ if grep -E 'break;|return 1|IRCALL_[A-Za-z0-9_]+[[:space:]]*:' \
 fi
 
 for forbidden in IR_KGC IR_KPTR IR_KKPTR IR_KNULL IR_KINT64 IR_KSLOT \
-  IR_NOP IR_CONV IR_ADD IR_SUB IR_MUL IR_DIV IR_ULT IR_UGE IR_ULE IR_UGT \
+  IR_NOP IR_CONV IR_SUB IR_MUL IR_DIV IR_ULT IR_UGE IR_ULE IR_UGT \
   IR_USE IR_NEG IR_MOD IR_POW \
   IR_ABS IR_LDEXP \
   IR_MIN IR_MAX IR_FPMATH \
@@ -245,7 +252,7 @@ for required in \
   'for (ref = REF_TRUE; ref <= REF_NIL; ref++)' \
   'ir->o != IR_KPRI || ir->t.irt != expected || ir->op12 != 0' \
   'ir->o != IR_KINT || ir->t.irt != IRT_INT' \
-  'arm64_ir_int_value_op((IROp)ir->o)' \
+  'arm64_ir_int_value_op((IROp)ir->o, allow_add)' \
   'arm64_ir_proto_range(pt, &lo, &hi)' \
   'startpc == NULL ||' \
   'startpc != J->startpc' \
@@ -255,7 +262,7 @@ for required in \
   '(MSize)slot > (MSize)pt->framesize' \
   'ir->op1 < 1 + LJ_FR2 || ir->op1 >= maxslots ||' \
   'ir->op1 >= root_topslot + 1u + LJ_FR2' \
-  'ir->op2 != IRSLOAD_TYPECHECK' \
+  'ir.op2 == IRSLOAD_TYPECHECK' \
   'ref >= before' \
   'mapofs > T->nsnapmap || nextofs > T->nsnapmap' \
   'mapofs != expected_mapofs' \
@@ -263,7 +270,7 @@ for required in \
   'slot >= nslots' \
   'slot <= snap_slot(T->snapmap[mapofs+n-1])' \
   'uint32_t flags = sn & 0x00ff0000u;' \
-  'slot < 1 + LJ_FR2 || flags != 0' \
+  '(flags != 0 && flags != SNAP_NORESTORE)' \
   '(uint8_t)pcbase != (uint8_t)(J->baseslot-2)' \
   '!arm64_ir_pcpos(snappc, proto_lo, proto_hi, &snappos)' \
   'topslot != root_topslot' \
@@ -281,7 +288,7 @@ for required in \
   '!irt_isphi(T->ir[ir->op2].t)' \
   'T->ir[prevphi].op1 == ir->op1' \
   '!!irt_isphi(T->ir[ref].t) != operand' \
-  'startop != BC_LOOP'; do
+  '(startop != BC_LOOP && startop != BC_FORL)'; do
   grep -F "$required" "$classifier" >/dev/null || {
     echo "ARM64 IR structural check changed: $required" >&2
     exit 1
@@ -301,6 +308,9 @@ for required in \
   'fixture_pt->sizebc = 0;' \
   'fixture_pt->sizebc = (MSize)(fixture_loop_pc-bc);' \
   'make_forl_trace(J);' \
+  'fx.ir[R_B].op2 = IRSLOAD_TYPECHECK|IRSLOAD_INHERIT;' \
+  'fx.ir[R_C].op2 = IRSLOAD_READONLY|IRSLOAD_INHERIT;' \
+  'expect_reject(J, LJ_ARM64_IR_REJECT_OPERAND, IR_ADD);' \
   'fx.T.startins = loadbc(fixture_forl_pc);' \
   'setir(REF_TRUE, IR_KINT, IRT_INT, 1, 0);' \
   'setir(REF_FALSE, IR_KNUM, IRT_NUM, 0, 0);' \
@@ -316,6 +326,7 @@ for required in \
   'fx.snapmap[6] = SNAP(2, SNAP_NORESTORE, R_SUM1);' \
   'fx.ir[R_BODY1].op1 = R_PRECOND;' \
   'REJECT_REMOVED(R_SUM1, IR_USE, IRT_INT, R_A, 0);' \
+  'expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_ADD);' \
   'IR_LT, IR_GE, IR_LE, IR_GT, IR_EQ, IR_NE' \
   'IR_ADDOV, IR_SUBOV, IR_MULOV' \
   'IR_ULT, IR_UGE, IR_ULE, IR_UGT' \
@@ -410,4 +421,4 @@ grep -F '#if LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED' \
   -o "$fixture"
 "$fixture"
 
-echo "arm64_jit_ir_admission_contract OK: exact scalar BC_LOOP policy and bounded integer spill layout verified"
+echo "arm64_jit_ir_admission_contract OK: exact scalar LOOP/FORL grammar and bounded integer spill layout verified"

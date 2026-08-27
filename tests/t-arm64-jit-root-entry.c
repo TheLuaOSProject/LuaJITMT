@@ -35,9 +35,11 @@
 #include "lj_trace.h"
 
 #if !LJ_HASJIT || LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED || \
+    LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED || \
     !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED || \
     LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED || \
+    !LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED || \
     !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED
 #error "t-arm64-jit-root-entry requires the granular integer-loop gate split"
@@ -339,6 +341,7 @@ static int root_entry_metadata_layout_valid(const GCtrace *T)
   view.spadjust = T->spadjust;
   view.proto_sizebc = pt->sizebc;
   view.root_topslot = T->topslot;
+  view.startins = T->startins;
   view.base_delta = 0;
   ok = lj_asm_arm64_postra_admit(&view, &semantic_nins);
   if (ok)

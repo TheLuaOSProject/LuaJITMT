@@ -212,11 +212,15 @@ grep -E '^#define LJ_ABI_PAUTH[[:space:]]+0$' \
   "$ordinary_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
   "$ordinary_macros" >/dev/null
+grep -E '^#define LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
+  "$ordinary_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
   "$ordinary_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
   "$ordinary_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+0$' \
+  "$ordinary_macros" >/dev/null
+grep -E '^#define LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+1$' \
   "$ordinary_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+1$' \
   "$ordinary_macros" >/dev/null
@@ -237,7 +241,9 @@ for required in '__arm64_root_jforl' '__arm64_root_jfori' \
   'lua_tointeger(L, -1) == 1234' \
   'lua_pushnumber(L, 4.5)' \
   'LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED' \
+  'LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED' \
   'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED' \
+  'LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED' \
   'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED' \
   'trace_startpt_rel(&J->cur, pt);' \
   'trace_link_rel(&J->cur, 1);' \
@@ -401,6 +407,7 @@ for required in 'postra.ir = v->ir;' 'postra.snap = v->snap;' \
   'postra.spadjust = v->spadjust;' \
   'postra.proto_sizebc = pt->sizebc;' \
   'postra.root_topslot = v->topslot;' \
+  'postra.startins = v->startins;' \
   'postra.base_delta = 0;' \
   'return lj_asm_arm64_postra_admit(&postra, NULL);'; do
   grep -F "$required" "$layout_region" >/dev/null
@@ -450,7 +457,11 @@ grep -E '^#define LJ_ABI_BRANCH_TRACK[[:space:]]+1$' \
   "$pauth_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
   "$pauth_macros" >/dev/null
+grep -E '^#define LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
+  "$pauth_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+0$' \
+  "$pauth_macros" >/dev/null
+grep -E '^#define LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+1$' \
   "$pauth_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
   "$pauth_macros" >/dev/null

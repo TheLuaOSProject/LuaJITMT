@@ -545,12 +545,14 @@
 #if defined(LUAJIT_DISABLE_JIT)
 #error "LUAJIT_MT_ARM64_JIT_EXPERIMENTAL cannot be combined with LUAJIT_DISABLE_JIT"
 #endif
-/* The exact bounded integer BC_LOOP root, including canonical fixed and
-** dynamic 32-bit spill layouts, is executable under both the ordinary ARM64
-** and authenticated ARM64e ABIs. All wider recorder and entry surfaces remain
-** independently fail-closed below. */
+/* Exact bounded integer BC_LOOP roots are executable. Constant-step integer
+** BC_FORL roots may be recorded and published under their separate semantic
+** proof, while their JFORL native entry remains independently closed until
+** the post-update VM edge is proved end to end. */
 #define LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED		0
+#define LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED		0
 #define LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED	0
+#define LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED	1
 #define LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED		1
 #define LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED	1
 #define LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED	1
@@ -572,6 +574,9 @@
 #ifndef LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED
 #define LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED		0
 #endif
+#ifndef LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED
+#define LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED		0
+#endif
 #ifndef LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED
 #define LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED	0
 #endif
@@ -581,6 +586,9 @@
 #ifndef LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED
 #define LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED	0
 #endif
+#ifndef LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED
+#define LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED	0
+#endif
 #ifndef LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED
 #define LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED	0
 #endif
@@ -589,12 +597,14 @@
 #ifndef LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED
 #define LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED \
   (LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED || \
+   LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED || \
    LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED || \
    LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED)
 #endif
 #ifndef LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED
 #define LJ_ARM64_JIT_NATIVE_ENTRY_FAIL_CLOSED \
   (LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED || \
+   LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED || \
    LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
    LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED)
 #endif

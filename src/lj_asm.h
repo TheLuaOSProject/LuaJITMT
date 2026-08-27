@@ -50,6 +50,7 @@ typedef struct LJArm64PostRAView {
   MSize spadjust;
   MSize proto_sizebc;
   MSize root_topslot;
+  BCIns startins;
   uint8_t base_delta;
 } LJArm64PostRAView;
 

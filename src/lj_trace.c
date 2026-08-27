@@ -3788,6 +3788,7 @@ static int trace_root_entry_arm64_layout_valid(
   postra.spadjust = v->spadjust;
   postra.proto_sizebc = pt->sizebc;
   postra.root_topslot = v->topslot;
+  postra.startins = v->startins;
   postra.base_delta = 0;
   return lj_asm_arm64_postra_admit(&postra, NULL);
 }
@@ -6323,10 +6324,13 @@ static void trace_mark_active_startpt(jit_State *J)
 static int trace_root_startins_valid(BCIns ins, ExitNo exitno)
 {
 #if LJ_TARGET_ARM64
-  /* The first admitted ARM64 recorder surface is one ordinary BC_LOOP root.
-  ** This also rejects down-recursion and stitched roots which reach
+  /* ARM64 admits only ordinary BC_LOOP and separately gated integer BC_FORL
+  ** roots. This also rejects down-recursion and stitched roots which reach
   ** trace_start() without passing through lj_trace_hot(). */
-  return exitno == 0 && bc_op(ins) == BC_LOOP;
+  return exitno == 0 &&
+         (bc_op(ins) == BC_LOOP ||
+          (bc_op(ins) == BC_FORL &&
+           !LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED));
 #else
   if (exitno != 0) {
     BCOp op = bc_op(ins);
@@ -6385,6 +6389,40 @@ static int trace_root_itern_tuple(GCproto *pt, const BCIns *pc,
   return 1;
 }
 
+/* Validate the paired FORI/FORL generation before rec_setup_root() follows
+** the negative FORL displacement. FORI remains deliberately unpatched for
+** lockless ARM64 publication, so both words can be rechecked exactly. */
+static int trace_root_forl_tuple(GCproto *pt, const BCIns *pc,
+	BCIns startins)
+{
+  const BCIns *bc;
+  BCPos pcpos;
+  int64_t bodypos, foripos, exitpos;
+  BCIns fori;
+  BCReg ra;
+  if (!pt || !pc || bc_op(startins) != BC_FORL || pt->sizebc == 0)
+    return 0;
+  bc = proto_bc(pt);
+  if (!trace_pc_in_proto_range(pc, bc, pt->sizebc))
+    return 0;
+  pcpos = proto_bcpos(pt, pc);
+  bodypos = (int64_t)pcpos+1+(int64_t)bc_j(startins);
+  foripos = bodypos-1;
+  ra = bc_a(startins);
+  if (bc_j(startins) >= 0 || bodypos <= 0 ||
+      bodypos > (int64_t)pcpos || foripos < 0 ||
+      foripos >= (int64_t)pt->sizebc ||
+      (MSize)ra+FORL_EXT >= (MSize)pt->framesize)
+    return 0;
+  fori = (BCIns)la_load32_acq((const uint32_t *)&bc[(BCPos)foripos]);
+  exitpos = foripos+1+(int64_t)bc_j(fori);
+  if (bc_op(fori) != BC_FORI || bc_a(fori) != ra || bc_j(fori) <= 0 ||
+      exitpos != (int64_t)pcpos+1)
+    return 0;
+  return (BCIns)la_load32_acq((const uint32_t *)pc) == startins &&
+         (BCIns)la_load32_acq((const uint32_t *)&bc[(BCPos)foripos]) == fori;
+}
+
 typedef enum TraceStartResult {
   TRACE_START_RESULT_ACTIVE = 0,
   TRACE_START_RESULT_IDLE,
@@ -6413,6 +6451,9 @@ static TraceStartResult trace_start(jit_State *J)
     root_startins =
       (BCIns)la_load32_acq((const uint32_t *)J->pc);
     if (!trace_root_startins_valid(root_startins, J->exitno))
+      return TRACE_START_RESULT_IDLE;
+    if (bc_op(root_startins) == BC_FORL &&
+	!trace_root_forl_tuple(J->pt, J->pc, root_startins))
       return TRACE_START_RESULT_IDLE;
     if (bc_op(root_startins) == BC_ITERN &&
 	!trace_root_itern_tuple(J->pt, J->pc, root_startins, &root_iterl))
@@ -7138,7 +7179,10 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
   state = lj_trace_state_load(J);
   if (state == LJ_TRACE_START) {
     BCIns ins = (BCIns)la_load32_acq((const uint32_t *)pc);
-    if (bc_op(ins) != BC_LOOP)
+    if (bc_op(ins) != BC_LOOP &&
+	(bc_op(ins) != BC_FORL ||
+	 LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED ||
+	 !trace_root_forl_tuple(pt, pc, ins)))
       return 0;
   } else if (state == LJ_TRACE_RECORD) {
     GCobj *startpt = trace_startptgco_acq(&J->cur);
@@ -7149,7 +7193,10 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
 	!checkptrGC(startpt) || startpt->gch.gct != (uint32_t)~LJ_TPROTO)
       return 0;
     rootpt = gco2pt(startpt);
-    if (bc_op(startins) != BC_LOOP ||
+    if ((bc_op(startins) != BC_LOOP &&
+	 (bc_op(startins) != BC_FORL ||
+	  LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED ||
+	  !trace_root_forl_tuple(rootpt, startpc, startins))) ||
 	!trace_pc_in_proto_range(startpc, proto_bc(rootpt), rootpt->sizebc) ||
 	(BCIns)la_load32_acq((const uint32_t *)startpc) != startins)
       return 0;
@@ -7222,7 +7269,8 @@ static int trace_hot_root_start_valid(const BCIns *pc)
   */
   BCOp op = bc_op((BCIns)la_load32_acq((uint32_t *)pc));
 #if LJ_TARGET_ARM64
-  return op == BC_LOOP;
+  return op == BC_LOOP ||
+	 (op == BC_FORL && !LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED);
 #else
   return op == BC_FORL || op == BC_ITERL || op == BC_ITERN ||
 	 op == BC_LOOP || op == BC_FUNCF;

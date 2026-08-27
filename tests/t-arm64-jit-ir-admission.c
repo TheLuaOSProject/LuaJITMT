@@ -27,7 +27,9 @@
 #include "lj_vm.h"
 
 #if !LJ_HASJIT || LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED || \
+    LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED || \
     LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED || \
+    !LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED || \
     !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED || \
     !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
@@ -185,6 +187,11 @@ static void make_forl_trace(jit_State *J)
   fx.T.startins = loadbc(fixture_forl_pc);
   setmref(fx.T.startpc, fixture_forl_pc);
   J->startpc = fixture_forl_pc;
+  /* Normalize the synthetic hidden IDX/STOP loads so this negative reaches
+  ** the dedicated induction-shape proof instead of failing at slot layout. */
+  fx.ir[R_B].op2 = IRSLOAD_TYPECHECK|IRSLOAD_INHERIT;
+  fx.ir[R_C].t.irt = IRT_INT;
+  fx.ir[R_C].op2 = IRSLOAD_READONLY|IRSLOAD_INHERIT;
 }
 
 static LJArm64IRReject expect_reject(jit_State *J,
@@ -216,6 +223,7 @@ static LJArm64PostRAView make_postra_view(jit_State *J)
   view.spadjust = 0;
   view.proto_sizebc = fixture_pt->sizebc;
   view.root_topslot = fixture_pt->framesize;
+  view.startins = fx.T.startins;
   view.base_delta = 0;
   return view;
 }
@@ -533,7 +541,9 @@ static void test_start_metadata_rejections(jit_State *J)
   fixture_pt->sizebc = sizebc;
 
   make_forl_trace(J);
-  expect_reject(J, LJ_ARM64_IR_REJECT_TRACE, IR_LOOP);
+  /* The paired bytecode and hidden loads are valid, but this LOOP-shaped
+  ** fixture has no exact pair of FORL induction ADDs. */
+  expect_reject(J, LJ_ARM64_IR_REJECT_OPERAND, IR_ADD);
 
   bc_publish((const uint32_t *)fixture_loop_pc,
 	     BCINS_AJ(BC_LOOP, bc_a(loop), 0));
@@ -738,12 +748,17 @@ static void test_positive_and_negative(lua_State *L)
   } while (0)
   REJECT_REMOVED(R_SUM1, IR_NOP, IRT_NIL, 0, 0);
   REJECT_REMOVED(R_SUM1, IR_CONV, IRT_INT, R_A, IRCONV_INT_NUM);
-  REJECT_REMOVED(R_SUM1, IR_ADD, IRT_INT, R_A, R_B);
   REJECT_REMOVED(R_SUM1, IR_SUB, IRT_INT, R_A, R_B);
   REJECT_REMOVED(R_SUM1, IR_MUL, IRT_INT, R_A, R_B);
   REJECT_REMOVED(R_SUM1, IR_DIV, IRT_NUM, R_A, R_B);
   REJECT_REMOVED(R_SUM1, IR_USE, IRT_INT, R_A, 0);
 #undef REJECT_REMOVED
+
+  /* IR_ADD belongs only to the exact FORL induction grammar. A LOOP root
+  ** reaches its dedicated case, but may not use the producer. */
+  make_trace(J);
+  setir(R_SUM1, IR_ADD, IRT_INT, R_A, R_B);
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_ADD);
 
   make_trace(J);
   setir(K_STEP, IR_KGC, IRT_TAB, 0, 0);
@@ -868,7 +883,7 @@ static void test_positive_and_negative(lua_State *L)
 
   make_trace(J);
   fx.snapmap[6] = SNAP(2, SNAP_NORESTORE, R_SUM1);
-  expect_reject(J, LJ_ARM64_IR_REJECT_SNAPSHOT, IR_XPOLL);
+  expect_reject(J, LJ_ARM64_IR_REJECT_SNAPSHOT, IR_SLOAD);
 
   make_trace(J);
   fx.snapmap[6] |= 0x00200000u;
@@ -986,7 +1001,7 @@ int main(void)
   J->startpc = savedstartpc;
   L->top--;
   lua_close(L);
-  puts("arm64_jit_ir_admission OK: scalar BC_LOOP policy and integer spill layout verified");
+  puts("arm64_jit_ir_admission OK: scalar LOOP/FORL policy and integer spill layout verified");
   return 0;
 }
 

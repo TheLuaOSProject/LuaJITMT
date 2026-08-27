@@ -64,6 +64,8 @@ LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_emitter_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/jit_hotcount_generation_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/jit_recorder_safepoint_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_ir_admission_contract.sh"
+LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
+  sh "$root/tools/ci/arm64_jit_forl_record_contract.sh"
 
 # The native-loop tranche may be landed independently of this umbrella gate.
 # Run its executable proof automatically once the companion contract exists.
@@ -78,18 +80,18 @@ assert(jit.status() == true, "experimental build did not admit JIT APIs")
 local util = require("jit.util")
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
-local function unsupported_forl(n)
+local function unsupported_dynamic_forl(a, b, step)
   local sum = 0
-  for i = 1, n do sum = sum + i end
+  for i = a, b, step do sum = sum + i end
   return sum
 end
-local expected = 4096 * 4097 / 2
+local expected = 2048 * 2048
 for round = 1, 128 do
-  assert(unsupported_forl(4096) == expected)
+  assert(unsupported_dynamic_forl(1, 4096, 2) == expected)
   collectgarbage("step", 64)
 end
 assert(util.traceinfo(1) == nil,
-       "unsupported FORL unexpectedly published trace 1")
+       "dynamic-step FORL unexpectedly published trace 1")
 '
 
 LJ_ARM64_SAFEPOINT_SOURCE_ONLY=1 \
@@ -100,4 +102,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" LUA_PATH="$lua_path" \
   "$luajit" "$root/tools/test.lua" \
     m5_arm64_jit_fail_closed_safepoint_runtime
 
-echo "arm64_jit_fail_closed_gate OK: unsupported FORL stayed interpreted; constrained LOOP contracts sound"
+echo "arm64_jit_fail_closed_gate OK: dynamic-step FORL stayed interpreted; constrained LOOP/FORL contracts sound"
