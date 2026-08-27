@@ -1,12 +1,12 @@
 /*
 ** macOS ARM64e negative contract for authenticated root-trace entry.
 **
-** Each mutation mode runs in a fresh process. It records and validates either
-** an admitted integer BC_LOOP or integer BC_FORL root, changes only
-** GCtrace.mcauth, revalidates the semantic body, and dispatches the patched
-** JLOOP or taken integer JFORL edge. The supervising process requires Darwin
-** to terminate that child with SIGBUS; a helper rejection, an assertion, or a
-** successful native entry is not accepted.
+** Each mutation mode runs in a fresh process. It records and validates an
+** admitted integer BC_LOOP, integer BC_FORL, or exact literal-true BC_FUNCF
+** root, changes only GCtrace.mcauth, revalidates the semantic body, and
+** dispatches the corresponding patched VM entry. The supervising process
+** requires Darwin to terminate that child with SIGBUS; a helper rejection,
+** an assertion, or a successful native entry is not accepted.
 */
 
 #include <assert.h>
@@ -39,6 +39,7 @@
 #include "lj_gc2.h"
 #include "lj_ir.h"
 #include "lj_jit.h"
+#include "lj_snap.h"
 #include "lj_target.h"
 #include "lj_tg.h"
 #include "lj_trace.h"
@@ -51,9 +52,9 @@
     !LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED || \
     LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED || \
     LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED || \
-    !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
+    LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED
-#error "t-arm64e-jit-trace-pauth requires exact ARM64e LOOP/FORL gates and BTI"
+#error "t-arm64e-jit-trace-pauth requires exact ARM64e LOOP/FORL/JFUNCF gates and BTI"
 #endif
 
 extern char **environ;
@@ -77,6 +78,13 @@ enum {
   R_END
 };
 
+enum {
+  FUNCF_R_SEPARATOR = REF_BASE+1,
+  FUNCF_R_XPOLL,
+  FUNCF_R_SUFFIX,
+  FUNCF_R_END
+};
+
 typedef enum EntryMode {
   ENTRY_CONTROL,
   ENTRY_RAW,
@@ -86,7 +94,8 @@ typedef enum EntryMode {
 
 typedef enum EntrySite {
   ENTRY_SITE_JLOOP,
-  ENTRY_SITE_JFORL
+  ENTRY_SITE_JFORL,
+  ENTRY_SITE_JFUNCF
 } EntrySite;
 
 static const IRRef expected_snaprefs[] = {
@@ -108,12 +117,17 @@ static void run_lua(lua_State *L, const char *chunk)
 
 static const char *entry_function_name(EntrySite site)
 {
-  return site == ENTRY_SITE_JFORL ? "__arm64e_pauth_integer_forl" :
-	 "__arm64e_pauth_integer_loop";
+  if (site == ENTRY_SITE_JFUNCF)
+    return "__arm64e_pauth_funcf_true";
+  if (site == ENTRY_SITE_JFORL)
+    return "__arm64e_pauth_integer_forl";
+  return "__arm64e_pauth_integer_loop";
 }
 
 static const char *entry_site_name(EntrySite site)
 {
+  if (site == ENTRY_SITE_JFUNCF)
+    return "JFUNCF";
   return site == ENTRY_SITE_JFORL ? "JFORL" : "JLOOP";
 }
 
@@ -121,20 +135,26 @@ static int call_sum(lua_State *L, EntrySite site, lua_Integer n,
 	lua_Integer expected, int signal_ready)
 {
   int status;
+  int nargs = site == ENTRY_SITE_JFUNCF ? 0 : 1;
   lua_getglobal(L, entry_function_name(site));
   if (!lua_isfunction(L, -1))
     return 71;
-  lua_pushinteger(L, n);
+  if (nargs != 0)
+    lua_pushinteger(L, n);
   if (signal_ready)
     signal_negative_ready();
-  status = lua_pcall(L, 1, 1, 0);
+  status = lua_pcall(L, nargs, 1, 0);
   if (status != LUA_OK) {
     fprintf(stderr, "ARM64e trace-PAUTH call failed: %s\n",
 	    lua_tostring(L, -1));
     return 72;
   }
-  if (!lua_isnumber(L, -1) || lua_tointeger(L, -1) != expected)
+  if (site == ENTRY_SITE_JFUNCF) {
+    if (!lua_isboolean(L, -1) || lua_toboolean(L, -1) == 0)
+      return 73;
+  } else if (!lua_isnumber(L, -1) || lua_tointeger(L, -1) != expected) {
     return 73;
+  }
   lua_pop(L, 1);
   return 0;
 }
@@ -214,6 +234,56 @@ static void expect_snapshot_shape(const GCtrace *T)
 	 (SnapNo)(sizeof(expected_snaprefs)/sizeof(expected_snaprefs[0])));
   for (sn = 0; sn < trace_nsnap_acq(T); sn++)
     assert(snap_ref_acq(&snap[sn]) == expected_snaprefs[sn]);
+}
+
+static void expect_funcf_ir_shape(const GCtrace *T)
+{
+  IRIns *ir = trace_ir_acq(T);
+  IRRef ref;
+
+  assert(ir != NULL);
+  assert(trace_nk_acq(T) == REF_TRUE);
+  assert(trace_nins_acq(T) == FUNCF_R_END);
+  for (ref = REF_TRUE; ref <= REF_NIL; ref++) {
+    IRIns k = ir_load_acq(&ir[ref]);
+    assert(k.o == IR_KPRI);
+    assert(k.t.irt == (uint8_t)(REF_NIL-ref));
+    assert(k.op12 == 0);
+  }
+  expect_ir(ir, REF_BASE, IR_BASE, IRT_PGC, 0, 0);
+  expect_ir(ir, FUNCF_R_SEPARATOR, IR_NOP, IRT_NIL, 0, 0);
+  expect_ir(ir, FUNCF_R_XPOLL, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0);
+  expect_ir(ir, FUNCF_R_SUFFIX, IR_NOP, IRT_NIL, 0, 0);
+  assert(ir_load_acq(&ir[FUNCF_R_SUFFIX]).prev == 0);
+  for (ref = REF_BASE; ref < trace_nins_acq(T); ref++)
+    assert(ir_load_acq(&ir[ref]).s == SPS_NONE);
+}
+
+static void expect_funcf_snapshot_shape(const GCtrace *T,
+	const GCproto *pt)
+{
+  const BCIns *bc = proto_bc(pt);
+  SnapShot *snap = trace_snap_acq(T);
+  SnapEntry *map = trace_snapmap_acq(T);
+  MSize result_slot = (MSize)pt->framesize+LJ_FR2;
+
+  assert(snap != NULL && map != NULL);
+  assert(trace_nsnap_acq(T) == 2);
+  assert(trace_nsnapmap_acq(T) == 5);
+  assert(snap_ref_acq(&snap[0]) == FUNCF_R_SEPARATOR);
+  assert(snap_mapofs_acq(&snap[0]) == 0);
+  assert(snap_nent_acq(&snap[0]) == 0);
+  assert(snap_nslots_acq(&snap[0]) == result_slot);
+  assert(snap_topslot_acq(&snap[0]) == (MSize)pt->framesize);
+  assert(snap_pc_acq(&map[0]) == &bc[1]);
+
+  assert(snap_ref_acq(&snap[1]) == FUNCF_R_XPOLL);
+  assert(snap_mapofs_acq(&snap[1]) == 2);
+  assert(snap_nent_acq(&snap[1]) == 1);
+  assert(snap_nslots_acq(&snap[1]) == result_slot+1u);
+  assert(snap_topslot_acq(&snap[1]) == (MSize)pt->framesize);
+  assert(snapentry_acq(&map[2]) == SNAP(result_slot, 0, REF_TRUE));
+  assert(snap_pc_acq(&map[3]) == &bc[2]);
 }
 
 static void expect_loop_geometry(const GCtrace *T, const GCproto *pt)
@@ -351,10 +421,72 @@ static void expect_exact_forl_body(jit_State *J, GCtrace *T, GCproto *pt)
     assert(!trace_runnable_acq(traceref_safe(J, traceno), traceno));
 }
 
+static void expect_exact_funcf_body(jit_State *J, GCtrace *T, GCproto *pt)
+{
+  const BCIns *bc = proto_bc(pt);
+  const BCIns *pc;
+  BCIns startins, live, kpri, ret;
+  BCReg result;
+  uint8_t admission;
+  TraceNo traceno;
+
+  assert(pt->sizebc == 3);
+  assert(pt->numparams == 2);
+  assert(pt->framesize == 3);
+  assert((pt->flags & PROTO_VARARG) == 0);
+  result = (BCReg)(pt->framesize-1u);
+
+  assert(T != NULL && trace_runnable_acq(T, 1));
+  assert(trace_traceno_acq(T) == 1);
+  assert(trace_root_acq(T) == 0);
+  assert(trace_link_acq(T) == 0);
+  assert(trace_linktype_acq(T) == LJ_TRLINK_RETURN);
+  assert(trace_nchild_acq(T) == 0);
+  assert(trace_nextside_acq(T) == 0);
+  assert(trace_startpt_acq(T) == pt);
+  assert(la_load64_acq(&T->retire_epoch) == 0);
+
+  pc = trace_startpc_acq(T);
+  startins = trace_startins_acq(T);
+  assert(pc == &bc[0]);
+  assert(bc_op(startins) == BC_FUNCF);
+  assert(bc_a(startins) == pt->framesize);
+  assert(bc_d(startins) == 0);
+  live = (BCIns)la_load32_acq((const uint32_t *)&bc[0]);
+  kpri = (BCIns)la_load32_acq((const uint32_t *)&bc[1]);
+  ret = (BCIns)la_load32_acq((const uint32_t *)&bc[2]);
+  assert(live == BCINS_AD(BC_JFUNCF, bc_a(startins), 1));
+  assert(kpri == BCINS_AD(BC_KPRI, result, 2));
+  assert(ret == BCINS_AD(BC_RET1, result, 2));
+  assert(proto_jit_startins_acq(pt, pc) == startins);
+  assert((BCIns)la_load32_acq((const uint32_t *)&bc[0]) == live);
+  assert((BCIns)la_load32_acq((const uint32_t *)&bc[1]) == kpri);
+  assert((BCIns)la_load32_acq((const uint32_t *)&bc[2]) == ret);
+
+  admission = la_load8_acq(&T->unused1);
+  assert(admission == TRACE_ARM64_TRUE_FUNCF_ADMITTED);
+  assert((admission & (TRACE_ARM64_INT_LOOP_ADMITTED |
+	 TRACE_ARM64_INT_FORL_ADMITTED)) == 0);
+  assert(trace_spadjust_acq(T) == 0);
+  assert(trace_topslot_acq(T) == (MSize)pt->framesize);
+  assert(trace_mcode_acq(T) != NULL);
+  assert(trace_szmcode_acq(T) > sizeof(MCode));
+  assert((trace_szmcode_acq(T) & (sizeof(MCode)-1u)) == 0);
+  assert(trace_mcode_acq(T)[0] == A64I_BTI_J);
+  assert(trace_mcloop_acq(T) == 0);
+  expect_funcf_ir_shape(T);
+  expect_funcf_snapshot_shape(T, pt);
+
+  for (traceno = 2; (MSize)traceno < trace_sizetrace_acq(J); traceno++)
+    assert(!trace_runnable_acq(traceref_safe(J, traceno), traceno));
+}
+
 static void expect_exact_body(jit_State *J, GCtrace *T, GCproto *pt,
 	EntrySite site)
 {
-  if (site == ENTRY_SITE_JFORL)
+  if (site == ENTRY_SITE_JFUNCF)
+    expect_exact_funcf_body(J, T, pt);
+  else if (site == ENTRY_SITE_JFORL)
     expect_exact_forl_body(J, T, pt);
   else
     expect_exact_loop_body(J, T, pt);
@@ -427,6 +559,25 @@ static void signal_negative_ready(void)
     _exit(85);
 }
 
+static int record_baseline(lua_State *L, jit_State *J, EntrySite site)
+{
+  unsigned i;
+
+  if (site != ENTRY_SITE_JFUNCF)
+    return call_sum(L, site, 20, 210, 0);
+
+  /* A C-driven call with no supplied arguments exercises the fixed-function
+  ** missing-parameter path. Stop at the first published owner trace. */
+  for (i = 0; i < 256; i++) {
+    int status = call_sum(L, site, 0, 0, 0);
+    if (status != 0)
+      return status;
+    if (trace_runnable_acq(traceref_safe(J, 1), 1))
+      return 0;
+  }
+  return 74;
+}
+
 static int child_mode(EntrySite site, EntryMode mode)
 {
   lua_State *L = luaL_newstate();
@@ -436,8 +587,10 @@ static int child_mode(EntrySite site, EntryMode mode)
   GCtrace *T;
   GCtrace wrong_discriminator;
   ASMFunction original, injected, loaded;
+  TValue *saved_base;
   void *saved_cframe;
   int32_t saved_vmstate;
+  int saved_top;
   int status;
 
   assert(L != NULL);
@@ -447,8 +600,10 @@ static int child_mode(EntrySite site, EntryMode mode)
   assert(J != NULL && tg != NULL);
   assert(lj_tg_load_cur_L(tg) == L);
   assert(lj_tg_load_jit_base(tg) == NULL);
+  saved_base = L->base;
   saved_cframe = L->cframe;
   saved_vmstate = lj_tg_vmstate_load_acq(tg);
+  saved_top = lua_gettop(L);
 
   run_lua(L,
     "jit.flush(); jit.on(); "
@@ -463,12 +618,15 @@ static int child_mode(EntrySite site, EntryMode mode)
       "for i=1,n do x=x+i end "
       "return x "
     "end "
+    "function __arm64e_pauth_funcf_true(a, b) return true end "
     "__arm64e_pauth_integer_loop=loop "
     "__arm64e_pauth_integer_forl=forl");
 
   /* The first call records and executes the valid baseline. */
-  assert(call_sum(L, site, 20, 210, 0) == 0);
+  assert(record_baseline(L, J, site) == 0);
+  assert(L->base == saved_base);
   assert(L->cframe == saved_cframe);
+  assert(lua_gettop(L) == saved_top);
   assert(lj_tg_load_jit_base(tg) == NULL);
   assert(lj_tg_vmstate_load_acq(tg) == saved_vmstate);
   pt = global_proto(L, site);
@@ -483,11 +641,18 @@ static int child_mode(EntrySite site, EntryMode mode)
     assert(call_sum(L, site, 20, 210, 0) == 0);
     assert(lj_trace_test_root_entry_publishes() == 1);
     assert(lj_trace_test_root_entry_cleanups() == 0);
-    assert(lj_trace_test_exit_calls() == 1);
-    assert(lj_trace_test_last_exit_parent() == 1);
-    assert(lj_trace_test_last_exitno() ==
-	   (site == ENTRY_SITE_JFORL ? 5 : 8));
+    if (site == ENTRY_SITE_JFUNCF) {
+      assert(lj_trace_test_root_entry_startins_calls() == 0);
+      assert(lj_trace_test_exit_calls() == 0);
+    } else {
+      assert(lj_trace_test_exit_calls() == 1);
+      assert(lj_trace_test_last_exit_parent() == 1);
+      assert(lj_trace_test_last_exitno() ==
+	     (site == ENTRY_SITE_JFORL ? 5 : 8));
+    }
+    assert(L->base == saved_base);
     assert(L->cframe == saved_cframe);
+    assert(lua_gettop(L) == saved_top);
     assert(lj_tg_load_jit_base(tg) == NULL);
     assert(lj_tg_vmstate_load_acq(tg) == saved_vmstate);
     expect_exact_body(J, T, pt, site);
@@ -528,6 +693,11 @@ static int child_mode(EntrySite site, EntryMode mode)
   status = call_sum(L, site, 20, 210, 1);
   la_storefunc_rel(&T->mcauth, original);
   assert(function_bits(trace_mcauth_acq(T)) == function_bits(original));
+  assert(L->base == saved_base);
+  assert(L->cframe == saved_cframe);
+  assert(lua_gettop(L) == saved_top);
+  assert(lj_tg_load_jit_base(tg) == NULL);
+  assert(lj_tg_vmstate_load_acq(tg) == saved_vmstate);
   if (status != 0)
     return status;
   if (lj_trace_test_root_entry_publishes() != 1)
@@ -563,6 +733,10 @@ static EntrySite parse_site(const char **namep)
   if (strncmp(name, "jforl-", 6) == 0) {
     *namep = name+6;
     return ENTRY_SITE_JFORL;
+  }
+  if (strncmp(name, "jfuncf-", 7) == 0) {
+    *namep = name+7;
+    return ENTRY_SITE_JFUNCF;
   }
   /* Preserve the fixture's original direct child-mode command line. */
   return ENTRY_SITE_JLOOP;
@@ -678,9 +852,13 @@ static int supervise(const char *self)
       spawn_mode(self, "jforl-control", 0) != 0 ||
       spawn_mode(self, "jforl-raw", 1) != 0 ||
       spawn_mode(self, "jforl-ia-zero", 1) != 0 ||
-      spawn_mode(self, "jforl-wrong-trace", 1) != 0)
+      spawn_mode(self, "jforl-wrong-trace", 1) != 0 ||
+      spawn_mode(self, "jfuncf-control", 0) != 0 ||
+      spawn_mode(self, "jfuncf-raw", 1) != 0 ||
+      spawn_mode(self, "jfuncf-ia-zero", 1) != 0 ||
+      spawn_mode(self, "jfuncf-wrong-trace", 1) != 0)
     return 1;
-  puts("t-arm64e-jit-trace-pauth OK: JLOOP and JFORL");
+  puts("t-arm64e-jit-trace-pauth OK: JLOOP, JFORL, and JFUNCF");
   return 0;
 }
 

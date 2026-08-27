@@ -109,7 +109,7 @@ static BCIns arm64_ir_bc_acq(uintptr_t lo, MSize pos)
 /* Exact immutable bytecode grammar for the first fixed-function root. The
 ** trace can only return literal true from the final frame slot. */
 static int arm64_ir_funcf_bytecode(const BCIns *bc, MSize sizebc,
-	MSize framesize, BCIns startins)
+	MSize framesize, BCIns startins, BCIns liveins)
 {
   uintptr_t lo = (uintptr_t)bc;
   BCIns kpri, ret;
@@ -119,7 +119,10 @@ static int arm64_ir_funcf_bytecode(const BCIns *bc, MSize sizebc,
 	(uintptr_t)sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns) || framesize == 0 ||
 	framesize > UINT8_MAX || bc_op(startins) != BC_FUNCF ||
 	bc_a(startins) != framesize || bc_d(startins) != 0 ||
-	(BCIns)la_load32_acq((const uint32_t *)&bc[0]) != startins)
+	!((liveins == startins) ||
+	  (bc_op(liveins) == BC_JFUNCF &&
+	   bc_a(liveins) == bc_a(startins) && bc_d(liveins) != 0)) ||
+	(BCIns)la_load32_acq((const uint32_t *)&bc[0]) != liveins)
     return 0;
   result = (BCReg)(framesize-1u);
   kpri = (BCIns)la_load32_acq((const uint32_t *)&bc[1]);
@@ -127,7 +130,7 @@ static int arm64_ir_funcf_bytecode(const BCIns *bc, MSize sizebc,
   return bc_op(kpri) == BC_KPRI && bc_a(kpri) == result &&
 	 bc_d(kpri) == 2u && bc_op(ret) == BC_RET1 &&
 	 bc_a(ret) == result && bc_d(ret) == 2u &&
-	 (BCIns)la_load32_acq((const uint32_t *)&bc[0]) == startins &&
+	 (BCIns)la_load32_acq((const uint32_t *)&bc[0]) == liveins &&
 	 (BCIns)la_load32_acq((const uint32_t *)&bc[1]) == kpri &&
 	 (BCIns)la_load32_acq((const uint32_t *)&bc[2]) == ret;
 }
@@ -188,7 +191,7 @@ static int arm64_ir_start(const jit_State *J, const GCtrace *T,
     if (LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED || pos != 0 ||
 	(pt->flags & PROTO_VARARG) != 0 ||
 	!arm64_ir_funcf_bytecode(proto_bc(pt), pt->sizebc, pt->framesize,
-	  startins) ||
+	  startins, startins) ||
 	pt->numparams > (BCReg)(pt->framesize-1u))
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE, REF_BASE,
 			     IR_XPOLL, (uint16_t)op);
@@ -274,14 +277,21 @@ static int arm64_ir_funcf_snapshots(const SnapShot *snap,
 	uint8_t base_delta);
 
 static int arm64_postra_funcf_admit(const LJArm64PostRAView *view,
-	IRRef *semantic_ninsp)
+	BCIns liveins, IRRef *semantic_ninsp)
 {
-  const IRIns *ir = view->ir;
+  const IRIns *ir;
   IRRef ref;
-  if (view->nk != REF_TRUE || view->nins != REF_BASE+4u ||
+  if (view == NULL || (ir = view->ir) == NULL || view->snap == NULL ||
+	view->snapmap == NULL || view->proto_bc == NULL ||
+	view->nins <= REF_FIRST || view->nins >= REF_DROP ||
+	view->nk == 0 || view->nk > REF_TRUE || view->nsnap == 0 ||
+	view->nsnapmap == 0 || view->proto_sizebc == 0 ||
+	view->root_topslot == 0 || view->root_topslot > UINT8_MAX ||
+	view->base_delta != 0 ||
+	view->nk != REF_TRUE || view->nins != REF_BASE+4u ||
 	view->spadjust != 0 ||
 	!arm64_ir_funcf_bytecode(view->proto_bc, view->proto_sizebc,
-	  view->root_topslot, view->startins))
+	  view->root_topslot, view->startins, liveins))
     return 0;
   for (ref = REF_TRUE; ref <= REF_NIL; ref++) {
     IRIns k = ir_load_acq(&ir[ref]);
@@ -301,7 +311,8 @@ static int arm64_postra_funcf_admit(const LJArm64PostRAView *view,
 	poll.o != IR_XPOLL || poll.t.irt != (IRT_NIL|IRT_GUARD) ||
 	poll.op1 != 1 || poll.op2 != 0 || poll.s != SPS_NONE ||
 	suffix.o != IR_NOP || suffix.t.irt != IRT_NIL ||
-	suffix.op1 != 0 || suffix.op2 != 0 || suffix.prev != 0)
+	suffix.op1 != 0 || suffix.op2 != 0 || suffix.s != SPS_NONE ||
+	suffix.prev != 0)
       return 0;
   }
   if (!arm64_ir_funcf_snapshots(view->snap, view->snapmap, view->nsnap,
@@ -346,7 +357,7 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
   if (rootop != BC_LOOP && rootop != BC_FORL && rootop != BC_FUNCF)
     return 0;
   if (rootop == BC_FUNCF)
-    return arm64_postra_funcf_admit(view, semantic_ninsp);
+    return arm64_postra_funcf_admit(view, view->startins, semantic_ninsp);
   maxslots = view->root_topslot+1u+LJ_FR2;
   if (rootop == BC_FORL) {
     MSize ra = bc_a(view->startins);
@@ -560,6 +571,22 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
   if (semantic_ninsp)
     *semantic_ninsp = semantic_nins;
   return 1;
+}
+
+/* Re-run the exact fixed-function allocator certificate after publication.
+** Assembly sees the original FUNCF word, whereas native entry must prove the
+** full patched JFUNCF generation without weakening the assembly-time API. */
+int lj_asm_arm64_postra_funcf_entry_admit(
+	const LJArm64PostRAView *view, BCIns liveins,
+	IRRef *semantic_ninsp)
+{
+  /* This helper is exported for the entry gate, so retain fail-closed pointer
+  ** behavior even if a future caller omits lj_trace.c's metadata preflight. */
+  if (view == NULL || bc_op(view->startins) != BC_FUNCF ||
+	bc_op(liveins) != BC_JFUNCF ||
+	bc_a(liveins) != bc_a(view->startins) || bc_d(liveins) == 0)
+    return 0;
+  return arm64_postra_funcf_admit(view, liveins, semantic_ninsp);
 }
 
 static int arm64_ir_int_ref(const GCtrace *T, IRRef ref, IRRef before,

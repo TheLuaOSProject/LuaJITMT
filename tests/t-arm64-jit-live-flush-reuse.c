@@ -1,7 +1,8 @@
 /*
 ** Native macOS ARM64 lifecycle contract for live trace flush, SMR grace and
 ** public trace-number reuse. This deliberately covers one exact integer
-** BC_LOOP root at a time and keeps every unsupported JIT surface closed.
+** BC_LOOP root at a time; certified JFUNCF entry is covered by its dedicated
+** fixture, while unsupported JIT surfaces remain closed.
 */
 
 #include <assert.h>
@@ -34,9 +35,9 @@
     !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED || \
     LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED || \
-    !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
+    LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED
-#error "t-arm64-jit-live-flush-reuse requires the exact first-loop ARM64 gates"
+#error "t-arm64-jit-live-flush-reuse requires the admitted ARM64 root gates"
 #endif
 
 #define WAIT_LIMIT 20000000u

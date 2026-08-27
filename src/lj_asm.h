@@ -58,6 +58,9 @@ LJ_FUNC int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
 				   LJArm64IRReject *reject);
 LJ_FUNC int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
 				      IRRef *semantic_ninsp);
+LJ_FUNC int lj_asm_arm64_postra_funcf_entry_admit(
+	const LJArm64PostRAView *view, BCIns liveins,
+	IRRef *semantic_ninsp);
 #endif
 #if LJ_TARGET_ARM64 && defined(LJ_ARM64_EMIT_TEST_HELPERS)
 typedef enum {

@@ -170,8 +170,9 @@ for required in \
   'uint32_t sourceop = (uint32_t)bc_op(sourceins);' \
   '(TraceNo)bc_d(sourceins) != traceno' \
   'BCIns expected = BCINS_AD((BCOp)sourceop, bc_a(startins), traceno);' \
-  'return sourceins == expected && ins == sourceins;' \
-  'TRACE_ARM64_INT_FORL_ADMITTED : TRACE_ARM64_INT_LOOP_ADMITTED' \
+  'if (sourceins != expected || ins != sourceins)' \
+  '(sourceop == (uint32_t)BC_JFUNCF ?' \
+  'TRACE_ARM64_TRUE_FUNCF_ADMITTED : TRACE_ARM64_INT_LOOP_ADMITTED)' \
   '(v->admission & root_admission) == expected_admission' \
   'trace_root_entry_loop_geometry(sourceop, pt, pc, v->startins)' \
   'bc_op(startins) != BC_FORL' \
@@ -186,7 +187,7 @@ for required in \
     exit 1
   }
 done
-test "$(grep -Fc 'trace_root_entry_bytecode_valid(pc, traceno, sourceop,' \
+test "$(grep -Fc 'trace_root_entry_bytecode_valid(pc, pt, traceno, sourceop,' \
   "$entry_helper")" = 3
 
 # The integer JFORL helper is reachable only through the taken comparison after
@@ -264,7 +265,7 @@ for setting in \
   'LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED 0' \
-  'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED 1' \
+  'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED 1'; do
   grep -E "^#define ${setting}$" "$macros" >/dev/null || {
     echo "ARM64 native-FORL gate mismatch: $setting" >&2

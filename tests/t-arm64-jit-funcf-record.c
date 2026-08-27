@@ -1,11 +1,11 @@
 /*
-** macOS ARM64 publication-only contract for the first fixed FUNCF root.
-** The exact function(a, b) return true end trace may be recorded and
-** published as JFUNCF, but the independently gated native header entry must
-** reject before publishing a TG jit_base lifetime lease.
+** macOS ARM64 native-entry contract for the first fixed FUNCF root.
+** The exact function(a, b) return true end trace is recorded, published as
+** JFUNCF and entered through the certified fixed-function header path.
 */
 
 #include <assert.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -21,14 +21,19 @@
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
+#include "lj_asm.h"
 #include "lj_bc.h"
+#include "lj_buf.h"
 #include "lj_func.h"
+#include "lj_gc2.h"
 #include "lj_ir.h"
 #include "lj_jit.h"
 #include "lj_snap.h"
 #include "lj_target.h"
 #include "lj_tg.h"
+#include "lj_thr.h"
 #include "lj_trace.h"
+#include "lj_vm.h"
 
 #if !LJ_HASJIT || LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED || \
     LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED || \
@@ -36,9 +41,9 @@
     !LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED || \
     LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED || \
     LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED || \
-    !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
+    LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED
-#error "t-arm64-jit-funcf-record requires publication-only ARM64 FUNCF gates"
+#error "t-arm64-jit-funcf-record requires native ARM64 JFUNCF entry"
 #endif
 
 enum {
@@ -47,6 +52,29 @@ enum {
   FUNCF_R_SUFFIX,
   FUNCF_R_END
 };
+
+typedef struct FuncfWordRace {
+  BCIns *word;
+  BCIns replacement;
+  uint32_t saw_pause;
+  uint32_t worker_done;
+} FuncfWordRace;
+
+typedef struct FuncfProfileRace {
+  TGState *tg;
+  uint32_t saw_pause;
+  uint32_t saw_jit_base;
+  uint32_t worker_done;
+} FuncfProfileRace;
+
+typedef struct FuncfStopRace {
+  global_State *g;
+  TGState *tg;
+  uint64_t epoch;
+  uint32_t saw_pause;
+  uint32_t saw_jit_base;
+  uint32_t worker_done;
+} FuncfStopRace;
 
 static void run_lua(lua_State *L, const char *chunk)
 {
@@ -69,6 +97,17 @@ static GCproto *global_proto(lua_State *L, const char *name)
   pt = funcproto(fn);
   lua_pop(L, 1);
   return pt;
+}
+
+static GCfunc *global_lfunc(lua_State *L, const char *name)
+{
+  GCfunc *fn;
+  lua_getglobal(L, name);
+  assert(lua_isfunction(L, -1));
+  fn = funcV(L->top-1);
+  assert(isluafunc(fn));
+  lua_pop(L, 1);
+  return fn;
 }
 
 static void push_integer_args(lua_State *L, int nargs, lua_Integer value)
@@ -198,8 +237,55 @@ static void expect_exact_ir(const GCtrace *T)
   assert(ir_load_acq(&ir[FUNCF_R_SUFFIX]).prev == 0);
 }
 
+static void expect_funcf_mcode_tail(jit_State *J, const GCtrace *T,
+	int expect_indirect)
+{
+  MCode *mcode = trace_mcode_acq(T);
+  MSize szmcode = trace_szmcode_acq(T);
+  MSize nins, i, nadd = 0, nsub = 0;
+  MCode *tail;
+  MCode add_fixed = (A64I_ADDx^A64I_K12) | A64F_U12(16) |
+		    A64F_D(RID_SP) | A64F_N(RID_SP);
+  MCode sub_fixed = 0xd10043ffu;
+  MCode indirect = A64I_BR_AUTH | A64F_N(RID_LR);
+
+  assert(mcode != NULL && szmcode > 2u*sizeof(MCode));
+  assert((szmcode & (sizeof(MCode)-1u)) == 0);
+  nins = szmcode / sizeof(MCode);
+  tail = &mcode[nins];
+  for (i = 0; i < nins; i++) {
+    nadd += mcode[i] == add_fixed;
+    nsub += mcode[i] == sub_fixed;
+  }
+  assert(nadd == 1 && nsub == 0);
+#if LJ_ABI_BRANCH_TRACK
+  assert(mcode[0] == A64I_BTI_J);
+#endif
+  if (expect_indirect) {
+    intptr_t k64ofs =
+      (intptr_t)((char *)&J->k64[LJ_K64_VM_EXIT_INTERP] -
+		 (char *)&J2GG(J)->g);
+    MCode ldr_interp;
+    assert(tail[-1] == indirect);
+    assert(k64ofs >= 0 && (k64ofs & 7) == 0 &&
+	   (k64ofs >> 3) < 4096);
+    ldr_interp = A64I_LDRx | A64F_D(RID_LR) | A64F_N(RID_GL) |
+		 A64F_U12((uint32_t)(k64ofs >> 3));
+    assert(tail[-3] == add_fixed);
+    assert(tail[-2] == ldr_interp);
+  } else {
+    intptr_t bytes = (intptr_t)(uintptr_t)(void *)lj_vm_exit_interp -
+		     (intptr_t)(uintptr_t)(void *)&tail[-1];
+    assert(tail[-1] != indirect);
+    assert((bytes & (intptr_t)(sizeof(MCode)-1u)) == 0);
+    assert(tail[-2] == add_fixed);
+    assert(tail[-1] == (A64I_B |
+	   A64F_S26(bytes/(intptr_t)sizeof(MCode))));
+  }
+}
+
 static GCtrace *expect_published_true(lua_State *L, GCproto *pt,
-	BCIns startins)
+	BCIns startins, int expect_indirect)
 {
   jit_State *J = L2J(L);
   GCtrace *T = traceref_safe(J, 1);
@@ -233,6 +319,7 @@ static GCtrace *expect_published_true(lua_State *L, GCproto *pt,
   assert(trace_topslot_acq(T) == (MSize)pt->framesize);
   expect_exact_ir(T);
   expect_exact_snapshots(T, pt);
+  expect_funcf_mcode_tail(J, T, expect_indirect);
 
   for (traceno = 2; (MSize)traceno < trace_sizetrace_acq(J); traceno++)
     assert(!trace_runnable_acq(traceref_safe(J, traceno), traceno));
@@ -254,36 +341,373 @@ static GCtrace *hotcall_until_published(lua_State *L, const char *name)
   return NULL;
 }
 
-static void expect_closed_jfuncf_boundary(lua_State *L,
-	uint32_t startins_calls)
+static void expect_native_jfuncf_boundary(lua_State *L,
+	uint32_t publishes)
 {
   TGState *tg = L->tg_hint;
   assert(tg != NULL);
-  assert(lj_trace_test_root_entry_startins_calls() == startins_calls);
-  assert(lj_trace_test_root_entry_publishes() == 0);
+  assert(lj_trace_test_root_entry_startins_calls() == 0);
+  assert(lj_trace_test_root_entry_publishes() == publishes);
   assert(lj_trace_test_root_entry_cleanups() == 0);
   assert(lj_trace_test_exit_calls() == 0);
   assert(lj_tg_load_jit_base(tg) == NULL);
 }
 
-static void expect_closed_jfuncf_calls(lua_State *L, const char *name)
+static void expect_native_jfuncf_calls(lua_State *L, const char *name)
 {
   lj_trace_test_root_entry_reset();
   lj_trace_test_reset_exit_stats();
   call_expect_true(L, name, 0);  /* Both fixed parameters missing. */
-  expect_closed_jfuncf_boundary(L, 1);
+  expect_native_jfuncf_boundary(L, 1);
   call_expect_true(L, name, 1);  /* One fixed parameter missing. */
-  expect_closed_jfuncf_boundary(L, 2);
+  expect_native_jfuncf_boundary(L, 2);
   call_expect_true(L, name, 2);  /* No fixed parameter missing. */
-  /* This final recovered FUNCF hotcount underflows and statically redispatches
-  ** the still-live JFUNCF once, accounting for the exact final delta of two. */
-  expect_closed_jfuncf_boundary(L, 4);
+  expect_native_jfuncf_boundary(L, 3);
+  call_expect_true(L, name, 3);  /* One extra argument is ignored. */
+  expect_native_jfuncf_boundary(L, 4);
 }
 
-static void run_positive(void)
+static void test_funcf_entry_view_preflight(GCtrace *T, GCproto *pt)
+{
+  LJArm64PostRAView view;
+  BCIns live = (BCIns)la_load32_acq(
+	(const uint32_t *)&proto_bc(pt)[0]);
+
+  assert(!lj_asm_arm64_postra_funcf_entry_admit(NULL, live, NULL));
+  memset(&view, 0, sizeof(view));
+  view.snap = trace_snap_acq(T);
+  view.snapmap = trace_snapmap_acq(T);
+  view.proto_bc = proto_bc(pt);
+  view.nins = trace_nins_acq(T);
+  view.nk = trace_nk_acq(T);
+  view.nsnap = trace_nsnap_acq(T);
+  view.nsnapmap = trace_nsnapmap_acq(T);
+  view.spadjust = trace_spadjust_acq(T);
+  view.proto_sizebc = pt->sizebc;
+  view.root_topslot = trace_topslot_acq(T);
+  view.startins = trace_startins_acq(T);
+  view.base_delta = 0;
+  assert(view.ir == NULL);
+  assert(!lj_asm_arm64_postra_funcf_entry_admit(&view, live, NULL));
+}
+
+static LJTraceRootEntry invoke_funcf_entry_helper(lua_State *L, GCfunc *fn,
+	GCtrace *T)
+{
+  TGState *tg = L2TG(L);
+  TValue saved_func;
+  int32_t saved_vmstate = lj_tg_vmstate_load_acq(tg);
+  lua_State *saved_tmpbuf_L = sbufL(&tg->tmpbuf);
+  const BCIns *pc = trace_startpc_acq(T);
+  BCIns live = (BCIns)la_load32_acq((const uint32_t *)pc);
+  LJTraceRootEntry entry;
+
+  copyTV(L, &saved_func, L->base-2);
+  setfuncV(L, L->base-2, fn);
+  assert(curr_func(L) == fn);
+  lj_tg_vmstate_store_rel(tg, (int32_t)~LJ_VMST_INTERP);
+  entry = lj_trace_enter_root(L2J(L), pc, trace_traceno_acq(T),
+	L, L->base, live);
+  if (entry.trace != NULL) {
+    assert(entry.trace == T && entry.target != NULL);
+    assert((uintptr_t)lj_ptr_strip(entry.target) ==
+	   (uintptr_t)(void *)trace_mcode_acq(T));
+    assert(lj_tg_load_jit_base(tg) == L->base);
+    lj_tg_store_jit_base(tg, NULL);
+  }
+  assert(lj_tg_load_jit_base(tg) == NULL);
+  setsbufL(&tg->tmpbuf, saved_tmpbuf_L);
+  lj_tg_vmstate_store_rel(tg, saved_vmstate);
+  copyTV(L, L->base-2, &saved_func);
+  return entry;
+}
+
+static void expect_funcf_entry_reject(lua_State *L, GCfunc *fn, GCtrace *T)
+{
+  LJTraceRootEntry entry;
+  lj_trace_test_root_entry_reset();
+  entry = invoke_funcf_entry_helper(L, fn, T);
+  assert(entry.trace == NULL && entry.target == NULL);
+  assert(lj_trace_test_root_entry_publishes() == 1);
+  assert(lj_trace_test_root_entry_cleanups() == 1);
+  assert(lj_trace_test_root_entry_startins_calls() == 0);
+}
+
+static void test_funcf_metadata_certificate(lua_State *L, GCfunc *fn,
+	GCtrace *T)
+{
+  IRIns *ir = trace_ir_acq(T);
+  uint8_t admission = la_load8_acq(&T->unused1);
+  LJTraceRootEntry entry;
+
+  lj_trace_test_root_entry_reset();
+  entry = invoke_funcf_entry_helper(L, fn, T);
+  assert(entry.trace == T && entry.target != NULL);
+  assert(lj_trace_test_root_entry_publishes() == 1);
+  assert(lj_trace_test_root_entry_cleanups() == 0);
+
+  trace_link_rel(T, 1);
+  expect_funcf_entry_reject(L, fn, T);
+  trace_link_rel(T, 0);
+
+  T->linktype = LJ_TRLINK_LOOP;
+  expect_funcf_entry_reject(L, fn, T);
+  T->linktype = LJ_TRLINK_RETURN;
+
+  T->mcloop = sizeof(MCode);
+  expect_funcf_entry_reject(L, fn, T);
+  T->mcloop = 0;
+
+  T->spadjust = 16;
+  expect_funcf_entry_reject(L, fn, T);
+  T->spadjust = 0;
+
+  T->nchild = 1;
+  expect_funcf_entry_reject(L, fn, T);
+  T->nchild = 0;
+
+  trace_nextside_rel(T, 1);
+  expect_funcf_entry_reject(L, fn, T);
+  trace_nextside_rel(T, 0);
+
+  T->unused1 = TRACE_ARM64_TRUE_FUNCF_ADMITTED |
+		TRACE_ARM64_INT_LOOP_ADMITTED;
+  expect_funcf_entry_reject(L, fn, T);
+  T->unused1 = 0;
+  expect_funcf_entry_reject(L, fn, T);
+  T->unused1 = admission;
+
+  ir[FUNCF_R_SUFFIX].s = SPS_FIRST;
+  expect_funcf_entry_reject(L, fn, T);
+  ir[FUNCF_R_SUFFIX].s = SPS_NONE;
+
+  lj_trace_test_root_entry_reset();
+  entry = invoke_funcf_entry_helper(L, fn, T);
+  assert(entry.trace == T && entry.target != NULL);
+  assert(lj_trace_test_root_entry_publishes() == 1);
+  assert(lj_trace_test_root_entry_cleanups() == 0);
+}
+
+static void wait_for_entry_pause(uint32_t stage, uint32_t *saw_pause)
+{
+  uint32_t i;
+  for (i = 0; i < 10000000u; i++) {
+    if (lj_trace_test_root_entry_paused() == stage) {
+      la_store32_rel(saw_pause, 1);
+      return;
+    }
+    (void)lj_thr_retry_yield(NULL);
+  }
+  assert(!"ARM64 JFUNCF helper did not reach requested pause");
+}
+
+static void *mutate_funcf_word(void *arg)
+{
+  FuncfWordRace *race = (FuncfWordRace *)arg;
+  wait_for_entry_pause(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA,
+	&race->saw_pause);
+  bc_publish(race->word, race->replacement);
+  lj_trace_test_root_entry_release();
+  la_store32_rel(&race->worker_done, 1);
+  return NULL;
+}
+
+static void test_funcf_generation_race(lua_State *L, GCfunc *fn, GCtrace *T,
+	BCIns *word, BCIns replacement)
+{
+  FuncfWordRace race;
+  BCIns original = (BCIns)la_load32_acq((const uint32_t *)word);
+  LJTraceRootEntry entry;
+  pthread_t worker;
+
+  memset(&race, 0, sizeof(race));
+  race.word = word;
+  race.replacement = replacement;
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_root_entry_pause(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA);
+  assert(pthread_create(&worker, NULL, mutate_funcf_word, &race) == 0);
+  entry = invoke_funcf_entry_helper(L, fn, T);
+  assert(entry.trace == NULL && entry.target == NULL);
+  assert(pthread_join(worker, NULL) == 0);
+  assert(la_load32_acq(&race.saw_pause) == 1);
+  assert(la_load32_acq(&race.worker_done) == 1);
+  assert((BCIns)la_load32_acq((const uint32_t *)word) == replacement);
+  assert(lj_trace_test_root_entry_publishes() == 1);
+  assert(lj_trace_test_root_entry_cleanups() == 1);
+  assert(lj_trace_test_root_entry_startins_calls() == 0);
+  assert(lj_tg_load_jit_base(L2TG(L)) == NULL);
+  bc_publish(word, original);
+}
+
+static void *publish_funcf_profile(void *arg)
+{
+  FuncfProfileRace *race = (FuncfProfileRace *)arg;
+  wait_for_entry_pause(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION,
+	&race->saw_pause);
+  la_store32_rel(&race->saw_jit_base,
+	lj_tg_load_jit_base(race->tg) != NULL);
+  lj_tg_profile_request_rel(race->tg, 1);
+  lj_trace_test_root_entry_release();
+  la_store32_rel(&race->worker_done, 1);
+  return NULL;
+}
+
+static void clear_funcf_stopreq(TGState *tg)
+{
+  (void)lj_tg_flags_and_rlx(tg,
+	(uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH));
+}
+
+static void *publish_funcf_stopreq(void *arg)
+{
+  FuncfStopRace *race = (FuncfStopRace *)arg;
+  wait_for_entry_pause(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION,
+	&race->saw_pause);
+  assert(gc2_hs_epoch_acq(race->g) == race->epoch);
+  assert(lj_tg_hs_epoch_ack_acq(race->tg) == race->epoch);
+  assert(gc2_hs_pending_acq(race->g) == 0);
+  assert(lj_tg_reqmask_acq(race->tg) == 0);
+  assert(lj_tg_poll_acq(race->tg) == 0);
+  assert(lj_tg_profile_request_acq(race->tg) == 0);
+  la_store32_rel(&race->saw_jit_base,
+	lj_tg_load_jit_base(race->tg) != NULL);
+  assert(la_load32_acq(&race->saw_jit_base) == 1);
+  gc2_hs_actions_rel(race->g, LJ_GC2_HS_STOPREQ);
+  gc2_hs_pending_rel(race->g, 1);
+  gc2_hs_epoch_rel(race->g, race->epoch+1u);
+  lj_tg_reqmask_rel(race->tg, LJ_GC2_HS_STOPREQ);
+  lj_tg_poll_rel(race->tg, 1);
+  lj_trace_test_root_entry_release();
+  la_store32_rel(&race->worker_done, 1);
+  return NULL;
+}
+
+static void test_funcf_native_xpoll(lua_State *L, const char *name,
+	GCtrace *T)
+{
+  TGState *tg = L2TG(L);
+  global_State *g = G(L);
+  FuncfProfileRace race;
+  pthread_t worker;
+  TValue *saved_base = L->base;
+  void *saved_cframe = L->cframe;
+  int saved_top = lua_gettop(L);
+  int32_t saved_vmstate = lj_tg_vmstate_load_acq(tg);
+  uint64_t saved_epoch = gc2_hs_epoch_acq(g);
+
+  memset(&race, 0, sizeof(race));
+  race.tg = tg;
+  assert(lj_tg_profile_request_acq(tg) == 0);
+  assert(lj_tg_poll_acq(tg) == 0);
+  assert(lj_tg_reqmask_acq(tg) == 0);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  lj_trace_test_root_entry_pause(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION);
+  assert(pthread_create(&worker, NULL, publish_funcf_profile, &race) == 0);
+  call_expect_true(L, name, 0);
+  assert(pthread_join(worker, NULL) == 0);
+  assert(la_load32_acq(&race.saw_pause) == 1);
+  assert(la_load32_acq(&race.saw_jit_base) == 1);
+  assert(la_load32_acq(&race.worker_done) == 1);
+  assert(lj_trace_test_root_entry_publishes() == 1);
+  assert(lj_trace_test_root_entry_cleanups() == 0);
+  assert(lj_trace_test_root_entry_startins_calls() == 0);
+  assert(lj_trace_test_exit_calls() == 1);
+  assert(lj_trace_test_first_exit_parent() == 1);
+  assert(lj_trace_test_first_exitno() == 1);
+  assert(lj_trace_test_last_exit_parent() == 1);
+  assert(lj_trace_test_last_exitno() == 1);
+  assert(lj_tg_profile_request_acq(tg) == 0);
+  assert(lj_tg_poll_acq(tg) == 0);
+  assert(lj_tg_reqmask_acq(tg) == 0);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  assert(lj_tg_load_jit_base(tg) == NULL);
+  assert(gc2_hs_epoch_acq(g) == saved_epoch);
+  assert(lj_tg_vmstate_load_acq(tg) == saved_vmstate);
+  assert(L->base == saved_base);
+  assert(L->cframe == saved_cframe);
+  assert(lua_gettop(L) == saved_top);
+  assert(trace_runnable_acq(T, 1));
+}
+
+static void test_funcf_native_stopreq(lua_State *L, const char *name,
+	GCtrace *T)
+{
+  TGState *tg = L2TG(L);
+  global_State *g = G(L);
+  FuncfStopRace race;
+  pthread_t worker;
+  TValue *saved_base = L->base;
+  void *saved_cframe = L->cframe;
+  int saved_top = lua_gettop(L);
+  int32_t saved_vmstate = lj_tg_vmstate_load_acq(tg);
+  uint64_t saved_epoch = gc2_hs_epoch_acq(g);
+  int status;
+
+  memset(&race, 0, sizeof(race));
+  race.g = g;
+  race.tg = tg;
+  race.epoch = saved_epoch;
+  clear_funcf_stopreq(tg);
+  assert(lj_tg_hs_epoch_ack_acq(tg) == saved_epoch);
+  assert(gc2_hs_leader_acq(g) == 0);
+  assert(gc2_hs_pending_acq(g) == 0);
+  assert(lj_tg_reqmask_acq(tg) == 0);
+  assert(lj_tg_poll_acq(tg) == 0);
+  assert(lj_tg_profile_request_acq(tg) == 0);
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  lj_trace_test_root_entry_pause(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION);
+  assert(pthread_create(&worker, NULL, publish_funcf_stopreq, &race) == 0);
+  lua_getglobal(L, name);
+  assert(lua_isfunction(L, -1));
+  status = lua_pcall(L, 0, 1, 0);
+  assert(pthread_join(worker, NULL) == 0);
+  assert(status == LUA_ERRRUN);
+  assert(lua_isstring(L, -1));
+  assert(strstr(lua_tostring(L, -1),
+	"thread interrupted: VM shutdown") != NULL);
+  lua_pop(L, 1);
+
+  assert(la_load32_acq(&race.saw_pause) == 1);
+  assert(la_load32_acq(&race.saw_jit_base) == 1);
+  assert(la_load32_acq(&race.worker_done) == 1);
+  assert(lj_trace_test_root_entry_publishes() == 1);
+  assert(lj_trace_test_root_entry_cleanups() == 0);
+  assert(lj_trace_test_root_entry_startins_calls() == 0);
+  assert(lj_trace_test_exit_calls() == 1);
+  assert(lj_trace_test_first_exit_parent() == 1);
+  assert(lj_trace_test_first_exitno() == 1);
+  assert(lj_trace_test_last_exit_parent() == 1);
+  assert(lj_trace_test_last_exitno() == 1);
+  assert(gc2_hs_actions_acq(g) == LJ_GC2_HS_STOPREQ);
+  assert(gc2_hs_epoch_acq(g) == saved_epoch+1u);
+  assert(lj_tg_hs_epoch_ack_acq(tg) == saved_epoch+1u);
+  assert(gc2_hs_leader_acq(g) == 0);
+  assert(gc2_hs_pending_acq(g) == 0);
+  assert(lj_tg_reqmask_acq(tg) == 0);
+  assert(lj_tg_poll_acq(tg) == 0);
+  assert(lj_tg_profile_request_acq(tg) == 0);
+  assert((lj_tg_flags_acq(tg) & TGF_STOPREQ) != 0);
+  assert((lj_tg_flags_acq(tg) & TGF_STOPREQ_FRESH) == 0);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  assert(lj_tg_load_jit_base(tg) == NULL);
+  assert(lj_tg_vmstate_load_acq(tg) == saved_vmstate);
+  assert(L->base == saved_base);
+  assert(L->cframe == saved_cframe);
+  assert(lua_gettop(L) == saved_top);
+  assert(trace_runnable_acq(T, 1));
+  clear_funcf_stopreq(tg);
+  assert((lj_tg_flags_acq(tg) &
+	(TGF_STOPREQ|TGF_STOPREQ_FRESH)) == 0);
+}
+
+static void run_positive(int expect_indirect)
 {
   lua_State *L = luaL_newstate();
   jit_State *J;
+  GCfunc *fn;
   GCproto *pt;
   GCtrace *T;
   const BCIns *startpc;
@@ -295,14 +719,28 @@ static void run_positive(void)
     "jit.opt.start('hotloop=1','hotexit=1','maxtrace=4')\n"
     "function __arm64_funcf_true(a, b) return true end\n");
   J = L2J(L);
+  fn = global_lfunc(L, "__arm64_funcf_true");
   pt = global_proto(L, "__arm64_funcf_true");
   expect_exact_true_bytecode(pt, &startins);
   startpc = proto_bc(pt);
   assert(!trace_runnable_acq(traceref_safe(J, 1), 1));
 
   T = hotcall_until_published(L, "__arm64_funcf_true");
-  assert(T == expect_published_true(L, pt, startins));
-  expect_closed_jfuncf_calls(L, "__arm64_funcf_true");
+  assert(T == expect_published_true(L, pt, startins, expect_indirect));
+  test_funcf_entry_view_preflight(T, pt);
+  expect_native_jfuncf_calls(L, "__arm64_funcf_true");
+  test_funcf_metadata_certificate(L, fn, T);
+  test_funcf_generation_race(L, fn, T, (BCIns *)&proto_bc(pt)[0],
+	BCINS_AD(BC_JFUNCF, (BCReg)(bc_a(startins)+1u), 1));
+  test_funcf_generation_race(L, fn, T, (BCIns *)&proto_bc(pt)[1],
+	BCINS_AD(BC_KPRI, (BCReg)(pt->framesize-1u), 1));
+  test_funcf_generation_race(L, fn, T, (BCIns *)&proto_bc(pt)[2],
+	BCINS_AD(BC_RET0, (BCReg)(pt->framesize-1u), 1));
+  test_funcf_native_xpoll(L, "__arm64_funcf_true", T);
+  assert(T == expect_published_true(L, pt, startins, expect_indirect));
+  test_funcf_native_stopreq(L, "__arm64_funcf_true", T);
+  assert(T == expect_published_true(L, pt, startins, expect_indirect));
+  expect_native_jfuncf_calls(L, "__arm64_funcf_true");
 
   /* jit.flush restores bytecode/slots; resetting the public hotloop parameter
   ** publishes a fresh owner-TG hotcount generation for deterministic reuse. */
@@ -313,12 +751,12 @@ static void run_positive(void)
   assert(lj_tg_load_jit_base(L->tg_hint) == NULL);
 
   /* Full flush returns trace number one to the allocator. Republish the same
-  ** immutable generation and re-prove that closed JFUNCF still interprets. */
+  ** immutable generation and re-prove native JFUNCF entry. */
   T = hotcall_until_published(L, "__arm64_funcf_true");
   assert(trace_traceno_acq(T) == 1);
   assert(trace_startpc_acq(T) == startpc);
-  assert(T == expect_published_true(L, pt, startins));
-  expect_closed_jfuncf_calls(L, "__arm64_funcf_true");
+  assert(T == expect_published_true(L, pt, startins, expect_indirect));
+  expect_native_jfuncf_calls(L, "__arm64_funcf_true");
   lua_close(L);
 }
 
@@ -408,11 +846,16 @@ static void run_rejections(void)
     NEG_NONTRIVIAL);
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
-  run_positive();
+  int expect_indirect;
+  assert(argc == 2);
+  assert(strcmp(argv[1], "direct") == 0 ||
+	 strcmp(argv[1], "indirect") == 0);
+  expect_indirect = strcmp(argv[1], "indirect") == 0;
+  run_positive(expect_indirect);
   run_rejections();
-  puts("arm64_jit_funcf_record OK: exact true FUNCF published; JFUNCF entry stayed closed");
+  puts("arm64_jit_funcf_record OK: exact true FUNCF published and entered natively");
   return 0;
 }
 

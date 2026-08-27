@@ -89,9 +89,9 @@ pauth_obj=$tmpdir/t-arm64-jit-phase-gates-arm64e.o
 macros=$tmpdir/macros.txt
 pauth_macros=$tmpdir/macros-arm64e.txt
 
-# Keep the behavioral proof pinned to three new universes and the sole ARM64
-# root shape admitted by this tranche. Garbage for SWEEP is created from C, so
-# the fixture cannot silently depend on an unsupported allocating trace.
+# Keep the behavioral proof pinned to three new universes and the integer-loop
+# root shape owned by this fixture. Garbage for SWEEP is created from C, so the
+# fixture cannot silently depend on an unsupported allocating trace.
 test "$(grep -Fc 'StrictLoop loop = strict_loop_new();' \
   "$fixture_source")" = 3
 test "$(grep -Fc 'while i<n do i=i+1 x=x+i end' \
@@ -168,7 +168,7 @@ for setting in \
   'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED 0' \
-  'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED 1' \
+  'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED 1'; do
   grep -F "#define $setting" "$macros" >/dev/null || {
     echo "ARM64 phase-gate policy mismatch: $setting" >&2

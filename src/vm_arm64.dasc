@@ -4461,6 +4461,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  clear_tg_jit_base
       |  b >4
 #else
+      |  sub sp, sp, #16	// SPS_FIXED: protect the interpreter C frame.
       |  br_trace_auth CARG2, CRET1
 #endif
       |

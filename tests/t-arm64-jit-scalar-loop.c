@@ -38,9 +38,9 @@
     !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED || \
     LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED || \
-    !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
+    LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED
-#error "t-arm64-jit-scalar-loop requires the root-only ARM64 gate split"
+#error "t-arm64-jit-scalar-loop requires the admitted-root ARM64 gate split"
 #endif
 
 #if !LJ_HASPROFILE || !LJ_PROFILE_TGLOCAL

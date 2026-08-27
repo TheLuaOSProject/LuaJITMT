@@ -40,7 +40,7 @@
     !LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED || \
     LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED || \
     LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED || \
-    !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
+    LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED
 #error "t-arm64-jit-root-entry requires open LOOP/FORL root entry gates"
 #endif
@@ -905,9 +905,9 @@ int main(void)
   assert(lj_trace_test_root_entry_cleanups() == 0);
   assert(sbufL(&tg->tmpbuf) == tmpbuf_L);
 
-  /* The open loop gate publishes intent before absent metadata reaches the
-  ** one cleanup path. JFUNCF remains closed at the source gate and publishes
-  ** no TG lifetime intent at all. */
+  /* Every open root-source gate publishes intent before absent metadata
+  ** reaches the one cleanup path. The incompatible JFUNCF/LOOP generation
+  ** must reject after the same lifetime publication, never before it. */
   expect_reject(test_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
                                     BC_JLOOP));
   assert(lj_tg_load_jit_base(tg) == NULL);
@@ -917,8 +917,8 @@ int main(void)
   cleanups = lj_trace_test_root_entry_cleanups();
   expect_reject(test_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
                                     BC_JFUNCF));
-  assert(lj_trace_test_root_entry_publishes() == publishes);
-  assert(lj_trace_test_root_entry_cleanups() == cleanups);
+  assert(lj_trace_test_root_entry_publishes() == publishes + 1u);
+  assert(lj_trace_test_root_entry_cleanups() == cleanups + 1u);
   assert(sbufL(&tg->tmpbuf) == tmpbuf_L);
 
   /* A gate owner wins before publication: entry records displacement and does
@@ -961,7 +961,8 @@ int main(void)
 
   /* Execute the checked-in BC_JLOOP and BC_JFUNCF VM callers themselves.
   ** The immutable startins sidecar supplies deterministic rejection recovery;
-  ** no TraceVec slot or native target exists. */
+  ** no TraceVec slot or native target exists, so every open source gate
+  ** publishes and cleans its rejected lifetime intent before recovery. */
   run_lua(L,
     "jit.off()\n"
     "function __arm64_root_loop(n)\n"
@@ -1027,8 +1028,9 @@ int main(void)
     assert(lua_toboolean(L, -2) != 0);
     assert(lua_toboolean(L, -1) != 0);
     lua_pop(L, 3);
-    assert(lj_trace_test_root_entry_publishes() == 0);
-    assert(lj_trace_test_root_entry_cleanups() == 0);
+    assert(lj_trace_test_root_entry_publishes() != 0);
+    assert(lj_trace_test_root_entry_publishes() ==
+	   lj_trace_test_root_entry_cleanups());
     assert(lj_tg_load_jit_base(tg) == NULL && tracevec_acq(J) == NULL);
 
     /* Preserve the pre-existing JITERL -> JLOOP tail path: it recovers its
@@ -1102,7 +1104,7 @@ int main(void)
 
   lj_trace_test_root_entry_reset();
   lua_close(L);
-  puts("arm64_jit_root_entry OK: strict LOOP/FORL entry, source generations, mutations and request races verified");
+  puts("arm64_jit_root_entry OK: strict LOOP/FORL/JFUNCF entry, source generations, mutations and request races verified");
   return 0;
 }
 

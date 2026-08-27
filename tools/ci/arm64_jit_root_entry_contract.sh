@@ -105,8 +105,8 @@ otool -rv "$fixture_obj" | \
   grep '^00000010 .* BR26 .* _lj_trace_enter_root$' >/dev/null
 
 # The generated VM has distinct JLOOP, integer-JFORL and JFUNCF AAPCS64 helper
-# call sites. JLOOP and post-update integer JFORL may continue through the
-# fixed reserve; JFUNCF remains closed at its granular source gate.
+# call sites. JLOOP, post-update integer JFORL and certified JFUNCF continue
+# through the fixed reserve before their raw/authenticated mcode transfer.
 otool -rv "$vm_object" >"$vm_reloc"
 test "$(grep -c 'BR26.*_lj_trace_enter_root$' "$vm_reloc")" = 3
 otool -tvV "$vm_object" >"$vm_disasm"
@@ -131,9 +131,10 @@ if grep -E 'stlr[[:space:]]+xzr, \[x14\]' "$jloop_region" >/dev/null; then
   exit 1
 fi
 grep -E 'ldar[[:space:]]+w16, \[x14\]' "$jfuncf_region" >/dev/null
-grep -E 'stlr[[:space:]]+xzr, \[x14\]' "$jfuncf_region" >/dev/null
-if grep -E 'br[[:space:]]+x1$' "$jfuncf_region" >/dev/null; then
-  echo "closed JFUNCF unexpectedly branches to the helper target" >&2
+grep -E 'sub[[:space:]]+sp, sp, #0x10' "$jfuncf_region" >/dev/null
+grep -E 'br[[:space:]]+x1$' "$jfuncf_region" >/dev/null
+if grep -E 'stlr[[:space:]]+xzr, \[x14\]' "$jfuncf_region" >/dev/null; then
+  echo "open JFUNCF unexpectedly clears its successful helper lease" >&2
   exit 1
 fi
 jloop_call=$(grep -nE 'bl[[:space:]]+0x' "$jloop_region" | sed -n '1p' | cut -d: -f1)
@@ -202,6 +203,8 @@ grep -F 'mov CARG6w, INSw' "$jfuncf_source" >/dev/null
 grep -F '#if LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED' \
   "$jfuncf_source" >/dev/null
 grep -F 'clear_tg_jit_base' "$jfuncf_source" >/dev/null
+grep -F 'sub sp, sp, #16' "$jfuncf_source" >/dev/null
+grep -F 'br_trace_auth CARG2, CRET1' "$jfuncf_source" >/dev/null
 grep -F 'Preserve callee-save RC' "$jfuncf_source" >/dev/null
 grep -F '#if LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED' \
   "$root/src/lj_trace.c" >/dev/null
@@ -229,7 +232,7 @@ grep -E '^#define LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+0$' \
   "$ordinary_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+0$' \
   "$ordinary_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+1$' \
+grep -E '^#define LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+0$' \
   "$ordinary_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+1$' \
   "$ordinary_macros" >/dev/null
@@ -341,11 +344,11 @@ fence=$(line_of 'la_fence_seq()' 1)
 gate2=$(line_of 'lj_gc2_jit_entry_open(g)' 2)
 slot1=$(line_of 'trace_root_entry_slot_acq(J, traceno' 1)
 view1=$(line_of 'trace_root_entry_loop_view_acq(T, traceno' 1)
-layout1=$(line_of 'trace_root_entry_arm64_layout_valid(&view)' 1)
+layout1=$(line_of 'trace_root_entry_arm64_layout_valid(&view, sourceins)' 1)
 mcode=$(line_of 'mcode = view.mcode' 1)
 slot2=$(line_of 'trace_root_entry_slot_acq(J, traceno' 2)
 view2=$(line_of 'trace_root_entry_loop_view_acq(T2, traceno' 1)
-layout2=$(line_of 'trace_root_entry_arm64_layout_valid(&view2)' 1)
+layout2=$(line_of 'trace_root_entry_arm64_layout_valid(&view2, sourceins)' 1)
 view_equal=$(line_of 'trace_root_entry_loop_view_equal(&view, &view2)' 1)
 pending1=$(line_of 'trace_root_entry_request_pending(tg)' 1)
 pending2=$(line_of 'trace_root_entry_request_pending(tg)' 2)
@@ -399,13 +402,13 @@ for required in trace_root_acq trace_link_acq trace_linktype_acq \
   trace_startpc_acq trace_mcloop_acq trace_topslot_acq trace_ir_acq \
   trace_nk_acq trace_snap_acq trace_snapmap_acq trace_traceno_acq retire_epoch \
   TRACE_ENTRY_GATED TRACE_ARM64_INT_LOOP_ADMITTED \
-  TRACE_ARM64_INT_FORL_ADMITTED; do
+  TRACE_ARM64_INT_FORL_ADMITTED TRACE_ARM64_TRUE_FUNCF_ADMITTED \
+  LJ_TRLINK_RETURN; do
   grep "$required" "$loop_view_region" >/dev/null
 done
-if grep -F 'v->spadjust == 0' "$loop_view_region" >/dev/null; then
-  echo "root-entry metadata view still rejects all dynamic spill layouts" >&2
-  exit 1
-fi
+grep -F 'function_root' "$loop_view_region" >/dev/null
+grep -F 'v->spadjust == 0' "$loop_view_region" >/dev/null
+grep -F 'v->link == traceno' "$loop_view_region" >/dev/null
 awk '/^static int trace_root_entry_arm64_layout_valid/ { copy=1 }
      copy { print }
      copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$layout_region"
@@ -419,6 +422,7 @@ for required in 'postra.ir = v->ir;' 'postra.snap = v->snap;' \
   'postra.root_topslot = v->topslot;' \
   'postra.startins = v->startins;' \
   'postra.base_delta = 0;' \
+  'lj_asm_arm64_postra_funcf_entry_admit(' \
   'return lj_asm_arm64_postra_admit(&postra, NULL);'; do
   grep -F "$required" "$layout_region" >/dev/null
 done
@@ -449,8 +453,8 @@ env LUA_PATH="$root/src/?.lua;$root/src/jit/?.lua;;" "$root/src/luajit" -e '
   assert(util.traceinfo(2) == nil, "closed side/stitch surface published trace 2")
 '
 
-# Arm64e/BTI admits the same exact root recorder and LOOP entry, while the
-# side/stitch/JFUNCF surfaces remain independently closed.
+# Arm64e/BTI admits the same exact root recorder and all three certified root
+# entry families, while side and stitch surfaces remain independently closed.
 env MACOSX_DEPLOYMENT_TARGET="$minver" make -C "$root/src" clean
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" -j"$jobs" \
@@ -479,7 +483,7 @@ grep -E '^#define LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
   "$pauth_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
   "$pauth_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+1$' \
+grep -E '^#define LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+0$' \
   "$pauth_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+1$' \
   "$pauth_macros" >/dev/null
@@ -525,4 +529,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
     XCFLAGS="$xcflags"
 restore_needed=0
 
-echo "arm64_jit_root_entry_contract OK: strict LOOP/FORL source gates verified on ARM64 and authenticated ARM64e"
+echo "arm64_jit_root_entry_contract OK: strict LOOP/FORL/JFUNCF source gates verified on ARM64 and authenticated ARM64e"

@@ -215,7 +215,7 @@ for setting in \
   'LJ_ABI_PAUTH 1' \
   'LJ_ABI_BRANCH_TRACK 1' \
   'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED 0' \
-  'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED 1' \
+  'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED 1'; do
   grep -F "#define $setting" "$pauth_macros" >/dev/null || {
     echo "ARM64e exit gate mismatch: $setting" >&2
@@ -263,4 +263,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
     XCFLAGS="$xcflags"
 restore_needed=0
 
-echo "arm64_jit_exit_contract OK: arm64 and arm64e LOOP-open exit policies verified"
+echo "arm64_jit_exit_contract OK: arm64 and arm64e exit substrate verified under open LOOP/JFUNCF policy"

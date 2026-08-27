@@ -3,7 +3,9 @@
 **
 ** Three deliberately separate roots prove the fixed reserve, the smallest
 ** dynamic frame, and the first useful copy-spill/overflow pressure shape.
-** Calls, allocations, side traces, stitches and JFUNCF entry remain excluded.
+** This workload contains no calls, allocations, side traces, stitches or
+** function-entry traces. Its spill certificate neither broadens the closed
+** surfaces nor substitutes for the dedicated certified-JFUNCF proof.
 */
 
 #include <assert.h>
@@ -40,9 +42,9 @@
     !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED || \
     LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED || \
-    !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
+    LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED
-#error "t-arm64-jit-integer-spills requires the root-only ARM64 gate split"
+#error "t-arm64-jit-integer-spills requires the admitted-root ARM64 gate split"
 #endif
 
 #if !LJ_HASPROFILE || !LJ_PROFILE_TGLOCAL

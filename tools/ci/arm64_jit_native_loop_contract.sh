@@ -113,7 +113,7 @@ for setting in \
   'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED 0' \
-  'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED 1' \
+  'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED 1'; do
   grep -F "#define $setting" "$macros" >/dev/null || {
     echo "ARM64 native-loop gate mismatch: $setting" >&2
@@ -197,8 +197,8 @@ branch_line=$(grep -nE 'br[[:space:]]+x1' "$jloop_disasm" | \
   sed -n '1p' | cut -d: -f1)
 test "$sub_line" -lt "$branch_line"
 
-# Pin each independently closed surface. The compatibility summaries are not
-# a behavioral predicate for this first-loop execution contract.
+# Pin each granular surface gate. The compatibility summaries are not a
+# behavioral predicate for this integer-loop execution contract.
 grep -A40 '^void LJ_FASTCALL lj_trace_hot' "$root/src/lj_trace.c" | \
   grep -F '#if LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED' >/dev/null
 grep -A20 '^void lj_trace_ins' "$root/src/lj_trace.c" | \
@@ -312,7 +312,7 @@ for setting in \
   'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED 0' \
-  'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED 1' \
+  'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED 1'; do
   grep -F "#define $setting" "$pauth_macros" >/dev/null || {
     echo "ARM64e native-loop gate mismatch: $setting" >&2

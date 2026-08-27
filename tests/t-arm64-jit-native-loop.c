@@ -1,5 +1,5 @@
 /*
-** Native macOS ARM64 execution contract for the first admitted trace shape.
+** Native macOS ARM64 execution contract for the admitted integer-loop shape.
 ** This deliberately covers one exact integer BC_LOOP root and nothing else.
 */
 
@@ -36,9 +36,9 @@
     !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED || \
     LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED || \
-    !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
+    LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED
-#error "t-arm64-jit-native-loop requires the exact first-loop ARM64 gates"
+#error "t-arm64-jit-native-loop requires the admitted ARM64 root-entry gates"
 #endif
 
 #if !LJ_HASPROFILE || !LJ_PROFILE_TGLOCAL

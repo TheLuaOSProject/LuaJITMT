@@ -32,9 +32,9 @@
 #include "lj_asm.h"
 
 #if !LJ_HASJIT || LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED || \
-    !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
+    LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED
-#error "t-arm64-jit-exit requires open LOOP entry and closed JFUNCF/stitch"
+#error "t-arm64-jit-exit requires open LOOP/JFUNCF entry and closed stitch entry"
 #endif
 
 #define EXIT_RACE_ROUNDS 128u
@@ -222,9 +222,9 @@ int main(int argc, char **argv)
   test_profile_ack_after_quiescence(L);
   lua_close(L);
 #if LJ_ABI_PAUTH
-  puts("t-arm64-jit-exit OK: arm64e LOOP-open stubs and lease races verified");
+  puts("t-arm64-jit-exit OK: arm64e exit stubs under open LOOP/JFUNCF policy and lease races verified");
 #else
-  puts("t-arm64-jit-exit OK: arm64 LOOP-open stubs and lease races verified");
+  puts("t-arm64-jit-exit OK: arm64 exit stubs under open LOOP/JFUNCF policy and lease races verified");
 #endif
   return 0;
 }

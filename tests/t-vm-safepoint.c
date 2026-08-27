@@ -837,6 +837,9 @@ int main(void)
 #endif
 
 #if !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED
+  /* The JFUNCF topology is open, but this recursive numeric shape is outside
+  ** the literal-true native certificate. It therefore remains an interpreter
+  ** hotcall-poll check, complementary to the dedicated native fixture. */
   assert(luaL_dostring(L, "jit.flush()") == LUA_OK);
   epoch0 = g->gc2.hs_epoch;
   scoped_slots0 = gc2_jit_scoped_slots_retired_acq(g);

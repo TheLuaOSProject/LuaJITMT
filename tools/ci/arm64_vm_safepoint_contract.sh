@@ -408,9 +408,11 @@ reloc_count=$(awk '
 ' "$relocs")
 object_checked_calls=3
 reloc_symbols='lj_vm_safepoint lj_vm_leave_cp lj_vm_unwind_c_eh'
+jit_vm_object=0
 if nm "$archive" | grep -E ' T _lj_trace_exit$' >/dev/null; then
   object_checked_calls=5
   reloc_symbols="$reloc_symbols lj_vm_exit_interp"
+  jit_vm_object=1
 fi
 if test "$reloc_count" -ne "$object_checked_calls"; then
   echo "ARM64 VM emitted the wrong checked safepoint call inventory" >&2
@@ -443,8 +445,16 @@ offset_exe=$tmpdir/safepoint-offsets
   printf '%s\n' '}'
 } >"$offset_probe"
 cc=${CC:-cc}
-if ! "$cc" -std=gnu11 -DLUAJIT_MT_ARM64_BOOTSTRAP \
-    -DLUAJIT_DISABLE_JIT -I"$root/src" "$offset_probe" -o "$offset_exe"; then
+offset_xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_DISABLE_JIT'
+if test "$jit_vm_object" = 1; then
+  # GG_LEN_DISP, and therefore poll/profile_request relative to DISPATCH,
+  # differs in a JIT-capable VM. Resolve offsets with the same architecture
+  # profile as the object selected above instead of assuming the no-JIT table.
+  offset_xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL'
+fi
+# shellcheck disable=SC2086 # offset_xcflags intentionally expands to flags.
+if ! "$cc" -std=gnu11 $offset_xcflags -I"$root/src" \
+    "$offset_probe" -o "$offset_exe"; then
   echo "ARM64 safepoint contract could not resolve TG dispatch offsets" >&2
   exit 1
 fi
@@ -524,14 +534,16 @@ require_poll_pair() {
     'cbnz[[:space:]]+w8, _lj_vm_safepoint'
 }
 
-for poll_symbol in \
-  lj_BC_ITERN \
-  lj_BC_FORL \
-  lj_BC_ITERL \
-  lj_BC_LOOP \
-  lj_BC_JMP \
-  lj_BC_IFUNCF \
-  lj_BC_IFUNCV
+poll_symbols='lj_BC_ITERN lj_BC_FORL lj_BC_ITERL lj_BC_LOOP
+lj_BC_JMP lj_BC_IFUNCF lj_BC_IFUNCV'
+if test "$jit_vm_object" = 1; then
+  # The JIT-capable dispatch table exposes hotcount stubs at the public
+  # ITERN/FORL/ITERL/LOOP symbols. Their ordinary interpreter bodies, and the
+  # safepoint polls being certified here, start at the corresponding I-labels.
+  poll_symbols='lj_vm_IITERN lj_BC_IFORL lj_BC_IITERL lj_BC_ILOOP
+lj_BC_JMP lj_BC_IFUNCF lj_BC_IFUNCV'
+fi
+for poll_symbol in $poll_symbols
 do
   require_poll_pair "$poll_symbol"
 done

@@ -1,5 +1,5 @@
 /*
-** Native macOS ARM64 phase-gate contract for the first admitted trace shape.
+** Native macOS ARM64 phase-gate contract for the admitted integer-loop shape.
 ** Each subtest owns a fresh Lua universe and one exact integer BC_LOOP root.
 */
 
@@ -34,9 +34,9 @@
     !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED || \
     LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED || \
-    !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
+    LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED
-#error "t-arm64-jit-phase-gates requires the exact first-loop ARM64 gates"
+#error "t-arm64-jit-phase-gates requires the admitted ARM64 root-entry gates"
 #endif
 
 #define WAIT_NS 10000000000ull

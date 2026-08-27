@@ -3677,7 +3677,45 @@ static LJ_AINLINE GCtrace *trace_root_entry_slot_acq(jit_State *J,
   return traceref_fromgco_safe(o);
 }
 
+/* Prove the complete live three-word function generation. The immutable trace
+** view carries the original FUNCF word, while the prototype header is the
+** exact JFUNCF word consumed by the VM. All three acquire-loaded words are
+** reread before success so a test mutation cannot splice two generations. */
+static int trace_root_entry_funcf_generation_valid(const GCproto *pt,
+	const BCIns *pc, BCIns startins, BCIns liveins)
+{
+  const BCIns *bc;
+  uintptr_t lo;
+  BCIns kpri, ret;
+  BCReg result;
+  LJ_STATIC_ASSERT((sizeof(BCIns) & (sizeof(BCIns)-1u)) == 0);
+  if (pt == NULL || pc == NULL || pt->sizebc != 3 || pt->framesize == 0 ||
+	pt->framesize > UINT8_MAX || (pt->flags & PROTO_VARARG) != 0 ||
+	bc_op(startins) != BC_FUNCF || bc_a(startins) != pt->framesize ||
+	bc_d(startins) != 0 || bc_op(liveins) != BC_JFUNCF ||
+	bc_a(liveins) != bc_a(startins) || bc_d(liveins) == 0)
+    return 0;
+  bc = proto_bc(pt);
+  lo = (uintptr_t)(const void *)bc;
+  if (lo == 0 || (lo & (sizeof(BCIns)-1u)) != 0 || pc != bc ||
+	(uintptr_t)pt->sizebc > (UINTPTR_MAX-lo)/sizeof(BCIns))
+    return 0;
+  result = (BCReg)(pt->framesize-1u);
+  if (pt->numparams > result ||
+	(BCIns)la_load32_acq((const uint32_t *)&bc[0]) != liveins)
+    return 0;
+  kpri = (BCIns)la_load32_acq((const uint32_t *)&bc[1]);
+  ret = (BCIns)la_load32_acq((const uint32_t *)&bc[2]);
+  return bc_op(kpri) == BC_KPRI && bc_a(kpri) == result &&
+	 bc_d(kpri) == 2u && bc_op(ret) == BC_RET1 &&
+	 bc_a(ret) == result && bc_d(ret) == 2u &&
+	 (BCIns)la_load32_acq((const uint32_t *)&bc[0]) == liveins &&
+	 (BCIns)la_load32_acq((const uint32_t *)&bc[1]) == kpri &&
+	 (BCIns)la_load32_acq((const uint32_t *)&bc[2]) == ret;
+}
+
 static LJ_AINLINE int trace_root_entry_bytecode_valid(const BCIns *pc,
+					       const GCproto *pt,
 					       TraceNo traceno,
 					       uint32_t sourceop,
 					       BCIns startins,
@@ -3685,7 +3723,12 @@ static LJ_AINLINE int trace_root_entry_bytecode_valid(const BCIns *pc,
 {
   BCIns ins = (BCIns)la_load32_acq((const uint32_t *)pc);
   BCIns expected = BCINS_AD((BCOp)sourceop, bc_a(startins), traceno);
-  return sourceins == expected && ins == sourceins;
+  if (sourceins != expected || ins != sourceins)
+    return 0;
+  if (sourceop == (uint32_t)BC_JFUNCF)
+    return trace_root_entry_funcf_generation_valid(
+	pt, pc, startins, sourceins);
+  return 1;
 }
 
 static int trace_root_entry_loop_geometry(uint32_t sourceop,
@@ -3702,6 +3745,16 @@ static int trace_root_entry_loop_geometry(uint32_t sourceop,
   if (!trace_pc_in_proto_range(pc, bc, pt->sizebc))
     return 0;
   pos = proto_bcpos(pt, pc);
+  if (sourceop == (uint32_t)BC_JFUNCF) {
+    BCReg result;
+    if (pos != 0 || pt->sizebc != 3 || pt->framesize == 0 ||
+	pt->framesize > UINT8_MAX || (pt->flags & PROTO_VARARG) != 0 ||
+	bc_op(startins) != BC_FUNCF || bc_a(startins) != pt->framesize ||
+	bc_d(startins) != 0)
+      return 0;
+    result = (BCReg)(pt->framesize-1u);
+    return pt->numparams <= result;
+  }
   if (sourceop == (uint32_t)BC_JFORL) {
     ra = bc_a(startins);
     bodypos = (int64_t)pos+1+(int64_t)bc_j(startins);
@@ -3762,9 +3815,12 @@ static int trace_root_entry_loop_view_acq(const GCtrace *T, TraceNo traceno,
 	TraceArm64LoopView *v)
 {
   uint8_t expected_admission = sourceop == (uint32_t)BC_JFORL ?
-	TRACE_ARM64_INT_FORL_ADMITTED : TRACE_ARM64_INT_LOOP_ADMITTED;
+	TRACE_ARM64_INT_FORL_ADMITTED :
+	(sourceop == (uint32_t)BC_JFUNCF ?
+	 TRACE_ARM64_TRUE_FUNCF_ADMITTED : TRACE_ARM64_INT_LOOP_ADMITTED);
   uint8_t root_admission = TRACE_ARM64_INT_LOOP_ADMITTED |
-	TRACE_ARM64_INT_FORL_ADMITTED;
+	TRACE_ARM64_INT_FORL_ADMITTED | TRACE_ARM64_TRUE_FUNCF_ADMITTED;
+  int function_root = sourceop == (uint32_t)BC_JFUNCF;
   v->retire_epoch = la_load64_acq(&T->retire_epoch);
   v->startpt = trace_startptgco_acq((GCtrace *)T);
   v->startpc = trace_startpc_acq(T);
@@ -3788,25 +3844,28 @@ static int trace_root_entry_loop_view_acq(const GCtrace *T, TraceNo traceno,
   v->traceno = trace_traceno_acq(T);
   v->admission = la_load8_acq(&T->unused1);
   return v->retire_epoch == 0 && v->traceno == traceno &&
-	 trace_root_acq(T) == 0 && v->link == traceno &&
-	 v->linktype == LJ_TRLINK_LOOP && v->nextside == 0 &&
-	 v->nchild == 0 &&
+	 trace_root_acq(T) == 0 && v->nextside == 0 && v->nchild == 0 &&
+	 (function_root ?
+	  (v->link == 0 && v->linktype == LJ_TRLINK_RETURN &&
+	   v->mcloop == 0 && v->spadjust == 0) :
+	  (v->link == traceno && v->linktype == LJ_TRLINK_LOOP &&
+	   v->mcloop > 0 && v->mcloop < v->szmcode &&
+	   (v->mcloop & (sizeof(MCode)-1u)) == 0)) &&
 	 v->startpt == obj2gco(pt) && v->startpc == pc &&
 	 trace_root_entry_loop_geometry(sourceop, pt, pc, v->startins) &&
 	 v->mcode != NULL && v->szmcode > sizeof(MCode) &&
-	 v->mcloop > 0 && v->mcloop < v->szmcode &&
-	 (v->mcloop & (sizeof(MCode)-1u)) == 0 &&
 	 v->topslot == (MSize)pt->framesize &&
 	 v->ir != NULL && v->nins > REF_FIRST && v->nins < REF_DROP &&
 	 v->nk > 0 && v->nk <= REF_TRUE &&
 	 v->snap != NULL && v->snapmap != NULL && v->nsnap != 0 &&
 	 v->nsnapmap != 0 &&
 	 (v->admission & root_admission) == expected_admission &&
+	 (!function_root || v->admission == expected_admission) &&
 	 (v->admission & TRACE_ENTRY_GATED) == 0;
 }
 
 static int trace_root_entry_arm64_layout_valid(
-	const TraceArm64LoopView *v)
+	const TraceArm64LoopView *v, BCIns sourceins)
 {
   LJArm64PostRAView postra;
   GCproto *pt = gco2pt(v->startpt);
@@ -3823,6 +3882,9 @@ static int trace_root_entry_arm64_layout_valid(
   postra.root_topslot = v->topslot;
   postra.startins = v->startins;
   postra.base_delta = 0;
+  if (bc_op(v->startins) == BC_FUNCF)
+    return lj_asm_arm64_postra_funcf_entry_admit(
+	&postra, sourceins, NULL);
   return lj_asm_arm64_postra_admit(&postra, NULL);
 }
 
@@ -3934,8 +3996,8 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
   if (!trace_runnable_acq(T, traceno) ||
       !trace_root_entry_start_valid(sourceop, trace_startins_acq(T)) ||
       !trace_root_entry_loop_view_acq(T, traceno, pc, pt, sourceop, &view) ||
-      !trace_root_entry_arm64_layout_valid(&view) ||
-      !trace_root_entry_bytecode_valid(pc, traceno, sourceop,
+      !trace_root_entry_arm64_layout_valid(&view, sourceins) ||
+      !trace_root_entry_bytecode_valid(pc, pt, traceno, sourceop,
 				       view.startins, sourceins))
     goto reject_published;
   mcode = view.mcode;
@@ -3961,10 +4023,10 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
   if (tv2 != tv || T2 != T || !trace_runnable_acq(T2, traceno) ||
       !trace_root_entry_loop_view_acq(T2, traceno, pc, pt, sourceop,
 				      &view2) ||
-      !trace_root_entry_arm64_layout_valid(&view2) ||
+      !trace_root_entry_arm64_layout_valid(&view2, sourceins) ||
       !trace_root_entry_loop_view_equal(&view, &view2) ||
       !trace_root_entry_start_valid(sourceop, view2.startins) ||
-      !trace_root_entry_bytecode_valid(pc, traceno, sourceop,
+      !trace_root_entry_bytecode_valid(pc, pt, traceno, sourceop,
 				       view2.startins, sourceins))
     goto reject_published;
 #if LJ_ABI_PAUTH
@@ -3974,7 +4036,7 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
 #endif
   trace_test_root_entry_pause_at(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA);
   if (trace_root_entry_request_pending(tg) ||
-      !trace_root_entry_bytecode_valid(pc, traceno, sourceop,
+      !trace_root_entry_bytecode_valid(pc, pt, traceno, sourceop,
 				       view2.startins, sourceins))
     goto reject_published;
   /* Test-only boundary after the final admission recheck. A request published

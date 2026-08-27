@@ -88,7 +88,9 @@ macros=$tmpdir/macros.txt
 pauth_macros=$tmpdir/macros-arm64e.txt
 
 # Freeze the three distinct pressure surfaces. The generated Lua body contains
-# no calls, allocations, FFI, sides, stitches or function-entry traces.
+# no calls, allocations, FFI, sides, stitches or function-entry traces. The
+# latter is a workload boundary, not a claim that certified JFUNCF entry is
+# globally closed.
 for required in \
   'FIXED_N = 23' \
   'MIN_DYNAMIC_N = 23' \
@@ -212,7 +214,7 @@ for setting in \
   'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED 0' \
-  'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED 1' \
+  'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED 1'; do
   grep -F "#define $setting" "$macros" >/dev/null || {
     echo "ARM64 integer-spill policy mismatch: $setting" >&2
