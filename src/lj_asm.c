@@ -40,6 +40,33 @@
 #endif
 
 #if LJ_TARGET_ARM64
+/* -- Address-safe ARM64 B26 encoding ------------------------------------ */
+
+/* Encode the signed, word-scaled immediate of an unconditional branch.
+** Compute only ordered unsigned differences: source and target need not
+** belong to the same C object, and no signed-address conversion can wrap. */
+int lj_asm_arm64_b26_encode(uintptr_t source, uintptr_t target, MCode *insp)
+{
+  uintptr_t distance;
+  uint32_t immediate;
+  if (source == 0 || target == 0 || insp == NULL ||
+	((source | target) & 3u) != 0)
+    return 0;
+  if (target >= source) {
+    distance = target - source;
+    if (distance > UINT32_C(0x07fffffc))
+      return 0;
+    immediate = (uint32_t)(distance >> 2);
+  } else {
+    distance = source - target;
+    if (distance > UINT32_C(0x08000000))
+      return 0;
+    immediate = (0u - (uint32_t)(distance >> 2)) & UINT32_C(0x03ffffff);
+  }
+  *insp = (MCode)(A64I_B | immediate);
+  return 1;
+}
+
 /* -- Initial ARM64 IR admission ------------------------------------------ */
 
 /*

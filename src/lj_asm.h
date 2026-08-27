@@ -13,6 +13,11 @@ LJ_FUNC void lj_asm_trace(jit_State *J, GCtrace *T);
 LJ_FUNC void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno,
 			      MCode *target);
 #if LJ_TARGET_ARM64
+/* Encode one host-order ARM64 unconditional B instruction. The source and
+** target are raw code addresses; no C pointer subtraction is performed. */
+LJ_FUNC int lj_asm_arm64_b26_encode(uintptr_t source, uintptr_t target,
+	MCode *insp);
+
 /* Fail-closed admission result for the first ARM64 native trace shape. */
 typedef enum {
   LJ_ARM64_IR_REJECT_NONE,

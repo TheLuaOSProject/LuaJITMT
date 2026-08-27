@@ -2021,6 +2021,7 @@ static void asm_tail_fixup(ASMState *as, TraceNo lnk)
 {
   MCode *mcp = as->mctail;
   MCode *target;
+  MCode branch;
   /* Undo the sp adjustment in BC_JLOOP when exiting to the interpreter. */
   int32_t spadj = as->T->spadjust + (lnk ? 0 : sps_scale(SPS_FIXED));
   if (spadj) {  /* Emit stack adjustment. */
@@ -2031,8 +2032,11 @@ static void asm_tail_fixup(ASMState *as, TraceNo lnk)
   /* Emit exit branch. */
   target = lnk ? traceref(as->J, lnk)->mcode :
     (MCode *)(void *)emit_asmlabel_addr(lj_vm_exit_interp);
-  if (lnk || A64F_S_OK(target - mcp, 26)) {
-    *mcp = A64I_B | A64F_S26(target - mcp); mcp++;
+  if (lj_asm_arm64_b26_encode((uintptr_t)(void *)mcp,
+	(uintptr_t)(void *)target, &branch)) {
+    *mcp++ = branch;
+  } else if (lnk) {
+    lj_trace_err(as->J, LJ_TRERR_MCODEOV);
   } else {
     *mcp++ = A64I_LDRx | A64F_D(RID_LR) | A64F_N(RID_GL) | A64F_U12(glofs(as, &as->J->k64[LJ_K64_VM_EXIT_INTERP]) >> 3);
     *mcp++ = A64I_BR_AUTH | A64F_N(RID_LR);
@@ -2050,7 +2054,14 @@ static void asm_tail_prep(ASMState *as, TraceNo lnk)
     if (!lnk) {
       MCode *target =
 	(MCode *)(void *)emit_asmlabel_addr(lj_vm_exit_interp);
-      if (!A64F_S_OK(target - p, 26) || !A64F_S_OK(target - (p+1), 26)) p--;
+      MCode branch;
+      /* After the unconditional reservation below, the direct B is at p-1
+      ** without an SP adjustment or at p with one. Both must be encodable. */
+      if (!lj_asm_arm64_b26_encode((uintptr_t)(void *)p,
+	    (uintptr_t)(void *)target, &branch) ||
+	  !lj_asm_arm64_b26_encode((uintptr_t)(void *)(p-1),
+	    (uintptr_t)(void *)target, &branch))
+	p--;
     }
     p--;  /* Leave room for stack pointer adjustment. */
     as->mcp = p;
