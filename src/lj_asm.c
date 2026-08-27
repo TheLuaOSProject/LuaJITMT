@@ -798,18 +798,14 @@ int lj_asm_arm64_side_ir_admit(const LJArm64SideIRView *view,
   return 1;
 }
 
-static int arm64_side_postra_gpr(IRIns ins)
-{
-  return ins.s == SPS_NONE && ins.r < RID_MAX_GPR &&
-	 rset_test(RSET_GPR, ins.r);
-}
-
 int lj_asm_arm64_side_postra_admit(const LJArm64SidePostRAView *view,
 	IRRef *semantic_ninsp)
 {
+  static const Reg valueregs[4] = {
+    RID_X27, RID_X28, RID_X28, RID_X27
+  };
   const IRIns *ir;
   IRIns ins;
-  RegSP parentrs;
   IRRef ref;
   if (view == NULL || (ir = view->semantic.ir) == NULL ||
 	!lj_asm_arm64_side_ir_admit(&view->semantic, NULL) ||
@@ -820,25 +816,22 @@ int lj_asm_arm64_side_postra_admit(const LJArm64SidePostRAView *view,
 
   ins = ir_load_acq(&ir[ARM64_SIDE_SEMANTIC_NINS]);
   if (ins.o != IR_NOP || ins.t.irt != IRT_NIL ||
-	ins.op1 != 0 || ins.op2 != 0 || ins.prev != 0)
+	ins.op1 != 0 || ins.op2 != 0 || ins.r != 0 || ins.s != 0)
     return 0;
 
-  parentrs = view->parent_slot4;
-  if (!regsp_used(parentrs) || ra_hasspill(regsp_spill(parentrs)) ||
-	regsp_reg(parentrs) >= RID_MAX_GPR ||
-	!rset_test(RSET_GPR, regsp_reg(parentrs)))
+  /* The live ARM64 allocator carries parent slot 4 in x28, then the side
+  ** head deliberately shuffles the inherited value into x27. */
+  if (view->parent_slot4 != REGSP(RID_X28, SPS_NONE))
     return 0;
   ins = ir_load_acq(&ir[REF_BASE]);
   if (ins.r != RID_BASE || ins.s != SPS_NONE)
     return 0;
   for (ref = ARM64_SIDE_R_PARENT; ref <= ARM64_SIDE_R_LIMIT; ref++) {
     ins = ir_load_acq(&ir[ref]);
-    if (!arm64_side_postra_gpr(ins))
+    if (ins.r != valueregs[ref-ARM64_SIDE_R_PARENT] ||
+	ins.s != SPS_NONE)
       return 0;
   }
-  ins = ir_load_acq(&ir[ARM64_SIDE_R_PARENT]);
-  if (ins.r != regsp_reg(parentrs))
-    return 0;
   ins = ir_load_acq(&ir[ARM64_SIDE_R_GT]);
   if (ins.r != RID_INIT || ins.s != SPS_NONE)
     return 0;
@@ -847,7 +840,7 @@ int lj_asm_arm64_side_postra_admit(const LJArm64SidePostRAView *view,
     return 0;
   for (ref = ARM64_SIDE_K_ONE; ref <= REF_NIL; ref++) {
     ins = ir_load_acq(&ir[ref]);
-    if (ins.prev != REGSP_INIT)
+    if (ins.r != RID_INIT || ins.s != SPS_NONE)
       return 0;
   }
   if (semantic_ninsp)

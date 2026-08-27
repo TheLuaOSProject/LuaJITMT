@@ -49,6 +49,12 @@ grep -F 'lj_asm_arm64_side_ir_admit' "$root/src/lj_asm.h" >/dev/null
 grep -F 'lj_asm_arm64_side_postra_admit' "$root/src/lj_asm.h" >/dev/null
 grep -F 'sh "$root/tools/ci/arm64_jit_side_ir_admission_contract.sh"' \
   "$root/tools/ci/arm64_jit_fail_closed_gate.sh" >/dev/null
+if grep -F 'LUAJIT_MT_ARM64_SIDE_POSTRA_OBSERVE' \
+     "$root/src/lj_arch.h" "$root/src/lj_trace.c" "$root/src/lj_trace.h" \
+     "$root/src/lj_asm.c" "$root/src/lj_asm.h" >/dev/null; then
+  echo "disposable ARM64 side observation overlay leaked into production sources" >&2
+  exit 1
+fi
 
 awk '/^\/\* -- Pure ARM64 first-side admission/ { copy=1 }
      copy { print }
@@ -83,15 +89,16 @@ for required in \
   'expected > (uintptr_t)(UINT64_MAX >> 8)' \
   'SNAP(4, 0, ARM64_SIDE_R_PARENT)' \
   'SNAP(5, 0, ARM64_SIDE_R_ADD)' \
+  'static const Reg valueregs[4]' \
+  'RID_X27, RID_X28, RID_X28, RID_X27' \
   'view->nins != ARM64_SIDE_SEMANTIC_NINS+1u' \
   'view->spadjust != 0 || view->parent_spadjust != 0' \
   'ins.o != IR_NOP || ins.t.irt != IRT_NIL' \
-  '!regsp_used(parentrs) || ra_hasspill(regsp_spill(parentrs))' \
+  'ins.op1 != 0 || ins.op2 != 0 || ins.r != 0 || ins.s != 0' \
+  'view->parent_slot4 != REGSP(RID_X28, SPS_NONE)' \
   'ins.r != RID_BASE || ins.s != SPS_NONE' \
-  'if (!arm64_side_postra_gpr(ins))' \
-  'ins.r != regsp_reg(parentrs)' \
-  'ins.r != RID_INIT || ins.s != SPS_NONE' \
-  'ins.prev != REGSP_INIT'; do
+  'ins.r != valueregs[ref-ARM64_SIDE_R_PARENT]' \
+  'ins.r != RID_INIT || ins.s != SPS_NONE'; do
   grep -F "$required" "$pure_region" >/dev/null || {
     echo "ARM64 side certificate invariant changed: $required" >&2
     exit 1
@@ -148,10 +155,15 @@ for required in \
   'fx.postra.spadjust = 16' \
   'fx.postra.parent_spadjust = 16' \
   'setir(R_END, IR_RENAME, IRT_NIL, R_ADD, 0)' \
-  'fx.postra.parent_slot4 = REGSP(RID_X4, 2)' \
+  'fx.postra.parent_slot4 = REGSP(RID_X28, SPS_NONE);' \
+  'fx.postra.parent_slot4 = REGSP(RID_X28, 2)' \
+  'fx.postra.parent_slot4 = REGSP(RID_X27, 0)' \
   'fx.postra.parent_slot4 = REGSP(RID_D0, 0)' \
+  'fx.ir[ref].r = RID_X0' \
   'fx.ir[ref].r = RID_D0' \
   'fx.ir[ref].s = 2' \
+  'fx.ir[R_END].r = RID_X1' \
+  'fx.ir[R_END].s = 2' \
   'fx.ir[R_GT].r = RID_X0' \
   'fx.ir[R_XPOLL].s = 2' \
   'TRACE_ARM64_INT_SIDE_ADMITTED == 0x80'; do
@@ -175,4 +187,4 @@ done
   -o "$fixture"
 "$fixture"
 
-echo "arm64_jit_side_ir_admission_contract OK: pure +1 first-side semantic and synthetic post-RA certificates verified; production gate remains closed"
+echo "arm64_jit_side_ir_admission_contract OK: pure first-side semantic and live-observed exact post-RA certificates verified; production gate remains closed"

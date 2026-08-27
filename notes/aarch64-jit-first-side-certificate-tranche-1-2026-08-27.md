@@ -2,6 +2,11 @@
 
 ## Scope
 
+Status update: the synthetic post-RA hypothesis in this tranche was replaced
+after a native abort-before-publication observation. See
+`notes/aarch64-jit-first-side-postra-observation-2026-08-27.md` for the exact
+x28-parent to x27-child shuffle and the resulting immutable certificate.
+
 This tranche adds both pure assembler-side policy for one observed first-level
 integer side trace and a dormant, read-only recorder-ingress certificate for
 its admitted LOOP parent. It does **not** open side recording, assemble a
@@ -100,27 +105,22 @@ Packed continuation PCs are accepted only when the prototype range is aligned
 and non-overflowing, every position is in range, the frame-base byte is zero,
 and the expected address fits before the eight-bit packing shift.
 
-## Synthetic post-RA certificate
+## Original synthetic post-RA hypothesis (superseded)
 
-No production side trace reaches register allocation yet, so the second helper
-is an intentionally exact synthetic certificate rather than a claim about the
-eventual live allocator shape. It re-runs the semantic certificate and accepts
-only:
+At this tranche boundary, no side trace had yet reached live register
+allocation. The original helper therefore hypothesized one trailing `NOP`, no
+renames or spills, zero child/parent stack adjustment, top slot 5, and the
+inherited slot-4 value remaining in the parent's register.
 
-- one exact trailing `NOP`, with no `RENAME` suffix;
-- zero child and parent stack adjustment and top slot 5 on both traces;
-- `BASE` in `RID_BASE` with no spill;
-- all four integer value instructions in unspilled GPRs;
-- the inherited slot-4 value in the same unspilled GPR recorded for the parent;
-- `GT` and `XPOLL` with `RID_INIT` and no spill;
-- primitive and `+1` constants retaining `REGSP_INIT`.
-
-This helper is not called by `lj_asm_trace()` and cannot set the admission bit.
-The next tranche must first observe the real post-RA child layout, then tighten
-or replace this synthetic shape before any assembly/publication call site is
-enabled. Parent exit-table lifetime, B26 reachability, arm64e authenticated tail
-linking, entry revalidation, child retirement, and side-of-side/stitch/call/heap
-closure remain separate gates.
+The later native probe confirmed every structural item except that final
+same-register assumption. The parent map carries slot 4 in x28 while the side
+head shuffles it into x27. The current helper now freezes that observed layout,
+including the exact post-RA register and spill bytes. Those fields force the
+current `asm_head_side()` algorithm onto its x28-to-x27 shuffle path, but the
+pure helper does not yet certify parent-map provenance or the emitted move. It
+remains dormant and cannot set the side admission bit. Parent lifetime,
+authenticated linking, publication order, retirement, and wider IR surfaces
+remain separate gates.
 
 ## Validation
 

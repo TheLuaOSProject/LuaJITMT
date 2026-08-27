@@ -85,8 +85,8 @@ typedef struct LJArm64SideIRView {
   uint8_t base_delta;
 } LJArm64SideIRView;
 
-/* Deliberately narrow synthetic post-RA certificate. Production dispatch does
-** not consume this view until a live side layout has been observed and frozen. */
+/* Exact immutable view of the repeatedly observed first-side ARM64 allocator
+** layout. Production dispatch remains separate and fail-closed. */
 typedef struct LJArm64SidePostRAView {
   LJArm64SideIRView semantic;
   IRRef nins;

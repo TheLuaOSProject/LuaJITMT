@@ -1,5 +1,6 @@
 /*
-** Pure synthetic contract for the first bounded ARM64 side-trace grammar.
+** Pure contract for the first bounded ARM64 side-trace grammar and the exact
+** allocator layout captured by an abort-before-publication native probe.
 ** The production side recorder remains closed; no generated code runs here.
 */
 
@@ -278,14 +279,16 @@ static void make_postra(void)
   IRRef ref;
   make_semantic();
   setir(R_END, IR_NOP, IRT_NIL, 0, 0);
-  for (ref = K_ONE; ref <= REF_NIL; ref++)
-    fx.ir[ref].prev = REGSP_INIT;
+  for (ref = K_ONE; ref <= REF_NIL; ref++) {
+    fx.ir[ref].r = RID_INIT;
+    fx.ir[ref].s = SPS_NONE;
+  }
   fx.ir[REF_BASE].r = RID_BASE;
   fx.ir[REF_BASE].s = SPS_NONE;
-  fx.ir[R_PARENT].r = RID_X4;
-  fx.ir[R_VALUE].r = RID_X5;
-  fx.ir[R_ADD].r = RID_X6;
-  fx.ir[R_LIMIT].r = RID_X7;
+  fx.ir[R_PARENT].r = RID_X27;
+  fx.ir[R_VALUE].r = RID_X28;
+  fx.ir[R_ADD].r = RID_X28;
+  fx.ir[R_LIMIT].r = RID_X27;
   fx.ir[R_GT].r = RID_INIT;
   fx.ir[R_XPOLL].r = RID_INIT;
 
@@ -295,7 +298,7 @@ static void make_postra(void)
   fx.postra.parent_spadjust = 0;
   fx.postra.topslot = 5;
   fx.postra.parent_topslot = 5;
-  fx.postra.parent_slot4 = REGSP(RID_X4, SPS_NONE);
+  fx.postra.parent_slot4 = REGSP(RID_X28, SPS_NONE);
 }
 
 static void expect_postra(int admitted)
@@ -335,16 +338,18 @@ static void test_postra(void)
   POSTRA_MUTATION(fx.ir[R_END].t.irt = IRT_INT);
   POSTRA_MUTATION(fx.ir[R_END].op1 = 1);
   POSTRA_MUTATION(fx.ir[R_END].op2 = 1);
-  POSTRA_MUTATION(fx.ir[R_END].prev = REGSP_INIT);
+  POSTRA_MUTATION(fx.ir[R_END].r = RID_X1);
+  POSTRA_MUTATION(fx.ir[R_END].s = 2);
 
   POSTRA_MUTATION(fx.postra.parent_slot4 = REGSP_INIT);
-  POSTRA_MUTATION(fx.postra.parent_slot4 = REGSP(RID_X4, 2));
+  POSTRA_MUTATION(fx.postra.parent_slot4 = REGSP(RID_X28, 2));
+  POSTRA_MUTATION(fx.postra.parent_slot4 = REGSP(RID_X27, 0));
   POSTRA_MUTATION(fx.postra.parent_slot4 = REGSP(RID_D0, 0));
   POSTRA_MUTATION(fx.ir[REF_BASE].r = RID_X0);
   POSTRA_MUTATION(fx.ir[REF_BASE].s = 2);
-  POSTRA_MUTATION(fx.ir[R_PARENT].r = RID_X3);
 
   for (ref = R_PARENT; ref <= R_LIMIT; ref++) {
+    make_postra(); fx.ir[ref].r = RID_X0; expect_postra(0);
     make_postra(); fx.ir[ref].r = RID_INIT; expect_postra(0);
     make_postra(); fx.ir[ref].r = RID_D0; expect_postra(0);
     make_postra(); fx.ir[ref].s = 2; expect_postra(0);
@@ -355,7 +360,8 @@ static void test_postra(void)
   POSTRA_MUTATION(fx.ir[R_XPOLL].s = 2);
 
   for (ref = K_ONE; ref <= REF_NIL; ref++) {
-    make_postra(); fx.ir[ref].prev = 0; expect_postra(0);
+    make_postra(); fx.ir[ref].r = RID_X0; expect_postra(0);
+    make_postra(); fx.ir[ref].s = 2; expect_postra(0);
   }
   POSTRA_MUTATION(fx.ir[R_ADD].o = IR_TNEW);
   POSTRA_MUTATION(fx.snap[1].nslots = 5);
