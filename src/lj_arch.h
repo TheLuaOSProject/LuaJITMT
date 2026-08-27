@@ -545,9 +545,10 @@
 #if defined(LUAJIT_DISABLE_JIT)
 #error "LUAJIT_MT_ARM64_JIT_EXPERIMENTAL cannot be combined with LUAJIT_DISABLE_JIT"
 #endif
-/* The exact spill-free integer BC_LOOP root is executable under both the
-** ordinary ARM64 and authenticated ARM64e ABIs. All wider recorder and entry
-** surfaces remain independently fail-closed below. */
+/* The exact bounded integer BC_LOOP root, including canonical fixed and
+** dynamic 32-bit spill layouts, is executable under both the ordinary ARM64
+** and authenticated ARM64e ABIs. All wider recorder and entry surfaces remain
+** independently fail-closed below. */
 #define LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED		0
 #define LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED	0
 #define LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED		1

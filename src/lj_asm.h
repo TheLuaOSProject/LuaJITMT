@@ -36,8 +36,27 @@ typedef struct LJArm64IRReject {
   uint16_t detail;  /* CALL helper ID, mode bits or structural discriminator. */
 } LJArm64IRReject;
 
+/* Immutable post-register-allocation data needed by both the assembler and
+** the ARM64 root-entry gate. */
+typedef struct LJArm64PostRAView {
+  const IRIns *ir;
+  const SnapShot *snap;
+  const SnapEntry *snapmap;
+  const BCIns *proto_bc;
+  IRRef nins;
+  IRRef nk;
+  MSize nsnap;
+  MSize nsnapmap;
+  MSize spadjust;
+  MSize proto_sizebc;
+  MSize root_topslot;
+  uint8_t base_delta;
+} LJArm64PostRAView;
+
 LJ_FUNC int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
 				   LJArm64IRReject *reject);
+LJ_FUNC int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
+				      IRRef *semantic_ninsp);
 #endif
 #if LJ_TARGET_ARM64 && defined(LJ_ARM64_EMIT_TEST_HELPERS)
 typedef enum {

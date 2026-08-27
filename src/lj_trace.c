@@ -3757,7 +3757,7 @@ static int trace_root_entry_loop_view_acq(const GCtrace *T, TraceNo traceno,
   return v->retire_epoch == 0 && v->traceno == traceno &&
 	 trace_root_acq(T) == 0 && v->link == traceno &&
 	 v->linktype == LJ_TRLINK_LOOP && v->nextside == 0 &&
-	 v->nchild == 0 && v->spadjust == 0 &&
+	 v->nchild == 0 &&
 	 v->startpt == obj2gco(pt) && v->startpc == pc &&
 	 trace_root_entry_loop_geometry(pt, pc, v->startins) &&
 	 v->mcode != NULL && v->szmcode > sizeof(MCode) &&
@@ -3770,6 +3770,26 @@ static int trace_root_entry_loop_view_acq(const GCtrace *T, TraceNo traceno,
 	 v->nsnapmap != 0 &&
 	 (v->admission & TRACE_ARM64_INT_LOOP_ADMITTED) != 0 &&
 	 (v->admission & TRACE_ENTRY_GATED) == 0;
+}
+
+static int trace_root_entry_arm64_layout_valid(
+	const TraceArm64LoopView *v)
+{
+  LJArm64PostRAView postra;
+  GCproto *pt = gco2pt(v->startpt);
+  postra.ir = v->ir;
+  postra.snap = v->snap;
+  postra.snapmap = v->snapmap;
+  postra.proto_bc = proto_bc(pt);
+  postra.nins = v->nins;
+  postra.nk = v->nk;
+  postra.nsnap = v->nsnap;
+  postra.nsnapmap = v->nsnapmap;
+  postra.spadjust = v->spadjust;
+  postra.proto_sizebc = pt->sizebc;
+  postra.root_topslot = v->topslot;
+  postra.base_delta = 0;
+  return lj_asm_arm64_postra_admit(&postra, NULL);
 }
 
 static int trace_root_entry_loop_view_equal(const TraceArm64LoopView *a,
@@ -3877,6 +3897,7 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
   if (!trace_runnable_acq(T, traceno) ||
       !trace_root_entry_start_valid(sourceop, trace_startins_acq(T)) ||
       !trace_root_entry_loop_view_acq(T, traceno, pc, pt, &view) ||
+      !trace_root_entry_arm64_layout_valid(&view) ||
       !trace_root_entry_bytecode_valid(pc, traceno, sourceop))
     goto reject_published;
   mcode = view.mcode;
@@ -3901,6 +3922,7 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
   T2 = trace_root_entry_slot_acq(J, traceno, &tv2);
   if (tv2 != tv || T2 != T || !trace_runnable_acq(T2, traceno) ||
       !trace_root_entry_loop_view_acq(T2, traceno, pc, pt, &view2) ||
+      !trace_root_entry_arm64_layout_valid(&view2) ||
       !trace_root_entry_loop_view_equal(&view, &view2) ||
       !trace_root_entry_start_valid(sourceop, view2.startins) ||
       !trace_root_entry_bytecode_valid(pc, traceno, sourceop))

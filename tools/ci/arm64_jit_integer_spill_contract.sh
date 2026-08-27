@@ -4,7 +4,7 @@ set -eu
 root=${LJ_TEST_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)}
 
 if test "$(uname -s)" != Darwin || test "$(uname -m)" != arm64; then
-  echo "arm64_jit_scalar_loop_contract SKIP: requires native macOS arm64"
+  echo "arm64_jit_integer_spill_contract SKIP: requires native macOS arm64"
   exit 0
 fi
 
@@ -14,7 +14,7 @@ minver=${MACOSX_DEPLOYMENT_TARGET:-13.0}
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_TRACE_TEST_HELPERS -DLUAJIT_MCODE_TEST'
 pauth_xcflags="$xcflags -DLUAJIT_ENABLE_CET_BR"
 archive=$root/src/libluajit.a
-fixture_source=$root/tests/t-arm64-jit-scalar-loop.c
+fixture_source=$root/tests/t-arm64-jit-integer-spills.c
 lock_dir=$root/src/.lj-test-run.lock
 lock_held=0
 restore_needed=0
@@ -57,8 +57,8 @@ acquire_lock() {
   while ! mkdir "$lock_dir" 2>/dev/null; do
     lock_now=$(date +%s)
     if test "$lock_timeout" -ge 0 &&
-       test $((lock_now - lock_started)) -ge "$lock_timeout"; then
-      echo "ARM64 scalar-loop contract lock timed out: $lock_dir" >&2
+       test $((lock_now-lock_started)) -ge "$lock_timeout"; then
+      echo "ARM64 integer-spill contract lock timed out: $lock_dir" >&2
       if test -f "$lock_dir/owner"; then
         echo "owner:" >&2
         cat "$lock_dir/owner" >&2 || true
@@ -79,115 +79,117 @@ acquire_lock() {
 }
 
 acquire_lock
-tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lj-arm64-scalar-loop.XXXXXX")
-fixture=$tmpdir/t-arm64-jit-scalar-loop
-fixture_obj=$tmpdir/t-arm64-jit-scalar-loop.o
-pauth_fixture=$tmpdir/t-arm64-jit-scalar-loop-arm64e
-pauth_obj=$tmpdir/t-arm64-jit-scalar-loop-arm64e.o
+tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lj-arm64-integer-spill.XXXXXX")
+fixture=$tmpdir/t-arm64-jit-integer-spills
+fixture_obj=$tmpdir/t-arm64-jit-integer-spills.o
+pauth_fixture=$tmpdir/t-arm64-jit-integer-spills-arm64e
+pauth_obj=$tmpdir/t-arm64-jit-integer-spills-arm64e.o
 macros=$tmpdir/macros.txt
 pauth_macros=$tmpdir/macros-arm64e.txt
-ops_region=$tmpdir/ops.txt
 
-awk '/^static const IROp sub_ops/ { copying = 1 }
-     copying { print }
-     copying && /^static void run_lua/ { exit }' "$fixture_source" >"$ops_region"
-test -s "$ops_region"
+# Freeze the three distinct pressure surfaces. The generated Lua body contains
+# no calls, allocations, FFI, sides, stitches or function-entry traces.
 for required in \
-  'IR_SLOAD, IR_SLOAD, IR_ADDOV, IR_SUBOV, IR_GT, IR_LOOP, IR_XPOLL' \
-  'IR_SLOAD, IR_SLOAD, IR_ADDOV, IR_MULOV, IR_SLOAD, IR_GT, IR_LOOP' \
-  'IR_SLOAD, IR_SLOAD, IR_ADDOV, IR_ADDOV, IR_SLOAD, IR_GE, IR_LOOP' \
-  'IR_ADDOV, IR_ADDOV, IR_LE, IR_PHI, IR_PHI' \
-  'IR_ADDOV, IR_SUBOV, IR_GE, IR_PHI, IR_PHI' \
-  'IR_ADDOV, IR_ADDOV, IR_NE, IR_PHI, IR_PHI' \
-  'IR_SLOAD, IR_SLOAD, IR_SLOAD, IR_ADDOV, IR_EQ, IR_ADDOV' \
-  'IR_SLOAD, IR_SLOAD, IR_SLOAD, IR_SLOAD, IR_ADDOV, IR_SUBOV, IR_MULOV' \
-  'IR_SLOAD, IR_GT, IR_LOOP, IR_XPOLL, IR_ADDOV, IR_SUBOV, IR_MULOV, IR_LT,' \
-  'IR_SLOAD, IR_SUBOV, IR_GE, IR_LOOP, IR_XPOLL, IR_SUBOV, IR_GE'; do
-  grep -F "$required" "$ops_region" >/dev/null || {
-    echo "ARM64 scalar fixture lost exact IR sequence: $required" >&2
-    exit 1
-  }
-done
-if grep -E 'IR_(CONV|KNUM|ADD,|SUB,|MUL,|DIV|MOD|CALL|TNEW|SNEW|CNEW|AREF|HREF|FLOAD|XLOAD)' \
-     "$ops_region" >/dev/null; then
-  echo "ARM64 scalar fixture gained an unsupported IR family" >&2
-  exit 1
-fi
-
-for required in \
-  "while i>0 do x=x+i i=i-1 end return x end" \
-  "while i<=n do x=x+i i=i+1 end return x end" \
-  "while i>=1 do x=x+i i=i-1 end return x end" \
-  "while i~=n do i=i+1 x=x+i end return x end" \
-  "if k==7 then x=x+i else x=x-i end" \
-  "while i<n do i=i+1 x=(x-s)*m end return x end" \
-  "while i<n do i=i+1 x=x*3 end return x end" \
-  "while i>=-2147483648 do i=i-1 end return i end" \
-  'lua_Integer overflow_args[2] = { 2, 357913941 };' \
-  'assert(call_scalar(L, overflow_args, 2) == 3221225469.0);' \
-  'lua_Integer overflow_arg[1] = { -2147483647LL };' \
-  'assert(call_scalar(L, overflow_arg, 1) == -2147483649.0);' \
-  'assert(loopsnap == 5 && finalexit == 8 && overflowexit == 7);' \
-  'assert(loopsnap == 6 && finalexit == 10);' \
-  '4, { 20, 10, 1, 2 }, 8388610' \
-  'ir[ref].op1 >= REF_FIRST && ir[ref].op1 < ref' \
-  'ir[ref].op2 >= REF_FIRST && ir[ref].op2 < ref' \
-  'static const lua_Integer false_args[2] = { 1, 6 };' \
-  'assert(call_scalar(L, false_args, 2) == -1);' \
-  'expect_one_exit(2);' \
-  'trace_nins_acq(T) == semantic_end+nphi' \
-  'assert(ir[ref].o == IR_RENAME);' \
-  'assert(ir[ref].r < RID_MAX_GPR);' \
-  'rset_test(RSET_GPR, ir[ref].r)' \
-  'if (irref_isk(mapref) || (sn & SNAP_FRAME))' \
-  'rs = ir[mapref].prev;' \
-  'for (renref = trace_nins_acq(T); renref-- > semantic_end; )' \
-  'if (ren->op1 == mapref && ren->op2 <= snapno)' \
-  'assert(!ra_hasspill(regsp_spill(rs)));' \
-  'assert(regsp_reg(rs) < RID_MAX_GPR);' \
-  'rset_test(RSET_GPR, regsp_reg(rs))' \
-  'for (traceno = 2; (MSize)traceno < trace_sizetrace_acq(J); traceno++)' \
-  'assert(loopsnap == 3 && overflowexit == 4);' \
-  'LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION' \
+  'FIXED_N = 23' \
+  'MIN_DYNAMIC_N = 23' \
+  'HEAVY_N = 26' \
+  '"dynamic-23-plus-k", SPILL_MIN_DYNAMIC' \
+  '"heavy-26", SPILL_HEAVY' \
+  'UINT64_C(0x8e987d05ec986c8b)' \
+  'UINT64_C(0x9daea8d07564bb57)' \
+  'UINT64_C(0x0e434c1ea83db142)' \
+  'UINT64_C(0xa5e15ce0c3358d84)' \
+  'UINT64_C(0x3074ad891371262f)' \
+  'UINT64_C(0x697804b1a9938ca1)' \
+  'assert(count == 2);' \
+  'assert(count == 4);' \
+  'assert(spec->kind == SPILL_HEAVY && count == 36);' \
+  'assert(ir[body_i+2u].s == 4);' \
+  'These unequal left/right spill pairs force asm_phi_copyspill().' \
+  'expect_snapshot_tuple(root, HEAVY_N+7u, 4,' \
+  'expect_snapshot_tuple(root, HEAVY_N+8u, 4,' \
+  'assert(trace_nsnapmap_acq(T) == root->spec->nsnapmap);' \
+  'assert(ntuples == root->spec->snapshot_tuples);' \
+  'assert(irhash == root->spec->ir_fingerprint);' \
+  'assert(snaphash == root->spec->snapshot_fingerprint);' \
+  'UINT32_C(0xd10043ff)' \
+  'assert(nsub == 1);' \
+  'assert(nbackedge == 1);' \
   'POSTADMISSION_PROFILE' \
   'POSTADMISSION_STOPREQ' \
-  'lj_trace_test_first_exitno() == loopsnap' \
-  'expect_one_exit(overflowexit);' \
-  'trace_spadjust_acq(T) == 0' \
-  'TRACE_ARM64_INT_LOOP_ADMITTED' \
-  '!ra_hasspill(ir[ref].s)' \
-  'trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0'; do
+  'lj_trace_test_first_exitno() == root.loopsnap' \
+  'thread interrupted: VM shutdown' \
+  'assert(tvisnum(a2));' \
+  'assert(numV(a2) == 2147483648.0);' \
+  'expect_one_exit(HEAVY_N+7u);' \
+  'trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0' \
+  'lj_tg_load_jit_base(root->tg) == NULL' \
+  'lj_tg_in_native_acq(root->tg) == 0' \
+  'lj_tg_vmstate_load_acq(root->tg) == root->idle_vmstate'; do
   grep -F "$required" "$fixture_source" >/dev/null || {
-    echo "ARM64 scalar fixture lost proof: $required" >&2
+    echo "ARM64 integer-spill fixture lost proof: $required" >&2
     exit 1
   }
 done
-if grep -E 'require\(|ffi\.|"[[:space:]]*for[[:space:]]' \
+test "$(grep -Fc 'call_and_expect_native_vector(&root, 0);' \
+  "$fixture_source")" = 4
+test "$(grep -Fc 'call_and_expect_native_vector(&root, 1);' \
+  "$fixture_source")" = 3
+test "$(grep -Fc 'SpillRoot root = spill_root_new(' \
+  "$fixture_source")" = 3
+if grep -E 'require\(|ffi\.|LJ_ARM64_SPILL_MEASURE' \
      "$fixture_source" >/dev/null; then
-  echo "ARM64 scalar fixture uses an unsupported Lua surface" >&2
+  echo "ARM64 integer-spill fixture gained an unsupported/bypass surface" >&2
   exit 1
 fi
 
+# Keep the behavioral proof coupled to the bounded post-RA validator and the
+# second root-entry validation after the trace lifetime lease is published.
 for required in \
-  'case IR_SLOAD: case IR_ADDOV: case IR_SUBOV: case IR_MULOV:' \
-  'case IR_LT: case IR_GE: case IR_LE: case IR_GT:' \
-  'case IR_EQ: case IR_NE:' \
-  'case IR_ADDOV: case IR_SUBOV: case IR_MULOV:'; do
-  grep -F "$required" "$root/src/lj_asm.c" >/dev/null || {
-    echo "ARM64 scalar admission mismatch: $required" >&2
+  '#define SPS_FIXED' \
+  '#define SPS_FIRST' \
+  '#define SPS_LIMIT' \
+  'static int arm64_postra_spill_slot(MSize slot, MSize capacity)' \
+  'capacity = SPS_FIXED + spadjust / sizeof(int32_t);' \
+  'if (highest_end <= SPS_FIXED)' \
+  'MSize expected = (MSize)sps_scale(sps_align(highest_end));' \
+  'if (spadjust != expected || highest_end > capacity)' \
+  'view->snapmap == NULL || view->proto_bc == NULL ||' \
+  'view->proto_sizebc == 0 || view->root_topslot == 0 ||' \
+  'view->root_topslot > UINT8_MAX || view->base_delta != 0)' \
+  'nslots < 1u+LJ_FR2 || topslot != view->root_topslot ||' \
+  'nslots > view->root_topslot+1u+LJ_FR2)' \
+  '(uint8_t)pcbase != view->base_delta ||' \
+  'rs = source.prev;' \
+  'rs = ren.prev;' \
+  'if (!arm64_postra_spill_slot(regsp_spill(rs), capacity))' \
+  'postraview.proto_bc = proto_bc(J->pt);' \
+  'postraview.proto_sizebc = J->pt->sizebc;' \
+  'postraview.root_topslot = T->topslot;' \
+  'postraview.base_delta = (uint8_t)(J->baseslot-2u);'; do
+  case "$required" in
+    '#define '*) file=$root/src/lj_target_arm64.h ;;
+    *) file=$root/src/lj_asm.c ;;
+  esac
+  grep -F "$required" "$file" >/dev/null || {
+    echo "ARM64 integer-spill admission mismatch: $required" >&2
     exit 1
   }
 done
-grep -F 'regsp_reg(rs) >= RID_MAX_GPR ||' \
-  "$root/src/lj_asm.c" >/dev/null || {
-  echo "ARM64 scalar post-RA snapshot register check is missing" >&2
-  exit 1
-}
-grep -F 'ren.op2 >= nsnap || ren.r >= RID_MAX_GPR ||' \
-  "$root/src/lj_asm.c" >/dev/null || {
-  echo "ARM64 scalar RENAME register range check is missing" >&2
-  exit 1
-}
+for required in \
+  'v->topslot == (MSize)pt->framesize &&' \
+  'GCproto *pt = gco2pt(v->startpt);' \
+  'postra.proto_bc = proto_bc(pt);' \
+  'postra.proto_sizebc = pt->sizebc;' \
+  'postra.root_topslot = v->topslot;' \
+  'postra.base_delta = 0;'; do
+  grep -F "$required" "$root/src/lj_trace.c" >/dev/null || {
+    echo "ARM64 integer-spill root revalidation mismatch: $required" >&2
+    exit 1
+  }
+done
+test "$(grep -Fc 'trace_root_entry_arm64_layout_valid(&view' \
+  "$root/src/lj_trace.c")" = 2
 
 restore_needed=1
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
@@ -196,20 +198,23 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" -j"$jobs" TARGET_FLAGS='-arch arm64' \
     XCFLAGS="$xcflags"
 test "$(lipo -archs "$archive")" = arm64
+nm "$archive" | grep ' T _lj_trace_test_root_entry_pause$' >/dev/null
+nm "$archive" | grep ' T _lj_trace_test_reset_exit_stats$' >/dev/null
 
 # shellcheck disable=SC2086 # xcflags intentionally expands to arguments.
 "$cc" -arch arm64 -mmacosx-version-min="$minver" $xcflags \
-  -I"$root/src" -dM -E "$root/src/lj_arch.h" >"$macros"
+  -I"$root/src" -dM -E -x c -include lj_arch.h /dev/null >"$macros"
 for setting in \
   'LJ_TARGET_ARM64 1' \
+  'LJ_HASJIT 1' \
   'LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED 1'; do
-  grep -E "^#define ${setting}$" "$macros" >/dev/null || {
-    echo "ARM64 scalar-loop gate mismatch: $setting" >&2
+  grep -F "#define $setting" "$macros" >/dev/null || {
+    echo "ARM64 integer-spill policy mismatch: $setting" >&2
     exit 1
   }
 done
@@ -220,7 +225,7 @@ done
   -c "$fixture_source" -o "$fixture_obj"
 "$cc" -arch arm64 -mmacosx-version-min="$minver" \
   "$fixture_obj" "$archive" -lm -pthread -o "$fixture"
-ordinary_runs=${LJ_ARM64_SCALAR_RUNS:-3}
+ordinary_runs=${LJ_ARM64_INTEGER_SPILL_RUNS:-3}
 run=1
 while test "$run" -le "$ordinary_runs"; do
   "$fixture"
@@ -248,8 +253,8 @@ for setting in \
   'LJ_ABI_BRANCH_TRACK 1' \
   'LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED 0'; do
-  grep -E "^#define ${setting}$" "$pauth_macros" >/dev/null || {
-    echo "ARM64e scalar-loop gate mismatch: $setting" >&2
+  grep -F "#define $setting" "$pauth_macros" >/dev/null || {
+    echo "ARM64e integer-spill policy mismatch: $setting" >&2
     exit 1
   }
 done
@@ -262,7 +267,7 @@ done
   -mmacosx-version-min="$minver" "$pauth_obj" "$archive" -lm -pthread \
   -o "$pauth_fixture"
 otool -hv "$pauth_fixture" | grep -E 'ARM64[[:space:]]+E' >/dev/null
-pauth_runs=${LJ_ARM64_SCALAR_PAUTH_RUNS:-3}
+pauth_runs=${LJ_ARM64_INTEGER_SPILL_PAUTH_RUNS:-2}
 run=1
 while test "$run" -le "$pauth_runs"; do
   "$pauth_fixture"
@@ -270,6 +275,7 @@ while test "$run" -le "$pauth_runs"; do
 done
 LUAJIT_MCODE_TEST=R "$pauth_fixture"
 
+# Leave the shared checkout in the ordinary experimental ARM64 configuration.
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" clean TARGET_FLAGS='-arch arm64' XCFLAGS="$xcflags"
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
@@ -277,4 +283,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
     XCFLAGS="$xcflags"
 restore_needed=0
 
-echo "arm64_jit_scalar_loop_contract OK: checked scalar arithmetic and all signed guards executed on ARM64/ARM64e with overflow and XPOLL exits"
+echo "arm64_jit_integer_spill_contract OK: fixed slots, canonical 16-byte frame, copy-spill overflow, XPOLL and ARM64e/far paths passed"

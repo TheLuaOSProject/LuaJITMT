@@ -17,9 +17,11 @@ trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
 fixture=$tmpdir/t-arm64-jit-ir-admission
 classifier=$tmpdir/classifier.txt
+semantic_region=$tmpdir/semantic-region.txt
 trace_asm=$tmpdir/trace-asm.txt
 call_region=$tmpdir/call-region.txt
 value_region=$tmpdir/value-region.txt
+postra_region=$tmpdir/postra-region.txt
 positive_region=$tmpdir/positive-region.txt
 audit_object=$tmpdir/lj_asm-arm64e.o
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT'
@@ -33,6 +35,10 @@ nm "$archive" | grep ' T _lj_asm_arm64_ir_admit$' >/dev/null || {
   echo "experimental archive lacks the ARM64 IR admission gate" >&2
   exit 1
 }
+nm "$archive" | grep ' T _lj_asm_arm64_postra_admit$' >/dev/null || {
+  echo "experimental archive lacks the ARM64 post-RA spill gate" >&2
+  exit 1
+}
 
 awk '/^\/\* -- Initial ARM64 IR admission/ { copying = 1 }
      copying { print }
@@ -40,9 +46,15 @@ awk '/^\/\* -- Initial ARM64 IR admission/ { copying = 1 }
   "$root/src/lj_asm.c" >"$classifier"
 test -s "$classifier"
 
+awk '/^int lj_asm_arm64_ir_admit/ { copying = 1 }
+     copying { print }
+     copying && /^\/\* -- Assembler state and common macros/ { exit }' \
+  "$root/src/lj_asm.c" >"$semantic_region"
+test -s "$semantic_region"
+
 awk '/^static int arm64_ir_int_value_op/ { copying = 1 }
      copying { print }
-     copying && /^static int arm64_ir_int_ref/ { exit }' \
+     copying && /^static int arm64_postra_int_value/ { exit }' \
   "$root/src/lj_asm.c" >"$value_region"
 grep -F 'case IR_SLOAD: case IR_ADDOV: case IR_SUBOV: case IR_MULOV:' \
   "$value_region" >/dev/null
@@ -51,6 +63,12 @@ if grep -E 'case IR_(CONV|ADD|SUB|MUL|DIV|LT|GE|LE|GT|EQ|NE|USE|PHI|LOOP|XPOLL):
   echo "non-value IR entered the ARM64 integer producer set" >&2
   exit 1
 fi
+
+awk '/^static int arm64_postra_spill_slot/ { copying = 1 }
+     copying { print }
+     copying && /^static int arm64_ir_int_ref/ { exit }' \
+  "$root/src/lj_asm.c" >"$postra_region"
+test -s "$postra_region"
 
 awk '/^static void make_trace\(/ { copying = 1 }
      copying { print }
@@ -83,52 +101,93 @@ test "$admit_line" -lt "$reserve_line"
 grep -F 'lj_trace_err_info(J, LJ_TRERR_NYIIR);' "$trace_asm" >/dev/null
 for required in \
   'finalview.nins = arm64_semantic_nins;' \
-  'T->spadjust != 0 || as->evenspill != SPS_FIRST || as->oddspill != 0' \
-  'if (ra_hasspill(ir.s))' \
-  'if (irref_isk(snapref) || (sn & SNAP_FRAME))' \
-  'rs = ir_load_acq(&finalir[snapref]).prev;' \
-  'for (renref = finalnins; renref-- > arm64_semantic_nins; )' \
-  'if (ren.op1 == snapref && ren.op2 <= snapno)' \
-  'if (ra_hasspill(regsp_spill(rs)) ||' \
-  'regsp_reg(rs) >= RID_MAX_GPR ||' \
-  '!rset_test(RSET_GPR, regsp_reg(rs)))' \
-  'finalnins == arm64_semantic_nins + 1u' \
-  'ir.o == IR_NOP && ir.t.irt == IRT_NIL' \
-  'if (!suffix_ok && finalnins > arm64_semantic_nins &&' \
-  'finalnins - arm64_semantic_nins <= LJ_MAX_PHI' \
-  'ir.o != IR_RENAME || ir.t.irt != IRT_NIL' \
-  'ra_hasspill(ir.s)' \
+  'postraview.ir = finalir;' \
+  'postraview.proto_bc = proto_bc(J->pt);' \
+  'postraview.nins = finalnins;' \
+  'postraview.nk = T->nk;' \
+  'postraview.spadjust = T->spadjust;' \
+  'postraview.proto_sizebc = J->pt->sizebc;' \
+  'postraview.root_topslot = T->topslot;' \
+  'postraview.base_delta = (uint8_t)(J->baseslot-2u);' \
+  '!lj_asm_arm64_postra_admit(' \
+  'validated_semantic_nins != arm64_semantic_nins' \
   'T->unused1 |= TRACE_ARM64_INT_LOOP_ADMITTED;'; do
   grep -F "$required" "$trace_asm" >/dev/null || {
     echo "ARM64 post-RA admission check changed: $required" >&2
     exit 1
   }
 done
-test "$(grep -Fc 'ir.r >= RID_MAX_GPR' "$trace_asm")" -eq 1
-if grep -E 'rset_test\(RSET_GPR, ir\.r\).*ir\.r >= RID_MAX_GPR' \
-     "$trace_asm" >/dev/null; then
-  echo "ARM64 post-RA register range check follows rset_test" >&2
+postra_line=$(grep -n '!lj_asm_arm64_postra_admit(' "$trace_asm" | cut -d: -f1)
+marker_line=$(grep -n 'T->unused1 |= TRACE_ARM64_INT_LOOP_ADMITTED;' "$trace_asm" | cut -d: -f1)
+test -n "$postra_line" && test -n "$marker_line" &&
+test "$postra_line" -lt "$marker_line"
+if grep -F 'T->spadjust != 0 || as->evenspill' "$trace_asm" >/dev/null; then
+  echo "ARM64 assembly gate still keys spill admission to allocator cursors" >&2
   exit 1
 fi
-snap_range_line=$(grep -n 'regsp_reg(rs) >= RID_MAX_GPR' "$trace_asm" | cut -d: -f1)
-snap_rset_line=$(grep -n '!rset_test(RSET_GPR, regsp_reg(rs))' "$trace_asm" | cut -d: -f1)
-snap_spill_line=$(grep -n 'if (ra_hasspill(regsp_spill(rs)) ||' "$trace_asm" | cut -d: -f1)
-suffix_line=$(grep -n 'if (LJ_UNLIKELY(!suffix_ok))' "$trace_asm" | cut -d: -f1)
-snap_loop_line=$(grep -n 'for (snapno = 0; snapno < T->nsnap; snapno++)' "$trace_asm" | cut -d: -f1)
-marker_line=$(grep -n 'T->unused1 |= TRACE_ARM64_INT_LOOP_ADMITTED;' "$trace_asm" | cut -d: -f1)
-rename_range_line=$(grep -n 'ir.op2 >= T->nsnap || ir.r >= RID_MAX_GPR ||' "$trace_asm" | cut -d: -f1)
-rename_rset_line=$(grep -n '!rset_test(RSET_GPR, ir.r)' "$trace_asm" | cut -d: -f1)
-test -n "$snap_spill_line" && test -n "$snap_range_line" &&
-test -n "$snap_rset_line" && test "$snap_spill_line" -lt "$snap_range_line" &&
-test "$snap_range_line" -lt "$snap_rset_line"
-test -n "$suffix_line" && test -n "$snap_loop_line" &&
-test -n "$marker_line" && test "$suffix_line" -lt "$snap_loop_line" &&
-test "$snap_loop_line" -lt "$marker_line"
+
+for required in \
+  'LJ_STATIC_ASSERT(SPS_FIRST == 2);' \
+  'LJ_STATIC_ASSERT(SPS_FIXED == 4);' \
+  'LJ_STATIC_ASSERT(SPS_LIMIT == 256);' \
+  'view->nk == 0 || view->nk > REF_TRUE' \
+  'view->root_topslot > UINT8_MAX || view->base_delta != 0' \
+  '(UINTPTR_MAX-proto_lo)/sizeof(BCIns)' \
+  'spadjust > (MSize)sps_scale(SPS_LIMIT-SPS_FIXED)' \
+  'capacity = SPS_FIXED + spadjust / sizeof(int32_t);' \
+  'slot >= SPS_FIRST && slot < capacity && slot < SPS_LIMIT' \
+  'if (last.o == IR_NOP)' \
+  'nrename == 0 || nrename > LJ_MAX_PHI' \
+  'case IR_SLOAD: case IR_ADDOV: case IR_SUBOV: case IR_MULOV:' \
+  'case IR_LT: case IR_GE: case IR_LE: case IR_GT:' \
+  'case IR_EQ: case IR_NE:' \
+  'case IR_LOOP: case IR_XPOLL:' \
+  'case IR_PHI:' \
+  'MSize expected = (MSize)sps_scale(sps_align(highest_end));' \
+  'spadjust != expected || highest_end > capacity' \
+  'ren.op2 >= nsnap || ren.r >= RID_MAX_GPR ||' \
+  '!rset_test(RSET_GPR, ren.r) || ren.s != SPS_NONE' \
+  'if (!arm64_postra_int_value(source))' \
+  'mapofs != expected_mapofs || nent > nextofs-mapofs' \
+  'nextofs-mapofs-nent != 1u+LJ_FR2' \
+  'snapat < REF_FIRST || snapat >= semantic_nins' \
+  'snapat < prev_snapref' \
+  'topslot != view->root_topslot' \
+  'nslots > view->root_topslot+1u+LJ_FR2' \
+  'slot >= nslots || (n != 0 &&' \
+  'sn == SNAP(1, SNAP_FRAME|SNAP_NORESTORE, REF_NIL)' \
+  'slot < 1u+LJ_FR2 || flags != 0' \
+  'valueref < view->nk || valueref >= REF_TRUE' \
+  'valueref < REF_FIRST || valueref >= snapat' \
+  'rs = source.prev;' \
+  'for (renref = view->nins; renref-- > semantic_nins; )' \
+  'if (ren.op1 == valueref && ren.op2 <= snapno)' \
+  'if (ra_hasspill(regsp_spill(rs)))' \
+  'regsp_reg(rs) >= RID_MAX_GPR ||' \
+  '!rset_test(RSET_GPR, regsp_reg(rs))' \
+  'pcraw[n] = snapentry_acq(&view->snapmap[mapofs+nent+n]);' \
+  '(uint8_t)pcbase != view->base_delta' \
+  '!arm64_ir_pcpos(snappc, proto_lo, proto_hi, &snappos)'; do
+  grep -F "$required" "$postra_region" >/dev/null || {
+    echo "ARM64 post-RA spill invariant changed: $required" >&2
+    exit 1
+  }
+done
+rename_range_line=$(grep -n 'ren.op2 >= nsnap || ren.r >= RID_MAX_GPR ||' \
+  "$postra_region" | cut -d: -f1)
+rename_rset_line=$(grep -n '!rset_test(RSET_GPR, ren.r)' \
+  "$postra_region" | cut -d: -f1)
+snap_range_line=$(grep -n 'regsp_reg(rs) >= RID_MAX_GPR ||' \
+  "$postra_region" | cut -d: -f1)
+snap_rset_line=$(grep -n '!rset_test(RSET_GPR, regsp_reg(rs))' \
+  "$postra_region" | cut -d: -f1)
 test -n "$rename_range_line" && test -n "$rename_rset_line" &&
 test "$rename_range_line" -lt "$rename_rset_line"
-if grep -F '} else if (finalnins > arm64_semantic_nins' \
-     "$trace_asm" >/dev/null; then
-  echo "one allocator RENAME is shadowed by the spare-NOP branch" >&2
+test -n "$snap_range_line" && test -n "$snap_rset_line" &&
+test "$snap_range_line" -lt "$snap_rset_line"
+if grep -E 'lj_mcode_|trace_save|traceslot_publish|lj_ir_call|asm_call|lj_trace_err' \
+     "$postra_region" >/dev/null; then
+  echo "ARM64 post-RA spill validator gained side effects" >&2
   exit 1
 fi
 
@@ -151,7 +210,7 @@ for cases in \
   'case IR_XPOLL:' \
   'case IR_CALLN: case IR_CALLA: case IR_CALLL: case IR_CALLS:' \
   'case IR_CALLXS:'; do
-  grep -F "$cases" "$classifier" >/dev/null || {
+  grep -F "$cases" "$semantic_region" >/dev/null || {
     echo "ARM64 IR classifier inventory changed: $cases" >&2
     exit 1
   }
@@ -159,7 +218,7 @@ done
 
 awk '/case IR_CALLN:/ { copying = 1 }
      copying { print }
-     copying && /default:/ { exit }' "$classifier" >"$call_region"
+     copying && /default:/ { exit }' "$semantic_region" >"$call_region"
 test "$(grep -c 'LJ_ARM64_IR_REJECT_CALL' "$call_region")" -eq 2
 if grep -E 'break;|return 1|IRCALL_[A-Za-z0-9_]+[[:space:]]*:' \
      "$call_region" >/dev/null; then
@@ -175,7 +234,7 @@ for forbidden in IR_KGC IR_KPTR IR_KKPTR IR_KNULL IR_KINT64 IR_KSLOT \
   IR_AREF IR_HREF IR_UREFO IR_FLOAD IR_XLOAD IR_ASTORE IR_HSTORE \
   IR_USTORE IR_FSTORE IR_XSTORE IR_SNEW IR_TNEW IR_CNEW IR_BUFHDR \
   IR_TBAR IR_OBAR IR_XBAR IR_XSAVE IR_RETF IR_PROF IR_CARG; do
-  if grep -E "case[[:space:]]+$forbidden:" "$classifier" >/dev/null; then
+  if grep -E "case[[:space:]]+$forbidden:" "$semantic_region" >/dev/null; then
     echo "forbidden ARM64 IR unexpectedly gained an admitted case: $forbidden" >&2
     exit 1
   fi
@@ -273,6 +332,52 @@ for required in \
   }
 done
 
+for required in \
+  'fx.ir[R_SUM1].s = 2;' \
+  'fx.ir[R_SUM2].s = 3;' \
+  'fx.ir[R_SUM1].s = 4;' \
+  'view.spadjust = 16;' \
+  'fx.ir[R_SUM1].s = 255;' \
+  'view.spadjust = 1008;' \
+  'view.spadjust = 4;' \
+  'view.spadjust = 8;' \
+  'view.spadjust = 12;' \
+  'view.spadjust = 1024;' \
+  'view.spadjust = 32;' \
+  'view.spadjust = 992;' \
+  'fx.ir[R_SUM1].s = 1;' \
+  'fx.ir[R_SUM1].prev = REGSP(RID_INIT, SPS_NONE);' \
+  'fx.ir[R_PRECOND].s = 2;' \
+  'fx.ir[R_LOOP].s = 2;' \
+  'fx.ir[R_XPOLL].s = 2;' \
+  'setir(R_END, IR_RENAME, IRT_NIL, R_SUM1, 0);' \
+  'fx.ir[R_END].r = RID_MAX_GPR;' \
+  'fx.ir[R_END].s = 2;' \
+  'fx.snap[1].nent = fx.T.nsnapmap;' \
+  'view.nk = fx.T.nk;' \
+  'view.proto_sizebc = fixture_pt->sizebc;' \
+  'view.root_topslot = fixture_pt->framesize;' \
+  'fx.snap[1].mapofs = 1;' \
+  'fx.snap[1].nent = 1;' \
+  'fixture_pt->framesize+2u+LJ_FR2' \
+  'fixture_pt->framesize-1u' \
+  'SNAP(1, SNAP_FRAME|SNAP_NORESTORE, REF_NIL)' \
+  'fx.snapmap[6] = SNAP(2, SNAP_NORESTORE, R_SUM1);' \
+  'fx.snapmap[6] = SNAP(2, 0, R_BODY1);' \
+  'fx.snap[3].ref = R_PRECOND;' \
+  'fx.snapmap[6] = SNAP(2, 0, K_ZERO-1u);' \
+  'setir(K_STEP, IR_KNUM, IRT_NUM, 0, 0);' \
+  'view.nk = 0;' \
+  'view.nk = REF_TRUE+1u;' \
+  'set_snapshot_payload(2, fixture_snapshot_pc, 1);' \
+  '(uintptr_t)proto_bc(fixture_pt)+1u' \
+  'proto_bc(fixture_pt)+fixture_pt->sizebc'; do
+  grep -F "$required" "$root/tests/t-arm64-jit-ir-admission.c" >/dev/null || {
+    echo "ARM64 post-RA mutation coverage changed: $required" >&2
+    exit 1
+  }
+done
+
 # ARM64 records the already-lowered full XPOLL only for root LOOP traces.
 # Side/stitch recording and non-loop native entry remain independently closed.
 test "$(grep -Fc '#if (LJ_TARGET_X64 || LJ_TARGET_ARM64) && LJ_GC64' \
@@ -305,4 +410,4 @@ grep -F '#if LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED' \
   -o "$fixture"
 "$fixture"
 
-echo "arm64_jit_ir_admission_contract OK: exact spill-free scalar BC_LOOP policy and fail-closed boundary verified"
+echo "arm64_jit_ir_admission_contract OK: exact scalar BC_LOOP policy and bounded integer spill layout verified"

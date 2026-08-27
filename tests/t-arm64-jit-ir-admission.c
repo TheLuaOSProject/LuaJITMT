@@ -21,6 +21,7 @@
 #include "lj_ir.h"
 #include "lj_ircall.h"
 #include "lj_jit.h"
+#include "lj_target.h"
 #include "lj_trace.h"
 #include "lj_asm.h"
 #include "lj_vm.h"
@@ -187,7 +188,7 @@ static void make_forl_trace(jit_State *J)
 }
 
 static LJArm64IRReject expect_reject(jit_State *J,
-	LJArm64IRRejectReason reason, IROp op)
+		LJArm64IRRejectReason reason, IROp op)
 {
   LJArm64IRReject reject;
   if (lj_asm_arm64_ir_admit(J, &fx.T, &reject))
@@ -197,6 +198,230 @@ static LJArm64IRReject expect_reject(jit_State *J,
   assert(reject.reason == reason);
   assert(reject.op == op);
   return reject;
+}
+
+static LJArm64PostRAView make_postra_view(jit_State *J)
+{
+  LJArm64PostRAView view;
+  make_trace(J);
+  setir(R_END, IR_NOP, IRT_NIL, 0, 0);
+  view.ir = fx.ir;
+  view.snap = fx.snap;
+  view.snapmap = fx.snapmap;
+  view.proto_bc = proto_bc(fixture_pt);
+  view.nins = R_END+1u;
+  view.nk = fx.T.nk;
+  view.nsnap = fx.T.nsnap;
+  view.nsnapmap = fx.T.nsnapmap;
+  view.spadjust = 0;
+  view.proto_sizebc = fixture_pt->sizebc;
+  view.root_topslot = fixture_pt->framesize;
+  view.base_delta = 0;
+  return view;
+}
+
+static void expect_postra_result(LJArm64PostRAView *view, int admitted)
+{
+  IRRef semantic_nins = 0;
+  int result = lj_asm_arm64_postra_admit(view, &semantic_nins);
+  assert(result == admitted);
+  if (admitted)
+    assert(semantic_nins == R_END);
+}
+
+static void test_postra_spill_layout(jit_State *J)
+{
+  LJArm64PostRAView view;
+
+  view = make_postra_view(J);
+  expect_postra_result(&view, 1);
+
+  view = make_postra_view(J);
+  fx.ir[R_SUM1].s = 2;
+  fx.ir[R_SUM2].s = 3;
+  expect_postra_result(&view, 1);
+
+  view = make_postra_view(J);
+  fx.ir[R_SUM1].s = 4;
+  view.spadjust = 16;
+  expect_postra_result(&view, 1);
+
+  view = make_postra_view(J);
+  fx.ir[R_SUM1].s = 255;
+  view.spadjust = 1008;
+  expect_postra_result(&view, 1);
+
+  view = make_postra_view(J);
+  view.spadjust = 4;
+  expect_postra_result(&view, 0);
+  view.spadjust = 8;
+  expect_postra_result(&view, 0);
+  view.spadjust = 12;
+  expect_postra_result(&view, 0);
+  view.spadjust = 1024;
+  expect_postra_result(&view, 0);
+
+  view = make_postra_view(J);
+  fx.ir[R_SUM1].s = 4;
+  expect_postra_result(&view, 0);
+  view.spadjust = 32;
+  expect_postra_result(&view, 0);
+
+  view = make_postra_view(J);
+  fx.ir[R_SUM1].s = 255;
+  view.spadjust = 992;
+  expect_postra_result(&view, 0);
+
+  view = make_postra_view(J);
+  fx.ir[R_SUM1].s = 1;
+  expect_postra_result(&view, 0);
+
+  view = make_postra_view(J);
+  fx.ir[R_SUM1].prev = REGSP(RID_INIT, SPS_NONE);
+  expect_postra_result(&view, 0);
+
+  view = make_postra_view(J);
+  fx.ir[R_PRECOND].s = 2;
+  expect_postra_result(&view, 0);
+  view = make_postra_view(J);
+  fx.ir[R_LOOP].s = 2;
+  expect_postra_result(&view, 0);
+  view = make_postra_view(J);
+  fx.ir[R_XPOLL].s = 2;
+  expect_postra_result(&view, 0);
+  view = make_postra_view(J);
+  fx.ir[R_SUM1].t.irt = IRT_NUM|IRT_GUARD|IRT_ISPHI;
+  fx.ir[R_SUM1].s = 2;
+  expect_postra_result(&view, 0);
+
+  view = make_postra_view(J);
+  setir(R_END, IR_RENAME, IRT_NIL, R_SUM1, 0);
+  fx.ir[R_END].r = RID_X0;
+  fx.ir[R_SUM1].s = 2;
+  expect_postra_result(&view, 1);
+
+  view = make_postra_view(J);
+  setir(R_END, IR_RENAME, IRT_NIL, R_PRECOND, 0);
+  fx.ir[R_END].r = RID_X0;
+  expect_postra_result(&view, 0);
+  view = make_postra_view(J);
+  setir(R_END, IR_RENAME, IRT_NIL, R_SUM1, fx.T.nsnap);
+  fx.ir[R_END].r = RID_X0;
+  expect_postra_result(&view, 0);
+  view = make_postra_view(J);
+  setir(R_END, IR_RENAME, IRT_NIL, R_SUM1, 0);
+  fx.ir[R_END].r = RID_MAX_GPR;
+  expect_postra_result(&view, 0);
+  view = make_postra_view(J);
+  setir(R_END, IR_RENAME, IRT_NIL, R_SUM1, 0);
+  fx.ir[R_END].r = RID_X0;
+  fx.ir[R_END].s = 2;
+  expect_postra_result(&view, 0);
+
+  view = make_postra_view(J);
+  setir(R_END, IR_RENAME, IRT_NIL, R_SUM1, 0);
+  fx.ir[R_END].r = RID_X0;
+  setir(R_END+1u, IR_NOP, IRT_NIL, 0, 0);
+  view.nins++;
+  expect_postra_result(&view, 0);
+
+  view = make_postra_view(J);
+  fx.snap[1].mapofs = fx.T.nsnapmap+1u;
+  expect_postra_result(&view, 0);
+  view = make_postra_view(J);
+  fx.snap[1].nent = fx.T.nsnapmap;
+  expect_postra_result(&view, 0);
+
+  /* Revalidate the exact frozen snapshot partition, not just its outer
+  ** allocation bounds. These mutations stay in-bounds but must never be
+  ** reinterpreted as another snapshot's payload. */
+  view = make_postra_view(J);
+  fx.snap[1].mapofs = 1;
+  expect_postra_result(&view, 0);
+  view = make_postra_view(J);
+  fx.snap[1].nent = 1;
+  expect_postra_result(&view, 0);
+  view = make_postra_view(J);
+  fx.snap[1].nslots = 3;
+  expect_postra_result(&view, 0);
+  view = make_postra_view(J);
+  fx.snap[1].nslots = (uint8_t)(fixture_pt->framesize+2u+LJ_FR2);
+  expect_postra_result(&view, 0);
+  view = make_postra_view(J);
+  fx.snap[1].topslot = (uint8_t)(fixture_pt->framesize-1u);
+  expect_postra_result(&view, 0);
+  view = make_postra_view(J);
+  fx.snap[1].topslot = (uint8_t)(fixture_pt->framesize+1u);
+  expect_postra_result(&view, 0);
+  view = make_postra_view(J);
+  fx.snapmap[7] = SNAP(2, 0, R_SUM2);
+  expect_postra_result(&view, 0);
+
+  view = make_postra_view(J);
+  fx.snapmap[2] = SNAP(1, SNAP_FRAME|SNAP_NORESTORE, REF_NIL);
+  expect_postra_result(&view, 1);
+
+  view = make_postra_view(J);
+  fx.snapmap[6] = SNAP(2, SNAP_NORESTORE, R_SUM1);
+  expect_postra_result(&view, 0);
+  view = make_postra_view(J);
+  fx.snapmap[6] = SNAP(2, SNAP_FRAME, R_SUM1);
+  expect_postra_result(&view, 0);
+
+  /* A dynamic value must already exist at the snapshot reference. */
+  view = make_postra_view(J);
+  fx.snapmap[6] = SNAP(2, 0, R_BODY1);
+  expect_postra_result(&view, 0);
+  view = make_postra_view(J);
+  fx.snap[1].ref = R_SUM1;
+  expect_postra_result(&view, 0);
+  view = make_postra_view(J);
+  fx.snap[0].ref = REF_FIRST-1u;
+  expect_postra_result(&view, 0);
+  view = make_postra_view(J);
+  fx.snap[3].ref = R_END;
+  expect_postra_result(&view, 0);
+  view = make_postra_view(J);
+  fx.snap[3].ref = R_PRECOND;
+  fx.snapmap[10] = SNAP(2, 0, R_SUM1);
+  fx.snapmap[11] = SNAP(3, 0, R_SUM2);
+  expect_postra_result(&view, 0);
+
+  /* Integer constants are rematerialized only from the exact admitted
+  ** [nk, REF_TRUE) KINT interval. */
+  view = make_postra_view(J);
+  fx.snapmap[6] = SNAP(2, 0, K_STEP);
+  expect_postra_result(&view, 1);
+  view = make_postra_view(J);
+  fx.snapmap[6] = SNAP(2, 0, K_ZERO-1u);
+  expect_postra_result(&view, 0);
+  view = make_postra_view(J);
+  fx.snapmap[6] = SNAP(2, 0, K_STEP);
+  setir(K_STEP, IR_KNUM, IRT_NUM, 0, 0);
+  expect_postra_result(&view, 0);
+  view = make_postra_view(J);
+  view.nk = 0;
+  expect_postra_result(&view, 0);
+  view = make_postra_view(J);
+  view.nk = REF_TRUE+1u;
+  expect_postra_result(&view, 0);
+
+  /* The exact tail payload is part of exit restoration: its low byte is the
+  ** root base delta and its pointer must be aligned inside the held proto. */
+  view = make_postra_view(J);
+  set_snapshot_payload(2, fixture_snapshot_pc, 1);
+  expect_postra_result(&view, 0);
+  view = make_postra_view(J);
+  set_snapshot_payload(2,
+	(const BCIns *)((uintptr_t)proto_bc(fixture_pt)+1u), 0);
+  expect_postra_result(&view, 0);
+  view = make_postra_view(J);
+  set_snapshot_payload(2, (const BCIns *)((uintptr_t)proto_bc(fixture_pt)-
+	sizeof(BCIns)), 0);
+  expect_postra_result(&view, 0);
+  view = make_postra_view(J);
+  set_snapshot_payload(2, proto_bc(fixture_pt)+fixture_pt->sizebc, 0);
+  expect_postra_result(&view, 0);
 }
 
 typedef struct ThrowContext {
@@ -749,6 +974,7 @@ int main(void)
   savedstartpc = J->startpc;
   J->L = L;
   test_positive_and_negative(L);
+  test_postra_spill_layout(J);
   J->L = savedL;
   J->parent = savedparent;
   J->exitno = savedexit;
@@ -760,7 +986,7 @@ int main(void)
   J->startpc = savedstartpc;
   L->top--;
   lua_close(L);
-  puts("arm64_jit_ir_admission OK: spill-free scalar BC_LOOP policy and rejection matrix verified");
+  puts("arm64_jit_ir_admission OK: scalar BC_LOOP policy and integer spill layout verified");
   return 0;
 }
 

@@ -171,6 +171,238 @@ static int arm64_ir_int_value_op(IROp op)
   }
 }
 
+static int arm64_postra_int_value(IRIns ir)
+{
+  return arm64_ir_int_value_op((IROp)ir.o) &&
+	 arm64_ir_type_flags(ir.t, IRT_INT, IRT_GUARD,
+			     IRT_GUARD|IRT_ISPHI);
+}
+
+static int arm64_postra_spill_slot(MSize slot, MSize capacity)
+{
+  return slot >= SPS_FIRST && slot < capacity && slot < SPS_LIMIT;
+}
+
+/* Validate the immutable allocator layout used by native execution and exit
+** restoration. This is deliberately independent of recorder state: the same
+** bounded scan runs while assembling and after root entry publishes jit_base
+** as its trace-body lifetime lease. */
+int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
+	IRRef *semantic_ninsp)
+{
+  const IRIns *ir;
+  IRRef semantic_nins, ref, renref;
+  MSize spadjust, capacity, highest_end = 0;
+  MSize nsnap, nsnapmap;
+  uintptr_t proto_lo, proto_hi, proto_bytes;
+  int suffix_is_nop = 0;
+
+  LJ_STATIC_ASSERT(SPS_FIRST == 2);
+  LJ_STATIC_ASSERT(SPS_FIXED == 4);
+  LJ_STATIC_ASSERT(SPS_LIMIT == 256);
+
+  if (view == NULL || (ir = view->ir) == NULL || view->snap == NULL ||
+	view->snapmap == NULL || view->proto_bc == NULL ||
+	view->nins <= REF_FIRST ||
+	view->nins >= REF_DROP || view->nk == 0 || view->nk > REF_TRUE ||
+	view->nsnap == 0 || view->nsnapmap == 0 ||
+	view->proto_sizebc == 0 || view->root_topslot == 0 ||
+	view->root_topslot > UINT8_MAX || view->base_delta != 0)
+    return 0;
+  proto_lo = (uintptr_t)view->proto_bc;
+  if ((proto_lo & (sizeof(BCIns)-1u)) != 0 ||
+	(uintptr_t)view->proto_sizebc >
+	  (UINTPTR_MAX-proto_lo)/sizeof(BCIns))
+    return 0;
+  proto_bytes = (uintptr_t)view->proto_sizebc*sizeof(BCIns);
+  proto_hi = proto_lo+proto_bytes;
+  if (proto_hi <= proto_lo)
+    return 0;
+  nsnap = view->nsnap;
+  nsnapmap = view->nsnapmap;
+  spadjust = view->spadjust;
+  if ((spadjust & 15u) != 0 ||
+	spadjust > (MSize)sps_scale(SPS_LIMIT-SPS_FIXED))
+    return 0;
+  capacity = SPS_FIXED + spadjust / sizeof(int32_t);
+  if (capacity > SPS_LIMIT)
+    return 0;
+
+  semantic_nins = view->nins;
+  {
+    IRIns last = ir_load_acq(&ir[semantic_nins-1u]);
+    if (last.o == IR_NOP) {
+      if (last.t.irt != IRT_NIL || last.op1 != 0 || last.op2 != 0 ||
+	  last.prev != 0)
+	return 0;
+      semantic_nins--;
+      suffix_is_nop = 1;
+    } else {
+      MSize nrename = 0;
+      while (semantic_nins > REF_FIRST) {
+	IRIns ren = ir_load_acq(&ir[semantic_nins-1u]);
+	if (ren.o != IR_RENAME)
+	  break;
+	semantic_nins--;
+	nrename++;
+      }
+      if (nrename == 0 || nrename > LJ_MAX_PHI)
+	return 0;
+    }
+  }
+  if (semantic_nins <= REF_FIRST)
+    return 0;
+
+  for (ref = REF_BASE; ref < semantic_nins; ref++) {
+    IRIns ins = ir_load_acq(&ir[ref]);
+    MSize slot = ins.s;
+    switch ((IROp)ins.o) {
+    case IR_BASE:
+      if (ref != REF_BASE || ins.t.irt != IRT_PGC || slot != SPS_NONE)
+	return 0;
+      break;
+    case IR_SLOAD: case IR_ADDOV: case IR_SUBOV: case IR_MULOV:
+      if (!arm64_postra_int_value(ins))
+	return 0;
+      break;
+    case IR_LT: case IR_GE: case IR_LE: case IR_GT:
+    case IR_EQ: case IR_NE:
+      if (!arm64_ir_type_flags(ins.t, IRT_INT, IRT_GUARD, IRT_GUARD) ||
+	  slot != SPS_NONE)
+	return 0;
+      break;
+    case IR_LOOP: case IR_XPOLL:
+      if (!arm64_ir_type_flags(ins.t, IRT_NIL, IRT_GUARD, IRT_GUARD) ||
+	  slot != SPS_NONE)
+	return 0;
+      break;
+    case IR_PHI:
+      if (ins.t.irt != IRT_INT)
+	return 0;
+      break;
+    default:
+      return 0;
+    }
+    if (slot != SPS_NONE) {
+      MSize end = slot + 1u;
+      if (!arm64_postra_spill_slot(slot, capacity))
+	return 0;
+      if (end > highest_end)
+	highest_end = end;
+    }
+  }
+
+  if (highest_end <= SPS_FIXED) {
+    if (spadjust != 0)
+      return 0;
+  } else {
+    MSize expected = (MSize)sps_scale(sps_align(highest_end));
+    if (spadjust != expected || highest_end > capacity)
+      return 0;
+  }
+
+  if (!suffix_is_nop) {
+    for (ref = semantic_nins; ref < view->nins; ref++) {
+      IRIns ren = ir_load_acq(&ir[ref]);
+      IRIns source;
+      if (ren.o != IR_RENAME || ren.t.irt != IRT_NIL ||
+	  ren.op1 < REF_FIRST || ren.op1 >= semantic_nins ||
+	  ren.op2 >= nsnap || ren.r >= RID_MAX_GPR ||
+	  !rset_test(RSET_GPR, ren.r) || ren.s != SPS_NONE)
+	return 0;
+      source = ir_load_acq(&ir[ren.op1]);
+      if (!arm64_postra_int_value(source))
+	return 0;
+    }
+  }
+
+  {
+    MSize snapno;
+    MSize expected_mapofs = 0;
+    IRRef prev_snapref = 0;
+    for (snapno = 0; snapno < nsnap; snapno++) {
+      const SnapShot *snap = &view->snap[snapno];
+      MSize mapofs = snap_mapofs_acq(snap);
+      MSize nent = snap_nent_acq(snap);
+      MSize nslots = snap_nslots_acq(snap);
+      MSize topslot = snap_topslot_acq(snap);
+      MSize nextofs = snapno+1u < nsnap ?
+	  snap_mapofs_acq(&view->snap[snapno+1u]) : nsnapmap;
+      IRRef snapat = snap_ref_acq(snap);
+      SnapEntry pcraw[1+LJ_FR2];
+      uint64_t pcbase;
+      uintptr_t snappc;
+      MSize snappos;
+      MSize n;
+      if (snapat < REF_FIRST || snapat >= semantic_nins ||
+	  snapat < prev_snapref || mapofs > nsnapmap ||
+	  nextofs < mapofs || nextofs > nsnapmap ||
+	  mapofs != expected_mapofs || nent > nextofs-mapofs ||
+	  nextofs-mapofs-nent != 1u+LJ_FR2 ||
+	  nslots < 1u+LJ_FR2 || topslot != view->root_topslot ||
+	  nslots > view->root_topslot+1u+LJ_FR2)
+	return 0;
+      expected_mapofs = nextofs;
+      prev_snapref = snapat;
+      for (n = 0; n < nent; n++) {
+	SnapEntry sn = snapentry_acq(&view->snapmap[mapofs+n]);
+	IRRef valueref = snap_ref(sn);
+	BCReg slot = snap_slot(sn);
+	uint32_t flags = sn & 0x00ff0000u;
+	IRIns source;
+	RegSP rs;
+	if (slot >= nslots || (n != 0 &&
+	    slot <= snap_slot(snapentry_acq(&view->snapmap[mapofs+n-1u]))))
+	  return 0;
+	if (sn == SNAP(1, SNAP_FRAME|SNAP_NORESTORE, REF_NIL))
+	  continue;
+	if (slot < 1u+LJ_FR2 || flags != 0)
+	  return 0;
+	if (irref_isk(valueref)) {
+	  if (valueref < view->nk || valueref >= REF_TRUE)
+	    return 0;
+	  source = ir_load_acq(&ir[valueref]);
+	  if (source.o != IR_KINT || source.t.irt != IRT_INT)
+	    return 0;
+	  continue;
+	}
+	if (valueref < REF_FIRST || valueref >= snapat)
+	  return 0;
+	source = ir_load_acq(&ir[valueref]);
+	if (!arm64_postra_int_value(source))
+	  return 0;
+	rs = source.prev;
+	for (renref = view->nins; renref-- > semantic_nins; ) {
+	  IRIns ren = ir_load_acq(&ir[renref]);
+	  if (ren.o != IR_RENAME)
+	    break;
+	  if (ren.op1 == valueref && ren.op2 <= snapno)
+	    rs = ren.prev;
+	}
+	if (ra_hasspill(regsp_spill(rs))) {
+	  if (!arm64_postra_spill_slot(regsp_spill(rs), capacity))
+	    return 0;
+	} else if (regsp_reg(rs) >= RID_MAX_GPR ||
+		   !rset_test(RSET_GPR, regsp_reg(rs))) {
+	  return 0;
+	}
+      }
+      LJ_STATIC_ASSERT(sizeof(pcraw) == sizeof(pcbase));
+      for (n = 0; n < 1u+LJ_FR2; n++)
+	pcraw[n] = snapentry_acq(&view->snapmap[mapofs+nent+n]);
+      memcpy(&pcbase, pcraw, sizeof(pcbase));
+      snappc = (uintptr_t)(pcbase >> 8);
+      if ((uint8_t)pcbase != view->base_delta ||
+	  !arm64_ir_pcpos(snappc, proto_lo, proto_hi, &snappos))
+	return 0;
+    }
+  }
+
+  if (semantic_ninsp)
+    *semantic_ninsp = semantic_nins;
+  return 1;
+}
+
 static int arm64_ir_int_ref(const GCtrace *T, IRRef ref, IRRef before)
 {
   const IRIns *ir;
@@ -3347,11 +3579,11 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
 #if LJ_TARGET_ARM64
   {
     GCtrace finalview = *T;
+    LJArm64PostRAView postraview;
     LJArm64IRReject reject;
     IRIns *finalir = J->curfinal->ir;
-    IRRef ref;
     IRRef finalnins = T->nins;
-    int suffix_ok = 0;
+    IRRef validated_semantic_nins;
 
     /* Re-run the complete semantic policy against the register-allocated
     ** compact IR. Header and snapshot authority still comes from the current
@@ -3363,84 +3595,23 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
       lj_trace_err_info(J, LJ_TRERR_NYIIR);
     }
 
-    /* The first executable surface intentionally excludes actual value
-    ** spills, even though the fixed 16-byte VM reserve can hold slots 0..3.
-    ** Inspect final RegSP metadata rather than treating allocator cursors as
-    ** the architectural stack contract. */
-    if (T->spadjust != 0 || as->evenspill != SPS_FIRST || as->oddspill != 0) {
+    postraview.ir = finalir;
+    postraview.snap = T->snap;
+    postraview.snapmap = T->snapmap;
+    postraview.proto_bc = proto_bc(J->pt);
+    postraview.nins = finalnins;
+    postraview.nk = T->nk;
+    postraview.nsnap = T->nsnap;
+    postraview.nsnapmap = T->nsnapmap;
+    postraview.spadjust = T->spadjust;
+    postraview.proto_sizebc = J->pt->sizebc;
+    postraview.root_topslot = T->topslot;
+    postraview.base_delta = (uint8_t)(J->baseslot-2u);
+    if (LJ_UNLIKELY(!lj_asm_arm64_postra_admit(
+	  &postraview, &validated_semantic_nins) ||
+	validated_semantic_nins != arm64_semantic_nins)) {
       setintV(&J->errinfo, (int32_t)IR_RENAME);
       lj_trace_err_info(J, LJ_TRERR_NYIIR);
-    }
-    for (ref = REF_BASE; ref < arm64_semantic_nins; ref++) {
-      IRIns ir = ir_load_acq(&finalir[ref]);
-      if (ra_hasspill(ir.s)) {
-        setintV(&J->errinfo, (int32_t)ir.o);
-        lj_trace_err_info(J, LJ_TRERR_NYIIR);
-      }
-    }
-
-    /* A no-rename assembly retains the one exact spare NOP. Otherwise every
-    ** post-semantic instruction must be a bounded, register-only RENAME. */
-    if (finalnins == arm64_semantic_nins + 1u) {
-      IRIns ir = ir_load_acq(&finalir[arm64_semantic_nins]);
-      suffix_ok = ir.o == IR_NOP && ir.t.irt == IRT_NIL &&
-		  ir.op1 == 0 && ir.op2 == 0 && ir.prev == 0;
-    }
-    if (!suffix_ok && finalnins > arm64_semantic_nins &&
-	finalnins - arm64_semantic_nins <= LJ_MAX_PHI) {
-      suffix_ok = 1;
-      for (ref = arm64_semantic_nins; ref < finalnins; ref++) {
-	IRIns ir = ir_load_acq(&finalir[ref]);
-	if (ir.o != IR_RENAME || ir.t.irt != IRT_NIL ||
-	    ir.op1 < REF_FIRST || ir.op1 >= arm64_semantic_nins ||
-	    !arm64_ir_int_ref(&finalview, ir.op1, arm64_semantic_nins) ||
-	    ir.op2 >= T->nsnap || ir.r >= RID_MAX_GPR ||
-	    !rset_test(RSET_GPR, ir.r) ||
-	    ra_hasspill(ir.s)) {
-	  setintV(&J->errinfo, (int32_t)ir.o);
-	  lj_trace_err_info(J, LJ_TRERR_NYIIR);
-	}
-      }
-    }
-    if (LJ_UNLIKELY(!suffix_ok)) {
-      setintV(&J->errinfo, (int32_t)IR_RENAME);
-      lj_trace_err_info(J, LJ_TRERR_NYIIR);
-    }
-
-    /* A dynamic snapshot value cannot use the generic no-register
-    ** rematerialization path: this surface admits no CONV and no spills.
-    ** Resolve the effective RegSP exactly like snap_renameref(), then require
-    ** an allocated, non-fixed GPR. Range-check before rset_test(), since IR
-    ** register fields are untrusted bytes and oversized shifts are undefined. */
-    {
-      SnapNo snapno;
-      for (snapno = 0; snapno < T->nsnap; snapno++) {
-	const SnapShot *snap = &T->snap[snapno];
-	MSize n;
-	for (n = 0; n < snap->nent; n++) {
-	  SnapEntry sn = T->snapmap[snap->mapofs+n];
-	  IRRef snapref = snap_ref(sn);
-	  IRRef renref;
-	  RegSP rs;
-	  if (irref_isk(snapref) || (sn & SNAP_FRAME))
-	    continue;
-	  rs = ir_load_acq(&finalir[snapref]).prev;
-	  for (renref = finalnins; renref-- > arm64_semantic_nins; ) {
-	    IRIns ren = ir_load_acq(&finalir[renref]);
-	    if (ren.o != IR_RENAME)
-	      break;
-	    if (ren.op1 == snapref && ren.op2 <= snapno)
-	      rs = ren.prev;
-	  }
-	  if (ra_hasspill(regsp_spill(rs)) ||
-	      regsp_reg(rs) >= RID_MAX_GPR ||
-	      !rset_test(RSET_GPR, regsp_reg(rs))) {
-	    IROp op = (IROp)ir_load_acq(&finalir[snapref]).o;
-	    setintV(&J->errinfo, (int32_t)op);
-	    lj_trace_err_info(J, LJ_TRERR_NYIIR);
-	  }
-	}
-      }
     }
     T->unused1 |= TRACE_ARM64_INT_LOOP_ADMITTED;
   }

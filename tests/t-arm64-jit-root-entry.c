@@ -28,6 +28,8 @@
 #include "lj_func.h"
 #include "lj_gc2.h"
 #include "lj_jit.h"
+#include "lj_asm.h"
+#include "lj_target.h"
 #include "lj_thr.h"
 #include "lj_tg.h"
 #include "lj_trace.h"
@@ -78,14 +80,22 @@ typedef struct RootEntryTraceVec2 {
   GCRef slot[2];
 } RootEntryTraceVec2;
 
+enum {
+  ROOT_ENTRY_R_VALUE = REF_FIRST,
+  ROOT_ENTRY_R_LOOP,
+  ROOT_ENTRY_R_SUFFIX,
+  ROOT_ENTRY_R_END,
+  ROOT_ENTRY_IR_CAP = ROOT_ENTRY_R_END
+};
+
 typedef struct RootEntryMetadataFixture {
   GCtrace saved_cur;
   TraceVec *saved_tracev;
   MSize saved_sizetrace;
   RootEntryTraceVec2 tracev;
-  IRIns ir[2];
+  IRIns ir[ROOT_ENTRY_IR_CAP];
   SnapShot snap[1];
-  SnapEntry snapmap[2];
+  SnapEntry snapmap[3];
   MCode mcode[4];
 } RootEntryMetadataFixture;
 
@@ -186,10 +196,24 @@ static void remove_root_entry_frame(lua_State *L,
   copyTV(L, L->base-2, &fixture->saved_func);
 }
 
+static void root_entry_setir(IRIns *ir, IRRef ref, IROp op, IRType type,
+	IRRef op1, IRRef op2, Reg reg, MSize spill)
+{
+  assert(ref < ROOT_ENTRY_IR_CAP && reg <= UINT8_MAX && spill <= UINT8_MAX);
+  memset(&ir[ref], 0, sizeof(ir[ref]));
+  ir[ref].op1 = (IRRef1)op1;
+  ir[ref].op2 = (IRRef1)op2;
+  ir[ref].t.irt = (uint8_t)type;
+  ir[ref].o = (IROp1)op;
+  ir[ref].r = (uint8_t)reg;
+  ir[ref].s = (uint8_t)spill;
+}
+
 static void install_root_entry_metadata(jit_State *J, GCproto *pt,
 					const RootEntryPatch *loop,
 					RootEntryMetadataFixture *fixture)
 {
+  uint64_t snapshot_pcbase;
   memset(fixture, 0, sizeof(*fixture));
   fixture->saved_cur = J->cur;
   fixture->saved_tracev = tracevec_acq(J);
@@ -211,13 +235,33 @@ static void install_root_entry_metadata(jit_State *J, GCproto *pt,
   setmref(J->cur.startpc, loop->pc);
   J->cur.startins = loop->original;
   J->cur.ir = fixture->ir;
-  J->cur.nins = REF_FIRST+1;
+  J->cur.nins = ROOT_ENTRY_R_END;
   J->cur.nk = REF_TRUE;
   J->cur.snap = fixture->snap;
   J->cur.snapmap = fixture->snapmap;
   J->cur.nsnap = 1;
-  J->cur.nsnapmap = 2;
+  J->cur.nsnapmap = 3;
   J->cur.unused1 = TRACE_ARM64_INT_LOOP_ADMITTED;
+
+  root_entry_setir(fixture->ir, REF_BASE, IR_BASE, IRT_PGC,
+		   0, 0, RID_X0, SPS_NONE);
+  root_entry_setir(fixture->ir, ROOT_ENTRY_R_VALUE, IR_SLOAD,
+		   IRT_INT|IRT_GUARD, 2, IRSLOAD_TYPECHECK,
+		   RID_X0, SPS_NONE);
+  root_entry_setir(fixture->ir, ROOT_ENTRY_R_LOOP, IR_LOOP,
+		   IRT_NIL|IRT_GUARD, 0, 0, RID_X0, SPS_NONE);
+  root_entry_setir(fixture->ir, ROOT_ENTRY_R_SUFFIX, IR_NOP, IRT_NIL,
+		   0, 0, RID_X0, SPS_NONE);
+  fixture->snap[0].ref = ROOT_ENTRY_R_LOOP;
+  fixture->snap[0].mapofs = 0;
+  assert(pt->framesize > 2);
+  fixture->snap[0].nslots = pt->framesize;
+  fixture->snap[0].topslot = pt->framesize;
+  fixture->snap[0].nent = 1;
+  fixture->snapmap[0] = SNAP(2, 0, ROOT_ENTRY_R_VALUE);
+  snapshot_pcbase = (uint64_t)(uintptr_t)loop->pc << 8;
+  memcpy(&fixture->snapmap[1], &snapshot_pcbase, sizeof(snapshot_pcbase));
+
   fixture->mcode[0] = 0xd503201fu;  /* Unreachable AArch64 NOPs. */
   fixture->mcode[1] = 0xd503201fu;
   fixture->mcode[2] = 0xd503201fu;
@@ -278,6 +322,30 @@ static void expect_reject(LJTraceRootEntry entry)
   assert(entry.target == NULL);
 }
 
+static int root_entry_metadata_layout_valid(const GCtrace *T)
+{
+  LJArm64PostRAView view;
+  GCproto *pt = trace_startpt_acq((GCtrace *)T);
+  IRRef semantic_nins = 0;
+  int ok;
+  view.ir = T->ir;
+  view.snap = T->snap;
+  view.snapmap = T->snapmap;
+  view.proto_bc = proto_bc(pt);
+  view.nins = T->nins;
+  view.nk = T->nk;
+  view.nsnap = T->nsnap;
+  view.nsnapmap = T->nsnapmap;
+  view.spadjust = T->spadjust;
+  view.proto_sizebc = pt->sizebc;
+  view.root_topslot = T->topslot;
+  view.base_delta = 0;
+  ok = lj_asm_arm64_postra_admit(&view, &semantic_nins);
+  if (ok)
+    assert(semantic_nins == ROOT_ENTRY_R_SUFFIX);
+  return ok;
+}
+
 static void expect_metadata_reject(lua_State *L, const BCIns *pc)
 {
   uint32_t publishes = lj_trace_test_root_entry_publishes();
@@ -294,6 +362,7 @@ static void expect_metadata_success(lua_State *L, const BCIns *pc,
   lua_State *saved_tmpbuf_L = sbufL(&L->tg_hint->tmpbuf);
   uint32_t publishes = lj_trace_test_root_entry_publishes();
   uint32_t cleanups = lj_trace_test_root_entry_cleanups();
+  assert(root_entry_metadata_layout_valid(&L2J(L)->cur));
   LJTraceRootEntry entry = lj_trace_enter_root(
     L2J(L), pc, 1, L, L->base, BC_JLOOP);
   assert(entry.trace == &L2J(L)->cur);
@@ -309,8 +378,191 @@ static void expect_metadata_success(lua_State *L, const BCIns *pc,
   setsbufL(&L->tg_hint->tmpbuf, saved_tmpbuf_L);
 }
 
+static void expect_layout_reject(lua_State *L, const BCIns *pc)
+{
+  assert(!root_entry_metadata_layout_valid(&L2J(L)->cur));
+  expect_metadata_reject(L, pc);
+}
+
+static void test_spill_layout_mutations(lua_State *L, const BCIns *pc,
+					RootEntryMetadataFixture *fixture)
+{
+  GCtrace *T = &L2J(L)->cur;
+  IRIns *ir = T->ir;
+
+  LJ_STATIC_ASSERT(SPS_FIRST == 2);
+  LJ_STATIC_ASSERT(SPS_FIXED == 4);
+  LJ_STATIC_ASSERT(SPS_LIMIT == 256);
+
+  /* The interpreter's fixed 16-byte reserve covers slots 2 and 3 without a
+  ** dynamic adjustment. Both the shared validator and the root-entry gate
+  ** must accept those exact layouts. */
+  ir[ROOT_ENTRY_R_VALUE].s = SPS_FIRST;
+  T->spadjust = 0;
+  expect_metadata_success(L, pc, fixture);
+  ir[ROOT_ENTRY_R_VALUE].s = SPS_FIXED-1;
+  expect_metadata_success(L, pc, fixture);
+
+  /* Slot 4 is the first dynamic slot and requires one canonical 16-byte
+  ** extension beyond the fixed VM reserve. */
+  ir[ROOT_ENTRY_R_VALUE].s = SPS_FIXED;
+  T->spadjust = 16;
+  expect_metadata_success(L, pc, fixture);
+
+  T->spadjust = 4;
+  expect_layout_reject(L, pc);
+  T->spadjust = 8;
+  expect_layout_reject(L, pc);
+  T->spadjust = 12;
+  expect_layout_reject(L, pc);
+
+  /* Aligned but non-canonical dynamic sizes fail in both directions. */
+  T->spadjust = 0;
+  expect_layout_reject(L, pc);
+  T->spadjust = 32;
+  expect_layout_reject(L, pc);
+
+  assert((MSize)sps_scale(SPS_LIMIT-SPS_FIXED) == 1008u);
+  T->spadjust = (MSize)sps_scale(SPS_LIMIT-SPS_FIXED) + 16u;
+  expect_layout_reject(L, pc);
+
+  /* The advertised 16 bytes provide slots 4..7, never slot 8. */
+  ir[ROOT_ENTRY_R_VALUE].s = SPS_FIXED+4;
+  T->spadjust = 16;
+  expect_layout_reject(L, pc);
+
+  ir[ROOT_ENTRY_R_VALUE].s = SPS_FIRST-1;
+  T->spadjust = 0;
+  expect_layout_reject(L, pc);
+
+  /* Structural and guard-only instructions never own spill storage. */
+  ir[ROOT_ENTRY_R_VALUE].s = SPS_NONE;
+  root_entry_setir(ir, REF_BASE, IR_BASE, IRT_PGC,
+		   0, 0, RID_X0, SPS_FIRST);
+  expect_layout_reject(L, pc);
+  root_entry_setir(ir, REF_BASE, IR_BASE, IRT_PGC,
+		   0, 0, RID_X0, SPS_NONE);
+
+  root_entry_setir(ir, ROOT_ENTRY_R_VALUE, IR_LT,
+		   IRT_INT|IRT_GUARD, REF_NIL, REF_TRUE,
+		   RID_X0, SPS_FIRST);
+  expect_layout_reject(L, pc);
+  root_entry_setir(ir, ROOT_ENTRY_R_VALUE, IR_LOOP,
+		   IRT_NIL|IRT_GUARD, 0, 0, RID_X0, SPS_FIRST);
+  expect_layout_reject(L, pc);
+  root_entry_setir(ir, ROOT_ENTRY_R_VALUE, IR_XPOLL,
+		   IRT_NIL|IRT_GUARD, 1, 0, RID_X0, SPS_FIRST);
+  expect_layout_reject(L, pc);
+
+  /* Even an otherwise eligible producer is rejected when its spilled value
+  ** type is not the exact checked integer family. */
+  root_entry_setir(ir, ROOT_ENTRY_R_VALUE, IR_SLOAD,
+		   IRT_NUM|IRT_GUARD, 2, IRSLOAD_TYPECHECK,
+		   RID_X0, SPS_FIRST);
+  expect_layout_reject(L, pc);
+  root_entry_setir(ir, ROOT_ENTRY_R_VALUE, IR_SLOAD,
+		   IRT_INT|IRT_GUARD, 2, IRSLOAD_TYPECHECK,
+		   RID_X0, SPS_NONE);
+
+  /* A terminal, register-only RENAME is valid and changes the effective
+  ** snapshot location. Its own spill, source ref, snapshot number and
+  ** register byte are independent fail-closed boundaries. */
+  root_entry_setir(ir, ROOT_ENTRY_R_SUFFIX, IR_RENAME, IRT_NIL,
+		   ROOT_ENTRY_R_VALUE, 0, RID_X1, SPS_NONE);
+  expect_metadata_success(L, pc, fixture);
+
+  ir[ROOT_ENTRY_R_SUFFIX].s = SPS_FIRST;
+  expect_layout_reject(L, pc);
+  root_entry_setir(ir, ROOT_ENTRY_R_SUFFIX, IR_RENAME, IRT_NIL,
+		   ROOT_ENTRY_R_SUFFIX, 0, RID_X1, SPS_NONE);
+  expect_layout_reject(L, pc);
+  root_entry_setir(ir, ROOT_ENTRY_R_SUFFIX, IR_RENAME, IRT_NIL,
+		   ROOT_ENTRY_R_VALUE, T->nsnap, RID_X1, SPS_NONE);
+  expect_layout_reject(L, pc);
+  root_entry_setir(ir, ROOT_ENTRY_R_SUFFIX, IR_RENAME, IRT_NIL,
+		   ROOT_ENTRY_R_VALUE, 0, RID_MAX_GPR, SPS_NONE);
+  expect_layout_reject(L, pc);
+
+  root_entry_setir(ir, ROOT_ENTRY_R_SUFFIX, IR_NOP, IRT_NIL,
+		   0, 0, RID_X0, SPS_NONE);
+  T->spadjust = 0;
+  assert(root_entry_metadata_layout_valid(T));
+}
+
+static void test_snapshot_layout_mutations(lua_State *L, const BCIns *pc)
+{
+  GCtrace *T = &L2J(L)->cur;
+  SnapShot *snap = T->snap;
+  SnapEntry *snapmap = T->snapmap;
+  MSize saved_nslots = snap[0].nslots;
+  MSize saved_topslot = snap[0].topslot;
+  GCproto *pt = trace_startpt_acq(T);
+  uint64_t saved_pcbase, bad_pcbase;
+
+  assert(root_entry_metadata_layout_valid(T));
+
+  /* The frozen map is one canonical partition: one semantic entry followed
+  ** by the exact PC/base payload. In-bounds shifts and alternate spans fail. */
+  snap[0].mapofs = 1;
+  expect_layout_reject(L, pc);
+  snap[0].mapofs = 0;
+  snap[0].nent = 0;
+  expect_layout_reject(L, pc);
+  snap[0].nent = 1;
+  snap[0].nslots = 2;
+  expect_layout_reject(L, pc);
+  snap[0].nslots = (uint8_t)saved_nslots;
+  snap[0].nslots = (uint8_t)(T->topslot+2u+LJ_FR2);
+  expect_layout_reject(L, pc);
+  snap[0].nslots = (uint8_t)saved_nslots;
+  snap[0].topslot = (uint8_t)(saved_topslot-1u);
+  expect_layout_reject(L, pc);
+  snap[0].topslot = (uint8_t)(saved_topslot+1u);
+  expect_layout_reject(L, pc);
+  snap[0].topslot = (uint8_t)saved_topslot;
+
+  snapmap[0] = SNAP(2, SNAP_NORESTORE, ROOT_ENTRY_R_VALUE);
+  expect_layout_reject(L, pc);
+  snapmap[0] = SNAP(2, SNAP_FRAME, ROOT_ENTRY_R_VALUE);
+  expect_layout_reject(L, pc);
+
+  /* Exit restoration can only name an integer value that precedes this
+  ** snapshot, or an exact KINT in the advertised constant interval. */
+  snapmap[0] = SNAP(2, 0, ROOT_ENTRY_R_LOOP);
+  expect_layout_reject(L, pc);
+  snap[0].ref = ROOT_ENTRY_R_VALUE;
+  snapmap[0] = SNAP(2, 0, ROOT_ENTRY_R_VALUE);
+  expect_layout_reject(L, pc);
+  snap[0].ref = ROOT_ENTRY_R_LOOP;
+  snapmap[0] = SNAP(2, 0, REF_TRUE-1u);
+  expect_layout_reject(L, pc);
+
+  snapmap[0] = SNAP(2, 0, ROOT_ENTRY_R_VALUE);
+  T->nk = 0;
+  expect_layout_reject(L, pc);
+  T->nk = REF_TRUE;
+
+  memcpy(&saved_pcbase, &snapmap[1], sizeof(saved_pcbase));
+  bad_pcbase = saved_pcbase | UINT64_C(1);
+  memcpy(&snapmap[1], &bad_pcbase, sizeof(bad_pcbase));
+  expect_layout_reject(L, pc);
+  bad_pcbase = ((uint64_t)(uintptr_t)proto_bc(pt)+1u) << 8;
+  memcpy(&snapmap[1], &bad_pcbase, sizeof(bad_pcbase));
+  expect_layout_reject(L, pc);
+  bad_pcbase = ((uint64_t)((uintptr_t)proto_bc(pt)-sizeof(BCIns))) << 8;
+  memcpy(&snapmap[1], &bad_pcbase, sizeof(bad_pcbase));
+  expect_layout_reject(L, pc);
+  bad_pcbase = ((uint64_t)(uintptr_t)
+	(proto_bc(pt)+pt->sizebc)) << 8;
+  memcpy(&snapmap[1], &bad_pcbase, sizeof(bad_pcbase));
+  expect_layout_reject(L, pc);
+  memcpy(&snapmap[1], &saved_pcbase, sizeof(saved_pcbase));
+  assert(root_entry_metadata_layout_valid(T));
+}
+
 static void test_metadata_mutation_rejections(lua_State *L, GCproto *pt,
-					      RootEntryPatch *loop)
+					      RootEntryPatch *loop,
+					      RootEntryMetadataFixture *fixture)
 {
   jit_State *J = L2J(L);
   GCtrace *T = &J->cur;
@@ -342,9 +594,8 @@ static void test_metadata_mutation_rejections(lua_State *L, GCproto *pt,
   expect_metadata_reject(L, loop->pc);
   trace_nextside_rel(T, 0);
 
-  T->spadjust = 16;
-  expect_metadata_reject(L, loop->pc);
-  T->spadjust = 0;
+  test_spill_layout_mutations(L, loop->pc, fixture);
+  test_snapshot_layout_mutations(L, loop->pc);
 
   T->mcloop = 0;
   expect_metadata_reject(L, loop->pc);
@@ -680,7 +931,8 @@ int main(void)
     RootEntryMetadataFixture metadata;
     install_root_entry_metadata(J, metadata_pt, &metadata_loop, &metadata);
     expect_metadata_success(L, metadata_loop.pc, &metadata);
-    test_metadata_mutation_rejections(L, metadata_pt, &metadata_loop);
+    test_metadata_mutation_rejections(L, metadata_pt, &metadata_loop,
+				      &metadata);
     run_pause_race(L, metadata_loop.pc, ROOT_ENTRY_POLL_AFTER_METADATA);
     run_pause_race(L, metadata_loop.pc, ROOT_ENTRY_REQMASK_AFTER_METADATA);
     run_pause_race(L, metadata_loop.pc, ROOT_ENTRY_PROFILE_AFTER_METADATA);

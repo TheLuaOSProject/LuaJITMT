@@ -89,6 +89,7 @@ enum {
 */
 #define SPS_FIXED	4
 #define SPS_FIRST	2
+#define SPS_LIMIT	256
 
 #define SPOFS_TMP	0
 
@@ -101,7 +102,7 @@ enum {
 typedef struct {
   lua_Number fpr[RID_NUM_FPR];	/* Floating-point registers. */
   intptr_t gpr[RID_NUM_GPR];	/* General-purpose registers. */
-  int32_t spill[256];		/* Spill slots. */
+  int32_t spill[SPS_LIMIT];	/* Spill slots. */
 } ExitState;
 
 /* Keep the VM's fixed 512 byte register-save prefix in lockstep with C. */
@@ -112,6 +113,8 @@ LJ_STATIC_ASSERT(offsetof(ExitState, gpr) == 32 * sizeof(lua_Number));
 LJ_STATIC_ASSERT(offsetof(ExitState, spill) ==
 		 32 * sizeof(lua_Number) + 32 * sizeof(intptr_t));
 LJ_STATIC_ASSERT(offsetof(ExitState, spill) == 512);
+LJ_STATIC_ASSERT(sizeof(((ExitState *)0)->spill) / sizeof(int32_t) ==
+		 SPS_LIMIT);
 
 /* Highest exit + 1 indicates stack check. */
 #define EXITSTATE_CHECKEXIT	1

@@ -52,6 +52,7 @@ helper_region=$tmpdir/helper-region.txt
 pending_region=$tmpdir/pending-region.txt
 source_gate_region=$tmpdir/source-gate-region.txt
 loop_view_region=$tmpdir/loop-view-region.txt
+layout_region=$tmpdir/layout-region.txt
 vm_disasm=$tmpdir/vm.disasm
 vm_reloc=$tmpdir/vm.reloc
 jloop_region=$tmpdir/vm-jloop.txt
@@ -241,12 +242,51 @@ for required in '__arm64_root_jforl' '__arm64_root_jfori' \
   'trace_startpt_rel(&J->cur, pt);' \
   'trace_link_rel(&J->cur, 1);' \
   'J->cur.linktype = LJ_TRLINK_LOOP;' \
-  'J->cur.spadjust = 0;' \
   'J->cur.mcloop = (MSize)sizeof(MCode);' \
   'J->cur.unused1 = TRACE_ARM64_INT_LOOP_ADMITTED;' \
+  'IRIns ir[ROOT_ENTRY_IR_CAP];' \
   'J->cur.ir = fixture->ir;' \
+  'J->cur.nins = ROOT_ENTRY_R_END;' \
+  'J->cur.nk = REF_TRUE;' \
   'J->cur.snap = fixture->snap;' \
+  'J->cur.nsnapmap = 3;' \
+  'root_entry_setir(fixture->ir, REF_BASE, IR_BASE, IRT_PGC,' \
+  'root_entry_setir(fixture->ir, ROOT_ENTRY_R_VALUE, IR_SLOAD,' \
+  'root_entry_setir(fixture->ir, ROOT_ENTRY_R_LOOP, IR_LOOP,' \
+  'root_entry_setir(fixture->ir, ROOT_ENTRY_R_SUFFIX, IR_NOP, IRT_NIL,' \
+  'fixture->snap[0].ref = ROOT_ENTRY_R_LOOP;' \
+  'fixture->snapmap[0] = SNAP(2, 0, ROOT_ENTRY_R_VALUE);' \
+  'snapshot_pcbase = (uint64_t)(uintptr_t)loop->pc << 8;' \
+  'memcpy(&fixture->snapmap[1], &snapshot_pcbase, sizeof(snapshot_pcbase));' \
   'expect_metadata_success(L, metadata_loop.pc, &metadata);' \
+  'ir[ROOT_ENTRY_R_VALUE].s = SPS_FIRST;' \
+  'ir[ROOT_ENTRY_R_VALUE].s = SPS_FIXED-1;' \
+  'ir[ROOT_ENTRY_R_VALUE].s = SPS_FIXED;' \
+  'T->spadjust = 4;' \
+  'T->spadjust = 8;' \
+  'T->spadjust = 12;' \
+  'sps_scale(SPS_LIMIT-SPS_FIXED) == 1008u' \
+  'ir[ROOT_ENTRY_R_VALUE].s = SPS_FIXED+4;' \
+  'ir[ROOT_ENTRY_R_VALUE].s = SPS_FIRST-1;' \
+  'ROOT_ENTRY_R_VALUE, IR_LT,' \
+  'ROOT_ENTRY_R_VALUE, IR_LOOP,' \
+  'ROOT_ENTRY_R_VALUE, IR_XPOLL,' \
+  'ROOT_ENTRY_R_SUFFIX, IR_RENAME, IRT_NIL,' \
+  'ROOT_ENTRY_R_VALUE, T->nsnap, RID_X1, SPS_NONE);' \
+  'ROOT_ENTRY_R_VALUE, 0, RID_MAX_GPR, SPS_NONE);' \
+  'snap[0].mapofs = 1;' \
+  'snap[0].nent = 0;' \
+  'SNAP(2, SNAP_NORESTORE, ROOT_ENTRY_R_VALUE)' \
+  'SNAP(2, SNAP_FRAME, ROOT_ENTRY_R_VALUE)' \
+  'SNAP(2, 0, ROOT_ENTRY_R_LOOP)' \
+  'SNAP(2, 0, REF_TRUE-1u)' \
+  'T->topslot+2u+LJ_FR2' \
+  'saved_topslot-1u' \
+  'bad_pcbase = saved_pcbase | UINT64_C(1);' \
+  '(uintptr_t)proto_bc(pt)+1u' \
+  '(uintptr_t)proto_bc(pt)-sizeof(BCIns)' \
+  'proto_bc(pt)+pt->sizebc' \
+  'T->nk = 0;' \
   'lj_tg_store_jit_base(L->tg_hint, NULL);' \
   'T->unused1 &= (uint8_t)~TRACE_ARM64_INT_LOOP_ADMITTED;' \
   'T->retire_epoch = 1;' \
@@ -288,14 +328,17 @@ fence=$(line_of 'la_fence_seq()' 1)
 gate2=$(line_of 'lj_gc2_jit_entry_open(g)' 2)
 slot1=$(line_of 'trace_root_entry_slot_acq(J, traceno' 1)
 view1=$(line_of 'trace_root_entry_loop_view_acq(T, traceno' 1)
+layout1=$(line_of 'trace_root_entry_arm64_layout_valid(&view)' 1)
 mcode=$(line_of 'mcode = view.mcode' 1)
 slot2=$(line_of 'trace_root_entry_slot_acq(J, traceno' 2)
 view2=$(line_of 'trace_root_entry_loop_view_acq(T2, traceno' 1)
+layout2=$(line_of 'trace_root_entry_arm64_layout_valid(&view2)' 1)
 view_equal=$(line_of 'trace_root_entry_loop_view_equal(&view, &view2)' 1)
 pending1=$(line_of 'trace_root_entry_request_pending(tg)' 1)
 pending2=$(line_of 'trace_root_entry_request_pending(tg)' 2)
 pending3=$(line_of 'trace_root_entry_request_pending(tg)' 3)
 postmetadata=$(line_of 'LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA' 1)
+final_admission=$(line_of 'LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION' 1)
 tmpbuf=$(line_of 'setsbufL(&tg->tmpbuf, L)' 1)
 cleanup_line=$(line_of 'lj_tg_store_jit_base(tg, NULL)' 1)
 test "$source_gate" -lt "$frame_bound" &&
@@ -308,11 +351,18 @@ test "$frame_extent" -lt "$gate1" &&
 test "$gate1" -lt "$publish" &&
 test "$publish" -lt "$fence" && test "$fence" -lt "$gate2" &&
 test "$gate2" -lt "$pending2" && test "$pending2" -lt "$slot1" &&
-test "$slot1" -lt "$view1" && test "$view1" -lt "$mcode" &&
-test "$mcode" -lt "$slot2" && test "$slot2" -lt "$view2" &&
-test "$view2" -lt "$view_equal" && test "$view_equal" -lt "$postmetadata" &&
-test "$postmetadata" -lt "$pending3" && test "$pending3" -lt "$tmpbuf" &&
+test "$slot1" -lt "$view1" && test "$view1" -lt "$layout1" &&
+test "$layout1" -lt "$mcode" && test "$mcode" -lt "$slot2" &&
+test "$slot2" -lt "$view2" && test "$view2" -lt "$layout2" &&
+test "$layout2" -lt "$view_equal" && test "$view_equal" -lt "$postmetadata" &&
+test "$postmetadata" -lt "$pending3" &&
+test "$pending3" -lt "$final_admission" &&
+test "$final_admission" -lt "$tmpbuf" &&
 test "$tmpbuf" -lt "$cleanup_line"
+test "$publish" -lt "$layout1" && test "$layout1" -lt "$final_admission"
+test "$publish" -lt "$layout2" && test "$layout2" -lt "$final_admission"
+test "$(grep -Fc 'trace_root_entry_arm64_layout_valid(&view' \
+  "$helper_region")" = 2
 test "$(grep -c 'lj_tg_store_jit_base(tg, NULL)' "$helper_region")" = 1
 for required in trace_runnable_acq trace_startins_acq \
   trace_root_entry_loop_view_acq trace_root_entry_loop_view_equal \
@@ -332,9 +382,28 @@ awk '/^static int trace_root_entry_loop_view_acq/ { copy=1 }
 for required in trace_root_acq trace_link_acq trace_linktype_acq \
   trace_nextside_acq trace_nchild_acq trace_spadjust_acq trace_startptgco_acq \
   trace_startpc_acq trace_mcloop_acq trace_topslot_acq trace_ir_acq \
-  trace_snap_acq trace_snapmap_acq trace_traceno_acq retire_epoch \
+  trace_nk_acq trace_snap_acq trace_snapmap_acq trace_traceno_acq retire_epoch \
   TRACE_ENTRY_GATED TRACE_ARM64_INT_LOOP_ADMITTED; do
   grep "$required" "$loop_view_region" >/dev/null
+done
+if grep -F 'v->spadjust == 0' "$loop_view_region" >/dev/null; then
+  echo "root-entry metadata view still rejects all dynamic spill layouts" >&2
+  exit 1
+fi
+awk '/^static int trace_root_entry_arm64_layout_valid/ { copy=1 }
+     copy { print }
+     copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$layout_region"
+for required in 'postra.ir = v->ir;' 'postra.snap = v->snap;' \
+  'postra.snapmap = v->snapmap;' 'postra.proto_bc = proto_bc(pt);' \
+  'postra.nins = v->nins;' \
+  'postra.nk = v->nk;' \
+  'postra.nsnap = v->nsnap;' 'postra.nsnapmap = v->nsnapmap;' \
+  'postra.spadjust = v->spadjust;' \
+  'postra.proto_sizebc = pt->sizebc;' \
+  'postra.root_topslot = v->topslot;' \
+  'postra.base_delta = 0;' \
+  'return lj_asm_arm64_postra_admit(&postra, NULL);'; do
+  grep -F "$required" "$layout_region" >/dev/null
 done
 awk '/^static LJ_AINLINE int trace_root_entry_request_pending/ { copy=1 }
      copy { print }
