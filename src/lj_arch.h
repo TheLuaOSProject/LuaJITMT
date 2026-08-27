@@ -545,14 +545,14 @@
 #if defined(LUAJIT_DISABLE_JIT)
 #error "LUAJIT_MT_ARM64_JIT_EXPERIMENTAL cannot be combined with LUAJIT_DISABLE_JIT"
 #endif
-/* Exact bounded integer BC_LOOP roots are executable. Constant-step integer
-** BC_FORL roots may be recorded and published under their separate semantic
-** proof, while their JFORL native entry remains independently closed until
-** the post-update VM edge is proved end to end. */
+/* Exact bounded integer BC_LOOP roots and separately certified constant-step
+** integer BC_FORL roots are executable. JFORL enters only from the taken
+** integer edge after the interpreter has updated both IDX and EXT; the FP
+** edge remains on branch-only recovery. */
 #define LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED		0
 #define LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED		0
 #define LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED	0
-#define LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED	1
+#define LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED	0
 #define LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED		1
 #define LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED	1
 #define LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED	1

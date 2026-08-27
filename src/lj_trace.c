@@ -3638,6 +3638,7 @@ int lj_trace_test_proto_pc_candidate(global_State *g, GCobj *o,
 static LJ_AINLINE int trace_root_entry_source_valid(uint32_t sourceop)
 {
   return sourceop == (uint32_t)BC_JLOOP ||
+	 sourceop == (uint32_t)BC_JFORL ||
 	 sourceop == (uint32_t)BC_JFUNCF;
 }
 
@@ -3645,6 +3646,8 @@ static LJ_AINLINE int trace_root_entry_source_admitted(uint32_t sourceop)
 {
   if (sourceop == (uint32_t)BC_JLOOP)
     return !LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED;
+  if (sourceop == (uint32_t)BC_JFORL)
+    return !LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED;
   if (sourceop == (uint32_t)BC_JFUNCF)
     return !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED;
   return 0;
@@ -3656,7 +3659,9 @@ static LJ_AINLINE int trace_root_entry_start_valid(uint32_t sourceop,
   BCOp op = bc_op(startins);
   if (sourceop == (uint32_t)BC_JFUNCF)
     return op == BC_FUNCF;
-  return op == BC_LOOP;
+  if (sourceop == (uint32_t)BC_JFORL)
+    return op == BC_FORL;
+  return sourceop == (uint32_t)BC_JLOOP && op == BC_LOOP;
 }
 
 static LJ_AINLINE GCtrace *trace_root_entry_slot_acq(jit_State *J,
@@ -3674,26 +3679,49 @@ static LJ_AINLINE GCtrace *trace_root_entry_slot_acq(jit_State *J,
 
 static LJ_AINLINE int trace_root_entry_bytecode_valid(const BCIns *pc,
 					       TraceNo traceno,
-					       uint32_t sourceop)
+					       uint32_t sourceop,
+					       BCIns startins,
+					       BCIns sourceins)
 {
   BCIns ins = (BCIns)la_load32_acq((const uint32_t *)pc);
-  return (uint32_t)bc_op(ins) == sourceop && (TraceNo)bc_d(ins) == traceno;
+  BCIns expected = BCINS_AD((BCOp)sourceop, bc_a(startins), traceno);
+  return sourceins == expected && ins == sourceins;
 }
 
-static int trace_root_entry_loop_geometry(const GCproto *pt,
-	const BCIns *pc, BCIns startins)
+static int trace_root_entry_loop_geometry(uint32_t sourceop,
+	const GCproto *pt, const BCIns *pc, BCIns startins)
 {
   const BCIns *bc;
   BCPos pos;
-  int64_t endpos, target;
-  BCIns back;
-  if (pt == NULL || bc_op(startins) != BC_LOOP ||
-      (MSize)bc_a(startins) > (MSize)pt->framesize)
+  int64_t endpos, target, bodypos, foripos;
+  BCIns back, fori;
+  BCReg ra;
+  if (pt == NULL)
     return 0;
   bc = proto_bc(pt);
   if (!trace_pc_in_proto_range(pc, bc, pt->sizebc))
     return 0;
   pos = proto_bcpos(pt, pc);
+  if (sourceop == (uint32_t)BC_JFORL) {
+    ra = bc_a(startins);
+    bodypos = (int64_t)pos+1+(int64_t)bc_j(startins);
+    foripos = bodypos-1;
+    if (bc_op(startins) != BC_FORL || bc_j(startins) >= 0 ||
+	bodypos <= 0 || bodypos > (int64_t)pos || foripos < 0 ||
+	foripos >= (int64_t)pt->sizebc ||
+	(MSize)ra+FORL_EXT >= (MSize)pt->framesize)
+      return 0;
+    fori = (BCIns)la_load32_acq(
+	(const uint32_t *)&bc[(BCPos)foripos]);
+    endpos = foripos+1+(int64_t)bc_j(fori);
+    return bc_op(fori) == BC_FORI && bc_a(fori) == ra &&
+	   bc_j(fori) > 0 && endpos == (int64_t)pos+1 &&
+	   (BCIns)la_load32_acq(
+	     (const uint32_t *)&bc[(BCPos)foripos]) == fori;
+  }
+  if (sourceop != (uint32_t)BC_JLOOP || bc_op(startins) != BC_LOOP ||
+      (MSize)bc_a(startins) > (MSize)pt->framesize)
+    return 0;
   endpos = (int64_t)pos + (int64_t)bc_j(startins);
   if (bc_j(startins) <= 0 || endpos < 0 ||
       endpos >= (int64_t)pt->sizebc)
@@ -3730,8 +3758,13 @@ typedef struct TraceArm64LoopView {
 } TraceArm64LoopView;
 
 static int trace_root_entry_loop_view_acq(const GCtrace *T, TraceNo traceno,
-	const BCIns *pc, const GCproto *pt, TraceArm64LoopView *v)
+	const BCIns *pc, const GCproto *pt, uint32_t sourceop,
+	TraceArm64LoopView *v)
 {
+  uint8_t expected_admission = sourceop == (uint32_t)BC_JFORL ?
+	TRACE_ARM64_INT_FORL_ADMITTED : TRACE_ARM64_INT_LOOP_ADMITTED;
+  uint8_t root_admission = TRACE_ARM64_INT_LOOP_ADMITTED |
+	TRACE_ARM64_INT_FORL_ADMITTED;
   v->retire_epoch = la_load64_acq(&T->retire_epoch);
   v->startpt = trace_startptgco_acq((GCtrace *)T);
   v->startpc = trace_startpc_acq(T);
@@ -3759,7 +3792,7 @@ static int trace_root_entry_loop_view_acq(const GCtrace *T, TraceNo traceno,
 	 v->linktype == LJ_TRLINK_LOOP && v->nextside == 0 &&
 	 v->nchild == 0 &&
 	 v->startpt == obj2gco(pt) && v->startpc == pc &&
-	 trace_root_entry_loop_geometry(pt, pc, v->startins) &&
+	 trace_root_entry_loop_geometry(sourceop, pt, pc, v->startins) &&
 	 v->mcode != NULL && v->szmcode > sizeof(MCode) &&
 	 v->mcloop > 0 && v->mcloop < v->szmcode &&
 	 (v->mcloop & (sizeof(MCode)-1u)) == 0 &&
@@ -3768,7 +3801,7 @@ static int trace_root_entry_loop_view_acq(const GCtrace *T, TraceNo traceno,
 	 v->nk > 0 && v->nk <= REF_TRUE &&
 	 v->snap != NULL && v->snapmap != NULL && v->nsnap != 0 &&
 	 v->nsnapmap != 0 &&
-	 (v->admission & TRACE_ARM64_INT_LOOP_ADMITTED) != 0 &&
+	 (v->admission & root_admission) == expected_admission &&
 	 (v->admission & TRACE_ENTRY_GATED) == 0;
 }
 
@@ -3820,10 +3853,11 @@ static LJ_AINLINE int trace_root_entry_request_pending(const TGState *tg)
 ** waiting, entering SMR, invoking callbacks or raising an error. The gate
 ** close/recheck handshake makes the published TG-local jit_base the lifetime
 ** lease for every metadata and mcode load below. Rejection never repairs stale
-** bytecode: the VM caller must reload it and redispatch after this returns. */
+** bytecode: a fresh root may reload and redispatch, while a post-update JFORL
+** must recover the branch from its preserved consumed instruction. */
 LJTraceRootEntry LJ_FASTCALL
 lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
-		    lua_State *L, TValue *base, uint32_t sourceop)
+		    lua_State *L, TValue *base, BCIns sourceins)
 {
   LJTraceRootEntry result = { NULL, NULL };
   global_State *g;
@@ -3838,8 +3872,10 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
   MCode *mcode;
   MSize szmcode;
   ASMFunction target;
+  uint32_t sourceop = (uint32_t)bc_op(sourceins);
 
   if (J == NULL || pc == NULL || L == NULL || base == NULL || traceno == 0 ||
+      (TraceNo)bc_d(sourceins) != traceno ||
       !trace_root_entry_source_valid(sourceop) ||
       !trace_root_entry_source_admitted(sourceop) ||
       ((uintptr_t)(const void *)pc & (sizeof(BCIns)-1u)) != 0)
@@ -3897,9 +3933,10 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
   T = trace_root_entry_slot_acq(J, traceno, &tv);
   if (!trace_runnable_acq(T, traceno) ||
       !trace_root_entry_start_valid(sourceop, trace_startins_acq(T)) ||
-      !trace_root_entry_loop_view_acq(T, traceno, pc, pt, &view) ||
+      !trace_root_entry_loop_view_acq(T, traceno, pc, pt, sourceop, &view) ||
       !trace_root_entry_arm64_layout_valid(&view) ||
-      !trace_root_entry_bytecode_valid(pc, traceno, sourceop))
+      !trace_root_entry_bytecode_valid(pc, traceno, sourceop,
+				       view.startins, sourceins))
     goto reject_published;
   mcode = view.mcode;
   szmcode = view.szmcode;
@@ -3922,11 +3959,13 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
   ** torn body view without extending authority beyond the TG lifetime lease. */
   T2 = trace_root_entry_slot_acq(J, traceno, &tv2);
   if (tv2 != tv || T2 != T || !trace_runnable_acq(T2, traceno) ||
-      !trace_root_entry_loop_view_acq(T2, traceno, pc, pt, &view2) ||
+      !trace_root_entry_loop_view_acq(T2, traceno, pc, pt, sourceop,
+				      &view2) ||
       !trace_root_entry_arm64_layout_valid(&view2) ||
       !trace_root_entry_loop_view_equal(&view, &view2) ||
       !trace_root_entry_start_valid(sourceop, view2.startins) ||
-      !trace_root_entry_bytecode_valid(pc, traceno, sourceop))
+      !trace_root_entry_bytecode_valid(pc, traceno, sourceop,
+				       view2.startins, sourceins))
     goto reject_published;
 #if LJ_ABI_PAUTH
   if (trace_mcauth_acq(T2) != target ||
@@ -3935,7 +3974,8 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
 #endif
   trace_test_root_entry_pause_at(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA);
   if (trace_root_entry_request_pending(tg) ||
-      !trace_root_entry_bytecode_valid(pc, traceno, sourceop))
+      !trace_root_entry_bytecode_valid(pc, traceno, sourceop,
+				       view2.startins, sourceins))
     goto reject_published;
   /* Test-only boundary after the final admission recheck. A request published
   ** here must be observed by native XPOLL, not retroactively rejected by this

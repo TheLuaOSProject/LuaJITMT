@@ -4164,8 +4164,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     } else {
       |  str CARG1, FOR_EXT
     }
-    if (op == BC_JFORI || op == BC_JFORL) {
+    if (op == BC_JFORI) {
       |  ble =>BC_JLOOP
+    } else if (op == BC_JFORL) {
+      |  ble >9
     }
     if (op == BC_IFORL) {
       |  ble >8				// Poll only on the taken backedge.
@@ -4220,6 +4222,32 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  cbnz TMP0w, ->vm_safepoint
       |  b <2
     }
+    if (op == BC_JFORL) {
+      |9:  // Taken integer edge: IDX/EXT are authoritative before admission.
+      |  mov RAw, INSw			// Preserve the consumed full JFORL word.
+      |  str BASE, L->base
+      |  add CARG1, GL, #GG_G2J_HI
+      |  add CARG1, CARG1, #GG_G2J_LO
+      |  sub CARG2, PC, #4
+      |  mov CARG3w, RCw			// x28 preserves traceno across C.
+      |  mov CARG4, L
+      |  mov CARG5, BASE
+      |  mov CARG6w, INSw
+      |  bl extern lj_trace_enter_root
+      |  ldr BASE, L->base
+      |  cbz CRET1, >8
+      |  cbz CARG2, >8
+#if LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED
+      |  clear_tg_jit_base
+      |  b >8
+#else
+      |  sub sp, sp, #16	// SPS_FIXED: protect the interpreter C frame.
+      |  br_trace_auth CARG2, CRET1
+#endif
+      |8:  // The already-executed edge must never redispatch as fresh bytecode.
+      |  mov INSw, RAw
+      |  b =>BC_JLOOP
+    }
     break;
 
   case BC_ITERL:
@@ -4272,8 +4300,9 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
   case BC_JLOOP:
     |.if JIT
-    |  // JFOR*/JITERL also tail here after performing their edge semantics.
-    |  // Only a directly dispatched JLOOP is a strict root admission site.
+    |  // FP JFORL, JFORI and JITERL tail here after performing edge semantics.
+    |  // Integer JFORL has its own post-update native-entry site above.
+    |  // Only a directly dispatched JLOOP is admitted at this label.
     |  and TMP0w, INSw, #255
     |  cmp TMP0w, #BC_JLOOP
     |  bne >5
@@ -4286,7 +4315,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  decode_RD CARG3, INS
     |  mov CARG4, L
     |  mov CARG5, BASE
-    |  mov CARG6w, #BC_JLOOP
+    |  mov CARG6w, INSw
     |  bl extern lj_trace_enter_root
     |  ldr BASE, L->base
     |  cbz CRET1, >1
@@ -4423,7 +4452,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  decode_RD CARG3, INS
       |  mov CARG4, L
       |  mov CARG5, BASE
-      |  mov CARG6w, #BC_JFUNCF
+      |  mov CARG6w, INSw
       |  bl extern lj_trace_enter_root
       |  ldr BASE, L->base
       |  cbz CRET1, >4

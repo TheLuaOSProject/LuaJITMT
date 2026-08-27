@@ -1,7 +1,7 @@
 /*
 ** macOS ARM64 recorder/publication contract for constant-step integer FORL.
-** Native JFORL entry remains closed: every taken edge must use the existing
-** branch-only recovery after the interpreter has updated IDX and EXT.
+** Integer JFORL edges may enter the certified native root after updating IDX
+** and EXT; numeric FP edges retain branch-only recovery.
 */
 
 #include <assert.h>
@@ -33,10 +33,10 @@
     !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED || \
     LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED || \
-    !LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED || \
+    LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED || \
     !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED
-#error "t-arm64-jit-forl-record requires publication-only ARM64 FORL gates"
+#error "t-arm64-jit-forl-record requires executable ARM64 FORL gates"
 #endif
 
 enum {
@@ -355,11 +355,25 @@ static GCtrace *expect_published_forl(lua_State *L, GCproto *pt)
   return T;
 }
 
-static void expect_no_native_entry(void)
+static void expect_branch_only(void)
 {
   assert(lj_trace_test_root_entry_publishes() == 0);
   assert(lj_trace_test_root_entry_cleanups() == 0);
   assert(lj_trace_test_exit_calls() == 0);
+}
+
+static void expect_native_entry(void)
+{
+  assert(lj_trace_test_root_entry_publishes() != 0);
+  assert(lj_trace_test_root_entry_cleanups() == 0);
+  assert(lj_trace_test_exit_calls() ==
+	 lj_trace_test_root_entry_publishes());
+}
+
+static void reset_native_activity(void)
+{
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
 }
 
 static void run_positive(void)
@@ -379,25 +393,25 @@ static void run_positive(void)
     "  return s\n"
     "end\n");
   pt = global_proto(L, "__arm64_forl_positive");
-  lj_trace_test_root_entry_reset();
+  reset_native_activity();
   assert(call1(L, "__arm64_forl_positive", 100) == 5050);
   T = expect_published_forl(L, pt);
   forlpc = trace_startpc_acq(T);
   forl = trace_startins_acq(T);
   expect_positive_ir(T, pt);
   expect_positive_snapshots(T, pt);
-  expect_no_native_entry();
-  assert(lj_trace_test_root_entry_startins_calls() != 0);
-  lj_trace_test_root_entry_reset();
+  expect_native_entry();
+  assert(lj_trace_test_root_entry_startins_calls() == 0);
+  reset_native_activity();
   assert(call1(L, "__arm64_forl_positive", 37) == 703);
-  expect_no_native_entry();
-  assert(lj_trace_test_root_entry_startins_calls() == 36);
+  expect_native_entry();
+  assert(lj_trace_test_root_entry_startins_calls() == 0);
 
   /* A later numeric STOP takes the FP JFORL edge. Stage 1 must keep that
   ** edge on branch-only recovery even though the integer trace is published. */
-  lj_trace_test_root_entry_reset();
+  reset_native_activity();
   assert(callnum1(L, "__arm64_forl_positive", 3.5) == 6.0);
-  expect_no_native_entry();
+  expect_branch_only();
   assert(lj_trace_test_root_entry_startins_calls() == 2);
 
   run_lua(L, "jit.flush()\n");
@@ -405,15 +419,15 @@ static void run_positive(void)
   assert(proto_jit_startins_acq(pt, forlpc) == forl);
   assert(!trace_runnable_acq(traceref_safe(L2J(L), 1), 1));
 
-  lj_trace_test_root_entry_reset();
+  reset_native_activity();
   assert(call1(L, "__arm64_forl_positive", 100) == 5050);
   T = expect_published_forl(L, pt);
   assert(trace_startpc_acq(T) == forlpc);
   assert(trace_startins_acq(T) == forl);
   expect_positive_ir(T, pt);
   expect_positive_snapshots(T, pt);
-  expect_no_native_entry();
-  assert(lj_trace_test_root_entry_startins_calls() != 0);
+  expect_native_entry();
+  assert(lj_trace_test_root_entry_startins_calls() == 0);
   lua_close(L);
 }
 
@@ -435,7 +449,7 @@ static void run_negative(void)
     "  return s\n"
     "end\n");
   pt = global_proto(L, "__arm64_forl_negative");
-  lj_trace_test_root_entry_reset();
+  reset_native_activity();
   assert(call1(L, "__arm64_forl_negative", 100) == 1717);
   T = expect_published_forl(L, pt);
   ir = trace_ir_acq(T);
@@ -462,12 +476,12 @@ static void run_negative(void)
   expect_ir(ir, N_SUM_PHI, IR_PHI, IRT_INT, N_SUM_PRE, N_SUM_BODY);
   expect_ir(ir, N_RENAME, IR_RENAME, IRT_NIL, N_SUM_PRE, 3);
   assert(trace_spadjust_acq(T) == 0);
-  expect_no_native_entry();
-  assert(lj_trace_test_root_entry_startins_calls() != 0);
-  lj_trace_test_root_entry_reset();
+  expect_native_entry();
+  assert(lj_trace_test_root_entry_startins_calls() == 0);
+  reset_native_activity();
   assert(call1(L, "__arm64_forl_negative", 40) == 287);
-  expect_no_native_entry();
-  assert(lj_trace_test_root_entry_startins_calls() == 13);
+  expect_native_entry();
+  assert(lj_trace_test_root_entry_startins_calls() == 0);
   lua_close(L);
 }
 
@@ -493,14 +507,14 @@ static void run_rejections(void)
     "  return c\n"
     "end\n");
   J = L2J(L);
-  lj_trace_test_root_entry_reset();
+  reset_native_activity();
   assert(call3(L, "__arm64_forl_dynamic", 1, 40, 2) == 400);
   assert(!trace_runnable_acq(traceref_safe(J, 1), 1));
-  expect_no_native_entry();
+  expect_branch_only();
   assert(lj_trace_test_root_entry_startins_calls() == 0);
   assert(call1(L, "__arm64_forl_zero", 0) == 10);
   assert(!trace_runnable_acq(traceref_safe(J, 1), 1));
-  expect_no_native_entry();
+  expect_branch_only();
   lua_close(L);
 }
 
@@ -522,7 +536,7 @@ static void run_negative_dynamic_stop(void)
     "  return s\n"
     "end\n");
   pt = global_proto(L, "__arm64_forl_negative_stop");
-  lj_trace_test_root_entry_reset();
+  reset_native_activity();
   assert(call2(L, "__arm64_forl_negative_stop", 100, 1) == 1717);
   T = expect_published_forl(L, pt);
   ir = trace_ir_acq(T);
@@ -540,8 +554,8 @@ static void run_negative_dynamic_stop(void)
   assert(ir[R_PRECOND].o == IR_GE && ir[R_PRECOND].op2 == R_STOP);
   assert(ir[R_IDX_BODY].o == IR_ADD && ir[R_IDX_BODY].op2 == minus3);
   assert(ir[R_COND].o == IR_GE && ir[R_COND].op2 == R_STOP);
-  expect_no_native_entry();
-  assert(lj_trace_test_root_entry_startins_calls() != 0);
+  expect_native_entry();
+  assert(lj_trace_test_root_entry_startins_calls() == 0);
   lua_close(L);
 }
 
@@ -551,7 +565,7 @@ int main(void)
   run_negative();
   run_negative_dynamic_stop();
   run_rejections();
-  puts("arm64_jit_forl_record OK: constant-step roots published; JFORL stayed branch-only");
+  puts("arm64_jit_forl_record OK: constant-step roots published and entered; FP stayed branch-only");
   return 0;
 }
 
@@ -559,7 +573,7 @@ int main(void)
 
 int main(void)
 {
-  puts("arm64_jit_forl_record SKIP: requires publication-only macOS ARM64 FORL");
+  puts("arm64_jit_forl_record SKIP: requires executable macOS ARM64 FORL");
   return 0;
 }
 

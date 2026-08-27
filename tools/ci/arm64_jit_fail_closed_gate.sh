@@ -8,6 +8,11 @@ if test "$(uname -s)" != Darwin || test "$(uname -m)" != arm64; then
   exit 0
 fi
 
+if test -z "${SDKROOT:-}"; then
+  SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
+  export SDKROOT
+fi
+
 lock_dir=$root/src/.lj-test-run.lock
 lock_held=0
 
@@ -66,6 +71,8 @@ LJ_TEST_ROOT="$root" sh "$root/tools/ci/jit_recorder_safepoint_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_ir_admission_contract.sh"
 LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
   sh "$root/tools/ci/arm64_jit_forl_record_contract.sh"
+LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
+  sh "$root/tools/ci/arm64_jit_native_forl_contract.sh"
 
 # The native-loop tranche may be landed independently of this umbrella gate.
 # Run its executable proof automatically once the companion contract exists.
@@ -102,4 +109,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" LUA_PATH="$lua_path" \
   "$luajit" "$root/tools/test.lua" \
     m5_arm64_jit_fail_closed_safepoint_runtime
 
-echo "arm64_jit_fail_closed_gate OK: dynamic-step FORL stayed interpreted; constrained LOOP/FORL contracts sound"
+echo "arm64_jit_fail_closed_gate OK: dynamic-step FORL stayed interpreted; constrained LOOP/FORL publication and entry contracts sound"

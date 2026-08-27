@@ -1,11 +1,12 @@
 /*
 ** macOS ARM64e negative contract for authenticated root-trace entry.
 **
-** Each mutation mode runs in a fresh process. It records and validates the
-** one admitted integer BC_LOOP, changes only GCtrace.mcauth, revalidates the
-** semantic body, and dispatches the already-patched JLOOP. The supervising
-** process requires Darwin to terminate that child with SIGBUS; a helper
-** rejection, an assertion, or a successful native entry is not accepted.
+** Each mutation mode runs in a fresh process. It records and validates either
+** an admitted integer BC_LOOP or integer BC_FORL root, changes only
+** GCtrace.mcauth, revalidates the semantic body, and dispatches the patched
+** JLOOP or taken integer JFORL edge. The supervising process requires Darwin
+** to terminate that child with SIGBUS; a helper rejection, an assertion, or a
+** successful native entry is not accepted.
 */
 
 #include <assert.h>
@@ -45,12 +46,14 @@
 #if !LJ_TARGET_OSX || !LJ_TARGET_ARM64 || !LJ_ABI_PAUTH || \
     !LJ_ABI_BRANCH_TRACK || !LJ_HASJIT || \
     LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED || \
+    LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED || \
     !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED || \
     LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED || \
+    LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED || \
     !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED
-#error "t-arm64e-jit-trace-pauth requires exact ARM64e loop gates and BTI"
+#error "t-arm64e-jit-trace-pauth requires exact ARM64e LOOP/FORL gates and BTI"
 #endif
 
 extern char **environ;
@@ -81,6 +84,11 @@ typedef enum EntryMode {
   ENTRY_WRONG_TRACE
 } EntryMode;
 
+typedef enum EntrySite {
+  ENTRY_SITE_JLOOP,
+  ENTRY_SITE_JFORL
+} EntrySite;
+
 static const IRRef expected_snaprefs[] = {
   R_I, R_I_NEXT, R_X_NEXT, R_N, R_PRECOND, R_LOOP,
   R_I_BODY, R_X_BODY, R_COND
@@ -98,11 +106,22 @@ static void run_lua(lua_State *L, const char *chunk)
   }
 }
 
-static int call_sum(lua_State *L, lua_Integer n, lua_Integer expected,
-	int signal_ready)
+static const char *entry_function_name(EntrySite site)
+{
+  return site == ENTRY_SITE_JFORL ? "__arm64e_pauth_integer_forl" :
+	 "__arm64e_pauth_integer_loop";
+}
+
+static const char *entry_site_name(EntrySite site)
+{
+  return site == ENTRY_SITE_JFORL ? "JFORL" : "JLOOP";
+}
+
+static int call_sum(lua_State *L, EntrySite site, lua_Integer n,
+	lua_Integer expected, int signal_ready)
 {
   int status;
-  lua_getglobal(L, "__arm64e_pauth_integer_loop");
+  lua_getglobal(L, entry_function_name(site));
   if (!lua_isfunction(L, -1))
     return 71;
   lua_pushinteger(L, n);
@@ -120,11 +139,11 @@ static int call_sum(lua_State *L, lua_Integer n, lua_Integer expected,
   return 0;
 }
 
-static GCproto *global_proto(lua_State *L)
+static GCproto *global_proto(lua_State *L, EntrySite site)
 {
   GCfunc *fn;
   GCproto *pt;
-  lua_getglobal(L, "__arm64e_pauth_integer_loop");
+  lua_getglobal(L, entry_function_name(site));
   assert(lua_isfunction(L, -1));
   fn = funcV(L->top - 1);
   assert(isluafunc(fn));
@@ -219,7 +238,38 @@ static void expect_loop_geometry(const GCtrace *T, const GCproto *pt)
   assert(target >= 0 && target <= pos && target < (int64_t)pt->sizebc);
 }
 
-static void expect_exact_body(jit_State *J, GCtrace *T, GCproto *pt)
+static void expect_forl_geometry(const GCtrace *T, const GCproto *pt)
+{
+  const BCIns *bc = proto_bc(pt);
+  const BCIns *pc = trace_startpc_acq(T);
+  BCIns startins = trace_startins_acq(T);
+  BCIns live, fori;
+  int64_t pos, bodypos, foripos, exitpos;
+
+  assert(pc >= bc && pc < bc + pt->sizebc);
+  pos = (int64_t)proto_bcpos(pt, pc);
+  assert(bc_op(startins) == BC_FORL);
+  assert(bc_j(startins) < 0);
+  assert((MSize)bc_a(startins)+FORL_EXT < (MSize)pt->framesize);
+  bodypos = pos+1+(int64_t)bc_j(startins);
+  foripos = bodypos-1;
+  assert(bodypos > 0 && bodypos <= pos);
+  assert(foripos >= 0 && foripos < (int64_t)pt->sizebc);
+  fori = (BCIns)la_load32_acq(
+    (const uint32_t *)&bc[(BCPos)foripos]);
+  assert(bc_op(fori) == BC_FORI);
+  assert(bc_a(fori) == bc_a(startins));
+  assert(bc_j(fori) > 0);
+  exitpos = foripos+1+(int64_t)bc_j(fori);
+  assert(exitpos == pos+1);
+  assert((BCIns)la_load32_acq(
+    (const uint32_t *)&bc[(BCPos)foripos]) == fori);
+  live = (BCIns)la_load32_acq((const uint32_t *)pc);
+  assert(live == BCINS_AD(BC_JFORL, bc_a(startins), 1));
+  assert(proto_jit_startins_acq(pt, pc) == startins);
+}
+
+static void expect_exact_loop_body(jit_State *J, GCtrace *T, GCproto *pt)
 {
   const BCIns *pc;
   BCIns patched;
@@ -259,6 +309,55 @@ static void expect_exact_body(jit_State *J, GCtrace *T, GCproto *pt)
 
   for (traceno = 2; (MSize)traceno < trace_sizetrace_acq(J); traceno++)
     assert(!trace_runnable_acq(traceref_safe(J, traceno), traceno));
+}
+
+static void expect_exact_forl_body(jit_State *J, GCtrace *T, GCproto *pt)
+{
+  uint8_t admission;
+  TraceNo traceno;
+
+  assert(T != NULL && trace_runnable_acq(T, 1));
+  assert(trace_traceno_acq(T) == 1);
+  assert(trace_root_acq(T) == 0);
+  assert(trace_link_acq(T) == 1);
+  assert(trace_linktype_acq(T) == LJ_TRLINK_LOOP);
+  assert(trace_nchild_acq(T) == 0);
+  assert(trace_nextside_acq(T) == 0);
+  assert(trace_startpt_acq(T) == pt);
+  assert(la_load64_acq(&T->retire_epoch) == 0);
+  admission = la_load8_acq(&T->unused1);
+  assert((admission & TRACE_ENTRY_GATED) == 0);
+  assert((admission & (TRACE_ARM64_INT_LOOP_ADMITTED |
+	 TRACE_ARM64_INT_FORL_ADMITTED)) == TRACE_ARM64_INT_FORL_ADMITTED);
+
+  expect_forl_geometry(T, pt);
+  assert(proto_trace_acq(pt) == 1);
+  assert(trace_spadjust_acq(T) == 0);
+  assert(trace_topslot_acq(T) == (MSize)pt->framesize);
+  assert(trace_ir_acq(T) != NULL);
+  assert(trace_nins_acq(T) > REF_FIRST);
+  assert(trace_snap_acq(T) != NULL);
+  assert(trace_snapmap_acq(T) != NULL);
+  assert(trace_nsnap_acq(T) != 0);
+  assert(trace_nsnapmap_acq(T) != 0);
+  assert(trace_mcode_acq(T) != NULL);
+  assert(trace_szmcode_acq(T) > sizeof(MCode));
+  assert(trace_mcode_acq(T)[0] == A64I_BTI_J);
+  assert(trace_mcloop_acq(T) > 0 &&
+	 trace_mcloop_acq(T) < trace_szmcode_acq(T));
+  assert((trace_mcloop_acq(T) & (sizeof(MCode)-1u)) == 0);
+
+  for (traceno = 2; (MSize)traceno < trace_sizetrace_acq(J); traceno++)
+    assert(!trace_runnable_acq(traceref_safe(J, traceno), traceno));
+}
+
+static void expect_exact_body(jit_State *J, GCtrace *T, GCproto *pt,
+	EntrySite site)
+{
+  if (site == ENTRY_SITE_JFORL)
+    expect_exact_forl_body(J, T, pt);
+  else
+    expect_exact_loop_body(J, T, pt);
 }
 
 static uintptr_t function_bits(ASMFunction fn)
@@ -328,7 +427,7 @@ static void signal_negative_ready(void)
     _exit(85);
 }
 
-static int child_mode(EntryMode mode)
+static int child_mode(EntrySite site, EntryMode mode)
 {
   lua_State *L = luaL_newstate();
   jit_State *J;
@@ -354,37 +453,44 @@ static int child_mode(EntryMode mode)
   run_lua(L,
     "jit.flush(); jit.on(); "
     "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
-    "local function f(n) "
+    "local function loop(n) "
       "local i,x=0,0 "
       "while i<n do i=i+1 x=x+i end "
       "return x "
     "end "
-    "__arm64e_pauth_integer_loop=f");
+    "local function forl(n) "
+      "local x=0 "
+      "for i=1,n do x=x+i end "
+      "return x "
+    "end "
+    "__arm64e_pauth_integer_loop=loop "
+    "__arm64e_pauth_integer_forl=forl");
 
   /* The first call records and executes the valid baseline. */
-  assert(call_sum(L, 20, 210, 0) == 0);
+  assert(call_sum(L, site, 20, 210, 0) == 0);
   assert(L->cframe == saved_cframe);
   assert(lj_tg_load_jit_base(tg) == NULL);
   assert(lj_tg_vmstate_load_acq(tg) == saved_vmstate);
-  pt = global_proto(L);
+  pt = global_proto(L, site);
   T = traceref_safe(J, 1);
   expect_open_entry_gates(L, tg);
-  expect_exact_body(J, T, pt);
+  expect_exact_body(J, T, pt, site);
   expect_valid_trace_signature(T);
 
   lj_trace_test_root_entry_reset();
   lj_trace_test_reset_exit_stats();
   if (mode == ENTRY_CONTROL) {
-    assert(call_sum(L, 20, 210, 0) == 0);
+    assert(call_sum(L, site, 20, 210, 0) == 0);
     assert(lj_trace_test_root_entry_publishes() == 1);
     assert(lj_trace_test_root_entry_cleanups() == 0);
     assert(lj_trace_test_exit_calls() == 1);
     assert(lj_trace_test_last_exit_parent() == 1);
-    assert(lj_trace_test_last_exitno() == 8);
+    assert(lj_trace_test_last_exitno() ==
+	   (site == ENTRY_SITE_JFORL ? 5 : 8));
     assert(L->cframe == saved_cframe);
     assert(lj_tg_load_jit_base(tg) == NULL);
     assert(lj_tg_vmstate_load_acq(tg) == saved_vmstate);
-    expect_exact_body(J, T, pt);
+    expect_exact_body(J, T, pt, site);
     expect_valid_trace_signature(T);
     lua_close(L);
     return 0;
@@ -411,15 +517,15 @@ static int child_mode(EntryMode mode)
 
   /* Re-prove every non-PAUTH admission predicate after the only mutation. */
   expect_open_entry_gates(L, tg);
-  expect_exact_body(J, T, pt);
-  fprintf(stderr, "ARM64e trace-PAUTH attempting negative mode %d\n",
-	  (int)mode);
+  expect_exact_body(J, T, pt, site);
+  fprintf(stderr, "ARM64e trace-PAUTH attempting %s negative mode %d\n",
+	  entry_site_name(site), (int)mode);
   fflush(stderr);
 
-  /* Correct behavior never returns: VM JLOOP reaches BRAA x1,x0 and Darwin
-  ** reports EXC_ARM_PAC_FAIL as SIGBUS. Restore first if it does return so
-  ** shutdown cannot turn an ordinary gate rejection into a false PAC signal. */
-  status = call_sum(L, 20, 210, 1);
+  /* Correct behavior never returns: the selected VM entry reaches BRAA x1,x0
+  ** and Darwin reports EXC_ARM_PAC_FAIL as SIGBUS. Restore first if it does
+  ** return so shutdown cannot turn an ordinary rejection into a false signal. */
+  status = call_sum(L, site, 20, 210, 1);
   la_storefunc_rel(&T->mcauth, original);
   assert(function_bits(trace_mcauth_acq(T)) == function_bits(original));
   if (status != 0)
@@ -445,6 +551,21 @@ static EntryMode parse_mode(const char *name)
     return ENTRY_WRONG_TRACE;
   fprintf(stderr, "unknown ARM64e trace-PAUTH mode: %s\n", name);
   exit(64);
+}
+
+static EntrySite parse_site(const char **namep)
+{
+  const char *name = *namep;
+  if (strncmp(name, "jloop-", 6) == 0) {
+    *namep = name+6;
+    return ENTRY_SITE_JLOOP;
+  }
+  if (strncmp(name, "jforl-", 6) == 0) {
+    *namep = name+6;
+    return ENTRY_SITE_JFORL;
+  }
+  /* Preserve the fixture's original direct child-mode command line. */
+  return ENTRY_SITE_JLOOP;
 }
 
 static int spawn_mode(const char *self, const char *mode, int expect_bus)
@@ -550,21 +671,29 @@ static int spawn_mode(const char *self, const char *mode, int expect_bus)
 
 static int supervise(const char *self)
 {
-  if (spawn_mode(self, "control", 0) != 0 ||
-      spawn_mode(self, "raw", 1) != 0 ||
-      spawn_mode(self, "ia-zero", 1) != 0 ||
-      spawn_mode(self, "wrong-trace", 1) != 0)
+  if (spawn_mode(self, "jloop-control", 0) != 0 ||
+      spawn_mode(self, "jloop-raw", 1) != 0 ||
+      spawn_mode(self, "jloop-ia-zero", 1) != 0 ||
+      spawn_mode(self, "jloop-wrong-trace", 1) != 0 ||
+      spawn_mode(self, "jforl-control", 0) != 0 ||
+      spawn_mode(self, "jforl-raw", 1) != 0 ||
+      spawn_mode(self, "jforl-ia-zero", 1) != 0 ||
+      spawn_mode(self, "jforl-wrong-trace", 1) != 0)
     return 1;
-  puts("t-arm64e-jit-trace-pauth OK");
+  puts("t-arm64e-jit-trace-pauth OK: JLOOP and JFORL");
   return 0;
 }
 
 int main(int argc, char **argv)
 {
+  const char *mode;
+  EntrySite site;
   assert(argc == 2);
   if (strcmp(argv[1], "supervise") == 0)
     return supervise(argv[0]);
-  return child_mode(parse_mode(argv[1]));
+  mode = argv[1];
+  site = parse_site(&mode);
+  return child_mode(site, parse_mode(mode));
 }
 
 #else

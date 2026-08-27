@@ -8,6 +8,11 @@ if test "$(uname -s)" != Darwin || test "$(uname -m)" != arm64; then
   exit 0
 fi
 
+if test -z "${SDKROOT:-}"; then
+  SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
+  export SDKROOT
+fi
+
 lock_dir=$root/src/.lj-test-run.lock
 lock_held=0
 restore_needed=0
@@ -37,7 +42,7 @@ trap cleanup EXIT HUP INT TERM
 printf 'cmd=%s\n' "$0" >"$lock_dir/owner" 2>/dev/null || true
 
 jobs=${JOBS:-${MAKE_JOBS:-$(sysctl -n hw.logicalcpu 2>/dev/null || echo 2)}}
-cc=${CC:-clang}
+cc=${CC:-$(xcrun --sdk macosx --find clang)}
 minver=${MACOSX_DEPLOYMENT_TARGET:-13.0}
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_TRACE_TEST_HELPERS'
 pauth_xcflags="$xcflags -DLUAJIT_ENABLE_CET_BR"
@@ -99,11 +104,11 @@ fi
 otool -rv "$fixture_obj" | \
   grep '^00000010 .* BR26 .* _lj_trace_enter_root$' >/dev/null
 
-# The generated VM has two real AAPCS64 helper call sites. Only strict JLOOP
-# may continue through the 16-byte SPS_FIXED reservation to native code;
-# JFUNCF remains closed at the helper's granular source gate.
+# The generated VM has distinct JLOOP, integer-JFORL and JFUNCF AAPCS64 helper
+# call sites. JLOOP and post-update integer JFORL may continue through the
+# fixed reserve; JFUNCF remains closed at its granular source gate.
 otool -rv "$vm_object" >"$vm_reloc"
-test "$(grep -c 'BR26.*_lj_trace_enter_root$' "$vm_reloc")" = 2
+test "$(grep -c 'BR26.*_lj_trace_enter_root$' "$vm_reloc")" = 3
 otool -tvV "$vm_object" >"$vm_disasm"
 awk '/^_lj_BC_JLOOP:/ { copy=1 }
      copy { print }
@@ -117,7 +122,7 @@ awk '/^_lj_BC_JFUNCV:/ { copy=1 }
 test -s "$jloop_region" && test -s "$jfuncf_region" && test -s "$jfuncv_region"
 for region in "$jloop_region" "$jfuncf_region"; do
   grep -E 'mov[[:space:]]+x4, x19' "$region" >/dev/null
-  grep -E 'mov[[:space:]]+w5, #0x' "$region" >/dev/null
+  grep -E 'mov[[:space:]]+w5, w16' "$region" >/dev/null
 done
 grep -E 'sub[[:space:]]+sp, sp, #0x10' "$jloop_region" >/dev/null
 grep -E 'br[[:space:]]+x1$' "$jloop_region" >/dev/null
@@ -171,7 +176,7 @@ for source in "$jloop_source" "$jfuncf_source"; do
   grep -F 'mov CARG5, BASE' "$source" >/dev/null
   grep -F 'bl extern lj_trace_enter_root' "$source" >/dev/null
 done
-grep -F 'mov CARG6w, #BC_JLOOP' "$jloop_source" >/dev/null
+grep -F 'mov CARG6w, INSw' "$jloop_source" >/dev/null
 grep -F 'mov CARG3w, RCw' "$jloop_source" >/dev/null
 grep -F '#if LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED' \
   "$jloop_source" >/dev/null
@@ -193,7 +198,7 @@ test "$(grep -Fc 'cmp TMP0w, #BC_JLOOP' "$jloop_source")" -ge 3
 test "$(grep -Fc 'mov PC, RC' "$for_source")" = 2
 test "$(grep -Fc 'ldrh RCw, [RC, #-4+OFS_RD]' "$for_source")" = 1
 test "$(grep -Fc 'ldrh RCw, [PC, #-4+OFS_RD]' "$for_source")" = 1
-grep -F 'mov CARG6w, #BC_JFUNCF' "$jfuncf_source" >/dev/null
+grep -F 'mov CARG6w, INSw' "$jfuncf_source" >/dev/null
 grep -F '#if LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED' \
   "$jfuncf_source" >/dev/null
 grep -F 'clear_tg_jit_base' "$jfuncf_source" >/dev/null
@@ -220,7 +225,7 @@ grep -E '^#define LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
   "$ordinary_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+0$' \
   "$ordinary_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+1$' \
+grep -E '^#define LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+0$' \
   "$ordinary_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+1$' \
   "$ordinary_macros" >/dev/null
@@ -380,6 +385,8 @@ awk '/^static LJ_AINLINE int trace_root_entry_source_admitted/ { copy=1 }
      copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$source_gate_region"
 grep -F 'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED' \
   "$source_gate_region" >/dev/null
+grep -F 'LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED' \
+  "$source_gate_region" >/dev/null
 grep -F 'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED' \
   "$source_gate_region" >/dev/null
 awk '/^static int trace_root_entry_loop_view_acq/ { copy=1 }
@@ -389,7 +396,8 @@ for required in trace_root_acq trace_link_acq trace_linktype_acq \
   trace_nextside_acq trace_nchild_acq trace_spadjust_acq trace_startptgco_acq \
   trace_startpc_acq trace_mcloop_acq trace_topslot_acq trace_ir_acq \
   trace_nk_acq trace_snap_acq trace_snapmap_acq trace_traceno_acq retire_epoch \
-  TRACE_ENTRY_GATED TRACE_ARM64_INT_LOOP_ADMITTED; do
+  TRACE_ENTRY_GATED TRACE_ARM64_INT_LOOP_ADMITTED \
+  TRACE_ARM64_INT_FORL_ADMITTED; do
   grep "$required" "$loop_view_region" >/dev/null
 done
 if grep -F 'v->spadjust == 0' "$loop_view_region" >/dev/null; then
@@ -461,7 +469,7 @@ grep -E '^#define LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
   "$pauth_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+0$' \
   "$pauth_macros" >/dev/null
-grep -E '^#define LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+1$' \
+grep -E '^#define LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+0$' \
   "$pauth_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
   "$pauth_macros" >/dev/null
@@ -513,4 +521,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
     XCFLAGS="$xcflags"
 restore_needed=0
 
-echo "arm64_jit_root_entry_contract OK: strict LOOP entry open on ARM64 and authenticated ARM64e"
+echo "arm64_jit_root_entry_contract OK: strict LOOP/FORL source gates verified on ARM64 and authenticated ARM64e"

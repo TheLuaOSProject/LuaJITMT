@@ -8,12 +8,17 @@ if test "$(uname -s)" != Darwin || test "$(uname -m)" != arm64; then
   exit 0
 fi
 
+if test -z "${SDKROOT:-}"; then
+  SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
+  export SDKROOT
+fi
+
 lock_dir=$root/src/.lj-test-run.lock
 lock_held=0
 tmpdir=
 restore_needed=0
 jobs=${JOBS:-${MAKE_JOBS:-$(sysctl -n hw.logicalcpu 2>/dev/null || echo 2)}}
-cc=${CC:-clang}
+cc=${CC:-$(xcrun --sdk macosx --find clang)}
 minver=${MACOSX_DEPLOYMENT_TARGET:-13.0}
 ordinary_xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_TRACE_TEST_HELPERS -DLUAJIT_MCODE_TEST'
 pauth_xcflags="$ordinary_xcflags -DLUAJIT_ENABLE_CET_BR"
@@ -98,6 +103,7 @@ fixture=$tmpdir/t-arm64e-jit-trace-pauth
 macros=$tmpdir/macros-arm64e.txt
 vm_disasm=$tmpdir/vm-arm64e.disasm
 jloop_disasm=$tmpdir/vm-arm64e-jloop.disasm
+jforl_disasm=$tmpdir/vm-arm64e-jforl.disasm
 
 restore_needed=1
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
@@ -117,9 +123,11 @@ for setting in \
   'LJ_ABI_PAUTH 1' \
   'LJ_ABI_BRANCH_TRACK 1' \
   'LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED 0' \
+  'LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED 0' \
+  'LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED 1'; do
   grep -F "#define $setting" "$macros" >/dev/null || {
@@ -147,12 +155,24 @@ awk '/^_lj_BC_JLOOP:/ { copy=1 }
 test -s "$jloop_disasm"
 grep -E 'bti[[:space:]]+j' "$jloop_disasm" >/dev/null
 grep -E 'braa[[:space:]]+x1, x0' "$jloop_disasm" >/dev/null
+awk '/^_lj_BC_JFORL:/ { copy=1 }
+     copy { print }
+     copy && /^_lj_BC_ITERL:/ { exit }' \
+  "$vm_disasm" >"$jforl_disasm"
+test -s "$jforl_disasm"
+grep -E 'bti[[:space:]]+j' "$jforl_disasm" >/dev/null
+grep -E 'bl[[:space:]]+0x[0-9a-f]+' "$jforl_disasm" >/dev/null
+grep -E 'sub[[:space:]]+sp, sp, #0x10' "$jforl_disasm" >/dev/null
+grep -E 'braa[[:space:]]+x1, x0' "$jforl_disasm" >/dev/null
 
 fixture_source=$root/tests/t-arm64e-jit-trace-pauth.c
 for required in \
-  'expect_exact_body(J, T, pt);' \
+  'expect_exact_body(J, T, pt, site);' \
+  'expect_exact_forl_body(J, T, pt);' \
   'expect_valid_trace_signature(T);' \
   'TRACE_ARM64_INT_LOOP_ADMITTED' \
+  'TRACE_ARM64_INT_FORL_ADMITTED' \
+  'live == BCINS_AD(BC_JFORL, bc_a(startins), 1)' \
   'trace_mcode_acq(T)[0] == A64I_BTI_J' \
   'la_storefunc_rel(&T->mcauth, injected)' \
   'ptrauth_strip(valid, ptrauth_key_function_pointer)' \
@@ -164,7 +184,14 @@ for required in \
   'WIFSIGNALED(status)' \
   'WTERMSIG(status) != SIGBUS' \
   'WEXITSTATUS(status) != 0' \
-  'la_storefunc_rel(&T->mcauth, original)'; do
+  'la_storefunc_rel(&T->mcauth, original)' \
+  'spawn_mode(self, "jloop-raw", 1)' \
+  'spawn_mode(self, "jloop-ia-zero", 1)' \
+  'spawn_mode(self, "jloop-wrong-trace", 1)' \
+  'spawn_mode(self, "jforl-control", 0)' \
+  'spawn_mode(self, "jforl-raw", 1)' \
+  'spawn_mode(self, "jforl-ia-zero", 1)' \
+  'spawn_mode(self, "jforl-wrong-trace", 1)'; do
   grep -F "$required" "$fixture_source" >/dev/null || {
     echo "ARM64e trace-PAUTH fixture lost required proof: $required" >&2
     exit 1
@@ -176,4 +203,4 @@ done
 ulimit -c 0 2>/dev/null || true
 "$fixture" supervise
 
-echo "arm64e_jit_trace_pauth_contract OK: valid trace entered; raw, IA/0, and wrong-trace signatures faulted at authenticated JLOOP entry"
+echo "arm64e_jit_trace_pauth_contract OK: valid LOOP/FORL traces entered; raw, IA/0, and wrong-trace signatures faulted at authenticated JLOOP and JFORL entry"

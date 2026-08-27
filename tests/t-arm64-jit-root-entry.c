@@ -39,10 +39,10 @@
     !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED || \
     LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED || \
-    !LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED || \
+    LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED || \
     !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED
-#error "t-arm64-jit-root-entry requires the granular integer-loop gate split"
+#error "t-arm64-jit-root-entry requires open LOOP/FORL root entry gates"
 #endif
 
 typedef enum RootEntryRaceMode {
@@ -304,16 +304,28 @@ static void call_global(lua_State *L, const char *name, int nargs, int nresults)
   }
 }
 
+/* Model the exact full instruction consumed by a VM caller. Tests which
+** deliberately mutate the live word after this construction still exercise
+** the helper's consumed-versus-current generation check. */
+static LJTraceRootEntry test_trace_enter_root(jit_State *J, const BCIns *pc,
+	TraceNo traceno, lua_State *L, TValue *base, BCOp sourceop)
+{
+  BCReg a = pc != NULL ? bc_a((BCIns)la_load32_acq(
+	(const uint32_t *)pc)) : 0;
+  BCIns sourceins = BCINS_AD(sourceop, a, traceno);
+  return lj_trace_enter_root(J, pc, traceno, L, base, sourceins);
+}
+
 /* Kept out of line for the contract script: its call site proves that Clang's
 ** Darwin AAPCS64 lowering consumes LJTraceRootEntry.trace from x0 and target
 ** from x1, with no hidden result pointer. It is deliberately never executed. */
 __attribute__((noinline, used))
 GCtrace *lj_test_root_entry_abi_probe(jit_State *J, const BCIns *pc,
-	TraceNo traceno, lua_State *L, TValue *base, uint32_t sourceop,
+	TraceNo traceno, lua_State *L, TValue *base, BCIns sourceins,
 	ASMFunction *targetp)
 {
   LJTraceRootEntry entry =
-    lj_trace_enter_root(J, pc, traceno, L, base, sourceop);
+    lj_trace_enter_root(J, pc, traceno, L, base, sourceins);
   *targetp = entry.target;
   return entry.trace;
 }
@@ -353,7 +365,7 @@ static void expect_metadata_reject(lua_State *L, const BCIns *pc)
 {
   uint32_t publishes = lj_trace_test_root_entry_publishes();
   uint32_t cleanups = lj_trace_test_root_entry_cleanups();
-  expect_reject(lj_trace_enter_root(L2J(L), pc, 1, L, L->base, BC_JLOOP));
+  expect_reject(test_trace_enter_root(L2J(L), pc, 1, L, L->base, BC_JLOOP));
   assert(lj_tg_load_jit_base(L->tg_hint) == NULL);
   assert(lj_trace_test_root_entry_publishes() == publishes + 1u);
   assert(lj_trace_test_root_entry_cleanups() == cleanups + 1u);
@@ -366,7 +378,7 @@ static void expect_metadata_success(lua_State *L, const BCIns *pc,
   uint32_t publishes = lj_trace_test_root_entry_publishes();
   uint32_t cleanups = lj_trace_test_root_entry_cleanups();
   assert(root_entry_metadata_layout_valid(&L2J(L)->cur));
-  LJTraceRootEntry entry = lj_trace_enter_root(
+  LJTraceRootEntry entry = test_trace_enter_root(
     L2J(L), pc, 1, L, L->base, BC_JLOOP);
   assert(entry.trace == &L2J(L)->cur);
   assert(entry.target != NULL);
@@ -737,7 +749,7 @@ static void run_pause_race(lua_State *L, BCIns *pc, RootEntryRaceMode mode)
   gc2_jit_sweep_displaced_rel(g, 0);
   lj_trace_test_root_entry_pause(stage);
   assert(pthread_create(&closer, NULL, root_entry_closer, &race) == 0);
-  entry = lj_trace_enter_root(L2J(L), pc, 1, L, L->base, BC_JLOOP);
+  entry = test_trace_enter_root(L2J(L), pc, 1, L, L->base, BC_JLOOP);
   expect_reject(entry);
   assert(lj_tg_load_jit_base(tg) == NULL);
   la_store32_rel(&race.entry_done, 1);
@@ -816,27 +828,27 @@ int main(void)
   lj_tg_vmstate_store_rel(tg, (int32_t)~LJ_VMST_INTERP);
 
   /* Invalid calls reject before publication and never clear a foreign lease. */
-  expect_reject(lj_trace_enter_root(NULL, metadata_loop.pc, 1, L, L->base,
+  expect_reject(test_trace_enter_root(NULL, metadata_loop.pc, 1, L, L->base,
                                     BC_JLOOP));
-  expect_reject(lj_trace_enter_root(
+  expect_reject(test_trace_enter_root(
     (jit_State *)((char *)J + sizeof(void *)), metadata_loop.pc, 1,
     L, L->base,
     BC_JLOOP));
-  expect_reject(lj_trace_enter_root(J, NULL, 1, L, L->base, BC_JLOOP));
-  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 0, L, L->base,
+  expect_reject(test_trace_enter_root(J, NULL, 1, L, L->base, BC_JLOOP));
+  expect_reject(test_trace_enter_root(J, metadata_loop.pc, 0, L, L->base,
                                     BC_JLOOP));
-  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, NULL, L->base,
+  expect_reject(test_trace_enter_root(J, metadata_loop.pc, 1, NULL, L->base,
                                     BC_JLOOP));
-  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, NULL,
+  expect_reject(test_trace_enter_root(J, metadata_loop.pc, 1, L, NULL,
                                     BC_JLOOP));
-  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+  expect_reject(test_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
                                     BC_JFUNCV));
   {
     TValue *savedbase = L->base;
     TValue *stack = mref_acq(L->stack, TValue);
     assert(stack != NULL && L->top >= stack + LJ_FR2);
     L->base = stack + LJ_FR2;
-    expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+    expect_reject(test_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
                                       BC_JLOOP));
     L->base = savedbase;
   }
@@ -853,40 +865,40 @@ int main(void)
     L->base = maxstack-1;
     L->top = maxstack;
     assert(metadata_pt->framesize > (MSize)(maxstack-L->base));
-    expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+    expect_reject(test_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
                                       BC_JLOOP));
     L->base = savedbase;
     L->top = savedtop;
     copyTV(L, maxstack-3, &saved_func);
   }
   lj_tg_store_jit_base(tg, L->base);
-  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+  expect_reject(test_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
                                     BC_JLOOP));
   assert(lj_tg_load_jit_base(tg) == L->base);
   lj_tg_store_jit_base(tg, NULL);
   assert(lj_tg_vmstate_load_acq(tg) == (int32_t)~LJ_VMST_INTERP);
   lj_tg_vmstate_store_rel(tg, (int32_t)~LJ_VMST_C);
-  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+  expect_reject(test_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
                                     BC_JLOOP));
   lj_tg_vmstate_store_rel(tg, (int32_t)~LJ_VMST_INTERP);
   lj_tg_vmstate_store_rel(tg, 1);
-  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+  expect_reject(test_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
                                     BC_JLOOP));
   lj_tg_vmstate_store_rel(tg, (int32_t)~LJ_VMST_INTERP);
   lj_tg_in_native_rel(tg, 1);
-  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+  expect_reject(test_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
                                     BC_JLOOP));
   lj_tg_in_native_rel(tg, 0);
   lj_tg_poll_rel(tg, 1);
-  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+  expect_reject(test_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
                                     BC_JLOOP));
   lj_tg_poll_rel(tg, 0);
   lj_tg_reqmask_rel(tg, LJ_GC2_HS_REDISPATCH);
-  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+  expect_reject(test_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
                                     BC_JLOOP));
   lj_tg_reqmask_rel(tg, 0);
   lj_tg_profile_request_rel(tg, 1);
-  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+  expect_reject(test_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
                                     BC_JLOOP));
   lj_tg_profile_request_rel(tg, 0);
   assert(lj_trace_test_root_entry_publishes() == 0);
@@ -896,14 +908,14 @@ int main(void)
   /* The open loop gate publishes intent before absent metadata reaches the
   ** one cleanup path. JFUNCF remains closed at the source gate and publishes
   ** no TG lifetime intent at all. */
-  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+  expect_reject(test_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
                                     BC_JLOOP));
   assert(lj_tg_load_jit_base(tg) == NULL);
   assert(lj_trace_test_root_entry_publishes() == 1);
   assert(lj_trace_test_root_entry_cleanups() == 1);
   publishes = lj_trace_test_root_entry_publishes();
   cleanups = lj_trace_test_root_entry_cleanups();
-  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+  expect_reject(test_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
                                     BC_JFUNCF));
   assert(lj_trace_test_root_entry_publishes() == publishes);
   assert(lj_trace_test_root_entry_cleanups() == cleanups);
@@ -916,7 +928,7 @@ int main(void)
   publishes = lj_trace_test_root_entry_publishes();
   cleanups = lj_trace_test_root_entry_cleanups();
   gc2_jit_sweep_displaced_rel(g, 0);
-  expect_reject(lj_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
+  expect_reject(test_trace_enter_root(J, metadata_loop.pc, 1, L, L->base,
                                     BC_JLOOP));
   assert(lj_tg_load_jit_base(tg) == NULL);
   assert(gc2_jit_sweep_displaced_acq(g) == 1);
@@ -1035,42 +1047,50 @@ int main(void)
     assert(lj_trace_test_root_entry_cleanups() == 0);
     assert(lj_tg_load_jit_base(tg) == NULL && tracevec_acq(J) == NULL);
 
-    /* JFORL has already incremented and tested the index before its JLOOP
-    ** tail. Recovery must branch with FORL.D without executing FORL again. */
+    /* Integer JFORL now attempts strict admission after increment/test/store.
+    ** With no TraceVec installed each attempt must clean its lease, preserve
+    ** the consumed JFORL generation and recover without executing FORL again. */
     lj_trace_test_root_entry_reset();
     lj_trace_test_force_startins_retry(1);
     lua_pushinteger(L, 4);
     call_global(L, "__arm64_root_jforl", 1, 1);
     assert(lua_tointeger(L, -1) == 1234);
     lua_pop(L, 1);
-    assert(lj_trace_test_root_entry_publishes() == 0);
-    assert(lj_trace_test_root_entry_cleanups() == 0);
+    assert(lj_trace_test_root_entry_publishes() != 0);
+    assert(lj_trace_test_root_entry_publishes() ==
+	   lj_trace_test_root_entry_cleanups());
     assert(lj_trace_test_root_entry_startins_calls() != 0);
+    lj_trace_test_root_entry_reset();
     lua_pushnumber(L, 4.5);
     call_global(L, "__arm64_root_jforl", 1, 1);
     assert(lua_tonumber(L, -1) == 1234.0);
     lua_pop(L, 1);
     assert(lj_trace_test_root_entry_publishes() == 0);
     assert(lj_trace_test_root_entry_cleanups() == 0);
+    assert(lj_trace_test_root_entry_startins_calls() != 0);
 
     /* A synthetic paired JFORI reaches the same JFORL PC before executing the
     ** first body. Branch-only recovery must neither skip i=1 nor double-step
-    ** later JFORL edges. */
+    ** later JFORL edges. Its later integer JFORL edges attempt admission, but
+    ** the FP variant remains wholly branch-only. */
     lj_trace_test_root_entry_reset();
     lj_trace_test_force_startins_retry(1);
     lua_pushinteger(L, 4);
     call_global(L, "__arm64_root_jfori", 1, 1);
     assert(lua_tointeger(L, -1) == 1234);
     lua_pop(L, 1);
-    assert(lj_trace_test_root_entry_publishes() == 0);
-    assert(lj_trace_test_root_entry_cleanups() == 0);
+    assert(lj_trace_test_root_entry_publishes() != 0);
+    assert(lj_trace_test_root_entry_publishes() ==
+	   lj_trace_test_root_entry_cleanups());
     assert(lj_trace_test_root_entry_startins_calls() != 0);
+    lj_trace_test_root_entry_reset();
     lua_pushnumber(L, 4.5);
     call_global(L, "__arm64_root_jfori", 1, 1);
     assert(lua_tonumber(L, -1) == 1234.0);
     lua_pop(L, 1);
     assert(lj_trace_test_root_entry_publishes() == 0);
     assert(lj_trace_test_root_entry_cleanups() == 0);
+    assert(lj_trace_test_root_entry_startins_calls() != 0);
     assert(lj_tg_load_jit_base(tg) == NULL && tracevec_acq(J) == NULL);
 
     restore_numeric_patch(&jfori);
@@ -1082,7 +1102,7 @@ int main(void)
 
   lj_trace_test_root_entry_reset();
   lua_close(L);
-  puts("arm64_jit_root_entry OK: strict loop entry, source gates, mutations and request races verified");
+  puts("arm64_jit_root_entry OK: strict LOOP/FORL entry, source generations, mutations and request races verified");
   return 0;
 }
 

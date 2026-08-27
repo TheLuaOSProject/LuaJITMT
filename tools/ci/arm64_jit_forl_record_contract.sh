@@ -8,8 +8,13 @@ if test "$(uname -s)" != Darwin || test "$(uname -m)" != arm64; then
   exit 0
 fi
 
+if test -z "${SDKROOT:-}"; then
+  SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
+  export SDKROOT
+fi
+
 jobs=${JOBS:-${MAKE_JOBS:-$(sysctl -n hw.logicalcpu 2>/dev/null || echo 2)}}
-cc=${CC:-clang}
+cc=${CC:-$(xcrun --sdk macosx --find clang)}
 minver=${MACOSX_DEPLOYMENT_TARGET:-13.0}
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_TRACE_TEST_HELPERS -DLUAJIT_MCODE_TEST'
 pauth_xcflags="$xcflags -DLUAJIT_ENABLE_CET_BR"
@@ -98,8 +103,9 @@ branch_only_vm=$tmpdir/branch-only-vm.txt
 root_entry=$tmpdir/root-entry.txt
 restore_needed=1
 
-# Freeze the Stage 1 boundary in the executable fixture: publication is real,
-# while every JFORL taken edge still recovers to the interpreter branch path.
+# Freeze the recorder/publication proof independently from the native-entry
+# contract. Integer roots enter their certified target; FP JFORL remains on
+# branch-only recovery.
 for required in \
   'LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED' \
   'LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED' \
@@ -109,11 +115,10 @@ for required in \
   'memcpy(&pcbase, &map[positive_mapofs[sn]+positive_nent[sn]],' \
   'SNAP_NORESTORE, R_IDX' \
   'SNAP_NORESTORE, R_STOP' \
-  'lj_trace_test_root_entry_publishes() == 0' \
-  'lj_trace_test_root_entry_cleanups() == 0' \
-  'lj_trace_test_exit_calls() == 0' \
-  'lj_trace_test_root_entry_startins_calls() == 36' \
-  'lj_trace_test_root_entry_startins_calls() == 13' \
+  'static void expect_native_entry(void)' \
+  'static void expect_branch_only(void)' \
+  'lj_trace_test_exit_calls() ==' \
+  'lj_trace_test_root_entry_startins_calls() == 0' \
   'callnum1(L, "__arm64_forl_positive", 3.5) == 6.0' \
   'lj_trace_test_root_entry_startins_calls() == 2' \
   'run_lua(L, "jit.flush()\n");' \
@@ -208,15 +213,15 @@ test "$commit_line" -lt "$sync_line" && test "$sync_line" -lt "$save_line" &&
 test "$save_line" -lt "$sidecar_line" && test "$sidecar_line" -lt "$cas_line"
 grep -F 'Leave FORI unpatched.' "$trace_stop" >/dev/null
 
-# JFORL still performs its update/test and both integer/number taken paths tail
-# to BC_JLOOP. Label 5 may recover the original branch only; it must not call
-# the root-entry helper or allocate/authenticate a native-entry frame.
+# JFORL still performs its update/test before native admission. The integer
+# taken edge has one dedicated helper and the two FP signs still tail through
+# label 5, whose recovery must remain branch-only.
 awk '/^  case BC_JFORI:/ { seen++; if (seen == 2) copy=1 }
      copy { print }
      copy && /^  case BC_ITERL:/ { exit }' "$vm_source" >"$forl_vm"
-# The shared source has one integer JFORI/JFORL tail, then separate FP JFORI
-# and JFORL tails. A generated JFORL receives exactly the first and last.
-test "$(grep -Fc '=>BC_JLOOP' "$forl_vm")" -eq 3
+# JFORI, both FP signs and the integer-helper rejection each have one tail.
+test "$(grep -Fc '=>BC_JLOOP' "$forl_vm")" -eq 4
+test "$(grep -Fc 'bl extern lj_trace_enter_root' "$forl_vm")" -eq 1
 grep -F 'str TMP0, FOR_IDX' "$forl_vm" >/dev/null
 grep -F 'str TMP0, FOR_EXT' "$forl_vm" >/dev/null
 awk '/\|5:  \/\/ JFOR\*\/JITERL already tested\/updated the edge/ { copy=1 }
@@ -239,17 +244,16 @@ if grep -E 'lj_trace_enter_root|sub sp, sp|br_trace_auth' \
   exit 1
 fi
 
-# The generic C root gate remains JLOOP/JFUNCF-only in Stage 1.
+# The generic C root gate admits JFORL only under its independent native gate.
 awk '/^static LJ_AINLINE int trace_root_entry_source_valid/ { copy=1 }
      copy { print }
      copy && /^static LJ_AINLINE GCtrace \*trace_root_entry_slot_acq/ { exit }' \
   "$trace_source" >"$root_entry"
 grep -F 'BC_JLOOP' "$root_entry" >/dev/null
 grep -F 'BC_JFUNCF' "$root_entry" >/dev/null
-if grep -E 'BC_JFORL|TRACE_ARM64_INT_FORL_ADMITTED' "$root_entry" >/dev/null; then
-  echo "ARM64 Stage 1 C root gate unexpectedly admits FORL" >&2
-  exit 1
-fi
+grep -F 'BC_JFORL' "$root_entry" >/dev/null
+grep -F '!LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED' \
+  "$root_entry" >/dev/null
 
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" clean TARGET_FLAGS='-arch arm64' XCFLAGS="$xcflags"
@@ -267,7 +271,7 @@ for setting in \
   'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED 0' \
-  'LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED 1' \
+  'LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED 1'; do
   grep -E "^#define ${setting}$" "$macros" >/dev/null || {
@@ -308,7 +312,7 @@ for setting in \
   'LJ_ABI_PAUTH 1' \
   'LJ_ABI_BRANCH_TRACK 1' \
   'LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED 0' \
-  'LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED 1'; do
+  'LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED 0'; do
   grep -E "^#define ${setting}$" "$pauth_macros" >/dev/null || {
     echo "ARM64e FORL gate mismatch: $setting" >&2
     exit 1
@@ -339,4 +343,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
     XCFLAGS="$xcflags"
 restore_needed=0
 
-echo "arm64_jit_forl_record_contract OK: bounded FORL roots published on ARM64/ARM64e; JFORL stayed branch-only"
+echo "arm64_jit_forl_record_contract OK: bounded FORL roots published and entered on ARM64/ARM64e; FP stayed branch-only"

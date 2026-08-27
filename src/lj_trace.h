@@ -38,7 +38,7 @@ LJ_STATIC_ASSERT(offsetof(LJTraceRootEntry, target) == 8);
 
 LJ_FUNCA LJTraceRootEntry LJ_FASTCALL
 lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
-		    lua_State *L, TValue *base, uint32_t sourceop);
+		    lua_State *L, TValue *base, BCIns sourceins);
 #endif
 
 LJ_FUNC GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T);
