@@ -152,14 +152,17 @@ for required in \
   'test_funcf_generation_race(L, fn, T, (BCIns *)&proto_bc(pt)[0]' \
   'test_funcf_generation_race(L, fn, T, (BCIns *)&proto_bc(pt)[1]' \
   'test_funcf_generation_race(L, fn, T, (BCIns *)&proto_bc(pt)[2]' \
-  'expect_funcf_mcode_tail(J, T, expect_indirect)' \
+  'expect_funcf_mcode_tail(J, T)' \
   'assert(nadd == 1 && nsub == 0)' \
   'assert(tail[-1] == indirect)' \
   'assert(tail[-3] == add_fixed)' \
   'assert(tail[-2] == ldr_interp)' \
-  'assert(tail[-1] != indirect)' \
   'assert(tail[-2] == add_fixed)' \
   'A64F_S26(bytes/(intptr_t)sizeof(MCode))' \
+  'trace_exittab_nslots_acq(T) == 2' \
+  'gate[3] ==' \
+  'A64I_LDARx | A64F_D(RID_LR)' \
+  'trace_exittarget_arm64_acq(T, (ExitNo)i) == fallback' \
   'LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION' \
   'test_funcf_native_xpoll(L, "__arm64_funcf_true", T)' \
   'lj_trace_test_first_exitno() == 1' \
@@ -463,10 +466,10 @@ fi
 ordinary_runs=${LJ_ARM64_FUNCF_RECORD_RUNS:-3}
 run=1
 while test "$run" -le "$ordinary_runs"; do
-  "$fixture" direct
+  "$fixture" default
   run=$((run+1))
 done
-LUAJIT_MCODE_TEST=R "$fixture" indirect
+LUAJIT_MCODE_TEST=R "$fixture" randomized
 
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" clean \
@@ -521,10 +524,10 @@ fi
 pauth_runs=${LJ_ARM64_FUNCF_RECORD_PAUTH_RUNS:-2}
 run=1
 while test "$run" -le "$pauth_runs"; do
-  "$pauth_fixture" direct
+  "$pauth_fixture" default
   run=$((run+1))
 done
-LUAJIT_MCODE_TEST=R "$pauth_fixture" indirect
+LUAJIT_MCODE_TEST=R "$pauth_fixture" randomized
 
 # Leave the shared checkout in the ordinary experimental configuration.
 env MACOSX_DEPLOYMENT_TARGET="$minver" \

@@ -137,6 +137,14 @@ for required in \
   'LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION' \
   'lj_safepoint_test_signal_pause_arm(main_tg)' \
   'lj_safepoint_test_signal_pause_release()' \
+  'expect_default_exit_table(g, oldT)' \
+  'lj_asm_patchexit(J, oldT, 0, trace_mcode_acq(oldT))' \
+  'trace_exittarget_arm64_acq(oldT, 0) == trace_mcode_acq(oldT)' \
+  'trace_exittab_acq(&J->cur) == NULL' \
+  'trace_exitstub_acq(&J->cur) == NULL' \
+  'lj_trace_test_exittab_frees() == 1' \
+  'lj_trace_test_exittab_last_free_slots() == 9' \
+  'lj_trace_test_exittab_allocs() == 2' \
   'assert(lj_tg_reqmask_acq(tg) == FLUSH_ACTIONS);' \
   'assert(lj_tg_poll_acq(tg) == 0);' \
   'expect_single_native_exit(5)' \
@@ -191,6 +199,7 @@ for setting in \
   'LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1' \
+  'LJ_ARM64_JIT_EXIT_TARGET_SLOTS 1' \
   'LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED 0' \
@@ -234,6 +243,7 @@ for setting in \
   'LJ_ABI_BRANCH_TRACK 1' \
   'LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED 0' \
+  'LJ_ARM64_JIT_EXIT_TARGET_SLOTS 1' \
   'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED 0'; do
   grep -F "#define $setting" "$pauth_macros" >/dev/null || {
     echo "ARM64e live-flush/reuse gate mismatch: $setting" >&2

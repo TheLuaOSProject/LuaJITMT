@@ -21,6 +21,7 @@
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
+#include "lj_asm.h"
 #include "lj_bc.h"
 #include "lj_func.h"
 #include "lj_gc2.h"
@@ -30,6 +31,7 @@
 #include "lj_tg.h"
 #include "lj_thr.h"
 #include "lj_trace.h"
+#include "lj_target.h"
 
 #if !LJ_HASJIT || LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED || \
     !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED || \
@@ -281,6 +283,26 @@ static GCtrace *expect_admitted_root(jit_State *J, GCproto *pt)
   return T;
 }
 
+static void expect_default_exit_table(global_State *g, const GCtrace *T)
+{
+  MCode **exittab = trace_exittab_acq(T);
+  MCode *exitstub = trace_exitstub_acq(T);
+  MCode *fallback;
+  ExitNo i;
+  assert(exittab != NULL && exitstub != NULL);
+  assert(!trace_exittab_ismcode(T));
+  assert(((uintptr_t)(void *)exittab & 7u) == 0);
+  assert(((uintptr_t)(void *)exitstub & 7u) == 0);
+  assert(lj_gc2_mem_registered(g, exittab));
+  fallback = exitstub_trace_fallback_addr_(exitstub);
+  assert(fallback[0] == A64I_BTI_J);
+  for (i = 0; i < trace_exittab_nslots_acq(T); i++) {
+    assert(exitstub_trace_addr_(exitstub, i) ==
+	   exitstub + ARM64_EXIT_GATE_WORDS * i);
+    assert(trace_exittarget_arm64_acq(T, i) == fallback);
+  }
+}
+
 static GCtrace *retired_trace_find(jit_State *J, GCtrace *needle)
 {
   GCtrace *T;
@@ -377,6 +399,8 @@ int main(void)
   const BCIns *oldpc;
   BCIns oldstart;
   MCode *oldarea;
+  MCode **oldtab;
+  MCode *oldfallback, *oldexitstub;
   MCodeRetire *oldowner, *retired_owner;
   size_t oldarea_size, oldszall;
   uint64_t baseline_stamp, epoch0, flush_epoch, retire_stamp;
@@ -403,6 +427,7 @@ int main(void)
   assert(peer_L != NULL && lua_gettop(L) == 1);
   bootstrap_sticky_mt(L, peer_L);
 
+  lj_trace_test_reset_exittab_stats();
   run_lua(L,
     "jit.flush(); jit.on(); "
     "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
@@ -423,6 +448,16 @@ int main(void)
   assert(oldpt != newpt);
   assert(proto_trace_acq(newpt) == 0);
   oldT = expect_admitted_root(J, oldpt);
+  expect_default_exit_table(g, oldT);
+  assert(trace_exittab_acq(&J->cur) == NULL);
+  assert(trace_exitstub_acq(&J->cur) == NULL);
+  oldtab = trace_exittab_acq(oldT);
+  oldexitstub = trace_exitstub_acq(oldT);
+  oldfallback = exitstub_trace_fallback_addr_(oldexitstub);
+  assert(lj_trace_test_exittab_allocs() == 1);
+  assert(lj_trace_test_exittab_frees() == 0);
+  assert(lj_trace_test_exittab_last_alloc_slots() ==
+	 trace_exittab_nslots_acq(oldT));
   oldpc = trace_startpc_acq(oldT);
   oldstart = trace_startins_acq(oldT);
   assert(bc_op(oldstart) == BC_LOOP);
@@ -434,6 +469,20 @@ int main(void)
   assert(oldowner->retire_epoch == MCODE_RETIRE_EPOCH_ACTIVE);
   oldarea_size = oldowner->size;
   assert(oldarea_size != 0 && oldarea_size <= oldszall);
+  assert(!((uintptr_t)(void *)oldtab >= (uintptr_t)(void *)oldarea &&
+	   (uintptr_t)(void *)oldtab <
+	     (uintptr_t)(void *)oldarea + oldarea_size));
+  assert(!((uintptr_t)(void *)oldtab >=
+	   (uintptr_t)(void *)lj_mcode_area_rw(oldarea) &&
+	   (uintptr_t)(void *)oldtab <
+	     (uintptr_t)(void *)lj_mcode_area_rw(oldarea) + oldarea_size));
+  /* Use an otherwise untouched guard slot to prove production retarget and
+  ** later FLUSHJ reset without affecting the deterministic XPOLL exit. */
+  assert(lj_jit_token_try(J));
+  lj_asm_patchexit(J, oldT, 0, trace_mcode_acq(oldT));
+  lj_jit_token_release(J);
+  assert(trace_exittarget_arm64_acq(oldT, 0) == trace_mcode_acq(oldT));
+  assert(trace_exittarget_arm64_acq(oldT, 0) != oldfallback);
   assert(mcode_retired_head_acq(J) == NULL);
   /* Successful assembly retires its separate construction copy. Prove this
   ** baseline node is exactly one unpublished, nonsemantic scratch body rather
@@ -550,6 +599,10 @@ int main(void)
   assert(trace_retired_next_acq(oldT) == NULL);
   assert(retired_trace_find(J, baseline_scratch) == NULL);
   assert(trace_mcode_acq(oldT) != NULL);
+  assert(trace_exittab_acq(oldT) == oldtab);
+  assert(trace_exitstub_acq(oldT) == oldexitstub);
+  expect_default_exit_table(g, oldT);
+  assert(lj_trace_test_exittab_frees() == 0);
 
   assert(mcode_active_head_acq(J) == NULL);
   assert(J->mcarea == NULL && J->mctop == NULL && J->mcbot == NULL);
@@ -576,6 +629,9 @@ int main(void)
   assert(trace_retired_next_acq(oldT) == NULL);
   assert(retired_trace_find(J, baseline_scratch) == NULL);
   assert(retired_mcode_find(J, oldarea) == oldowner);
+  assert(trace_exittab_acq(oldT) == oldtab);
+  expect_default_exit_table(g, oldT);
+  assert(lj_trace_test_exittab_frees() == 0);
   assert(J->szallmcarea == oldszall);
   assert(J->trace_reclaim_epoch == flush_epoch + 1u);
   assert(J->mcode_reclaim_epoch == flush_epoch + 1u);
@@ -599,11 +655,19 @@ int main(void)
   assert(lj_trace_test_findfree_calls() == 0);
   assert(lj_trace_test_findfree_reuses() == 0);
   assert(lj_trace_test_findfree_grows() == 0);
+  assert(lj_trace_test_exittab_frees() == 1);
+  assert(lj_trace_test_exittab_last_free_slots() == 9);
 
   run_lua(L,
     "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2')");
   call_loop(L, "__arm64_live_flush_new", 210);
   newT = expect_admitted_root(J, newpt);
+  expect_default_exit_table(g, newT);
+  assert(trace_exittab_acq(&J->cur) == NULL);
+  assert(trace_exitstub_acq(&J->cur) == NULL);
+  assert(lj_trace_test_exittab_allocs() == 2);
+  assert(lj_trace_test_exittab_frees() == 1);
+  assert(lj_trace_test_exittab_last_alloc_slots() == 9);
   assert(trace_startpt_acq(newT) == newpt);
   assert(la_load64_acq(&newT->retire_epoch) == 0);
   assert(trace_native_pins_acq(newT) == 0);

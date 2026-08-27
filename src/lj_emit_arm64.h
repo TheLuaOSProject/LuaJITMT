@@ -478,6 +478,8 @@ static void emit_cond_branch(ASMState *as, A64CC cond, MCode *target)
 {
   MCode *p = --as->mcp;
   ptrdiff_t delta = target - p;
+  if (LJ_UNLIKELY(!A64F_S_OK(delta, 19)))
+    lj_trace_err(as->J, LJ_TRERR_MCODEOV);
   lj_assertA(A64F_S_OK(delta, 19), "branch target out of range");
   *p = A64I_BCC | A64F_S19(delta) | cond;
 }
@@ -486,6 +488,8 @@ static void emit_branch(ASMState *as, A64Ins ai, MCode *target)
 {
   MCode *p = --as->mcp;
   ptrdiff_t delta = target - p;
+  if (LJ_UNLIKELY(!A64F_S_OK(delta, 26)))
+    lj_trace_err(as->J, LJ_TRERR_MCODEOV);
   lj_assertA(A64F_S_OK(delta, 26), "branch target out of range");
   *p = ai | A64F_S26(delta);
 }
@@ -495,6 +499,8 @@ static void emit_tnb(ASMState *as, A64Ins ai, Reg r, uint32_t bit, MCode *target
   MCode *p = --as->mcp;
   ptrdiff_t delta = target - p;
   lj_assertA(bit < 63, "bit number out of range");
+  if (LJ_UNLIKELY(!A64F_S_OK(delta, 14)))
+    lj_trace_err(as->J, LJ_TRERR_MCODEOV);
   lj_assertA(A64F_S_OK(delta, 14), "branch target out of range");
   if (bit > 31) ai |= A64I_X;
   *p = ai | A64F_BIT(bit & 31) | A64F_S14(delta) | r;
@@ -504,6 +510,8 @@ static void emit_cnb(ASMState *as, A64Ins ai, Reg r, MCode *target)
 {
   MCode *p = --as->mcp;
   ptrdiff_t delta = target - p;
+  if (LJ_UNLIKELY(!A64F_S_OK(delta, 19)))
+    lj_trace_err(as->J, LJ_TRERR_MCODEOV);
   lj_assertA(A64F_S_OK(delta, 19), "branch target out of range");
   *p = ai | A64F_S19(delta) | r;
 }

@@ -84,6 +84,24 @@ if test -f "$native_loop_contract"; then
     sh "$native_loop_contract"
 fi
 
+exit_contract=$root/tools/ci/arm64_jit_exit_contract.sh
+if test -f "$exit_contract"; then
+  LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
+    sh "$exit_contract"
+fi
+
+root_entry_contract=$root/tools/ci/arm64_jit_root_entry_contract.sh
+if test -f "$root_entry_contract"; then
+  LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
+    sh "$root_entry_contract"
+fi
+
+live_flush_contract=$root/tools/ci/arm64_jit_live_flush_reuse_contract.sh
+if test -f "$live_flush_contract"; then
+  LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
+    sh "$live_flush_contract"
+fi
+
 env LUA_PATH="$lua_path" "$luajit" -e '
 assert(jit.status() == true, "experimental build did not admit JIT APIs")
 local util = require("jit.util")

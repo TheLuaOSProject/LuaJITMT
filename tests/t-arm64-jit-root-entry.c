@@ -18,7 +18,7 @@
 #if defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__)) && \
     defined(LUAJIT_MT_ARM64_BOOTSTRAP) && \
     defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL) && \
-    defined(LJ_TRACE_TEST_HELPERS)
+    defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_EXIT_TEST_HELPERS)
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
@@ -83,6 +83,10 @@ typedef struct RootEntryTraceVec2 {
 } RootEntryTraceVec2;
 
 enum {
+  ROOT_ENTRY_BODY_WORDS = 4,
+  ROOT_ENTRY_EXIT_WORDS = ARM64_EXIT_FALLBACK_WORDS +
+	ARM64_EXIT_GATE_WORDS,
+  ROOT_ENTRY_MCODE_WORDS = ROOT_ENTRY_BODY_WORDS + ROOT_ENTRY_EXIT_WORDS,
   ROOT_ENTRY_R_VALUE = REF_FIRST,
   ROOT_ENTRY_R_LOOP,
   ROOT_ENTRY_R_SUFFIX,
@@ -98,7 +102,8 @@ typedef struct RootEntryMetadataFixture {
   IRIns ir[ROOT_ENTRY_IR_CAP];
   SnapShot snap[1];
   SnapEntry snapmap[3];
-  MCode mcode[4];
+  _Alignas(8) MCode mcode[ROOT_ENTRY_MCODE_WORDS];
+  _Alignas(8) MCode *exittab[1];
 } RootEntryMetadataFixture;
 
 typedef struct RootEntryFrameFixture {
@@ -215,6 +220,9 @@ static void install_root_entry_metadata(jit_State *J, GCproto *pt,
 					const RootEntryPatch *loop,
 					RootEntryMetadataFixture *fixture)
 {
+  MCode *fallback;
+  MCode *gates;
+  MSize exitwords;
   uint64_t snapshot_pcbase;
   memset(fixture, 0, sizeof(*fixture));
   fixture->saved_cur = J->cur;
@@ -264,15 +272,29 @@ static void install_root_entry_metadata(jit_State *J, GCproto *pt,
   snapshot_pcbase = (uint64_t)(uintptr_t)loop->pc << 8;
   memcpy(&fixture->snapmap[1], &snapshot_pcbase, sizeof(snapshot_pcbase));
 
-  fixture->mcode[0] = 0xd503201fu;  /* Unreachable AArch64 NOPs. */
-  fixture->mcode[1] = 0xd503201fu;
-  fixture->mcode[2] = 0xd503201fu;
-  fixture->mcode[3] = 0xd503201fu;
-  J->cur.szmcode = (MSize)sizeof(fixture->mcode);
+  fixture->mcode[0] = A64I_NOP;  /* Unreachable AArch64 NOP body. */
+  fixture->mcode[1] = A64I_NOP;
+  fixture->mcode[2] = A64I_NOP;
+  fixture->mcode[3] = A64I_NOP;
+  fallback = fixture->mcode + ROOT_ENTRY_BODY_WORDS;
+  gates = fallback + ARM64_EXIT_FALLBACK_WORDS;
+  exitwords = lj_asm_arm64_exitstub_test(J, fallback,
+	ROOT_ENTRY_EXIT_WORDS, 1, 1, fixture->exittab);
+  assert(exitwords == ROOT_ENTRY_EXIT_WORDS);
+  assert(((uintptr_t)(void *)fixture->exittab &
+	  (sizeof(void *)-1u)) == 0);
+  assert(((uintptr_t)(void *)gates & (sizeof(void *)-1u)) == 0);
+  J->cur.szmcode = ROOT_ENTRY_BODY_WORDS * (MSize)sizeof(MCode);
   J->cur.mcode = fixture->mcode;
   J->cur.mcloop = (MSize)sizeof(MCode);
+  trace_exittab_rel(&J->cur, fixture->exittab);
+  trace_exitstub_rel(&J->cur, gates);
+  assert(exitstub_trace_fallback_addr_(gates) == fallback);
+  assert(exitstub_trace_addr_(gates, 0) == gates);
+  assert(trace_exittarget_arm64_acq(&J->cur, 0) == fallback);
 #if LJ_ABI_PAUTH
-  J->cur.mcauth = lj_ptr_sign((ASMFunction)(void *)fixture->mcode, &J->cur);
+  J->cur.mcauth = lj_ptr_sign(
+    ptrauth_nop_cast(ASMFunction, fixture->mcode), &J->cur);
 #endif
 
   fixture->tracev.sizetrace = 2;
@@ -581,9 +603,42 @@ static void test_metadata_mutation_rejections(lua_State *L, GCproto *pt,
 {
   jit_State *J = L2J(L);
   GCtrace *T = &J->cur;
+  MCode **exittab = trace_exittab_acq(T);
+  MCode *exitstub = trace_exitstub_acq(T);
   IRIns *ir = T->ir;
   SnapShot *snap = T->snap;
   BCIns current = (BCIns)la_load32_acq((const uint32_t *)loop->pc);
+
+  assert(exittab == fixture->exittab);
+  assert(exitstub == fixture->mcode + ROOT_ENTRY_BODY_WORDS +
+	 ARM64_EXIT_FALLBACK_WORDS);
+
+  trace_exittab_rel(T, NULL);
+  expect_metadata_reject(L, loop->pc);
+  trace_exittab_rel(T, exittab);
+
+  trace_exitstub_rel(T, NULL);
+  expect_metadata_reject(L, loop->pc);
+  trace_exitstub_rel(T, exitstub);
+
+  trace_exittab_rel(T, (MCode **)(void *)((char *)exittab + 1));
+  expect_metadata_reject(L, loop->pc);
+  trace_exittab_rel(T, exittab);
+
+  trace_exitstub_rel(T, (MCode *)(void *)((char *)exitstub +
+						 sizeof(MCode)));
+  expect_metadata_reject(L, loop->pc);
+  trace_exitstub_rel(T, exitstub);
+
+  T->unused1 |= TRACE_EXITTAB_MCODE;
+  expect_metadata_reject(L, loop->pc);
+  T->unused1 &= (uint8_t)~TRACE_EXITTAB_MCODE;
+
+  trace_exittab_rel(T, (MCode **)(void *)exitstub);
+  trace_exitstub_rel(T, (MCode *)(void *)exittab);
+  expect_metadata_reject(L, loop->pc);
+  trace_exittab_rel(T, exittab);
+  trace_exitstub_rel(T, exitstub);
 
   trace_link_rel(T, 2);
   expect_metadata_reject(L, loop->pc);

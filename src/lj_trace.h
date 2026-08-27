@@ -327,6 +327,23 @@ LJ_FUNC uint32_t lj_trace_reclaim_retired(global_State *g,
 					  uint64_t completed_epoch);
 LJ_FUNC int lj_trace_retired_mcode_refs(global_State *g, MCode *area,
 					size_t size);
+#ifdef LJ_TRACE_TEST_HELPERS
+LJ_FUNC int lj_trace_test_body_mcode_refs(global_State *g, GCtrace *T,
+					  MCode *area, size_t size);
+LJ_FUNC void lj_trace_test_reset_exittab_stats(void);
+LJ_FUNC void lj_trace_test_note_exittab_alloc(MSize nslots);
+LJ_FUNC void lj_trace_test_note_exittab_free(MSize nslots);
+LJ_FUNC uint32_t lj_trace_test_exittab_allocs(void);
+LJ_FUNC uint32_t lj_trace_test_exittab_frees(void);
+LJ_FUNC MSize lj_trace_test_exittab_last_alloc_slots(void);
+LJ_FUNC MSize lj_trace_test_exittab_last_free_slots(void);
+LJ_FUNC uint32_t lj_trace_test_mcode_retries(void);
+LJ_FUNC uint32_t lj_trace_test_abort_count(void);
+LJ_FUNC TraceError lj_trace_test_last_abort_error(void);
+#else
+#define lj_trace_test_note_exittab_alloc(nslots) ((void)(nslots))
+#define lj_trace_test_note_exittab_free(nslots) ((void)(nslots))
+#endif
 #define LJ_TRACE_MCODE_REF_NONE		0
 #define LJ_TRACE_MCODE_REF_ACTIVE	1
 #define LJ_TRACE_MCODE_REF_PINNED_ONLY	2

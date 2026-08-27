@@ -282,6 +282,8 @@ void lj_snap_add(jit_State *J)
     nsnapmap = J->cur.snap[--nsnap].mapofs;
   } else {
   nomerge:
+    if (LJ_UNLIKELY(nsnap == UINT16_MAX))
+      lj_trace_err(J, LJ_TRERR_SNAPOV);
     lj_snap_grow_buf(J, nsnap+1);
     J->cur.nsnap = (uint16_t)(nsnap+1);
   }

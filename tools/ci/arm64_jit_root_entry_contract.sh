@@ -16,6 +16,7 @@ fi
 lock_dir=$root/src/.lj-test-run.lock
 lock_held=0
 restore_needed=0
+tmpdir=
 cleanup() {
   status=$?
   trap - EXIT HUP INT TERM
@@ -31,20 +32,27 @@ cleanup() {
     rm -f "$lock_dir/owner"
     rmdir "$lock_dir" 2>/dev/null || true
   fi
-  rm -rf "$tmpdir"
+  if test -n "$tmpdir"; then
+    rm -rf "$tmpdir"
+  fi
   exit "$status"
 }
 
-while ! mkdir "$lock_dir" 2>/dev/null; do sleep 0.2; done
-lock_held=1
+if test "${LJ_TEST_DISABLE_RUN_LOCK:-}" != 1 &&
+   test "${LJ_TEST_RUN_LOCK_HELD:-}" != 1; then
+  while ! mkdir "$lock_dir" 2>/dev/null; do sleep 0.2; done
+  lock_held=1
+fi
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lj-arm64-root-entry.XXXXXX")
 trap cleanup EXIT HUP INT TERM
-printf 'cmd=%s\n' "$0" >"$lock_dir/owner" 2>/dev/null || true
+if test "$lock_held" = 1; then
+  printf 'cmd=%s\n' "$0" >"$lock_dir/owner" 2>/dev/null || true
+fi
 
 jobs=${JOBS:-${MAKE_JOBS:-$(sysctl -n hw.logicalcpu 2>/dev/null || echo 2)}}
 cc=${CC:-$(xcrun --sdk macosx --find clang)}
 minver=${MACOSX_DEPLOYMENT_TARGET:-13.0}
-xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_TRACE_TEST_HELPERS'
+xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_TRACE_TEST_HELPERS -DLJ_ARM64_EXIT_TEST_HELPERS'
 pauth_xcflags="$xcflags -DLUAJIT_ENABLE_CET_BR"
 archive=$root/src/libluajit.a
 vm_object=$root/src/lj_vm.o
@@ -66,10 +74,12 @@ jfuncv_region=$tmpdir/vm-jfuncv.txt
 pauth_macros=$tmpdir/macros-arm64e.txt
 pauth_vm_disasm=$tmpdir/vm-arm64e.disasm
 pauth_jloop_region=$tmpdir/vm-arm64e-jloop.txt
+pauth_fixture_obj=$tmpdir/t-arm64-jit-root-entry-arm64e.o
+pauth_fixture=$tmpdir/t-arm64-jit-root-entry-arm64e
 restore_needed=1
 
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
-  make -C "$root/src" XCFLAGS="$xcflags" clean
+  make -C "$root/src" clean TARGET_FLAGS='-arch arm64' XCFLAGS="$xcflags"
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" -j"$jobs" XCFLAGS="$xcflags"
 
@@ -236,6 +246,8 @@ grep -E '^#define LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+0$' \
   "$ordinary_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+1$' \
   "$ordinary_macros" >/dev/null
+grep -E '^#define LJ_ARM64_JIT_EXIT_TARGET_SLOTS[[:space:]]+1$' \
+  "$ordinary_macros" >/dev/null
 if grep -R 'LJ_ARM64_JIT_FAIL_CLOSED' \
      "$root/tests/t-arm64-jit-root-entry.c" \
      "$root/tests/t-arm64-jit-emitter.c" \
@@ -259,6 +271,15 @@ for required in '__arm64_root_jforl' '__arm64_root_jfori' \
   'trace_link_rel(&J->cur, 1);' \
   'J->cur.linktype = LJ_TRLINK_LOOP;' \
   'J->cur.mcloop = (MSize)sizeof(MCode);' \
+  'lj_asm_arm64_exitstub_test(J, fallback,' \
+  'trace_exittab_rel(&J->cur, fixture->exittab);' \
+  'trace_exitstub_rel(&J->cur, gates);' \
+  'trace_exittarget_arm64_acq(&J->cur, 0) == fallback' \
+  'trace_exittab_rel(T, NULL);' \
+  'trace_exitstub_rel(T, NULL);' \
+  'T->unused1 |= TRACE_EXITTAB_MCODE;' \
+  'trace_exittab_rel(T, (MCode **)(void *)exitstub);' \
+  'trace_exitstub_rel(T, (MCode *)(void *)exittab);' \
   'J->cur.unused1 = TRACE_ARM64_INT_LOOP_ADMITTED;' \
   'IRIns ir[ROOT_ENTRY_IR_CAP];' \
   'J->cur.ir = fixture->ir;' \
@@ -400,7 +421,8 @@ awk '/^static int trace_root_entry_loop_view_acq/ { copy=1 }
 for required in trace_root_acq trace_link_acq trace_linktype_acq \
   trace_nextside_acq trace_nchild_acq trace_spadjust_acq trace_startptgco_acq \
   trace_startpc_acq trace_mcloop_acq trace_topslot_acq trace_ir_acq \
-  trace_nk_acq trace_snap_acq trace_snapmap_acq trace_traceno_acq retire_epoch \
+  trace_nk_acq trace_snap_acq trace_snapmap_acq trace_traceno_acq \
+  trace_exittab_acq trace_exitstub_acq retire_epoch TRACE_EXITTAB_MCODE \
   TRACE_ENTRY_GATED TRACE_ARM64_INT_LOOP_ADMITTED \
   TRACE_ARM64_INT_FORL_ADMITTED TRACE_ARM64_TRUE_FUNCF_ADMITTED \
   LJ_TRLINK_RETURN; do
@@ -422,6 +444,7 @@ for required in 'postra.ir = v->ir;' 'postra.snap = v->snap;' \
   'postra.root_topslot = v->topslot;' \
   'postra.startins = v->startins;' \
   'postra.base_delta = 0;' \
+  'trace_root_entry_arm64_exit_layout_valid(v)' \
   'lj_asm_arm64_postra_funcf_entry_admit(' \
   'return lj_asm_arm64_postra_admit(&postra, NULL);'; do
   grep -F "$required" "$layout_region" >/dev/null
@@ -455,7 +478,10 @@ env LUA_PATH="$root/src/?.lua;$root/src/jit/?.lua;;" "$root/src/luajit" -e '
 
 # Arm64e/BTI admits the same exact root recorder and all three certified root
 # entry families, while side and stitch surfaces remain independently closed.
-env MACOSX_DEPLOYMENT_TARGET="$minver" make -C "$root/src" clean
+env MACOSX_DEPLOYMENT_TARGET="$minver" \
+  make -C "$root/src" clean \
+    TARGET_FLAGS='-arch arm64e -mbranch-protection=bti' \
+    XCFLAGS="$pauth_xcflags"
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" -j"$jobs" \
     TARGET_FLAGS='-arch arm64e -mbranch-protection=bti' \
@@ -487,6 +513,22 @@ grep -E '^#define LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+0$' \
   "$pauth_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_STITCH_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+1$' \
   "$pauth_macros" >/dev/null
+grep -E '^#define LJ_ARM64_JIT_EXIT_TARGET_SLOTS[[:space:]]+1$' \
+  "$pauth_macros" >/dev/null
+
+# Run the same synthetic exit-table and root-entry mutation certificate with
+# authenticated slots and an arm64e ABI, in addition to the live root below.
+# shellcheck disable=SC2086 # pauth_xcflags intentionally expands.
+"$cc" -std=gnu11 -O2 -Wall -Wextra -Werror -arch arm64e \
+  -mbranch-protection=bti -mmacosx-version-min="$minver" $pauth_xcflags \
+  -I"$root/src" -c "$root/tests/t-arm64-jit-root-entry.c" \
+  -o "$pauth_fixture_obj"
+# shellcheck disable=SC2086 # pauth_xcflags intentionally expands.
+"$cc" -std=gnu11 -O2 -Wall -Wextra -Werror -arch arm64e \
+  -mbranch-protection=bti -mmacosx-version-min="$minver" $pauth_xcflags \
+  -I"$root/src" "$root/tests/t-arm64-jit-root-entry.c" "$archive" \
+  -lm -pthread -o "$pauth_fixture"
+"$pauth_fixture"
 
 otool -tvV "$vm_object" >"$pauth_vm_disasm"
 awk '/^_lj_BC_JLOOP:/ { copy=1 }

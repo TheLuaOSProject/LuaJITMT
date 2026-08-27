@@ -585,6 +585,18 @@ static LJ_AINLINE SnapNo trace_nsnap_acq(const GCtrace *T)
   return (SnapNo)la_load16_acq(&T->nsnap);
 }
 
+/* ARM64 side bodies reserve one additional table slot for the backend's
+** stack-check exit. The root field is immutable after body publication. */
+static LJ_AINLINE MSize trace_exittab_nslots_acq(const GCtrace *T)
+{
+  MSize n = (MSize)trace_nsnap_acq(T);
+#if LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS
+  if (trace_root_acq(T) != 0)
+    n++;
+#endif
+  return n;
+}
+
 static LJ_AINLINE MSize trace_nsnapmap_acq(const GCtrace *T)
 {
   return (MSize)la_load32_acq(&T->nsnapmap);
@@ -715,10 +727,53 @@ static LJ_AINLINE SnapEntry *trace_snapmap_acq(const GCtrace *T)
   return (SnapEntry *)la_loadptr_acq((void *const *)&T->snapmap);
 }
 
+#if !(LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS)
 #define trace_exittarget_acq(T, exitno) \
   ((MCode *)la_loadptr_acq((void *const *)&trace_exittab_acq((T))[(exitno)]))
 #define trace_exittarget_rel(T, exitno, target) \
   la_storeptr_rel((void **)&trace_exittab_acq((T))[(exitno)], (void *)(target))
+#endif
+
+#if LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS
+/* ARM64e exit gates authenticate with the owning global_State in x22. Keep
+** the signed representation intact in the data slot; strip only when C needs
+** the raw address for identity or mcode-lifetime comparisons. */
+static LJ_AINLINE void *trace_exittarget_arm64_encode(global_State *g,
+						       MCode *target)
+{
+#if LJ_ABI_PAUTH
+  ASMFunction signedtarget =
+    lj_ptr_sign(ptrauth_nop_cast(ASMFunction, target), g);
+  return ptrauth_nop_cast(void *, signedtarget);
+#else
+  UNUSED(g);
+  return (void *)target;
+#endif
+}
+
+static LJ_AINLINE void trace_exittarget_arm64_rel(global_State *g,
+						   GCtrace *T, ExitNo exitno,
+						   MCode *target)
+{
+  MCode **exittab = trace_exittab_acq(T);
+  la_storeptr_rel((void **)&exittab[exitno],
+		  trace_exittarget_arm64_encode(g, target));
+}
+
+static LJ_AINLINE MCode *trace_exittarget_arm64_acq(const GCtrace *T,
+						     ExitNo exitno)
+{
+  MCode **exittab = trace_exittab_acq(T);
+  void *target = la_loadptr_acq((void *const *)&exittab[exitno]);
+#if LJ_ABI_PAUTH
+  ASMFunction signedtarget = ptrauth_nop_cast(ASMFunction, target);
+  return ptrauth_nop_cast(MCode *, lj_ptr_strip(signedtarget));
+#else
+  return (MCode *)target;
+#endif
+}
+#endif
+
 static LJ_AINLINE GCobj *trace_startptgco_acq(GCtrace *T)
 {
   return gcref_acq(T->startpt);

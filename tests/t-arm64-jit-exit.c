@@ -12,6 +12,8 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
+#include <time.h>
 
 #include "lua.h"
 #include "lauxlib.h"
@@ -29,6 +31,7 @@
 #include "lj_safepoint.h"
 #include "lj_target.h"
 #include "lj_tg.h"
+#include "lj_thr.h"
 #include "lj_asm.h"
 
 #if !LJ_HASJIT || LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED || \
@@ -38,8 +41,10 @@
 #endif
 
 #define EXIT_RACE_ROUNDS 128u
+#define EXIT_SLOT_RACE_ROUNDS 256u
 #define EXIT_STUB_TRACE 0x1234u
 #define EXIT_STUB_NEXITS 4u
+#define EXIT_WAIT_TIMEOUT_NS U64x(00000006,fc23ac00)  /* 30 seconds. */
 
 typedef struct ExitLeaseRace {
   global_State *g;
@@ -48,15 +53,38 @@ typedef struct ExitLeaseRace {
   uint32_t idle_result;
 } ExitLeaseRace;
 
-static void wait_phase(const ExitLeaseRace *race, uint32_t phase)
+typedef struct ExitSlotRace {
+  GCtrace trace;
+  global_State *g;
+  _Alignas(8) MCode *slots[1];
+  _Alignas(8) MCode target[2][2];
+  uint32_t payload;
+  uint32_t acknowledged;
+} ExitSlotRace;
+
+static uint64_t monotonic_ns(void)
 {
-  uint32_t i;
-  for (i = 0; i < 10000000u; i++) {
-    if (la_load32_acq(&race->phase) >= phase)
+  struct timespec ts;
+  assert(clock_gettime(CLOCK_MONOTONIC, &ts) == 0);
+  return (uint64_t)ts.tv_sec * 1000000000u + (uint64_t)ts.tv_nsec;
+}
+
+static void wait_word(const uint32_t *word, uint32_t value)
+{
+  uint64_t deadline = monotonic_ns() + EXIT_WAIT_TIMEOUT_NS;
+  for (;;) {
+    if (la_load32_acq(word) >= value)
       return;
-    la_cpu_pause();
+    if (monotonic_ns() >= deadline)
+      break;
+    (void)lj_thr_retry_yield(NULL);
   }
   assert(!"ARM64 synthetic exit race timed out");
+}
+
+static void wait_phase(const ExitLeaseRace *race, uint32_t phase)
+{
+  wait_word(&race->phase, phase);
 }
 
 static void *exit_lease_reclaimer(void *arg)
@@ -81,15 +109,61 @@ static void *exit_lease_reclaimer(void *arg)
   return NULL;
 }
 
+static void *exit_slot_reader(void *arg)
+{
+  ExitSlotRace *race = (ExitSlotRace *)arg;
+  uint32_t round;
+  for (round = 0; round < EXIT_SLOT_RACE_ROUNDS; round++) {
+    MCode *expected = race->target[round & 1u];
+    uint64_t deadline = monotonic_ns() + EXIT_WAIT_TIMEOUT_NS;
+    for (;;) {
+      if (trace_exittarget_arm64_acq(&race->trace, 0) == expected)
+	break;
+      assert(monotonic_ns() < deadline);
+      (void)lj_thr_retry_yield(NULL);
+    }
+    assert(la_load32_rlx(&race->payload) == round + 1u);
+    la_store32_rel(&race->acknowledged, round + 1u);
+  }
+  return NULL;
+}
+
+static void test_exit_slot_release_acquire(lua_State *L)
+{
+  ExitSlotRace race;
+  pthread_t reader;
+  uint32_t round;
+
+  memset(&race, 0, sizeof(race));
+  race.g = G(L);
+  race.trace.nsnap = 1;
+  race.trace.exittab = race.slots;
+  race.target[0][0] = race.target[1][0] = A64I_BTI_J;
+  race.target[0][1] = race.target[1][1] = A64I_NOP;
+  trace_exittarget_arm64_rel(race.g, &race.trace, 0, race.target[1]);
+  assert(pthread_create(&reader, NULL, exit_slot_reader, &race) == 0);
+  for (round = 0; round < EXIT_SLOT_RACE_ROUNDS; round++) {
+    la_store32_rlx(&race.payload, round + 1u);
+    trace_exittarget_arm64_rel(race.g, &race.trace, 0,
+			       race.target[round & 1u]);
+    wait_word(&race.acknowledged, round + 1u);
+  }
+  assert(pthread_join(reader, NULL) == 0);
+  assert(la_load32_acq(&race.acknowledged) == EXIT_SLOT_RACE_ROUNDS);
+}
+
 static void test_exit_stub_words(jit_State *J, const char *path)
 {
-  MCode direct[32] = { 0 };
-  MCode indirect[32] = { 0 };
-  MSize ndirect, nindirect;
+  _Alignas(8) MCode words[64] = { 0 };
+  _Alignas(8) MCode *slots[EXIT_STUB_NEXITS] = { NULL };
+  GCtrace T;
+  MCode *fallback = words;
+  MCode *gates = words + ARM64_EXIT_FALLBACK_WORDS;
+  MSize nwords;
   intptr_t k64ofs = (intptr_t)((char *)&J->k64[LJ_K64_VM_EXIT_HANDLER] -
 			       (char *)&J2GG(J)->g);
-  MCode strlr = A64I_STRx | A64F_D(RID_LR) | A64F_N(RID_SP);
-  MCode movtrace = A64I_MOVZw | A64F_U16(EXIT_STUB_TRACE);
+  MCode movtrace = A64I_MOVZw | A64F_D(RID_X0) |
+		   A64F_U16(EXIT_STUB_TRACE);
   FILE *fp;
   ExitNo i;
 
@@ -99,41 +173,67 @@ static void test_exit_stub_words(jit_State *J, const char *path)
   assert(offsetof(ExitState, spill) == 512u);
   assert(k64ofs >= 0 && (k64ofs & 7) == 0 && (k64ofs >> 3) < 4096);
 
-  ndirect = lj_asm_arm64_exitstub_test(J, direct, 32, EXIT_STUB_TRACE,
-				       EXIT_STUB_NEXITS, 0);
-  nindirect = lj_asm_arm64_exitstub_test(J, indirect, 32, EXIT_STUB_TRACE,
-					 EXIT_STUB_NEXITS, 1);
-  assert(ndirect == EXIT_STUB_NEXITS + 3u);
-  assert(nindirect == EXIT_STUB_NEXITS + 4u);
+  nwords = lj_asm_arm64_exitstub_test(J, words, 64, EXIT_STUB_TRACE,
+				      EXIT_STUB_NEXITS, slots);
+  assert(nwords == ARM64_EXIT_FALLBACK_WORDS +
+	 ARM64_EXIT_GATE_WORDS * EXIT_STUB_NEXITS);
+  assert(((uintptr_t)(void *)fallback & 7u) == 0);
+  assert(((uintptr_t)(void *)gates & 7u) == 0);
 
-  assert(direct[0] == strlr);
-  assert(direct[1] == (A64I_BL | A64F_S26((int32_t)ndirect - 1)));
-  assert(direct[2] == movtrace);
-  assert(indirect[0] == strlr);
-  assert(indirect[1] ==
+  assert(fallback[0] == A64I_BTI_J);
+  assert(fallback[1] ==
 	 (A64I_LDRx | A64F_D(RID_LR) | A64F_N(RID_GL) |
 	  A64F_U12((uint32_t)(k64ofs >> 3))));
-  assert(indirect[2] == (A64I_BLR_AUTH | A64F_N(RID_LR)));
-  assert(indirect[3] == movtrace);
+  assert(fallback[2] == (A64I_BLR_AUTH | A64F_N(RID_LR)));
+  assert(fallback[3] == movtrace);
+
+  memset(&T, 0, sizeof(T));
+  T.nsnap = EXIT_STUB_NEXITS;
+  T.exittab = slots;
+  T.exitstub = gates;
 
   for (i = 0; i < EXIT_STUB_NEXITS; i++) {
-    uintptr_t saved_direct = (uintptr_t)&direct[3u + i + 1u];
-    uintptr_t handler_direct = (uintptr_t)&direct[2];
-    uintptr_t saved_indirect = (uintptr_t)&indirect[4u + i + 1u];
-    uintptr_t handler_indirect = (uintptr_t)&indirect[3];
-    assert(direct[3u+i] == (A64I_BL | A64F_S26(-3-(int32_t)i)));
-    assert(indirect[4u+i] == (A64I_BL | A64F_S26(-4-(int32_t)i)));
-    assert(exitstub_trace_addr_(direct, i) == &direct[3u+i]);
-    assert(exitstub_trace_addr_(indirect, i) == &indirect[4u+i]);
-    assert(((saved_direct-handler_direct) >> 2) - 2u == i);
-    assert(((saved_indirect-handler_indirect) >> 2) - 2u == i);
+    MCode *gate = gates + ARM64_EXIT_GATE_WORDS * i;
+    uint64_t literal = 0;
+    memcpy(&literal, &gate[6], sizeof(literal));
+    assert(((uintptr_t)(void *)&gate[6] & 7u) == 0);
+    assert(gate[0] ==
+	   (A64I_MOVZw | A64F_D(RID_LR) | A64F_U16(i)));
+    assert(gate[1] ==
+	   (A64I_STRx | A64F_D(RID_LR) | A64F_N(RID_SP)));
+    assert(gate[2] ==
+	   (A64I_LDRLx | A64F_D(RID_LR) | A64F_S19(4)));
+    assert(gate[3] ==
+	   (A64I_LDARx | A64F_D(RID_LR) | A64F_N(RID_LR)));
+    assert(gate[4] == (A64I_BR_G_AUTH | A64F_N(RID_LR)));
+    assert(gate[5] == A64I_NOP);
+    assert(literal == (uint64_t)(uintptr_t)(void *)&slots[i]);
+    assert(exitstub_trace_addr_((MCode *)gates, i) == gate);
+    assert(exitstub_trace_fallback_addr_((MCode *)gates) == fallback);
+    assert(trace_exittarget_arm64_acq(&T, i) == fallback);
+    assert(trace_exittarget_arm64_acq(&T, i) != gate);
   }
 
   fp = fopen(path, "wb");
   assert(fp != NULL);
-  assert(fwrite(direct, sizeof(MCode), ndirect, fp) == ndirect);
-  assert(fwrite(indirect, sizeof(MCode), nindirect, fp) == nindirect);
+  assert(fwrite(words, sizeof(MCode), nwords, fp) == nwords);
   assert(fclose(fp) == 0);
+}
+
+static void test_exit_stub_layout_limit(void)
+{
+  _Alignas(8) MCode aligned[2];
+  MSize need = 0;
+
+  assert(lj_asm_arm64_exitstub_layout_test(
+	(uintptr_t)(void *)&aligned[0], 8191, &need));
+  assert(need == 65532u);
+  assert(lj_asm_arm64_exitstub_layout_test(
+	(uintptr_t)(void *)&aligned[1], 8191, &need));
+  assert(need == 65533u);
+  assert(!lj_asm_arm64_exitstub_layout_test(
+	(uintptr_t)(void *)&aligned[0], 8192, &need));
+  assert(need == 65540u);
 }
 
 static void require_idle_reclaim(global_State *g)
@@ -217,7 +317,9 @@ int main(int argc, char **argv)
   L = luaL_newstate();
   assert(L != NULL && L2J(L) != NULL);
   lua_gc(L, LUA_GCSTOP, 0);
+  test_exit_stub_layout_limit();
   test_exit_stub_words(L2J(L), argv[1]);
+  test_exit_slot_release_acquire(L);
   test_exit_lease_race(L);
   test_profile_ack_after_quiescence(L);
   lua_close(L);

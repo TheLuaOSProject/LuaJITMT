@@ -184,9 +184,9 @@ done
   "$fixture_obj" "$archive" -lm -pthread -o "$fixture"
 "$fixture"
 
-# Run the identical three phase races under ARM64e. The randomized mcode hint
-# additionally exercises the authenticated far-exit path when placement leaves
-# direct BL range, without broadening the trace shape.
+# Run the identical three phase races under ARM64e. Randomized mcode hints
+# additionally prove that authenticated entry and immutable exit gates remain
+# placement-independent without broadening the trace shape.
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" clean \
     TARGET_FLAGS='-arch arm64e -mbranch-protection=bti' \

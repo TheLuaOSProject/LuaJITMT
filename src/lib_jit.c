@@ -725,7 +725,8 @@ static LJ_AINLINE MCode *jit_traceexitstub_addr_acq(const GCtrace *T,
   tv.exitstub = trace_exitstub_acq(T);
   if (tv.mcode == NULL)
     return NULL;
-#if LJ_TARGET_X86ORX64 && LJ_64
+#if (LJ_TARGET_X86ORX64 && LJ_64) || \
+    (LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS)
   if (tv.exitstub == NULL)
     return NULL;
 #endif
@@ -1149,6 +1150,8 @@ static int jitopt_param(jit_State *J, const char *str)
 	n = (n + (LJ_PAGESIZE >> 10) - 1) & ~((LJ_PAGESIZE >> 10) - 1);
 	if (n > maxkb) n = maxkb;
       }
+      if (i == JIT_P_maxsnap && n > UINT16_MAX)
+	n = UINT16_MAX;  /* GCtrace.nsnap is uint16_t. */
       jit_param_rel(J, i, (int32_t)n);
       if (i == JIT_P_hotloop)
 	lj_dispatch_init_hotcount(J2G(J));

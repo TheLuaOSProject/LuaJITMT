@@ -18,6 +18,7 @@
 #include "lj_gc2.h"
 #include "lj_jit.h"
 #include "lj_str.h"
+#include "lj_target.h"
 #include "lj_tg.h"
 #include "lj_trace.h"
 
@@ -152,13 +153,25 @@ static void test_listed_slot_teardown_no_republish(lua_State *L)
   GCtrace *T;
   int i;
   lua_settop(L, 0);
+#if LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS
+  assert(luaL_dostring(L,
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "return function(n) local i,s=0,0 while i<n do "
+      "i=i+1 s=s+i end return s end\n") == LUA_OK);
+#else
   assert(luaL_dostring(L,
     "jit.flush()\n"
     "jit.opt.start('hotloop=1', 'hotexit=1')\n"
     "return function(x) return x + 1 end\n") == LUA_OK);
+#endif
   for (i = 1; i <= 20; i++) {
     lua_pushvalue(L, -1);
+#if LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS
+    lua_pushinteger(L, 20);
+#else
     lua_pushinteger(L, i);
+#endif
     lua_call(L, 1, 1);
     lua_pop(L, 1);
   }
@@ -861,6 +874,42 @@ int main(void)
   assert(retired_find(J, T) != NULL);
   assert(reclaim_trace_at(g, scoped_epoch + LJ_FLUSH_EPOCHS) >= 1);
   assert(retired_find(J, T) == NULL);
+
+#if LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS
+  /* ARM64 side bodies own one backend stack-check slot beyond nsnap. Exact
+  ** teardown must free the two-element vector, even while side recording is
+  ** still fail-closed and no executable child is published. */
+  {
+    _Alignas(8) MCode signed_target[2] = { A64I_BTI_J, A64I_NOP };
+    uint32_t exittab_frees_before = lj_trace_test_exittab_frees();
+    T = lj_trace_alloc(L, &tmpl);
+    test_trace_complete_payload_layout(T);
+    test_trace_publish_root(g, T);
+    setgcref(T->startpt, obj2gco(pt));
+    T->root = 1;
+    exittab = lj_mem_newvec(L, 2, MCode *);
+    exittab[0] = exittab[1] = NULL;
+    T->exittab = exittab;
+    T->nsnap = 1;
+    trace_exittarget_arm64_rel(g, T, 0, signed_target);
+    trace_exittarget_arm64_rel(g, T, 1, signed_target);
+    assert(trace_exittab_nslots_acq(T) == 2);
+    assert(lj_trace_test_body_mcode_refs(g, T, signed_target,
+	   sizeof(signed_target)) == 1);
+    assert(lj_trace_test_body_mcode_refs(g, T, (MCode *)(void *)T,
+	   sizeof(MCode)) == 0);
+    assert(lj_gc2_mem_registered(g, exittab));
+    lj_trace_free(g, T);
+    ret = retired_find(J, T);
+    assert(ret == T && ret->exittab == exittab);
+    epoch = ret->retire_epoch - 1u;
+    J->trace_reclaim_epoch = 0;
+    assert(reclaim_trace_at(g, epoch + LJ_FLUSH_EPOCHS) >= 1);
+    assert(retired_find(J, T) == NULL);
+    assert(lj_trace_test_exittab_frees() == exittab_frees_before + 1u);
+    assert(lj_trace_test_exittab_last_free_slots() == 2);
+  }
+#endif
 
   test_listed_slot_teardown_no_republish(L);
   test_unpublished_huge_abandon_smr_collision(L);

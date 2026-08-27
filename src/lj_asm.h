@@ -61,6 +61,9 @@ LJ_FUNC int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
 LJ_FUNC int lj_asm_arm64_postra_funcf_entry_admit(
 	const LJArm64PostRAView *view, BCIns liveins,
 	IRRef *semantic_ninsp);
+#ifdef LJ_TRACE_TEST_HELPERS
+LJ_FUNC void lj_asm_arm64_test_force_exitstub_mcode_retry(uint32_t count);
+#endif
 #endif
 #if LJ_TARGET_ARM64 && defined(LJ_ARM64_EMIT_TEST_HELPERS)
 typedef enum {
@@ -77,9 +80,11 @@ LJ_FUNC MSize lj_asm_arm64_emit_test(jit_State *J, MCode *buf, MSize cap,
 			     LJArm64EmitTestOp op, int32_t state);
 #endif
 #if LJ_TARGET_ARM64 && defined(LJ_ARM64_EXIT_TEST_HELPERS)
+LJ_FUNC int lj_asm_arm64_exitstub_layout_test(uintptr_t mctop,
+	ExitNo nexits, MSize *needp);
 LJ_FUNC MSize lj_asm_arm64_exitstub_test(jit_State *J, MCode *buf, MSize cap,
 					 TraceNo traceno, ExitNo nexits,
-					 int indirect);
+					 MCode **slots);
 #endif
 #endif
 

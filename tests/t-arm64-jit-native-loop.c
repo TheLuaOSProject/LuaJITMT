@@ -285,38 +285,52 @@ static void expect_loop_geometry(const GCtrace *T, const GCproto *pt)
   assert(trace_topslot_acq(T) == (MSize)pt->framesize);
 }
 
-static void expect_exit_stub_path(jit_State *J, const GCtrace *T,
-	int expect_indirect)
+static void expect_exit_stub_path(jit_State *J, const GCtrace *T)
 {
-  MCode *e = exitstub_trace_addr(T, 0);
-  MCode strlr = A64I_STRx | A64F_D(RID_LR) | A64F_N(RID_SP);
-  MCode movtrace = A64I_MOVZw | A64F_U16(1);
+  MCode **exittab = trace_exittab_acq(T);
+  MCode *gates = trace_exitstub_acq(T);
+  MCode *fallback;
+  intptr_t k64ofs =
+    (intptr_t)((char *)&J->k64[LJ_K64_VM_EXIT_HANDLER] -
+	       (char *)&J2GG(J)->g);
+  ExitNo i;
 
-  assert(e != NULL);
-  assert(e[-1] == movtrace);
-  if (expect_indirect) {
-    intptr_t k64ofs =
-      (intptr_t)((char *)&J->k64[LJ_K64_VM_EXIT_HANDLER] -
-		 (char *)&J2GG(J)->g);
-    MCode ldrhandler;
-    assert(k64ofs >= 0 && (k64ofs & 7) == 0 &&
-	   (k64ofs >> 3) < 4096);
-    ldrhandler = A64I_LDRx | A64F_D(RID_LR) | A64F_N(RID_GL) |
-		 A64F_U12((uint32_t)(k64ofs >> 3));
-    assert(e[-4] == strlr);
-    assert(e[-3] == ldrhandler);
-    assert(e[-2] == (A64I_BLR_AUTH | A64F_N(RID_LR)));
-#if LJ_ABI_PAUTH
-    assert(e[-2] == (A64I_BLRAAZ | A64F_N(RID_LR)));
-#endif
-  } else {
-    assert(e[-3] == strlr);
-    assert((e[-2] & 0xfc000000u) == A64I_BL);
+  assert(exittab != NULL && gates != NULL);
+  assert(!trace_exittab_ismcode(T));
+  assert(((uintptr_t)(void *)exittab & 7u) == 0);
+  assert(((uintptr_t)(void *)gates & 7u) == 0);
+  fallback = exitstub_trace_fallback_addr_(gates);
+  assert(fallback[0] == A64I_BTI_J);
+  assert(k64ofs >= 0 && (k64ofs & 7) == 0 &&
+	 (k64ofs >> 3) < 4096);
+  assert(fallback[1] ==
+	 (A64I_LDRx | A64F_D(RID_LR) | A64F_N(RID_GL) |
+	  A64F_U12((uint32_t)(k64ofs >> 3))));
+  assert(fallback[2] == (A64I_BLR_AUTH | A64F_N(RID_LR)));
+  assert(fallback[3] ==
+	 (A64I_MOVZw | A64F_D(RID_X0) | A64F_U16(1)));
+
+  for (i = 0; i < trace_exittab_nslots_acq(T); i++) {
+    MCode *gate = exitstub_trace_addr_(gates, i);
+    uint64_t literal = 0;
+    memcpy(&literal, &gate[6], sizeof(literal));
+    assert(gate[0] ==
+	   (A64I_MOVZw | A64F_D(RID_LR) | A64F_U16(i)));
+    assert(gate[1] ==
+	   (A64I_STRx | A64F_D(RID_LR) | A64F_N(RID_SP)));
+    assert(gate[2] ==
+	   (A64I_LDRLx | A64F_D(RID_LR) | A64F_S19(4)));
+    assert(gate[3] ==
+	   (A64I_LDARx | A64F_D(RID_LR) | A64F_N(RID_LR)));
+    assert(gate[4] == (A64I_BR_G_AUTH | A64F_N(RID_LR)));
+    assert(gate[5] == A64I_NOP);
+    assert(literal == (uint64_t)(uintptr_t)(void *)&exittab[i]);
+    assert(trace_exittarget_arm64_acq(T, i) == fallback);
+    assert(trace_exittarget_arm64_acq(T, i) != gate);
   }
 }
 
-static void expect_only_root_trace(jit_State *J, GCproto *pt,
-	int expect_indirect)
+static void expect_only_root_trace(jit_State *J, GCproto *pt)
 {
   TraceNo traceno;
   GCtrace *T = traceref_safe(J, 1);
@@ -354,7 +368,7 @@ static void expect_only_root_trace(jit_State *J, GCproto *pt,
   assert((szmcode & (sizeof(MCode)-1u)) == 0);
   assert(trace_mcloop_acq(T) > 0 && trace_mcloop_acq(T) < szmcode);
   assert((trace_mcloop_acq(T) & (sizeof(MCode)-1u)) == 0);
-  expect_exit_stub_path(J, T, expect_indirect);
+  expect_exit_stub_path(J, T);
   expect_ir_shape(T);
   expect_snapshot_shape(T);
 
@@ -388,7 +402,7 @@ static void expect_profile_exit_and_reentry(void)
 }
 
 static void run_postadmission_profile(lua_State *L, jit_State *J, TGState *tg,
-	GCproto *pt, int expect_indirect)
+	GCproto *pt)
 {
   global_State *g = G(L);
   uint64_t epoch = gc2_hs_epoch_acq(g);
@@ -436,11 +450,11 @@ static void run_postadmission_profile(lua_State *L, jit_State *J, TGState *tg,
   assert(lj_tg_load_jit_base(tg) == NULL);
   assert(L->cframe == saved_cframe);
   assert(lj_tg_vmstate_load_acq(tg) == saved_vmstate);
-  expect_only_root_trace(J, pt, expect_indirect);
+  expect_only_root_trace(J, pt);
 }
 
 static void run_postadmission_stopreq(lua_State *L, jit_State *J, TGState *tg,
-	GCproto *pt, int expect_indirect)
+	GCproto *pt)
 {
   global_State *g = G(L);
   uint64_t epoch = gc2_hs_epoch_acq(g);
@@ -500,7 +514,7 @@ static void run_postadmission_stopreq(lua_State *L, jit_State *J, TGState *tg,
   clear_stopreq(tg);
   assert((lj_tg_flags_acq(tg) &
 	  (TGF_STOPREQ|TGF_STOPREQ_FRESH)) == 0);
-  expect_only_root_trace(J, pt, expect_indirect);
+  expect_only_root_trace(J, pt);
 }
 
 int main(int argc, char **argv)
@@ -511,14 +525,11 @@ int main(int argc, char **argv)
   GCproto *pt;
   void *saved_cframe;
   int32_t saved_vmstate;
-  int expect_indirect = 0;
 
   assert(argc == 1 || argc == 2);
-  if (argc == 2) {
+  if (argc == 2)
     assert(strcmp(argv[1], "direct") == 0 ||
-	   strcmp(argv[1], "indirect") == 0);
-    expect_indirect = strcmp(argv[1], "indirect") == 0;
-  }
+	   strcmp(argv[1], "randomized") == 0);
 
   assert(L != NULL);
   luaL_openlibs(L);
@@ -549,10 +560,10 @@ int main(int argc, char **argv)
   assert(lj_tg_load_jit_base(tg) == NULL);
   assert(lj_tg_vmstate_load_acq(tg) == saved_vmstate);
   pt = global_proto(L, "__arm64_native_integer_loop");
-  expect_only_root_trace(J, pt, expect_indirect);
+  expect_only_root_trace(J, pt);
 
-  run_postadmission_profile(L, J, tg, pt, expect_indirect);
-  run_postadmission_stopreq(L, J, tg, pt, expect_indirect);
+  run_postadmission_profile(L, J, tg, pt);
+  run_postadmission_stopreq(L, J, tg, pt);
 
   /* A handled STOPREQ never invalidates the admitted trace. Reset the probe
   ** counters and require the ordinary loop-condition exit on the next call. */
@@ -563,7 +574,7 @@ int main(int argc, char **argv)
   assert(lj_tg_load_jit_base(tg) == NULL);
   assert(L->cframe == saved_cframe);
   assert(lj_tg_vmstate_load_acq(tg) == saved_vmstate);
-  expect_only_root_trace(J, pt, expect_indirect);
+  expect_only_root_trace(J, pt);
 
   {
     const BCIns *pc = trace_startpc_acq(traceref_safe(J, 1));

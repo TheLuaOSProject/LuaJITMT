@@ -111,6 +111,7 @@ for setting in \
   'LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1' \
+  'LJ_ARM64_JIT_EXIT_TARGET_SLOTS 1' \
   'LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED 0' \
@@ -261,8 +262,11 @@ for required in \
   'trace_topslot_acq(T) == (MSize)pt->framesize' \
   '168 + (LJ_ABI_BRANCH_TRACK ? sizeof(MCode) : 0)' \
   'trace_mcode_acq(T)[0] == A64I_BTI_J' \
-  'exitstub_trace_addr(T, 0)' \
-  'A64I_BLRAAZ' \
+  'trace_exittab_acq(T)' \
+  'exitstub_trace_fallback_addr_(gates)' \
+  'trace_exittarget_arm64_acq(T, i) == fallback' \
+  'A64I_LDARx' \
+  'A64I_BR_G_AUTH' \
   'run_lua(L, "jit.flush()")' \
   'proto_trace_acq(pt) == 0' \
   'trace_mcloop_acq(T) & (sizeof(MCode)-1u)' \
@@ -287,10 +291,9 @@ test "$(grep -Fc 'call_sum_and_check_cframe(L, 20, 210)' \
   exit 1
 }
 
-# Execute the identical strict root under the authenticated ABI. The normal
-# placement must use the real direct exit-handler stub. Randomized mcode hints
-# then force the actual trace outside direct BL range, so all five entries and
-# exits execute through the K64 load plus BLRAAZ path as well.
+# Execute the identical strict root under the authenticated ABI. The fixed
+# fallback is placement-independent and always uses the K64 load plus BLRAAZ;
+# normal and randomized mcode hints must execute the same immutable gates.
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" clean \
     TARGET_FLAGS='-arch arm64e -mbranch-protection=bti' \
@@ -310,6 +313,7 @@ for setting in \
   'LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1' \
+  'LJ_ARM64_JIT_EXIT_TARGET_SLOTS 1' \
   'LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED 0' \
@@ -328,7 +332,7 @@ done
   -o "$pauth_fixture"
 otool -hv "$pauth_fixture" | grep -E 'ARM64[[:space:]]+E' >/dev/null
 "$pauth_fixture" direct
-LUAJIT_MCODE_TEST=R "$pauth_fixture" indirect
+LUAJIT_MCODE_TEST=R "$pauth_fixture" randomized
 
 otool -tvV "$vm_object" >"$pauth_vm_disasm"
 awk '/^_lj_BC_JLOOP:/ { copy=1 }
@@ -354,4 +358,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
     TARGET_FLAGS='-arch arm64' XCFLAGS="$xcflags"
 restore_needed=0
 
-echo "arm64_jit_native_loop_contract OK: strict ARM64 and ARM64e/BTI BC_LOOP executed XPOLL lifecycle, direct and authenticated far exits"
+echo "arm64_jit_native_loop_contract OK: strict ARM64 and ARM64e/BTI BC_LOOP executed XPOLL lifecycle through placement-invariant authenticated exit tables"

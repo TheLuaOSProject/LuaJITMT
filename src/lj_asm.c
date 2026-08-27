@@ -1267,7 +1267,15 @@ typedef struct ASMState {
 
 static LJ_NORET LJ_NOINLINE void asm_mclimit(ASMState *as)
 {
+#if LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS
+  /* ARM64's fixed exit gates live between mctop and mctoporig. Count them in
+  ** every body overflow decision; mctop alone names the fallback boundary. */
+  lj_assertA(as->mcp <= as->mctoporig, "bad ARM64 mcode accounting");
+  lj_mcode_limiterr(as->J,
+	(size_t)(as->mctoporig - as->mcp + 4*MCLIM_REDZONE));
+#else
   lj_mcode_limiterr(as->J, (size_t)(as->mctop - as->mcp + 4*MCLIM_REDZONE));
+#endif
 }
 
 static LJ_AINLINE void checkmclim(ASMState *as)
@@ -2244,8 +2252,13 @@ static void asm_snap_fixup_mcofs(ASMState *as)
   SnapShot *snap = as->T->snap;
   SnapNo i;
   for (i = as->T->nsnap-1; i > 0; i--) {
+    uint32_t ofs;
     /* Compute offset from mcode start and store in correct snapshot. */
-    snap[i].mcofs = (uint16_t)(sz - snap[i-1].mcofs);
+    lj_assertA(sz >= snap[i-1].mcofs, "bad snapshot mcode offset");
+    ofs = sz - snap[i-1].mcofs;
+    if (LJ_UNLIKELY(ofs >= 0x10000u))
+      lj_trace_err(as->J, LJ_TRERR_MCODEOV);
+    snap[i].mcofs = (uint16_t)ofs;
   }
   snap[0].mcofs = 0;
 }
@@ -2967,6 +2980,28 @@ static void asm_loop(ASMState *as)
 }
 
 /* -- Target-specific assembler ------------------------------------------- */
+
+#if LJ_TARGET_ARM64 && defined(LJ_TRACE_TEST_HELPERS)
+static uint32_t asm_test_exitstub_mcode_retry_count;
+
+void lj_asm_arm64_test_force_exitstub_mcode_retry(uint32_t count)
+{
+  la_store32_rel(&asm_test_exitstub_mcode_retry_count, count);
+}
+
+static int asm_test_exitstub_mcode_retry_consume(void)
+{
+  uint32_t count = la_load32_acq(&asm_test_exitstub_mcode_retry_count);
+  while (count != 0) {
+    uint32_t expect = count;
+    if (la_cas32(&asm_test_exitstub_mcode_retry_count, &expect, count-1u,
+			 LA_ACQ_REL, LA_ACQ))
+      return 1;
+    count = expect;
+  }
+  return 0;
+}
+#endif
 
 #if LJ_TARGET_X86ORX64
 #include "lj_asm_x86.h"
@@ -4123,28 +4158,42 @@ MSize lj_asm_arm64_emit_test(jit_State *J, MCode *buf, MSize cap,
 #endif
 
 #if LJ_TARGET_ARM64 && defined(LJ_ARM64_EXIT_TEST_HELPERS)
+int lj_asm_arm64_exitstub_layout_test(uintptr_t mctop, ExitNo nexits,
+	MSize *needp)
+{
+  MSize need;
+  if (nexits == 0 || needp == NULL)
+    return 0;
+  need = asm_exitstub_need(mctop, nexits);
+  *needp = need;
+  return need < 0x10000u;
+}
+
 MSize lj_asm_arm64_exitstub_test(jit_State *J, MCode *buf, MSize cap,
-				 TraceNo traceno, ExitNo nexits, int indirect)
+				 TraceNo traceno, ExitNo nexits, MCode **slots)
 {
   ASMState as_;
   ASMState *as = &as_;
   GCtrace T;
   MSize need;
 
-  if (J == NULL || buf == NULL || traceno == 0 || nexits == 0 ||
-      (indirect != 0 && indirect != 1))
+  if (J == NULL || buf == NULL || slots == NULL || traceno == 0 ||
+      nexits == 0 || nexits-1u > UINT16_MAX ||
+      ((uintptr_t)(void *)buf & 7u) != 0)
     return 0;
-  need = (MSize)nexits + 3u + (MSize)indirect;
-  if (cap <= need)
+  need = ARM64_EXIT_FALLBACK_WORDS +
+	 ARM64_EXIT_GATE_WORDS * (MSize)nexits;
+  if (cap < need)
     return 0;
   memset(as, 0, sizeof(*as));
   memset(&T, 0, sizeof(T));
   T.traceno = traceno;
+  T.nsnap = (SnapNo)nexits;
+  T.exittab = slots;
   as->J = J;
   as->T = &T;
   as->mctop = buf + need;
-  /* The synthetic direct call targets the first word after the stub. */
-  asm_exitstub_write(as, nexits, buf + need, indirect);
+  asm_exitstub_write(as, nexits);
   lj_assertA(as->mctop == buf, "bad synthetic exit-stub size");
   return need;
 }

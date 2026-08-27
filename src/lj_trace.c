@@ -56,6 +56,22 @@
 ** pressure; the recorder still never performs collection or liveness work. */
 #define TRACE_GC_PRESSURE_BATCH	64u
 
+#if LJ_TARGET_WINDOWS && defined(_MSC_VER)
+#define LJ_TRACE_TLS __declspec(thread)
+#elif LJ_TARGET_WINDOWS
+#define LJ_TRACE_TLS __thread
+#else
+#define LJ_TRACE_TLS LJ_TLS
+#endif
+
+/* lj_err_throw() ordinarily turns every recorder error into an asynchronous
+** abort by clearing ACTIVE. MCODELM is a synchronous, owner-local exception
+** which must retain ACTIVE so trace_abort() can retry in the new area. This
+** TLS marker suppresses only the throwing owner's own lj_trace_abort() call;
+** an abort from any peer thread has independent TLS and still clears ACTIVE. */
+static LJ_TRACE_TLS jit_State *trace_sync_mcode_retry_owner;
+#undef LJ_TRACE_TLS
+
 #ifdef LJ_TRACE_TEST_HELPERS
 static uint32_t trace_test_call_unroll_aborts;
 static uint32_t trace_test_call_unroll_linked;
@@ -85,6 +101,78 @@ static uint32_t trace_test_admission_side_parent;
 static uint32_t trace_test_admission_side_exitno;
 static uint32_t trace_test_admission_side_snapshot_value;
 static uint32_t trace_test_admission_cleanup_errno_clobber;
+static uint32_t trace_test_exittab_alloc_count;
+static uint32_t trace_test_exittab_free_count;
+static uint32_t trace_test_exittab_last_alloc_nslots;
+static uint32_t trace_test_exittab_last_free_nslots;
+static uint32_t trace_test_mcode_retry_count;
+static uint32_t trace_test_abort_count;
+static uint32_t trace_test_last_abort_error_code;
+
+void lj_trace_test_reset_exittab_stats(void)
+{
+  la_store32_rel(&trace_test_exittab_alloc_count, 0);
+  la_store32_rel(&trace_test_exittab_free_count, 0);
+  la_store32_rel(&trace_test_exittab_last_alloc_nslots, 0);
+  la_store32_rel(&trace_test_exittab_last_free_nslots, 0);
+  la_store32_rel(&trace_test_mcode_retry_count, 0);
+  la_store32_rel(&trace_test_abort_count, 0);
+  la_store32_rel(&trace_test_last_abort_error_code, 0);
+}
+
+void lj_trace_test_note_exittab_alloc(MSize nslots)
+{
+  la_store32_rel(&trace_test_exittab_last_alloc_nslots, (uint32_t)nslots);
+  (void)la_add32_acqrel(&trace_test_exittab_alloc_count, 1);
+}
+
+void lj_trace_test_note_exittab_free(MSize nslots)
+{
+  la_store32_rel(&trace_test_exittab_last_free_nslots, (uint32_t)nslots);
+  (void)la_add32_acqrel(&trace_test_exittab_free_count, 1);
+}
+
+uint32_t lj_trace_test_exittab_allocs(void)
+{
+  return la_load32_acq(&trace_test_exittab_alloc_count);
+}
+
+uint32_t lj_trace_test_exittab_frees(void)
+{
+  return la_load32_acq(&trace_test_exittab_free_count);
+}
+
+MSize lj_trace_test_exittab_last_alloc_slots(void)
+{
+  return (MSize)la_load32_acq(&trace_test_exittab_last_alloc_nslots);
+}
+
+MSize lj_trace_test_exittab_last_free_slots(void)
+{
+  return (MSize)la_load32_acq(&trace_test_exittab_last_free_nslots);
+}
+
+uint32_t lj_trace_test_mcode_retries(void)
+{
+  return la_load32_acq(&trace_test_mcode_retry_count);
+}
+
+uint32_t lj_trace_test_abort_count(void)
+{
+  return la_load32_acq(&trace_test_abort_count);
+}
+
+TraceError lj_trace_test_last_abort_error(void)
+{
+  return (TraceError)la_load32_acq(&trace_test_last_abort_error_code);
+}
+
+#define trace_test_note_abort_error(e) \
+  (la_store32_rel(&trace_test_last_abort_error_code, (uint32_t)(e)), \
+   (void)la_add32_acqrel(&trace_test_abort_count, 1))
+
+#define trace_test_note_mcode_retry() \
+  ((void)la_add32_acqrel(&trace_test_mcode_retry_count, 1))
 
 void lj_trace_test_admission_reset(void)
 {
@@ -526,6 +614,8 @@ static LJ_AINLINE void trace_test_note_findfree_grow(TraceNo traceno)
   ((void)(traceno), (void)(cleared))
 #define trace_test_note_findfree_reuse(traceno)		((void)(traceno))
 #define trace_test_note_findfree_grow(traceno)		((void)(traceno))
+#define trace_test_note_mcode_retry()			((void)0)
+#define trace_test_note_abort_error(e)			((void)(e))
 #endif
 
 #if defined(LJ_TRACE_TEST_HELPERS) || defined(LJ_GC2_TEST_HELPERS)
@@ -2709,6 +2799,10 @@ int lj_jit_token_acquire_wait(jit_State *J)
 void lj_trace_abort(global_State *g)
 {
   jit_State *J = G2J(g);
+  if (trace_sync_mcode_retry_owner == J) {
+    trace_sync_mcode_retry_owner = NULL;
+    return;
+  }
   lj_trace_state_abort(J);
 }
 
@@ -2717,6 +2811,11 @@ void lj_trace_err(jit_State *J, TraceError e)
 {
   setnilV(&J->errinfo);  /* No error info. */
   setintV(J->L->top++, (int32_t)e);
+  if (e == LJ_TRERR_MCODELM) {
+    lj_assertJ(trace_sync_mcode_retry_owner == NULL,
+	       "nested synchronous mcode retry");
+    trace_sync_mcode_retry_owner = J;
+  }
   lj_err_throw(J->L, LUA_ERRRUN);
 }
 
@@ -3791,6 +3890,8 @@ typedef struct TraceArm64LoopView {
   const BCIns *startpc;
   BCIns startins;
   MCode *mcode;
+  MCode **exittab;
+  MCode *exitstub;
   MSize szmcode;
   MSize mcloop;
   MSize spadjust;
@@ -3826,6 +3927,8 @@ static int trace_root_entry_loop_view_acq(const GCtrace *T, TraceNo traceno,
   v->startpc = trace_startpc_acq(T);
   v->startins = trace_startins_acq(T);
   v->mcode = trace_mcode_acq(T);
+  v->exittab = trace_exittab_acq(T);
+  v->exitstub = trace_exitstub_acq(T);
   v->szmcode = trace_szmcode_acq(T);
   v->mcloop = trace_mcloop_acq(T);
   v->spadjust = trace_spadjust_acq(T);
@@ -3853,7 +3956,9 @@ static int trace_root_entry_loop_view_acq(const GCtrace *T, TraceNo traceno,
 	   (v->mcloop & (sizeof(MCode)-1u)) == 0)) &&
 	 v->startpt == obj2gco(pt) && v->startpc == pc &&
 	 trace_root_entry_loop_geometry(sourceop, pt, pc, v->startins) &&
-	 v->mcode != NULL && v->szmcode > sizeof(MCode) &&
+	 v->mcode != NULL && v->exittab != NULL && v->exitstub != NULL &&
+	 (v->admission & TRACE_EXITTAB_MCODE) == 0 &&
+	 v->szmcode > sizeof(MCode) &&
 	 v->topslot == (MSize)pt->framesize &&
 	 v->ir != NULL && v->nins > REF_FIRST && v->nins < REF_DROP &&
 	 v->nk > 0 && v->nk <= REF_TRUE &&
@@ -3862,6 +3967,28 @@ static int trace_root_entry_loop_view_acq(const GCtrace *T, TraceNo traceno,
 	 (v->admission & root_admission) == expected_admission &&
 	 (!function_root || v->admission == expected_admission) &&
 	 (v->admission & TRACE_ENTRY_GATED) == 0;
+}
+
+static int trace_root_entry_arm64_exit_layout_valid(
+	const TraceArm64LoopView *v)
+{
+  uintptr_t mcode = (uintptr_t)(void *)v->mcode;
+  uintptr_t exitstub = (uintptr_t)(void *)v->exitstub;
+  uintptr_t bodyend, fallback, gatesz;
+
+  if (mcode > UINTPTR_MAX-(uintptr_t)v->szmcode ||
+      exitstub < ARM64_EXIT_FALLBACK_WORDS * sizeof(MCode) ||
+      (exitstub & (sizeof(void *)-1u)) != 0 ||
+      ((uintptr_t)(void *)v->exittab & (sizeof(void *)-1u)) != 0)
+    return 0;
+  bodyend = mcode + (uintptr_t)v->szmcode;
+  fallback = exitstub - ARM64_EXIT_FALLBACK_WORDS * sizeof(MCode);
+  gatesz = (uintptr_t)v->nsnap *
+	    (ARM64_EXIT_GATE_WORDS * sizeof(MCode));
+  if (exitstub > UINTPTR_MAX-gatesz || bodyend > fallback ||
+      fallback-bodyend > sizeof(MCode))
+    return 0;
+  return 1;
 }
 
 static int trace_root_entry_arm64_layout_valid(
@@ -3882,6 +4009,8 @@ static int trace_root_entry_arm64_layout_valid(
   postra.root_topslot = v->topslot;
   postra.startins = v->startins;
   postra.base_delta = 0;
+  if (!trace_root_entry_arm64_exit_layout_valid(v))
+    return 0;
   if (bc_op(v->startins) == BC_FUNCF)
     return lj_asm_arm64_postra_funcf_entry_admit(
 	&postra, sourceins, NULL);
@@ -3894,6 +4023,7 @@ static int trace_root_entry_loop_view_equal(const TraceArm64LoopView *a,
   return a->retire_epoch == b->retire_epoch &&
 	 a->startpt == b->startpt && a->startpc == b->startpc &&
 	 a->startins == b->startins && a->mcode == b->mcode &&
+	 a->exittab == b->exittab && a->exitstub == b->exitstub &&
 	 a->szmcode == b->szmcode && a->mcloop == b->mcloop &&
 	 a->spadjust == b->spadjust && a->topslot == b->topslot &&
 	 a->nchild == b->nchild && a->link == b->link &&
@@ -4618,7 +4748,8 @@ static int trace_mcode_area_refs(global_State *g, GCtrace *T, uintptr_t rxlo,
   MCode *mcode;
   MCode *exitstub;
   MCode **exittab;
-  SnapNo i, nsnap;
+  MSize i, nexits;
+  SnapNo nsnap;
   if (!T)
     return 0;
   /* Partial assembler output is never committed, linked or registered with a
@@ -4638,12 +4769,33 @@ static int trace_mcode_area_refs(global_State *g, GCtrace *T, uintptr_t rxlo,
     return 0;
   if (trace_exittab_ismcode(T))
     return trace_ptr_in_mcode_area(exittab, rxlo, rxhi, rwlo, rwhi);
-  for (i = 0; i < nsnap; i++)
-    if (trace_ptr_in_mcode_area(la_loadptr_acq((void *const *)&exittab[i]),
-				rxlo, rxhi, rwlo, rwhi))
+  nexits = (MSize)nsnap;
+#if LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS
+  if (trace_root_acq(T) != 0)
+    nexits++;
+#endif
+  for (i = 0; i < nexits; i++)
+    if (trace_ptr_in_mcode_area(
+#if LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS
+		trace_exittarget_arm64_acq(T, (ExitNo)i),
+#else
+		la_loadptr_acq((void *const *)&exittab[i]),
+#endif
+		rxlo, rxhi, rwlo, rwhi))
       return 1;
   return 0;
 }
+
+#ifdef LJ_TRACE_TEST_HELPERS
+int lj_trace_test_body_mcode_refs(global_State *g, GCtrace *T, MCode *area,
+				  size_t size)
+{
+  uintptr_t lo = (uintptr_t)(void *)area;
+  if (!g || !T || !area || size == 0 || lo > UINTPTR_MAX-size)
+    return 0;
+  return trace_mcode_area_refs(g, T, lo, lo+size, lo, lo+size);
+}
+#endif
 
 int lj_trace_retired_mcode_refs(global_State *g, MCode *area, size_t size)
 {
@@ -4976,13 +5128,38 @@ GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T)
 static void trace_exittab_free(global_State *g, GCtrace *T, SnapNo nsnap)
 {
   MCode **exittab = trace_exittab_acq(T);
+  MSize nexits = (MSize)nsnap;
+#if LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS
+  if (trace_root_acq(T) != 0)
+    nexits++;
+#endif
   if (exittab) {
+    int ismcode = trace_exittab_ismcode(T);
     trace_exittab_rel(T, NULL);
-    if (!trace_exittab_ismcode(T))
-      lj_mem_freevec(g, exittab, nsnap, MCode *);
+    trace_exitstub_rel(T, NULL);
+    if (!ismcode) {
+      lj_mem_freevec(g, exittab, nexits, MCode *);
+      lj_trace_test_note_exittab_free(nexits);
+    }
+  } else {
+    trace_exitstub_rel(T, NULL);
   }
   trace_exittab_mcode_clear(T);
-  trace_exitstub_rel(T, NULL);
+}
+
+static void trace_exittarget_reset_one(jit_State *J, GCtrace *T,
+				       ExitNo exitno)
+{
+#if LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS
+  MCode *exitstub = trace_exitstub_acq(T);
+  lj_assertJ(exitstub != NULL, "missing ARM64 exit gate");
+  trace_exittarget_arm64_rel(J2G(J), T, exitno,
+			     exitstub_trace_fallback_addr_(exitstub));
+#elif LJ_TARGET_ARM64
+  trace_exittarget_rel(T, exitno, exitstub_trace_addr(T, exitno));
+#else
+  trace_exittarget_rel(T, exitno, exitstub_addr(J, exitno));
+#endif
 }
 
 static void trace_exittab_reset(jit_State *J, GCtrace *T)
@@ -4997,8 +5174,8 @@ static void trace_exittab_reset(jit_State *J, GCtrace *T)
   ExitNo i;
   if (trace_exittab_acq(T) == NULL)
     return;
-  for (i = 0; i < trace_nsnap_acq(T); i++)
-    trace_exittarget_rel(T, i, exitstub_trace_addr(T, i));
+  for (i = 0; i < trace_exittab_nslots_acq(T); i++)
+    trace_exittarget_reset_one(J, T, i);
 #else
   UNUSED(J); UNUSED(T);
 #endif
@@ -5299,25 +5476,13 @@ static uint32_t trace_flushside(jit_State *J, GCtrace *T, int scoped)
     */
     if (marked && parent && trace_traceno_acq(parent) == parentno &&
 	trace_exittab_acq(parent) && exitno < trace_nsnap_acq(parent))
-      trace_exittarget_rel(parent, exitno,
-#if LJ_TARGET_ARM64
-			   exitstub_trace_addr(parent, exitno)
-#else
-			   exitstub_addr(J, exitno)
-#endif
-			   );
+      trace_exittarget_reset_one(J, parent, exitno);
     return marked;
   }
   trace_exittab_reset(J, T);
   if (parent && trace_traceno_acq(parent) == parentno &&
       trace_exittab_acq(parent) && exitno < trace_nsnap_acq(parent))
-    trace_exittarget_rel(parent, exitno,
-#if LJ_TARGET_ARM64
-			 exitstub_trace_addr(parent, exitno)
-#else
-			 exitstub_addr(J, exitno)
-#endif
-			 );
+    trace_exittarget_reset_one(J, parent, exitno);
   return 1;
 }
 
@@ -6835,7 +7000,11 @@ static int trace_stop(jit_State *J)
     ** The parent exit target is the runnable side-trace gate. Publish it only
     ** after the parent/root metadata above can be observed by other threads.
     */
+#if LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS
+    trace_exittarget_arm64_rel(g, parent, exitno, trace_mcode_acq(T));
+#else
     trace_exittarget_rel(parent, exitno, trace_mcode_acq(T));
+#endif
     lj_gc2_smr_read_leave(g);
     break;
   case BC_CALLM:
@@ -6936,9 +7105,11 @@ static TraceAbortResult trace_abort(jit_State *J)
   }
   if (tvisnumber(L->top-1))
     e = (TraceError)numberVint(L->top-1);
+  trace_test_note_abort_error(e);
   /* MCODELM retries rebuild per-trace exit stubs in a fresh mcode area. */
   trace_exittab_free(J2G(J), &J->cur, J->cur.nsnap);
   if (e == LJ_TRERR_MCODELM) {
+    trace_test_note_mcode_retry();
     if (!lj_trace_state_aborted(
 	  lj_trace_state_store_active(J, LJ_TRACE_ASM))) {
       L->top--;  /* Remove error object. */
@@ -7199,7 +7370,8 @@ static TValue *trace_state(lua_State *L, lua_CFunction dummy, void *ud)
     default:  /* Trace aborted asynchronously. */
       setintV(L->top++, (int32_t)LJ_TRERR_RECERR);
       /* fallthrough */
-    /* lj_err_throw() clears ACTIVE for synchronous recorder errors, too. */
+    /* lj_err_throw() clears ACTIVE for synchronous errors other than the
+    ** owner-local MCODELM retry handled by trace_sync_mcode_retry_owner. */
     case (LJ_TRACE_ERR & ~LJ_TRACE_ACTIVE):
     case LJ_TRACE_ERR:
       {
@@ -7958,7 +8130,8 @@ static LJ_AINLINE uintptr_t trace_unwind_exitstub_addr_acq(GCtrace *T,
   tv.exitstub = trace_exitstub_acq(T);
   if (tv.mcode == NULL)
     return 0;
-#if LJ_TARGET_X86ORX64 && LJ_64
+#if (LJ_TARGET_X86ORX64 && LJ_64) || \
+    (LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS)
   if (tv.exitstub == NULL)
     return 0;
 #endif
@@ -7981,7 +8154,9 @@ uintptr_t LJ_FASTCALL lj_trace_unwind(jit_State *J, uintptr_t addr, ExitNo *ep)
   TraceNo traceno;
 #endif
   MCode *mcode;
+#if EXITTRACE_VMSTATE
   MSize szmcode;
+#endif
   lj_gc2_smr_read_enter(g);
 #if EXITTRACE_VMSTATE
   T = traceref_safe(J, traceno);
@@ -7991,7 +8166,9 @@ uintptr_t LJ_FASTCALL lj_trace_unwind(jit_State *J, uintptr_t addr, ExitNo *ep)
   if (!T)
     T = traceref_safe(J, traceno);
   mcode = T ? trace_mcode_acq(T) : NULL;
+#if EXITTRACE_VMSTATE
   szmcode = T ? trace_szmcode_acq(T) : 0;
+#endif
   if (T && mcode
 #if EXITTRACE_VMSTATE
       && addr >= (uintptr_t)mcode &&

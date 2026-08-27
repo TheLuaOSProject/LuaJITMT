@@ -119,16 +119,29 @@ LJ_STATIC_ASSERT(sizeof(((ExitState *)0)->spill) / sizeof(int32_t) ==
 /* Highest exit + 1 indicates stack check. */
 #define EXITSTATE_CHECKEXIT	1
 
-/* Return the address of a per-trace exit stub. */
-static LJ_AINLINE uint32_t *exitstub_trace_addr_(uint32_t *p, uint32_t exitno)
+/* Fixed authenticated per-trace exit layout. T->exitstub names the first
+** gate; the shared fallback is immediately below it. Keep these constants in
+** sync with asm_exitstub_write(). */
+#define ARM64_EXIT_FALLBACK_WORDS	4u
+#define ARM64_EXIT_GATE_WORDS		8u
+
+static LJ_AINLINE uint32_t *exitstub_trace_addr_(uint32_t *exitstub,
+						 uint32_t exitno)
 {
-  while (*p == (LJ_LE ? 0xd503201f : 0x1f2003d5)) p++;  /* Skip A64I_NOP. */
-  if ((LJ_LE ? p[1] >> 28 : p[1] & 0xf) == 0xf) p++;  /* Skip A64I_LDRx. */
-  return p + 3 + exitno;
+  return exitstub + ARM64_EXIT_GATE_WORDS * exitno;
 }
-/* Avoid dependence on lj_jit.h if only including lj_target.h. */
+
+static LJ_AINLINE uint32_t *exitstub_trace_fallback_addr_(uint32_t *exitstub)
+{
+  return exitstub - ARM64_EXIT_FALLBACK_WORDS;
+}
+
+/* Avoid dependence on lj_jit.h if only including lj_target.h. Both GCtrace
+** and TraceMCodeView expose the immutable exitstub field. */
 #define exitstub_trace_addr(T, exitno) \
-  exitstub_trace_addr_((MCode *)((char *)(T)->mcode + (T)->szmcode), (exitno))
+  exitstub_trace_addr_((MCode *)(T)->exitstub, (exitno))
+#define exitstub_trace_fallback_addr(T) \
+  exitstub_trace_fallback_addr_((MCode *)(T)->exitstub)
 
 /* -- Instructions -------------------------------------------------------- */
 
@@ -281,6 +294,7 @@ typedef enum A64Ins {
 
   A64I_BRAAZ = 0xd61f081f,
   A64I_BLRAAZ = 0xd63f081f,
+  A64I_BRAA = 0xd71f0800,
 
   A64I_BTI_C  = 0xd503245f,
   A64I_BTI_J  = 0xd503249f,
@@ -348,6 +362,9 @@ typedef enum A64Ins {
 
 #define A64I_BR_AUTH	(LJ_ABI_PAUTH ? A64I_BRAAZ : A64I_BR)
 #define A64I_BLR_AUTH	(LJ_ABI_PAUTH ? A64I_BLRAAZ : A64I_BLR)
+/* Authenticate an exit-table target with fixed x22/global_State context. */
+#define A64I_BR_G_AUTH \
+  (LJ_ABI_PAUTH ? (A64I_BRAA | A64F_D(RID_GL)) : A64I_BR)
 
 typedef enum A64Shift {
   A64SH_LSL, A64SH_LSR, A64SH_ASR, A64SH_ROR

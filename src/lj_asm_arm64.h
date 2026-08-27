@@ -47,50 +47,108 @@ static Reg ra_alloc2(ASMState *as, IRIns *ir, RegSet allow)
 
 /* -- Guard handling ------------------------------------------------------ */
 
-/* Write the fixed per-trace exit-stub layout. */
-static void asm_exitstub_write(ASMState *as, ExitNo nexits, MCode *target,
-			       int ind)
+/* Write the fixed heap-target exit layout below the current mcode top.
+** Published guards branch to immutable gates. Each gate records its exit
+** number, acquire-loads one authenticated target slot and jumps either to the
+** shared fallback or, in a later milestone, a child trace. */
+static void asm_exitstub_write(ASMState *as, ExitNo nexits)
 {
+  GCtrace *T = as->T;
+  MCode *top = as->mctop;
+  MCode *fallback;
+  MCode *gates;
+  if (((uintptr_t)(void *)top & 7u) != 0)
+    *--top = A64I_LE(A64I_NOP);
+  fallback = top -
+    (ARM64_EXIT_FALLBACK_WORDS + ARM64_EXIT_GATE_WORDS * nexits);
+  gates = fallback + ARM64_EXIT_FALLBACK_WORDS;
+  intptr_t k64ofs = glofs(as, &as->J->k64[LJ_K64_VM_EXIT_HANDLER]);
   ExitNo i;
-  MCode *mxp = as->mctop;
-  /* !ind: 1: str lr,[sp]; bl ->vm_exit_handler; movz w0,traceno;
-  **  ind: 1: str lr,[sp]; ldr lr, [gl, K64_VXH]; blr lr; movz w0,traceno;
-  **          bl <1; bl <1; ...
-  */
-  for (i = nexits-1; (int32_t)i >= 0; i--)
-    *--mxp = A64I_LE(A64I_BL | A64F_S26(-3-ind-i));
-  as->mcexit = mxp;
-  *--mxp = A64I_LE(A64I_MOVZw | A64F_U16(as->T->traceno));
-  if (ind) {
-    *--mxp = A64I_LE(A64I_BLR_AUTH | A64F_N(RID_LR));
-    *--mxp = A64I_LE(A64I_LDRx | A64F_D(RID_LR) | A64F_N(RID_GL) | A64F_U12(glofs(as, &as->J->k64[LJ_K64_VM_EXIT_HANDLER]) >> 3));
-  } else {
-    mxp--;
-    *mxp = A64I_LE(A64I_BL | A64F_S26(target-mxp));
+
+  LJ_STATIC_ASSERT(sizeof(void *) == 2 * sizeof(MCode));
+  lj_assertA(nexits != 0, "ARM64 trace has no exit slots");
+  lj_assertA(k64ofs >= 0 && (k64ofs & 7) == 0 &&
+	     (uint32_t)(k64ofs >> 3) < 4096,
+	     "ARM64 VM exit-handler k64 offset out of range");
+  lj_assertA(((uintptr_t)(void *)fallback & 7u) == 0,
+	     "unaligned ARM64 exit fallback");
+  lj_assertA(((uintptr_t)(void *)gates & 7u) == 0,
+	     "unaligned ARM64 exit gates");
+
+  T->exitstub = as->mcexit = gates;
+  fallback[0] = A64I_LE(A64I_BTI_J);
+  fallback[1] = A64I_LE(A64I_LDRx | A64F_D(RID_LR) |
+			 A64F_N(RID_GL) | A64F_U12((uint32_t)k64ofs >> 3));
+  fallback[2] = A64I_LE(A64I_BLR_AUTH | A64F_N(RID_LR));
+  fallback[3] = A64I_LE(A64I_MOVZw | A64F_D(RID_X0) |
+			 A64F_U16(T->traceno));
+
+  for (i = 0; i < nexits; i++) {
+    MCode *gate = gates + ARM64_EXIT_GATE_WORDS * i;
+    uint64_t slotaddr = (uint64_t)(uintptr_t)(void *)&T->exittab[i];
+    lj_assertA(((uintptr_t)(void *)&T->exittab[i] & 7u) == 0,
+	       "unaligned ARM64 exit target slot");
+    lj_assertA(((uintptr_t)(void *)&gate[6] & 7u) == 0,
+	       "unaligned ARM64 exit gate literal");
+    gate[0] = A64I_LE(A64I_MOVZw | A64F_D(RID_LR) | A64F_U16(i));
+    gate[1] = A64I_LE(A64I_STRx | A64F_D(RID_LR) | A64F_N(RID_SP));
+    gate[2] = A64I_LE(A64I_LDRLx | A64F_D(RID_LR) | A64F_S19(4));
+    gate[3] = A64I_LE(A64I_LDARx | A64F_D(RID_LR) | A64F_N(RID_LR));
+    gate[4] = A64I_LE(A64I_BR_G_AUTH | A64F_N(RID_LR));
+    gate[5] = A64I_LE(A64I_NOP);
+    memcpy(&gate[6], &slotaddr, sizeof(slotaddr));
+    trace_exittarget_arm64_rel(J2G(as->J), T, i, fallback);
+    lj_assertA(gate + ARM64_EXIT_GATE_WORDS ==
+	       gates + ARM64_EXIT_GATE_WORDS * (i + 1u),
+	       "bad ARM64 trace exit gate size");
   }
-  *--mxp = A64I_LE(A64I_STRx | A64F_D(RID_LR) | A64F_N(RID_SP));
-  as->mctop = mxp;
+  as->mctop = fallback;
 }
 
 /* Setup all needed exit stubs. */
+static MSize asm_exitstub_need(uintptr_t mctop, ExitNo nexits)
+{
+  MSize align = (mctop & 7u) != 0;
+  return align + ARM64_EXIT_FALLBACK_WORDS +
+	 ARM64_EXIT_GATE_WORDS * (MSize)nexits;
+}
+
 static void asm_exitstub_setup(ASMState *as, ExitNo nexits)
 {
-  MCode *target = (MCode *)(void *)emit_asmlabel_addr(lj_vm_exit_handler);
-  MCode *mxp = as->mctop;
-  int ind;
+  MSize need;
   LJ_STATIC_ASSERT(sizeof(((GCtrace *)0)->traceno) == sizeof(uint16_t));
   LJ_STATIC_ASSERT(sizeof(((GCtrace *)0)->nsnap) == sizeof(uint16_t));
-  if (mxp - (nexits + 4 + MCLIM_REDZONE) < as->mclim)
-    asm_mclimit(as);
-  mxp = as->mctop;
-  ind = !A64F_S_OK(target - (mxp - nexits - 2), 26);
-  asm_exitstub_write(as, nexits, target, ind);
+  if (nexits == 0 || nexits-1u > UINT16_MAX)
+    lj_trace_err(as->J, LJ_TRERR_SNAPOV);
+  need = asm_exitstub_need((uintptr_t)(void *)as->mctop, nexits);
+  /* asm_snap_prev() stores mctoporig-mcp in a uint16_t when the backwards
+  ** assembler first crosses a snapshot. At that point the distance already
+  ** includes this complete fallback/gate tail. Reject an unrepresentable tail
+  ** before writing it or encoding any guard branches. */
+  if (need >= 0x10000u)
+    lj_trace_err(as->J, LJ_TRERR_MCODEOV);
+  if (as->mctop < as->mclim ||
+      (MSize)(as->mctop - as->mclim) < need + MCLIM_REDZONE)
+    lj_mcode_limiterr(as->J, (size_t)(need + 4*MCLIM_REDZONE));
+  if (as->T->exittab == NULL) {
+    as->T->exittab = lj_mem_newvec(as->J->L, nexits, MCode *);
+    lj_trace_test_note_exittab_alloc(nexits);
+  }
+  trace_exittab_mcode_clear(as->T);
+  asm_exitstub_write(as, nexits);
+#ifdef LJ_TRACE_TEST_HELPERS
+  /* Deterministically exercise synchronous MCODELM ownership after the table
+  ** and complete gate layout exist, without depending on a second MAP_JIT
+  ** mapping landing inside the process's current branch range. */
+  if (asm_test_exitstub_mcode_retry_consume())
+    lj_trace_err(as->J, LJ_TRERR_MCODELM);
+#endif
 }
 
 static MCode *asm_exitstub_addr(ASMState *as, ExitNo exitno)
 {
   /* Keep this in-sync with exitstub_trace_addr(). */
-  return as->mcexit + exitno;
+  return as->mcexit + ARM64_EXIT_GATE_WORDS * exitno;
 }
 
 /* Emit conditional branch to exit for guard. */
@@ -99,8 +157,11 @@ static void asm_guardcc(ASMState *as, A64CC cc)
   MCode *target = asm_exitstub_addr(as, as->snapno);
   MCode *p = as->mcp;
   if (LJ_UNLIKELY(p == as->invmcp)) {
+    ptrdiff_t delta = target - p;
+    if (LJ_UNLIKELY(!A64F_S_OK(delta, 26)))
+      lj_trace_err(as->J, LJ_TRERR_MCODEOV);
     as->loopinv = 1;
-    *p = A64I_B | A64F_S26(target-p);
+    *p = A64I_B | A64F_S26(delta);
     emit_cond_branch(as, cc^1, p-1);
     return;
   }
@@ -115,6 +176,8 @@ static int asm_guardtnb(ASMState *as, A64Ins ai, Reg r, uint32_t bit)
   ptrdiff_t delta = target - p;
   if (LJ_UNLIKELY(p == as->invmcp)) {
     if (as->orignins > 1023) return 0;  /* Delta might end up too large. */
+    if (LJ_UNLIKELY(!A64F_S_OK(delta, 26)))
+      lj_trace_err(as->J, LJ_TRERR_MCODEOV);
     as->loopinv = 1;
     *p = A64I_B | A64F_S26(delta);
     ai ^= 0x01000000u;
@@ -132,8 +195,11 @@ static void asm_guardcnb(ASMState *as, A64Ins ai, Reg r)
   MCode *target = asm_exitstub_addr(as, as->snapno);
   MCode *p = as->mcp;
   if (LJ_UNLIKELY(p == as->invmcp)) {
+    ptrdiff_t delta = target - p;
+    if (LJ_UNLIKELY(!A64F_S_OK(delta, 26)))
+      lj_trace_err(as->J, LJ_TRERR_MCODEOV);
     as->loopinv = 1;
-    *p = A64I_B | A64F_S26(target-p);
+    *p = A64I_B | A64F_S26(delta);
     emit_cnb(as, ai^0x01000000u, r, p-1);
     return;
   }
@@ -1889,12 +1955,17 @@ static void asm_loop_fixup(ASMState *as)
   MCode *p = as->mctop;
   MCode *target = as->mcp;
   if (as->loopinv) {  /* Inverted loop branch? */
-    uint32_t mask = (p[-2] & 0x7e000000) == 0x36000000 ? 0x3fffu : 0x7ffffu;
+    int bits = (p[-2] & 0x7e000000) == 0x36000000 ? 14 : 19;
+    uint32_t mask = bits == 14 ? 0x3fffu : 0x7ffffu;
     ptrdiff_t delta = target - (p - 2);
     /* asm_guard* already inverted the bcc/tnb/cnb and patched the final b. */
+    if (LJ_UNLIKELY(!A64F_S_OK(delta, bits)))
+      lj_trace_err(as->J, LJ_TRERR_MCODEOV);
     p[-2] |= ((uint32_t)delta & mask) << 5;
   } else {
     ptrdiff_t delta = target - (p - 1);
+    if (LJ_UNLIKELY(!A64F_S_OK(delta, 26)))
+      lj_trace_err(as->J, LJ_TRERR_MCODEOV);
     p[-1] = A64I_B | A64F_S26(delta);
   }
 }
@@ -2058,58 +2129,13 @@ static void asm_mcode_fixup(MCode *mcode, MSize size)
 
 /* -- Trace patching ------------------------------------------------------ */
 
-/* Patch exit jumps of existing machine code to a new target. */
+/* Publish one new authenticated exit target without mutating executable code. */
 void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno, MCode *target)
 {
-  MCode *p = T->mcode;
-  MCode *pe = (MCode *)((char *)p + T->szmcode);
-  MCode *cstart = NULL;
-  MCode *mcarea = lj_mcode_patch(J, p, 0);
-  MCode *px = exitstub_trace_addr(T, exitno);
-  int patchlong = 1;
-  /* Note: this assumes a trace exit is only ever patched once. */
-  for (; p < pe; p++) {
-    /* Look for exitstub branch, replace with branch to target. */
-    ptrdiff_t delta = target - p;
-    MCode ins = A64I_LE(*p);
-    if ((ins & 0xff000000u) == 0x54000000u &&
-	((ins ^ ((px-p)<<5)) & 0x00ffffe0u) == 0) {
-      /* Patch bcc, if within range. */
-      if (A64F_S_OK(delta, 19)) {
-	*p = A64I_LE((ins & 0xff00001fu) | A64F_S19(delta));
-	if (!cstart) cstart = p;
-      }
-    } else if ((ins & 0xfc000000u) == 0x14000000u &&
-	       ((ins ^ (px-p)) & 0x03ffffffu) == 0) {
-      /* Patch b. */
-      lj_assertJ(A64F_S_OK(delta, 26), "branch target out of range");
-      *p = A64I_LE((ins & 0xfc000000u) | A64F_S26(delta));
-      if (!cstart) cstart = p;
-    } else if ((ins & 0x7e000000u) == 0x34000000u &&
-	       ((ins ^ ((px-p)<<5)) & 0x00ffffe0u) == 0) {
-      /* Patch cbz/cbnz, if within range. */
-      if (p[-1] == ARM64_NOPATCH_GC_CHECK) {
-	patchlong = 0;
-      } else if (A64F_S_OK(delta, 19)) {
-	*p = A64I_LE((ins & 0xff00001fu) | A64F_S19(delta));
-	if (!cstart) cstart = p;
-      }
-    } else if ((ins & 0x7e000000u) == 0x36000000u &&
-	       ((ins ^ ((px-p)<<5)) & 0x0007ffe0u) == 0) {
-      /* Patch tbz/tbnz, if within range. */
-      if (A64F_S_OK(delta, 14)) {
-	*p = A64I_LE((ins & 0xfff8001fu) | A64F_S14(delta));
-	if (!cstart) cstart = p;
-      }
-    }
-  }
-  /* Always patch long-range branch in exit stub itself. Except, if we can't. */
-  if (patchlong) {
-    ptrdiff_t delta = target - px;
-    lj_assertJ(A64F_S_OK(delta, 26), "branch target out of range");
-    *px = A64I_B | A64F_S26(delta);
-    if (!cstart) cstart = px;
-  }
-  if (cstart) lj_mcode_sync(cstart, px+1);
-  lj_mcode_patch(J, mcarea, 1);
+  lj_assertJ(J != NULL && T != NULL && target != NULL,
+	     "invalid ARM64 exit target publication");
+  lj_assertJ(trace_exittab_acq(T) != NULL &&
+	     exitno < trace_exittab_nslots_acq(T),
+	     "ARM64 exit target out of range");
+  trace_exittarget_arm64_rel(J2G(J), T, exitno, target);
 }

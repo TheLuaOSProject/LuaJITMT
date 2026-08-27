@@ -237,11 +237,13 @@ static void expect_exact_ir(const GCtrace *T)
   assert(ir_load_acq(&ir[FUNCF_R_SUFFIX]).prev == 0);
 }
 
-static void expect_funcf_mcode_tail(jit_State *J, const GCtrace *T,
-	int expect_indirect)
+static void expect_funcf_mcode_tail(jit_State *J, const GCtrace *T)
 {
   MCode *mcode = trace_mcode_acq(T);
   MSize szmcode = trace_szmcode_acq(T);
+  MCode **exittab = trace_exittab_acq(T);
+  MCode *gates = trace_exitstub_acq(T);
+  MCode *fallback;
   MSize nins, i, nadd = 0, nsub = 0;
   MCode *tail;
   MCode add_fixed = (A64I_ADDx^A64I_K12) | A64F_U12(16) |
@@ -261,7 +263,7 @@ static void expect_funcf_mcode_tail(jit_State *J, const GCtrace *T,
 #if LJ_ABI_BRANCH_TRACK
   assert(mcode[0] == A64I_BTI_J);
 #endif
-  if (expect_indirect) {
+  if (tail[-1] == indirect) {
     intptr_t k64ofs =
       (intptr_t)((char *)&J->k64[LJ_K64_VM_EXIT_INTERP] -
 		 (char *)&J2GG(J)->g);
@@ -282,10 +284,46 @@ static void expect_funcf_mcode_tail(jit_State *J, const GCtrace *T,
     assert(tail[-1] == (A64I_B |
 	   A64F_S26(bytes/(intptr_t)sizeof(MCode))));
   }
+
+  assert(exittab != NULL && gates != NULL);
+  assert(!trace_exittab_ismcode(T));
+  assert(trace_exittab_nslots_acq(T) == 2);
+  fallback = exitstub_trace_fallback_addr_(gates);
+  {
+    intptr_t k64ofs =
+      (intptr_t)((char *)&J->k64[LJ_K64_VM_EXIT_HANDLER] -
+		 (char *)&J2GG(J)->g);
+    assert(fallback[0] == A64I_BTI_J);
+    assert(k64ofs >= 0 && (k64ofs & 7) == 0 &&
+	   (k64ofs >> 3) < 4096);
+    assert(fallback[1] ==
+	   (A64I_LDRx | A64F_D(RID_LR) | A64F_N(RID_GL) |
+	    A64F_U12((uint32_t)(k64ofs >> 3))));
+    assert(fallback[2] == (A64I_BLR_AUTH | A64F_N(RID_LR)));
+    assert(fallback[3] ==
+	   (A64I_MOVZw | A64F_D(RID_X0) | A64F_U16(1)));
+  }
+  for (i = 0; i < trace_exittab_nslots_acq(T); i++) {
+    MCode *gate = exitstub_trace_addr_(gates, (ExitNo)i);
+    uint64_t literal = 0;
+    memcpy(&literal, &gate[6], sizeof(literal));
+    assert(gate[0] ==
+	   (A64I_MOVZw | A64F_D(RID_LR) | A64F_U16((uint32_t)i)));
+    assert(gate[1] ==
+	   (A64I_STRx | A64F_D(RID_LR) | A64F_N(RID_SP)));
+    assert(gate[2] ==
+	   (A64I_LDRLx | A64F_D(RID_LR) | A64F_S19(4)));
+    assert(gate[3] ==
+	   (A64I_LDARx | A64F_D(RID_LR) | A64F_N(RID_LR)));
+    assert(gate[4] == (A64I_BR_G_AUTH | A64F_N(RID_LR)));
+    assert(gate[5] == A64I_NOP);
+    assert(literal == (uint64_t)(uintptr_t)(void *)&exittab[i]);
+    assert(trace_exittarget_arm64_acq(T, (ExitNo)i) == fallback);
+  }
 }
 
 static GCtrace *expect_published_true(lua_State *L, GCproto *pt,
-	BCIns startins, int expect_indirect)
+	BCIns startins)
 {
   jit_State *J = L2J(L);
   GCtrace *T = traceref_safe(J, 1);
@@ -319,7 +357,7 @@ static GCtrace *expect_published_true(lua_State *L, GCproto *pt,
   assert(trace_topslot_acq(T) == (MSize)pt->framesize);
   expect_exact_ir(T);
   expect_exact_snapshots(T, pt);
-  expect_funcf_mcode_tail(J, T, expect_indirect);
+  expect_funcf_mcode_tail(J, T);
 
   for (traceno = 2; (MSize)traceno < trace_sizetrace_acq(J); traceno++)
     assert(!trace_runnable_acq(traceref_safe(J, traceno), traceno));
@@ -703,7 +741,7 @@ static void test_funcf_native_stopreq(lua_State *L, const char *name,
 	(TGF_STOPREQ|TGF_STOPREQ_FRESH)) == 0);
 }
 
-static void run_positive(int expect_indirect)
+static void run_positive(void)
 {
   lua_State *L = luaL_newstate();
   jit_State *J;
@@ -726,7 +764,7 @@ static void run_positive(int expect_indirect)
   assert(!trace_runnable_acq(traceref_safe(J, 1), 1));
 
   T = hotcall_until_published(L, "__arm64_funcf_true");
-  assert(T == expect_published_true(L, pt, startins, expect_indirect));
+  assert(T == expect_published_true(L, pt, startins));
   test_funcf_entry_view_preflight(T, pt);
   expect_native_jfuncf_calls(L, "__arm64_funcf_true");
   test_funcf_metadata_certificate(L, fn, T);
@@ -737,9 +775,9 @@ static void run_positive(int expect_indirect)
   test_funcf_generation_race(L, fn, T, (BCIns *)&proto_bc(pt)[2],
 	BCINS_AD(BC_RET0, (BCReg)(pt->framesize-1u), 1));
   test_funcf_native_xpoll(L, "__arm64_funcf_true", T);
-  assert(T == expect_published_true(L, pt, startins, expect_indirect));
+  assert(T == expect_published_true(L, pt, startins));
   test_funcf_native_stopreq(L, "__arm64_funcf_true", T);
-  assert(T == expect_published_true(L, pt, startins, expect_indirect));
+  assert(T == expect_published_true(L, pt, startins));
   expect_native_jfuncf_calls(L, "__arm64_funcf_true");
 
   /* jit.flush restores bytecode/slots; resetting the public hotloop parameter
@@ -755,7 +793,7 @@ static void run_positive(int expect_indirect)
   T = hotcall_until_published(L, "__arm64_funcf_true");
   assert(trace_traceno_acq(T) == 1);
   assert(trace_startpc_acq(T) == startpc);
-  assert(T == expect_published_true(L, pt, startins, expect_indirect));
+  assert(T == expect_published_true(L, pt, startins));
   expect_native_jfuncf_calls(L, "__arm64_funcf_true");
   lua_close(L);
 }
@@ -848,12 +886,10 @@ static void run_rejections(void)
 
 int main(int argc, char **argv)
 {
-  int expect_indirect;
   assert(argc == 2);
-  assert(strcmp(argv[1], "direct") == 0 ||
-	 strcmp(argv[1], "indirect") == 0);
-  expect_indirect = strcmp(argv[1], "indirect") == 0;
-  run_positive(expect_indirect);
+  assert(strcmp(argv[1], "default") == 0 ||
+	 strcmp(argv[1], "randomized") == 0);
+  run_positive();
   run_rejections();
   puts("arm64_jit_funcf_record OK: exact true FUNCF published and entered natively");
   return 0;
