@@ -54,6 +54,44 @@ typedef struct LJArm64PostRAView {
   uint8_t base_delta;
 } LJArm64PostRAView;
 
+/* Pure immutable view for the first bounded ARM64 side-trace grammar. This is
+** intentionally separate from GCtrace/jit_State so the policy can be tested
+** before any recorder or publication path is opened. */
+typedef struct LJArm64SideIRView {
+  const IRIns *ir;
+  const SnapShot *snap;
+  const SnapEntry *snapmap;
+  const BCIns *proto_bc;
+  IRRef nins;
+  IRRef nk;
+  MSize nsnap;
+  MSize nsnapmap;
+  MSize proto_sizebc;
+  MSize baseslot;
+  MSize root_topslot;
+  TraceNo traceno;
+  TraceNo parent;
+  TraceNo root;
+  TraceNo link;
+  ExitNo exitno;
+  BCIns startins;
+  TraceLink linktype;
+  uint8_t sinktags;
+  uint8_t base_delta;
+} LJArm64SideIRView;
+
+/* Deliberately narrow synthetic post-RA certificate. Production dispatch does
+** not consume this view until a live side layout has been observed and frozen. */
+typedef struct LJArm64SidePostRAView {
+  LJArm64SideIRView semantic;
+  IRRef nins;
+  MSize spadjust;
+  MSize parent_spadjust;
+  MSize topslot;
+  MSize parent_topslot;
+  uint16_t parent_slot4;
+} LJArm64SidePostRAView;
+
 LJ_FUNC int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
 				   LJArm64IRReject *reject);
 LJ_FUNC int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
@@ -61,6 +99,10 @@ LJ_FUNC int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
 LJ_FUNC int lj_asm_arm64_postra_funcf_entry_admit(
 	const LJArm64PostRAView *view, BCIns liveins,
 	IRRef *semantic_ninsp);
+LJ_FUNC int lj_asm_arm64_side_ir_admit(const LJArm64SideIRView *view,
+	LJArm64IRReject *reject);
+LJ_FUNC int lj_asm_arm64_side_postra_admit(
+	const LJArm64SidePostRAView *view, IRRef *semantic_ninsp);
 #ifdef LJ_TRACE_TEST_HELPERS
 LJ_FUNC void lj_asm_arm64_test_force_exitstub_mcode_retry(uint32_t count);
 #endif

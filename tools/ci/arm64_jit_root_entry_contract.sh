@@ -76,6 +76,8 @@ pauth_vm_disasm=$tmpdir/vm-arm64e.disasm
 pauth_jloop_region=$tmpdir/vm-arm64e-jloop.txt
 pauth_fixture_obj=$tmpdir/t-arm64-jit-root-entry-arm64e.o
 pauth_fixture=$tmpdir/t-arm64-jit-root-entry-arm64e
+pauth_side_fixture_obj=$tmpdir/t-arm64-jit-side-ingress-metadata-arm64e.o
+pauth_side_fixture=$tmpdir/t-arm64-jit-side-ingress-metadata-arm64e
 restore_needed=1
 
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
@@ -326,6 +328,8 @@ for required in '__arm64_root_jforl' '__arm64_root_jfori' \
   'T->nk = 0;' \
   'lj_tg_store_jit_base(L->tg_hint, NULL);' \
   'T->unused1 &= (uint8_t)~TRACE_ARM64_INT_LOOP_ADMITTED;' \
+  'T->unused1 |= TRACE_ARM64_INT_SIDE_ADMITTED;' \
+  'T->unused1 &= (uint8_t)~TRACE_ARM64_INT_SIDE_ADMITTED;' \
   'T->retire_epoch = 1;' \
   'T->unused1 |= TRACE_ENTRY_INVALIDATED;' \
   'T->startins = BCINS_AJ(BC_LOOP, bc_a(loop->original), 0);' \
@@ -425,7 +429,7 @@ for required in trace_root_acq trace_link_acq trace_linktype_acq \
   trace_exittab_acq trace_exitstub_acq retire_epoch TRACE_EXITTAB_MCODE \
   TRACE_ENTRY_GATED TRACE_ARM64_INT_LOOP_ADMITTED \
   TRACE_ARM64_INT_FORL_ADMITTED TRACE_ARM64_TRUE_FUNCF_ADMITTED \
-  LJ_TRLINK_RETURN; do
+  TRACE_ARM64_INT_SIDE_ADMITTED LJ_TRLINK_RETURN; do
   grep "$required" "$loop_view_region" >/dev/null
 done
 grep -F 'function_root' "$loop_view_region" >/dev/null
@@ -529,6 +533,21 @@ grep -E '^#define LJ_ARM64_JIT_EXIT_TARGET_SLOTS[[:space:]]+1$' \
   -I"$root/src" "$root/tests/t-arm64-jit-root-entry.c" "$archive" \
   -lm -pthread -o "$pauth_fixture"
 "$pauth_fixture"
+
+# Exercise the side-ingress fixture under PAC too. Its selected exit slot is
+# encoded with the owning global_State, and a separately signed wrong-
+# discriminator mutation must fail the read-only checkpoint.
+# shellcheck disable=SC2086 # pauth_xcflags intentionally expands.
+"$cc" -std=gnu11 -O2 -Wall -Wextra -Werror -arch arm64e \
+  -mbranch-protection=bti -mmacosx-version-min="$minver" $pauth_xcflags \
+  -I"$root/src" -c "$root/tests/t-arm64-jit-side-ingress-metadata.c" \
+  -o "$pauth_side_fixture_obj"
+# shellcheck disable=SC2086 # pauth_xcflags intentionally expands.
+"$cc" -std=gnu11 -O2 -Wall -Wextra -Werror -arch arm64e \
+  -mbranch-protection=bti -mmacosx-version-min="$minver" $pauth_xcflags \
+  -I"$root/src" "$root/tests/t-arm64-jit-side-ingress-metadata.c" \
+  "$archive" -lm -pthread -o "$pauth_side_fixture"
+"$pauth_side_fixture"
 
 otool -tvV "$vm_object" >"$pauth_vm_disasm"
 awk '/^_lj_BC_JLOOP:/ { copy=1 }

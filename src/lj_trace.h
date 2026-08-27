@@ -39,6 +39,20 @@ LJ_STATIC_ASSERT(offsetof(LJTraceRootEntry, target) == 8);
 LJ_FUNCA LJTraceRootEntry LJ_FASTCALL
 lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
 		    lua_State *L, TValue *base, BCIns sourceins);
+
+/* Read-only first-level ARM64 side-recording checkpoint. The caller must keep
+** trace metadata resident with either a GC2 SMR reader or the recorder token.
+** `continuation` is the immutable selected snapshot PC; `pc` is the current
+** incoming bytecode. METADATA validates only the published generation. IDLE
+** and OWNER/START require both PCs to match; OWNER/RECORD permits later PCs in
+** the same prototype while pinning recorder scratch to `continuation`. None of
+** these modes claims the token, updates an exit count or starts recording. */
+#define LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA	0u
+#define LJ_TRACE_ARM64_SIDE_CONTEXT_IDLE		1u
+#define LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER	2u
+LJ_FUNC int lj_trace_arm64_first_side_loop_valid(
+  jit_State *J, lua_State *L, TraceNo parent, ExitNo exitno,
+  const BCIns *continuation, const BCIns *pc, uint32_t context);
 #endif
 
 LJ_FUNC GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T);
@@ -103,6 +117,9 @@ LJ_FUNC uint32_t lj_trace_test_root_entry_publishes(void);
 LJ_FUNC uint32_t lj_trace_test_root_entry_cleanups(void);
 LJ_FUNC void lj_trace_test_root_entry_retry_restore(BCIns *pc, BCIns ins);
 LJ_FUNC uint32_t lj_trace_test_root_entry_startins_calls(void);
+LJ_FUNC int lj_trace_test_arm64_first_side_loop_valid(
+  jit_State *J, lua_State *L, TraceNo parent, ExitNo exitno,
+  const BCIns *continuation, const BCIns *pc, uint32_t context);
 #endif
 #endif
 

@@ -624,6 +624,210 @@ static int arm64_ir_constants(const GCtrace *T, LJArm64IRReject *reject)
   return 1;
 }
 
+/* -- Pure ARM64 first-side admission ------------------------------------- */
+
+enum {
+  ARM64_SIDE_K_ONE = REF_TRUE-1u,
+  ARM64_SIDE_R_PARENT = REF_BASE+1u,
+  ARM64_SIDE_R_VALUE = REF_BASE+2u,
+  ARM64_SIDE_R_ADD = REF_BASE+3u,
+  ARM64_SIDE_R_LIMIT = REF_BASE+4u,
+  ARM64_SIDE_R_GT = REF_BASE+5u,
+  ARM64_SIDE_R_XPOLL = REF_BASE+6u,
+  ARM64_SIDE_SEMANTIC_NINS = REF_BASE+7u
+};
+
+static int arm64_side_snapshot_footer(const LJArm64SideIRView *view,
+	MSize snapno, MSize expected_pcpos)
+{
+  const SnapShot *snap = &view->snap[snapno];
+  SnapEntry pcraw[1+LJ_FR2];
+  uint64_t pcbase;
+  uintptr_t proto, expected;
+  MSize n;
+  LJ_STATIC_ASSERT(LJ_FR2 == 1);
+  LJ_STATIC_ASSERT(sizeof(pcraw) == sizeof(pcbase));
+  proto = (uintptr_t)(const void *)view->proto_bc;
+  if (expected_pcpos >= view->proto_sizebc ||
+	(uintptr_t)expected_pcpos >
+	  (UINTPTR_MAX-proto)/sizeof(BCIns))
+    return 0;
+  expected = proto+(uintptr_t)expected_pcpos*sizeof(BCIns);
+  for (n = 0; n < 1u+LJ_FR2; n++)
+    pcraw[n] = snapentry_acq(
+	&view->snapmap[snap_mapofs_acq(snap)+snap_nent_acq(snap)+n]);
+  memcpy(&pcbase, pcraw, sizeof(pcbase));
+  if (expected > (uintptr_t)(UINT64_MAX >> 8))
+    return 0;
+  return (uint8_t)pcbase == 0 && (uintptr_t)(pcbase >> 8) == expected;
+}
+
+int lj_asm_arm64_side_ir_admit(const LJArm64SideIRView *view,
+	LJArm64IRReject *reject)
+{
+  static const IRRef snaprefs[4] = {
+    ARM64_SIDE_R_VALUE, ARM64_SIDE_R_LIMIT,
+    ARM64_SIDE_R_GT, ARM64_SIDE_R_XPOLL
+  };
+  static const MSize mapofs[4] = { 0, 3, 7, 10 };
+  static const uint8_t nent[4] = { 1, 2, 1, 1 };
+  static const uint8_t nslots[4] = { 5, 6, 5, 5 };
+  static const MSize pcpos[4] = { 13, 3, 17, 7 };
+  const IRIns *ir;
+  IRIns ins;
+  uintptr_t proto;
+  MSize snapno;
+
+  if (reject) {
+    reject->reason = LJ_ARM64_IR_REJECT_NONE;
+    reject->ref = 0;
+    reject->op = IR_NOP;
+    reject->detail = LJ_ARM64_IR_CALL_NONE;
+  }
+  if (view == NULL || (ir = view->ir) == NULL || view->snap == NULL ||
+	view->snapmap == NULL || view->proto_bc == NULL)
+    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE,
+	REF_BASE, IR_BASE, 0);
+  proto = (uintptr_t)(const void *)view->proto_bc;
+  if ((proto & (sizeof(BCIns)-1u)) != 0 || view->proto_sizebc != 19u ||
+	(uintptr_t)view->proto_sizebc >
+	  (UINTPTR_MAX-proto)/sizeof(BCIns) ||
+	view->nins != ARM64_SIDE_SEMANTIC_NINS ||
+	view->nk != ARM64_SIDE_K_ONE || view->nsnap != 4u ||
+	view->nsnapmap != 13u || view->baseslot != 1u+LJ_FR2 ||
+	view->root_topslot != 5u || view->traceno == 0 ||
+	view->traceno > UINT16_MAX || view->parent == 0 ||
+	view->parent > UINT16_MAX || view->traceno == view->parent ||
+	view->root != view->parent ||
+	view->link != view->parent || view->exitno != 2u ||
+	view->startins != BCINS_AD(BC_JMP, 0, 0) ||
+	view->linktype != LJ_TRLINK_ROOT || view->sinktags != 0 ||
+	view->base_delta != 0)
+    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE,
+	REF_BASE, IR_BASE, (uint16_t)view->exitno);
+
+  ins = ir_load_acq(&ir[ARM64_SIDE_K_ONE]);
+  if (ins.o != IR_KINT || ins.t.irt != IRT_INT || ins.i != 1)
+    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CONSTANT,
+	ARM64_SIDE_K_ONE, (IROp)ins.o, ins.t.irt);
+  for (snapno = REF_TRUE; snapno <= REF_NIL; snapno++) {
+    IRType expected = (IRType)(REF_NIL-snapno);
+    ins = ir_load_acq(&ir[snapno]);
+    if (ins.o != IR_KPRI || ins.t.irt != expected || ins.op12 != 0)
+      return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CONSTANT,
+	(IRRef)snapno, (IROp)ins.o, ins.t.irt);
+  }
+
+#define ARM64_SIDE_REQUIRE(ref, op, type, a, b) \
+  do { \
+    ins = ir_load_acq(&ir[(ref)]); \
+    if (ins.o != (op) || ins.t.irt != (type) || \
+	ins.op1 != (a) || ins.op2 != (b)) \
+      return arm64_ir_reject(reject, \
+	ins.o != (op) ? LJ_ARM64_IR_REJECT_OPCODE : \
+	ins.t.irt != (type) ? LJ_ARM64_IR_REJECT_TYPE : \
+	LJ_ARM64_IR_REJECT_OPERAND, (ref), (IROp)ins.o, ins.op2); \
+  } while (0)
+  ARM64_SIDE_REQUIRE(REF_BASE, IR_BASE, IRT_PGC,
+	view->parent, view->exitno);
+  ARM64_SIDE_REQUIRE(ARM64_SIDE_R_PARENT, IR_SLOAD, IRT_INT, 4,
+	IRSLOAD_PARENT|IRSLOAD_INHERIT);
+  ARM64_SIDE_REQUIRE(ARM64_SIDE_R_VALUE, IR_SLOAD, IRT_INT|IRT_GUARD, 5,
+	IRSLOAD_TYPECHECK);
+  ARM64_SIDE_REQUIRE(ARM64_SIDE_R_ADD, IR_ADDOV, IRT_INT|IRT_GUARD,
+	ARM64_SIDE_R_VALUE, ARM64_SIDE_K_ONE);
+  ARM64_SIDE_REQUIRE(ARM64_SIDE_R_LIMIT, IR_SLOAD, IRT_INT|IRT_GUARD, 2,
+	IRSLOAD_TYPECHECK);
+  ARM64_SIDE_REQUIRE(ARM64_SIDE_R_GT, IR_GT, IRT_INT|IRT_GUARD,
+	ARM64_SIDE_R_LIMIT, ARM64_SIDE_R_ADD);
+  ARM64_SIDE_REQUIRE(ARM64_SIDE_R_XPOLL, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0);
+#undef ARM64_SIDE_REQUIRE
+
+  for (snapno = 0; snapno < 4u; snapno++) {
+    const SnapShot *snap = &view->snap[snapno];
+    MSize nextofs = snapno+1u < 4u ? mapofs[snapno+1u] : 13u;
+    if (snap_ref_acq(snap) != snaprefs[snapno] ||
+	snap_mapofs_acq(snap) != mapofs[snapno] ||
+	snap_nent_acq(snap) != nent[snapno] ||
+	snap_nslots_acq(snap) != nslots[snapno] ||
+	snap_topslot_acq(snap) != 5u ||
+	nextofs-mapofs[snapno] != nent[snapno]+1u+LJ_FR2 ||
+	!arm64_side_snapshot_footer(view, snapno, pcpos[snapno]))
+      return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
+	snaprefs[snapno], IR_XPOLL, (uint16_t)snapno);
+  }
+  if (snapentry_acq(&view->snapmap[0]) !=
+	SNAP(4, 0, ARM64_SIDE_R_PARENT) ||
+      snapentry_acq(&view->snapmap[3]) !=
+	SNAP(4, 0, ARM64_SIDE_R_ADD) ||
+      snapentry_acq(&view->snapmap[4]) !=
+	SNAP(5, 0, ARM64_SIDE_R_ADD) ||
+      snapentry_acq(&view->snapmap[7]) !=
+	SNAP(4, 0, ARM64_SIDE_R_ADD) ||
+      snapentry_acq(&view->snapmap[10]) !=
+	SNAP(4, 0, ARM64_SIDE_R_ADD))
+    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
+	ARM64_SIDE_R_ADD, IR_XPOLL, 0xffffu);
+  return 1;
+}
+
+static int arm64_side_postra_gpr(IRIns ins)
+{
+  return ins.s == SPS_NONE && ins.r < RID_MAX_GPR &&
+	 rset_test(RSET_GPR, ins.r);
+}
+
+int lj_asm_arm64_side_postra_admit(const LJArm64SidePostRAView *view,
+	IRRef *semantic_ninsp)
+{
+  const IRIns *ir;
+  IRIns ins;
+  RegSP parentrs;
+  IRRef ref;
+  if (view == NULL || (ir = view->semantic.ir) == NULL ||
+	!lj_asm_arm64_side_ir_admit(&view->semantic, NULL) ||
+	view->nins != ARM64_SIDE_SEMANTIC_NINS+1u ||
+	view->spadjust != 0 || view->parent_spadjust != 0 ||
+	view->topslot != 5u || view->parent_topslot != 5u)
+    return 0;
+
+  ins = ir_load_acq(&ir[ARM64_SIDE_SEMANTIC_NINS]);
+  if (ins.o != IR_NOP || ins.t.irt != IRT_NIL ||
+	ins.op1 != 0 || ins.op2 != 0 || ins.prev != 0)
+    return 0;
+
+  parentrs = view->parent_slot4;
+  if (!regsp_used(parentrs) || ra_hasspill(regsp_spill(parentrs)) ||
+	regsp_reg(parentrs) >= RID_MAX_GPR ||
+	!rset_test(RSET_GPR, regsp_reg(parentrs)))
+    return 0;
+  ins = ir_load_acq(&ir[REF_BASE]);
+  if (ins.r != RID_BASE || ins.s != SPS_NONE)
+    return 0;
+  for (ref = ARM64_SIDE_R_PARENT; ref <= ARM64_SIDE_R_LIMIT; ref++) {
+    ins = ir_load_acq(&ir[ref]);
+    if (!arm64_side_postra_gpr(ins))
+      return 0;
+  }
+  ins = ir_load_acq(&ir[ARM64_SIDE_R_PARENT]);
+  if (ins.r != regsp_reg(parentrs))
+    return 0;
+  ins = ir_load_acq(&ir[ARM64_SIDE_R_GT]);
+  if (ins.r != RID_INIT || ins.s != SPS_NONE)
+    return 0;
+  ins = ir_load_acq(&ir[ARM64_SIDE_R_XPOLL]);
+  if (ins.r != RID_INIT || ins.s != SPS_NONE)
+    return 0;
+  for (ref = ARM64_SIDE_K_ONE; ref <= REF_NIL; ref++) {
+    ins = ir_load_acq(&ir[ref]);
+    if (ins.prev != REGSP_INIT)
+      return 0;
+  }
+  if (semantic_ninsp)
+    *semantic_ninsp = ARM64_SIDE_SEMANTIC_NINS;
+  return 1;
+}
+
 static int arm64_ir_funcf_snapshots(const SnapShot *snap,
 	const SnapEntry *snapmap, MSize nsnap, MSize nsnapmap,
 	const BCIns *proto_bc, MSize proto_sizebc, MSize root_topslot,

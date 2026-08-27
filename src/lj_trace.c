@@ -3920,7 +3920,8 @@ static int trace_root_entry_loop_view_acq(const GCtrace *T, TraceNo traceno,
 	(sourceop == (uint32_t)BC_JFUNCF ?
 	 TRACE_ARM64_TRUE_FUNCF_ADMITTED : TRACE_ARM64_INT_LOOP_ADMITTED);
   uint8_t root_admission = TRACE_ARM64_INT_LOOP_ADMITTED |
-	TRACE_ARM64_INT_FORL_ADMITTED | TRACE_ARM64_TRUE_FUNCF_ADMITTED;
+	TRACE_ARM64_INT_FORL_ADMITTED | TRACE_ARM64_TRUE_FUNCF_ADMITTED |
+	TRACE_ARM64_INT_SIDE_ADMITTED;
   int function_root = sourceop == (uint32_t)BC_JFUNCF;
   v->retire_epoch = la_load64_acq(&T->retire_epoch);
   v->startpt = trace_startptgco_acq((GCtrace *)T);
@@ -4040,6 +4041,438 @@ static LJ_AINLINE int trace_root_entry_request_pending(const TGState *tg)
   return lj_tg_poll_acq(tg) != 0 || lj_tg_reqmask_acq(tg) != 0 ||
 	 lj_tg_profile_request_acq(tg) != 0;
 }
+
+/* Point-in-time input for the first-level side-recording checkpoint. Stable
+** body fields are captured together with live retirement/admission/topology,
+** selected-topslot and exit-retarget gates, then the complete view is captured
+** again around generation validation. Snapshot count is absent from the view:
+** hot-exit attempts update that byte independently, so it is reread at each
+** snapshot check instead. The caller supplies the body-lifetime authority
+** documented by lj_trace_arm64_first_side_loop_valid(). */
+typedef struct TraceArm64FirstSideLoopView {
+  TraceVec *tracev;
+  GCtrace *parent;
+  GCobj *startpt;
+  const BCIns *startpc;
+  BCIns startins;
+  IRIns *ir;
+  IRRef nins;
+  IRRef nk;
+  SnapShot *snap;
+  SnapEntry *snapmap;
+  MCode *mcode;
+  MCode **exittab;
+  MCode *exitstub;
+  MCode *fallback;
+  void *exittarget_raw;
+  void *fallback_encoding;
+  MSize szmcode;
+  MSize mcloop;
+  MSize topslot;
+  MSize nsnap;
+  MSize nsnapmap;
+  MSize mapofs;
+  MSize nextofs;
+  IRRef snapref;
+  MSize nslots;
+  MSize snaptopslot;
+  MSize mcofs;
+  MSize nent;
+  SnapEntry footer0;
+#if LJ_FR2
+  SnapEntry footer1;
+#endif
+  ExitNo exitno;
+  TraceNo traceno;
+  TraceNo link;
+  TraceNo root;
+  TraceNo nextside;
+  MSize nchild;
+  TraceLink linktype;
+  uint64_t retire_epoch;
+  uint8_t admission;
+} TraceArm64FirstSideLoopView;
+
+static int trace_arm64_first_side_mapref_valid(
+    const TraceArm64FirstSideLoopView *v, IRRef ref)
+{
+  if (irref_isk(ref))
+    return ref >= v->nk && ref < REF_BIAS;
+  return ref >= REF_FIRST && ref < v->nins;
+}
+
+static int trace_arm64_first_side_snapshot_valid(
+    const TraceArm64FirstSideLoopView *v, const BCIns *pc)
+{
+  MSize i;
+  BCReg previous = 0;
+  int have_previous = 0;
+  const MSize footer = 1u + LJ_FR2;
+#if LJ_FR2
+  SnapEntry rawpc[2];
+  uint64_t pcbase;
+#else
+  SnapEntry rawpc;
+#endif
+
+  if (v->nent == 0 || v->nslots < 1u+LJ_FR2 ||
+      v->nslots >= LJ_MAX_JSLOTS || v->snaptopslot > v->nslots ||
+      v->snaptopslot > v->topslot || v->snapref < REF_FIRST ||
+      v->snapref >= v->nins || v->mapofs > v->nsnapmap ||
+      v->nent > v->nsnapmap-v->mapofs ||
+      footer > v->nsnapmap-v->mapofs-v->nent ||
+      v->nextofs != v->mapofs+v->nent+footer ||
+      v->nextofs > v->nsnapmap)
+    return 0;
+
+  for (i = 0; i < v->nent; i++) {
+    SnapEntry sn = snapentry_acq(&v->snapmap[v->mapofs+i]);
+    BCReg slot = snap_slot(sn);
+    IRRef ref = snap_ref(sn);
+    if ((sn & UINT32_C(0x00ff0000)) != 0 || slot >= v->nslots ||
+        (have_previous && slot <= previous) ||
+        !trace_arm64_first_side_mapref_valid(v, ref))
+      return 0;
+    previous = slot;
+    have_previous = 1;
+  }
+
+#if LJ_FR2
+  rawpc[0] = v->footer0;
+  rawpc[1] = v->footer1;
+  memcpy(&pcbase, rawpc, sizeof(pcbase));
+  if ((uint8_t)pcbase != 0 ||
+      (const BCIns *)(uintptr_t)(pcbase >> 8) != pc)
+    return 0;
+#else
+  rawpc = v->footer0;
+  if ((const BCIns *)(uintptr_t)rawpc != pc)
+    return 0;
+#endif
+  return snap_count_acq(&v->snap[v->exitno]) != SNAPCOUNT_DONE;
+}
+
+/* Capture one selected root snapshot without deriving pointers until all
+** advertised counts needed for that derivation have been bounded. */
+static int trace_arm64_first_side_view_acq(jit_State *J, TraceNo parent,
+    ExitNo exitno, TraceArm64FirstSideLoopView *v)
+{
+  TraceVec *tv;
+  GCtrace *T;
+  SnapShot *selected;
+  MSize maxsnapmap;
+  uintptr_t mcodep, bodyend, fallbackp, gatesz;
+  const MSize footer = 1u + LJ_FR2;
+  uint8_t root_admission = TRACE_ARM64_INT_LOOP_ADMITTED |
+    TRACE_ARM64_INT_FORL_ADMITTED | TRACE_ARM64_TRUE_FUNCF_ADMITTED |
+    TRACE_ARM64_INT_SIDE_ADMITTED;
+
+  memset(v, 0, sizeof(*v));
+  tv = J ? tracevec_acq(J) : NULL;
+  if (tv == NULL || parent == 0 || (MSize)parent >= tv->sizetrace ||
+      (MSize)parent >= trace_sizetrace_acq(J))
+    return 0;
+  T = traceref_fromgco_safe(gcref_acq(tv->slot[parent]));
+  if (!trace_runnable_acq(T, parent))
+    return 0;
+
+  v->tracev = tv;
+  v->parent = T;
+  v->exitno = exitno;
+  v->retire_epoch = la_load64_acq(&T->retire_epoch);
+  v->traceno = trace_traceno_acq(T);
+  v->root = trace_root_acq(T);
+  v->link = trace_link_acq(T);
+  v->nextside = trace_nextside_acq(T);
+  v->nchild = trace_nchild_acq(T);
+  v->linktype = trace_linktype_acq(T);
+  v->admission = la_load8_acq(&T->unused1);
+  v->startpt = trace_startptgco_acq(T);
+  v->startpc = trace_startpc_acq(T);
+  v->startins = trace_startins_acq(T);
+  v->ir = trace_ir_acq(T);
+  v->nins = trace_nins_acq(T);
+  v->nk = trace_nk_acq(T);
+  v->snap = trace_snap_acq(T);
+  v->snapmap = trace_snapmap_acq(T);
+  v->mcode = trace_mcode_acq(T);
+  v->exittab = trace_exittab_acq(T);
+  v->exitstub = trace_exitstub_acq(T);
+  v->szmcode = trace_szmcode_acq(T);
+  v->mcloop = trace_mcloop_acq(T);
+  v->topslot = trace_topslot_acq(T);
+  v->nsnap = trace_nsnap_acq(T);
+  v->nsnapmap = trace_nsnapmap_acq(T);
+
+  maxsnapmap = (MSize)LJ_MAX_JSLOTS + (MSize)LJ_STACK_EXTRA + 32u;
+  if (v->retire_epoch != 0 || v->traceno != parent || v->root != 0 ||
+      v->link != parent || v->linktype != LJ_TRLINK_LOOP ||
+      v->nchild != 0 || v->nextside != 0 ||
+      (v->admission & root_admission) != TRACE_ARM64_INT_LOOP_ADMITTED ||
+      (v->admission & TRACE_EXITTAB_MCODE) != 0 ||
+      (v->admission & TRACE_ENTRY_GATED) != 0 ||
+      v->startpt == NULL || !checkptrGC(v->startpt) ||
+      v->startpt->gch.gct != (uint32_t)~LJ_TPROTO ||
+      v->startpc == NULL || bc_op(v->startins) != BC_LOOP ||
+      v->ir == NULL || v->nins <= REF_FIRST || v->nins >= REF_DROP ||
+      v->nk == 0 || v->nk > REF_TRUE || v->snap == NULL ||
+      v->snapmap == NULL || v->mcode == NULL || v->exittab == NULL ||
+      v->exitstub == NULL || v->szmcode <= sizeof(MCode) ||
+      v->mcloop == 0 || v->mcloop >= v->szmcode ||
+      (v->mcloop & (sizeof(MCode)-1u)) != 0 ||
+      v->topslot != (MSize)gco2pt(v->startpt)->framesize ||
+      v->nsnap == 0 || exitno >= v->nsnap || v->nsnapmap == 0 ||
+      v->nsnap > ~(MSize)0/maxsnapmap ||
+      v->nsnapmap > v->nsnap*maxsnapmap ||
+      ((uintptr_t)(void *)v->exittab & (sizeof(void *)-1u)) != 0 ||
+      ((uintptr_t)(void *)v->mcode & (sizeof(MCode)-1u)) != 0 ||
+      ((uintptr_t)(void *)v->exitstub & (sizeof(MCode)-1u)) != 0 ||
+      (uintptr_t)(void *)v->exitstub <
+	(uintptr_t)ARM64_EXIT_FALLBACK_WORDS*sizeof(MCode))
+    return 0;
+
+  mcodep = (uintptr_t)(void *)v->mcode;
+  fallbackp = (uintptr_t)(void *)v->exitstub -
+    (uintptr_t)ARM64_EXIT_FALLBACK_WORDS*sizeof(MCode);
+  gatesz = (uintptr_t)v->nsnap *
+    (uintptr_t)ARM64_EXIT_GATE_WORDS*sizeof(MCode);
+  if (mcodep > UINTPTR_MAX-(uintptr_t)v->szmcode ||
+      (uintptr_t)(void *)v->exitstub > UINTPTR_MAX-gatesz)
+    return 0;
+  bodyend = mcodep+(uintptr_t)v->szmcode;
+  if (bodyend > fallbackp || fallbackp-bodyend > sizeof(MCode))
+    return 0;
+  v->fallback = (MCode *)(void *)fallbackp;
+  v->exittarget_raw =
+    la_loadptr_acq((void *const *)&v->exittab[exitno]);
+#if LJ_ARM64_JIT_EXIT_TARGET_SLOTS
+  v->fallback_encoding =
+    trace_exittarget_arm64_encode(J2G(J), v->fallback);
+#else
+  v->fallback_encoding = (void *)v->fallback;
+#endif
+  if (v->exittarget_raw != v->fallback_encoding)
+    return 0;
+
+  selected = &v->snap[exitno];
+  v->mapofs = snap_mapofs_acq(selected);
+  v->snapref = snap_ref_acq(selected);
+  v->nslots = snap_nslots_acq(selected);
+  v->snaptopslot = snap_topslot_acq(selected);
+  v->mcofs = snap_mcofs_acq(selected);
+  v->nent = snap_nent_acq(selected);
+  if (v->mapofs > v->nsnapmap || v->nent > v->nsnapmap-v->mapofs ||
+      footer > v->nsnapmap-v->mapofs-v->nent)
+    return 0;
+  v->nextofs = exitno+1u == v->nsnap ? v->nsnapmap :
+    snap_mapofs_acq(&v->snap[exitno+1u]);
+  v->footer0 = snapentry_acq(&v->snapmap[v->mapofs+v->nent]);
+#if LJ_FR2
+  v->footer1 = snapentry_acq(&v->snapmap[v->mapofs+v->nent+1u]);
+#endif
+  return trace_runnable_acq(T, parent) &&
+    tracevec_acq(J) == tv &&
+    gcref_acq(tv->slot[parent]) == obj2gco(T);
+}
+
+static int trace_arm64_first_side_view_equal(
+    const TraceArm64FirstSideLoopView *a,
+    const TraceArm64FirstSideLoopView *b)
+{
+  return a->tracev == b->tracev && a->parent == b->parent &&
+    a->startpt == b->startpt && a->startpc == b->startpc &&
+    a->startins == b->startins && a->ir == b->ir &&
+    a->nins == b->nins && a->nk == b->nk && a->snap == b->snap &&
+    a->snapmap == b->snapmap && a->mcode == b->mcode &&
+    a->exittab == b->exittab && a->exitstub == b->exitstub &&
+    a->fallback == b->fallback &&
+    a->exittarget_raw == b->exittarget_raw &&
+    a->fallback_encoding == b->fallback_encoding &&
+    a->szmcode == b->szmcode && a->mcloop == b->mcloop &&
+    a->topslot == b->topslot && a->nsnap == b->nsnap &&
+    a->nsnapmap == b->nsnapmap && a->mapofs == b->mapofs &&
+    a->nextofs == b->nextofs && a->snapref == b->snapref &&
+    a->nslots == b->nslots && a->snaptopslot == b->snaptopslot &&
+    a->mcofs == b->mcofs && a->nent == b->nent &&
+    a->footer0 == b->footer0 && a->exitno == b->exitno &&
+#if LJ_FR2
+    a->footer1 == b->footer1 &&
+#endif
+    a->traceno == b->traceno && a->link == b->link &&
+    a->root == b->root && a->nextside == b->nextside &&
+    a->nchild == b->nchild && a->linktype == b->linktype &&
+    a->retire_epoch == b->retire_epoch &&
+    a->admission == b->admission;
+}
+
+static int trace_arm64_first_side_loop_generation_valid(
+    const TraceArm64FirstSideLoopView *v, TraceNo parent,
+    const BCIns *continuation)
+{
+  GCproto *pt = gco2pt(v->startpt);
+  const BCIns *bc = proto_bc(pt);
+  BCPos startpos;
+  int64_t endpos, target;
+  const BCIns *backpc;
+  BCIns expected, live1, live2, back1, back2, shadow1, shadow2;
+  BCIns continuation1, continuation2;
+  BCPos continuationpos;
+
+  if (!trace_pc_in_proto_range(v->startpc, bc, pt->sizebc) ||
+      !trace_pc_in_proto_range(continuation, bc, pt->sizebc) ||
+      bc_op(v->startins) != BC_LOOP || bc_j(v->startins) <= 0 ||
+      (MSize)bc_a(v->startins) > (MSize)pt->framesize)
+    return 0;
+  startpos = proto_bcpos(pt, v->startpc);
+  endpos = (int64_t)startpos + (int64_t)bc_j(v->startins);
+  if (endpos < 0 || endpos >= (int64_t)pt->sizebc)
+    return 0;
+  backpc = &bc[(BCPos)endpos];
+  /* The canonical offset-13 continuation is a live CGET. BC_JMP belongs to
+  ** J->cur.startins only after side setup, so pin this instruction generation
+  ** without incorrectly requiring a JMP opcode at the parent continuation. */
+  continuation1 =
+    (BCIns)la_load32_acq((const uint32_t *)continuation);
+  live1 = (BCIns)la_load32_acq((const uint32_t *)v->startpc);
+  back1 = (BCIns)la_load32_acq((const uint32_t *)backpc);
+  shadow1 = proto_jit_startins_acq(pt, v->startpc);
+  expected = BCINS_AD(BC_JLOOP, bc_a(v->startins), parent);
+  target = endpos + 1 + (int64_t)bc_j(back1);
+  continuationpos = proto_bcpos(pt, continuation);
+  if (live1 != expected || shadow1 != v->startins || bc_op(back1) != BC_JMP ||
+      bc_j(back1) >= 0 || target < 0 || target > (int64_t)startpos ||
+      target >= (int64_t)pt->sizebc ||
+      (int64_t)continuationpos < target ||
+      (int64_t)continuationpos >= endpos+1)
+    return 0;
+  live2 = (BCIns)la_load32_acq((const uint32_t *)v->startpc);
+  back2 = (BCIns)la_load32_acq((const uint32_t *)backpc);
+  shadow2 = proto_jit_startins_acq(pt, v->startpc);
+  continuation2 =
+    (BCIns)la_load32_acq((const uint32_t *)continuation);
+  return live2 == live1 && back2 == back1 && shadow2 == shadow1 &&
+    continuation2 == continuation1;
+}
+
+static int trace_arm64_first_side_metadata_valid(jit_State *J,
+    TraceNo parent, ExitNo exitno, const BCIns *pc, GCproto **ptp)
+{
+  TraceArm64FirstSideLoopView first, second;
+  if (J == NULL || pc == NULL || parent == 0 ||
+      !trace_arm64_first_side_view_acq(J, parent, exitno, &first) ||
+      !trace_arm64_first_side_snapshot_valid(&first, pc) ||
+      !trace_arm64_first_side_loop_generation_valid(&first, parent, pc) ||
+      !trace_arm64_first_side_view_acq(J, parent, exitno, &second) ||
+      !trace_arm64_first_side_snapshot_valid(&second, pc) ||
+      !trace_arm64_first_side_loop_generation_valid(&second, parent, pc) ||
+      !trace_arm64_first_side_view_equal(&first, &second))
+    return 0;
+  if (ptp)
+    *ptp = gco2pt(first.startpt);
+  return 1;
+}
+
+static int trace_arm64_first_side_context_valid(jit_State *J, lua_State *L,
+    GCproto *pt, TraceNo parent, ExitNo exitno,
+    const BCIns *continuation, const BCIns *pc, uint32_t context)
+{
+  global_State *g;
+  TGState *tg;
+  GCfunc *fn;
+  TraceState state;
+  TValue *stack, *maxstack;
+  uintptr_t basep, stackp, maxstackp;
+
+  if (context == LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA)
+    return 1;
+  if (J == NULL || L == NULL || pt == NULL || pc == NULL)
+    return 0;
+  g = G(L);
+  tg = L->tg_hint;
+  stack = mref_acq(L->stack, TValue);
+  maxstack = mref_acq(L->maxstack, TValue);
+  basep = (uintptr_t)(void *)L->base;
+  stackp = (uintptr_t)(void *)stack;
+  maxstackp = (uintptr_t)(void *)maxstack;
+  if (g == NULL || J != G2J(g) || L2J(L) != J || tg == NULL || tg->gl != g ||
+      lj_tg_flags_test_acq(tg, TGF_DEAD) || lj_tg_load_cur_L(tg) != L ||
+      !lj_tg_owns_state_acq(tg, L) ||
+      lj_tg_actor_acq(tg) != lj_thr_actor_current() || stack == NULL ||
+      maxstack == NULL || maxstackp <= stackp ||
+      basep < stackp+(uintptr_t)(1u+LJ_FR2)*sizeof(TValue) ||
+      basep >= maxstackp || (basep-stackp) % sizeof(TValue) != 0 ||
+      (lj_tg_hookmask_combined_load(g, tg) & (HOOK_GC|HOOK_VMEVENT)) != 0 ||
+      trace_root_entry_request_pending(tg) || !lj_jit_trace_stream_idle(g))
+    return 0;
+  fn = curr_func(L);
+  if (!isluafunc(fn) || funcproto(fn) != pt ||
+      !trace_pc_in_proto_range(pc, proto_bc(pt), pt->sizebc))
+    return 0;
+  state = lj_trace_state_load(J);
+  if (context == LJ_TRACE_ARM64_SIDE_CONTEXT_IDLE) {
+    if (pc != continuation || state != LJ_TRACE_IDLE ||
+        jit_owner_l_acq(J) != NULL ||
+        jit_token_acq(g) != 0)
+      return 0;
+  } else if (context == LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER) {
+    if (jit_owner_l_acq(J) != L || !lj_jit_token_held_l(L, J) ||
+        J->parent != parent ||
+        J->exitno != exitno ||
+        (state != LJ_TRACE_START && state != LJ_TRACE_RECORD))
+      return 0;
+    /* START is published before lj_trace_ins() installs the incoming pc,
+    ** function and prototype. Recorder scratch is initialized by trace_start()
+    ** only after START transitions to RECORD, so reject stale initialized
+    ** state there without reading those fields at the START boundary. */
+    if (state == LJ_TRACE_START) {
+      if (pc != continuation)
+        return 0;
+    } else {
+      GCobj *curpt = trace_startptgco_acq(&J->cur);
+      if (J->pt != pt || J->fn != fn || J->framedepth != 0 ||
+          J->retdepth != 0 || trace_root_acq(&J->cur) != parent ||
+          trace_traceno_acq(&J->cur) == 0 ||
+          trace_traceno_acq(&J->cur) == parent ||
+          J->baseslot != (BCReg)(1+LJ_FR2) || curpt != obj2gco(pt) ||
+          trace_startpc_acq(&J->cur) != continuation ||
+          trace_startins_acq(&J->cur) != BCINS_AD(BC_JMP, 0, 0))
+        return 0;
+    }
+  } else {
+    return 0;
+  }
+  return lj_tg_load_cur_L(tg) == L && lj_tg_owns_state_acq(tg, L) &&
+    lj_tg_actor_acq(tg) == lj_thr_actor_current() &&
+    (lj_tg_hookmask_combined_load(g, tg) & (HOOK_GC|HOOK_VMEVENT)) == 0 &&
+    !trace_root_entry_request_pending(tg) && lj_jit_trace_stream_idle(g);
+}
+
+int lj_trace_arm64_first_side_loop_valid(jit_State *J, lua_State *L,
+    TraceNo parent, ExitNo exitno, const BCIns *continuation,
+    const BCIns *pc, uint32_t context)
+{
+  GCproto *firstpt = NULL, *secondpt = NULL;
+  if (context > LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER ||
+      !trace_arm64_first_side_metadata_valid(
+        J, parent, exitno, continuation, &firstpt) ||
+      !trace_arm64_first_side_context_valid(
+        J, L, firstpt, parent, exitno, continuation, pc, context) ||
+      !trace_arm64_first_side_metadata_valid(
+        J, parent, exitno, continuation, &secondpt) || firstpt != secondpt)
+    return 0;
+  return trace_arm64_first_side_context_valid(
+    J, L, secondpt, parent, exitno, continuation, pc, context);
+}
+
+#ifdef LJ_TRACE_TEST_HELPERS
+int lj_trace_test_arm64_first_side_loop_valid(jit_State *J, lua_State *L,
+    TraceNo parent, ExitNo exitno, const BCIns *continuation,
+    const BCIns *pc, uint32_t context)
+{
+  return lj_trace_arm64_first_side_loop_valid(
+    J, L, parent, exitno, continuation, pc, context);
+}
+#endif
 
 /* Validate and publish one root-trace entry intent without allocating,
 ** waiting, entering SMR, invoking callbacks or raising an error. The gate

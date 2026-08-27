@@ -679,6 +679,12 @@ static void test_metadata_mutation_rejections(lua_State *L, GCproto *pt,
   expect_metadata_reject(L, loop->pc);
   T->unused1 |= TRACE_ARM64_INT_LOOP_ADMITTED;
 
+  /* A first-level side certificate is never a second root-entry certificate.
+  ** Root admission bits remain mutually exclusive across the 0x80 extension. */
+  T->unused1 |= TRACE_ARM64_INT_SIDE_ADMITTED;
+  expect_metadata_reject(L, loop->pc);
+  T->unused1 &= (uint8_t)~TRACE_ARM64_INT_SIDE_ADMITTED;
+
   T->retire_epoch = 1;
   expect_metadata_reject(L, loop->pc);
   T->retire_epoch = 0;
