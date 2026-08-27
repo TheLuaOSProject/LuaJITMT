@@ -6364,13 +6364,16 @@ static void trace_mark_active_startpt(jit_State *J)
 static int trace_root_startins_valid(BCIns ins, ExitNo exitno)
 {
 #if LJ_TARGET_ARM64
-  /* ARM64 admits only ordinary BC_LOOP and separately gated integer BC_FORL
-  ** roots. This also rejects down-recursion and stitched roots which reach
-  ** trace_start() without passing through lj_trace_hot(). */
+  /* ARM64 admits ordinary BC_LOOP, separately gated integer BC_FORL roots,
+  ** and the separately gated fixed-function root surface. This also rejects
+  ** down-recursion and stitched roots which reach trace_start() without
+  ** passing through lj_trace_hot(). */
   return exitno == 0 &&
          (bc_op(ins) == BC_LOOP ||
           (bc_op(ins) == BC_FORL &&
-           !LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED));
+           !LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED) ||
+          (bc_op(ins) == BC_FUNCF &&
+           !LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED));
 #else
   if (exitno != 0) {
     BCOp op = bc_op(ins);
@@ -6463,6 +6466,52 @@ static int trace_root_forl_tuple(GCproto *pt, const BCIns *pc,
          (BCIns)la_load32_acq((const uint32_t *)&bc[(BCPos)foripos]) == fori;
 }
 
+#if LJ_TARGET_ARM64
+/* Admit only the immutable three-word fixed-function seed used by the first
+** ARM64 function-root tranche. It has no body effects: the sole instruction
+** writes one primitive to the final frame slot and RET1 returns that slot. */
+static int trace_root_funcf_shape(GCproto *pt, const BCIns *pc,
+	BCIns startins)
+{
+  const BCIns *bc;
+  BCIns kpri, ret;
+  BCReg result;
+  if (!pt || !pc || pt->sizebc != 3 || pt->framesize == 0 ||
+      (pt->flags & PROTO_VARARG) != 0 || bc_op(startins) != BC_FUNCF ||
+      bc_a(startins) != pt->framesize || bc_d(startins) != 0)
+    return 0;
+  bc = proto_bc(pt);
+  if (pc != bc)
+    return 0;
+  result = (BCReg)(pt->framesize-1u);
+  if (pt->numparams > result)
+    return 0;
+  kpri = (BCIns)la_load32_acq((const uint32_t *)&bc[1]);
+  ret = (BCIns)la_load32_acq((const uint32_t *)&bc[2]);
+  return bc_op(kpri) == BC_KPRI && bc_a(kpri) == result &&
+	 bc_d(kpri) == 2u && bc_op(ret) == BC_RET1 &&
+	 bc_a(ret) == result && bc_d(ret) == 2u &&
+	 (BCIns)la_load32_acq((const uint32_t *)&bc[0]) == startins &&
+	 (BCIns)la_load32_acq((const uint32_t *)&bc[1]) == kpri &&
+	 (BCIns)la_load32_acq((const uint32_t *)&bc[2]) == ret;
+}
+
+static int trace_root_arm64_generation_valid(GCproto *pt, const BCIns *pc,
+	BCIns startins)
+{
+  BCOp op = bc_op(startins);
+  if (op == BC_LOOP)
+    return 1;
+  if (op == BC_FORL)
+    return !LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED &&
+	   trace_root_forl_tuple(pt, pc, startins);
+  if (op == BC_FUNCF)
+    return !LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED &&
+	   trace_root_funcf_shape(pt, pc, startins);
+  return 0;
+}
+#endif
+
 typedef enum TraceStartResult {
   TRACE_START_RESULT_ACTIVE = 0,
   TRACE_START_RESULT_IDLE,
@@ -6495,6 +6544,10 @@ static TraceStartResult trace_start(jit_State *J)
     if (bc_op(root_startins) == BC_FORL &&
 	!trace_root_forl_tuple(J->pt, J->pc, root_startins))
       return TRACE_START_RESULT_IDLE;
+#if LJ_TARGET_ARM64
+    if (!trace_root_arm64_generation_valid(J->pt, J->pc, root_startins))
+      return TRACE_START_RESULT_IDLE;
+#endif
     if (bc_op(root_startins) == BC_ITERN &&
 	!trace_root_itern_tuple(J->pt, J->pc, root_startins, &root_iterl))
       return TRACE_START_RESULT_IDLE;
@@ -7219,10 +7272,7 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
   state = lj_trace_state_load(J);
   if (state == LJ_TRACE_START) {
     BCIns ins = (BCIns)la_load32_acq((const uint32_t *)pc);
-    if (bc_op(ins) != BC_LOOP &&
-	(bc_op(ins) != BC_FORL ||
-	 LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED ||
-	 !trace_root_forl_tuple(pt, pc, ins)))
+    if (!trace_root_arm64_generation_valid(pt, pc, ins))
       return 0;
   } else if (state == LJ_TRACE_RECORD) {
     GCobj *startpt = trace_startptgco_acq(&J->cur);
@@ -7233,10 +7283,7 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
 	!checkptrGC(startpt) || startpt->gch.gct != (uint32_t)~LJ_TPROTO)
       return 0;
     rootpt = gco2pt(startpt);
-    if ((bc_op(startins) != BC_LOOP &&
-	 (bc_op(startins) != BC_FORL ||
-	  LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED ||
-	  !trace_root_forl_tuple(rootpt, startpc, startins))) ||
+    if (!trace_root_arm64_generation_valid(rootpt, startpc, startins) ||
 	!trace_pc_in_proto_range(startpc, proto_bc(rootpt), rootpt->sizebc) ||
 	(BCIns)la_load32_acq((const uint32_t *)startpc) != startins)
       return 0;
@@ -7310,7 +7357,8 @@ static int trace_hot_root_start_valid(const BCIns *pc)
   BCOp op = bc_op((BCIns)la_load32_acq((uint32_t *)pc));
 #if LJ_TARGET_ARM64
   return op == BC_LOOP ||
-	 (op == BC_FORL && !LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED);
+	 (op == BC_FORL && !LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED) ||
+	 (op == BC_FUNCF && !LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED);
 #else
   return op == BC_FORL || op == BC_ITERL || op == BC_ITERN ||
 	 op == BC_LOOP || op == BC_FUNCF;
@@ -7340,8 +7388,8 @@ void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L)
   return;
 #endif
 #if LJ_TARGET_ARM64
-  /* Reject a stale/non-LOOP hot edge before acquiring the recorder token, then
-  ** repeat the acquire check below after token publication. */
+  /* Reject a stale/non-admitted hot edge before acquiring the recorder token,
+  ** then repeat the acquire check below after token publication. */
   if (!trace_hot_root_start_valid(pc-1)) {
     ERRNO_RESTORE
     return;

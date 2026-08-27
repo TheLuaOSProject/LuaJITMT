@@ -219,6 +219,8 @@ grep -E '^#define LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
   "$ordinary_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
   "$ordinary_macros" >/dev/null
+grep -E '^#define LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
+  "$ordinary_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
   "$ordinary_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
@@ -466,6 +468,8 @@ grep -E '^#define LJ_ABI_BRANCH_TRACK[[:space:]]+1$' \
 grep -E '^#define LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
   "$pauth_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
+  "$pauth_macros" >/dev/null
+grep -E '^#define LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
   "$pauth_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+0$' \
   "$pauth_macros" >/dev/null

@@ -203,6 +203,7 @@ test "$(lipo -archs "$archive")" = arm64
 for setting in \
   'LJ_TARGET_ARM64 1' \
   'LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED 0' \
+  'LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED 0' \
@@ -247,6 +248,7 @@ for setting in \
   'LJ_ABI_PAUTH 1' \
   'LJ_ABI_BRANCH_TRACK 1' \
   'LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED 0' \
+  'LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED 0'; do
   grep -E "^#define ${setting}$" "$pauth_macros" >/dev/null || {
     echo "ARM64e scalar-loop gate mismatch: $setting" >&2

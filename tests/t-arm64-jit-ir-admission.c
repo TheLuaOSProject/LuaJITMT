@@ -203,6 +203,10 @@ static LJArm64IRReject expect_reject(jit_State *J,
 	(int)reason, (unsigned)op);
   assert(reject.reason != LJ_ARM64_IR_REJECT_NONE);
   assert(reject.reason == reason);
+  if (reject.op != op)
+    fprintf(stderr, "reject opcode mismatch: reason=%d wanted=%u got=%u detail=%u\n",
+	(int)reason, (unsigned)op, (unsigned)reject.op,
+	(unsigned)reject.detail);
   assert(reject.op == op);
   return reject;
 }
@@ -863,7 +867,7 @@ static void test_positive_and_negative(lua_State *L)
 
   make_trace(J);
   fx.T.startins = BCINS_AD(BC_FUNCF, 0, 0);
-  expect_reject(J, LJ_ARM64_IR_REJECT_TRACE, IR_LOOP);
+  expect_reject(J, LJ_ARM64_IR_REJECT_TRACE, IR_XPOLL);
 
   make_trace(J);
   fx.ir[R_XPOLL].op1 = 0;

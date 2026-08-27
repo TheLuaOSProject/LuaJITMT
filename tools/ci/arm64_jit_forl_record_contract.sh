@@ -156,7 +156,7 @@ for required in \
     exit 1
   }
 done
-test "$(grep -Fc 'trace_root_forl_tuple(' "$trace_source")" -eq 4
+test "$(grep -Fc 'trace_root_forl_tuple(' "$trace_source")" -eq 3
 
 # Pin the narrow semantic grammar and its independent post-RA recheck.
 awk '/^static int arm64_ir_forl_shape/ { copy=1 }
@@ -183,7 +183,8 @@ awk '/^int lj_asm_arm64_postra_admit/ { copy=1 }
   "$asm_source" >"$postra_region"
 for required in \
   'rootop = bc_op(view->startins);' \
-  'rootop != BC_LOOP && rootop != BC_FORL' \
+  'rootop != BC_LOOP && rootop != BC_FORL && rootop != BC_FUNCF' \
+  'if (rootop == BC_FUNCF)' \
   'rootop == BC_FORL && nadd != 2u' \
   'rootop == BC_LOOP && nadd != 0u' \
   'flags != 0 && flags != SNAP_NORESTORE' \
@@ -194,8 +195,12 @@ for required in \
     exit 1
   }
 done
-grep -F 'TRACE_ARM64_INT_FORL_ADMITTED : TRACE_ARM64_INT_LOOP_ADMITTED;' \
-  "$asm_source" >/dev/null
+for required in \
+  'T->unused1 |= TRACE_ARM64_INT_FORL_ADMITTED;' \
+  'T->unused1 |= TRACE_ARM64_TRUE_FUNCF_ADMITTED;' \
+  'T->unused1 |= TRACE_ARM64_INT_LOOP_ADMITTED;'; do
+  grep -F "$required" "$asm_source" >/dev/null
+done
 
 # Trace/mcode publication precedes the immutable recovery sidecar and one
 # full-word bytecode CAS. FORI is intentionally left untouched in this stage.
@@ -268,6 +273,7 @@ for setting in \
   'LJ_TARGET_ARM64 1' \
   'LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED 0' \
+  'LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED 1' \
   'LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED 0' \
@@ -312,6 +318,7 @@ for setting in \
   'LJ_ABI_PAUTH 1' \
   'LJ_ABI_BRANCH_TRACK 1' \
   'LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED 0' \
+  'LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED 0'; do
   grep -E "^#define ${setting}$" "$pauth_macros" >/dev/null || {
     echo "ARM64e FORL gate mismatch: $setting" >&2

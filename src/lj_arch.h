@@ -548,9 +548,11 @@
 /* Exact bounded integer BC_LOOP roots and separately certified constant-step
 ** integer BC_FORL roots are executable. JFORL enters only from the taken
 ** integer edge after the interpreter has updated both IDX and EXT; the FP
-** edge remains on branch-only recovery. */
+** edge remains on branch-only recovery. Exact literal-true fixed-function
+** roots may publish, but JFUNCF native entry remains independently closed. */
 #define LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED		0
 #define LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED		0
+#define LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED		0
 #define LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED	0
 #define LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED	0
 #define LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED		1
@@ -577,6 +579,9 @@
 #ifndef LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED
 #define LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED		0
 #endif
+#ifndef LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED
+#define LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED		0
+#endif
 #ifndef LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED
 #define LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED	0
 #endif
@@ -598,6 +603,7 @@
 #define LJ_ARM64_JIT_RECORDER_ADMISSION_FAIL_CLOSED \
   (LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED || \
    LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED || \
+   LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED || \
    LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED || \
    LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED)
 #endif
