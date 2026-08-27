@@ -1,6 +1,6 @@
 /*
-** Synthetic positive/negative contract for the first ARM64 trace IR gate.
-** The recorder and native entry remain fail-closed; no generated code runs.
+** Synthetic positive/negative contract for the ARM64 scalar trace IR gate.
+** This fixture validates policy only; no generated code runs here.
 */
 
 #include <assert.h>
@@ -110,14 +110,14 @@ static void make_trace(jit_State *J)
   setir(R_A, IR_SLOAD, IRT_INT|IRT_GUARD, 2, IRSLOAD_TYPECHECK);
   setir(R_B, IR_SLOAD, IRT_INT|IRT_GUARD, 3, IRSLOAD_TYPECHECK);
   setir(R_C, IR_SLOAD, IRT_INT|IRT_GUARD, 4, IRSLOAD_TYPECHECK);
-  setir(R_SUM1, IR_ADDOV, IRT_INT|IRT_GUARD|IRT_ISPHI, R_A, R_B);
-  setir(R_SUM2, IR_ADDOV, IRT_INT|IRT_GUARD|IRT_ISPHI, R_SUM1, R_C);
-  setir(R_PRECOND, IR_LT, IRT_INT|IRT_GUARD, R_SUM2, K_STOP);
+  setir(R_SUM1, IR_SUBOV, IRT_INT|IRT_GUARD|IRT_ISPHI, R_A, R_B);
+  setir(R_SUM2, IR_MULOV, IRT_INT|IRT_GUARD|IRT_ISPHI, R_SUM1, R_C);
+  setir(R_PRECOND, IR_GE, IRT_INT|IRT_GUARD, R_SUM2, K_STOP);
   setir(R_LOOP, IR_LOOP, IRT_NIL|IRT_GUARD, 0, 0);
   setir(R_XPOLL, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0);
-  setir(R_BODY1, IR_ADDOV, IRT_INT|IRT_GUARD|IRT_ISPHI, R_SUM2, R_C);
-  setir(R_BODY2, IR_ADDOV, IRT_INT|IRT_GUARD|IRT_ISPHI, R_BODY1, K_STEP);
-  setir(R_LOOPCOND, IR_GT, IRT_INT|IRT_GUARD, R_BODY2, K_ZERO);
+  setir(R_BODY1, IR_SUBOV, IRT_INT|IRT_GUARD|IRT_ISPHI, R_SUM2, R_C);
+  setir(R_BODY2, IR_MULOV, IRT_INT|IRT_GUARD|IRT_ISPHI, R_BODY1, K_STEP);
+  setir(R_LOOPCOND, IR_LE, IRT_INT|IRT_GUARD, R_BODY2, K_ZERO);
   setir(R_PHI1, IR_PHI, IRT_INT, R_SUM1, R_BODY1);
   setir(R_PHI2, IR_PHI, IRT_INT, R_SUM2, R_BODY2);
 
@@ -343,7 +343,7 @@ static void test_phi_and_xpoll_rejections(jit_State *J)
 
   make_trace(J);
   setir(R_BODY2, IR_PHI, IRT_INT, R_SUM1, R_BODY1);
-  expect_reject(J, LJ_ARM64_IR_REJECT_TRACE, IR_GT);
+  expect_reject(J, LJ_ARM64_IR_REJECT_TRACE, IR_LE);
 
   make_trace(J);
   fx.ir[R_PHI1].op1 = R_BODY2;
@@ -402,6 +402,16 @@ static void test_positive_and_negative(lua_State *L)
 {
   jit_State *J = L2J(L);
   LJArm64IRReject reject;
+  static const IROp signed_guards[] = {
+    IR_LT, IR_GE, IR_LE, IR_GT, IR_EQ, IR_NE
+  };
+  static const IROp arithmetic_ops[] = {
+    IR_ADDOV, IR_SUBOV, IR_MULOV
+  };
+  static const IROp unsigned_guards[] = {
+    IR_ULT, IR_UGE, IR_ULE, IR_UGT
+  };
+  MSize guardno, leftno, rightno;
 
   make_trace(J);
   assert(fixture_snapshot_pc != fixture_loop_pc);
@@ -411,6 +421,39 @@ static void test_positive_and_negative(lua_State *L)
 	(unsigned)reject.detail);
   assert(reject.reason == LJ_ARM64_IR_REJECT_NONE);
   assert(reject.detail == LJ_ARM64_IR_CALL_NONE);
+
+  for (guardno = 0;
+	 guardno < sizeof(signed_guards)/sizeof(signed_guards[0]);
+	 guardno++) {
+    make_trace(J);
+    fx.ir[R_PRECOND].o = (IROp1)signed_guards[guardno];
+    fx.ir[R_LOOPCOND].o = (IROp1)signed_guards[
+	(sizeof(signed_guards)/sizeof(signed_guards[0])-1u)-guardno];
+    assert(lj_asm_arm64_ir_admit(J, &fx.T, &reject));
+    assert(reject.reason == LJ_ARM64_IR_REJECT_NONE);
+  }
+
+  for (leftno = 0;
+	 leftno < sizeof(arithmetic_ops)/sizeof(arithmetic_ops[0]);
+	 leftno++) {
+    for (rightno = 0;
+	   rightno < sizeof(arithmetic_ops)/sizeof(arithmetic_ops[0]);
+	   rightno++) {
+      make_trace(J);
+      fx.ir[R_SUM1].o = fx.ir[R_BODY1].o = (IROp1)arithmetic_ops[leftno];
+      fx.ir[R_SUM2].o = fx.ir[R_BODY2].o = (IROp1)arithmetic_ops[rightno];
+      assert(lj_asm_arm64_ir_admit(J, &fx.T, &reject));
+      assert(reject.reason == LJ_ARM64_IR_REJECT_NONE);
+    }
+  }
+
+  for (guardno = 0;
+	 guardno < sizeof(unsigned_guards)/sizeof(unsigned_guards[0]);
+	 guardno++) {
+    make_trace(J);
+    fx.ir[R_PRECOND].o = (IROp1)unsigned_guards[guardno];
+    expect_reject(J, LJ_ARM64_IR_REJECT_OPCODE, unsigned_guards[guardno]);
+  }
 
   make_trace(J);
   setir(R_SUM1, IR_AREF, IRT_PGC, R_A, R_B);
@@ -475,12 +518,6 @@ static void test_positive_and_negative(lua_State *L)
   REJECT_REMOVED(R_SUM1, IR_MUL, IRT_INT, R_A, R_B);
   REJECT_REMOVED(R_SUM1, IR_DIV, IRT_NUM, R_A, R_B);
   REJECT_REMOVED(R_SUM1, IR_USE, IRT_INT, R_A, 0);
-  REJECT_REMOVED(R_SUM1, IR_SUBOV, IRT_INT|IRT_GUARD, R_A, R_B);
-  REJECT_REMOVED(R_SUM1, IR_MULOV, IRT_INT|IRT_GUARD, R_A, R_B);
-  REJECT_REMOVED(R_PRECOND, IR_LE, IRT_INT|IRT_GUARD, R_SUM2, K_STOP);
-  REJECT_REMOVED(R_PRECOND, IR_GE, IRT_INT|IRT_GUARD, R_SUM2, K_STOP);
-  REJECT_REMOVED(R_PRECOND, IR_EQ, IRT_INT|IRT_GUARD, R_SUM2, K_STOP);
-  REJECT_REMOVED(R_PRECOND, IR_NE, IRT_INT|IRT_GUARD, R_SUM2, K_STOP);
 #undef REJECT_REMOVED
 
   make_trace(J);
@@ -542,27 +579,35 @@ static void test_positive_and_negative(lua_State *L)
 
   make_trace(J);
   fx.ir[R_SUM1].t.irt &= (uint8_t)~IRT_GUARD;
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_SUBOV);
+
+  make_trace(J);
+  setir(R_SUM1, IR_ADDOV, IRT_INT|IRT_ISPHI, R_A, R_B);
   expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_ADDOV);
 
   make_trace(J);
   fx.ir[R_SUM1].t.irt = IRT_NUM|IRT_GUARD|IRT_ISPHI;
-  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_ADDOV);
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_SUBOV);
 
   make_trace(J);
   fx.ir[R_SUM1].op1 = R_BODY1;
-  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_ADDOV);
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_SUBOV);
 
   make_trace(J);
   fx.ir[R_BODY1].op1 = R_PRECOND;
-  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_ADDOV);
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_SUBOV);
+
+  make_trace(J);
+  fx.ir[R_SUM2].t.irt &= (uint8_t)~IRT_GUARD;
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_MULOV);
+
+  make_trace(J);
+  fx.ir[R_SUM2].op2 = R_LOOPCOND;
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_MULOV);
 
   make_trace(J);
   fx.ir[R_PRECOND].t.irt = IRT_NUM|IRT_GUARD;
-  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_LT);
-
-  make_trace(J);
-  fx.ir[R_PRECOND].o = IR_ULE;
-  expect_reject(J, LJ_ARM64_IR_REJECT_OPCODE, IR_ULE);
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_GE);
 
   make_trace(J);
   fx.T.sinktags = 1;
@@ -715,7 +760,7 @@ int main(void)
   J->startpc = savedstartpc;
   L->top--;
   lua_close(L);
-  puts("arm64_jit_ir_admission OK: strict integer BC_LOOP root and rejection matrix verified");
+  puts("arm64_jit_ir_admission OK: spill-free scalar BC_LOOP policy and rejection matrix verified");
   return 0;
 }
 

@@ -44,8 +44,9 @@ awk '/^static int arm64_ir_int_value_op/ { copying = 1 }
      copying { print }
      copying && /^static int arm64_ir_int_ref/ { exit }' \
   "$root/src/lj_asm.c" >"$value_region"
-grep -F 'case IR_SLOAD: case IR_ADDOV:' "$value_region" >/dev/null
-if grep -E 'case IR_(CONV|ADD|SUB|MUL|DIV|SUBOV|MULOV|LT|GE|LE|GT|EQ|NE|USE|PHI|LOOP|XPOLL):' \
+grep -F 'case IR_SLOAD: case IR_ADDOV: case IR_SUBOV: case IR_MULOV:' \
+  "$value_region" >/dev/null
+if grep -E 'case IR_(CONV|ADD|SUB|MUL|DIV|LT|GE|LE|GT|EQ|NE|USE|PHI|LOOP|XPOLL):' \
      "$value_region" >/dev/null; then
   echo "non-value IR entered the ARM64 integer producer set" >&2
   exit 1
@@ -56,11 +57,12 @@ awk '/^static void make_trace\(/ { copying = 1 }
      copying && /^static void make_forl_trace\(/ { exit }' \
   "$root/tests/t-arm64-jit-ir-admission.c" >"$positive_region"
 test "$(grep -c 'IR_SLOAD' "$positive_region")" -eq 3
-test "$(grep -c 'IR_ADDOV' "$positive_region")" -eq 4
-test "$(grep -c 'IR_LT' "$positive_region")" -eq 1
-test "$(grep -c 'IR_GT' "$positive_region")" -eq 1
+test "$(grep -c 'IR_SUBOV' "$positive_region")" -eq 2
+test "$(grep -c 'IR_MULOV' "$positive_region")" -eq 2
+test "$(grep -c 'IR_GE' "$positive_region")" -eq 1
+test "$(grep -c 'IR_LE' "$positive_region")" -eq 1
 test "$(grep -c 'IR_PHI' "$positive_region")" -eq 2
-if grep -E 'IR_(KNUM|NUM|CONV|ADD,|SUB,|MUL,|DIV|LE|GE|EQ|NE|USE|SUBOV|MULOV)' \
+if grep -E 'IR_(KNUM|NUM|CONV|ADD,|SUB,|MUL,|DIV|USE)' \
      "$positive_region" >/dev/null; then
   echo "removed numeric family entered the integer positive fixture" >&2
   exit 1
@@ -83,6 +85,13 @@ for required in \
   'finalview.nins = arm64_semantic_nins;' \
   'T->spadjust != 0 || as->evenspill != SPS_FIRST || as->oddspill != 0' \
   'if (ra_hasspill(ir.s))' \
+  'if (irref_isk(snapref) || (sn & SNAP_FRAME))' \
+  'rs = ir_load_acq(&finalir[snapref]).prev;' \
+  'for (renref = finalnins; renref-- > arm64_semantic_nins; )' \
+  'if (ren.op1 == snapref && ren.op2 <= snapno)' \
+  'if (ra_hasspill(regsp_spill(rs)) ||' \
+  'regsp_reg(rs) >= RID_MAX_GPR ||' \
+  '!rset_test(RSET_GPR, regsp_reg(rs)))' \
   'finalnins == arm64_semantic_nins + 1u' \
   'ir.o == IR_NOP && ir.t.irt == IRT_NIL' \
   'if (!suffix_ok && finalnins > arm64_semantic_nins &&' \
@@ -95,6 +104,28 @@ for required in \
     exit 1
   }
 done
+test "$(grep -Fc 'ir.r >= RID_MAX_GPR' "$trace_asm")" -eq 1
+if grep -E 'rset_test\(RSET_GPR, ir\.r\).*ir\.r >= RID_MAX_GPR' \
+     "$trace_asm" >/dev/null; then
+  echo "ARM64 post-RA register range check follows rset_test" >&2
+  exit 1
+fi
+snap_range_line=$(grep -n 'regsp_reg(rs) >= RID_MAX_GPR' "$trace_asm" | cut -d: -f1)
+snap_rset_line=$(grep -n '!rset_test(RSET_GPR, regsp_reg(rs))' "$trace_asm" | cut -d: -f1)
+snap_spill_line=$(grep -n 'if (ra_hasspill(regsp_spill(rs)) ||' "$trace_asm" | cut -d: -f1)
+suffix_line=$(grep -n 'if (LJ_UNLIKELY(!suffix_ok))' "$trace_asm" | cut -d: -f1)
+snap_loop_line=$(grep -n 'for (snapno = 0; snapno < T->nsnap; snapno++)' "$trace_asm" | cut -d: -f1)
+marker_line=$(grep -n 'T->unused1 |= TRACE_ARM64_INT_LOOP_ADMITTED;' "$trace_asm" | cut -d: -f1)
+rename_range_line=$(grep -n 'ir.op2 >= T->nsnap || ir.r >= RID_MAX_GPR ||' "$trace_asm" | cut -d: -f1)
+rename_rset_line=$(grep -n '!rset_test(RSET_GPR, ir.r)' "$trace_asm" | cut -d: -f1)
+test -n "$snap_spill_line" && test -n "$snap_range_line" &&
+test -n "$snap_rset_line" && test "$snap_spill_line" -lt "$snap_range_line" &&
+test "$snap_range_line" -lt "$snap_rset_line"
+test -n "$suffix_line" && test -n "$snap_loop_line" &&
+test -n "$marker_line" && test "$suffix_line" -lt "$snap_loop_line" &&
+test "$snap_loop_line" -lt "$marker_line"
+test -n "$rename_range_line" && test -n "$rename_rset_line" &&
+test "$rename_range_line" -lt "$rename_rset_line"
 if grep -F '} else if (finalnins > arm64_semantic_nins' \
      "$trace_asm" >/dev/null; then
   echo "one allocator RENAME is shadowed by the spare-NOP branch" >&2
@@ -112,8 +143,9 @@ fi
 for cases in \
   'case IR_BASE:' \
   'case IR_SLOAD:' \
-  'case IR_LT: case IR_GT:' \
-  'case IR_ADDOV:' \
+  'case IR_LT: case IR_GE: case IR_LE: case IR_GT:' \
+  'case IR_EQ: case IR_NE:' \
+  'case IR_ADDOV: case IR_SUBOV: case IR_MULOV:' \
   'case IR_PHI:' \
   'case IR_LOOP:' \
   'case IR_XPOLL:' \
@@ -136,8 +168,9 @@ if grep -E 'break;|return 1|IRCALL_[A-Za-z0-9_]+[[:space:]]*:' \
 fi
 
 for forbidden in IR_KGC IR_KPTR IR_KKPTR IR_KNULL IR_KINT64 IR_KSLOT \
-  IR_NOP IR_CONV IR_ADD IR_SUB IR_MUL IR_DIV IR_LE IR_GE IR_EQ IR_NE \
-  IR_USE IR_SUBOV IR_MULOV IR_NEG IR_MOD IR_POW IR_ABS IR_LDEXP \
+  IR_NOP IR_CONV IR_ADD IR_SUB IR_MUL IR_DIV IR_ULT IR_UGE IR_ULE IR_UGT \
+  IR_USE IR_NEG IR_MOD IR_POW \
+  IR_ABS IR_LDEXP \
   IR_MIN IR_MAX IR_FPMATH \
   IR_AREF IR_HREF IR_UREFO IR_FLOAD IR_XLOAD IR_ASTORE IR_HSTORE \
   IR_USTORE IR_FSTORE IR_XSTORE IR_SNEW IR_TNEW IR_CNEW IR_BUFHDR \
@@ -196,8 +229,8 @@ for required in \
   }
 done
 
-# The native fixture exercises real prototype bytecode and each structural
-# corruption which must remain fail-closed before publication.
+# The synthetic admission fixture exercises real prototype bytecode and each
+# structural corruption which must remain fail-closed before publication.
 for required in \
   'fixture_snapshot_pc = fixture_forl_pc + 1 + bc_j(loadbc(fixture_forl_pc));' \
   'set_snapshot_payload(2, fixture_snapshot_pc, 1);' \
@@ -224,12 +257,16 @@ for required in \
   'fx.snapmap[6] = SNAP(2, SNAP_NORESTORE, R_SUM1);' \
   'fx.ir[R_BODY1].op1 = R_PRECOND;' \
   'REJECT_REMOVED(R_SUM1, IR_USE, IRT_INT, R_A, 0);' \
-  'REJECT_REMOVED(R_SUM1, IR_SUBOV, IRT_INT|IRT_GUARD, R_A, R_B);' \
-  'REJECT_REMOVED(R_PRECOND, IR_LE, IRT_INT|IRT_GUARD, R_SUM2, K_STOP);' \
+  'IR_LT, IR_GE, IR_LE, IR_GT, IR_EQ, IR_NE' \
+  'IR_ADDOV, IR_SUBOV, IR_MULOV' \
+  'IR_ULT, IR_UGE, IR_ULE, IR_UGT' \
+  'expect_reject(J, LJ_ARM64_IR_REJECT_OPCODE, unsigned_guards[guardno]);' \
+  'setir(R_SUM1, IR_ADDOV, IRT_INT|IRT_ISPHI, R_A, R_B);' \
+  'fx.ir[R_SUM2].t.irt &= (uint8_t)~IRT_GUARD;' \
+  'expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_MULOV);' \
   'fx.snap[0].mapofs = fx.T.nsnapmap+1u;' \
   'fx.snap[1].mapofs = fx.T.nsnapmap+1u;' \
-  'fx.ir[R_A].t.irt = IRT_NUM|IRT_GUARD;' \
-  'fx.ir[R_PRECOND].o = IR_ULE;'; do
+  'fx.ir[R_A].t.irt = IRT_NUM|IRT_GUARD;'; do
   grep -F "$required" "$root/tests/t-arm64-jit-ir-admission.c" >/dev/null || {
     echo "ARM64 IR negative fixture coverage changed: $required" >&2
     exit 1
@@ -268,4 +305,4 @@ grep -F '#if LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED' \
   -o "$fixture"
 "$fixture"
 
-echo "arm64_jit_ir_admission_contract OK: exact integer BC_LOOP root policy and fail-closed boundary verified"
+echo "arm64_jit_ir_admission_contract OK: exact spill-free scalar BC_LOOP policy and fail-closed boundary verified"

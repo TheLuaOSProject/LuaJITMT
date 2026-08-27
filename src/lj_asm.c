@@ -44,9 +44,9 @@
 
 /*
 ** The stock ARM64 backend can encode a much larger IR surface than the
-** lockless runtime has proved safe. Keep the first native-publication shape
-** to one optimized, self-linked integer BC_LOOP root. In particular, this
-** list admits no IR CALL helper ID and no floating-point operation at all.
+** lockless runtime has proved safe. Keep native publication to optimized,
+** self-linked integer BC_LOOP roots. In particular, this list admits no IR
+** CALL helper ID and no floating-point operation at all.
 */
 
 static int arm64_ir_reject(LJArm64IRReject *reject,
@@ -164,7 +164,7 @@ static int arm64_ir_int_kref(const GCtrace *T, IRRef target)
 static int arm64_ir_int_value_op(IROp op)
 {
   switch (op) {
-  case IR_SLOAD: case IR_ADDOV:
+  case IR_SLOAD: case IR_ADDOV: case IR_SUBOV: case IR_MULOV:
     return 1;
   default:
     return 0;
@@ -406,13 +406,14 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
 	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE, ref,
 				 IR_SLOAD, ir->op2);
       break;
-    case IR_LT: case IR_GT:
+    case IR_LT: case IR_GE: case IR_LE: case IR_GT:
+    case IR_EQ: case IR_NE:
       if (!arm64_ir_type_flags(ir->t, IRT_INT, IRT_GUARD, IRT_GUARD) ||
 	  !arm64_ir_int_binary(T, ir, ref))
 	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE, ref,
 				 (IROp)ir->o, ir->t.irt);
       break;
-    case IR_ADDOV:
+    case IR_ADDOV: case IR_SUBOV: case IR_MULOV:
       if (!arm64_ir_type_flags(ir->t, IRT_INT, IRT_GUARD,
 			       IRT_GUARD|IRT_ISPHI) ||
 	  !arm64_ir_int_binary(T, ir, ref))
@@ -3393,7 +3394,8 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
 	if (ir.o != IR_RENAME || ir.t.irt != IRT_NIL ||
 	    ir.op1 < REF_FIRST || ir.op1 >= arm64_semantic_nins ||
 	    !arm64_ir_int_ref(&finalview, ir.op1, arm64_semantic_nins) ||
-	    ir.op2 >= T->nsnap || !rset_test(RSET_GPR, ir.r) ||
+	    ir.op2 >= T->nsnap || ir.r >= RID_MAX_GPR ||
+	    !rset_test(RSET_GPR, ir.r) ||
 	    ra_hasspill(ir.s)) {
 	  setintV(&J->errinfo, (int32_t)ir.o);
 	  lj_trace_err_info(J, LJ_TRERR_NYIIR);
@@ -3403,6 +3405,42 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
     if (LJ_UNLIKELY(!suffix_ok)) {
       setintV(&J->errinfo, (int32_t)IR_RENAME);
       lj_trace_err_info(J, LJ_TRERR_NYIIR);
+    }
+
+    /* A dynamic snapshot value cannot use the generic no-register
+    ** rematerialization path: this surface admits no CONV and no spills.
+    ** Resolve the effective RegSP exactly like snap_renameref(), then require
+    ** an allocated, non-fixed GPR. Range-check before rset_test(), since IR
+    ** register fields are untrusted bytes and oversized shifts are undefined. */
+    {
+      SnapNo snapno;
+      for (snapno = 0; snapno < T->nsnap; snapno++) {
+	const SnapShot *snap = &T->snap[snapno];
+	MSize n;
+	for (n = 0; n < snap->nent; n++) {
+	  SnapEntry sn = T->snapmap[snap->mapofs+n];
+	  IRRef snapref = snap_ref(sn);
+	  IRRef renref;
+	  RegSP rs;
+	  if (irref_isk(snapref) || (sn & SNAP_FRAME))
+	    continue;
+	  rs = ir_load_acq(&finalir[snapref]).prev;
+	  for (renref = finalnins; renref-- > arm64_semantic_nins; ) {
+	    IRIns ren = ir_load_acq(&finalir[renref]);
+	    if (ren.o != IR_RENAME)
+	      break;
+	    if (ren.op1 == snapref && ren.op2 <= snapno)
+	      rs = ren.prev;
+	  }
+	  if (ra_hasspill(regsp_spill(rs)) ||
+	      regsp_reg(rs) >= RID_MAX_GPR ||
+	      !rset_test(RSET_GPR, regsp_reg(rs))) {
+	    IROp op = (IROp)ir_load_acq(&finalir[snapref]).o;
+	    setintV(&J->errinfo, (int32_t)op);
+	    lj_trace_err_info(J, LJ_TRERR_NYIIR);
+	  }
+	}
+      }
     }
     T->unused1 |= TRACE_ARM64_INT_LOOP_ADMITTED;
   }
