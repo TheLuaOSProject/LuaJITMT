@@ -808,9 +808,12 @@ static void test_quarter_knum_rejected(void)
   lua_close(L);
 }
 
-static void test_dynamic_step_rejected(void)
+static void test_dynamic_step_separate_profile(void)
 {
   lua_State *L = luaL_newstate();
+  jit_State *J;
+  GCproto *pt;
+  GCtrace *T;
   assert(L != NULL);
   luaL_openlibs(L);
   run_lua(L,
@@ -820,7 +823,22 @@ static void test_dynamic_step_rejected(void)
       "while x<limit do x=x+step end return x end");
   assert(call_two_num(L, "__arm64_pure_numeric_negative",
 	20.25, 0.5) == 20.5);
-  expect_no_trace(L, "__arm64_pure_numeric_negative");
+  J = L2J(L);
+  pt = global_proto(L, "__arm64_pure_numeric_negative");
+  T = traceref_safe(J, 1);
+  /* Dynamic-step NUM is now a distinct exact grammar. Prove that this older
+  ** fixed-half fixture sees its no-IR-constant profile, not the KNUM profile
+  ** certified above. Its full native contract lives in the sibling fixture. */
+  assert(pt->framesize == 5 && pt->sizebc == 14 && pt->numparams == 2);
+  assert(proto_trace_acq(pt) == 1);
+  assert(trace_runnable_acq(T, 1));
+  assert(trace_startpt_acq(T) == pt && trace_topslot_acq(T) == 5);
+  assert(trace_nk_acq(T) == REF_TRUE);
+  assert(trace_nins_acq(T) == REF_BASE+12u);
+  run_lua(L, "jit.flush()");
+  assert(proto_trace_acq(pt) == 0);
+  T = traceref_safe(J, 1);
+  assert(T == NULL || !trace_runnable_acq(T, 1));
   lua_close(L);
 }
 
@@ -878,7 +896,7 @@ int main(int argc, char **argv)
 	   strcmp(argv[1], "randomized") == 0);
   test_positive_and_guard_exits();
   test_quarter_knum_rejected();
-  test_dynamic_step_rejected();
+  test_dynamic_step_separate_profile();
   test_conversion_rejected();
   test_num_mul_rejected();
   test_adjacent_compare_rejected();

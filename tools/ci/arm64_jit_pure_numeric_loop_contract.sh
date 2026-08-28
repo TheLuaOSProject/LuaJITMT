@@ -131,7 +131,12 @@ for required in \
   'nfcomp == 2 && npre == 1 && nbody == 1' \
   'function __arm64_pure_numeric_negative(limit) local x=0.25' \
   'while x<limit do x=x+0.25 end return x end' \
+  'static void test_dynamic_step_separate_profile(void)' \
   'while x<limit do x=x+step end return x end' \
+  'assert(pt->framesize == 5 && pt->sizebc == 14 && pt->numparams == 2);' \
+  'assert(trace_nk_acq(T) == REF_TRUE);' \
+  'assert(trace_nins_acq(T) == REF_BASE+12u);' \
+  'test_dynamic_step_separate_profile();' \
   'while i<n do i=i+1; x=x+i end return x end' \
   'while x<limit do x=x*step end return x end' \
   'while x<=limit do x=x+0.5 end return x end' \
@@ -286,4 +291,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
     XCFLAGS="$xcflags"
 restore_needed=0
 
-echo "arm64_jit_pure_numeric_loop_contract OK: exact half-step pure-NUM root, ordered FCMP NaN-exit polarity, FPR snapshots, XPOLL/STOPREQ reuse and ARM64e/BTI all ran; adjacent numeric families and sides stayed closed"
+echo "arm64_jit_pure_numeric_loop_contract OK: exact half-step pure-NUM root, ordered FCMP NaN-exit polarity, FPR snapshots, XPOLL/STOPREQ reuse and ARM64e/BTI all ran; dynamic-step profile stayed isolated and remaining adjacent numeric families and sides stayed closed"
