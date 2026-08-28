@@ -283,7 +283,7 @@ done
 # carries X, STEP and LIMIT entirely in FPRs.
 awk '/^static void make_numstep_trace\(/ { copying = 1 }
      copying { print }
-     copying && /^static void make_numacc_trace\(/ { exit }' \
+     copying && /^static unsigned numacc_fixture_comparison_profile\(/ { exit }' \
   "$root/tests/t-arm64-jit-ir-admission.c" >"$numstep_region"
 test -s "$numstep_region"
 test "$(grep -c 'IR_KNUM' "$numstep_region" || true)" -eq 0
@@ -319,10 +319,13 @@ for required in \
   '!arm64_ir_numstep_shape(J, T, pt, firstphi, reject)' \
   'static int arm64_postra_numstep_shape(const LJArm64PostRAView *view,' \
   'view->nk != REF_TRUE ||' \
+  'return arm64_postra_numdynamic_kernel(view, 4, 3, 2,' \
+  'ARM64_NUMCMP_STRICT);' \
   '} else if (constant_profile == ARM64_IR_KPROFILE_INT) {' \
   '!arm64_postra_numstep_shape(view, semantic_nins)' \
   '} else if (constant_profile == ARM64_IR_KPROFILE_INT &&' \
   'T->nk == REF_TRUE) {' \
+  '!arm64_ir_numdynamic_kernel(T, 4, 3, 2, ARM64_NUMCMP_STRICT)' \
   'xphi.r == xpre.r && xphi.r == xbody.r &&' \
   'step.r != xphi.r && limit.r != xphi.r && step.r != limit.r &&' \
   'x.r != step.r;'; do
@@ -385,10 +388,11 @@ for required in \
   }
 done
 
-# The dynamic-accumulator pure-NUM fixture is a fifth exact grammar. All three
-# scalar values are parameters, so both trace and prototype constant sets are
-# empty; its source, snapshots and stack-slot roles remain independently pinned.
-awk '/^static void make_numacc_trace\(/ { copying = 1 }
+# The dynamic-accumulator pure-NUM fixture is one exact geometry with strict
+# and inclusive comparison profiles. All three scalars are parameters, so both
+# trace and prototype constant sets are empty; bytecode polarity selects the
+# only matching signed IR guard pair.
+awk '/^static unsigned numacc_fixture_comparison_profile\(/ { copying = 1 }
      copying { print }
      copying && /^static LJArm64IRReject expect_reject\(/ { exit }' \
   "$root/tests/t-arm64-jit-ir-admission.c" >"$numacc_region"
@@ -398,12 +402,16 @@ test "$(grep -c 'IR_KINT' "$numacc_region" || true)" -eq 0
 test "$(grep -c 'IR_SLOAD' "$numacc_region")" -eq 3
 test "$(grep -c 'IR_ADD,' "$numacc_region")" -eq 2
 test "$(grep -c 'IR_GT' "$numacc_region")" -eq 1
+test "$(grep -c 'IR_GE' "$numacc_region")" -eq 1
 test "$(grep -c 'IR_LT' "$numacc_region")" -eq 1
+test "$(grep -c 'IR_LE' "$numacc_region")" -eq 1
 test "$(grep -c 'IR_LOOP' "$numacc_region")" -eq 1
 test "$(grep -c 'IR_XPOLL' "$numacc_region")" -eq 1
 test "$(grep -c 'IR_PHI' "$numacc_region")" -eq 1
 
 for required in \
+  'ARM64_NUMCMP_STRICT = 1u,' \
+  'ARM64_NUMCMP_INCLUSIVE = 2u' \
   'ARM64_NUMACC_R_X = ARM64_NUMSTEP_R_X,' \
   'ARM64_NUMACC_R_STEP = ARM64_NUMSTEP_R_STEP,' \
   'ARM64_NUMACC_SEMANTIC_NINS = ARM64_NUMSTEP_SEMANTIC_NINS' \
@@ -415,14 +423,29 @@ for required in \
   'SNAP(2, 0, ARM64_NUMACC_R_X_BODY)' \
   'nsnap != 5 || nsnapmap != 15 || proto_sizebc != 13' \
   'static int arm64_postra_numdynamic_kernel(const LJArm64PostRAView *view,' \
-  'return arm64_postra_numdynamic_kernel(view, 2, 4, 3);' \
+  'IRRef xslot, IRRef stepslot, IRRef limitslot,' \
+  'unsigned comparison_profile)' \
+  'if (comparison_profile == ARM64_NUMCMP_STRICT) {' \
+  '} else if (comparison_profile == ARM64_NUMCMP_INCLUSIVE) {' \
+  'preop = IR_GE;' \
+  'bodyop = IR_LE;' \
+  'return arm64_postra_numdynamic_kernel(view, 2, 4, 3,' \
   'static int arm64_postra_numacc_shape(const LJArm64PostRAView *view,' \
+  'static unsigned arm64_numacc_comparison_profile(const BCIns *proto_bc,' \
+  'if (bc_op(ins) == BC_ISGE)' \
+  'return ARM64_NUMCMP_STRICT;' \
+  'if (bc_op(ins) == BC_ISGT)' \
+  'return ARM64_NUMCMP_INCLUSIVE;' \
+  'unsigned comparison_profile = arm64_numacc_comparison_profile(' \
   'view->root_topslot != 5 || view->proto_sizebc != 13 ||' \
+  'comparison_profile == 0 ||' \
   'semantic_nins != ARM64_NUMACC_SEMANTIC_NINS ||' \
   '!arm64_numacc_snapshots(view->snap, view->snapmap,' \
   'else if (view->proto_sizebc == 13) {' \
   '!arm64_postra_numacc_shape(view, semantic_nins)' \
   'static int arm64_ir_numacc_bytecode(const GCproto *pt,' \
+  'const BCIns *startpc, unsigned *comparison_profile)' \
+  'startpc == NULL || comparison_profile == NULL ||' \
   'pt->sizebc != 13 || pt->numparams != 3 || pt->sizeuv != 0 ||' \
   'pt->sizekn != 0 || pt->sizekgc != 0 ||' \
   'pt->flags2 != PROTO2_CELLOPS' \
@@ -430,7 +453,6 @@ for required in \
   'ARM64_NUMACC_BC_AD(0, BC_FUNCF, 5, 0)' \
   'ARM64_NUMACC_BC_AD(1, BC_CGET, 3, 0)' \
   'ARM64_NUMACC_BC_AD(2, BC_CGET, 4, 1)' \
-  'ARM64_NUMACC_BC_AD(3, BC_ISGE, 3, 4)' \
   'ARM64_NUMACC_BC_AD(6, BC_CGET, 3, 0)' \
   'ARM64_NUMACC_BC_AD(7, BC_CGET, 4, 2)' \
   'ARM64_NUMACC_BC_AD(9, BC_CSET, 0, 3)' \
@@ -438,14 +460,16 @@ for required in \
   'ARM64_NUMACC_BC_AD(12, BC_RET1, 3, 2)' \
   'bc_op(ins) != BC_LOOP || bc_a(ins) != 3 || bc_j(ins) != 5' \
   'bc_op(ins) != BC_ADDVV || bc_a(ins) != 3 ||' \
-  'return bc_op(ins) == BC_JMP && bc_a(ins) == 3 && bc_j(ins) == -10;' \
+  'arm64_numacc_comparison_profile(bc, pt->sizebc) != profile)' \
+  '*comparison_profile = profile;' \
   'static int arm64_ir_numdynamic_kernel(const GCtrace *T, IRRef xslot,' \
+  'IRRef stepslot, IRRef limitslot, unsigned comparison_profile)' \
   'bc_b(ins) != 3 || bc_c(ins) != 4)' \
   'static int arm64_ir_numacc_shape(const jit_State *J, const GCtrace *T,' \
   'T->nk != REF_TRUE || T->nins != ARM64_NUMACC_SEMANTIC_NINS' \
-  '!arm64_ir_numacc_bytecode(pt, trace_startpc_acq((GCtrace *)T))' \
+  '!arm64_ir_numacc_bytecode(pt, trace_startpc_acq((GCtrace *)T),' \
   '!arm64_numacc_snapshots(T->snap, T->snapmap, T->nsnap,' \
-  '!arm64_ir_numdynamic_kernel(T, 2, 4, 3)' \
+  '!arm64_ir_numdynamic_kernel(T, 2, 4, 3, comparison_profile)' \
   'else if (pt->sizebc == 13) {' \
   '!arm64_ir_numacc_shape(J, T, pt, firstphi, reject)'; do
   grep -F "$required" "$classifier" >/dev/null || {
@@ -455,6 +479,18 @@ for required in \
 done
 
 for required in \
+  'NUMACC_FIXTURE_STRICT = 1u,' \
+  'NUMACC_FIXTURE_INCLUSIVE = 2u' \
+  'static void select_numacc_fixture(unsigned comparison_profile)' \
+  'static unsigned numacc_fixture_comparison_profile(void)' \
+  'if (bc_op(ins) == BC_ISGE)' \
+  'return NUMACC_FIXTURE_STRICT;' \
+  'assert(bc_op(ins) == BC_ISGT);' \
+  'return NUMACC_FIXTURE_INCLUSIVE;' \
+  'static IROp numacc_fixture_preop(void)' \
+  'IR_GT : IR_GE;' \
+  'static IROp numacc_fixture_bodyop(void)' \
+  'IR_LT : IR_LE;' \
   'static void make_numacc_trace(jit_State *J)' \
   'assert(numacc_fixture_pt->framesize == 5);' \
   'assert(numacc_fixture_pt->sizebc == 13);' \
@@ -463,9 +499,9 @@ for required in \
   'setir(A_R_STEP, IR_SLOAD, IRT_NUM|IRT_GUARD,' \
   'setir(A_R_X_PRE, IR_ADD, IRT_NUM|IRT_ISPHI,' \
   'setir(A_R_LIMIT, IR_SLOAD, IRT_NUM|IRT_GUARD,' \
-  'setir(A_R_PRE_GUARD, IR_GT, IRT_NUM|IRT_GUARD,' \
+  'setir(A_R_PRE_GUARD, preop, IRT_NUM|IRT_GUARD,' \
   'setir(A_R_X_BODY, IR_ADD, IRT_NUM|IRT_ISPHI,' \
-  'setir(A_R_BODY_GUARD, IR_LT, IRT_NUM|IRT_GUARD,' \
+  'setir(A_R_BODY_GUARD, bodyop, IRT_NUM|IRT_GUARD,' \
   'setir(A_R_X_PHI, IR_PHI, IRT_NUM, A_R_X_PRE, A_R_X_BODY);' \
   'fx.snapmap[2] = SNAP(2, 0, A_R_X_PRE);' \
   'fx.snapmap[3] = SNAP(5, 0, A_R_X_PRE);' \
@@ -487,6 +523,11 @@ for required in \
   'setir(A_R_NOP, IR_RENAME, IRT_NIL, A_R_X_PRE, 3);' \
   'fx.ir[A_R_X].op1 = 4;' \
   'fx.ir[D_R_X].op1 = 2;' \
+  'IR_ULT, IR_UGE, IR_ULE, IR_UGT' \
+  'fx.ir[A_R_PRE_GUARD].op1 = A_R_X_PRE;' \
+  'fx.ir[A_R_PRE_GUARD].op2 = A_R_LIMIT;' \
+  'fx.ir[A_R_BODY_GUARD].op1 = A_R_LIMIT;' \
+  'fx.ir[A_R_BODY_GUARD].op2 = A_R_X_BODY;' \
   'fx.T.nk = REF_TRUE-1u;' \
   'fx.T.nk = H_K_HALF;' \
   'REJECT_NUMACC_ADJACENT(IR_CONV, IRT_NUM|IRT_ISPHI,' \
@@ -496,6 +537,7 @@ for required in \
   'fx.snapmap[9] = SNAP(2, SNAP_NORESTORE, A_R_X_PRE);' \
   'for (i = 0; i < 13; i++) {' \
   'bc_publish((const uint32_t *)pc, saved ^ masks[bitno]);' \
+  'BCINS_AD(bc_op(saved), 4, 3));' \
   'numacc_fixture_pt->framesize = 4;' \
   'numacc_fixture_pt->framesize = 6;' \
   'numacc_fixture_pt->sizebc = 12;' \
@@ -508,6 +550,21 @@ for required in \
   'numacc_fixture_pt->flags2 = 0;' \
   'numacc_fixture_pt->flags2 = PROTO2_CELLOPS|PROTO2_CELLUV;' \
   'assert(numacc_fixture_loop_pc == proto_bc(numacc_fixture_pt)+5);' \
+  'while x<=limit do x=x+step end return x end' \
+  'numacc_strict_fixture_pt = funcproto(funcV(L->top-1));' \
+  'numacc_inclusive_fixture_pt = funcproto(funcV(L->top-1));' \
+  'bc_op(loadbc(proto_bc(numacc_fixture_pt)+3)) == BC_ISGE' \
+  'bc_op(loadbc(proto_bc(numacc_inclusive_fixture_pt)+3)) == BC_ISGT' \
+  'static void test_numacc_comparison_cross_product(jit_State *J)' \
+  'static const IROp preops[2] = { IR_GT, IR_GE };' \
+  'static const IROp bodyops[2] = { IR_LT, IR_LE };' \
+  'int admitted = pre == p && body == p;' \
+  'expect_numacc_semantic_result(J, admitted);' \
+  'expect_numacc_postra_result(&view, admitted);' \
+  'select_numacc_fixture(NUMACC_FIXTURE_STRICT);' \
+  'select_numacc_fixture(NUMACC_FIXTURE_INCLUSIVE);' \
+  'test_numacc_comparison_cross_product(J);' \
+  'L->top -= 6;' \
   'test_numacc_positive_and_negative(J);' \
   'test_numacc_postra_layout(J);'; do
   grep -F "$required" "$root/tests/t-arm64-jit-ir-admission.c" >/dev/null || {
@@ -515,6 +572,10 @@ for required in \
     exit 1
   }
 done
+test "$(grep -Fc 'test_numacc_positive_and_negative(J);' \
+  "$root/tests/t-arm64-jit-ir-admission.c")" -eq 2
+test "$(grep -Fc 'test_numacc_postra_layout(J);' \
+  "$root/tests/t-arm64-jit-ir-admission.c")" -eq 2
 postra_line=$(grep -n '!lj_asm_arm64_postra_admit(' "$trace_asm" | cut -d: -f1)
 marker_line=$(grep -n 'T->unused1 |= TRACE_ARM64_INT_FORL_ADMITTED;' \
   "$trace_asm" | cut -d: -f1)
@@ -841,4 +902,4 @@ grep -F '#if LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED' \
   -o "$fixture"
 "$fixture"
 
-echo "arm64_jit_ir_admission_contract OK: exact integer, mixed-NUM, fixed-half, dynamic-step and dynamic-accumulator pure-NUM LOOP/FORL grammars, bounded integer spills, and FPR-only NUM layouts verified"
+echo "arm64_jit_ir_admission_contract OK: exact integer, mixed-NUM, fixed-half, dynamic-step and strict/inclusive dynamic-accumulator pure-NUM LOOP/FORL grammars, bounded integer spills, and FPR-only NUM layouts verified"
