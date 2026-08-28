@@ -2,9 +2,9 @@
 ** Native macOS ARM64 contract for exact ascending/descending ADD and
 ** descending SUB dynamic-accumulator pure-NUM roots.
 **
-** This certifies five intentionally narrow evolution profiles over one loop
-** geometry: strict/inclusive ascending ADD, strict descending ADD, and
-** strict/inclusive descending SUB, each with three live NUM parameters
+** This certifies six intentionally narrow evolution profiles over one loop
+** geometry: strict/inclusive ascending ADD, strict/inclusive descending ADD,
+** and strict/inclusive descending SUB, each with three live NUM parameters
 ** (initial accumulator, limit, and step).
 ** Adjacent arithmetic, direction, and bytecode families remain fail-closed,
 ** while the already-admitted fixed-initializer roots stay distinct.
@@ -168,6 +168,24 @@ static const NumericArgsProfile add_descending_profile = {
   { 20.0, 0.25, -0.5, 0.0 },
   { 20.5, 0.25, -1.0, -0.5 },
   { 20.5, 1.0, -0.5, 1.0 },
+  { 0.75, 0.5, -0.5, 0.25 }
+};
+
+/* The inclusive descending-ADD reuse tuple is made entirely of exact binary
+** fractions. Replacing only x, limit, or step with its recording value
+** produces -0.75, 0.125, or -1.125 respectively instead of -0.875. */
+static const NumericArgsProfile add_descending_inclusive_profile = {
+  "__arm64_pure_numeric_args_add_descending_inclusive",
+  NUMERIC_ARGS_ADD_DESCENDING,
+  NUMERIC_ARGS_INCLUSIVE, BC_ISGT, 4, 3, BC_ADDVV, IR_ADD,
+  IR_LE, IR_GE, A64I_FADDd, 1, CC_HI, CC_LS,
+  { 20.5, 0.25, -0.5, 0.0 },
+  { 0.375, -0.625, -0.25, -0.875 },
+  { 20.5, 0.25, -0.5, 0.0 },
+  { 20.25, 0.25, -0.5, -0.25 },
+  { 20.0, 0.25, -0.5, 0.0 },
+  { 20.5, 0.25, -1.0, -0.5 },
+  { 20.5, 1.0, -0.5, 0.5 },
   { 0.75, 0.5, -0.5, 0.25 }
 };
 
@@ -1084,7 +1102,14 @@ static void test_positive_and_guard_exits(const NumericArgsProfile *profile)
   luaL_openlibs(L);
   tg = L2TG(L);
   idle_vmstate = lj_tg_vmstate_load_acq(tg);
-  if (profile->evolution == NUMERIC_ARGS_ADD_DESCENDING) {
+  if (profile->evolution == NUMERIC_ARGS_ADD_DESCENDING &&
+      profile->comparison == NUMERIC_ARGS_INCLUSIVE) {
+    run_lua(L,
+      "jit.flush(); jit.on(); "
+      "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
+      "function __arm64_pure_numeric_args_add_descending_inclusive"
+	"(x,limit,step) while x>=limit do x=x+step end return x end");
+  } else if (profile->evolution == NUMERIC_ARGS_ADD_DESCENDING) {
     run_lua(L,
       "jit.flush(); jit.on(); "
       "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
@@ -1134,9 +1159,36 @@ static void test_positive_and_guard_exits(const NumericArgsProfile *profile)
   expect_single_exit(FINAL_EXIT);
   expect_only_args_root(L, pt, profile);
 
-  if (profile->evolution == NUMERIC_ARGS_ADD_DESCENDING) {
+  if (profile->evolution == NUMERIC_ARGS_ADD_DESCENDING &&
+      profile->comparison == NUMERIC_ARGS_INCLUSIVE) {
     /* Each call retains one recording-time value. All three distinguish the
-    ** live argument from a constant specialized into the root. */
+    ** live argument from a constant specialized into the inclusive root. */
+    lj_trace_test_root_entry_reset();
+    lj_trace_test_reset_exit_stats();
+    assert(call_triple(L, profile->name,
+	profile->record.x, profile->reuse.limit, profile->reuse.step,
+	0, 0, 0) == -0.75);
+    expect_single_exit(FINAL_EXIT);
+    expect_only_args_root(L, pt, profile);
+
+    lj_trace_test_root_entry_reset();
+    lj_trace_test_reset_exit_stats();
+    assert(call_triple(L, profile->name,
+	profile->reuse.x, profile->record.limit, profile->reuse.step,
+	0, 0, 0) == 0.125);
+    expect_single_exit(PRECOND_EXIT);
+    expect_only_args_root(L, pt, profile);
+
+    lj_trace_test_root_entry_reset();
+    lj_trace_test_reset_exit_stats();
+    assert(call_triple(L, profile->name,
+	profile->reuse.x, profile->reuse.limit, profile->record.step,
+	0, 0, 0) == -1.125);
+    expect_single_exit(FINAL_EXIT);
+    expect_only_args_root(L, pt, profile);
+  } else if (profile->evolution == NUMERIC_ARGS_ADD_DESCENDING) {
+    /* Each call retains one recording-time value. All three distinguish the
+    ** live argument from a constant specialized into the strict root. */
     lj_trace_test_root_entry_reset();
     lj_trace_test_reset_exit_stats();
     assert(call_triple(L, profile->name,
@@ -1162,29 +1214,33 @@ static void test_positive_and_guard_exits(const NumericArgsProfile *profile)
     expect_only_args_root(L, pt, profile);
   }
 
-  if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING &&
+  if (numeric_args_is_descending(profile) &&
       profile->comparison == NUMERIC_ARGS_INCLUSIVE) {
+    const lua_Number equality_body_step =
+      profile->evolution == NUMERIC_ARGS_SUB_DESCENDING ? 0.375 : -0.375;
+    const lua_Number equality_first_step =
+      profile->evolution == NUMERIC_ARGS_SUB_DESCENDING ? 0.5 : -0.5;
     /* Equality at the body guard takes the inclusive backedge once more. */
     lj_trace_test_root_entry_reset();
     lj_trace_test_reset_exit_stats();
     assert(call_triple(L, profile->name,
-	1.0, 0.25, 0.375, 0, 0, 0) == -0.125);
+	1.0, 0.25, equality_body_step, 0, 0, 0) == -0.125);
     expect_single_exit(FINAL_EXIT);
     expect_only_args_root(L, pt, profile);
 
-    /* Equality after the first SUB passes the inclusive precondition. */
+    /* Equality after the first recurrence passes the inclusive precondition. */
     lj_trace_test_root_entry_reset();
     lj_trace_test_reset_exit_stats();
     assert(call_triple(L, profile->name,
-	1.0, 0.5, 0.5, 0, 0, 0) == 0.0);
+	1.0, 0.5, equality_first_step, 0, 0, 0) == 0.0);
     expect_single_exit(FINAL_EXIT);
     expect_only_args_root(L, pt, profile);
 
-    /* Initial equality enters JLOOP, whose first SUB falls below the limit. */
+    /* Initial equality enters JLOOP; the first recurrence falls below limit. */
     lj_trace_test_root_entry_reset();
     lj_trace_test_reset_exit_stats();
     assert(call_triple(L, profile->name,
-	0.5, 0.5, 0.5, 0, 0, 0) == 0.0);
+	0.5, 0.5, equality_first_step, 0, 0, 0) == 0.0);
     expect_single_exit(PRECOND_EXIT);
     expect_only_args_root(L, pt, profile);
   } else if (numeric_args_is_descending(profile)) {
@@ -1442,6 +1498,22 @@ static void test_fixed_initializers_remain_separate(void)
 
   run_lua(L,
     "jit.flush(); "
+    "function __arm64_fixed_initializer_add_descending_inclusive(limit,step) "
+      "local x=20.5 while x>=limit do x=x+step end return x end "
+    "assert(__arm64_fixed_initializer_add_descending_inclusive"
+      "(0.5,-0.5)==0.0)");
+  expect_no_trace(L, "__arm64_fixed_initializer_add_descending_inclusive");
+
+  run_lua(L,
+    "jit.flush(); "
+    "function __arm64_fixed_half_add_descending_inclusive(limit) "
+      "local x=20.5 while x>=limit do x=x+(-0.5) end return x end "
+    "assert(__arm64_fixed_half_add_descending_inclusive(0.5)==0.0)");
+  pt = global_proto(L, "__arm64_fixed_half_add_descending_inclusive");
+  expect_no_trace(L, "__arm64_fixed_half_add_descending_inclusive");
+
+  run_lua(L,
+    "jit.flush(); "
     "function __arm64_fixed_initializer_descending(limit,step) local x=20.5 "
       "while x>limit do x=x-step end return x end "
     "assert(__arm64_fixed_initializer_descending(0.25,0.5)==0.0)");
@@ -1556,14 +1628,6 @@ static void test_add_descending_adjacent_rejected(void)
   run_lua(L,
     "jit.flush(); jit.on(); "
     "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
-    "function __arm64_args_add_ge(x,limit,step) "
-      "while x>=limit do x=x+step end return x end");
-  assert(call_triple(L, "__arm64_args_add_ge",
-	20.5, 0.5, -0.5, 0, 0, 0) == 0.0);
-  expect_no_trace(L, "__arm64_args_add_ge");
-
-  run_lua(L,
-    "jit.flush(); "
     "function __arm64_args_reversed_add_gt_compare(x,limit,step) "
       "while limit<x do x=x+step end return x end");
   assert(call_triple(L, "__arm64_args_reversed_add_gt_compare",
@@ -1601,6 +1665,46 @@ static void test_add_descending_adjacent_rejected(void)
   assert(call_triple(L, "__arm64_args_add_gt_div",
 	20.5, 0.5, 2.0, 0, 0, 0) == 0.3203125);
   expect_no_trace(L, "__arm64_args_add_gt_div");
+
+  run_lua(L,
+    "jit.flush(); "
+    "function __arm64_args_reversed_add_ge_compare(x,limit,step) "
+      "while limit<=x do x=x+step end return x end");
+  assert(call_triple(L, "__arm64_args_reversed_add_ge_compare",
+	20.5, 0.5, -0.5, 0, 0, 0) == 0.0);
+  expect_no_trace(L, "__arm64_args_reversed_add_ge_compare");
+
+  run_lua(L,
+    "jit.flush(); "
+    "function __arm64_args_reversed_add_ge(x,limit,step) "
+      "while x>=limit do x=step+x end return x end");
+  assert(call_triple(L, "__arm64_args_reversed_add_ge",
+	20.5, 0.5, -0.5, 0, 0, 0) == 0.0);
+  expect_no_trace(L, "__arm64_args_reversed_add_ge");
+
+  run_lua(L,
+    "jit.flush(); "
+    "function __arm64_args_extra_add_ge(x,limit,step) "
+      "while x>=limit do x=x+step+step end return x end");
+  assert(call_triple(L, "__arm64_args_extra_add_ge",
+	20.5, 0.5, -0.25, 0, 0, 0) == 0.0);
+  expect_no_trace(L, "__arm64_args_extra_add_ge");
+
+  run_lua(L,
+    "jit.flush(); "
+    "function __arm64_args_add_ge_mul(x,limit,step) "
+      "while x>=limit do x=x*step end return x end");
+  assert(call_triple(L, "__arm64_args_add_ge_mul",
+	20.5, 0.5, 0.5, 0, 0, 0) == 0.3203125);
+  expect_no_trace(L, "__arm64_args_add_ge_mul");
+
+  run_lua(L,
+    "jit.flush(); "
+    "function __arm64_args_add_ge_div(x,limit,step) "
+      "while x>=limit do x=x/step end return x end");
+  assert(call_triple(L, "__arm64_args_add_ge_div",
+	20.5, 0.5, 2.0, 0, 0, 0) == 0.3203125);
+  expect_no_trace(L, "__arm64_args_add_ge_div");
   lua_close(L);
 }
 
@@ -1737,6 +1841,7 @@ int main(int argc, char **argv)
   test_positive_and_guard_exits(&strict_profile);
   test_positive_and_guard_exits(&inclusive_profile);
   test_positive_and_guard_exits(&add_descending_profile);
+  test_positive_and_guard_exits(&add_descending_inclusive_profile);
   test_positive_and_guard_exits(&descending_profile);
   test_positive_and_guard_exits(&descending_inclusive_profile);
   test_fixed_initializers_remain_separate();
