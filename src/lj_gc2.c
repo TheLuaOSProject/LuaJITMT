@@ -14509,6 +14509,88 @@ static int gc2_publish_mutator_nodrain(global_State *g, GCobj *o)
   return gc2_publish_mutator_(g, o, NULL, 0);
 }
 
+#if LJ_HASJIT
+/* Append one exact trace traversal request without rotating the owner SSB.
+** Rotation needs a free-node CAS and a global-list CAS loop; neither belongs
+** in the sealed publication suffix. The current TG is the sole active-cursor
+** writer, while workers can observe this slot only after a later cursor or
+** node publication. */
+static int gc2_trace_publish_active_ssb_bounded(global_State *g, GCobj *o)
+{
+  TGState *tg;
+  GC2SSBNode *node;
+  GCRef *base, *next, *end;
+  uint32_t remembered_count;
+  int remembered;
+  if (!g || !o || !(tg = G2TG(g)) || tg->gl != g ||
+      lj_tg_flags_test_acq(tg, TGF_DEAD))
+    return 0;
+  node = lj_tg_ssb_active_acq(tg);
+  base = lj_tg_ssb_base_acq(tg);
+  next = lj_tg_ssb_next_acq(tg);
+  end = lj_tg_ssb_end_acq(tg);
+  if (!node || lj_gc2_ssb_owner_acq(node) != tg ||
+      base != node->slot || end != node->slot + TG_GC2_SSB_SLOTS ||
+      !next || next < base || next >= end)
+    return 0;
+  remembered_count = lj_gc2_ssb_remembered_acq(node);
+  if (remembered_count > (uint32_t)(next-base))
+    return 0;
+
+  /* The entry is published regardless of phase. Thus an IDLE sample cannot
+  ** lose to a concurrent MARK start: cycle start preserves existing SSB work,
+  ** and MARK-active consumers treat raw SSB slots as traversal requests even
+  ** when the body was marked by a concurrent root snapshot first. */
+  remembered = gc2_phase_acq(g) == LJ_GC2_IDLE &&
+	       gc2_generational_acq(g) != 0;
+  gc2_queue_slot_store_rel(next, o);
+  if (remembered)
+    (void)lj_gc2_ssb_remembered_add(node);
+  lj_tg_ssb_next_rel(tg, next + 1);
+  return 1;
+}
+
+/* `gc2_recovery_fail_closed()` also drives the typed activation word to
+** NO_RECLAIM, but that defensive repair intentionally retries a racing CX16
+** transition. The sealed suffix needs a bounded checkpoint. The existing
+** sticky recovery-failure lane is independently sufficient here: it is part
+** of every MARK->WEAK, WEAK->SWEEP, sweep-bridge and physical-reclaim close
+** predicate. In IDLE, a later cycle may start but cannot cross MARK closure.
+** This release publication therefore vetoes semantic reclamation without a
+** retry loop, allocation, drain, or wait. */
+static void gc2_trace_publish_veto_bounded(global_State *g)
+{
+  if (!g)
+    return;
+  gc2_recovery_failed_rel(g, 1);
+  lj_gc2_worker_wake(g);
+}
+
+int lj_gc2_trace_publish_checkpoint_nodrain(global_State *g,
+					    uint32_t traceno,
+					    GCtrace *body)
+{
+  TraceVec *tv;
+  GCobj *published = NULL;
+  if (!g)
+    return LJ_GC2_TRACE_PUBLISH_VETOED;
+
+  /* The publication transaction retains its TraceVec/SMR authority through
+  ** this exact slot comparison. Do not authenticate or dereference the body:
+  ** slot identity and the caller's retained body lease are the authority. */
+  tv = tracevec_acq(G2J(g));
+  if (traceno != 0 && body != NULL && tv != NULL &&
+      (MSize)traceno < tv->sizetrace)
+    published = gcref_acq(tv->slot[traceno]);
+  if (body == NULL || published != obj2gco(body) ||
+      !gc2_trace_publish_active_ssb_bounded(g, published)) {
+    gc2_trace_publish_veto_bounded(g);
+    return LJ_GC2_TRACE_PUBLISH_VETOED;
+  }
+  return LJ_GC2_TRACE_PUBLISH_QUEUED;
+}
+#endif
+
 void lj_gc2_thread_owner_releasing(global_State *g, lua_State *L,
 				     uint32_t tid, int force_recovery)
 {

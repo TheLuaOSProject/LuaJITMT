@@ -19,6 +19,17 @@ typedef void (*GC2FinRegMarkFunc)(global_State *g, cTValue *tv);
 typedef void (*GC2FinRegMarkObjFunc)(global_State *g, GCobj *o);
 typedef void (*GC2FinRegMarkMemFunc)(global_State *g, void *p);
 typedef void (*GC2FinRegMarkTVFunc)(global_State *g, cTValue *tv);
+struct GCtrace;
+
+#if LJ_HASJIT
+/* A sealed trace publisher has only safe outcomes: the exact published body
+** is durably queued for traversal, or the sticky recovery-failure lane vetoes
+** collector closure before any semantic object can be reclaimed. */
+typedef enum LJGC2TracePublishCheckpointResult {
+  LJ_GC2_TRACE_PUBLISH_QUEUED = 1,
+  LJ_GC2_TRACE_PUBLISH_VETOED = 2
+} LJGC2TracePublishCheckpointResult;
+#endif
 /* Opaque counted body admission. A successful acquire protects every payload
 ** byte through the final read before lj_gc2_lease_release(). Do not copy an
 ** active lease. Huge allocations carry a counted HugeTab reader; only the
@@ -750,6 +761,12 @@ LJ_FUNC uint32_t lj_gc2_trace_sweep_root(global_State *g, GCobj *o);
 ** was admitted. Trace number zero is the empty edge and succeeds. */
 LJ_FUNC int lj_gc2_mark_trace_slot_status(global_State *g, uint32_t traceno);
 LJ_FUNC void lj_gc2_mark_trace_slot(global_State *g, uint32_t traceno);
+/* Sealed-publication checkpoint. The caller owns a stable TraceVec/slot and
+** exact body lifetime through this call. It performs no allocation, waiting,
+** SSB rotation/drain, recovery scan, or callback. The return is always one of
+** QUEUED/VETOED for a non-null universe; VETOED is a durable safe outcome. */
+LJ_FUNC int lj_gc2_trace_publish_checkpoint_nodrain(
+  global_State *g, uint32_t traceno, struct GCtrace *body);
 #endif
 LJ_FUNC void lj_gc2_remember_root(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc2_ismarkedmem(global_State *g, void *p);

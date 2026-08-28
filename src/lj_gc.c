@@ -4566,6 +4566,12 @@ void lj_gc_pubtrace(global_State *g, uint32_t traceno)
   if (gc2_phase_acq(g) != LJ_GC2_IDLE)
     lj_gc2_mark_trace_slot(g, traceno);
 }
+
+int lj_gc_pubtrace_checkpoint_nodrain(global_State *g, uint32_t traceno,
+				      GCtrace *body)
+{
+  return lj_gc2_trace_publish_checkpoint_nodrain(g, traceno, body);
+}
 #endif
 
 /* -- Allocator ----------------------------------------------------------- */

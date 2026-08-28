@@ -10,6 +10,7 @@
 
 typedef struct GCArena GCArena;
 typedef struct LJHugeInfo LJHugeInfo;
+struct GCtrace;
 
 typedef struct LJGCDestructCtx {
   void *base;
@@ -427,6 +428,11 @@ LJ_FUNC void lj_gc_barrierf(global_State *g, GCobj *o, GCobj *v);
 LJ_FUNC void lj_gc_closeuv(global_State *g, GCupval *uv);
 #if LJ_HASJIT
 LJ_FUNC void lj_gc_pubtrace(global_State *g, uint32_t traceno);
+/* Constant-work checkpoint for a sealed trace publication transaction. See
+** LJGC2TracePublishCheckpointResult in lj_gc2.h for the two safe outcomes. */
+LJ_FUNC int lj_gc_pubtrace_checkpoint_nodrain(global_State *g,
+					       uint32_t traceno,
+					       struct GCtrace *body);
 #endif
 LJ_FUNCA void lj_gc2_barrier_tv_g(global_State *g, cTValue *tv);
 LJ_FUNCA void lj_gc2_barrier_tvn_pair_g(global_State *g, GCobj *parent,
