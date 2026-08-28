@@ -18,6 +18,7 @@
 #include "lj_buf.h"
 #include "lj_strfmt.h"
 #include "lj_jit.h"
+#include "lj_gdbjit.h"
 #include "lj_dispatch.h"
 #include "lj_thr.h"
 
@@ -148,6 +149,11 @@ GDBJITdesc __jit_debug_descriptor = {
   1, GDBJIT_NOACTION, NULL, NULL
 };
 
+#ifdef LJ_GDBJIT_TEST_HELPERS
+static uint32_t gdbjit_test_register_callbacks;
+static uint32_t gdbjit_test_register_callbacks_ready;
+#endif
+
 static LJ_AINLINE GDBJITentry *gdbjit_entry_next_acq(const GDBJITentry *entry)
 {
   return (GDBJITentry *)la_loadptr_acq((void *const *)&entry->next_entry);
@@ -194,6 +200,16 @@ static LJ_AINLINE void gdbjit_desc_action_rel(uint32_t action)
 /* GDB sets a breakpoint at this function. */
 void LJ_NOINLINE __jit_debug_register_code()
 {
+#ifdef LJ_GDBJIT_TEST_HELPERS
+  GDBJITentry *relevant = (GDBJITentry *)la_loadptr_acq((void *const *)
+    &__jit_debug_descriptor.relevant_entry);
+  uint32_t action = la_load32_acq(&__jit_debug_descriptor.action_flag);
+  (void)la_add32_acqrel(&gdbjit_test_register_callbacks, 1);
+  if (action == GDBJIT_REGISTER && relevant != NULL &&
+      gdbjit_desc_first_acq() == relevant &&
+      relevant->symfile_addr != NULL && relevant->symfile_size != 0)
+    (void)la_add32_acqrel(&gdbjit_test_register_callbacks_ready, 1);
+#endif
   __asm__ __volatile__("");
 };
 
@@ -385,12 +401,23 @@ typedef struct GDBJITobj {
   uint8_t space[4096];			/* Space for various section data. */
 } GDBJITobj;
 
-/* Combined structure for GDB JIT entry and ELF object. */
-typedef struct GDBJITentryobj {
+/* Prepared GDB JIT entry and ELF object. The allocation stays caller-owned
+** until the one-shot descriptor commit succeeds. */
+struct GDBJITPrepared {
   GDBJITentry entry;
   size_t sz;
+  GCtrace *target;
+  uint8_t state;
   GDBJITobj obj;
-} GDBJITentryobj;
+};
+
+typedef struct GDBJITPrepared GDBJITentryobj;
+
+enum {
+  GDBJIT_PREPARED,
+  GDBJIT_COMMIT_ATTEMPTED,
+  GDBJIT_COMMITTED
+};
 
 /* Template for in-memory ELF header. */
 static const ELFheader elfhdr_template = {
@@ -751,8 +778,8 @@ static void gdbjit_initsect(GDBJITctx *ctx, int sect, GDBJITinitf initf)
 #define SECTALIGN(p, a) \
   ((p) = (uint8_t *)(((uintptr_t)(p) + ((a)-1)) & ~(uintptr_t)((a)-1)))
 
-/* Build in-memory ELF object. */
-static void gdbjit_buildobj(GDBJITctx *ctx)
+/* Build an in-memory ELF object after the caller has proved it fits. */
+static void gdbjit_buildobj_raw(GDBJITctx *ctx)
 {
   GDBJITobj *obj = &ctx->obj;
   /* Fill in ELF header and clear structures. */
@@ -772,11 +799,99 @@ static void gdbjit_buildobj(GDBJITctx *ctx)
   lj_assertX(ctx->objsize < sizeof(GDBJITobj), "GDBJITobj overflow");
 }
 
+/* The filename is the only unbounded object input and is emitted exactly
+** twice, before the single final pointer-alignment operation. Build the fixed
+** empty-name form first, then include both copies and worst-case alignment in
+** a conservative bound before any caller-controlled byte is emitted. */
+static int gdbjit_buildobj_bounded(GDBJITctx *ctx, size_t filenamelen)
+{
+  const char *filename = ctx->filename;
+  size_t fixedsize, extra;
+  const size_t alignslop = sizeof(uintptr_t)-1u;
+
+  ctx->filename = "";
+  gdbjit_buildobj_raw(ctx);
+  fixedsize = ctx->objsize;
+  ctx->filename = filename;
+
+  if (filenamelen > (SIZE_MAX-alignslop)/2u)
+    return 0;
+  extra = filenamelen*2u+alignslop;
+  if (fixedsize >= sizeof(ctx->obj) ||
+      extra >= sizeof(ctx->obj)-fixedsize)
+    return 0;
+
+  gdbjit_buildobj_raw(ctx);
+  lj_assertX(ctx->objsize <= fixedsize+extra,
+	     "GDBJIT filename bound mismatch");
+  return 1;
+}
+
 #undef SECTALIGN
 
 /* -- Interface to GDB JIT API -------------------------------------------- */
 
 static uint32_t gdbjit_lock;
+
+#ifdef LJ_GDBJIT_TEST_HELPERS
+static LJGDBJITTestStats gdbjit_test_counters;
+static uint32_t gdbjit_test_prepare_alloc_omit;
+
+#define gdbjit_test_note(field) \
+  ((void)la_add32_acqrel(&gdbjit_test_counters.field, 1))
+
+void lj_gdbjit_test_reset(void)
+{
+  la_store32_rel(&gdbjit_test_counters.prepare_attempts, 0);
+  la_store32_rel(&gdbjit_test_counters.prepare_successes, 0);
+  la_store32_rel(&gdbjit_test_counters.prepare_bounds_omits, 0);
+  la_store32_rel(&gdbjit_test_counters.prepare_alloc_omits, 0);
+  la_store32_rel(&gdbjit_test_counters.commit_attempts, 0);
+  la_store32_rel(&gdbjit_test_counters.commit_successes, 0);
+  la_store32_rel(&gdbjit_test_counters.commit_lock_omits, 0);
+  la_store32_rel(&gdbjit_test_counters.aborts, 0);
+  la_store32_rel(&gdbjit_test_prepare_alloc_omit, 0);
+  la_store32_rel(&gdbjit_test_register_callbacks, 0);
+  la_store32_rel(&gdbjit_test_register_callbacks_ready, 0);
+}
+
+void lj_gdbjit_test_force_prepare_alloc_omit(void)
+{
+  la_store32_rel(&gdbjit_test_prepare_alloc_omit, 1);
+}
+
+void lj_gdbjit_test_stats(LJGDBJITTestStats *stats)
+{
+  stats->prepare_attempts =
+    la_load32_acq(&gdbjit_test_counters.prepare_attempts);
+  stats->prepare_successes =
+    la_load32_acq(&gdbjit_test_counters.prepare_successes);
+  stats->prepare_bounds_omits =
+    la_load32_acq(&gdbjit_test_counters.prepare_bounds_omits);
+  stats->prepare_alloc_omits =
+    la_load32_acq(&gdbjit_test_counters.prepare_alloc_omits);
+  stats->commit_attempts =
+    la_load32_acq(&gdbjit_test_counters.commit_attempts);
+  stats->commit_successes =
+    la_load32_acq(&gdbjit_test_counters.commit_successes);
+  stats->commit_lock_omits =
+    la_load32_acq(&gdbjit_test_counters.commit_lock_omits);
+  stats->aborts = la_load32_acq(&gdbjit_test_counters.aborts);
+  stats->register_callbacks =
+    la_load32_acq(&gdbjit_test_register_callbacks);
+  stats->register_callbacks_ready =
+    la_load32_acq(&gdbjit_test_register_callbacks_ready);
+}
+
+static int gdbjit_test_take_prepare_alloc_omit(void)
+{
+  return la_xchg32_acqrel(&gdbjit_test_prepare_alloc_omit, 0) != 0;
+}
+
+#else
+#define gdbjit_test_note(field) ((void)0)
+#define gdbjit_test_take_prepare_alloc_omit() 0
+#endif
 
 static void gdbjit_lock_wait(lua_State *L)
 {
@@ -810,23 +925,158 @@ static void gdbjit_lock_release()
   la_store32_rel(&gdbjit_lock, 0);  /* 08 section 8.3: descriptor unlock. */
 }
 
-/* Add new entry to GDB JIT symbol chain. */
-static void gdbjit_newentry(lua_State *L, GDBJITctx *ctx)
+#ifdef LJ_GDBJIT_TEST_HELPERS
+int lj_gdbjit_test_descriptor_lock_acquire(void)
 {
-  /* Allocate memory for GDB JIT entry and ELF object. */
-  MSize sz = (MSize)(sizeof(GDBJITentryobj) - sizeof(GDBJITobj) + ctx->objsize);
-  GDBJITentryobj *eo = lj_mem_newt(L, sz, GDBJITentryobj);
-  memcpy(&eo->obj, &ctx->obj, ctx->objsize);  /* Copy ELF object. */
-  eo->sz = sz;
-  /* Optional debugger metadata must not park the recorder behind another Lua
-  ** universe's process-global descriptor update. A collision simply omits this
-  ** trace's debug entry; normal execution and later retirement stay lockless.
-  */
-  if (!gdbjit_lock_try()) {
-    lj_mem_free(G(L), eo, eo->sz);
-    return;
+  return gdbjit_lock_try();
+}
+
+void lj_gdbjit_test_descriptor_lock_release(void)
+{
+  gdbjit_lock_release();
+}
+
+size_t lj_gdbjit_test_prepared_symfile_size(const GDBJITPrepared *prep)
+{
+  const GDBJITentryobj *eo = (const GDBJITentryobj *)prep;
+  return eo != NULL ? (size_t)eo->entry.symfile_size : 0;
+}
+
+size_t lj_gdbjit_test_prepared_object_size(const GDBJITPrepared *prep)
+{
+  const GDBJITentryobj *eo = (const GDBJITentryobj *)prep;
+  return eo != NULL && eo->sz >= offsetof(GDBJITentryobj, obj) ?
+    eo->sz - offsetof(GDBJITentryobj, obj) : 0;
+}
+
+size_t lj_gdbjit_test_object_capacity(void)
+{
+  return sizeof(GDBJITobj);
+}
+#endif
+
+/* Prepare optional debugger metadata without exposing it to the trace or the
+** process-global descriptor. This phase may allocate, but allocation failure,
+** parent-SMR contention and an overlong source name all mean safe omission. */
+GDBJITPrepared *lj_gdbjit_preparetrace(jit_State *J, GCtrace *T,
+				       const GCtrace *exact_parent)
+{
+  GDBJITctx ctx;
+  GCtrace *source;
+  GCproto *pt;
+  GCstr *chunkname;
+  IRIns *ir;
+  IRIns base;
+  const BCIns *startpc;
+  TraceNo parent;
+  MSize parentspadj = 0;
+  size_t filenamelen;
+  size_t sz;
+  GDBJITentryobj *eo;
+
+  gdbjit_test_note(prepare_attempts);
+  if (J == NULL || J->L == NULL || T == NULL)
+    return NULL;
+
+  /* Before trace_save(), the compact destination contains only constructor
+  ** defaults. J->cur remains the complete private source image. */
+  source = (T == J->curfinal && trace_traceno_acq(T) == 0) ? &J->cur : T;
+  pt = trace_startpt_acq(source);
+  ir = trace_ir_acq(source);
+  startpc = trace_startpc_acq(source);
+  if (pt == NULL || ir == NULL || startpc == NULL ||
+      trace_traceno_acq(source) == 0 || trace_mcode_acq(source) == NULL ||
+      startpc < proto_bc(pt) || startpc >= proto_bc(pt)+pt->sizebc)
+    return NULL;
+
+  base = ir_load_acq(&ir[REF_BASE]);
+  parent = base.op1;
+  if (parent != 0) {
+    GCtrace *parentT;
+    int parent_ok;
+    /* One bounded reader attempt authenticates both the trace number and the
+    ** exact generation supplied by a future side-publication transaction. */
+    if (!lj_gc2_smr_read_try(J2G(J)))
+      return NULL;
+    parentT = traceref_safe(J, parent);
+    parent_ok = parentT != NULL && trace_traceno_acq(parentT) == parent &&
+      (exact_parent == NULL || parentT == exact_parent);
+    if (parent_ok)
+      parentspadj = trace_spadjust_acq(parentT);
+    lj_gc2_smr_read_leave(J2G(J));
+    if (!parent_ok)
+      return NULL;
+  } else if (exact_parent != NULL) {
+    return NULL;
   }
-  trace_gdbjit_entry_rel(ctx->T, (void *)eo);
+
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.T = source;
+  ctx.mcaddr = (uintptr_t)trace_mcode_acq(source);
+  ctx.szmcode = trace_szmcode_acq(source);
+  ctx.spadjp = CFRAME_SIZE_JIT + parentspadj;
+  ctx.spadj = CFRAME_SIZE_JIT + trace_spadjust_acq(source);
+  ctx.lineno = lj_debug_line(pt, proto_bcpos(pt, startpc));
+  chunkname = proto_chunkname_acq(pt);
+  if (chunkname == NULL)
+    return NULL;
+  ctx.filename = strdata(chunkname);
+  filenamelen = (size_t)chunkname->len;
+  if (filenamelen != 0 &&
+      (*ctx.filename == '@' || *ctx.filename == '=')) {
+    ctx.filename++;
+    filenamelen--;
+  } else {
+    ctx.filename = "(string)";
+    filenamelen = sizeof("(string)")-1u;
+  }
+  if (!gdbjit_buildobj_bounded(&ctx, filenamelen)) {
+    gdbjit_test_note(prepare_bounds_omits);
+    return NULL;
+  }
+
+  sz = offsetof(GDBJITentryobj, obj)+ctx.objsize;
+  if (gdbjit_test_take_prepare_alloc_omit()) {
+    gdbjit_test_note(prepare_alloc_omits);
+    return NULL;
+  }
+  eo = (GDBJITentryobj *)lj_mem_new_nothrow(J->L, (GCSize)sz);
+  if (eo == NULL) {
+    gdbjit_test_note(prepare_alloc_omits);
+    return NULL;
+  }
+  memset(&eo->entry, 0, sizeof(eo->entry));
+  eo->sz = sz;
+  eo->target = T;
+  eo->state = GDBJIT_PREPARED;
+  memcpy(&eo->obj, &ctx.obj, ctx.objsize);
+  eo->entry.symfile_addr = (const char *)&eo->obj;
+  eo->entry.symfile_size = ctx.objsize;
+  gdbjit_test_note(prepare_successes);
+  return eo;
+}
+
+/* Make exactly one nonwaiting descriptor attempt while the caller retains T
+** and serializes retirement. No allocation or free is permitted here: on
+** failure the caller owns abort after its sealed suffix. */
+int lj_gdbjit_committrace(GCtrace *T, GDBJITPrepared *prep)
+{
+  GDBJITentryobj *eo = (GDBJITentryobj *)prep;
+  if (T == NULL || eo == NULL || eo->target != T ||
+      eo->state != GDBJIT_PREPARED)
+    return 0;
+  eo->state = GDBJIT_COMMIT_ATTEMPTED;
+  gdbjit_test_note(commit_attempts);
+  if (!gdbjit_lock_try()) {
+    gdbjit_test_note(commit_lock_omits);
+    return 0;
+  }
+  if (trace_gdbjit_entry_acq(T) != NULL) {
+    gdbjit_lock_release();
+    return 0;
+  }
+  eo->state = GDBJIT_COMMITTED;
+  trace_gdbjit_entry_rel(T, (void *)eo);
   /* Link new entry to chain and register it. */
   {
     GDBJITentry *head = gdbjit_desc_first_acq();
@@ -835,51 +1085,31 @@ static void gdbjit_newentry(lua_State *L, GDBJITctx *ctx)
     if (head)
       gdbjit_entry_prev_rel(head, &eo->entry);
   }
-  eo->entry.symfile_addr = (const char *)&eo->obj;
-  eo->entry.symfile_size = ctx->objsize;
   gdbjit_desc_first_rel(&eo->entry);
   gdbjit_desc_relevant_rel(&eo->entry);
   gdbjit_desc_action_rel(GDBJIT_REGISTER);
   __jit_debug_register_code();
   gdbjit_lock_release();
+  gdbjit_test_note(commit_successes);
+  return 1;
 }
 
-/* Add debug info for newly compiled trace and notify GDB. */
+void lj_gdbjit_aborttrace(global_State *g, GDBJITPrepared *prep)
+{
+  GDBJITentryobj *eo = (GDBJITentryobj *)prep;
+  if (eo != NULL && eo->state != GDBJIT_COMMITTED) {
+    gdbjit_test_note(aborts);
+    lj_mem_free(g, eo, eo->sz);
+  }
+}
+
+/* Preserve the generic root/side call site while routing it through the
+** transaction-ready split. Optional metadata failure never affects a trace. */
 void lj_gdbjit_addtrace(jit_State *J, GCtrace *T)
 {
-  GDBJITctx ctx;
-  GCproto *pt = trace_startpt_acq(T);
-  IRIns base = ir_load_acq(&trace_ir_acq(T)[REF_BASE]);
-  TraceNo parent = base.op1;
-  const BCIns *startpc = trace_startpc_acq(T);
-  MSize parentspadj = 0;
-  if (parent) {
-    GCtrace *parentT;
-    /* Debugger metadata is optional. Omitting one entry is preferable to
-    ** parking the recorder behind an exclusive trace-body reclaimer, and a
-    ** guessed parent stack adjustment would describe invalid unwind state. */
-    if (!lj_gc2_smr_read_try(J2G(J)))
-      return;
-    parentT = traceref_safe(J, parent);
-    if (parentT && trace_traceno_acq(parentT) == parent)
-      parentspadj = trace_spadjust_acq(parentT);
-    lj_gc2_smr_read_leave(J2G(J));
-  }
-  ctx.T = T;
-  ctx.mcaddr = (uintptr_t)trace_mcode_acq(T);
-  ctx.szmcode = trace_szmcode_acq(T);
-  ctx.spadjp = CFRAME_SIZE_JIT + parentspadj;
-  ctx.spadj = CFRAME_SIZE_JIT + trace_spadjust_acq(T);
-  lj_assertJ(startpc >= proto_bc(pt) && startpc < proto_bc(pt) + pt->sizebc,
-	     "start PC out of range");
-  ctx.lineno = lj_debug_line(pt, proto_bcpos(pt, startpc));
-  ctx.filename = proto_chunknamestr_acq(pt);
-  if (*ctx.filename == '@' || *ctx.filename == '=')
-    ctx.filename++;
-  else
-    ctx.filename = "(string)";
-  gdbjit_buildobj(&ctx);
-  gdbjit_newentry(J->L, &ctx);
+  GDBJITPrepared *prep = lj_gdbjit_preparetrace(J, T, NULL);
+  if (prep != NULL && !lj_gdbjit_committrace(T, prep))
+    lj_gdbjit_aborttrace(J2G(J), prep);
 }
 
 static void gdbjit_deltrace_locked(global_State *g, GCtrace *T,
