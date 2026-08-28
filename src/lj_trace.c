@@ -4328,9 +4328,9 @@ static int trace_arm64_first_side_view_acq(jit_State *J, TraceNo parent,
 #endif
 
   maxsnapmap = (MSize)LJ_MAX_JSLOTS + (MSize)LJ_STACK_EXTRA + 32u;
-  /* The root marker also covers the first mixed INT/NUM execution canary.
-  ** Keep side recording restricted to the exact integer-parent bytecode
-  ** geometry already certified by the first-side assembler. */
+  /* The root marker also covers the first mixed INT/NUM and pure-NUM
+  ** execution canaries. Keep side recording restricted to the exact
+  ** integer-parent bytecode geometry certified by the first-side assembler. */
   if (v->retire_epoch != 0 || v->traceno != parent || v->root != 0 ||
       v->link != parent || v->linktype != LJ_TRLINK_LOOP ||
       v->nchild != 0 || v->nextside != 0 ||

@@ -104,6 +104,12 @@ if test -f "$numeric_loop_contract"; then
     sh "$numeric_loop_contract"
 fi
 
+pure_numeric_loop_contract=$root/tools/ci/arm64_jit_pure_numeric_loop_contract.sh
+if test -f "$pure_numeric_loop_contract"; then
+  LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
+    sh "$pure_numeric_loop_contract"
+fi
+
 exit_contract=$root/tools/ci/arm64_jit_exit_contract.sh
 if test -f "$exit_contract"; then
   LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
