@@ -74,10 +74,11 @@ int lj_asm_arm64_b26_encode(uintptr_t source, uintptr_t target, MCode *insp)
 ** lockless runtime has proved safe. Keep native publication to optimized,
 ** self-linked scalar BC_LOOP roots, separately certified constant-step
 ** integer BC_FORL roots, and the exact literal-true fixed-function root.
-** Numeric LOOP admission is presently limited to two exact spill-free
-** accumulator shapes: one dynamic mixed INT/NUM root and one pure NUM root
-** with a canonical +0.5 constant. In particular, this list admits no IR CALL
-** helper ID and no heap operation.
+** Numeric LOOP admission is presently limited to four exact spill-free
+** accumulator shapes: one dynamic mixed INT/NUM root, one pure NUM root with
+** a canonical +0.5 constant, one fixed-initializer root with a dynamic NUM
+** step, and one all-parameter pure-NUM root. In particular, this list admits
+** no IR CALL helper ID and no heap operation.
 */
 
 static int arm64_ir_reject(LJArm64IRReject *reject,
@@ -290,6 +291,23 @@ enum {
   ARM64_NUMSTEP_SEMANTIC_NINS
 };
 
+/* The all-parameter accumulator has the same compact IR numbering as the
+** fixed-initial dynamic-step root. Keep separate names for its independent
+** prototype and snapshot certificate without duplicating the IR policy. */
+enum {
+  ARM64_NUMACC_R_X = ARM64_NUMSTEP_R_X,
+  ARM64_NUMACC_R_STEP = ARM64_NUMSTEP_R_STEP,
+  ARM64_NUMACC_R_X_PRE = ARM64_NUMSTEP_R_X_PRE,
+  ARM64_NUMACC_R_LIMIT = ARM64_NUMSTEP_R_LIMIT,
+  ARM64_NUMACC_R_PRE_GUARD = ARM64_NUMSTEP_R_PRE_GUARD,
+  ARM64_NUMACC_R_LOOP = ARM64_NUMSTEP_R_LOOP,
+  ARM64_NUMACC_R_XPOLL = ARM64_NUMSTEP_R_XPOLL,
+  ARM64_NUMACC_R_X_BODY = ARM64_NUMSTEP_R_X_BODY,
+  ARM64_NUMACC_R_BODY_GUARD = ARM64_NUMSTEP_R_BODY_GUARD,
+  ARM64_NUMACC_R_X_PHI = ARM64_NUMSTEP_R_X_PHI,
+  ARM64_NUMACC_SEMANTIC_NINS = ARM64_NUMSTEP_SEMANTIC_NINS
+};
+
 #define ARM64_NUMHALF_BITS UINT64_C(0x3fe0000000000000)
 
 static int arm64_ir_numhalf_constant(const IRIns *ir, IRRef nk)
@@ -389,6 +407,57 @@ static int arm64_numstep_snapshots(const SnapShot *snap,
   MSize snapno, entry = 0;
   if (snap == NULL || snapmap == NULL || proto_bc == NULL ||
 	nsnap != 5 || nsnapmap != 15 || proto_sizebc != 14)
+    return 0;
+  for (snapno = 0; snapno < 5; snapno++) {
+    const SnapShot *s = &snap[snapno];
+    SnapEntry pcraw[1+LJ_FR2];
+    uint64_t pcbase;
+    uintptr_t expected;
+    MSize n;
+    if (snap_ref_acq(s) != refs[snapno] ||
+	snap_mapofs_acq(s) != mapofs[snapno] ||
+	snap_nent_acq(s) != nent[snapno] ||
+	snap_nslots_acq(s) != nslots[snapno] ||
+	snap_topslot_acq(s) != 5)
+      return 0;
+    for (n = 0; n < nent[snapno]; n++)
+      if (snapentry_acq(&snapmap[mapofs[snapno]+n]) != entries[entry++])
+	return 0;
+    for (n = 0; n < 1u+LJ_FR2; n++)
+      pcraw[n] = snapentry_acq(&snapmap[mapofs[snapno]+nent[snapno]+n]);
+    LJ_STATIC_ASSERT(sizeof(pcraw) == sizeof(pcbase));
+    memcpy(&pcbase, pcraw, sizeof(pcbase));
+    expected = (uintptr_t)(const void *)(proto_bc+pcpos[snapno]);
+    if ((uint8_t)pcbase != base_delta ||
+	(uintptr_t)(pcbase >> 8) != expected)
+      return 0;
+  }
+  return entry == 5;
+}
+
+static int arm64_numacc_snapshots(const SnapShot *snap,
+	const SnapEntry *snapmap, MSize nsnap, MSize nsnapmap,
+	const BCIns *proto_bc, MSize proto_sizebc, uint8_t base_delta)
+{
+  static const IRRef refs[5] = {
+    ARM64_NUMACC_R_X, ARM64_NUMACC_R_LIMIT,
+    ARM64_NUMACC_R_PRE_GUARD, ARM64_NUMACC_R_LOOP,
+    ARM64_NUMACC_R_BODY_GUARD
+  };
+  static const uint16_t mapofs[5] = { 0, 2, 6, 9, 12 };
+  static const uint8_t nent[5] = { 0, 2, 1, 1, 1 };
+  static const uint8_t nslots[5] = { 5, 6, 5, 5, 5 };
+  static const uint8_t pcpos[5] = { 6, 2, 11, 6, 11 };
+  static const SnapEntry entries[5] = {
+    SNAP(2, 0, ARM64_NUMACC_R_X_PRE),
+    SNAP(5, 0, ARM64_NUMACC_R_X_PRE),
+    SNAP(2, 0, ARM64_NUMACC_R_X_PRE),
+    SNAP(2, 0, ARM64_NUMACC_R_X_PRE),
+    SNAP(2, 0, ARM64_NUMACC_R_X_BODY)
+  };
+  MSize snapno, entry = 0;
+  if (snap == NULL || snapmap == NULL || proto_bc == NULL ||
+	nsnap != 5 || nsnapmap != 15 || proto_sizebc != 13)
     return 0;
   for (snapno = 0; snapno < 5; snapno++) {
     const SnapShot *s = &snap[snapno];
@@ -654,31 +723,23 @@ static int arm64_postra_numhalf_shape(const LJArm64PostRAView *view,
   return xphi.r == xpre.r && xphi.r == xbody.r;
 }
 
-static int arm64_postra_numstep_shape(const LJArm64PostRAView *view,
-	IRRef semantic_nins)
+static int arm64_postra_numdynamic_kernel(const LJArm64PostRAView *view,
+	IRRef xslot, IRRef stepslot, IRRef limitslot)
 {
   IRIns x, step, xpre, limit, xbody, xphi;
-  if (bc_op(view->startins) != BC_LOOP || bc_a(view->startins) != 3 ||
-	view->root_topslot != 5 || view->proto_sizebc != 14 ||
-	view->nk != REF_TRUE ||
-	semantic_nins != ARM64_NUMSTEP_SEMANTIC_NINS ||
-	!arm64_numstep_snapshots(view->snap, view->snapmap,
-	  view->nsnap, view->nsnapmap, view->proto_bc,
-	  view->proto_sizebc, view->base_delta))
-    return 0;
 #define ARM64_NUMSTEP_POSTRA_INS(ref, op, type, left, right) \
   (ir_load_acq(&view->ir[(ref)]).o == (op) && \
    ir_load_acq(&view->ir[(ref)]).t.irt == (type) && \
    ir_load_acq(&view->ir[(ref)]).op1 == (left) && \
    ir_load_acq(&view->ir[(ref)]).op2 == (right))
   if (!ARM64_NUMSTEP_POSTRA_INS(ARM64_NUMSTEP_R_X, IR_SLOAD,
-	IRT_NUM|IRT_GUARD, 4, IRSLOAD_TYPECHECK) ||
+	IRT_NUM|IRT_GUARD, xslot, IRSLOAD_TYPECHECK) ||
       !ARM64_NUMSTEP_POSTRA_INS(ARM64_NUMSTEP_R_STEP, IR_SLOAD,
-	IRT_NUM|IRT_GUARD, 3, IRSLOAD_TYPECHECK) ||
+	IRT_NUM|IRT_GUARD, stepslot, IRSLOAD_TYPECHECK) ||
       !ARM64_NUMSTEP_POSTRA_INS(ARM64_NUMSTEP_R_X_PRE, IR_ADD,
 	IRT_NUM|IRT_ISPHI, ARM64_NUMSTEP_R_STEP, ARM64_NUMSTEP_R_X) ||
       !ARM64_NUMSTEP_POSTRA_INS(ARM64_NUMSTEP_R_LIMIT, IR_SLOAD,
-	IRT_NUM|IRT_GUARD, 2, IRSLOAD_TYPECHECK) ||
+	IRT_NUM|IRT_GUARD, limitslot, IRSLOAD_TYPECHECK) ||
       !ARM64_NUMSTEP_POSTRA_INS(ARM64_NUMSTEP_R_PRE_GUARD, IR_GT,
 	IRT_NUM|IRT_GUARD, ARM64_NUMSTEP_R_LIMIT, ARM64_NUMSTEP_R_X_PRE) ||
       !ARM64_NUMSTEP_POSTRA_INS(ARM64_NUMSTEP_R_LOOP, IR_LOOP,
@@ -706,6 +767,34 @@ static int arm64_postra_numstep_shape(const LJArm64PostRAView *view,
   return xphi.r == xpre.r && xphi.r == xbody.r &&
     step.r != xphi.r && limit.r != xphi.r && step.r != limit.r &&
     x.r != step.r;
+}
+
+static int arm64_postra_numstep_shape(const LJArm64PostRAView *view,
+	IRRef semantic_nins)
+{
+  if (bc_op(view->startins) != BC_LOOP || bc_a(view->startins) != 3 ||
+	view->root_topslot != 5 || view->proto_sizebc != 14 ||
+	view->nk != REF_TRUE ||
+	semantic_nins != ARM64_NUMSTEP_SEMANTIC_NINS ||
+	!arm64_numstep_snapshots(view->snap, view->snapmap,
+	  view->nsnap, view->nsnapmap, view->proto_bc,
+	  view->proto_sizebc, view->base_delta))
+    return 0;
+  return arm64_postra_numdynamic_kernel(view, 4, 3, 2);
+}
+
+static int arm64_postra_numacc_shape(const LJArm64PostRAView *view,
+	IRRef semantic_nins)
+{
+  if (bc_op(view->startins) != BC_LOOP || bc_a(view->startins) != 3 ||
+	view->root_topslot != 5 || view->proto_sizebc != 13 ||
+	view->nk != REF_TRUE ||
+	semantic_nins != ARM64_NUMACC_SEMANTIC_NINS ||
+	!arm64_numacc_snapshots(view->snap, view->snapmap,
+	  view->nsnap, view->nsnapmap, view->proto_bc,
+	  view->proto_sizebc, view->base_delta))
+    return 0;
+  return arm64_postra_numdynamic_kernel(view, 2, 4, 3);
 }
 
 static int arm64_ir_funcf_snapshots(const SnapShot *snap,
@@ -959,10 +1048,18 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
 	if (!arm64_postra_numhalf_shape(view, semantic_nins))
 	  return 0;
       } else if (constant_profile == ARM64_IR_KPROFILE_INT) {
-	/* The all-KINT profile is vacuously true for the exact no-constant
-	** dynamic-step trace. Its shape independently requires nk == REF_TRUE. */
-	if (!arm64_postra_numstep_shape(view, semantic_nins))
+	/* The all-KINT profile is vacuously true for the two exact no-constant
+	** dynamic-NUM traces. Select by their distinct prototype sizes before
+	** rechecking independent snapshot and SLOAD-slot certificates. */
+	if (view->proto_sizebc == 14) {
+	  if (!arm64_postra_numstep_shape(view, semantic_nins))
+	    return 0;
+	} else if (view->proto_sizebc == 13) {
+	  if (!arm64_postra_numacc_shape(view, semantic_nins))
+	    return 0;
+	} else {
 	  return 0;
+	}
       } else {
 	return 0;
       }
@@ -1728,30 +1825,62 @@ static int arm64_ir_numstep_bytecode(const GCproto *pt,
   return bc_op(ins) == BC_JMP && bc_a(ins) == 3 && bc_j(ins) == -10;
 }
 
-/* Exact pure-NUM canary for one invariant dynamic NUM step. */
-static int arm64_ir_numstep_shape(const jit_State *J, const GCtrace *T,
-	const GCproto *pt, IRRef firstphi, LJArm64IRReject *reject)
+static int arm64_ir_numacc_bytecode(const GCproto *pt,
+	const BCIns *startpc)
+{
+  const BCIns *bc;
+  BCIns ins;
+  if (pt == NULL || startpc == NULL || pt->framesize != 5 ||
+	pt->sizebc != 13 || pt->numparams != 3 || pt->sizeuv != 0 ||
+	pt->sizekn != 0 || pt->sizekgc != 0 ||
+	pt->flags2 != PROTO2_CELLOPS)
+    return 0;
+  bc = proto_bc(pt);
+  if (startpc != bc+5)
+    return 0;
+#define ARM64_NUMACC_BC_AD(pos, op, a, d) \
+  (bc_op((ins = arm64_ir_bc_acq((uintptr_t)bc, (pos)))) == (op) && \
+   bc_a(ins) == (a) && bc_d(ins) == (d))
+  if (!ARM64_NUMACC_BC_AD(0, BC_FUNCF, 5, 0) ||
+      !ARM64_NUMACC_BC_AD(1, BC_CGET, 3, 0) ||
+      !ARM64_NUMACC_BC_AD(2, BC_CGET, 4, 1) ||
+      !ARM64_NUMACC_BC_AD(3, BC_ISGE, 3, 4) ||
+      !ARM64_NUMACC_BC_AD(6, BC_CGET, 3, 0) ||
+      !ARM64_NUMACC_BC_AD(7, BC_CGET, 4, 2) ||
+      !ARM64_NUMACC_BC_AD(9, BC_CSET, 0, 3) ||
+      !ARM64_NUMACC_BC_AD(11, BC_CGET, 3, 0) ||
+      !ARM64_NUMACC_BC_AD(12, BC_RET1, 3, 2))
+    return 0;
+#undef ARM64_NUMACC_BC_AD
+  ins = arm64_ir_bc_acq((uintptr_t)bc, 4);
+  if (bc_op(ins) != BC_JMP || bc_a(ins) != 3 || bc_j(ins) != 6)
+    return 0;
+  ins = arm64_ir_bc_acq((uintptr_t)bc, 5);
+  if (bc_op(ins) != BC_LOOP || bc_a(ins) != 3 || bc_j(ins) != 5)
+    return 0;
+  ins = arm64_ir_bc_acq((uintptr_t)bc, 8);
+  if (bc_op(ins) != BC_ADDVV || bc_a(ins) != 3 ||
+	bc_b(ins) != 3 || bc_c(ins) != 4)
+    return 0;
+  ins = arm64_ir_bc_acq((uintptr_t)bc, 10);
+  return bc_op(ins) == BC_JMP && bc_a(ins) == 3 && bc_j(ins) == -10;
+}
+
+static int arm64_ir_numdynamic_kernel(const GCtrace *T, IRRef xslot,
+	IRRef stepslot, IRRef limitslot)
 {
   const IRIns *ir = T->ir;
-  if (T->nk != REF_TRUE || T->nins != ARM64_NUMSTEP_SEMANTIC_NINS ||
-	firstphi != ARM64_NUMSTEP_R_X_PHI ||
-	!arm64_ir_numstep_bytecode(pt, trace_startpc_acq((GCtrace *)T)) ||
-	!arm64_numstep_snapshots(T->snap, T->snapmap, T->nsnap,
-	  T->nsnapmap, proto_bc(pt), pt->sizebc,
-	  (uint8_t)(J->baseslot-2u)))
-    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE,
-	ARM64_NUMSTEP_R_X, IR_ADD, 5);
 #define ARM64_NUMSTEP_INS(ref, op, type, left, right) \
   (ir[(ref)].o == (op) && ir[(ref)].t.irt == (type) && \
    ir[(ref)].op1 == (left) && ir[(ref)].op2 == (right))
   if (!ARM64_NUMSTEP_INS(ARM64_NUMSTEP_R_X, IR_SLOAD,
-	IRT_NUM|IRT_GUARD, 4, IRSLOAD_TYPECHECK) ||
+	IRT_NUM|IRT_GUARD, xslot, IRSLOAD_TYPECHECK) ||
       !ARM64_NUMSTEP_INS(ARM64_NUMSTEP_R_STEP, IR_SLOAD,
-	IRT_NUM|IRT_GUARD, 3, IRSLOAD_TYPECHECK) ||
+	IRT_NUM|IRT_GUARD, stepslot, IRSLOAD_TYPECHECK) ||
       !ARM64_NUMSTEP_INS(ARM64_NUMSTEP_R_X_PRE, IR_ADD,
 	IRT_NUM|IRT_ISPHI, ARM64_NUMSTEP_R_STEP, ARM64_NUMSTEP_R_X) ||
       !ARM64_NUMSTEP_INS(ARM64_NUMSTEP_R_LIMIT, IR_SLOAD,
-	IRT_NUM|IRT_GUARD, 2, IRSLOAD_TYPECHECK) ||
+	IRT_NUM|IRT_GUARD, limitslot, IRSLOAD_TYPECHECK) ||
       !ARM64_NUMSTEP_INS(ARM64_NUMSTEP_R_PRE_GUARD, IR_GT,
 	IRT_NUM|IRT_GUARD, ARM64_NUMSTEP_R_LIMIT, ARM64_NUMSTEP_R_X_PRE) ||
       !ARM64_NUMSTEP_INS(ARM64_NUMSTEP_R_LOOP, IR_LOOP,
@@ -1764,9 +1893,44 @@ static int arm64_ir_numstep_shape(const jit_State *J, const GCtrace *T,
 	IRT_NUM|IRT_GUARD, ARM64_NUMSTEP_R_X_BODY, ARM64_NUMSTEP_R_LIMIT) ||
       !ARM64_NUMSTEP_INS(ARM64_NUMSTEP_R_X_PHI, IR_PHI,
 	IRT_NUM, ARM64_NUMSTEP_R_X_PRE, ARM64_NUMSTEP_R_X_BODY))
+    return 0;
+#undef ARM64_NUMSTEP_INS
+  return 1;
+}
+
+/* Exact pure-NUM canary for one invariant dynamic NUM step. */
+static int arm64_ir_numstep_shape(const jit_State *J, const GCtrace *T,
+	const GCproto *pt, IRRef firstphi, LJArm64IRReject *reject)
+{
+  if (T->nk != REF_TRUE || T->nins != ARM64_NUMSTEP_SEMANTIC_NINS ||
+	firstphi != ARM64_NUMSTEP_R_X_PHI ||
+	!arm64_ir_numstep_bytecode(pt, trace_startpc_acq((GCtrace *)T)) ||
+	!arm64_numstep_snapshots(T->snap, T->snapmap, T->nsnap,
+	  T->nsnapmap, proto_bc(pt), pt->sizebc,
+	  (uint8_t)(J->baseslot-2u)))
+    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE,
+	ARM64_NUMSTEP_R_X, IR_ADD, 5);
+  if (!arm64_ir_numdynamic_kernel(T, 4, 3, 2))
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
 	ARM64_NUMSTEP_R_X, IR_ADD, 6);
-#undef ARM64_NUMSTEP_INS
+  return 1;
+}
+
+/* Exact pure-NUM canary for a dynamic accumulator, limit and step. */
+static int arm64_ir_numacc_shape(const jit_State *J, const GCtrace *T,
+	const GCproto *pt, IRRef firstphi, LJArm64IRReject *reject)
+{
+  if (T->nk != REF_TRUE || T->nins != ARM64_NUMACC_SEMANTIC_NINS ||
+	firstphi != ARM64_NUMACC_R_X_PHI ||
+	!arm64_ir_numacc_bytecode(pt, trace_startpc_acq((GCtrace *)T)) ||
+	!arm64_numacc_snapshots(T->snap, T->snapmap, T->nsnap,
+	  T->nsnapmap, proto_bc(pt), pt->sizebc,
+	  (uint8_t)(J->baseslot-2u)))
+    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE,
+	ARM64_NUMACC_R_X, IR_ADD, 7);
+  if (!arm64_ir_numdynamic_kernel(T, 2, 4, 3))
+    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
+	ARM64_NUMACC_R_X, IR_ADD, 8);
   return 1;
 }
 
@@ -2271,8 +2435,16 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
 	  return 0;
       } else if (constant_profile == ARM64_IR_KPROFILE_INT &&
 		 T->nk == REF_TRUE) {
-	if (!arm64_ir_numstep_shape(J, T, pt, firstphi, reject))
-	  return 0;
+	if (pt->sizebc == 14) {
+	  if (!arm64_ir_numstep_shape(J, T, pt, firstphi, reject))
+	    return 0;
+	} else if (pt->sizebc == 13) {
+	  if (!arm64_ir_numacc_shape(J, T, pt, firstphi, reject))
+	    return 0;
+	} else {
+	  return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE,
+	    ARM64_NUMSTEP_R_X, IR_ADD, (uint16_t)pt->sizebc);
+	}
       } else {
 	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CONSTANT,
 	  T->nk, IR_KNUM, (uint16_t)constant_profile);
