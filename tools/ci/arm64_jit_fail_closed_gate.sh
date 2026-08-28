@@ -116,6 +116,12 @@ if test -f "$pure_numeric_step_contract"; then
     sh "$pure_numeric_step_contract"
 fi
 
+pure_numeric_args_contract=$root/tools/ci/arm64_jit_pure_numeric_args_contract.sh
+if test -f "$pure_numeric_args_contract"; then
+  LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
+    sh "$pure_numeric_args_contract"
+fi
+
 exit_contract=$root/tools/ci/arm64_jit_exit_contract.sh
 if test -f "$exit_contract"; then
   LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
