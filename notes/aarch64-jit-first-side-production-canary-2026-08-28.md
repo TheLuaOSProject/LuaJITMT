@@ -123,6 +123,14 @@ strict arm64 and arm64e variants, including the profile/exit/re-entry sequence
 that originally exposed the stale TG state. The only repeated diagnostic was
 the same pre-existing unused `ccall_rawchild_wait` warning.
 
+The preserved x86_64 target was then rebuilt as a thin macOS binary and passed
+all 509 stock LuaJIT tests plus a real Rosetta JIT loop (`jit.os == "OSX"`,
+`jit.arch == "x64"`, and a published loop trace). The ordinary thin arm64
+experimental helper build was restored afterward, with JIT enabled, trace-test
+helpers present and the one-shot publication seam absent. The x86 build showed
+only the existing `lj_api.c` unused-`topofs` diagnostic; the restored arm64
+build showed only the existing unused `ccall_rawchild_wait` diagnostic.
+
 ## Next step
 
 Generalize one certificate dimension at a time while retaining the same
