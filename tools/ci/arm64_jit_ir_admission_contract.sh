@@ -31,11 +31,24 @@ positive_region=$tmpdir/positive-region.txt
 numhalf_region=$tmpdir/numhalf-region.txt
 numstep_region=$tmpdir/numstep-region.txt
 numacc_region=$tmpdir/numacc-region.txt
+postra_subge_region=$tmpdir/postra-subge-region.txt
+semantic_subge_region=$tmpdir/semantic-subge-region.txt
+selector_sub_region=$tmpdir/selector-sub-region.txt
+pauth_macros=$tmpdir/macros-arm64e.txt
 audit_object=$tmpdir/lj_asm-arm64e.o
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT'
+pauth_xcflags="$xcflags -DLUAJIT_ENABLE_CET_BR"
 
 test -f "$archive" && test -f "$asm_object" || {
   echo "ARM64 IR admission contract requires an existing experimental build" >&2
+  exit 1
+}
+test "$asm_object" -nt "$root/src/lj_asm.c" || {
+  echo "ARM64 IR admission object is stale relative to lj_asm.c" >&2
+  exit 1
+}
+ar -p "$archive" lj_asm.o | cmp - "$asm_object" || {
+  echo "ARM64 IR admission archive does not contain current lj_asm.o" >&2
   exit 1
 }
 
@@ -393,9 +406,9 @@ for required in \
 done
 
 # The dynamic-accumulator pure-NUM fixture is one exact geometry with ADD_LT,
-# ADD_LE and SUB_GT full-shape profiles. All three scalars are parameters, so
-# both trace and prototype constant sets are empty; exact comparison operands
-# and recurrence bytecode select the only matching IR tuple.
+# ADD_LE, SUB_GT and SUB_GE full-shape profiles. All three scalars are
+# parameters, so both trace and prototype constant sets are empty; exact
+# comparison operands and recurrence bytecode select the only matching tuple.
 awk '/^static unsigned numacc_fixture_full_shape\(/ { copying = 1 }
      copying { print }
      copying && /^static LJArm64IRReject expect_reject\(/ { exit }' \
@@ -414,7 +427,11 @@ test "$(grep -c 'IR_PHI' "$numacc_region")" -eq 1
 for required in \
   'ARM64_NUMDYN_ADD_LT = 1u,' \
   'ARM64_NUMDYN_ADD_LE = 2u,' \
-  'ARM64_NUMDYN_SUB_GT = 3u' \
+  'ARM64_NUMDYN_SUB_GT = 3u,' \
+  'ARM64_NUMDYN_SUB_GE = 4u' \
+  'static int arm64_numdynamic_is_sub(unsigned grammar_profile)' \
+  'return grammar_profile == ARM64_NUMDYN_SUB_GT ||' \
+  'grammar_profile == ARM64_NUMDYN_SUB_GE;' \
   'ARM64_NUMACC_R_X = ARM64_NUMSTEP_R_X,' \
   'ARM64_NUMACC_R_STEP = ARM64_NUMSTEP_R_STEP,' \
   'ARM64_NUMACC_SEMANTIC_NINS = ARM64_NUMSTEP_SEMANTIC_NINS' \
@@ -431,6 +448,7 @@ for required in \
   'if (grammar_profile == ARM64_NUMDYN_ADD_LT) {' \
   '} else if (grammar_profile == ARM64_NUMDYN_ADD_LE) {' \
   '} else if (grammar_profile == ARM64_NUMDYN_SUB_GT) {' \
+  '} else if (grammar_profile == ARM64_NUMDYN_SUB_GE) {' \
   'recurrence_op = IR_SUB;' \
   'first_left = ARM64_NUMSTEP_R_X;' \
   'first_right = ARM64_NUMSTEP_R_STEP;' \
@@ -450,6 +468,8 @@ for required in \
   'bc_op(recurrence) == BC_SUBVV && bc_a(recurrence) == 3' \
   'bc_op(compare) == BC_ISGE && bc_a(compare) == 4' \
   'return ARM64_NUMDYN_SUB_GT;' \
+  'bc_op(compare) == BC_ISGT && bc_a(compare) == 4' \
+  'return ARM64_NUMDYN_SUB_GE;' \
   'unsigned grammar_profile = arm64_numacc_grammar_profile(' \
   'view->root_topslot != 5 || view->proto_sizebc != 13 ||' \
   'grammar_profile == 0 ||' \
@@ -485,7 +505,8 @@ for required in \
   '!arm64_ir_numacc_bytecode(pt, trace_startpc_acq((GCtrace *)T),' \
   '!arm64_numacc_snapshots(T->snap, T->snapmap, T->nsnap,' \
   '!arm64_ir_numdynamic_kernel(T, 2, 4, 3, grammar_profile)' \
-  'allow_num_sub = numdynamic_profile == ARM64_NUMDYN_SUB_GT;' \
+  'IROp recurrence_op = arm64_numdynamic_is_sub(grammar_profile) ?' \
+  'allow_num_sub = arm64_numdynamic_is_sub(numdynamic_profile);' \
   'if (!allow_num_sub || startop != BC_LOOP ||' \
   'if (!allow_num_sub || irt_type(ins.t) != IRT_NUM)' \
   '!arm64_ir_num_ref(T, ref, snapref, allow_num_sub)' \
@@ -496,11 +517,82 @@ for required in \
     exit 1
   }
 done
+test "$(grep -Fc 'allow_num_sub = arm64_numdynamic_is_sub(numdynamic_profile);' \
+  "$classifier")" -eq 2
+test "$(grep -Fc '} else if (grammar_profile == ARM64_NUMDYN_SUB_GE) {' \
+  "$classifier")" -eq 2
+
+# Pin the descending-inclusive semantic and post-RA arms as complete scoped
+# tuples, so a matching token elsewhere cannot mask an operand or guard drift.
+awk '
+  /^static int arm64_postra_numdynamic_kernel/ { in_kernel = 1 }
+  in_kernel &&
+    index($0, "} else if (grammar_profile == ARM64_NUMDYN_SUB_GE) {") {
+      copying = 1
+    }
+  copying { print }
+  copying && $0 == "  } else {" { exit }
+' "$root/src/lj_asm.c" >"$postra_subge_region"
+
+awk '
+  /^static int arm64_ir_numdynamic_kernel/ { in_kernel = 1 }
+  in_kernel &&
+    index($0, "} else if (grammar_profile == ARM64_NUMDYN_SUB_GE) {") {
+      copying = 1
+    }
+  copying { print }
+  copying && $0 == "  } else {" { exit }
+' "$root/src/lj_asm.c" >"$semantic_subge_region"
+
+for region in "$postra_subge_region" "$semantic_subge_region"; do
+  test "$(wc -l <"$region" | tr -d ' ')" -eq 7
+  for required in \
+    '} else if (grammar_profile == ARM64_NUMDYN_SUB_GE) {' \
+    'recurrence_op = IR_SUB;' \
+    'first_left = ARM64_NUMSTEP_R_X;' \
+    'first_right = ARM64_NUMSTEP_R_STEP;' \
+    'preop = IR_LE;' \
+    'bodyop = IR_GE;' \
+    '} else {'; do
+    grep -F "$required" "$region" >/dev/null || {
+      echo "ARM64 SUB_GE kernel tuple changed: $required" >&2
+      exit 1
+    }
+  done
+done
+
+# Likewise, bind SUB_GT and SUB_GE to the exact SUBVV A/B/C and comparison
+# A/D bytecode tuple rather than accepting independent global token matches.
+awk '
+  /^static unsigned arm64_numacc_grammar_profile/ { in_selector = 1 }
+  in_selector &&
+    index($0, "} else if (bc_op(recurrence) == BC_SUBVV") {
+      copying = 1
+    }
+  copying { print }
+  copying && $0 == "  }" { exit }
+' "$root/src/lj_asm.c" >"$selector_sub_region"
+test "$(wc -l <"$selector_sub_region" | tr -d ' ')" -eq 9
+for required in \
+  '} else if (bc_op(recurrence) == BC_SUBVV && bc_a(recurrence) == 3 &&' \
+  'bc_b(recurrence) == 3 && bc_c(recurrence) == 4) {' \
+  'if (bc_op(compare) == BC_ISGE && bc_a(compare) == 4 &&' \
+  'return ARM64_NUMDYN_SUB_GT;' \
+  'if (bc_op(compare) == BC_ISGT && bc_a(compare) == 4 &&' \
+  'return ARM64_NUMDYN_SUB_GE;' \
+  '}'; do
+  grep -F "$required" "$selector_sub_region" >/dev/null || {
+    echo "ARM64 descending NUM selector tuple changed: $required" >&2
+    exit 1
+  }
+done
+test "$(grep -Fc 'bc_d(compare) == 3)' "$selector_sub_region")" -eq 2
 
 for required in \
   'NUMACC_FIXTURE_ADD_LT = 1u,' \
   'NUMACC_FIXTURE_ADD_LE = 2u,' \
-  'NUMACC_FIXTURE_SUB_GT = 3u' \
+  'NUMACC_FIXTURE_SUB_GT = 3u,' \
+  'NUMACC_FIXTURE_SUB_GE = 4u' \
   'typedef struct NumaccFixtureProfile {' \
   'BCOp comparison_bc;' \
   'BCOp recurrence_bc;' \
@@ -508,6 +600,7 @@ for required in \
   '{ NUMACC_FIXTURE_ADD_LT, BC_ISGE, 3, 4, BC_ADDVV, IR_ADD,' \
   '{ NUMACC_FIXTURE_ADD_LE, BC_ISGT, 3, 4, BC_ADDVV, IR_ADD,' \
   '{ NUMACC_FIXTURE_SUB_GT, BC_ISGE, 4, 3, BC_SUBVV, IR_SUB,' \
+  '{ NUMACC_FIXTURE_SUB_GE, BC_ISGT, 4, 3, BC_SUBVV, IR_SUB,' \
   'static void select_numacc_fixture(unsigned profile_id)' \
   'static unsigned numacc_fixture_full_shape(void)' \
   'bc_op(arithmetic) == profile->recurrence_bc' \
@@ -575,31 +668,32 @@ for required in \
   'assert(numacc_fixture_loop_pc == proto_bc(numacc_fixture_pt)+5);' \
   'while x<=limit do x=x+step end return x end' \
   'while x>limit do x=x-step end return x end' \
+  'while x>=limit do x=x-step end return x end' \
   'numacc_strict_fixture_pt = funcproto(funcV(L->top-1));' \
   'numacc_inclusive_fixture_pt = funcproto(funcV(L->top-1));' \
   'numacc_sub_gt_fixture_pt = funcproto(funcV(L->top-1));' \
+  'numacc_sub_ge_fixture_pt = funcproto(funcV(L->top-1));' \
   'bc_op(loadbc(proto_bc(numacc_fixture_pt)+3)) == BC_ISGE' \
   'bc_op(loadbc(proto_bc(numacc_inclusive_fixture_pt)+3)) == BC_ISGT' \
   'bc_a(comparison) == 4 && bc_d(comparison) == 3' \
   'bc_op(arithmetic) == BC_SUBVV && bc_a(arithmetic) == 3' \
   'static void test_numacc_shape_cross_product(jit_State *J)' \
   'static const IROp arithmetic_ops[2] = { IR_ADD, IR_SUB };' \
-  'static const IROp preops[3] = { IR_GT, IR_GE, IR_LT };' \
-  'static const IROp bodyops[3] = { IR_LT, IR_LE, IR_GT };' \
+  'static const IROp preops[4] = { IR_GT, IR_GE, IR_LT, IR_LE };' \
+  'static const IROp bodyops[4] = { IR_LT, IR_LE, IR_GT, IR_GE };' \
   'int admitted = pre_arithmetic == expected_arithmetic &&' \
-  'assert(combinations == 3u*2u*2u*3u*3u);' \
-  'assert(combinations == 108);' \
-  'assert(semantic_admissions == 3 && postra_admissions == 3);' \
+  'assert(combinations == 4u*2u*2u*4u*4u);' \
+  'assert(combinations == 256);' \
+  'assert(semantic_admissions == 4 && postra_admissions == 4);' \
   'expect_numacc_semantic_result(J, admitted);' \
   'expect_numacc_postra_result(&view, admitted);' \
-  'BCINS_AD(BC_ISGT, 4, 3)' \
-  'fx.ir[A_R_PRE_GUARD].o = IR_LE;' \
-  'fx.ir[A_R_BODY_GUARD].o = IR_GE;' \
+  'bc_op(saved_compare) == BC_ISGE ? BC_ISGT : BC_ISGE,' \
   'select_numacc_fixture(NUMACC_FIXTURE_ADD_LT);' \
   'select_numacc_fixture(NUMACC_FIXTURE_ADD_LE);' \
   'select_numacc_fixture(NUMACC_FIXTURE_SUB_GT);' \
+  'select_numacc_fixture(NUMACC_FIXTURE_SUB_GE);' \
   'test_numacc_shape_cross_product(J);' \
-  'L->top -= 7;' \
+  'L->top -= 8;' \
   'test_numacc_positive_and_negative(J);' \
   'test_numacc_postra_layout(J);'; do
   grep -F "$required" "$root/tests/t-arm64-jit-ir-admission.c" >/dev/null || {
@@ -608,9 +702,9 @@ for required in \
   }
 done
 test "$(grep -Fc 'test_numacc_positive_and_negative(J);' \
-  "$root/tests/t-arm64-jit-ir-admission.c")" -eq 3
+  "$root/tests/t-arm64-jit-ir-admission.c")" -eq 4
 test "$(grep -Fc 'test_numacc_postra_layout(J);' \
-  "$root/tests/t-arm64-jit-ir-admission.c")" -eq 3
+  "$root/tests/t-arm64-jit-ir-admission.c")" -eq 4
 postra_line=$(grep -n '!lj_asm_arm64_postra_admit(' "$trace_asm" | cut -d: -f1)
 marker_line=$(grep -n 'T->unused1 |= TRACE_ARM64_INT_FORL_ADMITTED;' \
   "$trace_asm" | cut -d: -f1)
@@ -926,11 +1020,27 @@ grep -A10 '^void lj_trace_ins' "$root/src/lj_trace.c" | \
 grep -F '#if LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED' \
   "$root/src/vm_arm64.dasc" >/dev/null
 
-# arm64e/BTI compilation catches pointer-auth target drift without executing
-# any admitted trace.
-# shellcheck disable=SC2086 # xcflags intentionally expands to arguments.
+# arm64e/BTI compilation catches pointer-auth and branch-tracking target drift
+# without executing any admitted trace. Verify the intended ABI feature macros
+# first, so unsupported or misspelled flags cannot silently weaken this audit.
+# shellcheck disable=SC2086 # pauth_xcflags intentionally expands to arguments.
+"$cc" -arch arm64e -mbranch-protection=bti \
+  -mmacosx-version-min="$minver" $pauth_xcflags -I"$root/src" \
+  -x c -dM -E -include lj_arch.h /dev/null >"$pauth_macros"
+for required in \
+  '#define LJ_TARGET_ARM64 1' \
+  '#define LJ_ABI_PAUTH 1' \
+  '#define LJ_ABI_BRANCH_TRACK 1'; do
+  grep -F "$required" "$pauth_macros" >/dev/null || {
+    echo "ARM64e/BTI audit macro missing: $required" >&2
+    exit 1
+  }
+done
+
+# shellcheck disable=SC2086 # pauth_xcflags intentionally expands to arguments.
 "$cc" -std=gnu11 -O0 -Wall -Wextra -Werror -arch arm64e \
-  -mmacosx-version-min="$minver" $xcflags -I"$root/src" \
+  -mbranch-protection=bti -mmacosx-version-min="$minver" \
+  $pauth_xcflags -I"$root/src" \
   -c "$root/src/lj_asm.c" -o "$audit_object"
 
 # shellcheck disable=SC2086 # xcflags intentionally expands to arguments.
@@ -940,4 +1050,4 @@ grep -F '#if LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED' \
   -o "$fixture"
 "$fixture"
 
-echo "arm64_jit_ir_admission_contract OK: exact integer, mixed-NUM, fixed-half, dynamic-step and ADD_LT/ADD_LE/SUB_GT dynamic-accumulator pure-NUM LOOP/FORL grammars, bounded integer spills, and FPR-only NUM layouts verified"
+echo "arm64_jit_ir_admission_contract OK: exact integer, mixed-NUM, fixed-half, dynamic-step and ADD_LT/ADD_LE/SUB_GT/SUB_GE dynamic-accumulator pure-NUM LOOP/FORL grammars, bounded integer spills, and FPR-only NUM layouts verified"

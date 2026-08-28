@@ -145,7 +145,8 @@ enum {
 enum {
   NUMACC_FIXTURE_ADD_LT = 1u,
   NUMACC_FIXTURE_ADD_LE = 2u,
-  NUMACC_FIXTURE_SUB_GT = 3u
+  NUMACC_FIXTURE_SUB_GT = 3u,
+  NUMACC_FIXTURE_SUB_GE = 4u
 };
 
 typedef struct NumaccFixtureProfile {
@@ -167,7 +168,9 @@ static const NumaccFixtureProfile numacc_fixture_profiles[] = {
   { NUMACC_FIXTURE_ADD_LE, BC_ISGT, 3, 4, BC_ADDVV, IR_ADD,
     A_R_STEP, A_R_X, IR_GE, IR_LE },
   { NUMACC_FIXTURE_SUB_GT, BC_ISGE, 4, 3, BC_SUBVV, IR_SUB,
-    A_R_X, A_R_STEP, IR_LT, IR_GT }
+    A_R_X, A_R_STEP, IR_LT, IR_GT },
+  { NUMACC_FIXTURE_SUB_GE, BC_ISGT, 4, 3, BC_SUBVV, IR_SUB,
+    A_R_X, A_R_STEP, IR_LE, IR_GE }
 };
 
 typedef struct AdmissionFixture {
@@ -197,6 +200,8 @@ static GCproto *numacc_inclusive_fixture_pt;
 static const BCIns *numacc_inclusive_fixture_loop_pc;
 static GCproto *numacc_sub_gt_fixture_pt;
 static const BCIns *numacc_sub_gt_fixture_loop_pc;
+static GCproto *numacc_sub_ge_fixture_pt;
+static const BCIns *numacc_sub_ge_fixture_loop_pc;
 /* Active full-shape prototype. The shared synthetic geometry is always
 ** rebuilt from this exact source certificate before every mutation. */
 static GCproto *numacc_fixture_pt;
@@ -211,7 +216,7 @@ static BCIns loadbc(const BCIns *pc)
 static void select_numacc_fixture(unsigned profile_id)
 {
   assert(profile_id >= NUMACC_FIXTURE_ADD_LT &&
-	 profile_id <= NUMACC_FIXTURE_SUB_GT);
+	 profile_id <= NUMACC_FIXTURE_SUB_GE);
   numacc_fixture_profile = &numacc_fixture_profiles[profile_id-1u];
   assert(numacc_fixture_profile->id == profile_id);
   if (profile_id == NUMACC_FIXTURE_ADD_LT) {
@@ -224,11 +229,16 @@ static void select_numacc_fixture(unsigned profile_id)
 	   numacc_inclusive_fixture_loop_pc != NULL);
     numacc_fixture_pt = numacc_inclusive_fixture_pt;
     numacc_fixture_loop_pc = numacc_inclusive_fixture_loop_pc;
-  } else {
+  } else if (profile_id == NUMACC_FIXTURE_SUB_GT) {
     assert(numacc_sub_gt_fixture_pt != NULL &&
 	   numacc_sub_gt_fixture_loop_pc != NULL);
     numacc_fixture_pt = numacc_sub_gt_fixture_pt;
     numacc_fixture_loop_pc = numacc_sub_gt_fixture_loop_pc;
+  } else {
+    assert(numacc_sub_ge_fixture_pt != NULL &&
+	   numacc_sub_ge_fixture_loop_pc != NULL);
+    numacc_fixture_pt = numacc_sub_ge_fixture_pt;
+    numacc_fixture_loop_pc = numacc_sub_ge_fixture_loop_pc;
   }
 }
 
@@ -2971,27 +2981,27 @@ static void test_numacc_positive_and_negative(jit_State *J)
 
 static void test_numacc_shape_cross_product(jit_State *J)
 {
-  static const unsigned profiles[3] = {
+  static const unsigned profiles[4] = {
     NUMACC_FIXTURE_ADD_LT, NUMACC_FIXTURE_ADD_LE,
-    NUMACC_FIXTURE_SUB_GT
+    NUMACC_FIXTURE_SUB_GT, NUMACC_FIXTURE_SUB_GE
   };
   static const IROp arithmetic_ops[2] = { IR_ADD, IR_SUB };
-  static const IROp preops[3] = { IR_GT, IR_GE, IR_LT };
-  static const IROp bodyops[3] = { IR_LT, IR_LE, IR_GT };
+  static const IROp preops[4] = { IR_GT, IR_GE, IR_LT, IR_LE };
+  static const IROp bodyops[4] = { IR_LT, IR_LE, IR_GT, IR_GE };
   MSize p, prearith, bodyarith, pre, body;
   MSize combinations = 0, semantic_admissions = 0, postra_admissions = 0;
 
-  /* Exercise the complete 3x2x2x3x3 source-profile, pre-arithmetic,
+  /* Exercise the complete 4x2x2x4x4 source-profile, pre-arithmetic,
   ** body-arithmetic, pre-guard and body-guard product. Exactly ADD_LT,
-  ** ADD_LE and SUB_GT are coherent at both semantic and post-RA gates. */
-  for (p = 0; p < 3; p++) {
-    const IROp expected_arithmetic = p == 2 ? IR_SUB : IR_ADD;
+  ** ADD_LE, SUB_GT and SUB_GE are coherent at both admission gates. */
+  for (p = 0; p < 4; p++) {
+    const IROp expected_arithmetic = p >= 2 ? IR_SUB : IR_ADD;
     select_numacc_fixture(profiles[p]);
     assert(numacc_fixture_full_shape() == profiles[p]);
     for (prearith = 0; prearith < 2; prearith++) {
       for (bodyarith = 0; bodyarith < 2; bodyarith++) {
-	for (pre = 0; pre < 3; pre++) {
-	  for (body = 0; body < 3; body++) {
+	for (pre = 0; pre < 4; pre++) {
+	  for (body = 0; body < 4; body++) {
 	    IROp pre_arithmetic = arithmetic_ops[prearith];
 	    IROp body_arithmetic = arithmetic_ops[bodyarith];
 	    IRRef pre_left = pre_arithmetic == IR_ADD ? A_R_STEP : A_R_X;
@@ -3025,13 +3035,13 @@ static void test_numacc_shape_cross_product(jit_State *J)
       }
     }
   }
-  assert(combinations == 3u*2u*2u*3u*3u);
-  assert(combinations == 108);
-  assert(semantic_admissions == 3 && postra_admissions == 3);
+  assert(combinations == 4u*2u*2u*4u*4u);
+  assert(combinations == 256);
+  assert(semantic_admissions == 4 && postra_admissions == 4);
 
   /* Semantic admission and post-RA independently re-read the exact compare
   ** operand direction and recurrence opcode from the live prototype. */
-  for (p = 0; p < 3; p++) {
+  for (p = 0; p < 4; p++) {
     const NumaccFixtureProfile *profile;
     const BCIns *comparepc, *arithmeticpc;
     BCIns saved_compare, saved_arithmetic;
@@ -3060,6 +3070,22 @@ static void test_numacc_shape_cross_product(jit_State *J)
     expect_numacc_postra_result(&view, 0);
     bc_publish((const uint32_t *)comparepc, saved_compare);
 
+    /* Switching only strict/inclusive comparison bytecode leaves a mixed
+    ** source/IR profile and must fail independently at both gates. */
+    make_numacc_trace(J);
+    bc_publish((const uint32_t *)comparepc,
+	BCINS_AD(bc_op(saved_compare) == BC_ISGE ? BC_ISGT : BC_ISGE,
+	  profile->comparison_a, profile->comparison_d));
+    expect_numacc_reject(J);
+    bc_publish((const uint32_t *)comparepc, saved_compare);
+
+    view = make_numacc_postra_view(J);
+    bc_publish((const uint32_t *)comparepc,
+	BCINS_AD(bc_op(saved_compare) == BC_ISGE ? BC_ISGT : BC_ISGE,
+	  profile->comparison_a, profile->comparison_d));
+    expect_numacc_postra_result(&view, 0);
+    bc_publish((const uint32_t *)comparepc, saved_compare);
+
     make_numacc_trace(J);
     bc_publish((const uint32_t *)arithmeticpc,
 	BCINS_ABC(adjacent, 3, 3, 4));
@@ -3073,27 +3099,6 @@ static void test_numacc_shape_cross_product(jit_State *J)
     bc_publish((const uint32_t *)arithmeticpc, saved_arithmetic);
   }
 
-  /* The coherent neighbouring descending-inclusive profile remains closed:
-  ** ISGT A4,D3, SUB, LE(limit,xpre), GE(xbody,limit). */
-  select_numacc_fixture(NUMACC_FIXTURE_SUB_GT);
-  {
-    const BCIns *comparepc = proto_bc(numacc_fixture_pt)+3;
-    BCIns saved = loadbc(comparepc);
-    LJArm64PostRAView view;
-    make_numacc_trace(J);
-    fx.ir[A_R_PRE_GUARD].o = IR_LE;
-    fx.ir[A_R_BODY_GUARD].o = IR_GE;
-    bc_publish((const uint32_t *)comparepc, BCINS_AD(BC_ISGT, 4, 3));
-    expect_numacc_reject(J);
-    bc_publish((const uint32_t *)comparepc, saved);
-
-    view = make_numacc_postra_view(J);
-    fx.ir[A_R_PRE_GUARD].o = IR_LE;
-    fx.ir[A_R_BODY_GUARD].o = IR_GE;
-    bc_publish((const uint32_t *)comparepc, BCINS_AD(BC_ISGT, 4, 3));
-    expect_numacc_postra_result(&view, 0);
-    bc_publish((const uint32_t *)comparepc, saved);
-  }
   select_numacc_fixture(NUMACC_FIXTURE_ADD_LT);
 }
 
@@ -3217,7 +3222,7 @@ static void test_positive_and_negative(lua_State *L)
   REJECT_REMOVED(R_SUM1, IR_USE, IRT_INT, R_A, 0);
 #undef REJECT_REMOVED
 
-  /* SUB has a dedicated case only for the exact NUM SUB_GT profile. */
+  /* SUB has a dedicated case only for the exact NUM SUB_GT/SUB_GE profiles. */
   make_trace(J);
   setir(R_SUM1, IR_SUB, IRT_INT, R_A, R_B);
   expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_SUB);
@@ -3607,6 +3612,39 @@ int main(void)
     assert(bc_op(arithmetic) == BC_SUBVV && bc_a(arithmetic) == 3);
     assert(bc_b(arithmetic) == 3 && bc_c(arithmetic) == 4);
   }
+
+  assert(luaL_loadstring(L,
+	"return function(x,limit,step) "
+	"while x>=limit do x=x-step end return x end") == 0);
+  assert(lua_pcall(L, 0, 1, 0) == 0);
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  numacc_sub_ge_fixture_pt = funcproto(funcV(L->top-1));
+  assert(numacc_sub_ge_fixture_pt->framesize == 5);
+  assert(numacc_sub_ge_fixture_pt->sizebc == 13);
+  assert(numacc_sub_ge_fixture_pt->numparams == 3);
+  assert(numacc_sub_ge_fixture_pt->sizeuv == 0);
+  assert(numacc_sub_ge_fixture_pt->sizekn == 0);
+  assert(numacc_sub_ge_fixture_pt->sizekgc == 0);
+  assert(numacc_sub_ge_fixture_pt->flags2 == PROTO2_CELLOPS);
+  for (i = 0; i < numacc_sub_ge_fixture_pt->sizebc; i++) {
+    const BCIns *pc = &proto_bc(numacc_sub_ge_fixture_pt)[i];
+    if (bc_op(loadbc(pc)) == BC_LOOP &&
+	numacc_sub_ge_fixture_loop_pc == NULL)
+      numacc_sub_ge_fixture_loop_pc = pc;
+  }
+  assert(numacc_sub_ge_fixture_loop_pc ==
+	 proto_bc(numacc_sub_ge_fixture_pt)+5);
+  assert(bc_j(loadbc(numacc_sub_ge_fixture_loop_pc)) > 0);
+  assert(bc_op(loadbc(numacc_sub_ge_fixture_loop_pc+
+	bc_j(loadbc(numacc_sub_ge_fixture_loop_pc)))) == BC_JMP);
+  {
+    BCIns comparison = loadbc(proto_bc(numacc_sub_ge_fixture_pt)+3);
+    BCIns arithmetic = loadbc(proto_bc(numacc_sub_ge_fixture_pt)+8);
+    assert(bc_op(comparison) == BC_ISGT);
+    assert(bc_a(comparison) == 4 && bc_d(comparison) == 3);
+    assert(bc_op(arithmetic) == BC_SUBVV && bc_a(arithmetic) == 3);
+    assert(bc_b(arithmetic) == 3 && bc_c(arithmetic) == 4);
+  }
   J = L2J(L);
   savedL = J->L;
   savedparent = J->parent;
@@ -3635,6 +3673,9 @@ int main(void)
   select_numacc_fixture(NUMACC_FIXTURE_SUB_GT);
   test_numacc_positive_and_negative(J);
   test_numacc_postra_layout(J);
+  select_numacc_fixture(NUMACC_FIXTURE_SUB_GE);
+  test_numacc_positive_and_negative(J);
+  test_numacc_postra_layout(J);
   test_numacc_shape_cross_product(J);
   J->L = savedL;
   J->parent = savedparent;
@@ -3645,9 +3686,9 @@ int main(void)
   J->framedepth = savedframedepth;
   J->retdepth = savedretdepth;
   J->startpc = savedstartpc;
-  L->top -= 7;
+  L->top -= 8;
   lua_close(L);
-  puts("arm64_jit_ir_admission OK: integer, mixed NUM, fixed-half, dynamic-step and ADD_LT/ADD_LE/SUB_GT dynamic-accumulator pure NUM LOOP/FORL policy verified");
+  puts("arm64_jit_ir_admission OK: integer, mixed NUM, fixed-half, dynamic-step and ADD_LT/ADD_LE/SUB_GT/SUB_GE dynamic-accumulator pure NUM LOOP/FORL policy verified");
   return 0;
 }
 
