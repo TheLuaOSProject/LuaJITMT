@@ -472,7 +472,7 @@ check_registration_closed '-arch arm64' "$base_xcflags" arm64
 check_registration_closed '-arch arm64e -mbranch-protection=bti' \
   "$base_xcflags -DLUAJIT_ENABLE_CET_BR" arm64e
 
-# A truly ordinary archive (no trace helpers at all) must publish all three
+# A truly ordinary archive (no trace helpers at all) must publish all four
 # exact first sides through normal hotexit traffic.
 build_archive '-arch arm64' "$base_xcflags" smoke arm64 0 0
 if nm "$archive" | grep -F ' T _lj_trace_test_reset_exit_stats' >/dev/null; then
