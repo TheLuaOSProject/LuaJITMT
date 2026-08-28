@@ -72,10 +72,11 @@ int lj_asm_arm64_b26_encode(uintptr_t source, uintptr_t target, MCode *insp)
 /*
 ** The stock ARM64 backend can encode a much larger IR surface than the
 ** lockless runtime has proved safe. Keep native publication to optimized,
-** self-linked integer BC_LOOP roots, separately certified constant-step
+** self-linked scalar BC_LOOP roots, separately certified constant-step
 ** integer BC_FORL roots, and the exact literal-true fixed-function root.
-** In particular, this list admits no IR CALL helper ID and no floating-point
-** operation at all.
+** Numeric LOOP admission is presently limited to one exact spill-free
+** dynamic NUM-add accumulator shape. In particular, this list admits no
+** IR CALL helper ID and no heap operation.
 */
 
 static int arm64_ir_reject(LJArm64IRReject *reject,
@@ -231,6 +232,30 @@ static int arm64_ir_start(const jit_State *J, const GCtrace *T,
   return 1;
 }
 
+enum {
+  ARM64_IR_SCALAR_INT = 1u,
+  ARM64_IR_SCALAR_NUM = 2u
+};
+
+enum {
+  ARM64_NUMADD_K_ONE = REF_TRUE-1u,
+  ARM64_NUMADD_R_I = REF_FIRST,
+  ARM64_NUMADD_R_X,
+  ARM64_NUMADD_R_STEP,
+  ARM64_NUMADD_R_I_PRE,
+  ARM64_NUMADD_R_X_PRE,
+  ARM64_NUMADD_R_LIMIT,
+  ARM64_NUMADD_R_PRE_GUARD,
+  ARM64_NUMADD_R_LOOP,
+  ARM64_NUMADD_R_XPOLL,
+  ARM64_NUMADD_R_I_BODY,
+  ARM64_NUMADD_R_X_BODY,
+  ARM64_NUMADD_R_BODY_GUARD,
+  ARM64_NUMADD_R_I_PHI,
+  ARM64_NUMADD_R_X_PHI,
+  ARM64_NUMADD_SEMANTIC_NINS
+};
+
 /* Return true only for an admitted integer constant. */
 static int arm64_ir_int_kref(const GCtrace *T, IRRef target)
 {
@@ -257,10 +282,20 @@ static int arm64_ir_int_value_op(IROp op, int allow_add)
   }
 }
 
+static int arm64_ir_num_value_op(IROp op)
+{
+  return op == IR_SLOAD || op == IR_ADD;
+}
+
 static int arm64_ir_sload_layout(IRIns ir, BCOp rootop, MSize forl_idxslot,
-	MSize maxslots)
+	MSize maxslots, IRType type)
 {
   if (ir.op1 < 1u+LJ_FR2 || ir.op1 >= maxslots)
+    return 0;
+  if (type == IRT_NUM)
+    return rootop == BC_LOOP && ir.t.irt == (IRT_NUM|IRT_GUARD) &&
+	   ir.op2 == IRSLOAD_TYPECHECK;
+  if (type != IRT_INT)
     return 0;
   if (rootop == BC_FORL) {
     if (ir.op1 == forl_idxslot)
@@ -286,16 +321,114 @@ static int arm64_postra_int_value(IRIns ir, BCOp rootop,
   if (!arm64_ir_int_value_op((IROp)ir.o, allow_add))
     return 0;
   if (ir.o == IR_SLOAD)
-    return arm64_ir_sload_layout(ir, rootop, forl_idxslot, maxslots);
+    return arm64_ir_sload_layout(ir, rootop, forl_idxslot, maxslots, IRT_INT);
   if (ir.o == IR_ADD)
     return arm64_ir_type_flags(ir.t, IRT_INT, IRT_ISPHI, IRT_ISPHI);
   return arm64_ir_type_flags(ir.t, IRT_INT, IRT_GUARD,
 			     IRT_GUARD|IRT_ISPHI);
 }
 
+static int arm64_postra_num_value(IRIns ir, BCOp rootop, MSize maxslots)
+{
+  if (rootop != BC_LOOP || !arm64_ir_num_value_op((IROp)ir.o))
+    return 0;
+  if (ir.o == IR_SLOAD)
+    return arm64_ir_sload_layout(ir, rootop, 0, maxslots, IRT_NUM);
+  return ir.t.irt == (IRT_NUM|IRT_ISPHI);
+}
+
 static int arm64_postra_spill_slot(MSize slot, MSize capacity)
 {
   return slot >= SPS_FIRST && slot < capacity && slot < SPS_LIMIT;
+}
+
+static int arm64_postra_constants(const LJArm64PostRAView *view,
+	unsigned *scalar_modep)
+{
+  IRRef ref;
+  unsigned scalar_mode = 0;
+  for (ref = REF_TRUE; ref <= REF_NIL; ref++) {
+    IRIns k = ir_load_acq(&view->ir[ref]);
+    if (k.o != IR_KPRI || k.t.irt != (uint8_t)(REF_NIL-ref) || k.op12 != 0)
+      return 0;
+  }
+  for (ref = view->nk; ref < REF_TRUE; ref++) {
+    IRIns k = ir_load_acq(&view->ir[ref]);
+    if (k.o != IR_KINT || k.t.irt != IRT_INT)
+      return 0;
+    scalar_mode |= ARM64_IR_SCALAR_INT;
+  }
+  *scalar_modep = scalar_mode;
+  return 1;
+}
+
+static int arm64_postra_scalar_kref(const LJArm64PostRAView *view,
+	IRRef target, IRType type)
+{
+  IRRef ref;
+  if (target < view->nk || target >= REF_TRUE)
+    return 0;
+  for (ref = view->nk; ref < REF_TRUE; ref++) {
+    IRIns k = ir_load_acq(&view->ir[ref]);
+    if (ref == target)
+      return type == IRT_INT && k.o == IR_KINT && k.t.irt == IRT_INT;
+  }
+  return 0;
+}
+
+static int arm64_postra_scalar_value(IRIns ir, BCOp rootop,
+	MSize forl_idxslot, MSize maxslots, IRType type)
+{
+  return type == IRT_NUM ?
+    arm64_postra_num_value(ir, rootop, maxslots) :
+    arm64_postra_int_value(ir, rootop, forl_idxslot, maxslots);
+}
+
+static int arm64_postra_numadd_shape(const LJArm64PostRAView *view,
+	IRRef semantic_nins)
+{
+  IRIns k;
+  if (bc_op(view->startins) != BC_LOOP ||
+	view->nk != ARM64_NUMADD_K_ONE ||
+	semantic_nins != ARM64_NUMADD_SEMANTIC_NINS)
+    return 0;
+  k = ir_load_acq(&view->ir[ARM64_NUMADD_K_ONE]);
+  if (k.o != IR_KINT || k.t.irt != IRT_INT || k.i != 1)
+    return 0;
+#define ARM64_NUMADD_POSTRA_INS(ref, op, left, right) \
+  (ir_load_acq(&view->ir[(ref)]).o == (op) && \
+   ir_load_acq(&view->ir[(ref)]).op1 == (left) && \
+   ir_load_acq(&view->ir[(ref)]).op2 == (right))
+  if (!ARM64_NUMADD_POSTRA_INS(ARM64_NUMADD_R_I, IR_SLOAD, 5,
+	IRSLOAD_TYPECHECK) ||
+      !ARM64_NUMADD_POSTRA_INS(ARM64_NUMADD_R_X, IR_SLOAD, 3,
+	IRSLOAD_TYPECHECK) ||
+      !ARM64_NUMADD_POSTRA_INS(ARM64_NUMADD_R_STEP, IR_SLOAD, 4,
+	IRSLOAD_TYPECHECK) ||
+      !ARM64_NUMADD_POSTRA_INS(ARM64_NUMADD_R_I_PRE, IR_ADDOV,
+	ARM64_NUMADD_R_I, ARM64_NUMADD_K_ONE) ||
+      !ARM64_NUMADD_POSTRA_INS(ARM64_NUMADD_R_X_PRE, IR_ADD,
+	ARM64_NUMADD_R_STEP, ARM64_NUMADD_R_X) ||
+      !ARM64_NUMADD_POSTRA_INS(ARM64_NUMADD_R_LIMIT, IR_SLOAD, 2,
+	IRSLOAD_TYPECHECK) ||
+      !ARM64_NUMADD_POSTRA_INS(ARM64_NUMADD_R_PRE_GUARD, IR_GT,
+	ARM64_NUMADD_R_LIMIT, ARM64_NUMADD_R_I_PRE) ||
+      !ARM64_NUMADD_POSTRA_INS(ARM64_NUMADD_R_LOOP, IR_LOOP, 0, 0) ||
+      !ARM64_NUMADD_POSTRA_INS(ARM64_NUMADD_R_XPOLL, IR_XPOLL, 1, 0) ||
+      !ARM64_NUMADD_POSTRA_INS(ARM64_NUMADD_R_I_BODY, IR_ADDOV,
+	ARM64_NUMADD_R_I_PRE, ARM64_NUMADD_K_ONE) ||
+      !ARM64_NUMADD_POSTRA_INS(ARM64_NUMADD_R_X_BODY, IR_ADD,
+	ARM64_NUMADD_R_X_PRE, ARM64_NUMADD_R_STEP) ||
+      !ARM64_NUMADD_POSTRA_INS(ARM64_NUMADD_R_BODY_GUARD, IR_LT,
+	ARM64_NUMADD_R_I_BODY, ARM64_NUMADD_R_LIMIT) ||
+      !ARM64_NUMADD_POSTRA_INS(ARM64_NUMADD_R_I_PHI, IR_PHI,
+	ARM64_NUMADD_R_I_PRE, ARM64_NUMADD_R_I_BODY) ||
+      !ARM64_NUMADD_POSTRA_INS(ARM64_NUMADD_R_X_PHI, IR_PHI,
+	ARM64_NUMADD_R_X_PRE, ARM64_NUMADD_R_X_BODY)) {
+    return 0;
+  }
+#undef ARM64_NUMADD_POSTRA_INS
+  return 1;
 }
 
 static int arm64_ir_funcf_snapshots(const SnapShot *snap,
@@ -362,10 +495,11 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
   IRRef semantic_nins, ref, renref;
   MSize spadjust, capacity, highest_end = 0;
   MSize nsnap, nsnapmap;
+  MSize nrename = 0;
   MSize maxslots, forl_idxslot = 0;
   uintptr_t proto_lo, proto_hi, proto_bytes;
   BCOp rootop;
-  unsigned nadd = 0;
+  unsigned nintadd = 0, scalar_mode = 0;
   int suffix_is_nop = 0;
 
   LJ_STATIC_ASSERT(SPS_FIRST == 2);
@@ -385,6 +519,8 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
     return 0;
   if (rootop == BC_FUNCF)
     return arm64_postra_funcf_admit(view, view->startins, semantic_ninsp);
+  if (!arm64_postra_constants(view, &scalar_mode))
+    return 0;
   maxslots = view->root_topslot+1u+LJ_FR2;
   if (rootop == BC_FORL) {
     MSize ra = bc_a(view->startins);
@@ -421,7 +557,6 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
       semantic_nins--;
       suffix_is_nop = 1;
     } else {
-      MSize nrename = 0;
       while (semantic_nins > REF_FIRST) {
 	IRIns ren = ir_load_acq(&ir[semantic_nins-1u]);
 	if (ren.o != IR_RENAME)
@@ -444,20 +579,48 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
       if (ref != REF_BASE || ins.t.irt != IRT_PGC || slot != SPS_NONE)
 	return 0;
       break;
-    case IR_SLOAD: case IR_ADDOV: case IR_SUBOV: case IR_MULOV:
+    case IR_SLOAD:
+      if (irt_type(ins.t) == IRT_INT) {
+	scalar_mode |= ARM64_IR_SCALAR_INT;
+	if (!arm64_postra_int_value(ins, rootop, forl_idxslot, maxslots))
+	  return 0;
+      } else if (irt_type(ins.t) == IRT_NUM) {
+	scalar_mode |= ARM64_IR_SCALAR_NUM;
+	if (!arm64_postra_num_value(ins, rootop, maxslots) ||
+	    slot != SPS_NONE || ins.r < RID_MIN_FPR || ins.r >= RID_MAX_FPR ||
+	    !rset_test(RSET_FPR, ins.r))
+	  return 0;
+      } else {
+	return 0;
+      }
+      break;
+    case IR_ADDOV: case IR_SUBOV: case IR_MULOV:
       if (!arm64_postra_int_value(ins, rootop, forl_idxslot, maxslots))
 	return 0;
+      scalar_mode |= ARM64_IR_SCALAR_INT;
       break;
     case IR_ADD:
-      nadd++;
-      if (!arm64_postra_int_value(ins, rootop, forl_idxslot, maxslots))
+      if (irt_type(ins.t) == IRT_INT) {
+	nintadd++;
+	scalar_mode |= ARM64_IR_SCALAR_INT;
+	if (!arm64_postra_int_value(ins, rootop, forl_idxslot, maxslots))
+	  return 0;
+      } else if (irt_type(ins.t) == IRT_NUM) {
+	scalar_mode |= ARM64_IR_SCALAR_NUM;
+	if (!arm64_postra_num_value(ins, rootop, maxslots) ||
+	    slot != SPS_NONE || ins.r < RID_MIN_FPR || ins.r >= RID_MAX_FPR ||
+	    !rset_test(RSET_FPR, ins.r))
+	  return 0;
+      } else {
 	return 0;
+      }
       break;
     case IR_LT: case IR_GE: case IR_LE: case IR_GT:
     case IR_EQ: case IR_NE:
       if (!arm64_ir_type_flags(ins.t, IRT_INT, IRT_GUARD, IRT_GUARD) ||
 	  slot != SPS_NONE)
 	return 0;
+      scalar_mode |= ARM64_IR_SCALAR_INT;
       break;
     case IR_LOOP: case IR_XPOLL:
       if (!arm64_ir_type_flags(ins.t, IRT_NIL, IRT_GUARD, IRT_GUARD) ||
@@ -465,8 +628,16 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
 	return 0;
       break;
     case IR_PHI:
-      if (ins.t.irt != IRT_INT)
+      if (ins.t.irt != IRT_INT && ins.t.irt != IRT_NUM)
 	return 0;
+      if (ins.t.irt == IRT_NUM) {
+	scalar_mode |= ARM64_IR_SCALAR_NUM;
+	if (slot != SPS_NONE || ins.r < RID_MIN_FPR || ins.r >= RID_MAX_FPR ||
+	    !rset_test(RSET_FPR, ins.r))
+	  return 0;
+      } else {
+	scalar_mode |= ARM64_IR_SCALAR_INT;
+      }
       break;
     default:
       return 0;
@@ -480,8 +651,14 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
     }
   }
 
-  if ((rootop == BC_FORL && nadd != 2u) ||
-      (rootop == BC_LOOP && nadd != 0u))
+  if ((rootop == BC_FORL && nintadd != 2u) ||
+      (rootop == BC_LOOP && nintadd != 0u))
+    return 0;
+
+  if ((scalar_mode & ARM64_IR_SCALAR_NUM) != 0 &&
+      (scalar_mode != (ARM64_IR_SCALAR_INT|ARM64_IR_SCALAR_NUM) ||
+       suffix_is_nop || nrename != 1u || spadjust != 0 || highest_end != 0 ||
+       !arm64_postra_numadd_shape(view, semantic_nins)))
     return 0;
 
   if (highest_end <= SPS_FIXED) {
@@ -499,12 +676,21 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
       IRIns source;
       if (ren.o != IR_RENAME || ren.t.irt != IRT_NIL ||
 	  ren.op1 < REF_FIRST || ren.op1 >= semantic_nins ||
-	  ren.op2 >= nsnap || ren.r >= RID_MAX_GPR ||
-	  !rset_test(RSET_GPR, ren.r) || ren.s != SPS_NONE)
+	  ren.op2 >= nsnap || ren.s != SPS_NONE)
 	return 0;
       source = ir_load_acq(&ir[ren.op1]);
-      if (!arm64_postra_int_value(source, rootop, forl_idxslot, maxslots))
+      if (irt_type(source.t) == IRT_INT) {
+	if (!arm64_postra_int_value(source, rootop, forl_idxslot, maxslots) ||
+	    ren.r >= RID_MAX_GPR || !rset_test(RSET_GPR, ren.r))
+	  return 0;
+      } else if (irt_type(source.t) == IRT_NUM) {
+	if (!arm64_postra_num_value(source, rootop, maxslots) ||
+	    ren.r < RID_MIN_FPR || ren.r >= RID_MAX_FPR ||
+	    !rset_test(RSET_FPR, ren.r))
+	  return 0;
+      } else {
 	return 0;
+      }
     }
   }
 
@@ -554,15 +740,16 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
 	if (irref_isk(valueref)) {
 	  if (flags != 0 || valueref < view->nk || valueref >= REF_TRUE)
 	    return 0;
-	  source = ir_load_acq(&ir[valueref]);
-	  if (source.o != IR_KINT || source.t.irt != IRT_INT)
+	  if (!arm64_postra_scalar_kref(view, valueref, IRT_INT))
 	    return 0;
 	  continue;
 	}
 	if (valueref < REF_FIRST || valueref >= snapat)
 	  return 0;
 	source = ir_load_acq(&ir[valueref]);
-	if (!arm64_postra_int_value(source, rootop, forl_idxslot, maxslots) ||
+	if ((irt_type(source.t) != IRT_INT && irt_type(source.t) != IRT_NUM) ||
+	    !arm64_postra_scalar_value(source, rootop, forl_idxslot, maxslots,
+				       (IRType)irt_type(source.t)) ||
 	    (flags == SNAP_NORESTORE &&
 	     (source.o != IR_SLOAD || source.op1 != slot ||
 	      rootop != BC_FORL ||
@@ -577,11 +764,17 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
 	    rs = ren.prev;
 	}
 	if (ra_hasspill(regsp_spill(rs))) {
-	  if (!arm64_postra_spill_slot(regsp_spill(rs), capacity))
+	  if (irt_type(source.t) == IRT_NUM ||
+	      !arm64_postra_spill_slot(regsp_spill(rs), capacity))
 	    return 0;
-	} else if (regsp_reg(rs) >= RID_MAX_GPR ||
-		   !rset_test(RSET_GPR, regsp_reg(rs))) {
-	  return 0;
+	} else if (irt_type(source.t) == IRT_NUM) {
+	  if (regsp_reg(rs) < RID_MIN_FPR || regsp_reg(rs) >= RID_MAX_FPR ||
+	      !rset_test(RSET_FPR, regsp_reg(rs)))
+	    return 0;
+	} else {
+	  if (regsp_reg(rs) >= RID_MAX_GPR ||
+	      !rset_test(RSET_GPR, regsp_reg(rs)))
+	    return 0;
 	}
       }
       LJ_STATIC_ASSERT(sizeof(pcraw) == sizeof(pcbase));
@@ -627,6 +820,16 @@ static int arm64_ir_int_ref(const GCtrace *T, IRRef ref, IRRef before,
   ir = &T->ir[ref];
   return irt_type(ir->t) == IRT_INT &&
 	 arm64_ir_int_value_op((IROp)ir->o, allow_add);
+}
+
+static int arm64_ir_num_ref(const GCtrace *T, IRRef ref, IRRef before)
+{
+  const IRIns *ir;
+  if (ref < REF_BASE || ref < REF_FIRST || ref >= T->nins || ref >= before)
+    return 0;
+  ir = &T->ir[ref];
+  return irt_type(ir->t) == IRT_NUM &&
+	 arm64_ir_num_value_op((IROp)ir->o);
 }
 
 static int arm64_ir_constants(const GCtrace *T, LJArm64IRReject *reject)
@@ -1005,6 +1208,65 @@ static int arm64_ir_int_binary(const GCtrace *T, const IRIns *ir,
 	 arm64_ir_int_ref(T, ir->op2, before, allow_add);
 }
 
+static int arm64_ir_num_binary(const GCtrace *T, const IRIns *ir,
+	IRRef before)
+{
+  return arm64_ir_num_ref(T, ir->op1, before) &&
+	 arm64_ir_num_ref(T, ir->op2, before);
+}
+
+/* First spill-free NUM execution canary. Integer induction keeps every
+** comparison and overflow edge in the already-certified family, while a
+** dynamic NUM accumulator proves FPR loads, ADD, PHI, snapshots and exits.
+** Constants remain KINT-only and no numeric conversion is needed. */
+static int arm64_ir_numadd_shape(const GCtrace *T, IRRef firstphi,
+	LJArm64IRReject *reject)
+{
+  const IRIns *ir = T->ir;
+  if (T->nk != ARM64_NUMADD_K_ONE ||
+	T->nins != ARM64_NUMADD_SEMANTIC_NINS ||
+	firstphi != ARM64_NUMADD_R_I_PHI ||
+	ir[ARM64_NUMADD_K_ONE].o != IR_KINT ||
+	ir[ARM64_NUMADD_K_ONE].t.irt != IRT_INT ||
+	ir[ARM64_NUMADD_K_ONE].i != 1)
+    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE,
+	ARM64_NUMADD_R_I, IR_ADD, 1);
+#define ARM64_NUMADD_INS(ref, op, left, right) \
+  (ir[(ref)].o == (op) && ir[(ref)].op1 == (left) && \
+   ir[(ref)].op2 == (right))
+  if (!ARM64_NUMADD_INS(ARM64_NUMADD_R_I, IR_SLOAD, 5,
+	IRSLOAD_TYPECHECK) ||
+      !ARM64_NUMADD_INS(ARM64_NUMADD_R_X, IR_SLOAD, 3,
+	IRSLOAD_TYPECHECK) ||
+      !ARM64_NUMADD_INS(ARM64_NUMADD_R_STEP, IR_SLOAD, 4,
+	IRSLOAD_TYPECHECK) ||
+      !ARM64_NUMADD_INS(ARM64_NUMADD_R_I_PRE, IR_ADDOV,
+	ARM64_NUMADD_R_I, ARM64_NUMADD_K_ONE) ||
+      !ARM64_NUMADD_INS(ARM64_NUMADD_R_X_PRE, IR_ADD,
+	ARM64_NUMADD_R_STEP, ARM64_NUMADD_R_X) ||
+      !ARM64_NUMADD_INS(ARM64_NUMADD_R_LIMIT, IR_SLOAD, 2,
+	IRSLOAD_TYPECHECK) ||
+      !ARM64_NUMADD_INS(ARM64_NUMADD_R_PRE_GUARD, IR_GT,
+	ARM64_NUMADD_R_LIMIT, ARM64_NUMADD_R_I_PRE) ||
+      !ARM64_NUMADD_INS(ARM64_NUMADD_R_LOOP, IR_LOOP, 0, 0) ||
+      !ARM64_NUMADD_INS(ARM64_NUMADD_R_XPOLL, IR_XPOLL, 1, 0) ||
+      !ARM64_NUMADD_INS(ARM64_NUMADD_R_I_BODY, IR_ADDOV,
+	ARM64_NUMADD_R_I_PRE, ARM64_NUMADD_K_ONE) ||
+      !ARM64_NUMADD_INS(ARM64_NUMADD_R_X_BODY, IR_ADD,
+	ARM64_NUMADD_R_X_PRE, ARM64_NUMADD_R_STEP) ||
+      !ARM64_NUMADD_INS(ARM64_NUMADD_R_BODY_GUARD, IR_LT,
+	ARM64_NUMADD_R_I_BODY, ARM64_NUMADD_R_LIMIT) ||
+      !ARM64_NUMADD_INS(ARM64_NUMADD_R_I_PHI, IR_PHI,
+	ARM64_NUMADD_R_I_PRE, ARM64_NUMADD_R_I_BODY) ||
+      !ARM64_NUMADD_INS(ARM64_NUMADD_R_X_PHI, IR_PHI,
+	ARM64_NUMADD_R_X_PRE, ARM64_NUMADD_R_X_BODY)) {
+    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
+	ARM64_NUMADD_R_I, IR_ADD, 2);
+  }
+#undef ARM64_NUMADD_INS
+  return 1;
+}
+
 static int arm64_ir_kint_value(const GCtrace *T, IRRef ref, int32_t *value)
 {
   if (!arm64_ir_int_kref(T, ref))
@@ -1144,7 +1406,7 @@ static int arm64_ir_forl_shape(const jit_State *J, const GCtrace *T,
 static int arm64_ir_snapshots(const GCtrace *T, IRRef loopref,
 	IRRef xpollref, MSize root_topslot, const jit_State *J,
 	uintptr_t proto_lo, uintptr_t proto_hi, BCOp rootop,
-	LJArm64IRReject *reject)
+	unsigned scalar_mode, LJArm64IRReject *reject)
 {
   SnapNo snapno;
   IRRef prevref = 0;
@@ -1196,7 +1458,9 @@ static int arm64_ir_snapshots(const GCtrace *T, IRRef loopref,
 	continue;  /* The sole root-frame sentinel carries no object. */
       if (slot < 1 + LJ_FR2 ||
 	  (flags != 0 && flags != SNAP_NORESTORE) ||
-	  !arm64_ir_int_ref(T, ref, snapref, rootop == BC_FORL))
+	  (!arm64_ir_int_ref(T, ref, snapref, rootop == BC_FORL) &&
+	   (!(scalar_mode & ARM64_IR_SCALAR_NUM) ||
+	    !arm64_ir_num_ref(T, ref, snapref))))
 	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
 			       ref, IR_XPOLL, (uint16_t)snapno);
       if (flags == SNAP_NORESTORE) {
@@ -1281,6 +1545,7 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
   GCproto *pt;
   uintptr_t proto_lo, proto_hi;
   unsigned nloop = 0, nxpoll = 0, nphi = 0;
+  unsigned scalar_mode = 0;
   BCOp startop;
   if (reject) {
     reject->reason = LJ_ARM64_IR_REJECT_NONE;
@@ -1357,46 +1622,76 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
 	  ir->op1 >= root_topslot + 1u + LJ_FR2)
 	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND, ref,
 				 IR_SLOAD, ir->op1);
-      if (!arm64_ir_sload_layout(*ir, startop, forl_idxslot,
-				    root_topslot+1u+LJ_FR2))
+      if (irt_type(ir->t) == IRT_INT) {
+	scalar_mode |= ARM64_IR_SCALAR_INT;
+	if (!arm64_ir_sload_layout(*ir, startop, forl_idxslot,
+					  root_topslot+1u+LJ_FR2, IRT_INT))
+	  return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE, ref,
+					 IR_SLOAD, ir->op2);
+      } else if (irt_type(ir->t) == IRT_NUM) {
+	scalar_mode |= ARM64_IR_SCALAR_NUM;
+	if (!arm64_ir_sload_layout(*ir, startop, forl_idxslot,
+					  root_topslot+1u+LJ_FR2, IRT_NUM))
+	  return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE, ref,
+					 IR_SLOAD, ir->op2);
+      } else {
 	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE, ref,
-				 IR_SLOAD, ir->op2);
+					 IR_SLOAD, ir->op2);
+      }
       break;
     case IR_LT: case IR_GE: case IR_LE: case IR_GT:
     case IR_EQ: case IR_NE:
       if (!arm64_ir_type_flags(ir->t, IRT_INT, IRT_GUARD, IRT_GUARD) ||
 	  !arm64_ir_int_binary(T, ir, ref, startop == BC_FORL))
 	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE, ref,
-				 (IROp)ir->o, ir->t.irt);
+					 (IROp)ir->o, ir->t.irt);
+      scalar_mode |= ARM64_IR_SCALAR_INT;
       break;
     case IR_ADDOV: case IR_SUBOV: case IR_MULOV:
       if (!arm64_ir_type_flags(ir->t, IRT_INT, IRT_GUARD,
 			       IRT_GUARD|IRT_ISPHI) ||
 	  !arm64_ir_int_binary(T, ir, ref, startop == BC_FORL))
 	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE, ref,
-				 (IROp)ir->o, ir->t.irt);
+					 (IROp)ir->o, ir->t.irt);
+      scalar_mode |= ARM64_IR_SCALAR_INT;
       break;
     case IR_ADD:
-	if (startop != BC_FORL ||
-	    ir->t.irt != (IRT_INT|IRT_ISPHI) ||
-	    !arm64_ir_int_binary(T, ir, ref, 1))
+	if (irt_type(ir->t) == IRT_INT) {
+	  scalar_mode |= ARM64_IR_SCALAR_INT;
+	  if (startop != BC_FORL || ir->t.irt != (IRT_INT|IRT_ISPHI) ||
+	      !arm64_ir_int_binary(T, ir, ref, 1))
+	    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE, ref,
+					   IR_ADD, ir->t.irt);
+	} else if (irt_type(ir->t) == IRT_NUM) {
+	  scalar_mode |= ARM64_IR_SCALAR_NUM;
+	  if (startop != BC_LOOP || ir->t.irt != (IRT_NUM|IRT_ISPHI) ||
+	      !arm64_ir_num_binary(T, ir, ref))
+	    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE, ref,
+					   IR_ADD, ir->t.irt);
+	} else {
 	  return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE, ref,
-				 IR_ADD, ir->t.irt);
+					 IR_ADD, ir->t.irt);
+	}
 	break;
     case IR_PHI:
       if (firstphi == 0)
 	firstphi = ref;
       nphi++;
-      if (ir->t.irt != IRT_INT || flags != 0 ||
+      if ((irt_type(ir->t) != IRT_INT && irt_type(ir->t) != IRT_NUM) ||
+	  flags != 0 ||
 	  nphi > LJ_MAX_PHI ||
 	  loopref == 0 || xpollref != loopref + 1u || ref <= xpollref ||
 	  ir->op1 < REF_FIRST || ir->op1 >= loopref ||
 	  ir->op2 <= xpollref || ir->op2 >= firstphi ||
-	  !arm64_ir_int_binary(T, ir, ref, startop == BC_FORL) ||
+	  (irt_type(ir->t) == IRT_INT ?
+	   !arm64_ir_int_binary(T, ir, ref, startop == BC_FORL) :
+	   !arm64_ir_num_binary(T, ir, ref)) ||
 	  !irt_isphi(T->ir[ir->op1].t) ||
 	  !irt_isphi(T->ir[ir->op2].t))
 	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE, ref,
-				 IR_PHI, ir->t.irt);
+					 IR_PHI, ir->t.irt);
+      scalar_mode |= irt_type(ir->t) == IRT_NUM ?
+	ARM64_IR_SCALAR_NUM : ARM64_IR_SCALAR_INT;
       {
 	IRRef prevphi;
 	for (prevphi = firstphi; prevphi < ref; prevphi++)
@@ -1442,11 +1737,17 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
 			   (uint16_t)((nloop << 8) | nxpoll));
   if (!arm64_ir_phi_marks(T, firstphi, T->nins, reject))
     return 0;
+  if ((scalar_mode & ARM64_IR_SCALAR_NUM) != 0 &&
+      (scalar_mode != (ARM64_IR_SCALAR_INT|ARM64_IR_SCALAR_NUM) ||
+       startop != BC_LOOP ||
+       !arm64_ir_numadd_shape(T, firstphi, reject)))
+    return 0;
   if (startop == BC_FORL &&
       !arm64_ir_forl_shape(J, T, loopref, xpollref, firstphi, reject))
     return 0;
   if (!arm64_ir_snapshots(T, loopref, xpollref, root_topslot, J,
-			  proto_lo, proto_hi, startop, reject))
+				  proto_lo, proto_hi, startop,
+				  scalar_mode, reject))
     return 0;
   if (!arm64_ir_guard_snapshots(T, reject))
     return 0;
