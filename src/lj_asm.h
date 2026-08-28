@@ -134,6 +134,7 @@ typedef struct LJArm64SideAsmProbe {
   uint32_t stages;
   uint32_t capture_count;
   uint32_t seal_failure;
+  uint32_t raw_negative;
   TraceNo parent;
   TraceNo child;
   ExitNo exitno;

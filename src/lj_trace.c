@@ -4734,6 +4734,7 @@ lj_trace_arm64_side_parent_revalidate(jit_State *J)
 
 #if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
 static uint32_t trace_test_arm64_side_publish_seal_failure;
+static uint32_t trace_test_arm64_side_publish_raw_negative;
 
 typedef struct TraceArm64SidePublishPlan {
   TraceVec *tracev;
@@ -4752,6 +4753,35 @@ typedef struct TraceArm64SidePublishPlan {
   MSize parent_topslot;
   MSize child_topslot;
 } TraceArm64SidePublishPlan;
+
+/* Reconstruct the exact allocator contract captured by lj_trace_alloc(). The
+** token-private J->curfinal identity owns this allocation, while the stored
+** counts are its only byte-geometry descriptor. They must still match the
+** semantic scratch which trace_save() would copy into the same body. */
+static int trace_arm64_side_publish_body_alloc_valid(jit_State *J,
+	GCtrace *T, GCtrace *body)
+{
+  GCSize size, expected;
+  SnapNo nsnap;
+  IRRef nins, nk;
+  MSize nsnapmap;
+  if (J == NULL || T == NULL || body == NULL || body != J->curfinal ||
+	  body == T ||
+	  trace_nins_acq(body) != trace_nins_acq(T) ||
+	  trace_nk_acq(body) != trace_nk_acq(T) ||
+	  trace_nsnap_acq(body) != trace_nsnap_acq(T) ||
+	  trace_nsnapmap_acq(body) != trace_nsnapmap_acq(T) ||
+	  !trace_size_checked(J2G(J), body, &size, &nsnap))
+    return 0;
+  nins = trace_nins_acq(body);
+  nk = trace_nk_acq(body);
+  nsnapmap = trace_nsnapmap_acq(body);
+  expected = (GCSize)((sizeof(GCtrace)+7)&~7);
+  expected += (GCSize)(nins-nk) * (GCSize)sizeof(IRIns);
+  expected += (GCSize)nsnap * (GCSize)sizeof(SnapShot);
+  expected += (GCSize)nsnapmap * (GCSize)sizeof(SnapEntry);
+  return nsnap == trace_nsnap_acq(T) && size == expected;
+}
 
 /* Validate the still-private compact child and every direct destination the
 ** future infallible suffix will consume. The assembler marker is necessary but
@@ -4816,10 +4846,10 @@ static int trace_arm64_side_publish_child_valid(jit_State *J, GCtrace *T,
       trace_native_pinword_acq(body) != 0 ||
       la_load64_acq(&body->retire_epoch) != 0 ||
       trace_retired_link_acq(body) != TRACE_RETIRED_LINK_UNLINKED ||
-      trace_nk_acq(body) != trace_nk_acq(T) ||
-      finalnins != trace_nins_acq(T) || finalnins <= REF_FIRST ||
+      finalnins <= REF_FIRST ||
       trace_ir_acq(body) == NULL ||
-      &trace_ir_acq(body)[trace_nk_acq(body)] != (IRIns *)compact)
+      &trace_ir_acq(body)[trace_nk_acq(body)] != (IRIns *)compact ||
+      !trace_arm64_side_publish_body_alloc_valid(J, T, body))
     goto fail_body;
 #ifdef LUAJIT_USE_GDBJIT
   if (trace_gdbjit_entry_acq(body) != NULL)
@@ -4968,12 +4998,80 @@ static LJTraceArm64SideParentResult trace_arm64_side_publish_seal(
   return result;
 }
 
+#if LJ_ABI_PAUTH
+/* Substitute the same stripped fallback address with a signature produced from
+** a deliberately different discriminator. The raw child-slot check must reject
+** it before PUBLISH, release its reader, and leave every private owner intact. */
+static int trace_arm64_side_publish_raw_negative_test(jit_State *J, GCtrace *T)
+{
+  TraceArm64SidePublishPlan plan;
+  LJTraceArm64SideParentResult result;
+  MCode **exittab = trace_exittab_acq(T);
+  MCode *fallback;
+  void *saved, *wrong = NULL;
+  MSize nexits = trace_exittab_nslots_acq(T);
+  uint32_t readers, salt;
+  int ok;
+
+  if (J == NULL || T == NULL || exittab == NULL || nexits == 0 ||
+	  trace_exitstub_acq(T) == NULL)
+    return 0;
+  fallback = exitstub_trace_fallback_addr_(trace_exitstub_acq(T));
+  saved = la_loadptr_acq((void *const *)&exittab[0]);
+  if (saved != trace_exittarget_arm64_encode(J2G(J), fallback))
+    return 0;
+  for (salt = 1; salt <= 64u; salt++) {
+    uintptr_t discriminator =
+	  ptrauth_blend_discriminator((void *)J, (uintptr_t)salt);
+    ASMFunction signedtarget = ptrauth_sign_unauthenticated(
+	  ptrauth_nop_cast(ASMFunction, fallback),
+	  ptrauth_key_function_pointer, discriminator);
+    wrong = ptrauth_nop_cast(void *, signedtarget);
+    if (wrong != saved)
+      break;
+  }
+  if (salt > 64u || wrong == saved) return 0;
+  {
+    ASMFunction signedwrong = ptrauth_nop_cast(ASMFunction, wrong);
+    if (ptrauth_nop_cast(MCode *, lj_ptr_strip(signedwrong)) != fallback)
+      return 0;
+  }
+
+  readers = gc2_smr_readers_acq(J2G(J));
+  la_storeptr_rel((void **)&exittab[0], wrong);
+  result = trace_arm64_side_publish_seal(J, T, &plan);
+  ok = result != LJ_TRACE_ARM64_SIDE_PARENT_OK &&
+	la_load32_acq(&trace_test_arm64_side_publish_seal_failure) == 5u &&
+	lj_trace_state_load(J) == LJ_TRACE_ASM &&
+	gc2_smr_readers_acq(J2G(J)) == readers &&
+	J->curfinal != NULL &&
+	tracevec_acq(J) == J->arm64_side_parent.tracev &&
+	gcref_acq(J->arm64_side_parent.tracev->slot[
+	  J->arm64_side_parent.child]) == (const GCobj *)LJ_TRACE_PENDING;
+  if (result == LJ_TRACE_ARM64_SIDE_PARENT_OK) {
+    uint32_t expect = (uint32_t)LJ_TRACE_PUBLISH;
+    if (!la_cas32((uint32_t *)&J->state, &expect, (uint32_t)LJ_TRACE_ASM,
+		  LA_ACQ_REL, LA_ACQ))
+      abort();
+    lj_gc2_smr_read_leave(J2G(J));
+    ok = 0;
+  }
+  la_storeptr_rel((void **)&exittab[0], saved);
+  if (la_loadptr_acq((void *const *)&exittab[0]) != saved ||
+	  gc2_smr_readers_acq(J2G(J)) != readers ||
+	  lj_trace_state_load(J) != LJ_TRACE_ASM)
+    ok = 0;
+  return ok;
+}
+#endif
+
 int lj_trace_test_arm64_side_publish_seal(jit_State *J, GCtrace *T)
 {
   TraceArm64SidePublishPlan plan;
   LJTraceArm64SideParentResult result;
   uint32_t expect;
   int ok;
+  la_store32_rel(&trace_test_arm64_side_publish_raw_negative, 0);
   result = trace_arm64_side_publish_seal(J, T, &plan);
   if (result != LJ_TRACE_ARM64_SIDE_PARENT_OK)
     return 0;
@@ -5011,13 +5109,28 @@ int lj_trace_test_arm64_side_publish_seal(jit_State *J, GCtrace *T)
     abort();
   }
   lj_gc2_smr_read_leave(J2G(J));
-  return ok && lj_trace_state_load(J) == LJ_TRACE_ASM &&
+  ok = ok && lj_trace_state_load(J) == LJ_TRACE_ASM &&
     gc2_smr_readers_acq(J2G(J)) == 0;
+#if LJ_ABI_PAUTH
+  if (ok && trace_arm64_side_publish_raw_negative_test(J, T)) {
+    la_store32_rel(&trace_test_arm64_side_publish_raw_negative, 1);
+    la_store32_rel(&trace_test_arm64_side_publish_seal_failure, 0);
+  } else {
+    la_store32_rel(&trace_test_arm64_side_publish_seal_failure, 11);
+    ok = 0;
+  }
+#endif
+  return ok;
 }
 
 uint32_t lj_trace_test_arm64_side_publish_seal_failure(void)
 {
   return la_load32_acq(&trace_test_arm64_side_publish_seal_failure);
+}
+
+uint32_t lj_trace_test_arm64_side_publish_raw_negative(void)
+{
+  return la_load32_acq(&trace_test_arm64_side_publish_raw_negative);
 }
 #endif
 

@@ -76,6 +76,7 @@ lj_trace_arm64_side_parent_revalidate(jit_State *J);
 ** abort against it, then restores ASM before the mandatory unpublished abort. */
 LJ_FUNC int lj_trace_test_arm64_side_publish_seal(jit_State *J, GCtrace *T);
 LJ_FUNC uint32_t lj_trace_test_arm64_side_publish_seal_failure(void);
+LJ_FUNC uint32_t lj_trace_test_arm64_side_publish_raw_negative(void);
 #endif
 #endif
 

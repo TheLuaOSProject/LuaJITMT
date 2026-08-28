@@ -144,6 +144,10 @@ for required in \
   'if (old == (uint32_t)LJ_TRACE_PUBLISH)' \
   'static LJ_AINLINE int lj_trace_state_publish_try(jit_State *J)' \
   'trace_arm64_side_publish_child_valid(' \
+  'trace_arm64_side_publish_body_alloc_valid(' \
+  'trace_nsnap_acq(body) != trace_nsnap_acq(T)' \
+  'trace_nsnapmap_acq(body) != trace_nsnapmap_acq(T)' \
+  '!trace_size_checked(J2G(J), body, &size, &nsnap)' \
   'gcref_acq(cert->tracev->slot[cert->child])' \
   'la_loadptr_acq((void *const *)&exittab[i]) != fallback_encoding' \
   'plan->parent_fallback_encoding = parentview->fallback_encoding;' \
@@ -151,6 +155,11 @@ for required in \
   'lj_trace_state_publish_try(J)' \
   'if (result != LJ_TRACE_ARM64_SIDE_PARENT_OK)' \
   'gc2_smr_readers_acq(J2G(J)) == 1' \
+  'trace_arm64_side_publish_raw_negative_test(J, T)' \
+  'ptrauth_blend_discriminator((void *)J, (uintptr_t)salt)' \
+  'ptrauth_nop_cast(MCode *, lj_ptr_strip(signedwrong)) != fallback' \
+  'trace_test_arm64_side_publish_seal_failure) == 5u' \
+  'lj_trace_test_arm64_side_publish_raw_negative' \
   'lj_trace_state_abort(J);'; do
   grep -F "$required" "$root/src/lj_trace.c" "$root/src/lj_trace.h" \
     "$root/src/lj_jit.h" >/dev/null || {
@@ -182,6 +191,8 @@ for required in \
   'lj_asm_arm64_test_side_probe_arm(PROBE_PARENT, PROBE_EXIT);' \
   'lj_asm_arm64_test_force_exitstub_mcode_retry(1);' \
   'assert(probe.stages == LJ_ARM64_SIDE_ASM_PROBE_ALL);' \
+  'assert(probe.seal_failure == 0);' \
+  'assert(probe.raw_negative == (uint32_t)LJ_ABI_PAUTH);' \
   'assert(probe.capture_count == 2);' \
   'assert(probe.parent == PROBE_PARENT);' \
   'assert(probe.child == PROBE_CHILD);' \
@@ -209,6 +220,8 @@ for required in \
   'assert(lj_tg_load_jit_base(tg) == NULL);' \
   'assert(side_parent_cert_zero(&J->arm64_side_parent));' \
   'assert(gc2_smr_readers_acq(g) == 0);' \
+  'assert(jit_token_acq(g) == 0);' \
+  'assert(jit_owner_l_acq(J) == NULL);' \
   'assert(!lj_trace_state_publish_try(J));' \
   'assert(lj_trace_state_publish_try(J));' \
   'assert(lj_trace_state_load(J) == LJ_TRACE_PUBLISH);' \
@@ -251,7 +264,8 @@ for symbol in \
   _lj_asm_arm64_test_side_probe_active \
   _lj_asm_arm64_test_side_probe_read \
   _lj_trace_test_arm64_side_publish_seal \
-  _lj_trace_test_arm64_side_publish_seal_failure; do
+  _lj_trace_test_arm64_side_publish_seal_failure \
+  _lj_trace_test_arm64_side_publish_raw_negative; do
   nm "$archive" | grep -F " T $symbol" >/dev/null || {
     echo "ARM64 side-assembler probe archive lost $symbol" >&2
     exit 1
@@ -324,11 +338,11 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" -j"$jobs" TARGET_FLAGS='-arch arm64' \
     XCFLAGS="$ordinary_xcflags"
 if nm "$archive" | grep -E \
-     '_lj_asm_arm64_test_side_probe_(arm|ingress|active|read)$|_lj_trace_test_arm64_side_publish_seal(_failure)?$' \
+     '_lj_asm_arm64_test_side_probe_(arm|ingress|active|read)$|_lj_trace_test_arm64_side_publish_(seal(_failure)?|raw_negative)$' \
      >/dev/null; then
   echo "ordinary ARM64 helper build retained special side-probe APIs" >&2
   exit 1
 fi
 restore_needed=0
 
-echo "arm64_jit_side_asm_consumption_contract OK: exact first-side assembly, MCODELM recapture and non-abortable dry publication seal proved on ARM64/ARM64e without publication"
+echo "arm64_jit_side_asm_consumption_contract OK: exact first-side assembly, compact allocation geometry, MCODELM recapture and raw ARM64e negative dry publication seal proved without publication"

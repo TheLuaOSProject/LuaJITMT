@@ -174,11 +174,11 @@ static void expect_root_shape(jit_State *J, GCproto *pt, GCtrace **rootp,
 static void dump_probe(const LJArm64SideAsmProbe *probe)
 {
   fprintf(stderr,
-    "side assembler probe stages=%#x captures=%u seal_failure=%u "
+    "side assembler probe stages=%#x captures=%u seal_failure=%u raw_negative=%u "
     "parent=%u child=%u "
     "exit=%u mapn=%u entry_words=%u tail_pc=%p tail=%#x marker=%#x\n",
     (unsigned)probe->stages, (unsigned)probe->capture_count,
-    (unsigned)probe->seal_failure,
+    (unsigned)probe->seal_failure, (unsigned)probe->raw_negative,
     (unsigned)probe->parent, (unsigned)probe->child,
     (unsigned)probe->exitno, (unsigned)probe->parentmap_n,
     (unsigned)probe->entry_words, (void *)probe->tail_pc,
@@ -282,6 +282,8 @@ int main(void)
   if (probe.stages != LJ_ARM64_SIDE_ASM_PROBE_ALL)
     dump_probe(&probe);
   assert(probe.stages == LJ_ARM64_SIDE_ASM_PROBE_ALL);
+  assert(probe.seal_failure == 0);
+  assert(probe.raw_negative == (uint32_t)LJ_ABI_PAUTH);
   assert(probe.capture_count == 2);
   assert(probe.parent == PROBE_PARENT);
   assert(probe.child == PROBE_CHILD);

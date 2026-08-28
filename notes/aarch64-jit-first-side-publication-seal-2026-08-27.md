@@ -41,7 +41,8 @@ infallible suffix must keep a successful reader through its last parent-exit
 CAS. Before attempting the state CAS the seal proves:
 
 - the exact ASM token owner and canonical current first-side scratch;
-- the still-private compact `J->curfinal` body and compact IR extent;
+- the still-private compact `J->curfinal` body, exact stored snapshot counts and
+  reconstructed allocator extent;
 - exact scratch ownership of snapshots, exit table and synchronized mcode;
 - canonical four-snapshot/thirteen-map and five-exit layout;
 - every child exit slot contains the exact owning-`global_State` encoding of
@@ -63,6 +64,12 @@ the asynchronous-abort path and proves the state remains PUBLISH. Because this
 checkpoint has performed no irreversible action, the test alone restores
 `PUBLISH -> ASM` with an exact CAS, releases the reader, and then raises the
 mandatory unpublished abort.
+
+The arm64e probe then replaces one child exit slot with the same stripped
+fallback address signed under a deliberately different discriminator. A second
+dry seal must reject the raw word at the exit-table check before PUBLISH, release
+its reader, and preserve the token-private child slot/body. The test restores
+the original authenticated word before the mandatory unpublished abort.
 
 The fixture proves the reserved child slot remains PENDING, root child count
 and side link remain zero, the selected snapshot is not DONE, the parent exit

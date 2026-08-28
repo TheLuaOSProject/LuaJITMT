@@ -3449,6 +3449,8 @@ static int asm_test_side_probe_finish(jit_State *J, GCtrace *T)
     asm_test_side_probe.stages |= LJ_ARM64_SIDE_ASM_PROBE_SEAL;
   asm_test_side_probe.seal_failure =
     lj_trace_test_arm64_side_publish_seal_failure();
+  asm_test_side_probe.raw_negative =
+    lj_trace_test_arm64_side_publish_raw_negative();
   la_store32_rel(&asm_test_side_probe_state, ASM_TEST_SIDE_PROBE_DONE);
   return 1;
 }
