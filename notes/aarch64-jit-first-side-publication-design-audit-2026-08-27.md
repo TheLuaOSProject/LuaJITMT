@@ -33,11 +33,13 @@ path or invoke user code:
 A lost CAS releases the reader and uses normal unpublished cleanup. There is no
 normal rollback after a successful seal.
 
-`lj_mcode_commit()` needs separate audit. If it advances `mctop` before the
-seal, ordinary `lj_mcode_abort()` does not restore that committed top. Prefer a
-split where all protection/RUN work is prepared before the seal and the suffix
-contains only a target-specific, nonfailing top publication. Otherwise capture
-and restore the exact old top/protection state on every pre-seal failure.
+This audit produced the split recorded in
+`aarch64-jit-mcode-commit-split-2026-08-27.md`.
+`lj_mcode_commit_prepare()` now completes the protection/RUN transition without
+advancing `mctop` and captures the exact old/new top generation;
+`lj_mcode_commit_publish()` consumes that plan using only a checked top store.
+The dedicated first-child path still needs to place those two calls on the
+opposite sides of its final seal.
 
 ## Sealed suffix order
 
@@ -60,6 +62,10 @@ unexpected value after the seal is an invariant failure, not a Lua error:
 12. publish terminal IDLE and release the recorder token; and
 13. only afterward handle optional debugger/perf state, detached events and GC
     pressure/stepping.
+
+The mcode publication plan is one-shot even if rollback and the next reserve
+reuse the same pointers: it carries the exact odd reservation generation, and
+commit/abort plus area replacement advance that generation without wrapping.
 
 The trace-slot CAS publishes the initialized GC body. The last parent-exit CAS
 is the runnable-graph linearization point. Transaction-owned shared fields use

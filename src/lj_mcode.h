@@ -25,6 +25,19 @@ LJ_FUNC uint32_t lj_mcode_reclaim_retired(global_State *g,
 LJ_FUNC void lj_mcode_freeretired(global_State *g);
 LJ_FUNC int lj_mcode_markretired(global_State *g, int gc2);
 LJ_FUNC MCode *lj_mcode_reserve(jit_State *J, MCode **lim);
+/* Split commit for publication transactions. Prepare validates the exact
+** reservation and completes any protection-mode transition while rollback is
+** still legal, without advancing mctop. Publish is the bounded ownership store
+** used only after all failure paths are closed. */
+typedef struct LJMCodeCommitPlan {
+  MCode *oldtop;
+  MCode *newtop;
+  uint64_t generation;
+} LJMCodeCommitPlan;
+LJ_FUNC int lj_mcode_commit_prepare(jit_State *J, MCode *top,
+				     LJMCodeCommitPlan *plan);
+LJ_FUNC void lj_mcode_commit_publish(jit_State *J,
+				      const LJMCodeCommitPlan *plan);
 LJ_FUNC void lj_mcode_commit(jit_State *J, MCode *m);
 LJ_FUNC void lj_mcode_abort(jit_State *J);
 LJ_FUNC MCode *lj_mcode_patch(jit_State *J, MCode *ptr, int finish);

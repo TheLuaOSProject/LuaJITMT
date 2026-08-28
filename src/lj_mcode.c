@@ -92,6 +92,7 @@ void lj_mcode_sync(void *start, void *end)
 
 void lj_mcode_init(global_State *g)
 {
+  G2J(g)->mcreserve_generation = 0;
 #if defined(__linux__) && LJ_TARGET_X64
   if (la_membarrier_register_synccore() == 0)
     la_store32_rel(&g->jit_mcode_synccore, 1);  /* 08 section 8.5. */
@@ -540,6 +541,37 @@ static void *mcode_alloc(jit_State *J, size_t sz)
 
 /* -- MCode area management ----------------------------------------------- */
 
+/* The recorder token serializes this exact reservation ticket. Odd values
+** name one active backwards-growing reservation; even values name no active
+** reservation. Never wrap: equality is the stale-plan rejection authority. */
+static LJ_NORET void mcode_reservation_failstop(jit_State *J,
+						 const char *why)
+{
+  lj_assertJ(0, "%s", why);
+  UNUSED(why);
+  abort();
+}
+
+static LJ_AINLINE void mcode_reservation_begin(jit_State *J)
+{
+  uint64_t generation = J->mcreserve_generation;
+  if (LJ_UNLIKELY((generation & 1u) != 0 ||
+		  generation >= UINT64_MAX-1u))
+    mcode_reservation_failstop(J, "invalid/exhausted mcode reservation");
+  J->mcreserve_generation = generation+1u;
+}
+
+/* Invalidate every prepared plan and leave the ticket inactive. Area
+** replacement uses the even-to-even step; commit/abort close odd to even. */
+static LJ_AINLINE void mcode_reservation_invalidate(jit_State *J)
+{
+  uint64_t generation = J->mcreserve_generation;
+  uint64_t delta = (generation & 1u) != 0 ? 1u : 2u;
+  if (LJ_UNLIKELY(generation > UINT64_MAX-delta))
+    mcode_reservation_failstop(J, "exhausted mcode reservation generation");
+  J->mcreserve_generation = generation+delta;
+}
+
 static LJ_AINLINE size_t mcode_default_size(jit_State *J)
 {
   return (size_t)jit_param_acq(J, JIT_P_sizemcode) << 10;
@@ -622,6 +654,7 @@ static void mcode_allocarea(jit_State *J, size_t sz)
   mcode_active_push(J, ret);
   (void)lj_gc2_markmem_registered_publish_try(g, ret);
 
+  mcode_reservation_invalidate(J);
   J->mcarea = area;
   J->szmcarea = sz;
   J->mcprot = MCPROT_GEN;
@@ -678,6 +711,7 @@ void lj_mcode_free(jit_State *J)
   uint64_t epoch;
   if (!mc)
     return;
+  mcode_reservation_invalidate(J);
   epoch = lj_gc2_retire_epoch(g);
   retired = mcode_active_head_xchg_acqrel(J, NULL);
   lj_assertJ(retired != NULL, "active mcode area has no retirement owner");
@@ -717,6 +751,7 @@ void lj_mcode_freeall(global_State *g)
   if (!g)
     return;
   J = G2J(g);
+  mcode_reservation_invalidate(J);
   active = mcode_active_head_xchg_acqrel(J, NULL);
   J->mcarea = NULL;
   J->mctop = J->mcbot = NULL;
@@ -882,15 +917,89 @@ MCode *lj_mcode_reserve(jit_State *J, MCode **lim)
     mcode_allocarea(J, mcode_default_size(J));
   else
     mcode_set_current_mode(J, MCPROT_GEN);
+  mcode_reservation_begin(J);
   *lim = J->mcbot;
   return J->mctop;
+}
+
+/* Validate one backwards-growing reservation without deriving an address past
+** the current area. The recorder token owns all four fields, so this is an
+** exact transaction-generation check rather than a concurrent data read. */
+static int mcode_commit_top_valid(const jit_State *J, const MCode *oldtop,
+				  const MCode *newtop,
+				  uint64_t generation)
+{
+  uintptr_t area, areaend, bot, oldp, newp;
+  if (J == NULL || J->mcarea == NULL || J->mcbot == NULL ||
+      J->mctop == NULL || oldtop == NULL || newtop == NULL ||
+      J->szmcarea == 0 || J->mctop != oldtop || generation == 0 ||
+      generation == UINT64_MAX || (generation & 1u) == 0 ||
+      J->mcreserve_generation != generation)
+    return 0;
+  area = (uintptr_t)(void *)J->mcarea;
+  if (area > UINTPTR_MAX-(uintptr_t)J->szmcarea)
+    return 0;
+  areaend = area+(uintptr_t)J->szmcarea;
+  bot = (uintptr_t)(void *)J->mcbot;
+  oldp = (uintptr_t)(const void *)oldtop;
+  newp = (uintptr_t)(const void *)newtop;
+  return bot >= area && bot <= areaend && oldp >= bot && oldp <= areaend &&
+    newp >= bot && newp <= oldp &&
+    ((bot-area) & (sizeof(MCode)-1u)) == 0 &&
+    ((oldp-area) & (sizeof(MCode)-1u)) == 0 &&
+    ((newp-area) & (sizeof(MCode)-1u)) == 0;
+}
+
+/* Close every fallible/platform protection operation before an irreversible
+** publication seal. Success deliberately leaves mctop unchanged, so ordinary
+** abort still discards the whole reservation. */
+int lj_mcode_commit_prepare(jit_State *J, MCode *top,
+			    LJMCodeCommitPlan *plan)
+{
+  MCode *oldtop;
+  uint64_t generation;
+  if (plan == NULL)
+    return 0;
+  plan->oldtop = NULL;
+  plan->newtop = NULL;
+  plan->generation = 0;
+  oldtop = J ? J->mctop : NULL;
+  generation = J ? J->mcreserve_generation : 0;
+  if (!mcode_commit_top_valid(J, oldtop, top, generation))
+    return 0;
+  mcode_set_current_mode(J, MCPROT_RUN);
+  if (!mcode_commit_top_valid(J, oldtop, top, generation))
+    return 0;
+  plan->oldtop = oldtop;
+  plan->newtop = top;
+  plan->generation = generation;
+  return 1;
+}
+
+/* Publish the already prepared top. The token owner must have repeated the
+** exact preflight immediately before its irreversible seal. Any mismatch here
+** is internal corruption: returning to Lua would expose an unowned mcode gap. */
+void lj_mcode_commit_publish(jit_State *J, const LJMCodeCommitPlan *plan)
+{
+  if (LJ_UNLIKELY(plan == NULL ||
+	!mcode_commit_top_valid(J, plan->oldtop, plan->newtop,
+				plan->generation))) {
+    lj_assertJ(0, "invalid prepared mcode commit");
+    abort();
+  }
+  J->mctop = plan->newtop;
+  J->mcreserve_generation = plan->generation+1u;
 }
 
 /* Commit the top part of the current MCode area. */
 void lj_mcode_commit(jit_State *J, MCode *top)
 {
-  J->mctop = top;
-  mcode_set_current_mode(J, MCPROT_RUN);
+  LJMCodeCommitPlan plan;
+  if (LJ_UNLIKELY(!lj_mcode_commit_prepare(J, top, &plan))) {
+    lj_assertJ(0, "invalid mcode commit reservation");
+    abort();
+  }
+  lj_mcode_commit_publish(J, &plan);
 }
 
 /* Abort the reservation. */
@@ -898,6 +1007,7 @@ void lj_mcode_abort(jit_State *J)
 {
   if (J->mcarea)
     mcode_set_current_mode(J, MCPROT_RUN);
+  mcode_reservation_invalidate(J);
 }
 
 /* Set/reset protection to allow patching of MCode areas. */

@@ -36,6 +36,7 @@ whenever a shared field is introduced or migrated.
 | J->L | recorder-token owner pointer | store rel / load acq; only unchanged token owner may restore or clear |
 | J->activemcode | preowned active-mcode retirement records | CAS rel/acq; batch exchange at full flush; raw nodes marked from JIT roots |
 | J->retiredmcode | retired mcode records | CAS rel/acq; retire epoch store rel; free after `LJ_FLUSH_EPOCHS` completed epochs |
+| J->mcreserve_generation | token-owned exact mcode reservation ticket | plain monotonic generation under the recorder token; odd means one active reservation, even means none; reserve, abort/commit and current-area replacement advance it, and prepared commits require the exact odd generation |
 | J->retiredtraces / GCtrace.retired_next | token-owned tagged retired trace bodies | head CAS/exchange acq_rel; embedded link rel/acq; free only under token + zero-reader gate after `LJ_FLUSH_EPOCHS` |
 | GCtrace.retire_epoch | trace-entry retirement gate | token-owned CAS acq_rel of encoded epoch + 1; zero means live |
 | GCtrace.native_pins | exact native-body admission + lease count | high `CLOSED` bit and low 31-bit count share one CAS acq_rel word; pin increments only while open under an independent body lease; retirement closes after the epoch LP and before slot disposition; final closed unpin publishes count zero before notifying reclaim and must not dereference the body afterward |

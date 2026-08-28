@@ -1065,6 +1065,7 @@ typedef struct jit_State {
   MCode *mcbot;		/* Bottom of current mcode area. */
   size_t szmcarea;	/* Size of current mcode area. */
   size_t szallmcarea;	/* Total size of all allocated mcode areas. */
+  uint64_t mcreserve_generation;  /* Odd active/even inactive reservation. */
   MCodeRetire *activemcode;  /* Preowned nodes for active mcode areas. */
   MCodeRetire *retiredmcode;  /* Retired mcode areas awaiting SMR. */
   uintptr_t mcmin, mcmax;	/* Mcode allocation range. */
