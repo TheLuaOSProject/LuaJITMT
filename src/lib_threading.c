@@ -2516,41 +2516,41 @@ void lj_threading_detach(lua_State *L, int disown_callbacks)
   threading_detach_commit(L, tg, disown_callbacks);
 }
 
-int lj_threading_detach_callback_unwind(lua_State *L)
+void lj_threading_detach_callback_pending(lua_State *L)
 {
 #if LJ_HASFFI
   global_State *g;
   TGState *tg;
   CCallbackRuntime *cb;
   if (!L)
-    return 0;
+    abort();
   g = G(L);
   tg = lj_thr_get_tg();
   if (!tg || tg == g->main_tg || tg->gl != g || L2TG(L) != tg ||
       lj_tg_load_cur_L(tg) != L || lj_tg_load_thread_L(tg) != L)
-    return 0;
+    abort();
   cb = &tg->cb;
-  /* Only the unwind hook may consume this bit. Every callback/native root has
-  ** already been popped, and err_unwind() has removed the logical C frame.
-  ** Clear just this one debt so the unchanged public scope predicate can
-  ** certify all remaining detach invariants. */
+  /* Only callback terminal completion may consume this bit. Every callback
+  ** and native root has already been popped; either err_unwind() removed the
+  ** logical C frame or normal leave restored its predecessor. Clear just this
+  ** one debt so the unchanged public scope predicate can certify every
+  ** remaining detach invariant. */
   if (ccallback_auto_detach_acq(cb) != 1 ||
       ccallback_depth_acq(cb) != 0 || ccallback_L_acq(cb) != NULL ||
       ccallback_slot_acq(cb) != 0 ||
       ccallback_native_had_stopreq_acq(cb) != 0 ||
       lj_tg_ffi_call_func_acq(tg) != NULL)
-    return 0;
+    abort();
   ccallback_auto_detach_rel(cb, 0);
   if (!threading_detach_scope_quiescent(g, tg, L) ||
       !threading_jit_detach_preabort_ready(g, tg)) {
     ccallback_auto_detach_rel(cb, 1);
-    return 0;
+    abort();
   }
   threading_detach_commit(L, tg, 0);
-  return 1;
 #else
   UNUSED(L);
-  return 0;
+  abort();
 #endif
 }
 

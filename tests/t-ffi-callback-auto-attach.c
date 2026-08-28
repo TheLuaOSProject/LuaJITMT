@@ -3,6 +3,7 @@
 */
 
 #include <assert.h>
+#include <errno.h>
 #include <pthread.h>
 #include <stdio.h>
 
@@ -29,6 +30,7 @@ typedef struct AutoCtx {
   double fp_result;
   TGState *after_tg;
   int signal_call;
+  int errnum;
 } AutoCtx;
 
 static lua_State *mainL;
@@ -45,6 +47,10 @@ static uint32_t concurrent_hold;
 static uint32_t concurrent_release;
 static uint32_t concurrent_entered;
 static uint32_t concurrent_attempts;
+#ifdef LJ_CCALLBACK_TEST_HELPERS
+static uint32_t result_detach_entered;
+static uint32_t result_detach_release;
+#endif
 
 static void assert_dead_tgs_drop_callback_roots(void)
 {
@@ -67,6 +73,7 @@ static void init_ctx(AutoCtx *ctx)
   ctx->fp_result = -1.0;
   ctx->after_tg = (TGState *)1;
   ctx->signal_call = 0;
+  ctx->errnum = -1;
 }
 
 static void wait_u32_at_least(uint32_t *p, uint32_t value)
@@ -173,6 +180,107 @@ static void *stale_foreign_worker(void *arg)
   return NULL;
 }
 
+#ifdef LJ_CCALLBACK_TEST_HELPERS
+static void *foreign_result_worker(void *arg)
+{
+  AutoCtx *ctx = (AutoCtx *)arg;
+  if (lj_thr_get_tg() != NULL) {
+    ctx->status = 1;
+    return NULL;
+  }
+  errno = E2BIG;
+  ctx->result = saved_cb(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+  ctx->errnum = errno;
+  ctx->after_tg = lj_thr_get_tg();
+  ctx->status = 0;
+  return NULL;
+}
+
+static void *foreign_fp_worker(void *arg)
+{
+  AutoCtx *ctx = (AutoCtx *)arg;
+  if (lj_thr_get_tg() != NULL) {
+    ctx->status = 1;
+    return NULL;
+  }
+  errno = EILSEQ;
+  ctx->fp_result = saved_fp_cb(12.5);
+  ctx->errnum = errno;
+  ctx->after_tg = lj_thr_get_tg();
+  ctx->status = 0;
+  return NULL;
+}
+
+static void result_after_detach_hold(void)
+{
+  errno = ERANGE;  /* Finish must restore the callback's exact error pair. */
+  la_store32_rel(&result_detach_entered, 1);
+  while (la_load32_acq(&result_detach_release) == 0)
+    (void)lj_thr_sleep_ns(NULL, 1000000);
+}
+
+static void drain_dead_tgs(global_State *g)
+{
+  while (lj_tg_reclaim_dead(g) != 0)
+    ;
+}
+
+static void arm_result_after_detach_hold(void)
+{
+  la_store32_rel(&result_detach_entered, 0);
+  la_store32_rel(&result_detach_release, 0);
+  lj_ccallback_test_set_after_detach_hook(result_after_detach_hold);
+}
+
+static void release_result_after_detach_hold(void)
+{
+  la_store32_rel(&result_detach_release, 1);
+}
+
+static void test_result_reload_after_reclaim(global_State *g)
+{
+  AutoCtx intctx, fpctx;
+  pthread_t intpt, fppt;
+
+  drain_dead_tgs(g);
+  assert(mt_live_acq(g) == 0);
+  init_ctx(&intctx);
+  arm_result_after_detach_hold();
+  assert(pthread_create(&intpt, NULL, foreign_result_worker, &intctx) == 0);
+  wait_u32_at_least(&result_detach_entered, 1);
+  /* Auto-detach is complete, but the assembly continuation has not yet
+  ** reloaded the integer result. Reclaim the exact TG in that old UAF window. */
+  assert(mt_live_acq(g) == 0);
+  assert(lj_tg_reclaim_dead(g) == 1u);
+  assert(lj_tg_reclaim_dead(g) == 0u);
+  release_result_after_detach_hold();
+  assert(pthread_join(intpt, NULL) == 0);
+  assert(intctx.status == 0);
+  assert(intctx.result == 55);
+  assert(intctx.errnum == E2BIG);
+  assert(intctx.after_tg == NULL);
+
+  drain_dead_tgs(g);
+  assert(mt_live_acq(g) == 0);
+  init_ctx(&fpctx);
+  arm_result_after_detach_hold();
+  assert(pthread_create(&fppt, NULL, foreign_fp_worker, &fpctx) == 0);
+  wait_u32_at_least(&result_detach_entered, 1);
+  /* Repeat with the independent floating-point carrier. */
+  assert(mt_live_acq(g) == 0);
+  assert(lj_tg_reclaim_dead(g) == 1u);
+  assert(lj_tg_reclaim_dead(g) == 0u);
+  release_result_after_detach_hold();
+  assert(pthread_join(fppt, NULL) == 0);
+  assert(fpctx.status == 0);
+  assert(fpctx.fp_result == 13.0);
+  assert(fpctx.errnum == EILSEQ);
+  assert(fpctx.after_tg == NULL);
+  assert(saved_owner->tg_hint == NULL);
+  assert(saved_fp_owner->tg_hint == NULL);
+}
+#endif
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -238,6 +346,12 @@ int main(void)
   assert(context_checks == 1);
   assert(slot_owner() == saved_owner);
 
+#ifdef LJ_CCALLBACK_TEST_HELPERS
+  test_result_reload_after_reclaim(G(L));
+  assert(slot_owner() == saved_owner);
+  assert(slot_owner_at(saved_fp_slot) == saved_fp_owner);
+#endif
+
   la_store32_rel(&concurrent_hold, 1);
   la_store32_rel(&concurrent_release, 0);
   la_store32_rel(&concurrent_entered, 0);
@@ -264,7 +378,11 @@ int main(void)
   assert_dead_tgs_drop_callback_roots();
   assert(callbackL == saved_owner);
   assert(saved_owner->tg_hint == NULL);
+#ifdef LJ_CCALLBACK_TEST_HELPERS
+  assert(context_checks == 4);
+#else
   assert(context_checks == 3);
+#endif
   assert(slot_owner() == saved_owner);
 
   ljt_lua_dostring(L,
@@ -288,6 +406,10 @@ int main(void)
 
   ljt_lua_dostring(L, "collectgarbage('collect')\n");
   lua_close(L);
+#ifdef LJ_CCALLBACK_TEST_HELPERS
+  printf("t-ffi-callback-auto-attach OK: integer/FP results and errno survived post-detach TG reclaim\n");
+#else
   printf("t-ffi-callback-auto-attach OK: TLS-less pthread callback auto-attach and stale return verified\n");
+#endif
   return 0;
 }

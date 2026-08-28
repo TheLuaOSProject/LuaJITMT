@@ -3535,9 +3535,16 @@ static void build_subroutines(BuildCtx *ctx)
 |  mov CARG1, CTSTATE
 |  mov CARG2, RB
 |  mov CARG3, KBASE
-|  call extern lj_ccallback_leave	// (CTState *cts, TValue *o, CCallbackRuntime *cb)
-|  mov rax, CBACK:KBASE->gpr[0]
-|  movsd xmm0, qword CBACK:KBASE->fpr[0]
+|  call extern lj_ccallback_leave_result // (CTState *, TValue *, CCallbackRuntime *)
+|  mov PC, qword CBACK:KBASE->fpr[0]
+|  mov KBASE, CBACK:KBASE->gpr[0]
+|  test rax, rax
+|  jz >1
+|  mov CARG1, rax
+|  call extern lj_ccallback_leave_result_finish // (lua_State *L)
+|1:
+|  mov rax, KBASE
+|  movd xmm0, PC
 |  jmp ->vm_leave_unw
 |
 |->vm_ffi_callback_dead:

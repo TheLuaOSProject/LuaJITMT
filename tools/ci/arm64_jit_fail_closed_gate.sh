@@ -81,6 +81,9 @@ LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
 LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
   sh "$root/tools/ci/arm64_jit_gdbjit_prepare_contract.sh"
 LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
+LJ_CALLBACK_RESULT_RESTORE_XCFLAGS="$xcflags" \
+  sh "$root/tools/ci/arm64_ffi_callback_result_lifetime_contract.sh"
+LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
   sh "$root/tools/ci/arm64_jit_forl_record_contract.sh"
 LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
   sh "$root/tools/ci/arm64_jit_funcf_record_contract.sh"

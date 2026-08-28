@@ -430,7 +430,7 @@ LJ_FUNC int lj_thr_main_close_claim(lua_State *L);
 LJ_FUNC int lj_threading_attach(lua_State *L);
 LJ_FUNC int lj_threading_attach_wait(lua_State *L);
 LJ_FUNC void lj_threading_detach(lua_State *L, int disown_callbacks);
-LJ_FUNC int lj_threading_detach_callback_unwind(lua_State *L);
+LJ_FUNC void lj_threading_detach_callback_pending(lua_State *L);
 LJ_FUNC int lj_state_claim(lua_State *L, uint32_t tid);
 LJ_FUNC int lj_state_tryclaim(lua_State *L, uint32_t tid, LJStateClaim *claim);
 LJ_FUNC int lj_state_resumeclaim(lua_State *L, uint32_t tid,

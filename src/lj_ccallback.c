@@ -1008,8 +1008,9 @@ void lj_ccallback_unwind_detach(void)
   /* This is the final LuaJIT cleanup edge, not a retryable public request.
   ** Refusal would strand the sole TG/universe lifetime token as the physical
   ** callback frame is disposed, so make any invariant split fail-stop. */
-  if (L == NULL || !lj_threading_detach_callback_unwind(L))
+  if (L == NULL)
     abort();
+  lj_threading_detach_callback_pending(L);
   ccallback_error_restore(&err);
 }
 
@@ -1352,9 +1353,10 @@ lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
   return L;  /* Now call the function on this stack. */
 }
 
-/* Leave callback. */
-void LJ_FASTCALL lj_ccallback_leave(CTState *cts, TValue *o,
-				    CCallbackRuntime *cb)
+/* Leave callback. A retained result leaves an auto-attached carrier live until
+** assembly has copied the result registers out of TG-owned callback storage. */
+static lua_State *ccallback_leave(CTState *cts, TValue *o,
+				  CCallbackRuntime *cb, int retain_result)
 {
   CCallbackErrorState err;
   CCallbackFrame *frame;
@@ -1414,8 +1416,59 @@ void LJ_FASTCALL lj_ccallback_leave(CTState *cts, TValue *o,
   } else if (native_depth != 0) {
     lj_tg_in_native_rel(tg, native_depth);
   }
-  if (auto_detach)
-    lj_threading_detach(L, 0);
+  if (auto_detach) {
+    if (retain_result)
+      ccallback_auto_detach_rel(cb, 1);  /* Result-reload lifetime debt. */
+    else
+      lj_threading_detach(L, 0);
+  }
+  ccallback_error_restore(&err);
+  return auto_detach && retain_result ? L : NULL;
+}
+
+void LJ_FASTCALL lj_ccallback_leave(CTState *cts, TValue *o,
+				    CCallbackRuntime *cb)
+{
+  (void)ccallback_leave(cts, o, cb, 0);
+}
+
+lua_State *LJ_FASTCALL lj_ccallback_leave_result(CTState *cts, TValue *o,
+						 CCallbackRuntime *cb)
+{
+  return ccallback_leave(cts, o, cb, 1);
+}
+
+#ifdef LJ_CCALLBACK_TEST_HELPERS
+static LJCCallbackAfterDetachHook ccallback_test_after_detach_hook;
+
+void lj_ccallback_test_set_after_detach_hook(
+  LJCCallbackAfterDetachHook hook)
+{
+  la_storefunc_rel(&ccallback_test_after_detach_hook, hook);
+}
+
+static void ccallback_test_after_detach(void)
+{
+  LJCCallbackAfterDetachHook hook = la_xchgfunc_acqrel(
+    &ccallback_test_after_detach_hook, NULL);
+  if (hook != NULL)
+    hook();
+}
+#else
+#define ccallback_test_after_detach() ((void)0)
+#endif
+
+void LJ_FASTCALL lj_ccallback_leave_result_finish(lua_State *L)
+{
+  CCallbackErrorState err;
+  if (L == NULL)
+    return;
+  /* Nothing after detach may dereference L, its TG, or the universe. The test
+  ** hook deliberately lets the runtime-main TG reclaim the retired carrier
+  ** before this helper returns to the result-reload assembly. */
+  ccallback_error_save(&err);
+  lj_threading_detach_callback_pending(L);
+  ccallback_test_after_detach();
   ccallback_error_restore(&err);
 }
 

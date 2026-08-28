@@ -21,6 +21,16 @@ LJ_FUNCA lua_State * LJ_FASTCALL lj_ccallback_enter(CTState *cts, void *cf,
 						    CCallbackRuntime *cb);
 LJ_FUNCA void LJ_FASTCALL lj_ccallback_leave(CTState *cts, TValue *o,
 					     CCallbackRuntime *cb);
+/* The supported MT backends must copy TG-owned result carriers before the
+** matching finish call releases a foreign callback's auto-attached TG. */
+LJ_FUNCA lua_State * LJ_FASTCALL lj_ccallback_leave_result(
+  CTState *cts, TValue *o, CCallbackRuntime *cb);
+LJ_FUNCA void LJ_FASTCALL lj_ccallback_leave_result_finish(lua_State *L);
+#ifdef LJ_CCALLBACK_TEST_HELPERS
+typedef void (*LJCCallbackAfterDetachHook)(void);
+LJ_FUNC void lj_ccallback_test_set_after_detach_hook(
+  LJCCallbackAfterDetachHook hook);
+#endif
 LJ_FUNC void lj_ccallback_unwind(lua_State *L, TValue *cont);
 LJ_FUNC void lj_ccallback_unwind_detach(void);
 LJ_FUNC void lj_ccallback_disown_state(lua_State *L);
