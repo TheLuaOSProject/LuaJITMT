@@ -96,6 +96,27 @@ All five scripts passed shell syntax checks and source-contract checks. The
 runner restored the ordinary experimental ARM64 helper archive and released
 its test lock.
 
+The complete `tools/ci/arm64_jit_fail_closed_gate.sh` umbrella also passed
+after its adjacent assembler-consumption pin was updated to follow the named
+child-snapshot bound. That run covered the two production sides, authenticated
+arm64e entry/exit targets, LOOP/FORL/JFUNCF recording and native entry, mcode
+publication/retirement, live flush and trace-slot reuse, and VM/recorder
+safepoint races.
+
+Cross-architecture regression on the same commit passed:
+
+- the thin macOS x86_64 platform build and binary smoke test;
+- all 509 stock tests with zero failures;
+- a Rosetta x86_64 JIT loop which published trace 1 with `linktype=loop`; and
+- restoration of a thin arm64 experimental-helper build, followed by a native
+  health check with JIT enabled, a published loop trace, and successful
+  lockless thread spawn/join.
+
+The only build warnings were the existing x86 `topofs` unused-value warning
+and ARM64 `ccall_rawchild_wait` unused-function warning. The x86 platform
+builder also emitted and discarded its expected preliminary non-GC64
+configuration diagnostic before selecting the supported GC64 build.
+
 ## Remaining work
 
 This checkpoint establishes a second real production generation without
