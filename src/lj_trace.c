@@ -4115,6 +4115,8 @@ typedef struct TraceArm64FirstSideLoopView {
   MCode *fallback;
   void *exittarget_raw;
   void *fallback_encoding;
+  uintptr_t exittarget_bits;
+  uintptr_t fallback_encoding_bits;
   MSize szmcode;
   MSize mcloop;
   MSize topslot;
@@ -4146,6 +4148,14 @@ typedef struct TraceArm64FirstSideLoopView {
   uintptr_t mcauth_bits;
 #endif
 } TraceArm64FirstSideLoopView;
+
+static LJ_AINLINE uintptr_t trace_arm64_first_side_pointer_bits(void *target)
+{
+  uintptr_t bits;
+  LJ_STATIC_ASSERT(sizeof(bits) == sizeof(target));
+  memcpy(&bits, &target, sizeof(bits));
+  return bits;
+}
 
 #if LJ_ABI_PAUTH
 static LJ_AINLINE uintptr_t trace_arm64_first_side_function_bits(
@@ -4337,7 +4347,11 @@ static int trace_arm64_first_side_view_acq(jit_State *J, TraceNo parent,
 #else
   v->fallback_encoding = (void *)v->fallback;
 #endif
-  if (v->exittarget_raw != v->fallback_encoding)
+  v->exittarget_bits =
+    trace_arm64_first_side_pointer_bits(v->exittarget_raw);
+  v->fallback_encoding_bits =
+    trace_arm64_first_side_pointer_bits(v->fallback_encoding);
+  if (v->exittarget_bits != v->fallback_encoding_bits)
     return 0;
 
   selected = &v->snap[exitno];
@@ -4372,8 +4386,8 @@ static int trace_arm64_first_side_view_equal(
     a->snapmap == b->snapmap && a->mcode == b->mcode &&
     a->exittab == b->exittab && a->exitstub == b->exitstub &&
     a->fallback == b->fallback &&
-    a->exittarget_raw == b->exittarget_raw &&
-    a->fallback_encoding == b->fallback_encoding &&
+    a->exittarget_bits == b->exittarget_bits &&
+    a->fallback_encoding_bits == b->fallback_encoding_bits &&
     a->szmcode == b->szmcode && a->mcloop == b->mcloop &&
     a->topslot == b->topslot && a->spadjust == b->spadjust &&
     a->nsnap == b->nsnap &&
@@ -4952,8 +4966,10 @@ typedef struct TraceArm64SidePublishPlan {
   MCode **parent_exitslot;
   MCode *parent_fallback;
   void *parent_fallback_encoding;
+  uintptr_t parent_fallback_encoding_bits;
   MCode *child_mcode;
   void *child_target_encoding;
+  uintptr_t child_target_encoding_bits;
   TraceNo parentno;
   TraceNo childno;
   ExitNo exitno;
@@ -5024,6 +5040,7 @@ static int trace_arm64_side_publish_child_valid(jit_State *J, GCtrace *T,
   MCode *mcode, *exitstub, *fallback;
   MCode **exittab;
   void *fallback_encoding;
+  uintptr_t fallback_encoding_bits;
   MSize szmcode, nsnap, nexits, i;
   uint16_t parentmap = REGSP(RID_X28, SPS_NONE);
   char *compact;
@@ -5105,8 +5122,12 @@ static int trace_arm64_side_publish_child_valid(jit_State *J, GCtrace *T,
 	((uintptr_t)(void *)mcode+(uintptr_t)szmcode) > sizeof(MCode))
     goto fail_layout;
   fallback_encoding = trace_exittarget_arm64_encode(J2G(J), fallback);
+  fallback_encoding_bits =
+    trace_arm64_first_side_pointer_bits(fallback_encoding);
   for (i = 0; i < nexits; i++)
-    if (la_loadptr_acq((void *const *)&exittab[i]) != fallback_encoding)
+    if (trace_arm64_first_side_pointer_bits(
+	  la_loadptr_acq((void *const *)&exittab[i])) !=
+	fallback_encoding_bits)
       goto fail_exittab;
 
   memset(&postra, 0, sizeof(postra));
@@ -5155,9 +5176,13 @@ static int trace_arm64_side_publish_child_valid(jit_State *J, GCtrace *T,
   plan->parent_exitslot = &parentview->exittab[cert->exitno];
   plan->parent_fallback = parentview->fallback;
   plan->parent_fallback_encoding = parentview->fallback_encoding;
+  plan->parent_fallback_encoding_bits =
+    parentview->fallback_encoding_bits;
   plan->child_mcode = mcode;
   plan->child_target_encoding =
     trace_exittarget_arm64_encode(J2G(J), mcode);
+  plan->child_target_encoding_bits =
+    trace_arm64_first_side_pointer_bits(plan->child_target_encoding);
   plan->parentno = cert->parent;
   plan->childno = cert->child;
   plan->exitno = cert->exitno;
@@ -5266,6 +5291,7 @@ static int trace_arm64_side_publish_raw_negative_test(jit_State *J, GCtrace *T)
   MCode *fallback;
   void *saved, *wrong = NULL;
   MSize nexits = trace_exittab_nslots_acq(T);
+  uintptr_t saved_bits, wrong_bits = 0, expected_bits;
   uint32_t readers, salt;
   int ok;
 
@@ -5274,7 +5300,10 @@ static int trace_arm64_side_publish_raw_negative_test(jit_State *J, GCtrace *T)
     return 0;
   fallback = exitstub_trace_fallback_addr_(trace_exitstub_acq(T));
   saved = la_loadptr_acq((void *const *)&exittab[0]);
-  if (saved != trace_exittarget_arm64_encode(J2G(J), fallback))
+  saved_bits = trace_arm64_first_side_pointer_bits(saved);
+  expected_bits = trace_arm64_first_side_pointer_bits(
+    trace_exittarget_arm64_encode(J2G(J), fallback));
+  if (saved_bits != expected_bits)
     return 0;
   for (salt = 1; salt <= 64u; salt++) {
     uintptr_t discriminator =
@@ -5283,10 +5312,11 @@ static int trace_arm64_side_publish_raw_negative_test(jit_State *J, GCtrace *T)
 	  ptrauth_nop_cast(ASMFunction, fallback),
 	  ptrauth_key_function_pointer, discriminator);
     wrong = ptrauth_nop_cast(void *, signedtarget);
-    if (wrong != saved)
+    wrong_bits = trace_arm64_first_side_pointer_bits(wrong);
+    if (wrong_bits != saved_bits)
       break;
   }
-  if (salt > 64u || wrong == saved) return 0;
+  if (salt > 64u || wrong_bits == saved_bits) return 0;
   {
     ASMFunction signedwrong = ptrauth_nop_cast(ASMFunction, wrong);
     if (ptrauth_nop_cast(MCode *, lj_ptr_strip(signedwrong)) != fallback)
@@ -5313,7 +5343,8 @@ static int trace_arm64_side_publish_raw_negative_test(jit_State *J, GCtrace *T)
     ok = 0;
   }
   la_storeptr_rel((void **)&exittab[0], saved);
-  if (la_loadptr_acq((void *const *)&exittab[0]) != saved ||
+  if (trace_arm64_first_side_pointer_bits(
+	la_loadptr_acq((void *const *)&exittab[0])) != saved_bits ||
 	  gc2_smr_readers_acq(J2G(J)) != readers ||
 	  lj_trace_state_load(J) != LJ_TRACE_ASM)
     ok = 0;
@@ -5341,13 +5372,16 @@ int lj_trace_test_arm64_side_publish_seal(jit_State *J, GCtrace *T)
     gcref_acq(*plan.childslot) == (const GCobj *)LJ_TRACE_PENDING &&
     plan.parentsnap == &trace_snap_acq(plan.parent)[plan.exitno] &&
     plan.parent_exitslot == &trace_exittab_acq(plan.parent)[plan.exitno] &&
-    la_loadptr_acq((void *const *)plan.parent_exitslot) ==
-      plan.parent_fallback_encoding &&
-    plan.parent_fallback_encoding ==
-      trace_exittarget_arm64_encode(J2G(J), plan.parent_fallback) &&
+    trace_arm64_first_side_pointer_bits(
+	la_loadptr_acq((void *const *)plan.parent_exitslot)) ==
+      plan.parent_fallback_encoding_bits &&
+    plan.parent_fallback_encoding_bits ==
+      trace_arm64_first_side_pointer_bits(
+	trace_exittarget_arm64_encode(J2G(J), plan.parent_fallback)) &&
     plan.child_mcode == trace_mcode_acq(T) &&
-    plan.child_target_encoding ==
-      trace_exittarget_arm64_encode(J2G(J), trace_mcode_acq(T)) &&
+    plan.child_target_encoding_bits ==
+      trace_arm64_first_side_pointer_bits(
+	trace_exittarget_arm64_encode(J2G(J), trace_mcode_acq(T))) &&
     gc2_smr_readers_acq(J2G(J)) == 1;
   if (!ok)
     la_store32_rel(&trace_test_arm64_side_publish_seal_failure, 10);
@@ -5412,6 +5446,7 @@ typedef struct TraceArm64FirstChildEntryView {
   MCode **exittab;
   MCode *exitstub;
   void *parent_target;
+  uintptr_t parent_target_bits;
   uint64_t retire_epoch;
   MSize szmcode;
   MSize topslot;
@@ -5443,7 +5478,8 @@ static int trace_root_entry_first_child_view_equal(
 	a->startpt == b->startpt && a->startpc == b->startpc &&
 	a->ir == b->ir && a->snap == b->snap && a->snapmap == b->snapmap &&
 	a->mcode == b->mcode && a->exittab == b->exittab &&
-	a->exitstub == b->exitstub && a->parent_target == b->parent_target &&
+	a->exitstub == b->exitstub &&
+	a->parent_target_bits == b->parent_target_bits &&
 	a->retire_epoch == b->retire_epoch && a->szmcode == b->szmcode &&
 	a->topslot == b->topslot && a->spadjust == b->spadjust &&
 	a->nsnap == b->nsnap && a->nsnapmap == b->nsnapmap &&
@@ -5484,7 +5520,7 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
   MCode *fallback;
   MSize nexits, i;
   uint16_t parentmap0 = REGSP(RID_X28, SPS_NONE);
-  uintptr_t mcodep, fallbackp;
+  uintptr_t mcodep, fallbackp, fallback_encoding_bits;
 
   memset(view, 0, sizeof(*view));
   if (rootview->nchild == 0)
@@ -5537,6 +5573,8 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
   view->exitstub = trace_exitstub_acq(child);
   view->parent_target =
 	la_loadptr_acq((void *const *)&rootview->exittab[2]);
+  view->parent_target_bits =
+	trace_arm64_first_side_pointer_bits(view->parent_target);
   view->retire_epoch = la_load64_acq(&child->retire_epoch);
   view->szmcode = trace_szmcode_acq(child);
   view->topslot = trace_topslot_acq(child);
@@ -5576,7 +5614,8 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
 	view->exittab == NULL || view->exitstub == NULL ||
 	view->parent_snap_topslot != view->topslot ||
 	view->parent_snap_count != SNAPCOUNT_DONE ||
-	view->parent_target != trace_exittarget_arm64_encode(g, view->mcode) ||
+	view->parent_target_bits != trace_arm64_first_side_pointer_bits(
+	  trace_exittarget_arm64_encode(g, view->mcode)) ||
 	(trace_native_pinword_acq(child) & TRACE_NATIVE_PIN_CLOSED) != 0 ||
 	trace_retired_link_acq(child) != TRACE_RETIRED_LINK_UNLINKED ||
 	!trace_size_checked(g, child, &size, &checked_nsnap) ||
@@ -5603,12 +5642,15 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
 	fallbackp-(mcodep+(uintptr_t)view->szmcode) > sizeof(MCode))
     return 0;
   fallback = (MCode *)(void *)fallbackp;
+  fallback_encoding_bits = trace_arm64_first_side_pointer_bits(
+    trace_exittarget_arm64_encode(g, fallback));
   nexits = trace_exittab_nslots_acq(child);
   if (nexits != 6u)
     return 0;
   for (i = 0; i < nexits; i++)
-    if (la_loadptr_acq((void *const *)&view->exittab[i]) !=
-	trace_exittarget_arm64_encode(g, fallback))
+    if (trace_arm64_first_side_pointer_bits(
+	  la_loadptr_acq((void *const *)&view->exittab[i])) !=
+	fallback_encoding_bits)
       return 0;
 
 #if LJ_ABI_PAUTH
@@ -5666,8 +5708,9 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
 	trace_runnable_acq(child, view->traceno) &&
 	trace_nchild_acq(parent) == 1 &&
 	trace_nextside_acq(parent) == view->traceno &&
-	la_loadptr_acq((void *const *)&rootview->exittab[2]) ==
-	  view->parent_target;
+	trace_arm64_first_side_pointer_bits(
+	  la_loadptr_acq((void *const *)&rootview->exittab[2])) ==
+	  view->parent_target_bits;
 }
 
 /* Validate and publish one root-trace entry intent without allocating,
@@ -5694,6 +5737,9 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
   MCode *mcode;
   MSize szmcode;
   ASMFunction target;
+#if LJ_ABI_PAUTH
+  uintptr_t target_bits;
+#endif
   uint32_t sourceop = (uint32_t)bc_op(sourceins);
 
   if (J == NULL || pc == NULL || L == NULL || base == NULL || traceno == 0 ||
@@ -5772,6 +5818,7 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
     goto reject_published;
 #if LJ_ABI_PAUTH
   target = trace_mcauth_acq(T);
+  target_bits = trace_arm64_first_side_function_bits(target);
   if (target == NULL || (uintptr_t)lj_ptr_strip(target) != mcodep)
     goto reject_published;
 #else
@@ -5795,7 +5842,8 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
 				       view2.startins, sourceins))
     goto reject_published;
 #if LJ_ABI_PAUTH
-  if (trace_mcauth_acq(T2) != target ||
+  if (trace_arm64_first_side_function_bits(trace_mcauth_acq(T2)) !=
+	target_bits ||
       (uintptr_t)lj_ptr_strip(target) != mcodep)
     goto reject_published;
 #endif
@@ -6980,10 +7028,11 @@ static int trace_arm64_side_publish_initialized_revalidate_held(
 	plan->parentsnap == &view.snap[cert->exitno] &&
 	plan->parent_exitslot == &view.exittab[cert->exitno] &&
 	plan->parent_fallback == view.fallback &&
-	plan->parent_fallback_encoding == view.fallback_encoding &&
+	plan->parent_fallback_encoding_bits == view.fallback_encoding_bits &&
 	plan->child_mcode == trace_mcode_acq(body) &&
-	plan->child_target_encoding ==
-	  trace_exittarget_arm64_encode(J2G(J), trace_mcode_acq(body)) &&
+	plan->child_target_encoding_bits ==
+	  trace_arm64_first_side_pointer_bits(
+	    trace_exittarget_arm64_encode(J2G(J), trace_mcode_acq(body))) &&
 	plan->parentno == cert->parent && plan->childno == cert->child &&
 	plan->exitno == cert->exitno &&
 	plan->parent_topslot == view.snaptopslot &&
@@ -6996,8 +7045,9 @@ static int trace_arm64_side_publish_initialized_revalidate_held(
 	trace_nchild_acq(body) == 0 &&
 	la_load8_acq(&body->unused1) == TRACE_ARM64_INT_SIDE_ADMITTED &&
 	gcref_acq(*plan->childslot) == (const GCobj *)LJ_TRACE_PENDING &&
-	la_loadptr_acq((void *const *)plan->parent_exitslot) ==
-	  plan->parent_fallback_encoding &&
+	trace_arm64_first_side_pointer_bits(
+	  la_loadptr_acq((void *const *)plan->parent_exitslot)) ==
+	  plan->parent_fallback_encoding_bits &&
 	snap_topslot_acq(plan->parentsnap) == plan->parent_topslot;
 }
 
@@ -7708,6 +7758,9 @@ typedef struct TraceArm64FirstSideRetirePlan {
   void *child_encoding;
   void *fallback_encoding;
   void *raw_target;
+  uintptr_t child_encoding_bits;
+  uintptr_t fallback_encoding_bits;
+  uintptr_t raw_target_bits;
   TraceNo childno;
   TraceNo parentno;
   ExitNo exitno;
@@ -7859,10 +7912,16 @@ static int trace_arm64_first_side_retire_plan(jit_State *J, GCtrace *T,
   plan->fallback_encoding = trace_exittarget_arm64_encode(g, fallback);
   plan->raw_target =
     la_loadptr_acq((void *const *)plan->parent_exitslot);
+  plan->child_encoding_bits =
+    trace_arm64_first_side_pointer_bits(plan->child_encoding);
+  plan->fallback_encoding_bits =
+    trace_arm64_first_side_pointer_bits(plan->fallback_encoding);
+  plan->raw_target_bits =
+    trace_arm64_first_side_pointer_bits(plan->raw_target);
   plan->childno = childno;
   plan->parentno = parentno;
   plan->exitno = exitno;
-  return plan->child_encoding != plan->fallback_encoding &&
+  return plan->child_encoding_bits != plan->fallback_encoding_bits &&
     tracevec_acq(J) == tv &&
     gcref_acq(tv->slot[childno]) == obj2gco(T) &&
     gcref_acq(tv->slot[parentno]) == obj2gco(parent) &&
@@ -7888,13 +7947,13 @@ static int trace_arm64_first_side_retire_edge(jit_State *J, GCtrace *T)
   if (!trace_arm64_first_side_retire_plan(J, T, 0, &plan))
     trace_arm64_first_side_retire_failstop(
       J, "ARM64 first-side retirement generation was lost");
-  if (plan.raw_target == plan.fallback_encoding) {
+  if (plan.raw_target_bits == plan.fallback_encoding_bits) {
     if (trace_scope_pending_acq(T))
       return TRACE_ARM64_FIRST_SIDE_RETIRE_EXACT;
     trace_arm64_first_side_retire_failstop(
       J, "live ARM64 first-side edge was already detached");
   }
-  if (plan.raw_target != plan.child_encoding)
+  if (plan.raw_target_bits != plan.child_encoding_bits)
     trace_arm64_first_side_retire_failstop(
       J, "ARM64 first-side edge has wrong authenticated target");
   expected = plan.child_encoding;
@@ -7902,8 +7961,9 @@ static int trace_arm64_first_side_retire_edge(jit_State *J, GCtrace *T)
 	plan.parent_exitslot, &expected, plan.fallback_encoding))
     trace_arm64_first_side_retire_failstop(
       J, "ARM64 first-side edge retirement CAS lost");
-  if (la_loadptr_acq((void *const *)plan.parent_exitslot) !=
-      plan.fallback_encoding)
+  if (trace_arm64_first_side_pointer_bits(
+	la_loadptr_acq((void *const *)plan.parent_exitslot)) !=
+      plan.fallback_encoding_bits)
     trace_arm64_first_side_retire_failstop(
       J, "ARM64 first-side fallback publication was not durable");
   return TRACE_ARM64_FIRST_SIDE_RETIRE_EXACT;
@@ -7928,7 +7988,7 @@ static int trace_arm64_first_side_retire_topology(jit_State *J, GCtrace *T)
   if (!trace_arm64_first_side_retire_plan(J, T, 1, &plan))
     trace_arm64_first_side_retire_failstop(
       J, "retired ARM64 first-side generation/topology was lost");
-  if (plan.raw_target != plan.fallback_encoding)
+  if (plan.raw_target_bits != plan.fallback_encoding_bits)
     trace_arm64_first_side_retire_failstop(
       J, "retired ARM64 first-side edge is not exact fallback");
   expected16 = (uint16_t)plan.childno;
@@ -7941,8 +8001,9 @@ static int trace_arm64_first_side_retire_topology(jit_State *J, GCtrace *T)
       J, "ARM64 first-side child-count inverse CAS lost");
   if (trace_nextside_acq(plan.parent) != 0 ||
       trace_nchild_acq(plan.parent) != 0 ||
-      la_loadptr_acq((void *const *)plan.parent_exitslot) !=
-	plan.fallback_encoding ||
+      trace_arm64_first_side_pointer_bits(
+	la_loadptr_acq((void *const *)plan.parent_exitslot)) !=
+	plan.fallback_encoding_bits ||
       snap_count_acq(plan.parentsnap) != SNAPCOUNT_DONE ||
       snap_topslot_acq(plan.parentsnap) != trace_topslot_acq(T))
     trace_arm64_first_side_retire_failstop(

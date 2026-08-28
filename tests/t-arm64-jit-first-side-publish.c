@@ -107,6 +107,24 @@ static BCIns loadbc(const BCIns *pc)
   return (BCIns)la_load32_acq((const uint32_t *)pc);
 }
 
+static uintptr_t pointer_bits(void *target)
+{
+  uintptr_t bits;
+  _Static_assert(sizeof(bits) == sizeof(target), "pointer width mismatch");
+  memcpy(&bits, &target, sizeof(bits));
+  return bits;
+}
+
+#if LJ_ABI_PAUTH
+static uintptr_t function_bits(ASMFunction target)
+{
+  uintptr_t bits;
+  _Static_assert(sizeof(bits) == sizeof(target), "function width mismatch");
+  memcpy(&bits, &target, sizeof(bits));
+  return bits;
+}
+#endif
+
 static GCtrace *retired_find(jit_State *J, GCtrace *needle)
 {
   GCtrace *T;
@@ -310,8 +328,8 @@ static void expect_child_shape(jit_State *J, GCproto *pt, GCtrace *child,
   assert(exittab != NULL && trace_exitstub_acq(child) != NULL);
   fallback = exitstub_trace_fallback_addr_(trace_exitstub_acq(child));
   for (i = 0; i < trace_exittab_nslots_acq(child); i++) {
-    assert(la_loadptr_acq((void *const *)&exittab[i]) ==
-	   trace_exittarget_arm64_encode(J2G(J), fallback));
+    assert(pointer_bits(la_loadptr_acq((void *const *)&exittab[i])) ==
+	   pointer_bits(trace_exittarget_arm64_encode(J2G(J), fallback)));
     assert(trace_exittarget_arm64_acq(child, (ExitNo)i) == fallback);
   }
 
@@ -325,7 +343,7 @@ static void expect_child_shape(jit_State *J, GCproto *pt, GCtrace *child,
     ASMFunction actual = trace_mcauth_acq(child);
     ASMFunction expected = lj_ptr_sign(
 	  ptrauth_nop_cast(ASMFunction, mcode), child);
-    assert(actual == expected);
+    assert(function_bits(actual) == function_bits(expected));
     assert(ptrauth_nop_cast(MCode *, lj_ptr_strip(actual)) == mcode);
   }
 #endif
@@ -417,9 +435,10 @@ static void expect_retired_first_side(lua_State *L, jit_State *J,
   uintptr_t retired_link;
   uint64_t retire_stamp;
 
-  assert(raw_child != raw_fallback);
-  assert(la_loadptr_acq((void *const *)&root_exittab[PROBE_EXIT]) ==
-	 raw_child);
+  assert(pointer_bits(raw_child) != pointer_bits(raw_fallback));
+  assert(pointer_bits(
+	la_loadptr_acq((void *const *)&root_exittab[PROBE_EXIT])) ==
+	 pointer_bits(raw_child));
   assert(snap_topslot_acq(&root_snap[PROBE_EXIT]) == PROBE_TOPSLOT);
   assert(snap_count_acq(&root_snap[PROBE_EXIT]) == SNAPCOUNT_DONE);
 
@@ -450,8 +469,9 @@ static void expect_retired_first_side(lua_State *L, jit_State *J,
   assert(trace_nchild_acq(root) == 0);
   assert(trace_nextside_acq(root) == 0);
   assert(trace_exittarget_arm64_acq(root, PROBE_EXIT) == root_fallback);
-  assert(la_loadptr_acq((void *const *)&root_exittab[PROBE_EXIT]) ==
-	 raw_fallback);
+  assert(pointer_bits(
+	la_loadptr_acq((void *const *)&root_exittab[PROBE_EXIT])) ==
+	 pointer_bits(raw_fallback));
   assert(snap_topslot_acq(&root_snap[PROBE_EXIT]) == PROBE_TOPSLOT);
   assert(snap_count_acq(&root_snap[PROBE_EXIT]) == SNAPCOUNT_DONE);
 
@@ -518,9 +538,10 @@ static void expect_full_flush_first_side(lua_State *L, jit_State *J,
   void *raw_child = trace_exittarget_arm64_encode(g, child_mcode);
   void *raw_fallback = trace_exittarget_arm64_encode(g, root_fallback);
 
-  assert(raw_child != raw_fallback);
-  assert(la_loadptr_acq((void *const *)&root_exittab[PROBE_EXIT]) ==
-	 raw_child);
+  assert(pointer_bits(raw_child) != pointer_bits(raw_fallback));
+  assert(pointer_bits(
+	la_loadptr_acq((void *const *)&root_exittab[PROBE_EXIT])) ==
+	 pointer_bits(raw_child));
   assert(proto_trace_acq(pt) == PROBE_PARENT);
   assert(bc_op(loadbc(root_startpc)) == BC_JLOOP);
   assert(bc_d(loadbc(root_startpc)) == PROBE_PARENT);
@@ -554,8 +575,9 @@ static void expect_full_flush_first_side(lua_State *L, jit_State *J,
   assert(trace_root_acq(child) == PROBE_PARENT);
   assert(trace_link_acq(child) == 0);
   assert(trace_nextside_acq(child) == 0);
-  assert(la_loadptr_acq((void *const *)&root_exittab[PROBE_EXIT]) ==
-	 raw_fallback);
+  assert(pointer_bits(
+	la_loadptr_acq((void *const *)&root_exittab[PROBE_EXIT])) ==
+	 pointer_bits(raw_fallback));
   assert(trace_exittarget_arm64_acq(root, PROBE_EXIT) == root_fallback);
   assert(snap_topslot_acq(&root_snap[PROBE_EXIT]) == PROBE_TOPSLOT);
   assert(snap_count_acq(&root_snap[PROBE_EXIT]) == SNAPCOUNT_DONE);
@@ -613,9 +635,10 @@ static void expect_scoped_retired_first_side(lua_State *L, jit_State *J,
   void *raw_child = trace_exittarget_arm64_encode(g, child_mcode);
   void *raw_fallback = trace_exittarget_arm64_encode(g, root_fallback);
 
-  assert(raw_child != raw_fallback);
-  assert(la_loadptr_acq((void *const *)&root_exittab[PROBE_EXIT]) ==
-	 raw_child);
+  assert(pointer_bits(raw_child) != pointer_bits(raw_fallback));
+  assert(pointer_bits(
+	la_loadptr_acq((void *const *)&root_exittab[PROBE_EXIT])) ==
+	 pointer_bits(raw_child));
   lj_trace_test_reset_retire_publish_calls();
   assert(lj_trace_flushscope(J, PROBE_CHILD) == 1u);
 
@@ -637,8 +660,9 @@ static void expect_scoped_retired_first_side(lua_State *L, jit_State *J,
   assert(!trace_retired_link_listed_acq(root));
   assert(trace_nchild_acq(root) == 0);
   assert(trace_nextside_acq(root) == 0);
-  assert(la_loadptr_acq((void *const *)&root_exittab[PROBE_EXIT]) ==
-	 raw_fallback);
+  assert(pointer_bits(
+	la_loadptr_acq((void *const *)&root_exittab[PROBE_EXIT])) ==
+	 pointer_bits(raw_fallback));
   assert(trace_exittarget_arm64_acq(root, PROBE_EXIT) == root_fallback);
   assert(snap_topslot_acq(&root_snap[PROBE_EXIT]) == PROBE_TOPSLOT);
   assert(snap_count_acq(&root_snap[PROBE_EXIT]) == SNAPCOUNT_DONE);
@@ -667,8 +691,9 @@ static void expect_scoped_retired_first_side(lua_State *L, jit_State *J,
   expect_root_native_fallback(L, J);
   assert(lj_trace_test_retire_publish_calls() == 1u);
   assert(trace_nchild_acq(root) == 0 && trace_nextside_acq(root) == 0);
-  assert(la_loadptr_acq((void *const *)&root_exittab[PROBE_EXIT]) ==
-	 raw_fallback);
+  assert(pointer_bits(
+	la_loadptr_acq((void *const *)&root_exittab[PROBE_EXIT])) ==
+	 pointer_bits(raw_fallback));
   assert(gc2_smr_readers_acq(g) == 0);
   assert(jit_token_acq(g) == 0);
 }
@@ -862,8 +887,9 @@ int main(int argc, char **argv)
   assert(snap_topslot_acq(&root_snap[PROBE_EXIT]) == PROBE_TOPSLOT);
   assert(snap_count_acq(&root_snap[PROBE_EXIT]) == SNAPCOUNT_DONE);
   assert(trace_exittarget_arm64_acq(root, PROBE_EXIT) == child_mcode);
-  assert(la_loadptr_acq((void *const *)&root_exittab[PROBE_EXIT]) ==
-	 trace_exittarget_arm64_encode(g, child_mcode));
+  assert(pointer_bits(
+	la_loadptr_acq((void *const *)&root_exittab[PROBE_EXIT])) ==
+	 pointer_bits(trace_exittarget_arm64_encode(g, child_mcode)));
 
   /* All private transaction ownership is gone before DONE is observable. */
   assert(J->curfinal == NULL);

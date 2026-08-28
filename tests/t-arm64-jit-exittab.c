@@ -281,7 +281,15 @@ static int ptr_in_active_mcode(jit_State *J, const void *ptr)
   return 0;
 }
 
-static void *slot_bits(const GCtrace *T, ExitNo exitno)
+static uintptr_t pointer_bits(void *target)
+{
+  uintptr_t bits;
+  _Static_assert(sizeof(bits) == sizeof(target), "pointer width mismatch");
+  memcpy(&bits, &target, sizeof(bits));
+  return bits;
+}
+
+static void *slot_word(const GCtrace *T, ExitNo exitno)
 {
   MCode **exittab = trace_exittab_acq(T);
   return la_loadptr_acq((void *const *)&exittab[exitno]);
@@ -302,19 +310,20 @@ static MCode *landing_raw(void)
 static void expect_slot_auth(global_State *g, const GCtrace *T,
 	ExitNo exitno, MCode *raw)
 {
-  void *bits = slot_bits(T, exitno);
+  void *word = slot_word(T, exitno);
+  uintptr_t bits = pointer_bits(word);
   assert(trace_exittarget_arm64_acq(T, exitno) == raw);
 #if LJ_ABI_PAUTH
   {
-    ASMFunction target = ptrauth_nop_cast(ASMFunction, bits);
+    ASMFunction target = ptrauth_nop_cast(ASMFunction, word);
     void *authenticated = ptrauth_auth_data(
 	 ptrauth_nop_cast(void *, target), ptrauth_key_function_pointer, g);
     assert(authenticated == (void *)raw);
-    assert((uintptr_t)bits != (uintptr_t)(void *)raw);
+    assert(bits != pointer_bits((void *)raw));
   }
 #else
   UNUSED(g);
-  assert(bits == (void *)raw);
+  assert(bits == pointer_bits((void *)raw));
 #endif
 }
 
@@ -600,7 +609,7 @@ static void publish_negative_target(jit_State *J, global_State *g, GCtrace *T,
     bits = ptrauth_nop_cast(void *, target);
   }
   la_storeptr_rel((void **)&trace_exittab_acq(T)[TERMINAL_EXIT], bits);
-  assert(slot_bits(T, TERMINAL_EXIT) == bits);
+  assert(pointer_bits(slot_word(T, TERMINAL_EXIT)) == pointer_bits(bits));
   assert(trace_exittarget_arm64_acq(T, TERMINAL_EXIT) == raw);
 }
 #endif

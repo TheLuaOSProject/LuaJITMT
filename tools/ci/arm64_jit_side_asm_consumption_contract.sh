@@ -320,7 +320,9 @@ for required in \
   'trace_nsnapmap_acq(body) != trace_nsnapmap_acq(T)' \
   '!trace_size_checked(J2G(J), body, &size, &nsnap)' \
   'gcref_acq(cert->tracev->slot[cert->child])' \
-  'la_loadptr_acq((void *const *)&exittab[i]) != fallback_encoding' \
+  'fallback_encoding_bits =' \
+  'trace_arm64_first_side_pointer_bits(' \
+  'plan->parent_fallback_encoding_bits =' \
   'plan->parent_fallback_encoding = parentview->fallback_encoding;' \
   'trace_arm64_side_parent_revalidate_held(J, &cert, &parentview)' \
   'lj_trace_state_publish_try(J)' \

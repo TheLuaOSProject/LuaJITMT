@@ -131,6 +131,7 @@ for primitive in \
   'snap_count_xchg_acqrel' \
   'trace_nextside_cas_acqrel' \
   'trace_exittarget_arm64_raw_cas_acqrel' \
+  'pointer_bits(la_loadptr_acq' \
   'test_first_child_publication_primitives(L);'; do
   grep -F "$primitive" "$root/src/lj_atomic.h" "$root/src/lj_jit.h" \
     "$root/tests/t-arm64-jit-exit.c" >/dev/null || {

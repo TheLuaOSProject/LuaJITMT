@@ -407,7 +407,9 @@ test "$(grep -Fc 'trace_root_entry_arm64_layout_valid(&view' \
 test "$(grep -c 'lj_tg_store_jit_base(tg, NULL)' "$helper_region")" = 1
 for required in trace_runnable_acq trace_startins_acq \
   trace_root_entry_loop_view_acq trace_root_entry_loop_view_equal \
-  trace_mcauth_acq lj_ptr_strip; do
+  trace_mcauth_acq lj_ptr_strip \
+  'trace_arm64_first_side_function_bits(trace_mcauth_acq(T2))' \
+  target_bits; do
   grep "$required" "$helper_region" >/dev/null
 done
 awk '/^static LJ_AINLINE int trace_root_entry_source_admitted/ { copy=1 }

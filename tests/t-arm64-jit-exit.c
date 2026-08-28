@@ -62,6 +62,14 @@ typedef struct ExitSlotRace {
   uint32_t acknowledged;
 } ExitSlotRace;
 
+static uintptr_t pointer_bits(void *target)
+{
+  uintptr_t bits;
+  _Static_assert(sizeof(bits) == sizeof(target), "pointer width mismatch");
+  memcpy(&bits, &target, sizeof(bits));
+  return bits;
+}
+
 static uint64_t monotonic_ns(void)
 {
   struct timespec ts;
@@ -194,22 +202,26 @@ static void test_first_child_publication_primitives(lua_State *L)
   expected = fallback_encoding;
   assert(trace_exittarget_arm64_raw_cas_acqrel(
 	 &slots[0], &expected, child_encoding));
-  assert(la_loadptr_acq((void *const *)&slots[0]) == child_encoding);
+  assert(pointer_bits(la_loadptr_acq((void *const *)&slots[0])) ==
+	 pointer_bits(child_encoding));
   assert(trace_exittarget_arm64_acq(&root, 0) == targets[1]);
   expected = fallback_encoding;
   assert(!trace_exittarget_arm64_raw_cas_acqrel(
 	 &slots[0], &expected, fallback_encoding));
-  assert(expected == child_encoding);
-  assert(la_loadptr_acq((void *const *)&slots[0]) == child_encoding);
+  assert(pointer_bits(expected) == pointer_bits(child_encoding));
+  assert(pointer_bits(la_loadptr_acq((void *const *)&slots[0])) ==
+	 pointer_bits(child_encoding));
   expected = child_encoding;
   assert(trace_exittarget_arm64_raw_cas_acqrel(
 	 &slots[0], &expected, fallback_encoding));
-  assert(la_loadptr_acq((void *const *)&slots[0]) == fallback_encoding);
+  assert(pointer_bits(la_loadptr_acq((void *const *)&slots[0])) ==
+	 pointer_bits(fallback_encoding));
   assert(trace_exittarget_arm64_acq(&root, 0) == targets[0]);
-  assert(fallback_encoding != child_encoding);
+  assert(pointer_bits(fallback_encoding) != pointer_bits(child_encoding));
 #if LJ_ABI_PAUTH
   {
     void *wrong_encoding = NULL;
+    uintptr_t wrong_bits = 0;
     uint32_t salt;
     for (salt = 1; salt <= 64u; salt++) {
       uintptr_t discriminator =
@@ -218,19 +230,21 @@ static void test_first_child_publication_primitives(lua_State *L)
 	ptrauth_nop_cast(ASMFunction, targets[0]),
 	ptrauth_key_function_pointer, discriminator);
       wrong_encoding = ptrauth_nop_cast(void *, signedwrong);
-      if (wrong_encoding != fallback_encoding) {
+	wrong_bits = pointer_bits(wrong_encoding);
+      if (wrong_bits != pointer_bits(fallback_encoding)) {
 	assert(ptrauth_nop_cast(MCode *, lj_ptr_strip(signedwrong)) ==
 	       targets[0]);
 	break;
       }
     }
-    assert(salt <= 64u && wrong_encoding != fallback_encoding);
+    assert(salt <= 64u &&
+	   wrong_bits != pointer_bits(fallback_encoding));
     la_storeptr_rel((void **)&slots[0], wrong_encoding);
     assert(trace_exittarget_arm64_acq(&root, 0) == targets[0]);
     expected = fallback_encoding;
     assert(!trace_exittarget_arm64_raw_cas_acqrel(
 	   &slots[0], &expected, child_encoding));
-    assert(expected == wrong_encoding);
+    assert(pointer_bits(expected) == wrong_bits);
   }
 #endif
 }

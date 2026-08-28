@@ -102,7 +102,8 @@ for required in \
   'if (slot == 4u)' \
   'return have_side_parent_slot &&' \
   '(uint8_t)pcbase != 0' \
-  'v->exittarget_raw != v->fallback_encoding' \
+  'v->exittarget_bits != v->fallback_encoding_bits' \
+  'trace_arm64_first_side_pointer_bits(v->exittarget_raw)' \
   'trace_exittarget_arm64_encode(J2G(J), v->fallback)' \
   'live1 != expected || shadow1 != v->startins' \
   'continuation2 != continuation1' \

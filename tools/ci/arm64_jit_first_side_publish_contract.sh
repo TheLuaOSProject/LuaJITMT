@@ -234,7 +234,10 @@ done
 for required in \
   'exitstub_trace_fallback_addr_(' \
   'trace_exittarget_arm64_encode(' \
-  'la_loadptr_acq((void *const *)plan->parent_exitslot)'; do
+  'la_loadptr_acq((void *const *)plan->parent_exitslot)' \
+  'trace_arm64_first_side_pointer_bits(plan->child_encoding)' \
+  'trace_arm64_first_side_pointer_bits(plan->fallback_encoding)' \
+  'trace_arm64_first_side_pointer_bits(plan->raw_target)'; do
   grep -F "$required" "$retire_plan_region" >/dev/null || {
     echo "first-side raw retirement plan lost: $required" >&2
     exit 1
@@ -246,18 +249,18 @@ grep -F 'trace_exittarget_arm64_raw_cas_acqrel(' \
   exit 1
 }
 for required in \
-  'if (plan.raw_target == plan.fallback_encoding)' \
-  'if (plan.raw_target != plan.child_encoding)' \
+  'if (plan.raw_target_bits == plan.fallback_encoding_bits)' \
+  'if (plan.raw_target_bits != plan.child_encoding_bits)' \
   'ARM64 first-side edge has wrong authenticated target' \
-  'if (la_loadptr_acq((void *const *)plan.parent_exitslot) !=' \
-  'plan.fallback_encoding)'; do
+  'trace_arm64_first_side_pointer_bits(' \
+  'plan.fallback_encoding_bits)'; do
   grep -F "$required" "$retire_edge_region" >/dev/null || {
     echo "first-side raw retirement rejection lost: $required" >&2
     exit 1
   }
 done
 for required in \
-  'if (plan.raw_target != plan.fallback_encoding)' \
+  'if (plan.raw_target_bits != plan.fallback_encoding_bits)' \
   'retired ARM64 first-side edge is not exact fallback'; do
   grep -F "$required" "$retire_topology_region" >/dev/null || {
     echo "first-side retired fallback validation lost: $required" >&2
@@ -383,7 +386,8 @@ for required in \
   'trace_exittarget_arm64_encode(g, child_mcode)' \
   'LJ_ARENA_LIFETIME_LIVE' \
   'LJ_ARENA_ROOT_MEMBER' \
-  'assert(actual == expected);' \
+  'assert(function_bits(actual) == function_bits(expected));' \
+  'pointer_bits(trace_exittarget_arm64_encode(g, child_mcode))' \
   'assert(mcode[0] == A64I_LE(A64I_BTI_J));' \
   'assert(calls == 1);' \
   'assert(first_parent == PROBE_CHILD);' \
@@ -423,7 +427,7 @@ for required in \
   'assert(trace_nchild_acq(root) == 0);' \
   'assert(trace_nextside_acq(root) == 0);' \
   'assert(trace_exittarget_arm64_acq(root, PROBE_EXIT) == root_fallback);' \
-  'raw_fallback);' \
+  'pointer_bits(raw_fallback));' \
   'assert(snap_topslot_acq(&root_snap[PROBE_EXIT]) == PROBE_TOPSLOT);' \
   'assert(snap_count_acq(&root_snap[PROBE_EXIT]) == SNAPCOUNT_DONE);' \
   'assert(trace_ir_acq(child) == child_ir);' \
@@ -451,7 +455,7 @@ for required in \
   'assert(retired_find(J, child) == child);' \
   'assert(trace_nchild_acq(root) == 0);' \
   'assert(trace_nextside_acq(root) == 0);' \
-  'raw_fallback);' \
+  'pointer_bits(raw_fallback));' \
   'assert(snap_topslot_acq(&root_snap[PROBE_EXIT]) == PROBE_TOPSLOT);' \
   'assert(snap_count_acq(&root_snap[PROBE_EXIT]) == SNAPCOUNT_DONE);' \
   'assert(proto_trace_acq(pt) == 0);' \
@@ -476,7 +480,7 @@ for required in \
   'assert(trace_runnable_acq(root, PROBE_PARENT));' \
   'assert(trace_nchild_acq(root) == 0);' \
   'assert(trace_nextside_acq(root) == 0);' \
-  'raw_fallback);' \
+  'pointer_bits(raw_fallback));' \
   'assert(snap_topslot_acq(&root_snap[PROBE_EXIT]) == PROBE_TOPSLOT);' \
   'assert(snap_count_acq(&root_snap[PROBE_EXIT]) == SNAPCOUNT_DONE);' \
   'assert(proto_trace_acq(pt) == PROBE_PARENT);' \
