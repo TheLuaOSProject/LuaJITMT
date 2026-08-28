@@ -30,6 +30,7 @@ postra_region=$tmpdir/postra-region.txt
 positive_region=$tmpdir/positive-region.txt
 numhalf_region=$tmpdir/numhalf-region.txt
 numstep_region=$tmpdir/numstep-region.txt
+numacc_region=$tmpdir/numacc-region.txt
 audit_object=$tmpdir/lj_asm-arm64e.o
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT'
 
@@ -282,7 +283,7 @@ done
 # carries X, STEP and LIMIT entirely in FPRs.
 awk '/^static void make_numstep_trace\(/ { copying = 1 }
      copying { print }
-     copying && /^static LJArm64IRReject expect_reject\(/ { exit }' \
+     copying && /^static void make_numacc_trace\(/ { exit }' \
   "$root/tests/t-arm64-jit-ir-admission.c" >"$numstep_region"
 test -s "$numstep_region"
 test "$(grep -c 'IR_KNUM' "$numstep_region" || true)" -eq 0
@@ -380,6 +381,137 @@ for required in \
   'test_numstep_postra_layout(J);'; do
   grep -F "$required" "$root/tests/t-arm64-jit-ir-admission.c" >/dev/null || {
     echo "ARM64 dynamic-step NUM mutation coverage changed: $required" >&2
+    exit 1
+  }
+done
+
+# The dynamic-accumulator pure-NUM fixture is a fifth exact grammar. All three
+# scalar values are parameters, so both trace and prototype constant sets are
+# empty; its source, snapshots and stack-slot roles remain independently pinned.
+awk '/^static void make_numacc_trace\(/ { copying = 1 }
+     copying { print }
+     copying && /^static LJArm64IRReject expect_reject\(/ { exit }' \
+  "$root/tests/t-arm64-jit-ir-admission.c" >"$numacc_region"
+test -s "$numacc_region"
+test "$(grep -c 'IR_KNUM' "$numacc_region" || true)" -eq 0
+test "$(grep -c 'IR_KINT' "$numacc_region" || true)" -eq 0
+test "$(grep -c 'IR_SLOAD' "$numacc_region")" -eq 3
+test "$(grep -c 'IR_ADD,' "$numacc_region")" -eq 2
+test "$(grep -c 'IR_GT' "$numacc_region")" -eq 1
+test "$(grep -c 'IR_LT' "$numacc_region")" -eq 1
+test "$(grep -c 'IR_LOOP' "$numacc_region")" -eq 1
+test "$(grep -c 'IR_XPOLL' "$numacc_region")" -eq 1
+test "$(grep -c 'IR_PHI' "$numacc_region")" -eq 1
+
+for required in \
+  'ARM64_NUMACC_R_X = ARM64_NUMSTEP_R_X,' \
+  'ARM64_NUMACC_R_STEP = ARM64_NUMSTEP_R_STEP,' \
+  'ARM64_NUMACC_SEMANTIC_NINS = ARM64_NUMSTEP_SEMANTIC_NINS' \
+  'static int arm64_numacc_snapshots(const SnapShot *snap,' \
+  'static const uint8_t nslots[5] = { 5, 6, 5, 5, 5 };' \
+  'static const uint8_t pcpos[5] = { 6, 2, 11, 6, 11 };' \
+  'SNAP(2, 0, ARM64_NUMACC_R_X_PRE),' \
+  'SNAP(5, 0, ARM64_NUMACC_R_X_PRE),' \
+  'SNAP(2, 0, ARM64_NUMACC_R_X_BODY)' \
+  'nsnap != 5 || nsnapmap != 15 || proto_sizebc != 13' \
+  'static int arm64_postra_numdynamic_kernel(const LJArm64PostRAView *view,' \
+  'return arm64_postra_numdynamic_kernel(view, 2, 4, 3);' \
+  'static int arm64_postra_numacc_shape(const LJArm64PostRAView *view,' \
+  'view->root_topslot != 5 || view->proto_sizebc != 13 ||' \
+  'semantic_nins != ARM64_NUMACC_SEMANTIC_NINS ||' \
+  '!arm64_numacc_snapshots(view->snap, view->snapmap,' \
+  'else if (view->proto_sizebc == 13) {' \
+  '!arm64_postra_numacc_shape(view, semantic_nins)' \
+  'static int arm64_ir_numacc_bytecode(const GCproto *pt,' \
+  'pt->sizebc != 13 || pt->numparams != 3 || pt->sizeuv != 0 ||' \
+  'pt->sizekn != 0 || pt->sizekgc != 0 ||' \
+  'pt->flags2 != PROTO2_CELLOPS' \
+  'if (startpc != bc+5)' \
+  'ARM64_NUMACC_BC_AD(0, BC_FUNCF, 5, 0)' \
+  'ARM64_NUMACC_BC_AD(1, BC_CGET, 3, 0)' \
+  'ARM64_NUMACC_BC_AD(2, BC_CGET, 4, 1)' \
+  'ARM64_NUMACC_BC_AD(3, BC_ISGE, 3, 4)' \
+  'ARM64_NUMACC_BC_AD(6, BC_CGET, 3, 0)' \
+  'ARM64_NUMACC_BC_AD(7, BC_CGET, 4, 2)' \
+  'ARM64_NUMACC_BC_AD(9, BC_CSET, 0, 3)' \
+  'ARM64_NUMACC_BC_AD(11, BC_CGET, 3, 0)' \
+  'ARM64_NUMACC_BC_AD(12, BC_RET1, 3, 2)' \
+  'bc_op(ins) != BC_LOOP || bc_a(ins) != 3 || bc_j(ins) != 5' \
+  'bc_op(ins) != BC_ADDVV || bc_a(ins) != 3 ||' \
+  'return bc_op(ins) == BC_JMP && bc_a(ins) == 3 && bc_j(ins) == -10;' \
+  'static int arm64_ir_numdynamic_kernel(const GCtrace *T, IRRef xslot,' \
+  'bc_b(ins) != 3 || bc_c(ins) != 4)' \
+  'static int arm64_ir_numacc_shape(const jit_State *J, const GCtrace *T,' \
+  'T->nk != REF_TRUE || T->nins != ARM64_NUMACC_SEMANTIC_NINS' \
+  '!arm64_ir_numacc_bytecode(pt, trace_startpc_acq((GCtrace *)T))' \
+  '!arm64_numacc_snapshots(T->snap, T->snapmap, T->nsnap,' \
+  '!arm64_ir_numdynamic_kernel(T, 2, 4, 3)' \
+  'else if (pt->sizebc == 13) {' \
+  '!arm64_ir_numacc_shape(J, T, pt, firstphi, reject)'; do
+  grep -F "$required" "$classifier" >/dev/null || {
+    echo "ARM64 dynamic-accumulator NUM production contract changed: $required" >&2
+    exit 1
+  }
+done
+
+for required in \
+  'static void make_numacc_trace(jit_State *J)' \
+  'assert(numacc_fixture_pt->framesize == 5);' \
+  'assert(numacc_fixture_pt->sizebc == 13);' \
+  'assert(numacc_fixture_pt->numparams == 3);' \
+  'setir(A_R_X, IR_SLOAD, IRT_NUM|IRT_GUARD,' \
+  'setir(A_R_STEP, IR_SLOAD, IRT_NUM|IRT_GUARD,' \
+  'setir(A_R_X_PRE, IR_ADD, IRT_NUM|IRT_ISPHI,' \
+  'setir(A_R_LIMIT, IR_SLOAD, IRT_NUM|IRT_GUARD,' \
+  'setir(A_R_PRE_GUARD, IR_GT, IRT_NUM|IRT_GUARD,' \
+  'setir(A_R_X_BODY, IR_ADD, IRT_NUM|IRT_ISPHI,' \
+  'setir(A_R_BODY_GUARD, IR_LT, IRT_NUM|IRT_GUARD,' \
+  'setir(A_R_X_PHI, IR_PHI, IRT_NUM, A_R_X_PRE, A_R_X_BODY);' \
+  'fx.snapmap[2] = SNAP(2, 0, A_R_X_PRE);' \
+  'fx.snapmap[3] = SNAP(5, 0, A_R_X_PRE);' \
+  'fx.snapmap[12] = SNAP(2, 0, A_R_X_BODY);' \
+  'static const MSize pcpos[5] = { 6, 2, 11, 6, 11 };' \
+  'fx.T.nk = REF_TRUE;' \
+  'fx.ir[A_R_STEP].r = RID_D1;' \
+  'fx.ir[A_R_X_PRE].r = RID_D15;' \
+  'fx.ir[A_R_LIMIT].r = RID_D0;' \
+  'fx.ir[A_R_X].r = fx.ir[A_R_LIMIT].r;' \
+  'fx.ir[A_R_X].r = fx.ir[A_R_X_PHI].r;' \
+  'fx.ir[A_R_STEP].r = fx.ir[A_R_X_PHI].r;' \
+  'fx.ir[A_R_LIMIT].r = fx.ir[A_R_X_PHI].r;' \
+  'fx.ir[A_R_STEP].r = fx.ir[A_R_LIMIT].r;' \
+  'fx.ir[A_R_X].r = fx.ir[A_R_STEP].r;' \
+  'fx.ir[value_refs[i]].r = RID_X0;' \
+  'fx.ir[value_refs[i]].r = RID_MAX_FPR;' \
+  'fx.ir[value_refs[i]].s = 2;' \
+  'setir(A_R_NOP, IR_RENAME, IRT_NIL, A_R_X_PRE, 3);' \
+  'fx.ir[A_R_X].op1 = 4;' \
+  'fx.ir[D_R_X].op1 = 2;' \
+  'fx.T.nk = REF_TRUE-1u;' \
+  'fx.T.nk = H_K_HALF;' \
+  'REJECT_NUMACC_ADJACENT(IR_CONV, IRT_NUM|IRT_ISPHI,' \
+  'REJECT_NUMACC_ADJACENT(IR_SUB, IRT_NUM|IRT_ISPHI,' \
+  'REJECT_NUMACC_ADJACENT(IR_MUL, IRT_NUM|IRT_ISPHI,' \
+  'REJECT_NUMACC_ADJACENT(IR_DIV, IRT_NUM|IRT_ISPHI,' \
+  'fx.snapmap[9] = SNAP(2, SNAP_NORESTORE, A_R_X_PRE);' \
+  'for (i = 0; i < 13; i++) {' \
+  'bc_publish((const uint32_t *)pc, saved ^ masks[bitno]);' \
+  'numacc_fixture_pt->framesize = 4;' \
+  'numacc_fixture_pt->framesize = 6;' \
+  'numacc_fixture_pt->sizebc = 12;' \
+  'numacc_fixture_pt->sizebc = 14;' \
+  'numacc_fixture_pt->numparams = 2;' \
+  'numacc_fixture_pt->numparams = 4;' \
+  'numacc_fixture_pt->sizeuv = 1;' \
+  'numacc_fixture_pt->sizekn = 1;' \
+  'numacc_fixture_pt->sizekgc = 1;' \
+  'numacc_fixture_pt->flags2 = 0;' \
+  'numacc_fixture_pt->flags2 = PROTO2_CELLOPS|PROTO2_CELLUV;' \
+  'assert(numacc_fixture_loop_pc == proto_bc(numacc_fixture_pt)+5);' \
+  'test_numacc_positive_and_negative(J);' \
+  'test_numacc_postra_layout(J);'; do
+  grep -F "$required" "$root/tests/t-arm64-jit-ir-admission.c" >/dev/null || {
+    echo "ARM64 dynamic-accumulator NUM mutation coverage changed: $required" >&2
     exit 1
   }
 done
@@ -709,4 +841,4 @@ grep -F '#if LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED' \
   -o "$fixture"
 "$fixture"
 
-echo "arm64_jit_ir_admission_contract OK: exact integer, mixed-NUM, fixed-half and dynamic-step pure-NUM LOOP/FORL grammars, bounded integer spills, and FPR-only NUM layouts verified"
+echo "arm64_jit_ir_admission_contract OK: exact integer, mixed-NUM, fixed-half, dynamic-step and dynamic-accumulator pure-NUM LOOP/FORL grammars, bounded integer spills, and FPR-only NUM layouts verified"
