@@ -293,6 +293,9 @@ for required in '__arm64_root_jforl' '__arm64_root_jfori' \
   'J->cur.nk = REF_TRUE;' \
   'J->cur.snap = fixture->snap;' \
   'J->cur.nsnapmap = 3;' \
+  'root_entry_setir(fixture->ir, REF_TRUE, IR_KPRI, IRT_TRUE,' \
+  'root_entry_setir(fixture->ir, REF_FALSE, IR_KPRI, IRT_FALSE,' \
+  'root_entry_setir(fixture->ir, REF_NIL, IR_KPRI, IRT_NIL,' \
   'root_entry_setir(fixture->ir, REF_BASE, IR_BASE, IRT_PGC,' \
   'root_entry_setir(fixture->ir, ROOT_ENTRY_R_VALUE, IR_SLOAD,' \
   'root_entry_setir(fixture->ir, ROOT_ENTRY_R_LOOP, IR_LOOP,' \

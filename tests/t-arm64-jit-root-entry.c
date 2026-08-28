@@ -253,6 +253,12 @@ static void install_root_entry_metadata(jit_State *J, GCproto *pt,
   J->cur.nsnapmap = 3;
   J->cur.unused1 = TRACE_ARM64_INT_LOOP_ADMITTED;
 
+  root_entry_setir(fixture->ir, REF_TRUE, IR_KPRI, IRT_TRUE,
+		   0, 0, RID_X0, SPS_NONE);
+  root_entry_setir(fixture->ir, REF_FALSE, IR_KPRI, IRT_FALSE,
+		   0, 0, RID_X0, SPS_NONE);
+  root_entry_setir(fixture->ir, REF_NIL, IR_KPRI, IRT_NIL,
+		   0, 0, RID_X0, SPS_NONE);
   root_entry_setir(fixture->ir, REF_BASE, IR_BASE, IRT_PGC,
 		   0, 0, RID_X0, SPS_NONE);
   root_entry_setir(fixture->ir, ROOT_ENTRY_R_VALUE, IR_SLOAD,
