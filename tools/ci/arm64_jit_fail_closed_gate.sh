@@ -155,4 +155,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" LUA_PATH="$lua_path" \
   "$luajit" "$root/tools/test.lua" \
     m5_arm64_jit_fail_closed_safepoint_runtime
 
-echo "arm64_jit_fail_closed_gate OK: dynamic-step FORL stayed interpreted; constrained integer and mixed-NUM LOOP/FORL plus literal-true JFUNCF entry contracts sound"
+echo "arm64_jit_fail_closed_gate OK: dynamic-step FORL stayed interpreted; constrained integer, mixed-NUM and pure-NUM LOOP/FORL plus literal-true JFUNCF entry contracts sound"
