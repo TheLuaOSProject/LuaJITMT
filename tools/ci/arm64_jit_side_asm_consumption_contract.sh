@@ -151,21 +151,26 @@ done
 # Freeze the resumed-CGET grammar consumed by both real ARM64 assembler gates.
 # The semantic CGET is a NOP because its value is already inherited from the
 # parent; ADD therefore consumes the parent value directly. The real POSTRA
-# stage below binds this grammar to the observed register allocation.
+# stage below binds this grammar to the descriptor-selected register allocation.
 for required in \
   'ARM64_SIDE_R_CGET = REF_BASE+2u,' \
   'ARM64_SIDE_R_ADD = REF_BASE+3u,' \
-  'static const MSize mapofs[5] = { 0, 3, 7, 11, 14 };' \
-  'static const uint8_t nent[5] = { 1, 2, 2, 1, 1 };' \
-  'static const uint8_t nslots[5] = { 5, 6, 6, 5, 5 };' \
-  'static const MSize pcpos[5] = { 13, 14, 3, 17, 7 };' \
+  'static const MSize mapofs[LJ_ARM64_SIDE_CHILD_NSNAP] =' \
+  'static const uint8_t nent[LJ_ARM64_SIDE_CHILD_NSNAP] =' \
+  'static const uint8_t nslots[LJ_ARM64_SIDE_CHILD_NSNAP] =' \
+  '{ 0, 3, 7, 11, 14 };' \
+  '{ 1, 2, 2, 1, 1 };' \
   'view->nk != ARM64_SIDE_K_ONE || view->nsnap != 5u ||' \
   'view->nsnapmap != 17u || view->baseslot != 1u+LJ_FR2 ||' \
+  'shape = lj_asm_arm64_side_shape(view->exitno);' \
+  'view, snapno, shape->child_pcpos[snapno]))' \
   'ARM64_SIDE_REQUIRE(ARM64_SIDE_R_CGET, IR_NOP, IRT_NIL, 0, 0);' \
   'ARM64_SIDE_R_PARENT, ARM64_SIDE_K_ONE);' \
-  'RID_X27, RID_INIT, RID_X28, RID_X27' \
-  'view->parentmap[0] != REGSP(RID_X28, SPS_NONE)' \
-  'A64F_D(RID_X27) | A64F_M(RID_X28)) ||'; do
+  'valueregs[0] = shape->sload_reg;' \
+  'valueregs[2] = shape->inherited_reg;' \
+  'view->parentmap[0] != REGSP(shape->inherited_reg, SPS_NONE)' \
+  'A64F_D(shape->sload_reg)' \
+  'A64F_M(shape->inherited_reg)) ||'; do
   grep -F "$required" "$root/src/lj_asm.c" >/dev/null || {
     echo "ARM64 resumed-CGET assembler shape changed: $required" >&2
     exit 1
