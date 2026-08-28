@@ -86,11 +86,20 @@ for required in \
   'while x<limit do x=x+step end return x end' \
   'function __arm64_pure_numeric_args_inclusive(x,limit,step)' \
   'while x<=limit do x=x+step end return x end' \
-  'BC_ISGE, IR_GT, IR_LT, CC_HS, CC_LO, 20.25, 1.0, 20.0' \
-  'BC_ISGT, IR_GE, IR_LE, CC_HI, CC_LS, 20.5, 1.375, 20.5' \
+  'function __arm64_pure_numeric_args_descending(x,limit,step)' \
+  'while x>limit do x=x-step end return x end' \
+  'NUMERIC_ARGS_STRICT, BC_ISGE, 3, 4, BC_ADDVV, IR_ADD,' \
+  'IR_GT, IR_LT, A64I_FADDd, 0, CC_HS, CC_LO,' \
+  'NUMERIC_ARGS_INCLUSIVE, BC_ISGT, 3, 4, BC_ADDVV, IR_ADD,' \
+  'IR_GE, IR_LE, A64I_FADDd, 0, CC_HI, CC_LS,' \
+  'NUMERIC_ARGS_STRICT, BC_ISGE, 4, 3, BC_SUBVV, IR_SUB,' \
+  'IR_LT, IR_GT, A64I_FSUBd, 1, CC_HS, CC_LO,' \
   'pt->framesize == 5 && pt->sizebc == 13 && pt->numparams == 3' \
   'pt->sizeuv == 0 && pt->sizekn == 0 && pt->sizekgc == 0' \
+  'pt->flags == PROTO_HAS_RETURN' \
   'pt->flags2 == PROTO2_CELLOPS' \
+  'profile->compare_a, profile->compare_d' \
+  'bc_op(ins) == profile->recurrence_bc && bc_a(ins) == 3' \
   'assert(pc == proto_bc(pt)+5u);' \
   '#define QNAN_BITS UINT64_C(0x7ff8000000000000)' \
   '#define PINF_BITS UINT64_C(0x7ff0000000000000)' \
@@ -102,17 +111,29 @@ for required in \
   'assert(trace_nk_acq(T) == REF_TRUE);' \
   'expect_ir(ir, R_X, IR_SLOAD, IRT_NUM|IRT_GUARD,' \
   'expect_ir(ir, R_STEP, IR_SLOAD, IRT_NUM|IRT_GUARD,' \
-  'expect_ir(ir, R_X_PRE, IR_ADD, IRT_NUM|IRT_ISPHI, R_STEP, R_X);' \
+  'expect_ir(ir, R_X_PRE, profile->recurrence_ir,' \
+  'IRT_NUM|IRT_ISPHI, R_X, R_STEP);' \
+  'IRT_NUM|IRT_ISPHI, R_STEP, R_X);' \
   'expect_ir(ir, R_LIMIT, IR_SLOAD, IRT_NUM|IRT_GUARD,' \
   'expect_ir(ir, R_PRECOND, profile->precondition_op,' \
-  'expect_ir(ir, R_X_BODY, IR_ADD, IRT_NUM|IRT_ISPHI,' \
+  'expect_ir(ir, R_X_BODY, profile->recurrence_ir, IRT_NUM|IRT_ISPHI,' \
   'expect_ir(ir, R_COND, profile->body_op,' \
   'expect_ir(ir, R_X_PHI, IR_PHI, IRT_NUM, R_X_PRE, R_X_BODY);' \
+  'assert(fpr_index(x) == 2);' \
+  'assert(fpr_index(step) == 1);' \
+  'assert(fpr_index(xpre) == 15);' \
+  'assert(fpr_index(limit) == 0);' \
   'assert(xpre == xbody && xpre == xphi);' \
   'assert(step != xphi && limit != xphi && step != limit);' \
   'assert(x != step);' \
-  'if ((ins & fadd_mask) == A64I_FADDd)' \
-  'assert(nfadd == 2);' \
+  'if ((ins & farith_mask) == profile->recurrence_mcode)' \
+  'profile->evolution == NUMERIC_ARGS_SUB_DESCENDING' \
+  'assert(right == stepreg);' \
+  'profile->recurrence_mcode == A64I_FADDd ? A64I_FSUBd : A64I_FADDd' \
+  'if (profile->fcmp_limit_first)' \
+  'assert(left == limitreg && right == phireg);' \
+  'assert(left == phireg && right == limitreg);' \
+  'assert(nfarith == 2 && nopposite == 0);' \
   'assert(nfcmp == 2 && npre == 1 && nbody == 1);' \
   'trace_szmcode_acq(T) == 140 && trace_mcloop_acq(T) == 80' \
   'trace_szmcode_acq(T) == 136 && trace_mcloop_acq(T) == 76' \
@@ -122,22 +143,29 @@ for required in \
   'POSTADMISSION_STOPREQ' \
   'POSTADMISSION_QNAN_X' \
   'POSTADMISSION_PINF_X' \
-  'POSTADMISSION_NINF_X_STOP' \
+  'POSTADMISSION_NINF_X' \
   'POSTADMISSION_QNAN_LIMIT' \
-  'POSTADMISSION_PINF_LIMIT_STOP' \
+  'POSTADMISSION_PINF_LIMIT' \
   'POSTADMISSION_NINF_LIMIT' \
   'POSTADMISSION_QNAN_STEP' \
   'POSTADMISSION_PINF_STEP' \
-  'POSTADMISSION_NINF_STEP_STOP' \
+  'POSTADMISSION_NINF_STEP' \
+  '.stop_after_mutation = 1' \
   'target = &base[0];' \
   'target = &base[1];' \
   'target = &base[2];' \
   'tv_rawstore_rel(target, replacement);' \
   'isnan(result)' \
   'isinf(result) && result > 0' \
-  '0.25, 20.25, 0.5, 0, 0, 0' \
+  'isinf(result) && result < 0' \
+  'MUTATION_NINF' \
   'MUTATION_FINITE, 0.75' \
-  '0.25, 1.0, 0.375, 0, 0, 0) == profile->sensitive_result' \
+  'MUTATION_FINITE, 19.75' \
+  '{ 0.5, -0.625, 0.375, -0.625 },' \
+  'profile->reuse.x, profile->reuse.limit, profile->reuse.step,' \
+  '1.0, 0.25, 0.375, 0, 0, 0) == 0.25' \
+  '1.0, 0.5, 0.5, 0, 0, 0) == 0.5' \
+  '0.5, 0.5, 0.5, 0, 0, 0) == 0.5' \
   '0.625, 1.0, 0.375, 0, 0, 0) == 1.375' \
   '1.0, 1.0, 0.375, 0, 0, 0) == 1.375' \
   'expect_native_exit(X_OR_STEP_TYPE_EXIT, X_OR_STEP_TYPE_EXIT);' \
@@ -145,11 +173,15 @@ for required in \
   'expect_native_exit(PRECOND_EXIT, PRECOND_EXIT);' \
   'expect_profile_exit_and_reentry();' \
   'thread interrupted: VM shutdown' \
+  'void *saved_cframe = L->cframe;' \
+  'assert(L->cframe == saved_cframe);' \
   'trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0' \
   'function __arm64_fixed_initializer(limit,step) local x=0.5' \
   'function __arm64_fixed_half(limit) local x=0.5' \
   'function __arm64_fixed_initializer_inclusive(limit,step) local x=0.5' \
   'function __arm64_fixed_half_inclusive(limit) local x=0.5' \
+  'function __arm64_fixed_initializer_descending(limit,step) local x=20.5' \
+  'function __arm64_fixed_half_descending(limit) local x=20.5' \
   'function __arm64_args_negative(x,limit,step)' \
   'while x<limit do x=x-step end return x end' \
   'while x<limit do x=x*step end return x end' \
@@ -160,6 +192,21 @@ for required in \
   'while x<=limit do x=step+x end return x end' \
   'while x<limit do x=x+step+step end return x end' \
   'while x<=limit do x=x+step+step end return x end' \
+  'function __arm64_args_descending_inclusive(x,limit,step)' \
+  'while x>=limit do x=x-step end return x end' \
+  'function __arm64_args_inclusive_sub(x,limit,step)' \
+  'while x<=limit do x=x-step end return x end' \
+  'function __arm64_args_descending_mul(x,limit,step)' \
+  'while x>limit do x=x*step end return x end' \
+  'function __arm64_args_descending_div(x,limit,step)' \
+  'while x>limit do x=x/step end return x end' \
+  'function __arm64_args_reversed_descending_compare(x,limit,step)' \
+  'while limit<x do x=x-step end return x end' \
+  'function __arm64_args_reversed_sub(x,limit,step)' \
+  'while x>limit do x=step-x end return x end' \
+  'function __arm64_args_extra_sub(x,limit,step)' \
+  'while x>limit do x=x-step-step end return x end' \
+  'test_positive_and_guard_exits(&descending_profile);' \
   'run_lua(L, "jit.flush()")' \
   'proto_trace_acq(pt) == 0'; do
   grep -F "$required" "$fixture_source" >/dev/null || {
@@ -167,6 +214,16 @@ for required in \
     exit 1
   }
 done
+test "$(grep -Fc 'void *saved_cframe = L->cframe;' \
+  "$fixture_source")" -eq 3 || {
+  echo "ARM64 dynamic-args NUM lifecycle lost cframe baselines" >&2
+  exit 1
+}
+test "$(grep -Fc 'assert(L->cframe == saved_cframe);' \
+  "$fixture_source")" -eq 6 || {
+  echo "ARM64 dynamic-args NUM lifecycle lost cframe restoration proof" >&2
+  exit 1
+}
 test "$(grep -Fc 'assert(gc2_hs_leader_acq(g) == 0);' \
   "$fixture_source")" -eq 4 || {
   echo "ARM64 dynamic-args NUM lifecycle lost handshake cleanup proof" >&2
@@ -181,6 +238,7 @@ for required in \
   'asm_guardcc(as, (asm_compmap[ir->o] >> 4));' \
   'emit_nm(as, ai, left, right);' \
   'asm_fparith(as, ir, A64I_FADDd);' \
+  'asm_fparith(as, ir, A64I_FSUBd);' \
   'emit_dnm(as, ai, (dest & 31), (left & 31), (right & 31));'; do
   grep -F "$required" "$backend_source" >/dev/null || {
     echo "ARM64 dynamic-args NUM FP lowering changed: $required" >&2
@@ -304,4 +362,4 @@ while test "$run" -le "$pauth_runs"; do
   run=$((run+1))
 done
 
-echo "arm64_jit_pure_numeric_args_contract OK: strict/inclusive dynamic-accumulator NUM roots and lifecycle proved on ARM64/arm64e"
+echo "arm64_jit_pure_numeric_args_contract OK: ascending ADD and descending SUB dynamic-accumulator NUM roots and lifecycle proved on ARM64/arm64e"
