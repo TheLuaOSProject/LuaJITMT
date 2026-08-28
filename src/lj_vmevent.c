@@ -29,6 +29,8 @@
 #if defined(LJ_GC2_TEST_HELPERS)
 static LJVMEVENTPrepareTestHook vmevent_prepare_test_hook;
 static void *vmevent_prepare_test_ud;
+static LJVMEVENTAbsenceReserveTestHook vmevent_absence_reserve_test_hook;
+static void *vmevent_absence_reserve_test_ud;
 #if LJ_HASJIT
 static LJJitVMEVENTCallTestHook jit_vmevent_call_test_hook;
 static void *jit_vmevent_call_test_ud;
@@ -39,6 +41,13 @@ void lj_vmevent_test_set_prepare_hook(LJVMEVENTPrepareTestHook hook,
 {
   vmevent_prepare_test_hook = hook;
   vmevent_prepare_test_ud = ud;
+}
+
+void lj_vmevent_test_set_absence_reserve_hook(
+  LJVMEVENTAbsenceReserveTestHook hook, void *ud)
+{
+  vmevent_absence_reserve_test_hook = hook;
+  vmevent_absence_reserve_test_ud = ud;
 }
 
 #if LJ_HASJIT
@@ -257,8 +266,9 @@ void lj_jit_event_attachment_writer_publish(
       la_load64_acq(&clock->next_generation) != writer->generation ||
       la_load64_acq(&clock->generation) != writer->generation - 1u)
     abort();
-  /* The caller's exact semantic CAS precedes this function. Make the cache
-  ** retryable before any reader can acquire the matching even sequence. */
+  /* The caller's exact semantic CAS or no-change exclusion interval precedes
+  ** this function. Make the cache retryable before any reader can acquire the
+  ** matching even sequence. */
   vmevmask_store_rel(g, VMEVENT_NOCACHE);
   la_store64_rel(&clock->generation, writer->generation);
   la_store64_rel(&clock->sequence, writer->sequence + 2u);
@@ -530,6 +540,140 @@ int lj_vmevent_prepare_try(lua_State *L, VMEvent ev,
 #endif
   }
 #endif
+}
+
+int lj_vmevent_absence_revalidate(
+  global_State *g, VMEvent ev, const LJVMEVENTPrepareResult *prepared)
+{
+  uint32_t slot = LJ_JIT_EVENT_ATTACHMENT_SLOT_NONE;
+  if (!g || !prepared || prepared->argbase != 0 ||
+      !vmevent_event_slot(ev, &slot) || prepared->slot != slot ||
+      !lj_vmevent_attachment_identity_valid(
+	prepared->attachment_state, prepared->attachment.generation))
+    return 0;
+
+#ifdef LUAJIT_DISABLE_VMEVENT
+  /* Compile-time disabled VM events have no registry reader or attachment
+  ** clock. Only the unique zero-valued UNCLOCKED absence is authoritative. */
+  return prepared->attachment_state == LJ_VMEVENT_ATTACHMENT_UNCLOCKED &&
+    prepared->attachment.sequence == 0 &&
+    prepared->attachment.next_generation == 0 &&
+    prepared->attachment.generation == 0;
+#elif LJ_HASJIT
+  {
+    LJJitEventAttachmentSnapshot now;
+    int state;
+    if ((prepared->attachment_state != LJ_VMEVENT_ATTACHMENT_INITIAL &&
+	 prepared->attachment_state != LJ_VMEVENT_ATTACHMENT_PUBLISHED) ||
+	(vmevmask_load_acq(g) & VMEVENT_MASK(ev)) != 0)
+      return 0;
+    /* Pair the final cache observation with a standard attachment writer's
+    ** release publication. An odd lane, a changed generation, or corruption
+    ** is a bounded refusal; no reader spins for the writer. */
+    la_fence_acq();
+    state = lj_jit_event_attachment_snapshot(g, slot, &now);
+    if ((prepared->attachment_state == LJ_VMEVENT_ATTACHMENT_INITIAL &&
+	 state != LJ_JIT_EVENT_ATTACHMENT_SNAPSHOT_INITIAL) ||
+	(prepared->attachment_state == LJ_VMEVENT_ATTACHMENT_PUBLISHED &&
+	 state != LJ_JIT_EVENT_ATTACHMENT_SNAPSHOT_PUBLISHED))
+      return 0;
+    return now.sequence == prepared->attachment.sequence &&
+      now.next_generation == prepared->attachment.next_generation &&
+      now.generation == prepared->attachment.generation;
+  }
+#else
+  /* A runtime VM-event table without JIT attachment clocks has no bounded
+  ** way to revalidate registry absence after prepare_try() returns. */
+  UNUSED(ev);
+  return 0;
+#endif
+}
+
+enum {
+  VMEVENT_ABSENCE_RESERVATION_IDLE = 0,
+  VMEVENT_ABSENCE_RESERVATION_UNCLOCKED = 1,
+  VMEVENT_ABSENCE_RESERVATION_CLOCKED = 2
+};
+
+int lj_vmevent_absence_reserve(
+  global_State *g, VMEvent ev, const LJVMEVENTPrepareResult *prepared,
+  LJVMEVENTAbsenceReservation *reservation)
+{
+  if (!reservation)
+    return 0;
+  memset(reservation, 0, sizeof(*reservation));
+  reservation->slot = LJ_JIT_EVENT_ATTACHMENT_SLOT_NONE;
+  if (!lj_vmevent_absence_revalidate(g, ev, prepared))
+    return 0;
+
+#if defined(LJ_GC2_TEST_HELPERS)
+  {
+    LJVMEVENTAbsenceReserveTestHook hook =
+      vmevent_absence_reserve_test_hook;
+    void *ud = vmevent_absence_reserve_test_ud;
+    if (hook) {
+      /* One-shot before the authoritative claim. This deterministic seam
+      ** exercises a writer which wins the revalidation-to-claim interval. */
+      vmevent_absence_reserve_test_hook = NULL;
+      vmevent_absence_reserve_test_ud = NULL;
+      hook(g, ev, ud);
+    }
+  }
+#endif
+
+#ifdef LUAJIT_DISABLE_VMEVENT
+  reservation->slot = prepared->slot;
+  reservation->state = VMEVENT_ABSENCE_RESERVATION_UNCLOCKED;
+  return 1;
+#elif LJ_HASJIT
+  {
+    int claim = lj_jit_event_attachment_writer_claim(
+	 g, prepared->slot, &reservation->writer);
+    if (claim != LJ_JIT_EVENT_ATTACHMENT_WRITER_CLAIMED)
+      return 0;
+    /* A writer may have completed between the bounded revalidation and this
+    ** claim. Consuming the newer claim is mandatory, but it does not authorize
+    ** omission for the stale prepare generation. */
+    if (reservation->writer.sequence != prepared->attachment.sequence ||
+	reservation->writer.generation !=
+	  prepared->attachment.generation + 1u) {
+      lj_jit_event_attachment_writer_publish(&reservation->writer);
+      memset(reservation, 0, sizeof(*reservation));
+      reservation->slot = LJ_JIT_EVENT_ATTACHMENT_SLOT_NONE;
+      return 0;
+    }
+    reservation->slot = prepared->slot;
+    reservation->state = VMEVENT_ABSENCE_RESERVATION_CLOCKED;
+    return 1;
+  }
+#else
+  UNUSED(g); UNUSED(ev); UNUSED(prepared);
+  return 0;
+#endif
+}
+
+void lj_vmevent_absence_release(
+  LJVMEVENTAbsenceReservation *reservation)
+{
+  if (!reservation)
+    abort();
+#ifdef LUAJIT_DISABLE_VMEVENT
+  if (reservation->state != VMEVENT_ABSENCE_RESERVATION_UNCLOCKED ||
+      reservation->slot == LJ_JIT_EVENT_ATTACHMENT_SLOT_NONE ||
+      reservation->writer.claimed != 0)
+    abort();
+#elif LJ_HASJIT
+  if (reservation->state != VMEVENT_ABSENCE_RESERVATION_CLOCKED ||
+      reservation->slot == LJ_JIT_EVENT_ATTACHMENT_SLOT_NONE ||
+      reservation->writer.claimed != 1 ||
+      reservation->writer.slot != reservation->slot)
+    abort();
+  lj_jit_event_attachment_writer_publish(&reservation->writer);
+#else
+  abort();
+#endif
+  memset(reservation, 0, sizeof(*reservation));
+  reservation->slot = LJ_JIT_EVENT_ATTACHMENT_SLOT_NONE;
 }
 
 ptrdiff_t lj_vmevent_prepare(lua_State *L, VMEvent ev)

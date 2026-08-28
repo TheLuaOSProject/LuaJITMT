@@ -55,12 +55,15 @@ typedef struct LJJitEventAttachmentSnapshot {
 
 /* A claimed writer has made one authoritative lane odd. There is
 ** intentionally no cancel operation: after claim, the caller performs only
-** its bounded external semantic CAS and writer_publish(). publish first
-** invalidates the VM-event cache, then exposes the reserved generation and
-** finally restores the exact lane sequence to even. Invalid handle use is a
-** fail-stop invariant violation, never a recoverable path which could strand
-** an odd lane. publish rederives the authoritative main-TG clock and
-** fail-stops if it no longer exactly names this handle. */
+** its bounded external semantic CAS, or a finite no-change exclusion interval,
+** and writer_publish(). The odd interval forbids allocation, waiting, Lua or
+** native callbacks, GC stepping, and recoverable exits. A state-CAS loser must
+** publish before ordinary rollback. publish first invalidates the VM-event
+** cache, then exposes the reserved generation and finally restores the exact
+** lane sequence to even. Invalid handle use is a fail-stop invariant
+** violation, never a recoverable path which could strand an odd lane. publish
+** rederives the authoritative main-TG clock and fail-stops if it no longer
+** exactly names this handle. */
 typedef struct LJJitEventAttachmentWriter {
   global_State *g;
   uint64_t sequence;
@@ -123,6 +126,36 @@ static LJ_AINLINE int lj_vmevent_attachment_identity_valid(
 LJ_FUNC void lj_vmevent_init(lua_State *L);
 LJ_FUNC int lj_vmevent_prepare_try(lua_State *L, VMEvent ev,
 				    LJVMEVENTPrepareResult *result);
+/* Revalidate one previously accepted ABSENT result without allocation,
+** waiting, stack access or registry traversal. This is a bounded prerequisite
+** for reservation, not lifetime exclusion by itself: a later clock writer may
+** still begin after this observation. */
+LJ_FUNC int lj_vmevent_absence_revalidate(
+  global_State *g, VMEvent ev, const LJVMEVENTPrepareResult *prepared);
+
+/* Exact exclusion for an omitted event terminal. A clocked reservation owns
+** the event lane's odd writer sequence and therefore blocks standard
+** jit.attach/detach from committing that event until release. Release is the
+** only legal terminal for a successful reservation and conservatively
+** publishes a fresh attachment generation/cache invalidation. Compile-time
+** disabled VM events use a checked no-op reservation. */
+typedef struct LJVMEVENTAbsenceReservation {
+  LJJitEventAttachmentWriter writer;
+  uint32_t slot;
+  uint32_t state;
+} LJVMEVENTAbsenceReservation;
+
+LJ_FUNC int lj_vmevent_absence_reserve(
+  global_State *g, VMEvent ev, const LJVMEVENTPrepareResult *prepared,
+  LJVMEVENTAbsenceReservation *reservation);
+LJ_FUNC void lj_vmevent_absence_release(
+  LJVMEVENTAbsenceReservation *reservation);
+#if defined(LJ_GC2_TEST_HELPERS)
+typedef void (*LJVMEVENTAbsenceReserveTestHook)(
+  global_State *g, VMEvent ev, void *ud);
+LJ_FUNC void lj_vmevent_test_set_absence_reserve_hook(
+  LJVMEVENTAbsenceReserveTestHook hook, void *ud);
+#endif
 LJ_FUNC ptrdiff_t lj_vmevent_prepare(lua_State *L, VMEvent ev);
 
 #if LJ_HASJIT

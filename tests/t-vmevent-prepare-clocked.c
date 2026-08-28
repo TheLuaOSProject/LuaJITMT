@@ -234,6 +234,42 @@ static void assert_result_retry(const LJVMEVENTPrepareResult *result)
   assert_snapshot_zero(&result->attachment);
 }
 
+static void assert_absence_revalidation_shape(
+  lua_State *L, VMEvent ev, const LJVMEVENTPrepareResult *accepted,
+  int supported)
+{
+  global_State *g = G(L);
+  LJVMEVENTPrepareResult changed;
+  uint8_t event_mask = VMEVENT_MASK(ev);
+  assert(lj_vmevent_absence_revalidate(g, ev, accepted) == supported);
+  assert(!lj_vmevent_absence_revalidate(NULL, ev, accepted));
+  assert(!lj_vmevent_absence_revalidate(g, ev, NULL));
+
+  changed = *accepted;
+  changed.argbase = 1;
+  assert(!lj_vmevent_absence_revalidate(g, ev, &changed));
+  changed = *accepted;
+  changed.slot ^= 1u;
+  assert(!lj_vmevent_absence_revalidate(g, ev, &changed));
+  changed = *accepted;
+  changed.attachment_state = LJ_VMEVENT_ATTACHMENT_INVALID;
+  assert(!lj_vmevent_absence_revalidate(g, ev, &changed));
+  changed = *accepted;
+  changed.attachment.sequence ^= 2u;
+  assert(!lj_vmevent_absence_revalidate(g, ev, &changed));
+  changed = *accepted;
+  changed.attachment.next_generation ^= 1u;
+  assert(!lj_vmevent_absence_revalidate(g, ev, &changed));
+  changed = *accepted;
+  changed.attachment.generation ^= 1u;
+  assert(!lj_vmevent_absence_revalidate(g, ev, &changed));
+
+  (void)vmevmask_set_bits_acqrel(g, event_mask);
+  assert(!lj_vmevent_absence_revalidate(g, ev, accepted));
+  (void)vmevmask_clear_bits_acqrel(g, event_mask);
+  assert(lj_vmevent_absence_revalidate(g, ev, accepted) == supported);
+}
+
 static void test_fixed_bootstrap_key(lua_State *L)
 {
   global_State *g = G(L);
@@ -293,6 +329,13 @@ static void test_initial_default_and_raw(lua_State *L)
   status = prepare_checked(L, LJ_VMEVENT_TRACE, &result, 1);
   assert(status == LJ_VMEVENT_PREPARE_ABSENT);
   assert_result_accepted(&result, accepted_state_initial(), 1);
+  assert_absence_revalidation_shape(L, LJ_VMEVENT_TRACE, &result,
+#if LJ_HASJIT
+	1
+#else
+	0
+#endif
+  );
   assert((vmevmask_load_acq(g) & VMEVENT_MASK(LJ_VMEVENT_TRACE)) == 0);
 
   raw_install_nonfunction(L, LJ_VMEVENT_TRACE);
@@ -658,6 +701,96 @@ static void test_all_published_lanes(lua_State *L)
   call_jit_attach(L, handler_a, NULL);
 }
 
+#if LJ_HASJIT
+static void advance_absence_reserve_clock(
+  global_State *g, VMEvent ev, void *ud)
+{
+  LJJitEventAttachmentWriter writer;
+  uint32_t *calls = (uint32_t *)ud;
+  uint32_t slot;
+  assert(lj_jit_event_attachment_clock_slot(VMEVENT_HASH(ev), &slot));
+  assert(lj_jit_event_attachment_writer_claim(g, slot, &writer) ==
+	 LJ_JIT_EVENT_ATTACHMENT_WRITER_CLAIMED);
+  lj_jit_event_attachment_writer_publish(&writer);
+  (*calls)++;
+}
+#endif
+
+static void test_absence_reservation(lua_State *L)
+{
+  global_State *g = G(L);
+  LJVMEVENTPrepareResult prepared;
+  LJVMEVENTAbsenceReservation reservation;
+
+  (void)vmevmask_set_bits_acqrel(g, VMEVENT_MASK(LJ_VMEVENT_TRACE));
+  assert(prepare_checked(L, LJ_VMEVENT_TRACE, &prepared, 1) ==
+	 LJ_VMEVENT_PREPARE_ABSENT);
+#if LJ_HASJIT
+  {
+    LJJitEventAttachmentSnapshot after;
+    LJJitEventAttachmentWriter competing;
+    LJJitEventAttachmentWriter other_lane;
+    LJVMEVENTAbsenceReservation stale;
+    uint32_t other_slot;
+    uint32_t hook_calls = 0;
+
+    /* A writer wins after bounded revalidation. reserve() must finish both
+    ** that generation and its own stale claim, return false, and leave the
+    ** authoritative lane even. */
+    lj_vmevent_test_set_absence_reserve_hook(
+	advance_absence_reserve_clock, &hook_calls);
+    assert(!lj_vmevent_absence_reserve(
+	 g, LJ_VMEVENT_TRACE, &prepared, &stale));
+    lj_vmevent_test_set_absence_reserve_hook(NULL, NULL);
+    assert(hook_calls == 1u && stale.state == 0 &&
+	   stale.slot == LJ_JIT_EVENT_ATTACHMENT_SLOT_NONE);
+    assert(lj_jit_event_attachment_snapshot(g, prepared.slot, &after) ==
+	 LJ_JIT_EVENT_ATTACHMENT_SNAPSHOT_PUBLISHED);
+    assert(after.sequence == prepared.attachment.sequence + 4u);
+    assert(after.next_generation == prepared.attachment.generation + 2u);
+    assert(after.generation == prepared.attachment.generation + 2u);
+
+    (void)vmevmask_set_bits_acqrel(g, VMEVENT_MASK(LJ_VMEVENT_TRACE));
+    assert(prepare_checked(L, LJ_VMEVENT_TRACE, &prepared, 1) ==
+	   LJ_VMEVENT_PREPARE_ABSENT);
+    assert(lj_vmevent_absence_reserve(
+	 g, LJ_VMEVENT_TRACE, &prepared, &reservation));
+    assert(lj_jit_event_attachment_snapshot(g, prepared.slot, &after) ==
+	 LJ_JIT_EVENT_ATTACHMENT_SNAPSHOT_RETRY);
+    assert(lj_jit_event_attachment_writer_claim(
+	 g, prepared.slot, &competing) ==
+	 LJ_JIT_EVENT_ATTACHMENT_WRITER_BUSY);
+    assert(lj_jit_event_attachment_clock_slot(
+	 VMEVENT_HASH(LJ_VMEVENT_BC), &other_slot));
+    assert(other_slot != prepared.slot);
+    assert(lj_jit_event_attachment_writer_claim(
+	 g, other_slot, &other_lane) ==
+	 LJ_JIT_EVENT_ATTACHMENT_WRITER_CLAIMED);
+    lj_jit_event_attachment_writer_publish(&other_lane);
+    assert(lj_jit_event_attachment_snapshot(g, prepared.slot, &after) ==
+	 LJ_JIT_EVENT_ATTACHMENT_SNAPSHOT_RETRY);
+    lj_vmevent_absence_release(&reservation);
+    assert(reservation.state == 0 &&
+	   reservation.slot == LJ_JIT_EVENT_ATTACHMENT_SLOT_NONE);
+    assert(lj_jit_event_attachment_snapshot(g, prepared.slot, &after) ==
+	 LJ_JIT_EVENT_ATTACHMENT_SNAPSHOT_PUBLISHED);
+    assert(after.sequence == prepared.attachment.sequence + 2u);
+    assert(after.next_generation == prepared.attachment.generation + 1u);
+    assert(after.generation == prepared.attachment.generation + 1u);
+    assert((vmevmask_load_acq(g) & VMEVENT_MASK(LJ_VMEVENT_TRACE)) != 0);
+    (void)vmevmask_clear_bits_acqrel(
+	 g, VMEVENT_MASK(LJ_VMEVENT_TRACE));
+    assert(!lj_vmevent_absence_revalidate(
+	 g, LJ_VMEVENT_TRACE, &prepared));
+    assert(!lj_vmevent_absence_reserve(
+	 g, LJ_VMEVENT_TRACE, &prepared, &stale));
+  }
+#else
+  assert(!lj_vmevent_absence_reserve(
+	 g, LJ_VMEVENT_TRACE, &prepared, &reservation));
+#endif
+}
+
 static void test_per_hop_admission_retry(lua_State *L)
 {
   global_State *g = G(L);
@@ -881,6 +1014,33 @@ static void test_clock_retry_shapes(lua_State *L)
   assert(lj_jit_event_attachment_snapshot(g, 1, &saved) ==
 	 LJ_JIT_EVENT_ATTACHMENT_SNAPSHOT_PUBLISHED);
 
+  /* The final absence cut must reject every in-flight or changed live clock,
+  ** even though the earlier rooted lookup itself was valid. */
+  call_jit_attach(L, handler_a, NULL);
+  (void)vmevmask_set_bits_acqrel(g, VMEVENT_MASK(LJ_VMEVENT_TRACE));
+  assert(prepare_checked(L, LJ_VMEVENT_TRACE, &result, 1) ==
+	 LJ_VMEVENT_PREPARE_ABSENT);
+  assert_result_accepted(&result, LJ_VMEVENT_ATTACHMENT_PUBLISHED, 1);
+  assert(lj_vmevent_absence_revalidate(
+	 g, LJ_VMEVENT_TRACE, &result));
+  saved = result.attachment;
+  clock_store(clock, saved.sequence + 1u, saved.generation,
+	      saved.generation);
+  assert(!lj_vmevent_absence_revalidate(
+	 g, LJ_VMEVENT_TRACE, &result));
+  clock_store(clock, saved.sequence, saved.generation + 1u,
+	      saved.generation);
+  assert(!lj_vmevent_absence_revalidate(
+	 g, LJ_VMEVENT_TRACE, &result));
+  clock_store(clock, saved.sequence + 2u, saved.generation,
+	      saved.generation);
+  assert(!lj_vmevent_absence_revalidate(
+	 g, LJ_VMEVENT_TRACE, &result));
+  clock_store(clock, saved.sequence, saved.next_generation,
+	      saved.generation);
+  assert(lj_vmevent_absence_revalidate(
+	 g, LJ_VMEVENT_TRACE, &result));
+
   (void)vmevmask_set_bits_acqrel(g, VMEVENT_MASK(LJ_VMEVENT_TRACE));
   mask = vmevmask_load_acq(g);
   clock_store(clock, saved.sequence + 1u, saved.generation,
@@ -1018,6 +1178,7 @@ static void run_enabled_tests(void)
   test_registry_absence(L);
   test_published_and_runtime_joff(L);
   test_all_published_lanes(L);
+  test_absence_reservation(L);
   test_per_hop_admission_retry(L);
   test_no_runtime_string_admission(L);
   test_writer_reader_races(L);
@@ -1064,6 +1225,24 @@ static void run_disabled_tests(void)
   assert(result.argbase == 0 && result.slot == 1u);
   assert(result.attachment_state == LJ_VMEVENT_ATTACHMENT_UNCLOCKED);
   assert_snapshot_zero(&result.attachment);
+  assert(lj_vmevent_absence_revalidate(
+	 G(L), LJ_VMEVENT_TRACE, &result));
+  {
+    LJVMEVENTAbsenceReservation reservation;
+    LJVMEVENTPrepareResult changed = result;
+    changed.argbase = 1;
+    assert(!lj_vmevent_absence_revalidate(
+	 G(L), LJ_VMEVENT_TRACE, &changed));
+    changed = result;
+    changed.attachment.sequence = 2;
+    assert(!lj_vmevent_absence_revalidate(
+	 G(L), LJ_VMEVENT_TRACE, &changed));
+    assert(lj_vmevent_absence_reserve(
+	 G(L), LJ_VMEVENT_TRACE, &result, &reservation));
+    lj_vmevent_absence_release(&reservation);
+    assert(reservation.state == 0 &&
+	   reservation.slot == LJ_JIT_EVENT_ATTACHMENT_SLOT_NONE);
+  }
   assert(lj_vmevent_prepare(L, LJ_VMEVENT_TRACE) == 0);
   assert(savestack(L, L->top) == top);
 
