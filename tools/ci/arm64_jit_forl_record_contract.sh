@@ -185,8 +185,8 @@ for required in \
   'rootop = bc_op(view->startins);' \
   'rootop != BC_LOOP && rootop != BC_FORL && rootop != BC_FUNCF' \
   'if (rootop == BC_FUNCF)' \
-  'rootop == BC_FORL && nadd != 2u' \
-  'rootop == BC_LOOP && nadd != 0u' \
+  'rootop == BC_FORL && nintadd != 2u' \
+  'rootop == BC_LOOP && nintadd != 0u' \
   'flags != 0 && flags != SNAP_NORESTORE' \
   'source.o != IR_SLOAD || source.op1 != slot' \
   'slot != forl_idxslot && slot != forl_idxslot+FORL_STOP'; do
