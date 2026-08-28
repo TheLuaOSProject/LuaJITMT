@@ -2059,6 +2059,9 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE,
 	firstphi ? firstphi : REF_BASE, IR_PHI, (uint16_t)scalar_mode);
     }
+  } else if (constant_profile != ARM64_IR_KPROFILE_INT) {
+    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CONSTANT,
+	T->nk, IR_KNUM, (uint16_t)constant_profile);
   }
   if (startop == BC_FORL &&
       !arm64_ir_forl_shape(J, T, loopref, xpollref, firstphi, reject))
