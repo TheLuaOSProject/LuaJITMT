@@ -106,6 +106,8 @@ for required in \
   'while x<limit do x=x+step end return x end' \
   'function __arm64_pure_numeric_args_inclusive(x,limit,step)' \
   'while x<=limit do x=x+step end return x end' \
+  'function __arm64_pure_numeric_args_add_descending(x,limit,step)' \
+  'while x>limit do x=x+step end return x end' \
   'function __arm64_pure_numeric_args_descending(x,limit,step)' \
   'while x>limit do x=x-step end return x end' \
   'function __arm64_pure_numeric_args_descending_inclusive' \
@@ -114,6 +116,8 @@ for required in \
   'IR_GT, IR_LT, A64I_FADDd, 0, CC_HS, CC_LO,' \
   'NUMERIC_ARGS_INCLUSIVE, BC_ISGT, 3, 4, BC_ADDVV, IR_ADD,' \
   'IR_GE, IR_LE, A64I_FADDd, 0, CC_HI, CC_LS,' \
+  'NUMERIC_ARGS_STRICT, BC_ISGE, 4, 3, BC_ADDVV, IR_ADD,' \
+  'IR_LT, IR_GT, A64I_FADDd, 1, CC_HS, CC_LO,' \
   'NUMERIC_ARGS_STRICT, BC_ISGE, 4, 3, BC_SUBVV, IR_SUB,' \
   'IR_LT, IR_GT, A64I_FSUBd, 1, CC_HS, CC_LO,' \
   'NUMERIC_ARGS_INCLUSIVE, BC_ISGT, 4, 3, BC_SUBVV, IR_SUB,' \
@@ -185,16 +189,24 @@ for required in \
   'MUTATION_NINF' \
   'MUTATION_FINITE, 0.75' \
   'MUTATION_FINITE, 19.75' \
+  '{ 20.5, 0.25, -0.5, 0.0 },' \
+  '{ 0.5, -0.625, -0.375, -0.625 },' \
+  '{ 20.25, 0.25, -0.5, 0.25 },' \
+  '{ 20.0, 0.25, -0.5, 0.0 },' \
+  '{ 20.5, 0.25, -1.0, -0.5 },' \
+  '{ 20.5, 1.0, -0.5, 1.0 },' \
+  '{ 0.75, 0.5, -0.5, 0.25 }' \
+  '** 0.125, or -1.0 respectively instead of -0.625.' \
   '{ 0.5, -0.625, 0.375, -0.625 },' \
   '{ 0.375, -0.625, 0.25, -0.875 },' \
   '{ 20.25, 0.25, 0.5, -0.25 },' \
   '** -0.75, 0.125, or -1.125 respectively instead of -0.875.' \
   'profile->reuse.x, profile->reuse.limit, profile->reuse.step,' \
-  '1.0, 0.25, 0.375, 0, 0, 0) == 0.25' \
+  '1.0, 0.25, equality_body_step, 0, 0, 0) == 0.25' \
   '1.0, 0.25, 0.375, 0, 0, 0) == -0.125' \
-  '1.0, 0.5, 0.5, 0, 0, 0) == 0.5' \
+  '1.0, 0.5, equality_first_step, 0, 0, 0) == 0.5' \
   '1.0, 0.5, 0.5, 0, 0, 0) == 0.0' \
-  '0.5, 0.5, 0.5, 0, 0, 0) == 0.5' \
+  '0.5, 0.5, equality_first_step, 0, 0, 0) == 0.5' \
   '0.5, 0.5, 0.5, 0, 0, 0) == 0.0' \
   '0.625, 1.0, 0.375, 0, 0, 0) == 1.375' \
   '1.0, 1.0, 0.375, 0, 0, 0) == 1.375' \
@@ -210,25 +222,44 @@ for required in \
   'function __arm64_fixed_half(limit) local x=0.5' \
   'function __arm64_fixed_initializer_inclusive(limit,step) local x=0.5' \
   'function __arm64_fixed_half_inclusive(limit) local x=0.5' \
+  'function __arm64_fixed_initializer_add_descending(limit,step)' \
+  'function __arm64_fixed_half_add_descending(limit) local x=20.5' \
+  'expect_no_trace(L, "__arm64_fixed_initializer_add_descending");' \
+  'expect_no_trace(L, "__arm64_fixed_half_add_descending");' \
   'function __arm64_fixed_initializer_descending(limit,step) local x=20.5' \
   'function __arm64_fixed_half_descending(limit) local x=20.5' \
   'function __arm64_fixed_initializer_descending_inclusive(limit,step)' \
   'function __arm64_fixed_half_descending_inclusive(limit) local x=20.5' \
   'expect_no_trace(L, "__arm64_fixed_initializer_descending_inclusive");' \
   'expect_no_trace(L, "__arm64_fixed_half_descending_inclusive");' \
-  'function __arm64_args_negative(x,limit,step)' \
+  'function __arm64_args_sub_lt(x,limit,step)' \
   'while x<limit do x=x-step end return x end' \
+  'expect_no_trace(L, "__arm64_args_sub_lt");' \
   'while x<limit do x=x*step end return x end' \
   'while x<limit do x=x/step end return x end' \
-  'while x>limit do x=x+step end return x end' \
+  'function __arm64_args_add_ge(x,limit,step)' \
   'while x>=limit do x=x+step end return x end' \
-  'expect_no_trace(L, "__arm64_args_ge");' \
+  'expect_no_trace(L, "__arm64_args_add_ge");' \
   'while limit>=x do x=x+step end return x end' \
   'while x<=limit do x=step+x end return x end' \
   'while x<limit do x=x+step+step end return x end' \
   'while x<=limit do x=x+step+step end return x end' \
-  'function __arm64_args_inclusive_sub(x,limit,step)' \
+  'function __arm64_args_reversed_add_gt_compare(x,limit,step)' \
+  'while limit<x do x=x+step end return x end' \
+  'expect_no_trace(L, "__arm64_args_reversed_add_gt_compare");' \
+  'function __arm64_args_reversed_add_gt(x,limit,step)' \
+  'while x>limit do x=step+x end return x end' \
+  'expect_no_trace(L, "__arm64_args_reversed_add_gt");' \
+  'function __arm64_args_extra_add_gt(x,limit,step)' \
+  'while x>limit do x=x+step+step end return x end' \
+  'expect_no_trace(L, "__arm64_args_extra_add_gt");' \
+  'function __arm64_args_add_gt_mul(x,limit,step)' \
+  'expect_no_trace(L, "__arm64_args_add_gt_mul");' \
+  'function __arm64_args_add_gt_div(x,limit,step)' \
+  'expect_no_trace(L, "__arm64_args_add_gt_div");' \
+  'function __arm64_args_sub_le(x,limit,step)' \
   'while x<=limit do x=x-step end return x end' \
+  'expect_no_trace(L, "__arm64_args_sub_le");' \
   'function __arm64_args_descending_mul(x,limit,step)' \
   'while x>limit do x=x*step end return x end' \
   'function __arm64_args_descending_inclusive_mul(x,limit,step)' \
@@ -256,6 +287,7 @@ for required in \
   'expect_no_trace(L, "__arm64_args_extra_inclusive_sub");' \
   'test_positive_and_guard_exits(&strict_profile);' \
   'test_positive_and_guard_exits(&inclusive_profile);' \
+  'test_positive_and_guard_exits(&add_descending_profile);' \
   'test_positive_and_guard_exits(&descending_profile);' \
   'test_positive_and_guard_exits(&descending_inclusive_profile);' \
   'run_lua(L, "jit.flush()")' \
@@ -266,19 +298,73 @@ for required in \
   }
 done
 
+require_fixture_sequence \
+  'static int numeric_args_is_descending' \
+  'static const NumericArgsProfile strict_profile' \
+  'return profile->evolution == NUMERIC_ARGS_ADD_DESCENDING || profile->evolution == NUMERIC_ARGS_SUB_DESCENDING;'
+
 for required in \
-  'if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING) { test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_QNAN_X, profile->mutation.x, MUTATION_QNAN, 0.0);' \
+  'if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING) { expect_ir(ir, R_X_PRE, profile->recurrence_ir, IRT_NUM|IRT_ISPHI, R_X, R_STEP);' \
+  '} else { expect_ir(ir, R_X_PRE, profile->recurrence_ir, IRT_NUM|IRT_ISPHI, R_STEP, R_X);'; do
+  require_fixture_sequence \
+    'static void expect_ir_shape' \
+    'static void expect_snapshot_shape' "$required"
+done
+
+for required in \
+  'if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING) { assert(right == stepreg);' \
+  '} else { unsigned other; assert((left == stepreg) != (right == stepreg)); other = left == stepreg ? right : left;'; do
+  require_fixture_sequence \
+    'static void expect_dynamic_fp_mcode' \
+    'static void expect_only_args_root' "$required"
+done
+
+# Keep the new profile's exact bytecode/IR/machine-code certificate and all
+# value-sensitive rows together. Global token checks would allow fields from
+# unrelated profiles to satisfy this proof accidentally.
+for required in \
+  '"__arm64_pure_numeric_args_add_descending", NUMERIC_ARGS_ADD_DESCENDING,' \
+  'NUMERIC_ARGS_STRICT, BC_ISGE, 4, 3, BC_ADDVV, IR_ADD, IR_LT, IR_GT, A64I_FADDd, 1, CC_HS, CC_LO,' \
+  '{ 20.5, 0.25, -0.5, 0.0 }, { 0.5, -0.625, -0.375, -0.625 }, { 20.5, 0.25, -0.5, 0.0 }, { 20.25, 0.25, -0.5, 0.25 }, { 20.0, 0.25, -0.5, 0.0 }, { 20.5, 0.25, -1.0, -0.5 }, { 20.5, 1.0, -0.5, 1.0 }, { 0.75, 0.5, -0.5, 0.25 }'; do
+  require_fixture_sequence \
+    'static const NumericArgsProfile add_descending_profile = {' \
+    'static const NumericArgsProfile descending_profile = {' "$required"
+done
+
+for required in \
+  'if (profile->evolution == NUMERIC_ARGS_ADD_DESCENDING) { run_lua(L,' \
+  '"function __arm64_pure_numeric_args_add_descending(x,limit,step) " "while x>limit do x=x+step end return x end");'; do
+  require_fixture_sequence \
+    'static void test_positive_and_guard_exits' \
+    'assert(call_triple(L, profile->name,' "$required"
+done
+
+for required in \
+  'assert(call_triple(L, profile->name, profile->reuse.x, profile->reuse.limit, profile->reuse.step, 0, 0, 0) == profile->reuse.result); expect_single_exit(FINAL_EXIT);' \
+  'if (profile->evolution == NUMERIC_ARGS_ADD_DESCENDING) {' \
+  'assert(call_triple(L, profile->name, profile->record.x, profile->reuse.limit, profile->reuse.step, 0, 0, 0) == -0.875); expect_single_exit(FINAL_EXIT);' \
+  'assert(call_triple(L, profile->name, profile->reuse.x, profile->record.limit, profile->reuse.step, 0, 0, 0) == 0.125); expect_single_exit(PRECOND_EXIT);' \
+  'assert(call_triple(L, profile->name, profile->reuse.x, profile->reuse.limit, profile->record.step, 0, 0, 0) == -1.0); expect_single_exit(FINAL_EXIT);'; do
+  require_fixture_sequence \
+    '/* The same trace must consume different accumulator' \
+    'if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING &&' "$required"
+done
+
+for required in \
+  'if (numeric_args_is_descending(profile)) { test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_QNAN_X, profile->mutation.x, MUTATION_QNAN, 0.0);' \
   'test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile, POSTADMISSION_PINF_X, profile->mutation.x);' \
   'test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_NINF_X, profile->mutation.x, MUTATION_NINF, 0.0);' \
   'test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_QNAN_LIMIT, profile->mutation.limit, MUTATION_FINITE, 19.75);' \
   'test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_PINF_LIMIT, profile->mutation.limit, MUTATION_FINITE, 19.75);' \
   'test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile, POSTADMISSION_NINF_LIMIT, profile->mutation.limit);' \
   'test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_QNAN_STEP, profile->mutation.step, MUTATION_QNAN, 0.0);' \
-  'test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_PINF_STEP, profile->mutation.step, MUTATION_NINF, 0.0);' \
+  'if (profile->evolution == NUMERIC_ARGS_ADD_DESCENDING) { test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile, POSTADMISSION_PINF_STEP, profile->mutation.step);' \
+  'test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_NINF_STEP, profile->mutation.step, MUTATION_NINF, 0.0);' \
+  '} else { test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_PINF_STEP, profile->mutation.step, MUTATION_NINF, 0.0);' \
   'test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile, POSTADMISSION_NINF_STEP, profile->mutation.step);'; do
   require_fixture_sequence \
     'test_xpoll_lifecycle(L, pt, idle_vmstate, profile);' \
-    '} else {' "$required"
+    'if (profile->evolution == NUMERIC_ARGS_ADD_ASCENDING &&' "$required"
 done
 
 for required in \
@@ -291,12 +377,45 @@ for required in \
     'test_xpoll_lifecycle(L, pt, idle_vmstate, profile);' "$required"
 done
 
+for required in \
+  '} else if (numeric_args_is_descending(profile)) {' \
+  'profile->evolution == NUMERIC_ARGS_SUB_DESCENDING ? 0.375 : -0.375;' \
+  'profile->evolution == NUMERIC_ARGS_SUB_DESCENDING ? 0.5 : -0.5;' \
+  'assert(call_triple(L, profile->name, 1.0, 0.25, equality_body_step, 0, 0, 0) == 0.25); expect_single_exit(FINAL_EXIT);' \
+  'assert(call_triple(L, profile->name, 1.0, 0.5, equality_first_step, 0, 0, 0) == 0.5); expect_single_exit(PRECOND_EXIT);' \
+  'assert(call_triple(L, profile->name, 0.5, 0.5, equality_first_step, 0, 0, 0) == 0.5); assert(lj_trace_test_root_entry_publishes() == 0); assert(lj_trace_test_exit_calls() == 0);'; do
+  require_fixture_sequence \
+    '} else if (numeric_args_is_descending(profile)) {' \
+    '} else if (profile->comparison == NUMERIC_ARGS_INCLUSIVE) {' "$required"
+done
+
+for required in \
+  '"function __arm64_fixed_initializer_add_descending(limit,step) " "local x=20.5 while x>limit do x=x+step end return x end " "assert(__arm64_fixed_initializer_add_descending(0.25,-0.5)==0.0)"); expect_no_trace(L, "__arm64_fixed_initializer_add_descending");' \
+  '"function __arm64_fixed_half_add_descending(limit) local x=20.5 " "while x>limit do x=x+(-0.5) end return x end " "assert(__arm64_fixed_half_add_descending(0.25)==0.0)"); pt = global_proto(L, "__arm64_fixed_half_add_descending"); expect_no_trace(L, "__arm64_fixed_half_add_descending");'; do
+  require_fixture_sequence \
+    'static void test_fixed_initializers_remain_separate' \
+    'static void test_sub_lt_rejected' "$required"
+done
+
+for required in \
+  '"function __arm64_args_add_ge(x,limit,step) " "while x>=limit do x=x+step end return x end");' \
+  '"function __arm64_args_reversed_add_gt_compare(x,limit,step) " "while limit<x do x=x+step end return x end");' \
+  '"function __arm64_args_reversed_add_gt(x,limit,step) " "while x>limit do x=step+x end return x end");' \
+  '"function __arm64_args_extra_add_gt(x,limit,step) " "while x>limit do x=x+step+step end return x end");' \
+  '"function __arm64_args_add_gt_mul(x,limit,step) " "while x>limit do x=x*step end return x end");' \
+  '"function __arm64_args_add_gt_div(x,limit,step) " "while x>limit do x=x/step end return x end");'; do
+  require_fixture_sequence \
+    'static void test_add_descending_adjacent_rejected' \
+    'static void test_extra_add_rejected' "$required"
+done
+
 test "$(grep -Fc 'test_positive_and_guard_exits(&' \
-  "$fixture_source")" -eq 4 || {
+  "$fixture_source")" -eq 5 || {
   echo "ARM64 dynamic-args NUM fixture lost a positive profile" >&2
   exit 1
 }
-for profile in strict_profile inclusive_profile descending_profile \
+for profile in strict_profile inclusive_profile add_descending_profile \
+  descending_profile \
   descending_inclusive_profile; do
   test "$(grep -Fc \
     "test_positive_and_guard_exits(&$profile);" "$fixture_source")" -eq 1 || {
@@ -315,19 +434,61 @@ main_region=$(
   ' "$fixture_source"
 )
 test -n "$main_region"
+test "$(printf '%s\n' "$main_region" | \
+  grep -Fc 'test_positive_and_guard_exits(&')" -eq 5 || {
+  echo "ARM64 dynamic-args NUM main lost a positive profile" >&2
+  exit 1
+}
+for profile in strict_profile inclusive_profile add_descending_profile \
+  descending_profile descending_inclusive_profile; do
+  test "$(printf '%s\n' "$main_region" | grep -Fc \
+    "test_positive_and_guard_exits(&$profile);")" -eq 1 || {
+    echo "ARM64 dynamic-args NUM main lost exact $profile invocation" >&2
+    exit 1
+  }
+done
 for suite in \
   test_fixed_initializers_remain_separate \
-  test_sub_rejected \
+  test_sub_lt_rejected \
   test_mul_rejected \
   test_div_rejected \
   test_adjacent_comparisons_rejected \
   test_extra_add_rejected \
+  test_add_descending_adjacent_rejected \
   test_descending_adjacent_rejected; do
   test "$(printf '%s\n' "$main_region" | grep -Fc "$suite();")" -eq 1 || {
     echo "ARM64 dynamic-args NUM fixture lost exact $suite invocation" >&2
     exit 1
   }
 done
+
+for name in \
+  __arm64_fixed_initializer_add_descending \
+  __arm64_fixed_half_add_descending \
+  __arm64_args_add_ge \
+  __arm64_args_reversed_add_gt_compare \
+  __arm64_args_reversed_add_gt \
+  __arm64_args_extra_add_gt \
+  __arm64_args_add_gt_mul \
+  __arm64_args_add_gt_div \
+  __arm64_args_sub_lt \
+  __arm64_args_sub_le; do
+  test "$(grep -Fc "expect_no_trace(L, \"$name\");" \
+    "$fixture_source")" -eq 1 || {
+    echo "ARM64 dynamic-args NUM fixture lost exact no-trace identity: $name" >&2
+    exit 1
+  }
+done
+if grep -F 'expect_no_trace(L, "__arm64_args_gt");' \
+    "$fixture_source" >/dev/null; then
+  echo "ARM64 dynamic-args NUM fixture retained obsolete ADD_GT rejection" >&2
+  exit 1
+fi
+if grep -F '"function __arm64_args_gt(' "$fixture_source" >/dev/null; then
+  echo "ARM64 dynamic-args NUM fixture retained obsolete ADD_GT negative" >&2
+  exit 1
+fi
+
 test "$(grep -Fc 'void *saved_cframe = L->cframe;' \
   "$fixture_source")" -eq 3 || {
   echo "ARM64 dynamic-args NUM lifecycle lost cframe baselines" >&2
@@ -476,4 +637,4 @@ while test "$run" -le "$pauth_runs"; do
   run=$((run+1))
 done
 
-echo "arm64_jit_pure_numeric_args_contract OK: ADD_LT/ADD_LE/SUB_GT/SUB_GE dynamic-accumulator NUM roots and lifecycle proved on ARM64/arm64e"
+echo "arm64_jit_pure_numeric_args_contract OK: ADD_LT/ADD_LE/ADD_GT/SUB_GT/SUB_GE dynamic-accumulator NUM roots and lifecycle proved on ARM64/arm64e"

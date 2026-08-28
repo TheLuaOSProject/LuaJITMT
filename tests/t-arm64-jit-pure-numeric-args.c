@@ -1,11 +1,11 @@
 /*
-** Native macOS ARM64 contract for exact ascending ADD and descending SUB
-** dynamic-accumulator pure-NUM roots.
+** Native macOS ARM64 contract for exact ascending/descending ADD and
+** descending SUB dynamic-accumulator pure-NUM roots.
 **
-** This certifies four intentionally narrow evolution profiles over one loop
-** geometry: strict/inclusive ascending ADD and strict/inclusive descending
-** SUB, each with three live NUM parameters (initial accumulator, limit, and
-** step).
+** This certifies five intentionally narrow evolution profiles over one loop
+** geometry: strict/inclusive ascending ADD, strict descending ADD, and
+** strict/inclusive descending SUB, each with three live NUM parameters
+** (initial accumulator, limit, and step).
 ** Adjacent arithmetic, direction, and bytecode families remain fail-closed,
 ** while the already-admitted fixed-initializer roots stay distinct.
 */
@@ -83,6 +83,7 @@ typedef enum NumericArgsComparison {
 
 typedef enum NumericArgsEvolution {
   NUMERIC_ARGS_ADD_ASCENDING,
+  NUMERIC_ARGS_ADD_DESCENDING,
   NUMERIC_ARGS_SUB_DESCENDING
 } NumericArgsEvolution;
 
@@ -118,6 +119,12 @@ typedef struct NumericArgsProfile {
   NumericArgsCall precondition;
 } NumericArgsProfile;
 
+static int numeric_args_is_descending(const NumericArgsProfile *profile)
+{
+  return profile->evolution == NUMERIC_ARGS_ADD_DESCENDING ||
+	 profile->evolution == NUMERIC_ARGS_SUB_DESCENDING;
+}
+
 static const NumericArgsProfile strict_profile = {
   "__arm64_pure_numeric_args", NUMERIC_ARGS_ADD_ASCENDING,
   NUMERIC_ARGS_STRICT, BC_ISGE, 3, 4, BC_ADDVV, IR_ADD,
@@ -144,6 +151,24 @@ static const NumericArgsProfile inclusive_profile = {
   { 0.5, 20.25, 1.0, 20.5 },
   { 0.5, 20.0, 0.5, 20.5 },
   { 0.5, 0.75, 0.5, 1.0 }
+};
+
+/* The descending-ADD reuse tuple is made entirely of exact binary fractions.
+** Replacing only x, limit, or step with its recording value produces -0.875,
+** 0.125, or -1.0 respectively instead of -0.625. */
+static const NumericArgsProfile add_descending_profile = {
+  "__arm64_pure_numeric_args_add_descending",
+  NUMERIC_ARGS_ADD_DESCENDING,
+  NUMERIC_ARGS_STRICT, BC_ISGE, 4, 3, BC_ADDVV, IR_ADD,
+  IR_LT, IR_GT, A64I_FADDd, 1, CC_HS, CC_LO,
+  { 20.5, 0.25, -0.5, 0.0 },
+  { 0.5, -0.625, -0.375, -0.625 },
+  { 20.5, 0.25, -0.5, 0.0 },
+  { 20.25, 0.25, -0.5, 0.25 },
+  { 20.0, 0.25, -0.5, 0.0 },
+  { 20.5, 0.25, -1.0, -0.5 },
+  { 20.5, 1.0, -0.5, 1.0 },
+  { 0.75, 0.5, -0.5, 0.25 }
 };
 
 static const NumericArgsProfile descending_profile = {
@@ -1059,7 +1084,13 @@ static void test_positive_and_guard_exits(const NumericArgsProfile *profile)
   luaL_openlibs(L);
   tg = L2TG(L);
   idle_vmstate = lj_tg_vmstate_load_acq(tg);
-  if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING &&
+  if (profile->evolution == NUMERIC_ARGS_ADD_DESCENDING) {
+    run_lua(L,
+      "jit.flush(); jit.on(); "
+      "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
+      "function __arm64_pure_numeric_args_add_descending(x,limit,step) "
+	"while x>limit do x=x+step end return x end");
+  } else if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING &&
       profile->comparison == NUMERIC_ARGS_INCLUSIVE) {
     run_lua(L,
       "jit.flush(); jit.on(); "
@@ -1103,6 +1134,34 @@ static void test_positive_and_guard_exits(const NumericArgsProfile *profile)
   expect_single_exit(FINAL_EXIT);
   expect_only_args_root(L, pt, profile);
 
+  if (profile->evolution == NUMERIC_ARGS_ADD_DESCENDING) {
+    /* Each call retains one recording-time value. All three distinguish the
+    ** live argument from a constant specialized into the root. */
+    lj_trace_test_root_entry_reset();
+    lj_trace_test_reset_exit_stats();
+    assert(call_triple(L, profile->name,
+	profile->record.x, profile->reuse.limit, profile->reuse.step,
+	0, 0, 0) == -0.875);
+    expect_single_exit(FINAL_EXIT);
+    expect_only_args_root(L, pt, profile);
+
+    lj_trace_test_root_entry_reset();
+    lj_trace_test_reset_exit_stats();
+    assert(call_triple(L, profile->name,
+	profile->reuse.x, profile->record.limit, profile->reuse.step,
+	0, 0, 0) == 0.125);
+    expect_single_exit(PRECOND_EXIT);
+    expect_only_args_root(L, pt, profile);
+
+    lj_trace_test_root_entry_reset();
+    lj_trace_test_reset_exit_stats();
+    assert(call_triple(L, profile->name,
+	profile->reuse.x, profile->reuse.limit, profile->record.step,
+	0, 0, 0) == -1.0);
+    expect_single_exit(FINAL_EXIT);
+    expect_only_args_root(L, pt, profile);
+  }
+
   if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING &&
       profile->comparison == NUMERIC_ARGS_INCLUSIVE) {
     /* Equality at the body guard takes the inclusive backedge once more. */
@@ -1128,20 +1187,24 @@ static void test_positive_and_guard_exits(const NumericArgsProfile *profile)
 	0.5, 0.5, 0.5, 0, 0, 0) == 0.0);
     expect_single_exit(PRECOND_EXIT);
     expect_only_args_root(L, pt, profile);
-  } else if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING) {
+  } else if (numeric_args_is_descending(profile)) {
+    const lua_Number equality_body_step =
+      profile->evolution == NUMERIC_ARGS_SUB_DESCENDING ? 0.375 : -0.375;
+    const lua_Number equality_first_step =
+      profile->evolution == NUMERIC_ARGS_SUB_DESCENDING ? 0.5 : -0.5;
     /* Exact equality at the body guard exits through the final snapshot. */
     lj_trace_test_root_entry_reset();
     lj_trace_test_reset_exit_stats();
     assert(call_triple(L, profile->name,
-	1.0, 0.25, 0.375, 0, 0, 0) == 0.25);
+	1.0, 0.25, equality_body_step, 0, 0, 0) == 0.25);
     expect_single_exit(FINAL_EXIT);
     expect_only_args_root(L, pt, profile);
 
-    /* Equality after the first SUB fails the strict native precondition. */
+    /* Equality after the first recurrence fails the strict precondition. */
     lj_trace_test_root_entry_reset();
     lj_trace_test_reset_exit_stats();
     assert(call_triple(L, profile->name,
-	1.0, 0.5, 0.5, 0, 0, 0) == 0.5);
+	1.0, 0.5, equality_first_step, 0, 0, 0) == 0.5);
     expect_single_exit(PRECOND_EXIT);
     expect_only_args_root(L, pt, profile);
 
@@ -1149,7 +1212,7 @@ static void test_positive_and_guard_exits(const NumericArgsProfile *profile)
     lj_trace_test_root_entry_reset();
     lj_trace_test_reset_exit_stats();
     assert(call_triple(L, profile->name,
-	0.5, 0.5, 0.5, 0, 0, 0) == 0.5);
+	0.5, 0.5, equality_first_step, 0, 0, 0) == 0.5);
     assert(lj_trace_test_root_entry_publishes() == 0);
     assert(lj_trace_test_exit_calls() == 0);
     expect_only_args_root(L, pt, profile);
@@ -1190,7 +1253,7 @@ static void test_positive_and_guard_exits(const NumericArgsProfile *profile)
   }
 
   test_xpoll_lifecycle(L, pt, idle_vmstate, profile);
-  if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING) {
+  if (numeric_args_is_descending(profile)) {
     test_terminating_mutation(L, pt, idle_vmstate, profile,
       POSTADMISSION_QNAN_X, profile->mutation.x, MUTATION_QNAN, 0.0);
     test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile,
@@ -1208,11 +1271,19 @@ static void test_positive_and_guard_exits(const NumericArgsProfile *profile)
     test_terminating_mutation(L, pt, idle_vmstate, profile,
       POSTADMISSION_QNAN_STEP, profile->mutation.step,
       MUTATION_QNAN, 0.0);
-    test_terminating_mutation(L, pt, idle_vmstate, profile,
-      POSTADMISSION_PINF_STEP, profile->mutation.step,
-      MUTATION_NINF, 0.0);
-    test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile,
-      POSTADMISSION_NINF_STEP, profile->mutation.step);
+    if (profile->evolution == NUMERIC_ARGS_ADD_DESCENDING) {
+      test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile,
+	POSTADMISSION_PINF_STEP, profile->mutation.step);
+      test_terminating_mutation(L, pt, idle_vmstate, profile,
+	POSTADMISSION_NINF_STEP, profile->mutation.step,
+	MUTATION_NINF, 0.0);
+    } else {
+      test_terminating_mutation(L, pt, idle_vmstate, profile,
+	POSTADMISSION_PINF_STEP, profile->mutation.step,
+	MUTATION_NINF, 0.0);
+      test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile,
+	POSTADMISSION_NINF_STEP, profile->mutation.step);
+    }
   } else {
     test_terminating_mutation(L, pt, idle_vmstate, profile,
       POSTADMISSION_QNAN_X, profile->mutation.x, MUTATION_QNAN, 0.0);
@@ -1356,6 +1427,21 @@ static void test_fixed_initializers_remain_separate(void)
 
   run_lua(L,
     "jit.flush(); "
+    "function __arm64_fixed_initializer_add_descending(limit,step) "
+      "local x=20.5 while x>limit do x=x+step end return x end "
+    "assert(__arm64_fixed_initializer_add_descending(0.25,-0.5)==0.0)");
+  expect_no_trace(L, "__arm64_fixed_initializer_add_descending");
+
+  run_lua(L,
+    "jit.flush(); "
+    "function __arm64_fixed_half_add_descending(limit) local x=20.5 "
+      "while x>limit do x=x+(-0.5) end return x end "
+    "assert(__arm64_fixed_half_add_descending(0.25)==0.0)");
+  pt = global_proto(L, "__arm64_fixed_half_add_descending");
+  expect_no_trace(L, "__arm64_fixed_half_add_descending");
+
+  run_lua(L,
+    "jit.flush(); "
     "function __arm64_fixed_initializer_descending(limit,step) local x=20.5 "
       "while x>limit do x=x-step end return x end "
     "assert(__arm64_fixed_initializer_descending(0.25,0.5)==0.0)");
@@ -1389,7 +1475,7 @@ static void test_fixed_initializers_remain_separate(void)
   lua_close(L);
 }
 
-static void test_sub_rejected(void)
+static void test_sub_lt_rejected(void)
 {
   lua_State *L = luaL_newstate();
   assert(L != NULL);
@@ -1397,11 +1483,11 @@ static void test_sub_rejected(void)
   run_lua(L,
     "jit.flush(); jit.on(); "
     "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
-    "function __arm64_args_negative(x,limit,step) "
+    "function __arm64_args_sub_lt(x,limit,step) "
       "while x<limit do x=x-step end return x end");
-  assert(call_triple(L, "__arm64_args_negative",
+  assert(call_triple(L, "__arm64_args_sub_lt",
 	0.5, 20.25, -0.5, 0, 0, 0) == 20.5);
-  expect_no_trace(L, "__arm64_args_negative");
+  expect_no_trace(L, "__arm64_args_sub_lt");
   lua_close(L);
 }
 
@@ -1445,22 +1531,6 @@ static void test_adjacent_comparisons_rejected(void)
   run_lua(L,
     "jit.flush(); jit.on(); "
     "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
-    "function __arm64_args_gt(x,limit,step) "
-      "while x>limit do x=x+step end return x end");
-  assert(call_triple(L, "__arm64_args_gt",
-	20.5, 0.5, -0.5, 0, 0, 0) == 0.5);
-  expect_no_trace(L, "__arm64_args_gt");
-
-  run_lua(L,
-    "jit.flush(); "
-    "function __arm64_args_ge(x,limit,step) "
-      "while x>=limit do x=x+step end return x end");
-  assert(call_triple(L, "__arm64_args_ge",
-	20.5, 0.5, -0.5, 0, 0, 0) == 0.0);
-  expect_no_trace(L, "__arm64_args_ge");
-
-  run_lua(L,
-    "jit.flush(); "
     "function __arm64_args_reversed_compare(x,limit,step) "
       "while limit>=x do x=x+step end return x end");
   assert(call_triple(L, "__arm64_args_reversed_compare",
@@ -1474,6 +1544,63 @@ static void test_adjacent_comparisons_rejected(void)
   assert(call_triple(L, "__arm64_args_reversed_add",
 	0.5, 20.25, 0.5, 0, 0, 0) == 20.5);
   expect_no_trace(L, "__arm64_args_reversed_add");
+  lua_close(L);
+}
+
+static void test_add_descending_adjacent_rejected(void)
+{
+  lua_State *L = luaL_newstate();
+  assert(L != NULL);
+  luaL_openlibs(L);
+
+  run_lua(L,
+    "jit.flush(); jit.on(); "
+    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
+    "function __arm64_args_add_ge(x,limit,step) "
+      "while x>=limit do x=x+step end return x end");
+  assert(call_triple(L, "__arm64_args_add_ge",
+	20.5, 0.5, -0.5, 0, 0, 0) == 0.0);
+  expect_no_trace(L, "__arm64_args_add_ge");
+
+  run_lua(L,
+    "jit.flush(); "
+    "function __arm64_args_reversed_add_gt_compare(x,limit,step) "
+      "while limit<x do x=x+step end return x end");
+  assert(call_triple(L, "__arm64_args_reversed_add_gt_compare",
+	20.5, 0.25, -0.5, 0, 0, 0) == 0.0);
+  expect_no_trace(L, "__arm64_args_reversed_add_gt_compare");
+
+  run_lua(L,
+    "jit.flush(); "
+    "function __arm64_args_reversed_add_gt(x,limit,step) "
+      "while x>limit do x=step+x end return x end");
+  assert(call_triple(L, "__arm64_args_reversed_add_gt",
+	20.5, 0.25, -0.5, 0, 0, 0) == 0.0);
+  expect_no_trace(L, "__arm64_args_reversed_add_gt");
+
+  run_lua(L,
+    "jit.flush(); "
+    "function __arm64_args_extra_add_gt(x,limit,step) "
+      "while x>limit do x=x+step+step end return x end");
+  assert(call_triple(L, "__arm64_args_extra_add_gt",
+	20.5, 0.25, -0.25, 0, 0, 0) == 0.0);
+  expect_no_trace(L, "__arm64_args_extra_add_gt");
+
+  run_lua(L,
+    "jit.flush(); "
+    "function __arm64_args_add_gt_mul(x,limit,step) "
+      "while x>limit do x=x*step end return x end");
+  assert(call_triple(L, "__arm64_args_add_gt_mul",
+	20.5, 0.5, 0.5, 0, 0, 0) == 0.3203125);
+  expect_no_trace(L, "__arm64_args_add_gt_mul");
+
+  run_lua(L,
+    "jit.flush(); "
+    "function __arm64_args_add_gt_div(x,limit,step) "
+      "while x>limit do x=x/step end return x end");
+  assert(call_triple(L, "__arm64_args_add_gt_div",
+	20.5, 0.5, 2.0, 0, 0, 0) == 0.3203125);
+  expect_no_trace(L, "__arm64_args_add_gt_div");
   lua_close(L);
 }
 
@@ -1511,11 +1638,11 @@ static void test_descending_adjacent_rejected(void)
   run_lua(L,
     "jit.flush(); jit.on(); "
     "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
-    "function __arm64_args_inclusive_sub(x,limit,step) "
+    "function __arm64_args_sub_le(x,limit,step) "
       "while x<=limit do x=x-step end return x end");
-  assert(call_triple(L, "__arm64_args_inclusive_sub",
+  assert(call_triple(L, "__arm64_args_sub_le",
 	0.5, 20.25, -0.5, 0, 0, 0) == 20.5);
-  expect_no_trace(L, "__arm64_args_inclusive_sub");
+  expect_no_trace(L, "__arm64_args_sub_le");
 
   run_lua(L,
     "jit.flush(); "
@@ -1609,14 +1736,16 @@ int main(int argc, char **argv)
 	   strcmp(argv[1], "randomized") == 0);
   test_positive_and_guard_exits(&strict_profile);
   test_positive_and_guard_exits(&inclusive_profile);
+  test_positive_and_guard_exits(&add_descending_profile);
   test_positive_and_guard_exits(&descending_profile);
   test_positive_and_guard_exits(&descending_inclusive_profile);
   test_fixed_initializers_remain_separate();
-  test_sub_rejected();
+  test_sub_lt_rejected();
   test_mul_rejected();
   test_div_rejected();
   test_adjacent_comparisons_rejected();
   test_extra_add_rejected();
+  test_add_descending_adjacent_rejected();
   test_descending_adjacent_rejected();
   puts("t-arm64-jit-pure-numeric-args OK");
   return 0;
