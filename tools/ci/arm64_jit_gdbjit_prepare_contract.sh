@@ -116,7 +116,10 @@ side_text=$(sed -n \
   '/^static int trace_stop_arm64_first_side(/,/^}/p' "$trace_source")
 terminal_text=$(sed -n \
   '/^static void trace_terminal_release(/,/^}/p' "$trace_source")
-test -n "$side_text" && test -n "$terminal_text"
+callback_ready_text=$(sed -n \
+  '/^int lj_trace_test_arm64_gdbjit_callback_ready(/,/^}/p' "$trace_source")
+test -n "$side_text" && test -n "$terminal_text" && \
+test -n "$callback_ready_text"
 for required in \
   'J->gdbjit_pending_abort = lj_gdbjit_preparetrace(J, body, cert.body);' \
   'lj_gdbjit_committrace(body, J->gdbjit_pending_abort)' \
@@ -128,6 +131,8 @@ for required in \
 done
 prepare_line=$(printf '%s\n' "$side_text" | \
   grep -nF 'lj_gdbjit_preparetrace(J, body, cert.body)' | cut -d: -f1)
+plan_line=$(printf '%s\n' "$side_text" | \
+  grep -nF 'trace_compact_body_plan(J, body, &compact)' | cut -d: -f1)
 compact_line=$(printf '%s\n' "$side_text" | \
   grep -nF 'trace_compact_body_init(J, &compact);' | cut -d: -f1)
 publish_line=$(printf '%s\n' "$side_text" | \
@@ -139,9 +144,11 @@ commit_line=$(printf '%s\n' "$side_text" | \
   cut -d: -f1)
 smr_leave_line=$(printf '%s\n' "$side_text" | \
   grep -nF 'lj_gc2_smr_read_leave(g);' | head -n 1 | cut -d: -f1)
-test -n "$prepare_line" && test -n "$compact_line" && \
+test -n "$plan_line" && test -n "$prepare_line" && \
+test -n "$compact_line" && \
 test -n "$publish_line" && test -n "$edge_line" && \
 test -n "$smr_leave_line" && test -n "$commit_line" && \
+test "$plan_line" -lt "$prepare_line" && \
 test "$prepare_line" -lt "$compact_line" && \
 test "$compact_line" -lt "$publish_line" && \
 test "$publish_line" -lt "$edge_line" && \
@@ -163,6 +170,17 @@ test -n "$release_line" && test -n "$dispatch_line" && \
 test -n "$abort_line" && \
 test "$detach_line" -lt "$idle_line" && test "$idle_line" -lt "$release_line" && \
 test "$release_line" -lt "$dispatch_line" && test "$dispatch_line" -lt "$abort_line"
+
+callback_reader_line=$(printf '%s\n' "$callback_ready_text" | \
+  grep -nF 'lj_gc2_smr_read_try(g)' | cut -d: -f1)
+callback_plan_line=$(printf '%s\n' "$callback_ready_text" | \
+  grep -nF 'trace_arm64_first_side_retire_plan(' | cut -d: -f1)
+callback_leave_line=$(printf '%s\n' "$callback_ready_text" | \
+  grep -nF 'lj_gc2_smr_read_leave(g);' | cut -d: -f1)
+test -n "$callback_reader_line" && test -n "$callback_plan_line" && \
+test -n "$callback_leave_line" && \
+test "$callback_reader_line" -lt "$callback_plan_line" && \
+test "$callback_plan_line" -lt "$callback_leave_line"
 if grep -F 'lj_mem_newt' "$source_file" >/dev/null; then
   echo "GDBJIT preparation retained the throwing allocator" >&2
   exit 1
@@ -208,17 +226,35 @@ for required in \
   'trace_retired_link_listed_acq(child)' \
   'reclaim_trace_at(g, mature_epoch) == 0' \
   'reclaim_trace_at(g, mature_epoch) >= 1u' \
-  'gc2_smr_readers_acq(G(L)) == 0' \
-  'stats.prepare_bounds_omits == 0' \
-  'stats.prepare_alloc_omits == 0' \
-  'stats.commit_lock_omits == 0' \
-  'stats.aborts_after_token == 0'; do
+  'trace_retired_head_acq(J) == NULL' \
+  'gc2_smr_readers_acq(G(L)) == 0'; do
   grep -F "$required" "$fixture_source" >/dev/null || {
     echo "GDBJIT prepare fixture lost proof: $required" >&2
     exit 1
   }
 done
 test "$(grep -Fc 'lj_gdbjit_committrace(&target, prep)' "$fixture_source")" = 2
+
+unsupported_text=$(sed -n \
+  '/^static void run_unsupported_side_case(/,/^}/p' "$fixture_source")
+test -n "$unsupported_text"
+for required in \
+  'stats.prepare_attempts == 0' \
+  'stats.prepare_successes == 0' \
+  'stats.prepare_bounds_omits == 0' \
+  'stats.prepare_alloc_omits == 0' \
+  'stats.commit_attempts == 0' \
+  'stats.commit_successes == 0' \
+  'stats.commit_lock_omits == 0' \
+  'stats.aborts == 0' \
+  'stats.aborts_after_token == 0' \
+  'stats.register_callbacks == 0' \
+  'stats.register_callbacks_ready == 0'; do
+  printf '%s\n' "$unsupported_text" | grep -F "$required" >/dev/null || {
+    echo "unsupported-side GDBJIT proof lost: $required" >&2
+    exit 1
+  }
+done
 
 for required in \
   'production GDBJIT first-side smoke must not use test helpers' \

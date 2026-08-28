@@ -721,6 +721,7 @@ static void run_side_case(GDBJITSideCase which)
     lj_gdbjit_test_descriptor_lock_release();
     assert(reclaim_trace_at(g, mature_epoch) >= 1u);
     assert(traceref_safe(J, childno) == NULL);
+    assert(trace_retired_head_acq(J) == NULL);
     assert(trace_gdbjit_entry_acq(root) == root_entry);
     lj_gdbjit_test_stats(&stats);
     assert(stats.register_callbacks == 2);
