@@ -110,6 +110,9 @@ Validated locally on native Apple Silicon macOS:
 - `arm64_jit_gdbjit_prepare_contract.sh` on arm64 and arm64e+BTI, including all
   root and real-child success/omission/rollback/external-error/retirement cases,
   plus helper-free production archives and descriptor/edge/flush smoke tests;
+- the complete `arm64_jit_fail_closed_gate.sh` umbrella from a clean restart,
+  including the newly wired GDBJIT stage and every later native entry, exit,
+  retirement, flush/reuse, recorder-safepoint, and VM-safepoint stage;
 - `arm64_jit_first_side_production_contract.sh` smoke plus GC-claim, scoped, and
   full-flush modes on arm64 and arm64e+BTI;
 - the macOS x86_64 platform build and binary smoke; and
