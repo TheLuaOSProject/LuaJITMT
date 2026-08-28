@@ -126,10 +126,10 @@ fi
 # The new token-private lifetime certificate is allowed exactly one one-shot
 # SMR admission per operation. It must prove ambient/exact ownership before
 # dereferencing J->L, double-capture the published body and PAUTH identity, and
-# publish only the six-field local certificate. It may not acquire/release the
+# publish only the exact source/destination local certificate. It may not acquire/release the
 # JIT token, wait for SMR, mutate parent metadata or set side admission.
 awk '/^static int trace_arm64_side_parent_asm_owner_base/ { copy=1 }
-     copy && /^#ifdef LJ_TRACE_TEST_HELPERS/ { exit }
+     copy && /^#if defined\(LJ_TRACE_TEST_HELPERS\) && defined\(LJ_ARM64_SIDE_ASM_TEST\)/ { exit }
      copy { print }' "$root/src/lj_trace.c" >"$cert_region"
 test -s "$cert_region"
 for required in \
@@ -150,14 +150,18 @@ for required in \
   'lj_gc2_smr_read_try(g)' \
   'lj_gc2_smr_read_leave(g)' \
   'trace_arm64_first_side_metadata_view_valid(' \
-  'view.parent == local.body && view.mcode == local.mcode' \
-  'view.continuationins == local.continuationins' \
+  'view.tracev != local->tracev || view.parent != local->body' \
+  'view.mcode != local->mcode' \
+  'view.continuationins != local->continuationins' \
+  'gcref_acq(view.tracev->slot[local->child])' \
+  'local.tracev = view.tracev;' \
   'local.body = view.parent;' \
   'local.mcode = view.mcode;' \
   'local.continuation = continuation;' \
   'local.continuationins = view.continuationins;' \
   'local.parent = parent;' \
   'local.exitno = exitno;' \
+  'local.child = child;' \
   'J->arm64_side_parent = local;'; do
   grep -F "$required" "$cert_region" >/dev/null || {
     echo "ARM64 side-parent certificate invariant changed: $required" >&2
@@ -179,20 +183,20 @@ fi
 cert_schema=$tmpdir/side-parent-cert-schema.txt
 sed -n '/^typedef struct LJTraceArm64SideParentCert/,/^} LJTraceArm64SideParentCert;/p' \
   "$root/src/lj_jit.h" >"$cert_schema"
-for field in 'GCtrace *body;' 'MCode *mcode;' \
+for field in 'TraceVec *tracev;' 'GCtrace *body;' 'MCode *mcode;' \
   'const BCIns *continuation;' 'BCIns continuationins;' \
-  'TraceNo parent;' 'ExitNo exitno;'; do
+  'TraceNo parent;' 'ExitNo exitno;' 'TraceNo child;'; do
   grep -Fx "  $field" "$cert_schema" >/dev/null || {
     echo "ARM64 side-parent stored schema changed: $field" >&2
     exit 1
   }
 done
 field_count=$(sed '1d;$d' "$cert_schema" | tr -cd ';' | wc -c | tr -d ' ')
-if test "$field_count" != 6; then
-  echo "ARM64 side-parent stored schema no longer has exactly six fields" >&2
+if test "$field_count" != 8; then
+  echo "ARM64 side-parent stored schema no longer has exactly eight fields" >&2
   exit 1
 fi
-if grep -E 'mcauth|TraceVec|tracev' "$cert_schema" >/dev/null; then
+if grep -E 'mcauth|SnapShot|exittab' "$cert_schema" >/dev/null; then
   echo "ARM64 side-parent stored schema gained redundant identity" >&2
   exit 1
 fi
@@ -380,13 +384,17 @@ for required in \
   'LJ_TRACE_ARM64_SIDE_PARENT_RETRY == 0' \
   'LJ_TRACE_ARM64_SIDE_PARENT_OK == 1' \
   'test_parent_lifetime_certificate(L, &fixture)' \
+  'J->arm64_side_parent.tracev = (TraceVec *)&f->replacement_tracev;' \
   'J->arm64_side_parent.body = &replacement;' \
   'J->arm64_side_parent.mcode = cert.mcode+1;' \
   'J->arm64_side_parent.continuation = continuation+1;' \
   'J->arm64_side_parent.continuationins ^= UINT32_C(0x00000100);' \
   'J->arm64_side_parent.parent++;' \
   'J->arm64_side_parent.exitno--;' \
+  'J->arm64_side_parent.child++;' \
   'f->replacement_tracev = f->tracev;' \
+  'setgcrefrel(f->tracev.slot[SIDE_META_CHILD], NULL);' \
+  '(const GCobj *)LJ_TRACE_PENDING);' \
   'setgcrefrel(f->tracev.slot[SIDE_META_PARENT], obj2gco(&replacement));' \
   'saved_continuationins ^ UINT32_C(0x00000100));' \
   'gc2_smr_reclaiming_cas(' \

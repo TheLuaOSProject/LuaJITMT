@@ -15,20 +15,25 @@ not side-recording admission.
 
 ## Stored identity
 
-`jit_State.arm64_side_parent` contains exactly six fields in a 40-byte payload:
+The publication-seal checkpoint extended `jit_State.arm64_side_parent` to
+exactly eight fields in a 48-byte payload:
 
+- `tracev`: the exact source/destination trace-vector generation;
 - `body`: the exact published `GCtrace *` allocation;
 - `mcode`: the raw parent machine-code identity used by a future linked tail;
 - `continuation`: the selected immutable parent snapshot PC;
 - `continuationins`: the exact bytecode word captured at that PC;
 - `parent`: the public trace number whose slot must still name `body`; and
-- `exitno`: the selected parent exit.
+- `exitno`: the selected parent exit; and
+- `child`: the reserved child number whose slot must still equal
+  `LJ_TRACE_PENDING`.
 
-`body == NULL` is the sole empty representation. The certificate deliberately
-does not store `TraceVec *`: vector growth may replace the vector while retaining
-the exact trace slot/body identity. It also does not store a redundant PAUTH
-target. On arm64e, the current published `GCtrace.mcauth` is derived and checked
-again from `lj_ptr_sign(mcode, body)` on every stable view.
+`body == NULL` remains the sole empty representation. Pinning `tracev` is now
+required because publication will consume a direct pending child-slot pointer:
+even a byte-identical vector replacement is an ABA generation change and is
+rejected. The certificate still does not store a redundant PAUTH target. On
+arm64e, the current published `GCtrace.mcauth` is derived and checked again from
+`lj_ptr_sign(mcode, body)` on every stable view.
 
 The payload is non-atomic because it is private to the exact recorder-token
 owner. Capture first requires the token word to equal the ambient TG's logical
@@ -62,14 +67,14 @@ admission bit. Their distinct results are:
 - `SMR_RETRY`: the one-shot trace-body SMR admission was closed.
 
 An authorized capture clears the embedded destination before starting. It
-builds a local six-field value and copies that value to `jit_State` only after
-the double-captured parent view, bytecode generation, PAUTH identity and final
-ASM-owner check all succeed. Thus a failed capture is empty rather than a
-partially updated or replayable predecessor. An unauthorized call cannot clear
-another actor's token-private value. Revalidation copies the existing private
-value, admits one SMR reader, reacquires the current trace vector/slot, and
-requires the same body, mcode and exact continuation bytecode word while leaving
-the stored value unchanged.
+builds a local eight-field value and copies that value to `jit_State` only after
+the double-captured parent view, bytecode generation, PAUTH identity, exact
+pending child slot and final ASM-owner check all succeed. Thus a failed capture
+is empty rather than a partially updated or replayable predecessor. An
+unauthorized call cannot clear another actor's token-private value.
+Revalidation copies the existing private value, admits one SMR reader, requires
+the same vector generation, parent body, mcode, continuation bytecode and
+pending child slot, and leaves the stored value unchanged.
 
 The stable parent view now acquires the signed `mcauth` bits along with the raw
 mcode and includes those bits in its double-capture equality. On PAUTH builds it
@@ -103,11 +108,13 @@ The selected parent snapshot certificate additionally proves that canonical
 slot 4 exists before the assertion-only `lj_snap_regspmap()` search, keeping
 that release-build scan bounded.
 
-The remaining publication transaction must retain the exact parent/root
-certificate through child publication and the authenticated last
-parent-exit-slot store, then clear the successful attempt before generic
-terminal release. This checkpoint does not claim side-child/root retirement
-ordering or enterable side code.
+The later dry publication-seal checkpoint retains this exact source and
+destination certificate through an atomic `ASM -> PUBLISH` state transition.
+It still does not publish a child. The remaining transaction must consume the
+captured raw authenticated parent fallback value through the last parent-exit
+CAS, then clear the successful attempt before generic terminal release. This
+checkpoint does not claim side-child/root retirement ordering or enterable
+side code.
 
 ## Synthetic mutation contract
 
@@ -116,7 +123,8 @@ LOOP parent and exact ASM-owner scratch, captures the embedded identity and
 revalidates it. It mutates every stored field and independently exercises:
 
 - same-slot removal and replacement by an otherwise identical body allocation;
-- legal TraceVec replacement which retains the exact body;
+- byte-identical TraceVec replacement as an invalid ABA generation change;
+- pending child-slot removal and replacement;
 - parent mcode and selected snapshot-footer generations;
 - same-address continuation bytecode generation changes;
 - missing, raw/unsigned and wrong-discriminator `mcauth` values on arm64e;
@@ -127,7 +135,7 @@ revalidates it. It mutates every stored field and independently exercises:
 
 `tools/ci/arm64_jit_side_ingress_metadata_contract.sh` separates the original
 read-only ingress audit from the new bounded-SMR region, checks the exact
-six-field schema, PAUTH derivation, two one-shot admission/leave pairs, absence
+eight-field schema, PAUTH derivation, two one-shot admission/leave pairs, absence
 of blocking/mutation surfaces, the init/start/downrec/abort/terminal cleanup
 ordering, shutdown empty-state preflight, logical-TG-token/physical-actor split,
 and the exact assembler capture/revalidation call set and ordering. It runs the fixture

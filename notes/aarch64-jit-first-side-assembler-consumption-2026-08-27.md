@@ -17,10 +17,10 @@ still-closed production side recorder at compile time.
 For an exact nonzero `J->parent`, `lj_asm_trace()` now requires `J->loopref ==
 0`, constructs the canonical `LJArm64SideIRView`, and runs
 `lj_asm_arm64_side_ir_admit()`. Only after semantic success does it capture the
-six-field token-private parent certificate. Capture precedes IR growth, scratch
-trace allocation, mcode reservation and exit-table setup. `RETRY` maps to
-`LJ_TRERR_RETRY`; a closed one-shot SMR admission maps distinctly to
-`LJ_TRERR_SMRRETRY`.
+eight-field token-private parent/destination certificate. Capture precedes IR
+growth, scratch trace allocation, mcode reservation and exit-table setup.
+`RETRY` maps to `LJ_TRERR_RETRY`; a closed one-shot SMR admission maps
+distinctly to `LJ_TRERR_SMRRETRY`.
 
 `trace_abort()` clears the embedded certificate before mcode teardown. Thus an
 `LJ_TRERR_MCODELM` retry re-enters `lj_asm_trace()` and must repeat semantic
@@ -92,7 +92,9 @@ side attempt throws before `trace_stop()` regardless of diagnostic state, so
 the test build cannot publish or retarget a child.
 
 The fixture forces one exit-stub `LJ_TRERR_MCODELM` restart and proves two
-certificate captures but only one completed assembly. It observes the real
+certificate captures but only one completed assembly. Each capture now pins the
+exact TraceVec generation and reserved `LJ_TRACE_PENDING` child slot as well as
+the parent. It observes the real
 single x28 parent map, optional `BTI J`, `MOV x27, x28`, the certified parent
 target and the actual emitted B26 instruction, final revalidation and the
 scratch-only side marker. The mandatory post-assembly abort then proves slot 2,
@@ -102,14 +104,17 @@ VM state and `jit_base` all return cleanly, and root 1 remains natively usable.
 
 `tools/ci/arm64_jit_side_asm_consumption_contract.sh` rebuilt and executed this
 path twice as ordinary arm64 and twice as arm64e with BTI/PAUTH on this machine.
-All four executions passed, including the forced retry, and the runner restored
-an ordinary arm64 helper build afterward. The ordinary build is also checked
-to contain none of the four special probe API symbols.
+All four executions passed, including the forced retry and the later dry
+publication seal, and the runner restored an ordinary arm64 helper build
+afterward. The ordinary build is checked to contain none of the special probe
+or dry-seal API symbols.
 
 The complete `arm64_jit_fail_closed_gate.sh` umbrella also passed after this
 integration, covering both arm64 and arm64e native paths together with root
 entry, exits, trace retirement, live flush/reuse and safepoint runtime checks.
 
-This checkpoint does not prove child publication, authenticated parent-exit
-publication, enterability or side/root retirement. Those remain separate
-transactions that must be completed before the recorder gate can open.
+The later dry-seal checkpoint proves the same-word abort race and exact
+pre-publication inputs at this seam, but still performs no irreversible action.
+It does not prove child publication, authenticated parent-exit publication,
+enterability or side/root retirement. Those remain separate transactions that
+must be completed before the recorder gate can open.

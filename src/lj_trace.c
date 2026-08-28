@@ -4627,7 +4627,7 @@ lj_trace_arm64_side_parent_capture(jit_State *J)
   LJTraceArm64SideParentCert local;
   TraceArm64FirstSideLoopView view;
   const BCIns *continuation;
-  TraceNo parent;
+  TraceNo parent, child;
   ExitNo exitno;
   global_State *g;
   LJTraceArm64SideParentResult result = LJ_TRACE_ARM64_SIDE_PARENT_RETRY;
@@ -4640,6 +4640,7 @@ lj_trace_arm64_side_parent_capture(jit_State *J)
   ** predecessor. Authenticate the private owner before performing this clear. */
   lj_trace_arm64_side_parent_clear(J);
   parent = J->parent;
+  child = trace_traceno_acq(&J->cur);
   exitno = J->exitno;
   continuation = trace_startpc_acq(&J->cur);
   if (!trace_arm64_side_parent_asm_owner_exact(
@@ -4652,16 +4653,22 @@ lj_trace_arm64_side_parent_capture(jit_State *J)
         J, parent, exitno, continuation) ||
       !trace_arm64_first_side_metadata_view_valid(
         J, parent, exitno, continuation, NULL, &view) ||
-      view.parent == NULL || view.mcode == NULL ||
+      view.tracev == NULL || view.parent == NULL || view.mcode == NULL ||
+      child == 0 || child == parent ||
+      (MSize)child >= view.tracev->sizetrace ||
+      gcref_acq(view.tracev->slot[child]) !=
+	(const GCobj *)LJ_TRACE_PENDING ||
       !trace_arm64_side_parent_asm_owner_exact(
         J, parent, exitno, continuation))
     goto out;
+  local.tracev = view.tracev;
   local.body = view.parent;
   local.mcode = view.mcode;
   local.continuation = continuation;
   local.continuationins = view.continuationins;
   local.parent = parent;
   local.exitno = exitno;
+  local.child = child;
   /* This is the sole successful publication into token-private recorder state. */
   J->arm64_side_parent = local;
   result = LJ_TRACE_ARM64_SIDE_PARENT_OK;
@@ -4670,37 +4677,349 @@ out:
   return result;
 }
 
+/* Revalidate one certificate while the caller holds the one-shot SMR reader.
+** Keeping this body separate lets the future publication seal retain the exact
+** view and destination generation through its same-word state transition. */
+static int trace_arm64_side_parent_revalidate_held(jit_State *J,
+    const LJTraceArm64SideParentCert *local,
+    TraceArm64FirstSideLoopView *viewp)
+{
+  TraceArm64FirstSideLoopView view;
+  if (local == NULL || local->tracev == NULL || local->body == NULL ||
+      local->mcode == NULL || local->continuation == NULL ||
+      local->parent == 0 || local->child == 0 ||
+      local->child == local->parent ||
+      !trace_arm64_side_parent_asm_owner_exact(
+        J, local->parent, local->exitno, local->continuation) ||
+      !trace_arm64_first_side_metadata_view_valid(
+        J, local->parent, local->exitno, local->continuation, NULL, &view) ||
+      view.tracev != local->tracev || view.parent != local->body ||
+      view.mcode != local->mcode ||
+      view.continuationins != local->continuationins ||
+      (MSize)local->child >= view.tracev->sizetrace ||
+      gcref_acq(view.tracev->slot[local->child]) !=
+	(const GCobj *)LJ_TRACE_PENDING ||
+      trace_traceno_acq(&J->cur) != local->child ||
+      !trace_arm64_side_parent_asm_owner_exact(
+        J, local->parent, local->exitno, local->continuation))
+    return 0;
+  if (viewp)
+    *viewp = view;
+  return 1;
+}
+
 LJTraceArm64SideParentResult
 lj_trace_arm64_side_parent_revalidate(jit_State *J)
 {
   LJTraceArm64SideParentCert local;
-  TraceArm64FirstSideLoopView view;
   global_State *g;
   LJTraceArm64SideParentResult result = LJ_TRACE_ARM64_SIDE_PARENT_RETRY;
 
   if (J == NULL || !trace_arm64_side_parent_asm_owner_base(J, NULL))
     return result;
   local = J->arm64_side_parent;
-  if (local.body == NULL || local.mcode == NULL ||
-      local.continuation == NULL || local.parent == 0 ||
+  if (local.tracev == NULL || local.body == NULL || local.mcode == NULL ||
+      local.continuation == NULL || local.parent == 0 || local.child == 0 ||
       !trace_arm64_side_parent_asm_owner_exact(
         J, local.parent, local.exitno, local.continuation))
     return result;
   g = J2G(J);
   if (!lj_gc2_smr_read_try(g))
     return LJ_TRACE_ARM64_SIDE_PARENT_SMR_RETRY;
-  if (trace_arm64_side_parent_asm_owner_exact(
-        J, local.parent, local.exitno, local.continuation) &&
-      trace_arm64_first_side_metadata_view_valid(
-        J, local.parent, local.exitno, local.continuation, NULL, &view) &&
-      view.parent == local.body && view.mcode == local.mcode &&
-      view.continuationins == local.continuationins &&
-      trace_arm64_side_parent_asm_owner_exact(
-        J, local.parent, local.exitno, local.continuation))
+  if (trace_arm64_side_parent_revalidate_held(J, &local, NULL))
     result = LJ_TRACE_ARM64_SIDE_PARENT_OK;
   lj_gc2_smr_read_leave(g);
   return result;
 }
+
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
+static uint32_t trace_test_arm64_side_publish_seal_failure;
+
+typedef struct TraceArm64SidePublishPlan {
+  TraceVec *tracev;
+  GCRef *childslot;
+  GCtrace *parent;
+  GCtrace *childbody;
+  SnapShot *parentsnap;
+  MCode **parent_exitslot;
+  MCode *parent_fallback;
+  void *parent_fallback_encoding;
+  MCode *child_mcode;
+  void *child_target_encoding;
+  TraceNo parentno;
+  TraceNo childno;
+  ExitNo exitno;
+  MSize parent_topslot;
+  MSize child_topslot;
+} TraceArm64SidePublishPlan;
+
+/* Validate the still-private compact child and every direct destination the
+** future infallible suffix will consume. The assembler marker is necessary but
+** not sufficient here: replay the exact semantic/post-RA policy from immutable
+** scratch and prove that the reserved child slot still names PENDING. */
+static int trace_arm64_side_publish_child_valid(jit_State *J, GCtrace *T,
+    const LJTraceArm64SideParentCert *cert,
+    const TraceArm64FirstSideLoopView *parentview,
+    TraceArm64SidePublishPlan *plan)
+{
+  GCtrace *body = J->curfinal;
+  LJArm64SidePostRAView postra;
+  IRRef finalnins, semantic_nins, admitted_nins;
+  MCode *mcode, *exitstub, *fallback;
+  MCode **exittab;
+  void *fallback_encoding;
+  MSize szmcode, nsnap, nexits, i;
+  uint16_t parentmap = REGSP(RID_X28, SPS_NONE);
+  char *compact;
+
+  if (T == NULL || T != &J->cur || body == NULL || cert == NULL ||
+      parentview == NULL || plan == NULL || cert->tracev == NULL ||
+      cert->tracev != parentview->tracev || cert->body != parentview->parent ||
+      cert->parent != parentview->traceno || cert->parent != J->parent ||
+      cert->exitno != J->exitno || cert->child == 0 ||
+      cert->child == cert->parent ||
+      trace_traceno_acq(T) != cert->child ||
+      trace_root_acq(T) != cert->parent ||
+      trace_link_acq(T) != cert->parent ||
+      trace_linktype_acq(T) != LJ_TRLINK_ROOT ||
+      trace_nextroot_acq(T) != 0 || trace_nextside_acq(T) != 0 ||
+      trace_nchild_acq(T) != 0 || trace_spadjust_acq(T) != 0 ||
+      trace_topslot_acq(T) != parentview->topslot ||
+      trace_startptgco_acq(T) != parentview->startpt ||
+      trace_startpc_acq(T) != cert->continuation ||
+      trace_startins_acq(T) != BCINS_AD(BC_JMP, 0, 0) ||
+      T->sinktags != 0 ||
+      la_load8_acq(&T->unused1) != TRACE_ARM64_INT_SIDE_ADMITTED ||
+      trace_native_pinword_acq(T) != 0 ||
+      la_load64_acq(&T->retire_epoch) != 0 ||
+      trace_retired_link_acq(T) != 0 ||
+      tracevec_acq(J) != cert->tracev ||
+      (MSize)cert->child >= cert->tracev->sizetrace ||
+      gcref_acq(cert->tracev->slot[cert->child]) !=
+	(const GCobj *)LJ_TRACE_PENDING)
+    goto fail_current;
+
+  /* lj_trace_alloc() owns only compact IR storage at this boundary. Snapshot,
+  ** exit-table, mcode and semantic-header ownership remain in J->cur until the
+  ** future post-seal transfer. */
+  finalnins = trace_nins_acq(body);
+  compact = (char *)body + ((sizeof(GCtrace)+7)&~7);
+  if (body->gct != (uint32_t)~LJ_TTRACE ||
+      trace_traceno_acq(body) != 0 || trace_link_acq(body) != 0 ||
+      trace_root_acq(body) != 0 || trace_nextroot_acq(body) != 0 ||
+      trace_nextside_acq(body) != 0 || trace_nchild_acq(body) != 0 ||
+      trace_startptgco_acq(body) != NULL || trace_startpc_acq(body) != NULL ||
+      trace_snap_acq(body) != NULL || trace_snapmap_acq(body) != NULL ||
+      trace_mcode_acq(body) != NULL || trace_exittab_acq(body) != NULL ||
+      trace_exitstub_acq(body) != NULL || trace_szmcode_acq(body) != 0 ||
+      la_load8_acq(&body->unused1) != 0 ||
+      trace_native_pinword_acq(body) != 0 ||
+      la_load64_acq(&body->retire_epoch) != 0 ||
+      trace_retired_link_acq(body) != TRACE_RETIRED_LINK_UNLINKED ||
+      trace_nk_acq(body) != trace_nk_acq(T) ||
+      finalnins != trace_nins_acq(T) || finalnins <= REF_FIRST ||
+      trace_ir_acq(body) == NULL ||
+      &trace_ir_acq(body)[trace_nk_acq(body)] != (IRIns *)compact)
+    goto fail_body;
+#ifdef LUAJIT_USE_GDBJIT
+  if (trace_gdbjit_entry_acq(body) != NULL)
+    goto fail_body;
+#endif
+
+  nsnap = trace_nsnap_acq(T);
+  mcode = trace_mcode_acq(T);
+  szmcode = trace_szmcode_acq(T);
+  exittab = trace_exittab_acq(T);
+  exitstub = trace_exitstub_acq(T);
+  nexits = trace_exittab_nslots_acq(T);
+  if (nsnap == 0 || nsnap != 4u || trace_nsnapmap_acq(T) != 13u ||
+      mcode == NULL || szmcode <= sizeof(MCode) ||
+      (szmcode & (sizeof(MCode)-1u)) != 0 ||
+      ((uintptr_t)(void *)mcode & (sizeof(MCode)-1u)) != 0 ||
+      exittab == NULL || exitstub == NULL || nexits != nsnap+1u ||
+      ((uintptr_t)(void *)exittab & (sizeof(void *)-1u)) != 0 ||
+      (uintptr_t)(void *)exitstub <
+	(uintptr_t)ARM64_EXIT_FALLBACK_WORDS*sizeof(MCode))
+    goto fail_mcode;
+  fallback = exitstub_trace_fallback_addr_(exitstub);
+  if ((uintptr_t)(void *)mcode > UINTPTR_MAX-(uintptr_t)szmcode ||
+      (uintptr_t)(void *)mcode+(uintptr_t)szmcode >
+	(uintptr_t)(void *)fallback ||
+      (uintptr_t)(void *)fallback-
+	((uintptr_t)(void *)mcode+(uintptr_t)szmcode) > sizeof(MCode))
+    goto fail_layout;
+  fallback_encoding = trace_exittarget_arm64_encode(J2G(J), fallback);
+  for (i = 0; i < nexits; i++)
+    if (la_loadptr_acq((void *const *)&exittab[i]) != fallback_encoding)
+      goto fail_exittab;
+
+  memset(&postra, 0, sizeof(postra));
+  semantic_nins = finalnins-1u;
+  postra.semantic.ir = trace_ir_acq(body);
+  postra.semantic.snap = trace_snap_acq(T);
+  postra.semantic.snapmap = trace_snapmap_acq(T);
+  postra.semantic.proto_bc = proto_bc(J->pt);
+  postra.semantic.nins = semantic_nins;
+  postra.semantic.nk = trace_nk_acq(T);
+  postra.semantic.nsnap = nsnap;
+  postra.semantic.nsnapmap = trace_nsnapmap_acq(T);
+  postra.semantic.proto_sizebc = J->pt->sizebc;
+  postra.semantic.baseslot = J->baseslot;
+  postra.semantic.root_topslot = parentview->topslot;
+  postra.semantic.traceno = cert->child;
+  postra.semantic.parent = cert->parent;
+  postra.semantic.root = trace_root_acq(T);
+  postra.semantic.link = trace_link_acq(T);
+  postra.semantic.exitno = cert->exitno;
+  postra.semantic.startins = trace_startins_acq(T);
+  postra.semantic.linktype = trace_linktype_acq(T);
+  postra.semantic.sinktags = T->sinktags;
+  postra.semantic.base_delta = 0;
+  postra.parentmap = &parentmap;
+  postra.entry = mcode;
+  postra.nins = finalnins;
+  postra.stopins = REF_BASE+1u;
+  postra.orignins = semantic_nins;
+  postra.spadjust = trace_spadjust_acq(T);
+  postra.parent_spadjust = parentview->spadjust;
+  postra.topslot = trace_topslot_acq(T);
+  postra.parent_topslot = parentview->topslot;
+  postra.parentmap_n = 1u;
+  postra.entry_words = szmcode/sizeof(MCode);
+  postra.branch_track = (uint8_t)LJ_ABI_BRANCH_TRACK;
+  if (!lj_asm_arm64_side_postra_admit(&postra, &admitted_nins) ||
+      admitted_nins != semantic_nins)
+    goto fail_postra;
+
+  plan->tracev = cert->tracev;
+  plan->childslot = &cert->tracev->slot[cert->child];
+  plan->parent = cert->body;
+  plan->childbody = body;
+  plan->parentsnap = &parentview->snap[cert->exitno];
+  plan->parent_exitslot = &parentview->exittab[cert->exitno];
+  plan->parent_fallback = parentview->fallback;
+  plan->parent_fallback_encoding = parentview->fallback_encoding;
+  plan->child_mcode = mcode;
+  plan->child_target_encoding =
+    trace_exittarget_arm64_encode(J2G(J), mcode);
+  plan->parentno = cert->parent;
+  plan->childno = cert->child;
+  plan->exitno = cert->exitno;
+  plan->parent_topslot = parentview->snaptopslot;
+  plan->child_topslot = trace_topslot_acq(T);
+  return 1;
+
+fail_current:
+  la_store32_rel(&trace_test_arm64_side_publish_seal_failure, 1);
+  return 0;
+fail_body:
+  la_store32_rel(&trace_test_arm64_side_publish_seal_failure, 2);
+  return 0;
+fail_mcode:
+  la_store32_rel(&trace_test_arm64_side_publish_seal_failure, 3);
+  return 0;
+fail_layout:
+  la_store32_rel(&trace_test_arm64_side_publish_seal_failure, 4);
+  return 0;
+fail_exittab:
+  la_store32_rel(&trace_test_arm64_side_publish_seal_failure, 5);
+  return 0;
+fail_postra:
+  la_store32_rel(&trace_test_arm64_side_publish_seal_failure, 6);
+  return 0;
+}
+
+/* Final one-shot lifetime/topology seal. Success leaves state=PUBLISH and the
+** one-shot SMR reader held: the future infallible suffix must retain it through
+** the final parent-exit CAS. Failure leaves no reader. The unchanged low
+** recorder token plus non-abortable state prevent logical retirement while
+** the reader protects every direct plan pointer from physical reclamation. */
+static LJTraceArm64SideParentResult trace_arm64_side_publish_seal(
+    jit_State *J, GCtrace *T, TraceArm64SidePublishPlan *plan)
+{
+  LJTraceArm64SideParentCert cert;
+  TraceArm64FirstSideLoopView parentview;
+  global_State *g;
+  LJTraceArm64SideParentResult result = LJ_TRACE_ARM64_SIDE_PARENT_RETRY;
+  if (J == NULL || T == NULL || plan == NULL ||
+      !trace_arm64_side_parent_asm_owner_base(J, NULL))
+    return result;
+  la_store32_rel(&trace_test_arm64_side_publish_seal_failure, 0);
+  cert = J->arm64_side_parent;
+  g = J2G(J);
+  memset(plan, 0, sizeof(*plan));
+  if (!lj_gc2_smr_read_try(g))
+    return LJ_TRACE_ARM64_SIDE_PARENT_SMR_RETRY;
+  if (!trace_arm64_side_parent_revalidate_held(J, &cert, &parentview)) {
+    la_store32_rel(&trace_test_arm64_side_publish_seal_failure, 7);
+  } else if (trace_arm64_side_publish_child_valid(
+      J, T, &cert, &parentview, plan)) {
+    if (!trace_arm64_side_parent_asm_owner_exact(
+          J, cert.parent, cert.exitno, cert.continuation)) {
+      la_store32_rel(&trace_test_arm64_side_publish_seal_failure, 8);
+    } else if (!lj_trace_state_publish_try(J)) {
+      la_store32_rel(&trace_test_arm64_side_publish_seal_failure, 9);
+    } else {
+      result = LJ_TRACE_ARM64_SIDE_PARENT_OK;
+    }
+  }
+  if (result != LJ_TRACE_ARM64_SIDE_PARENT_OK)
+    lj_gc2_smr_read_leave(g);
+  return result;
+}
+
+int lj_trace_test_arm64_side_publish_seal(jit_State *J, GCtrace *T)
+{
+  TraceArm64SidePublishPlan plan;
+  LJTraceArm64SideParentResult result;
+  uint32_t expect;
+  int ok;
+  result = trace_arm64_side_publish_seal(J, T, &plan);
+  if (result != LJ_TRACE_ARM64_SIDE_PARENT_OK)
+    return 0;
+  ok = lj_trace_state_load(J) == LJ_TRACE_PUBLISH &&
+    plan.tracev == J->arm64_side_parent.tracev &&
+    plan.parent == J->arm64_side_parent.body &&
+    plan.childbody == J->curfinal &&
+    plan.childno == trace_traceno_acq(T) &&
+    plan.parentno == J->parent && plan.exitno == J->exitno &&
+    plan.childslot == &plan.tracev->slot[plan.childno] &&
+    gcref_acq(*plan.childslot) == (const GCobj *)LJ_TRACE_PENDING &&
+    plan.parentsnap == &trace_snap_acq(plan.parent)[plan.exitno] &&
+    plan.parent_exitslot == &trace_exittab_acq(plan.parent)[plan.exitno] &&
+    la_loadptr_acq((void *const *)plan.parent_exitslot) ==
+      plan.parent_fallback_encoding &&
+    plan.parent_fallback_encoding ==
+      trace_exittarget_arm64_encode(J2G(J), plan.parent_fallback) &&
+    plan.child_mcode == trace_mcode_acq(T) &&
+    plan.child_target_encoding ==
+      trace_exittarget_arm64_encode(J2G(J), trace_mcode_acq(T)) &&
+    gc2_smr_readers_acq(J2G(J)) == 1;
+  if (!ok)
+    la_store32_rel(&trace_test_arm64_side_publish_seal_failure, 10);
+  /* Exercise the post-CAS half of the same-word race: an asynchronous abort
+  ** after the seal must leave PUBLISH intact. No irreversible action has run in
+  ** this test-only checkpoint, so restore ASM with an exact CAS before the
+  ** mandatory pre-trace_stop abort discards the scratch. */
+  lj_trace_state_abort(J);
+  if (lj_trace_state_load(J) != LJ_TRACE_PUBLISH)
+    ok = 0;
+  expect = (uint32_t)LJ_TRACE_PUBLISH;
+  if (!la_cas32((uint32_t *)&J->state, &expect, (uint32_t)LJ_TRACE_ASM,
+		LA_ACQ_REL, LA_ACQ)) {
+    lj_assertJ(0, "test-only ARM64 publication seal restore lost");
+    abort();
+  }
+  lj_gc2_smr_read_leave(J2G(J));
+  return ok && lj_trace_state_load(J) == LJ_TRACE_ASM &&
+    gc2_smr_readers_acq(J2G(J)) == 0;
+}
+
+uint32_t lj_trace_test_arm64_side_publish_seal_failure(void)
+{
+  return la_load32_acq(&trace_test_arm64_side_publish_seal_failure);
+}
+#endif
 
 #ifdef LJ_TRACE_TEST_HELPERS
 int lj_trace_test_arm64_first_side_loop_valid(jit_State *J, lua_State *L,

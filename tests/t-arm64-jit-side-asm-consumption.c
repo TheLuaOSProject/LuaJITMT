@@ -122,9 +122,9 @@ static int selected_map_has_slot(const GCtrace *T, ExitNo exitno,
 
 static int side_parent_cert_zero(const LJTraceArm64SideParentCert *cert)
 {
-  return cert->body == NULL && cert->mcode == NULL &&
+  return cert->tracev == NULL && cert->body == NULL && cert->mcode == NULL &&
 	 cert->continuation == NULL && cert->continuationins == 0 &&
-	 cert->parent == 0 && cert->exitno == 0;
+	 cert->parent == 0 && cert->exitno == 0 && cert->child == 0;
 }
 
 static void expect_root_shape(jit_State *J, GCproto *pt, GCtrace **rootp,
@@ -174,9 +174,11 @@ static void expect_root_shape(jit_State *J, GCproto *pt, GCtrace **rootp,
 static void dump_probe(const LJArm64SideAsmProbe *probe)
 {
   fprintf(stderr,
-    "side assembler probe stages=%#x captures=%u parent=%u child=%u "
+    "side assembler probe stages=%#x captures=%u seal_failure=%u "
+    "parent=%u child=%u "
     "exit=%u mapn=%u entry_words=%u tail_pc=%p tail=%#x marker=%#x\n",
     (unsigned)probe->stages, (unsigned)probe->capture_count,
+    (unsigned)probe->seal_failure,
     (unsigned)probe->parent, (unsigned)probe->child,
     (unsigned)probe->exitno, (unsigned)probe->parentmap_n,
     (unsigned)probe->entry_words, (void *)probe->tail_pc,
@@ -277,18 +279,23 @@ int main(void)
       (unsigned)snapcount_before);
   }
   assert(done);
+  if (probe.stages != LJ_ARM64_SIDE_ASM_PROBE_ALL)
+    dump_probe(&probe);
   assert(probe.stages == LJ_ARM64_SIDE_ASM_PROBE_ALL);
   assert(probe.capture_count == 2);
   assert(probe.parent == PROBE_PARENT);
   assert(probe.child == PROBE_CHILD);
   assert(probe.exitno == PROBE_EXIT);
 
-  /* All six stored certificate identities come from the real parent. */
+  /* The exact source and pending destination generations come from the real
+  ** recorder attempt; none are recovered by trace number after assembly. */
+  assert(probe.cert_tracev == tracevec_acq(J));
   assert(probe.cert_body == root);
   assert(probe.cert_mcode == root_mcode);
   assert(probe.cert_continuation == continuation);
   assert(probe.cert_continuationins == continuationins);
   assert(probe.cert_continuationins == loadbc(continuation));
+  assert(probe.cert_child == PROBE_CHILD);
 
   /* The generic parent-map builder and the real head shuffle consumed the
   ** sole inherited slot from x28 and emitted the canonical x28 -> x27 move. */
@@ -365,6 +372,21 @@ int main(void)
   assert(trace_mcode_acq(root) == root_mcode);
   assert(loadbc(root_pc) == root_jloop);
   assert(gc2_smr_readers_acq(g) == 0);
+
+  /* Same-word ordering is decisive on both sides of the seal CAS. An abort
+  ** which wins first makes the CAS fail; one which arrives after PUBLISH must
+  ** leave the non-abortable state intact. No recorder is active in this local
+  ** state-machine check. */
+  lj_trace_state_store(J, LJ_TRACE_ASM);
+  lj_trace_state_abort(J);
+  assert(lj_trace_state_load(J) ==
+	 (TraceState)((uint32_t)LJ_TRACE_ASM & ~(uint32_t)LJ_TRACE_ACTIVE));
+  assert(!lj_trace_state_publish_try(J));
+  lj_trace_state_store(J, LJ_TRACE_ASM);
+  assert(lj_trace_state_publish_try(J));
+  lj_trace_state_abort(J);
+  assert(lj_trace_state_load(J) == LJ_TRACE_PUBLISH);
+  lj_trace_state_store(J, LJ_TRACE_IDLE);
 
   lua_close(L);
   puts("t-arm64-jit-side-asm-consumption OK");

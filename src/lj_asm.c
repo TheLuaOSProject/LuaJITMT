@@ -3391,6 +3391,7 @@ static void asm_test_side_probe_capture(jit_State *J)
 {
   if (asm_test_side_probe_active()) {
     asm_test_side_probe.capture_count++;
+    asm_test_side_probe.cert_tracev = J->arm64_side_parent.tracev;
     asm_test_side_probe.cert_body = J->arm64_side_parent.body;
     asm_test_side_probe.cert_mcode = J->arm64_side_parent.mcode;
     asm_test_side_probe.cert_continuation =
@@ -3399,6 +3400,7 @@ static void asm_test_side_probe_capture(jit_State *J)
       J->arm64_side_parent.continuationins;
     asm_test_side_probe.parent = J->arm64_side_parent.parent;
     asm_test_side_probe.exitno = J->arm64_side_parent.exitno;
+    asm_test_side_probe.cert_child = J->arm64_side_parent.child;
     asm_test_side_probe.stages |= LJ_ARM64_SIDE_ASM_PROBE_CAPTURE;
   }
 }
@@ -3436,13 +3438,17 @@ static void asm_test_side_probe_tail(MCode *target, MCode *tail_pc)
   }
 }
 
-static int asm_test_side_probe_finish(GCtrace *T)
+static int asm_test_side_probe_finish(jit_State *J, GCtrace *T)
 {
   if (!asm_test_side_probe_active())
     return 0;
   asm_test_side_probe.child = trace_traceno_acq(T);
   asm_test_side_probe.marker =
     (uint8_t)(la_load8_acq(&T->unused1) & TRACE_ARM64_INT_SIDE_ADMITTED);
+  if (lj_trace_test_arm64_side_publish_seal(J, T))
+    asm_test_side_probe.stages |= LJ_ARM64_SIDE_ASM_PROBE_SEAL;
+  asm_test_side_probe.seal_failure =
+    lj_trace_test_arm64_side_publish_seal_failure();
   la_store32_rel(&asm_test_side_probe_state, ASM_TEST_SIDE_PROBE_DONE);
   return 1;
 }
@@ -4682,7 +4688,7 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
   if (J->parent != 0) {
     /* The one-shot native probe must never return to trace_stop(). Even an
     ** incomplete diagnostic aborts this private attempt fail-closed. */
-    (void)asm_test_side_probe_finish(T);
+    (void)asm_test_side_probe_finish(J, T);
     lj_trace_err(J, LJ_TRERR_NYIIR);
   }
 #endif

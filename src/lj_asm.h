@@ -127,11 +127,13 @@ enum {
   LJ_ARM64_SIDE_ASM_PROBE_TAIL = 0x10u,
   LJ_ARM64_SIDE_ASM_PROBE_FINAL = 0x20u,
   LJ_ARM64_SIDE_ASM_PROBE_MARKER = 0x40u,
-  LJ_ARM64_SIDE_ASM_PROBE_ALL = 0x7fu
+  LJ_ARM64_SIDE_ASM_PROBE_SEAL = 0x80u,
+  LJ_ARM64_SIDE_ASM_PROBE_ALL = 0xffu
 };
 typedef struct LJArm64SideAsmProbe {
   uint32_t stages;
   uint32_t capture_count;
+  uint32_t seal_failure;
   TraceNo parent;
   TraceNo child;
   ExitNo exitno;
@@ -141,10 +143,12 @@ typedef struct LJArm64SideAsmProbe {
   uint8_t branch_track;
   uint8_t marker;
   MCode entry[2];
+  TraceVec *cert_tracev;
   GCtrace *cert_body;
   MCode *cert_mcode;
   const BCIns *cert_continuation;
   BCIns cert_continuationins;
+  TraceNo cert_child;
   MCode *tail_target;
   MCode *tail_pc;
   MCode tail_ins;

@@ -149,7 +149,13 @@ typedef enum {
   LJ_TRACE_START,	/* New trace started. */
   LJ_TRACE_END,		/* End of trace. */
   LJ_TRACE_ASM,		/* Assemble trace. */
-  LJ_TRACE_ERR		/* Trace aborted with error. */
+  LJ_TRACE_ERR,		/* Trace aborted with error. */
+  /* Exact post-ASM publication seal. This state stays in the same atomic word
+  ** as the asynchronous-abort bit, but an abort requester must not clear it:
+  ** the recorder token and this state bridge a final one-shot SMR validation
+  ** to an infallible publication suffix. Only the certified ARM64 first-side
+  ** transaction may enter it for now. */
+  LJ_TRACE_PUBLISH
 } TraceState;
 
 /* Post-processing action. */
@@ -943,19 +949,22 @@ typedef struct FoldState {
 } FoldState;
 
 #if LJ_TARGET_ARM64
-/* Token-private identity for one admitted first-level side parent. The
-** published parent body remains the lifetime discriminator; mcode is the raw
+/* Token-private identity for one admitted first-level side parent. The exact
+** TraceVec and child number pin the still-pending destination generation; the
+** published parent body remains the lifetime discriminator. Mcode is the raw
 ** linked-tail identity and is authenticated again from the body on every
 ** capture/revalidation. A NULL body is the sole empty representation. */
 typedef struct LJTraceArm64SideParentCert {
+  TraceVec *tracev;
   GCtrace *body;
   MCode *mcode;
   const BCIns *continuation;
   BCIns continuationins;
   TraceNo parent;
   ExitNo exitno;
+  TraceNo child;
 } LJTraceArm64SideParentCert;
-LJ_STATIC_ASSERT(sizeof(LJTraceArm64SideParentCert) == 5*sizeof(uint64_t));
+LJ_STATIC_ASSERT(sizeof(LJTraceArm64SideParentCert) == 6*sizeof(uint64_t));
 #endif
 
 /* JIT compiler state. */

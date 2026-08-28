@@ -129,11 +129,32 @@ for required in \
   'asm_test_side_probe_tail(certified_parent_mcode, tail_pc);' \
   'asm_test_side_probe_note(LJ_ARM64_SIDE_ASM_PROBE_FINAL);' \
   'asm_test_side_probe_note(LJ_ARM64_SIDE_ASM_PROBE_MARKER);' \
-  '(void)asm_test_side_probe_finish(T);' \
+  'lj_trace_test_arm64_side_publish_seal(J, T)' \
+  'LJ_ARM64_SIDE_ASM_PROBE_SEAL' \
+  '(void)asm_test_side_probe_finish(J, T);' \
   'lj_trace_err(J, LJ_TRERR_NYIIR);'; do
   grep -F "$required" "$root/src/lj_asm.c" "$root/src/lj_arch.h" \
     >/dev/null || {
     echo "ARM64 side-assembler probe lost containment/proof: $required" >&2
+    exit 1
+  }
+done
+for required in \
+  'LJ_TRACE_PUBLISH' \
+  'if (old == (uint32_t)LJ_TRACE_PUBLISH)' \
+  'static LJ_AINLINE int lj_trace_state_publish_try(jit_State *J)' \
+  'trace_arm64_side_publish_child_valid(' \
+  'gcref_acq(cert->tracev->slot[cert->child])' \
+  'la_loadptr_acq((void *const *)&exittab[i]) != fallback_encoding' \
+  'plan->parent_fallback_encoding = parentview->fallback_encoding;' \
+  'trace_arm64_side_parent_revalidate_held(J, &cert, &parentview)' \
+  'lj_trace_state_publish_try(J)' \
+  'if (result != LJ_TRACE_ARM64_SIDE_PARENT_OK)' \
+  'gc2_smr_readers_acq(J2G(J)) == 1' \
+  'lj_trace_state_abort(J);'; do
+  grep -F "$required" "$root/src/lj_trace.c" "$root/src/lj_trace.h" \
+    "$root/src/lj_jit.h" >/dev/null || {
+    echo "ARM64 side publication-seal invariant changed: $required" >&2
     exit 1
   }
 done
@@ -165,9 +186,11 @@ for required in \
   'assert(probe.parent == PROBE_PARENT);' \
   'assert(probe.child == PROBE_CHILD);' \
   'assert(probe.exitno == PROBE_EXIT);' \
+  'assert(probe.cert_tracev == tracevec_acq(J));' \
   'assert(probe.cert_body == root);' \
   'assert(probe.cert_mcode == root_mcode);' \
   'assert(probe.cert_continuation == continuation);' \
+  'assert(probe.cert_child == PROBE_CHILD);' \
   'assert(probe.parentmap0 == REGSP(RID_X28, SPS_NONE));' \
   'assert(probe.entry[0] == A64I_LE(A64I_BTI_J));' \
   'A64F_D(RID_X27) | A64F_M(RID_X28)' \
@@ -186,6 +209,9 @@ for required in \
   'assert(lj_tg_load_jit_base(tg) == NULL);' \
   'assert(side_parent_cert_zero(&J->arm64_side_parent));' \
   'assert(gc2_smr_readers_acq(g) == 0);' \
+  'assert(!lj_trace_state_publish_try(J));' \
+  'assert(lj_trace_state_publish_try(J));' \
+  'assert(lj_trace_state_load(J) == LJ_TRACE_PUBLISH);' \
   'assert(trace_nchild_acq(root) == root_nchild && root_nchild == 0);' \
   'assert(trace_nextside_acq(root) == root_nextside && root_nextside == 0);' \
   'assert(snap_count_acq(&root_snap[PROBE_EXIT]) != SNAPCOUNT_DONE);' \
@@ -223,7 +249,9 @@ for symbol in \
   _lj_asm_arm64_test_side_probe_arm \
   _lj_asm_arm64_test_side_probe_ingress \
   _lj_asm_arm64_test_side_probe_active \
-  _lj_asm_arm64_test_side_probe_read; do
+  _lj_asm_arm64_test_side_probe_read \
+  _lj_trace_test_arm64_side_publish_seal \
+  _lj_trace_test_arm64_side_publish_seal_failure; do
   nm "$archive" | grep -F " T $symbol" >/dev/null || {
     echo "ARM64 side-assembler probe archive lost $symbol" >&2
     exit 1
@@ -296,11 +324,11 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" -j"$jobs" TARGET_FLAGS='-arch arm64' \
     XCFLAGS="$ordinary_xcflags"
 if nm "$archive" | grep -E \
-     '_lj_asm_arm64_test_side_probe_(arm|ingress|active|read)$' \
+     '_lj_asm_arm64_test_side_probe_(arm|ingress|active|read)$|_lj_trace_test_arm64_side_publish_seal(_failure)?$' \
      >/dev/null; then
   echo "ordinary ARM64 helper build retained special side-probe APIs" >&2
   exit 1
 fi
 restore_needed=0
 
-echo "arm64_jit_side_asm_consumption_contract OK: exact first-side assembly and MCODELM recapture proved on ARM64/ARM64e without publication"
+echo "arm64_jit_side_asm_consumption_contract OK: exact first-side assembly, MCODELM recapture and non-abortable dry publication seal proved on ARM64/ARM64e without publication"

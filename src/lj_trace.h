@@ -71,6 +71,12 @@ LJ_FUNC LJTraceArm64SideParentResult
 lj_trace_arm64_side_parent_capture(jit_State *J);
 LJ_FUNC LJTraceArm64SideParentResult
 lj_trace_arm64_side_parent_revalidate(jit_State *J);
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
+/* Test-only dry seal: proves and enters exact PUBLISH, exercises an asynchronous
+** abort against it, then restores ASM before the mandatory unpublished abort. */
+LJ_FUNC int lj_trace_test_arm64_side_publish_seal(jit_State *J, GCtrace *T);
+LJ_FUNC uint32_t lj_trace_test_arm64_side_publish_seal_failure(void);
+#endif
 #endif
 
 LJ_FUNC GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T);
@@ -508,9 +514,21 @@ static LJ_AINLINE void lj_trace_state_abort(jit_State *J)
   uint32_t old = (uint32_t)lj_trace_state_load(J);
   while ((old & (uint32_t)LJ_TRACE_ACTIVE) != 0) {
     uint32_t next = old & ~(uint32_t)LJ_TRACE_ACTIVE;
+    /* PUBLISH is the irreversible side-trace seam. If the exact ASM->PUBLISH
+    ** CAS won, the token owner must finish the bounded suffix; if an abort CAS
+    ** won first, the publish CAS observes the inactive ASM word and fails. */
+    if (old == (uint32_t)LJ_TRACE_PUBLISH)
+      return;
     if (la_cas32((uint32_t *)&J->state, &old, next, LA_ACQ_REL, LA_ACQ))
       break;  /* 08 section 8.7: publish async recorder abort. */
   }
+}
+
+static LJ_AINLINE int lj_trace_state_publish_try(jit_State *J)
+{
+  uint32_t expect = (uint32_t)LJ_TRACE_ASM;
+  return la_cas32((uint32_t *)&J->state, &expect,
+	(uint32_t)LJ_TRACE_PUBLISH, LA_ACQ_REL, LA_ACQ);
 }
 
 #define lj_trace_end(J)		lj_trace_state_store_active((J), LJ_TRACE_END)

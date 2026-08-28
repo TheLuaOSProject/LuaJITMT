@@ -36,6 +36,7 @@
 
 enum {
   SIDE_META_PARENT = 1,
+  SIDE_META_CHILD = 2,
   SIDE_META_EXIT = 2,
   SIDE_META_PC_POS = 13,
   SIDE_META_NSNAP = 4,
@@ -51,12 +52,12 @@ enum {
   SIDE_META_R_END
 };
 
-typedef struct SideMetaTraceVec2 {
+typedef struct SideMetaTraceVec3 {
   MSize sizetrace;
   uint64_t retire_epoch;
   TraceVec *retired_next;
-  GCRef slot[2];
-} SideMetaTraceVec2;
+  GCRef slot[3];
+} SideMetaTraceVec3;
 
 typedef struct SideMetaFixture {
   GCtrace saved_cur;
@@ -73,8 +74,8 @@ typedef struct SideMetaFixture {
   LJTraceArm64SideParentCert saved_parent_cert;
   TValue saved_frame_function;
   GCtrace parent_trace;
-  SideMetaTraceVec2 tracev;
-  SideMetaTraceVec2 replacement_tracev;
+  SideMetaTraceVec3 tracev;
+  SideMetaTraceVec3 replacement_tracev;
   IRIns ir[SIDE_META_R_END];
   SnapShot snap[SIDE_META_NSNAP];
   SnapEntry snapmap[SIDE_META_NSNAPMAP];
@@ -247,10 +248,12 @@ static void side_meta_install(lua_State *L, SideMetaFixture *f)
   bc_publish(f->looppc,
              BCINS_AD(BC_JLOOP, bc_a(f->loopins), SIDE_META_PARENT));
 
-  f->tracev.sizetrace = 2;
+  f->tracev.sizetrace = 3;
   setgcrefrel(f->tracev.slot[0], NULL);
   setgcrefrel(f->tracev.slot[SIDE_META_PARENT], obj2gco(T));
-  trace_sizetrace_rel(J, 2);
+  setgcrefrel(f->tracev.slot[SIDE_META_CHILD],
+              (const GCobj *)LJ_TRACE_PENDING);
+  trace_sizetrace_rel(J, 3);
   tracevec_rel(J, (TraceVec *)&f->tracev);
 }
 
@@ -598,18 +601,20 @@ static void test_context_mutations(lua_State *L, SideMetaFixture *f)
 
 static int side_parent_cert_empty(const LJTraceArm64SideParentCert *cert)
 {
-  return cert->body == NULL && cert->mcode == NULL &&
+  return cert->tracev == NULL && cert->body == NULL && cert->mcode == NULL &&
     cert->continuation == NULL && cert->continuationins == 0 &&
-    cert->parent == 0 && cert->exitno == 0;
+    cert->parent == 0 && cert->exitno == 0 && cert->child == 0;
 }
 
 static int side_parent_cert_equal(const LJTraceArm64SideParentCert *a,
                                   const LJTraceArm64SideParentCert *b)
 {
-  return a->body == b->body && a->mcode == b->mcode &&
+  return a->tracev == b->tracev && a->body == b->body &&
+    a->mcode == b->mcode &&
     a->continuation == b->continuation &&
     a->continuationins == b->continuationins &&
-    a->parent == b->parent && a->exitno == b->exitno;
+    a->parent == b->parent && a->exitno == b->exitno &&
+    a->child == b->child;
 }
 
 static void side_parent_prepare_asm(lua_State *L, SideMetaFixture *f)
@@ -659,12 +664,14 @@ static void test_parent_lifetime_certificate(lua_State *L, SideMetaFixture *f)
   LJ_STATIC_ASSERT(LJ_TRACE_ARM64_SIDE_PARENT_OK == 1);
 
   /* An unauthorized call cannot clear token-private state. */
+  sentinel.tracev = (TraceVec *)&f->tracev;
   sentinel.body = T;
   sentinel.mcode = T->mcode;
   sentinel.continuation = continuation;
   sentinel.continuationins = saved_continuationins;
   sentinel.parent = SIDE_META_PARENT;
   sentinel.exitno = SIDE_META_EXIT;
+  sentinel.child = SIDE_META_CHILD;
   J->arm64_side_parent = sentinel;
   assert(lj_trace_arm64_side_parent_capture(J) ==
          LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
@@ -676,14 +683,20 @@ static void test_parent_lifetime_certificate(lua_State *L, SideMetaFixture *f)
   assert(lj_trace_arm64_side_parent_capture(J) ==
          LJ_TRACE_ARM64_SIDE_PARENT_OK);
   cert = J->arm64_side_parent;
-  assert(cert.body == T && cert.mcode == T->mcode &&
+  assert(cert.tracev == (TraceVec *)&f->tracev &&
+         cert.body == T && cert.mcode == T->mcode &&
          cert.continuation == continuation &&
          cert.continuationins == saved_continuationins &&
-         cert.parent == SIDE_META_PARENT && cert.exitno == SIDE_META_EXIT);
+         cert.parent == SIDE_META_PARENT && cert.exitno == SIDE_META_EXIT &&
+         cert.child == SIDE_META_CHILD);
   assert(lj_trace_arm64_side_parent_revalidate(J) ==
          LJ_TRACE_ARM64_SIDE_PARENT_OK);
 
   /* Every stored identity component is independently authoritative. */
+  J->arm64_side_parent.tracev = (TraceVec *)&f->replacement_tracev;
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
+  J->arm64_side_parent = cert;
   J->arm64_side_parent.body = &replacement;
   assert(lj_trace_arm64_side_parent_revalidate(J) ==
          LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
@@ -708,14 +721,28 @@ static void test_parent_lifetime_certificate(lua_State *L, SideMetaFixture *f)
   assert(lj_trace_arm64_side_parent_revalidate(J) ==
          LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
   J->arm64_side_parent = cert;
+  J->arm64_side_parent.child++;
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
+  J->arm64_side_parent = cert;
 
-  /* A TraceVec replacement is legal when the exact slot still publishes the
-  ** certified body. The vector itself is deliberately not stored. */
+  /* The destination generation is part of the publication certificate. Even
+  ** a byte-identical vector replacement is an ABA change and must be rejected. */
   f->replacement_tracev = f->tracev;
   tracevec_rel(J, (TraceVec *)&f->replacement_tracev);
   assert(lj_trace_arm64_side_parent_revalidate(J) ==
-         LJ_TRACE_ARM64_SIDE_PARENT_OK);
+         LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
   tracevec_rel(J, (TraceVec *)&f->tracev);
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_OK);
+
+  setgcrefrel(f->tracev.slot[SIDE_META_CHILD], NULL);
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
+  setgcrefrel(f->tracev.slot[SIDE_META_CHILD],
+              (const GCobj *)LJ_TRACE_PENDING);
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_OK);
 
   /* Slot replacement by an otherwise identical allocation is an identity
   ** change, even if its raw mcode and all semantic fields match. */
