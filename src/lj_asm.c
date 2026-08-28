@@ -77,9 +77,9 @@ int lj_asm_arm64_b26_encode(uintptr_t source, uintptr_t target, MCode *insp)
 ** Numeric LOOP admission is presently limited to four exact spill-free
 ** accumulator shapes: one dynamic mixed INT/NUM root, one pure NUM root with
 ** a canonical +0.5 constant, one fixed-initializer root with a dynamic NUM
-** step, and one all-parameter pure-NUM root with an exact ADD_LT, ADD_LE or
-** SUB_GT recurrence grammar. In particular, this list admits no IR CALL
-** helper ID and no heap operation.
+** step, and one all-parameter pure-NUM root with an exact ADD_LT, ADD_LE,
+** ADD_GT, SUB_GT or SUB_GE recurrence grammar. In particular, this list
+** admits no IR CALL helper ID and no heap operation.
 */
 
 static int arm64_ir_reject(LJArm64IRReject *reject,
@@ -249,7 +249,8 @@ enum {
   ARM64_NUMDYN_ADD_LT = 1u,
   ARM64_NUMDYN_ADD_LE = 2u,
   ARM64_NUMDYN_SUB_GT = 3u,
-  ARM64_NUMDYN_SUB_GE = 4u
+  ARM64_NUMDYN_SUB_GE = 4u,
+  ARM64_NUMDYN_ADD_GT = 5u
 };
 
 static int arm64_numdynamic_is_sub(unsigned grammar_profile)
@@ -758,6 +759,12 @@ static int arm64_postra_numdynamic_kernel(const LJArm64PostRAView *view,
     first_right = ARM64_NUMSTEP_R_X;
     preop = IR_GE;
     bodyop = IR_LE;
+  } else if (grammar_profile == ARM64_NUMDYN_ADD_GT) {
+    recurrence_op = IR_ADD;
+    first_left = ARM64_NUMSTEP_R_STEP;
+    first_right = ARM64_NUMSTEP_R_X;
+    preop = IR_LT;
+    bodyop = IR_GT;
   } else if (grammar_profile == ARM64_NUMDYN_SUB_GT) {
     recurrence_op = IR_SUB;
     first_left = ARM64_NUMSTEP_R_X;
@@ -847,6 +854,9 @@ static unsigned arm64_numacc_grammar_profile(const BCIns *proto_bc,
     if (bc_op(compare) == BC_ISGT && bc_a(compare) == 3 &&
 	bc_d(compare) == 4)
       return ARM64_NUMDYN_ADD_LE;
+    if (bc_op(compare) == BC_ISGE && bc_a(compare) == 4 &&
+	bc_d(compare) == 3)
+      return ARM64_NUMDYN_ADD_GT;
   } else if (bc_op(recurrence) == BC_SUBVV && bc_a(recurrence) == 3 &&
 	bc_b(recurrence) == 3 && bc_c(recurrence) == 4) {
     if (bc_op(compare) == BC_ISGE && bc_a(compare) == 4 &&
@@ -1987,6 +1997,12 @@ static int arm64_ir_numdynamic_kernel(const GCtrace *T, IRRef xslot,
     first_right = ARM64_NUMSTEP_R_X;
     preop = IR_GE;
     bodyop = IR_LE;
+  } else if (grammar_profile == ARM64_NUMDYN_ADD_GT) {
+    recurrence_op = IR_ADD;
+    first_left = ARM64_NUMSTEP_R_STEP;
+    first_right = ARM64_NUMSTEP_R_X;
+    preop = IR_LT;
+    bodyop = IR_GT;
   } else if (grammar_profile == ARM64_NUMDYN_SUB_GT) {
     recurrence_op = IR_SUB;
     first_left = ARM64_NUMSTEP_R_X;
