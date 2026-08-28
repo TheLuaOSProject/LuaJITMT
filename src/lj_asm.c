@@ -807,11 +807,27 @@ int lj_asm_arm64_side_postra_admit(const LJArm64SidePostRAView *view,
   const IRIns *ir;
   IRIns ins;
   IRRef ref;
+  MSize moveidx;
   if (view == NULL || (ir = view->semantic.ir) == NULL ||
 	!lj_asm_arm64_side_ir_admit(&view->semantic, NULL) ||
 	view->nins != ARM64_SIDE_SEMANTIC_NINS+1u ||
+	view->stopins != ARM64_SIDE_R_PARENT ||
+	view->orignins != ARM64_SIDE_SEMANTIC_NINS ||
 	view->spadjust != 0 || view->parent_spadjust != 0 ||
-	view->topslot != 5u || view->parent_topslot != 5u)
+	view->topslot != 5u || view->parent_topslot != 5u ||
+	view->parentmap == NULL || view->parentmap_n != 1u ||
+	((uintptr_t)(const void *)view->parentmap &
+	 (sizeof(uint16_t)-1u)) != 0 ||
+	view->entry == NULL ||
+	((uintptr_t)(const void *)view->entry & (sizeof(MCode)-1u)) != 0 ||
+	view->branch_track != (uint8_t)LJ_ABI_BRANCH_TRACK)
+    return 0;
+
+  moveidx = (MSize)LJ_ABI_BRANCH_TRACK;
+  if (view->entry_words <= moveidx ||
+	(view->branch_track && view->entry[0] != A64I_LE(A64I_BTI_J)) ||
+	view->entry[moveidx] != A64I_LE(A64I_MOVx | A64F_D(RID_X27) |
+				     A64F_M(RID_X28)))
     return 0;
 
   ins = ir_load_acq(&ir[ARM64_SIDE_SEMANTIC_NINS]);
@@ -819,9 +835,10 @@ int lj_asm_arm64_side_postra_admit(const LJArm64SidePostRAView *view,
 	ins.op1 != 0 || ins.op2 != 0 || ins.r != 0 || ins.s != 0)
     return 0;
 
-  /* The live ARM64 allocator carries parent slot 4 in x28, then the side
-  ** head deliberately shuffles the inherited value into x27. */
-  if (view->parent_slot4 != REGSP(RID_X28, SPS_NONE))
+  /* The map extent comes directly from lj_snap_regspmap(). The emitted entry
+  ** prefix proves that asm_head_side() consumes its sole x28 value into the
+  ** allocator-selected x27 child register before any body instruction. */
+  if (view->parentmap[0] != REGSP(RID_X28, SPS_NONE))
     return 0;
   ins = ir_load_acq(&ir[REF_BASE]);
   if (ins.r != RID_BASE || ins.s != SPS_NONE)
@@ -1453,6 +1470,7 @@ typedef struct ASMState {
   intptr_t krefk[RID_NUM_KREF];
 #endif
   IRRef1 phireg[RID_MAX];  /* PHI register references. */
+  MSize parentmap_n;  /* Number of entries copied from lj_snap_regspmap(). */
   uint16_t parentmap[LJ_MAX_JSLOTS];  /* Parent instruction to RegSP map. */
 } ASMState;
 
@@ -3849,14 +3867,18 @@ static void asm_setup_regsp(ASMState *as)
   as->stopins = REF_BASE;
   as->orignins = nins;
   as->curins = nins;
+  as->parentmap_n = 0;
 
   /* Setup register hints for parent link instructions. */
   ir = IR(REF_FIRST);
   if (as->parent) {
     uint16_t *p;
+    MSize parentmap_n;
     lastir = lj_snap_regspmap(as->J, as->parent, as->J->exitno, ir);
-    if (lastir - ir > LJ_MAX_JSLOTS)
+    parentmap_n = (MSize)(lastir-ir);
+    if (parentmap_n > LJ_MAX_JSLOTS)
       lj_trace_err(as->J, LJ_TRERR_NYICOAL);
+    as->parentmap_n = parentmap_n;
     as->stopins = (IRRef)((lastir-1) - as->ir);
     for (p = as->parentmap; ir < lastir; ir++) {
       RegSP rs = ir->prev;

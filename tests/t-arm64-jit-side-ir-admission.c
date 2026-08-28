@@ -41,6 +41,8 @@ typedef struct SideFixture {
   SnapShot snap[4];
   SnapEntry snapmap[13];
   BCIns proto[19];
+  uint16_t parentmap[1];
+  MCode entry[3];
   LJArm64SideIRView view;
   LJArm64SidePostRAView postra;
 } SideFixture;
@@ -293,12 +295,25 @@ static void make_postra(void)
   fx.ir[R_XPOLL].r = RID_INIT;
 
   fx.postra.semantic = fx.view;
+  fx.parentmap[0] = REGSP(RID_X28, SPS_NONE);
+#if LJ_ABI_BRANCH_TRACK
+  fx.entry[0] = A64I_LE(A64I_BTI_J);
+  fx.entry[1] = A64I_LE(A64I_MOVx | A64F_D(RID_X27) | A64F_M(RID_X28));
+#else
+  fx.entry[0] = A64I_LE(A64I_MOVx | A64F_D(RID_X27) | A64F_M(RID_X28));
+#endif
+  fx.postra.parentmap = fx.parentmap;
+  fx.postra.entry = fx.entry;
   fx.postra.nins = R_END+1u;
+  fx.postra.stopins = R_PARENT;
+  fx.postra.orignins = R_END;
   fx.postra.spadjust = 0;
   fx.postra.parent_spadjust = 0;
   fx.postra.topslot = 5;
   fx.postra.parent_topslot = 5;
-  fx.postra.parent_slot4 = REGSP(RID_X28, SPS_NONE);
+  fx.postra.parentmap_n = 1;
+  fx.postra.entry_words = 1u+(MSize)LJ_ABI_BRANCH_TRACK;
+  fx.postra.branch_track = (uint8_t)LJ_ABI_BRANCH_TRACK;
 }
 
 static void expect_postra(int admitted)
@@ -330,6 +345,10 @@ static void test_postra(void)
   POSTRA_MUTATION(fx.postra.semantic.ir = NULL);
   POSTRA_MUTATION(fx.postra.nins--);
   POSTRA_MUTATION(fx.postra.nins++);
+  POSTRA_MUTATION(fx.postra.stopins = REF_BASE);
+  POSTRA_MUTATION(fx.postra.stopins++);
+  POSTRA_MUTATION(fx.postra.orignins--);
+  POSTRA_MUTATION(fx.postra.orignins++);
   POSTRA_MUTATION(fx.postra.spadjust = 16);
   POSTRA_MUTATION(fx.postra.parent_spadjust = 16);
   POSTRA_MUTATION(fx.postra.topslot = 6);
@@ -341,10 +360,50 @@ static void test_postra(void)
   POSTRA_MUTATION(fx.ir[R_END].r = RID_X1);
   POSTRA_MUTATION(fx.ir[R_END].s = 2);
 
-  POSTRA_MUTATION(fx.postra.parent_slot4 = REGSP_INIT);
-  POSTRA_MUTATION(fx.postra.parent_slot4 = REGSP(RID_X28, 2));
-  POSTRA_MUTATION(fx.postra.parent_slot4 = REGSP(RID_X27, 0));
-  POSTRA_MUTATION(fx.postra.parent_slot4 = REGSP(RID_D0, 0));
+  POSTRA_MUTATION(fx.postra.parentmap = NULL);
+  POSTRA_MUTATION(fx.postra.parentmap =
+    (const uint16_t *)(const void *)((const char *)fx.parentmap+1));
+  POSTRA_MUTATION(fx.postra.parentmap_n = 0);
+  POSTRA_MUTATION(fx.postra.parentmap_n = 2);
+  POSTRA_MUTATION(fx.parentmap[0] = REGSP_INIT);
+  POSTRA_MUTATION(fx.parentmap[0] = REGSP(RID_X28, 2));
+  POSTRA_MUTATION(fx.parentmap[0] = REGSP(RID_X27, 0));
+  POSTRA_MUTATION(fx.parentmap[0] = REGSP(RID_D0, 0));
+  POSTRA_MUTATION(fx.postra.entry = NULL);
+  POSTRA_MUTATION(fx.postra.entry =
+    (const MCode *)(const void *)((const char *)fx.entry+1));
+  POSTRA_MUTATION(fx.postra.entry_words = 0);
+  POSTRA_MUTATION(fx.postra.branch_track =
+    (uint8_t)!LJ_ABI_BRANCH_TRACK);
+#if LJ_ABI_BRANCH_TRACK
+  make_postra();
+  fx.postra.entry_words = 1;
+  expect_postra(0);
+  make_postra();
+  fx.entry[0] = A64I_LE(A64I_NOP);
+  expect_postra(0);
+#endif
+  make_postra();
+  fx.entry[LJ_ABI_BRANCH_TRACK] ^= 1u;
+  expect_postra(0);
+  make_postra();
+  fx.entry[LJ_ABI_BRANCH_TRACK] =
+    A64I_LE(A64I_MOVw | A64F_D(RID_X27) | A64F_M(RID_X28));
+  expect_postra(0);
+  make_postra();
+  fx.entry[LJ_ABI_BRANCH_TRACK] =
+    A64I_LE(A64I_MOVx | A64F_D(RID_X27) | A64F_M(RID_X26));
+  expect_postra(0);
+  make_postra();
+  fx.entry[LJ_ABI_BRANCH_TRACK] =
+    A64I_LE(A64I_MOVx | A64F_D(RID_X28) | A64F_M(RID_X27));
+  expect_postra(0);
+  make_postra();
+  fx.entry[LJ_ABI_BRANCH_TRACK] = A64I_LE(A64I_NOP);
+  fx.entry[LJ_ABI_BRANCH_TRACK+1u] =
+    A64I_LE(A64I_MOVx | A64F_D(RID_X27) | A64F_M(RID_X28));
+  fx.postra.entry_words++;
+  expect_postra(0);
   POSTRA_MUTATION(fx.ir[REF_BASE].r = RID_X0);
   POSTRA_MUTATION(fx.ir[REF_BASE].s = 2);
 

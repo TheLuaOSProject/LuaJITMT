@@ -116,11 +116,13 @@ The later native probe confirmed every structural item except that final
 same-register assumption. The parent map carries slot 4 in x28 while the side
 head shuffles it into x27. The current helper now freezes that observed layout,
 including the exact post-RA register and spill bytes. Those fields force the
-current `asm_head_side()` algorithm onto its x28-to-x27 shuffle path, but the
-pure helper does not yet certify parent-map provenance or the emitted move. It
-remains dormant and cannot set the side admission bit. Parent lifetime,
-authenticated linking, publication order, retirement, and wider IR surfaces
-remain separate gates.
+current `asm_head_side()` algorithm onto its x28-to-x27 shuffle path. The later
+[head-shuffle certificate](aarch64-jit-first-side-head-shuffle-certificate-2026-08-27.md)
+now also freezes the exact parent-map provenance and emitted move. Both helpers
+remain dormant and cannot set the side admission bit; a production call site
+still needs pre-head validation under a live parent certificate. Parent
+lifetime, authenticated linking, publication order, retirement, and wider IR
+surfaces remain separate gates.
 
 ## Validation
 

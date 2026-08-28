@@ -92,7 +92,10 @@ the required x28-to-x27 shuffle, while the child uses x28 for the live value and
 These fields prove the allocator-facing source and target and force the current
 `asm_head_side()` algorithm onto its x28-to-x27 shuffle path. The pure post-RA
 helper does not by itself certify the live parent-map provenance or the emitted
-move; both remain production gates.
+move. The later
+[head-shuffle certificate](aarch64-jit-first-side-head-shuffle-certificate-2026-08-27.md)
+now freezes both, while its production call site and parent-lifetime protection
+remain closed gates.
 
 The four temporary snapshot machine-code offsets were 65, 61, 59, and 48
 words. They are assembler products, not semantic identity, and remain outside
@@ -131,8 +134,9 @@ including the exact x28 parent map and x27 child inheritance target. Its pure
 fixture mutates every register byte, spill byte, suffix, top-slot, adjustment,
 and parent-map field. The helper remains dormant: production `lj_asm_trace()`
 does not call it, no side admission bit is set, and the side recorder stays
-closed. Parent-map provenance and the actual x28-to-x27 head move still require
-their own exact certificate before this helper can participate in production.
+closed. The later head-shuffle certificate freezes parent-map provenance and
+the actual x28-to-x27 move, but neither helper can participate in production
+until a pre-head validator runs while the exact parent lifetime is protected.
 
 The next production tranche still needs an exact parent lifetime/generation
 certificate through assembly, acquire-loaded parent mcode identity, linked-tail

@@ -89,12 +89,18 @@ typedef struct LJArm64SideIRView {
 ** layout. Production dispatch remains separate and fail-closed. */
 typedef struct LJArm64SidePostRAView {
   LJArm64SideIRView semantic;
+  const uint16_t *parentmap;
+  const MCode *entry;
   IRRef nins;
+  IRRef stopins;
+  IRRef orignins;
   MSize spadjust;
   MSize parent_spadjust;
   MSize topslot;
   MSize parent_topslot;
-  uint16_t parent_slot4;
+  MSize parentmap_n;
+  MSize entry_words;
+  uint8_t branch_track;
 } LJArm64SidePostRAView;
 
 LJ_FUNC int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,

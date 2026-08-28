@@ -20,10 +20,12 @@ tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lj-arm64-side-ir.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
 fixture=$tmpdir/t-arm64-jit-side-ir-admission
+arm64e_fixture=$tmpdir/t-arm64e-jit-side-ir-admission
 audit_object=$tmpdir/lj_asm-arm64e.o
 pure_region=$tmpdir/pure-side-region.txt
 trace_asm=$tmpdir/trace-asm.txt
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT'
+arm64e_xcflags="$xcflags -DLUAJIT_ENABLE_CET_BR"
 
 test -f "$archive" || {
   echo "ARM64 side IR contract requires an existing experimental build" >&2
@@ -92,10 +94,18 @@ for required in \
   'static const Reg valueregs[4]' \
   'RID_X27, RID_X28, RID_X28, RID_X27' \
   'view->nins != ARM64_SIDE_SEMANTIC_NINS+1u' \
+  'view->stopins != ARM64_SIDE_R_PARENT' \
+  'view->orignins != ARM64_SIDE_SEMANTIC_NINS' \
   'view->spadjust != 0 || view->parent_spadjust != 0' \
+  'view->parentmap == NULL || view->parentmap_n != 1u' \
+  'view->branch_track != (uint8_t)LJ_ABI_BRANCH_TRACK' \
+  'view->entry_words <= moveidx' \
+  'view->entry[0] != A64I_LE(A64I_BTI_J)' \
+  'A64I_MOVx | A64F_D(RID_X27)' \
+  'A64F_M(RID_X28)' \
   'ins.o != IR_NOP || ins.t.irt != IRT_NIL' \
   'ins.op1 != 0 || ins.op2 != 0 || ins.r != 0 || ins.s != 0' \
-  'view->parent_slot4 != REGSP(RID_X28, SPS_NONE)' \
+  'view->parentmap[0] != REGSP(RID_X28, SPS_NONE)' \
   'ins.r != RID_BASE || ins.s != SPS_NONE' \
   'ins.r != valueregs[ref-ARM64_SIDE_R_PARENT]' \
   'ins.r != RID_INIT || ins.s != SPS_NONE'; do
@@ -155,10 +165,23 @@ for required in \
   'fx.postra.spadjust = 16' \
   'fx.postra.parent_spadjust = 16' \
   'setir(R_END, IR_RENAME, IRT_NIL, R_ADD, 0)' \
-  'fx.postra.parent_slot4 = REGSP(RID_X28, SPS_NONE);' \
-  'fx.postra.parent_slot4 = REGSP(RID_X28, 2)' \
-  'fx.postra.parent_slot4 = REGSP(RID_X27, 0)' \
-  'fx.postra.parent_slot4 = REGSP(RID_D0, 0)' \
+  'fx.postra.stopins = R_PARENT;' \
+  'fx.postra.orignins = R_END;' \
+  'fx.postra.parentmap_n = 1;' \
+  'fx.postra.entry_words = 1u+(MSize)LJ_ABI_BRANCH_TRACK;' \
+  'fx.postra.branch_track = (uint8_t)LJ_ABI_BRANCH_TRACK;' \
+  'fx.postra.parentmap = NULL' \
+  'fx.postra.parentmap_n = 2' \
+  'fx.parentmap[0] = REGSP(RID_X28, 2)' \
+  'fx.parentmap[0] = REGSP(RID_X27, 0)' \
+  'fx.parentmap[0] = REGSP(RID_D0, 0)' \
+  'fx.postra.entry = NULL' \
+  'fx.postra.entry_words = 0' \
+  'fx.postra.branch_track =' \
+  'fx.entry[0] = A64I_LE(A64I_NOP)' \
+  'A64I_MOVw | A64F_D(RID_X27)' \
+  'A64F_M(RID_X26)' \
+  'fx.entry[LJ_ABI_BRANCH_TRACK+1u] =' \
   'fx.ir[ref].r = RID_X0' \
   'fx.ir[ref].r = RID_D0' \
   'fx.ir[ref].s = 2' \
@@ -173,12 +196,25 @@ for required in \
   }
 done
 
-# arm64e compilation catches target register/PAC configuration drift even
-# though this pure tranche does not yet publish an authenticated child target.
-# shellcheck disable=SC2086 # xcflags intentionally expands to arguments.
-"$cc" -std=gnu11 -O0 -Wall -Wextra -Werror -arch arm64e \
-  -mmacosx-version-min="$minver" $xcflags -I"$root/src" \
+grep -F 'MSize parentmap_n;  /* Number of entries copied from lj_snap_regspmap(). */' \
+  "$root/src/lj_asm.c" >/dev/null
+grep -F 'as->parentmap_n = parentmap_n;' "$root/src/lj_asm.c" >/dev/null
+
+# Build the pure helper directly with function sections so dead-strip can link
+# and execute the same fixture under the actual arm64e/BTI compile-time mode.
+# This tranche still does not publish an authenticated child target.
+# shellcheck disable=SC2086 # arm64e_xcflags intentionally expands to arguments.
+"$cc" -std=gnu11 -O2 -ffunction-sections -fdata-sections \
+  -Wall -Wextra -Werror -arch arm64e -mmacosx-version-min="$minver" \
+  $arm64e_xcflags -I"$root/src" \
   -c "$root/src/lj_asm.c" -o "$audit_object"
+# shellcheck disable=SC2086 # arm64e_xcflags intentionally expands to arguments.
+"$cc" -std=gnu11 -O2 -ffunction-sections -fdata-sections \
+  -Wall -Wextra -Werror -arch arm64e -mmacosx-version-min="$minver" \
+  $arm64e_xcflags -I"$root/src" \
+  "$root/tests/t-arm64-jit-side-ir-admission.c" "$audit_object" \
+  -Wl,-dead_strip -lm -pthread -o "$arm64e_fixture"
+"$arm64e_fixture"
 
 # shellcheck disable=SC2086 # xcflags intentionally expands to arguments.
 "$cc" -std=gnu11 -O2 -Wall -Wextra -Werror -arch arm64 \
@@ -187,4 +223,4 @@ done
   -o "$fixture"
 "$fixture"
 
-echo "arm64_jit_side_ir_admission_contract OK: pure first-side semantic and live-observed exact post-RA certificates verified; production gate remains closed"
+echo "arm64_jit_side_ir_admission_contract OK: ARM64/arm64e first-side semantic, post-RA and exact head-shuffle certificates verified; production gate remains closed"
