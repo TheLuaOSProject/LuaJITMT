@@ -290,6 +290,13 @@ static LJ_AINLINE void snap_topslot_rel(SnapShot *snap, MSize topslot)
   la_store8_rel(&snap->topslot, (uint8_t)topslot);
 }
 
+static LJ_AINLINE int snap_topslot_cas_acqrel(SnapShot *snap,
+	uint8_t *topslot, MSize next)
+{
+  return la_cas8(&snap->topslot, topslot, (uint8_t)next,
+		 LA_ACQ_REL, LA_ACQ);
+}
+
 static LJ_AINLINE MSize snap_mcofs_acq(const SnapShot *snap)
 {
   return (MSize)la_load16_acq(&snap->mcofs);
@@ -314,6 +321,11 @@ static LJ_AINLINE int snap_count_cas_acqrel(SnapShot *snap, uint8_t *count,
 					    MSize next)
 {
   return la_cas8(&snap->count, count, (uint8_t)next, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE MSize snap_count_xchg_acqrel(SnapShot *snap, MSize next)
+{
+  return (MSize)la_xchg8_acqrel(&snap->count, (uint8_t)next);
 }
 
 static LJ_AINLINE SnapEntry snapentry_acq(const SnapEntry *entry)
@@ -548,6 +560,12 @@ static LJ_AINLINE void traceno16_rel(uint16_t *p, TraceNo traceno)
   la_store16_rel(p, (uint16_t)traceno);
 }
 
+static LJ_AINLINE int traceno16_cas_acqrel(uint16_t *p, uint16_t *traceno,
+	TraceNo next)
+{
+  return la_cas16(p, traceno, (uint16_t)next, LA_ACQ_REL, LA_ACQ);
+}
+
 #define proto_trace_acq(pt)	traceno16_acq(&(pt)->trace)
 #define proto_trace_rel(pt, tr)	traceno16_rel(&(pt)->trace, (tr))
 #define trace_traceno_acq(T)	traceno16_acq(&(T)->traceno)
@@ -559,6 +577,11 @@ static LJ_AINLINE void traceno16_rel(uint16_t *p, TraceNo traceno)
 #define trace_nextroot_rel(T, tr)	traceno16_rel(&(T)->nextroot, (tr))
 #define trace_nextside_acq(T)	traceno16_acq(&(T)->nextside)
 #define trace_nextside_rel(T, tr)	traceno16_rel(&(T)->nextside, (tr))
+static LJ_AINLINE int trace_nextside_cas_acqrel(GCtrace *T,
+	uint16_t *traceno, TraceNo next)
+{
+  return traceno16_cas_acqrel(&T->nextside, traceno, next);
+}
 
 static LJ_AINLINE int trace_scope_pending_acq(const GCtrace *T)
 {
@@ -778,6 +801,15 @@ static LJ_AINLINE MCode *trace_exittarget_arm64_acq(const GCtrace *T,
 #else
   return (MCode *)target;
 #endif
+}
+
+/* Compare the stored authenticated representation itself. Stripping before
+** this CAS would accept a stale or wrong-discriminator ARM64e publication. */
+static LJ_AINLINE int trace_exittarget_arm64_raw_cas_acqrel(
+  MCode **slot, void **expected, void *desired)
+{
+  return la_casptr((void **)slot, expected, desired,
+		   LA_ACQ_REL, LA_ACQ);
 }
 #endif
 

@@ -152,6 +152,89 @@ static void test_exit_slot_release_acquire(lua_State *L)
   assert(la_load32_acq(&race.acknowledged) == EXIT_SLOT_RACE_ROUNDS);
 }
 
+static void test_first_child_publication_primitives(lua_State *L)
+{
+  global_State *g = G(L);
+  SnapShot snap;
+  GCtrace root;
+  _Alignas(8) MCode *slots[1];
+  _Alignas(8) MCode targets[2][2];
+  uint8_t u8;
+  uint16_t u16;
+  void *fallback_encoding, *child_encoding, *expected;
+
+  memset(&snap, 0, sizeof(snap));
+  memset(&root, 0, sizeof(root));
+  memset(targets, 0, sizeof(targets));
+  root.exittab = slots;
+  targets[0][0] = targets[1][0] = A64I_BTI_J;
+
+  snap_topslot_rel(&snap, 4);
+  u8 = 4;
+  assert(snap_topslot_cas_acqrel(&snap, &u8, 5));
+  assert(snap_topslot_acq(&snap) == 5);
+  u8 = 4;
+  assert(!snap_topslot_cas_acqrel(&snap, &u8, 6) && u8 == 5);
+
+  snap_count_rel(&snap, 7);
+  assert(snap_count_xchg_acqrel(&snap, SNAPCOUNT_DONE) == 7);
+  assert(snap_count_acq(&snap) == SNAPCOUNT_DONE);
+  assert(snap_count_xchg_acqrel(&snap, SNAPCOUNT_DONE) == SNAPCOUNT_DONE);
+
+  trace_nextside_rel(&root, 0);
+  u16 = 0;
+  assert(trace_nextside_cas_acqrel(&root, &u16, 2));
+  assert(trace_nextside_acq(&root) == 2);
+  u16 = 0;
+  assert(!trace_nextside_cas_acqrel(&root, &u16, 3) && u16 == 2);
+
+  fallback_encoding = trace_exittarget_arm64_encode(g, targets[0]);
+  child_encoding = trace_exittarget_arm64_encode(g, targets[1]);
+  la_storeptr_rel((void **)&slots[0], fallback_encoding);
+  expected = fallback_encoding;
+  assert(trace_exittarget_arm64_raw_cas_acqrel(
+	 &slots[0], &expected, child_encoding));
+  assert(la_loadptr_acq((void *const *)&slots[0]) == child_encoding);
+  assert(trace_exittarget_arm64_acq(&root, 0) == targets[1]);
+  expected = fallback_encoding;
+  assert(!trace_exittarget_arm64_raw_cas_acqrel(
+	 &slots[0], &expected, fallback_encoding));
+  assert(expected == child_encoding);
+  assert(la_loadptr_acq((void *const *)&slots[0]) == child_encoding);
+  expected = child_encoding;
+  assert(trace_exittarget_arm64_raw_cas_acqrel(
+	 &slots[0], &expected, fallback_encoding));
+  assert(la_loadptr_acq((void *const *)&slots[0]) == fallback_encoding);
+  assert(trace_exittarget_arm64_acq(&root, 0) == targets[0]);
+  assert(fallback_encoding != child_encoding);
+#if LJ_ABI_PAUTH
+  {
+    void *wrong_encoding = NULL;
+    uint32_t salt;
+    for (salt = 1; salt <= 64u; salt++) {
+      uintptr_t discriminator =
+	ptrauth_blend_discriminator((void *)g, (uintptr_t)salt);
+      ASMFunction signedwrong = ptrauth_sign_unauthenticated(
+	ptrauth_nop_cast(ASMFunction, targets[0]),
+	ptrauth_key_function_pointer, discriminator);
+      wrong_encoding = ptrauth_nop_cast(void *, signedwrong);
+      if (wrong_encoding != fallback_encoding) {
+	assert(ptrauth_nop_cast(MCode *, lj_ptr_strip(signedwrong)) ==
+	       targets[0]);
+	break;
+      }
+    }
+    assert(salt <= 64u && wrong_encoding != fallback_encoding);
+    la_storeptr_rel((void **)&slots[0], wrong_encoding);
+    assert(trace_exittarget_arm64_acq(&root, 0) == targets[0]);
+    expected = fallback_encoding;
+    assert(!trace_exittarget_arm64_raw_cas_acqrel(
+	   &slots[0], &expected, child_encoding));
+    assert(expected == wrong_encoding);
+  }
+#endif
+}
+
 static void test_exit_stub_words(jit_State *J, const char *path)
 {
   _Alignas(8) MCode words[64] = { 0 };
@@ -320,6 +403,7 @@ int main(int argc, char **argv)
   test_exit_stub_layout_limit();
   test_exit_stub_words(L2J(L), argv[1]);
   test_exit_slot_release_acquire(L);
+  test_first_child_publication_primitives(L);
   test_exit_lease_race(L);
   test_profile_ack_after_quiescence(L);
   lua_close(L);

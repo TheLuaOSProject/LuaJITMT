@@ -125,6 +125,20 @@ for setting in \
   }
 done
 
+for primitive in \
+  'la_xchg8_acqrel' \
+  'snap_topslot_cas_acqrel' \
+  'snap_count_xchg_acqrel' \
+  'trace_nextside_cas_acqrel' \
+  'trace_exittarget_arm64_raw_cas_acqrel' \
+  'test_first_child_publication_primitives(L);'; do
+  grep -F "$primitive" "$root/src/lj_atomic.h" "$root/src/lj_jit.h" \
+    "$root/tests/t-arm64-jit-exit.c" >/dev/null || {
+      echo "ARM64 first-child publication primitive missing: $primitive" >&2
+      exit 1
+    }
+done
+
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" clean TARGET_FLAGS='-arch arm64' XCFLAGS="$xcflags"
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
