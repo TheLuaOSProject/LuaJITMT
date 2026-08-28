@@ -107,6 +107,17 @@ static BCIns loadbc(const BCIns *pc)
   return (BCIns)la_load32_acq((const uint32_t *)pc);
 }
 
+static GCtrace *retired_find(jit_State *J, GCtrace *needle)
+{
+  GCtrace *T;
+  for (T = trace_retired_head_acq(J);
+	 T != NULL;
+	 T = trace_retired_next_acq(T))
+    if (T == needle)
+      return T;
+  return NULL;
+}
+
 static const BCIns *selected_continuation(const GCtrace *T, ExitNo exitno)
 {
   SnapShot *snap = trace_snap_acq(T);
@@ -358,6 +369,310 @@ static void expect_child_native_exit(lua_State *L, jit_State *J)
   assert(traceref_safe(J, PROBE_GRANDCHILD) == NULL);
 }
 
+static void expect_root_native_fallback(lua_State *L, jit_State *J)
+{
+  uint32_t calls;
+  TraceNo first_parent;
+  TraceNo last_parent;
+  ExitNo first_exit;
+  ExitNo last_exit;
+  lj_trace_test_reset_exit_stats();
+  assert(call_probe(L, 1, 1) == 2);
+  calls = lj_trace_test_exit_calls();
+  first_parent = lj_trace_test_first_exit_parent();
+  first_exit = lj_trace_test_first_exitno();
+  last_parent = lj_trace_test_last_exit_parent();
+  last_exit = lj_trace_test_last_exitno();
+  if (calls != 1 || first_parent != PROBE_PARENT ||
+      first_exit != PROBE_EXIT || last_parent != PROBE_PARENT ||
+      last_exit != PROBE_EXIT) {
+    fprintf(stderr,
+      "retired child fallback calls=%u first=%u/%u last=%u/%u slot2=%p\n",
+      (unsigned)calls, (unsigned)first_parent, (unsigned)first_exit,
+      (unsigned)last_parent, (unsigned)last_exit,
+      (void *)traceref_safe(J, PROBE_CHILD));
+  }
+  assert(calls == 1);
+  assert(first_parent == PROBE_PARENT);
+  assert(first_exit == PROBE_EXIT);
+  assert(last_parent == PROBE_PARENT);
+  assert(last_exit == PROBE_EXIT);
+}
+
+static void expect_retired_first_side(lua_State *L, jit_State *J,
+	global_State *g, GCproto *pt, GCtrace *root, GCtrace *child,
+	const BCIns *continuation, SnapShot *root_snap, MCode **root_exittab,
+	MCode *root_fallback, MCode *child_mcode)
+{
+  IRIns *child_ir = trace_ir_acq(child);
+  SnapShot *child_snap = trace_snap_acq(child);
+  SnapEntry *child_snapmap = trace_snapmap_acq(child);
+  MCode **child_exittab = trace_exittab_acq(child);
+  MCode *child_exitstub = trace_exitstub_acq(child);
+  MSize child_szmcode = trace_szmcode_acq(child);
+  GCArena *child_arena = lj_arena_of(child);
+  uint32_t child_cell = lj_arena_cellof(child);
+  void *raw_child = trace_exittarget_arm64_encode(g, child_mcode);
+  void *raw_fallback = trace_exittarget_arm64_encode(g, root_fallback);
+  uintptr_t retired_link;
+  uint64_t retire_stamp;
+
+  assert(raw_child != raw_fallback);
+  assert(la_loadptr_acq((void *const *)&root_exittab[PROBE_EXIT]) ==
+	 raw_child);
+  assert(snap_topslot_acq(&root_snap[PROBE_EXIT]) == PROBE_TOPSLOT);
+  assert(snap_count_acq(&root_snap[PROBE_EXIT]) == SNAPCOUNT_DONE);
+
+  lj_trace_test_reset_retire_publish_calls();
+  assert(lj_trace_retire_gc_claim(g, child) == 1);
+  retire_stamp = la_load64_acq(&child->retire_epoch);
+  retired_link = trace_retired_link_acq(child);
+  assert(retire_stamp != 0);
+  assert(lj_trace_test_retire_publish_calls() == 1u);
+  assert(trace_retired_link_listed_acq(child));
+  assert(trace_retired_next_acq(child) != child);
+  assert(retired_find(J, child) == child);
+  assert(!lj_trace_body_destroyed_acq(child));
+  assert(trace_native_pin_closed_acq(child));
+  assert(trace_native_pins_acq(child) == 0);
+  assert(!trace_runnable_acq(child, PROBE_CHILD));
+  assert(traceref_safe(J, PROBE_CHILD) == child);
+  assert(trace_traceno_acq(child) == PROBE_CHILD);
+  assert(trace_root_acq(child) == PROBE_PARENT);
+  assert(trace_link_acq(child) == 0);
+  assert(trace_nextroot_acq(child) == 0);
+  assert(trace_nextside_acq(child) == 0);
+
+  /* Retirement restores native reachability before removing topology. The
+  ** publication snapshot remains deliberately terminal and conservative. */
+  assert(traceref_safe(J, PROBE_PARENT) == root);
+  assert(trace_runnable_acq(root, PROBE_PARENT));
+  assert(trace_nchild_acq(root) == 0);
+  assert(trace_nextside_acq(root) == 0);
+  assert(trace_exittarget_arm64_acq(root, PROBE_EXIT) == root_fallback);
+  assert(la_loadptr_acq((void *const *)&root_exittab[PROBE_EXIT]) ==
+	 raw_fallback);
+  assert(snap_topslot_acq(&root_snap[PROBE_EXIT]) == PROBE_TOPSLOT);
+  assert(snap_count_acq(&root_snap[PROBE_EXIT]) == SNAPCOUNT_DONE);
+
+  /* The public slot and complete compact/native body remain list-owned for
+  ** their grace period. The second production claim is an exact no-op. */
+  assert(trace_startpt_acq(child) == pt);
+  assert(trace_startpc_acq(child) == continuation);
+  assert(trace_ir_acq(child) == child_ir);
+  assert(trace_snap_acq(child) == child_snap);
+  assert(trace_snapmap_acq(child) == child_snapmap);
+  assert(trace_mcode_acq(child) == child_mcode);
+  assert(trace_szmcode_acq(child) == child_szmcode);
+  assert(trace_exittab_acq(child) == child_exittab);
+  assert(trace_exitstub_acq(child) == child_exitstub);
+  assert(lj_arena_lifetime_state_acq(child_arena, child_cell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_root_state_acq(child_arena, child_cell) ==
+	 LJ_ARENA_ROOT_MEMBER);
+
+  assert(lj_trace_retire_gc_claim(g, child) == 1);
+  assert(lj_trace_test_retire_publish_calls() == 1u);
+  assert(la_load64_acq(&child->retire_epoch) == retire_stamp);
+  assert(trace_retired_link_acq(child) == retired_link);
+  assert(retired_find(J, child) == child);
+  assert(!lj_trace_body_destroyed_acq(child));
+  assert(trace_mcode_acq(child) == child_mcode);
+  assert(trace_exittab_acq(child) == child_exittab);
+  assert(gc2_smr_readers_acq(g) == 0);
+  assert(jit_token_acq(g) == 0);
+  assert(jit_owner_l_acq(J) == NULL);
+  assert(lj_trace_state_load(J) == LJ_TRACE_IDLE);
+
+  expect_root_native_fallback(L, J);
+  expect_root_native_fallback(L, J);
+  assert(trace_nchild_acq(root) == 0 && trace_nextside_acq(root) == 0);
+  assert(trace_exittarget_arm64_acq(root, PROBE_EXIT) == root_fallback);
+  assert(retired_find(J, child) == child);
+  assert(!lj_trace_body_destroyed_acq(child));
+  assert(gc2_smr_readers_acq(g) == 0);
+  assert(jit_token_acq(g) == 0);
+}
+
+static void expect_full_flush_first_side(lua_State *L, jit_State *J,
+	global_State *g, GCproto *pt, GCtrace *root, GCtrace *child,
+	const BCIns *continuation, SnapShot *root_snap, MCode **root_exittab,
+	MCode *root_fallback, MCode *child_mcode)
+{
+  const BCIns *root_startpc = trace_startpc_acq(root);
+  BCIns root_startins = trace_startins_acq(root);
+  IRIns *root_ir = trace_ir_acq(root);
+  SnapEntry *root_snapmap = trace_snapmap_acq(root);
+  MCode *root_mcode = trace_mcode_acq(root);
+  MCode *root_exitstub = trace_exitstub_acq(root);
+  IRIns *child_ir = trace_ir_acq(child);
+  SnapShot *child_snap = trace_snap_acq(child);
+  SnapEntry *child_snapmap = trace_snapmap_acq(child);
+  MCode **child_exittab = trace_exittab_acq(child);
+  MCode *child_exitstub = trace_exitstub_acq(child);
+  MSize child_szmcode = trace_szmcode_acq(child);
+  GCArena *root_arena = lj_arena_of(root);
+  GCArena *child_arena = lj_arena_of(child);
+  uint32_t root_cell = lj_arena_cellof(root);
+  uint32_t child_cell = lj_arena_cellof(child);
+  void *raw_child = trace_exittarget_arm64_encode(g, child_mcode);
+  void *raw_fallback = trace_exittarget_arm64_encode(g, root_fallback);
+
+  assert(raw_child != raw_fallback);
+  assert(la_loadptr_acq((void *const *)&root_exittab[PROBE_EXIT]) ==
+	 raw_child);
+  assert(proto_trace_acq(pt) == PROBE_PARENT);
+  assert(bc_op(loadbc(root_startpc)) == BC_JLOOP);
+  assert(bc_d(loadbc(root_startpc)) == PROBE_PARENT);
+
+  lj_trace_test_reset_retire_publish_calls();
+  assert(lj_trace_flushall_gc(L) == 0);
+
+  /* The structural prepass retires and disconnects the child while its parent
+  ** is still live. The destructive pass then retires each body exactly once,
+  ** regardless of the trace-number scan order. */
+  assert(lj_trace_test_retire_publish_calls() == 2u);
+  assert(la_load64_acq(&root->retire_epoch) != 0);
+  assert(la_load64_acq(&child->retire_epoch) != 0);
+  assert(trace_retired_link_listed_acq(root));
+  assert(trace_retired_link_listed_acq(child));
+  assert(retired_find(J, root) == root);
+  assert(retired_find(J, child) == child);
+  assert(!lj_trace_body_destroyed_acq(root));
+  assert(!lj_trace_body_destroyed_acq(child));
+  assert(trace_native_pin_closed_acq(root));
+  assert(trace_native_pin_closed_acq(child));
+  assert(trace_native_pins_acq(root) == 0);
+  assert(trace_native_pins_acq(child) == 0);
+  assert(trace_traceno_acq(root) == 0);
+  assert(trace_traceno_acq(child) == 0);
+
+  assert(trace_root_acq(root) == 0);
+  assert(trace_link_acq(root) == 0);
+  assert(trace_nchild_acq(root) == 0);
+  assert(trace_nextside_acq(root) == 0);
+  assert(trace_root_acq(child) == PROBE_PARENT);
+  assert(trace_link_acq(child) == 0);
+  assert(trace_nextside_acq(child) == 0);
+  assert(la_loadptr_acq((void *const *)&root_exittab[PROBE_EXIT]) ==
+	 raw_fallback);
+  assert(trace_exittarget_arm64_acq(root, PROBE_EXIT) == root_fallback);
+  assert(snap_topslot_acq(&root_snap[PROBE_EXIT]) == PROBE_TOPSLOT);
+  assert(snap_count_acq(&root_snap[PROBE_EXIT]) == SNAPCOUNT_DONE);
+
+  /* Full flush removes interpreter/prototype entry, but list ownership keeps
+  ** both compact bodies and their retired mcode area inspectable through the
+  ** grace interval. */
+  assert(proto_trace_acq(pt) == 0);
+  assert(loadbc(root_startpc) == root_startins);
+  assert(bc_op(root_startins) == BC_LOOP);
+  assert(trace_startpt_acq(root) == pt);
+  assert(trace_startpt_acq(child) == pt);
+  assert(trace_startpc_acq(child) == continuation);
+  assert(trace_ir_acq(root) == root_ir);
+  assert(trace_snap_acq(root) == root_snap);
+  assert(trace_snapmap_acq(root) == root_snapmap);
+  assert(trace_mcode_acq(root) == root_mcode);
+  assert(trace_exittab_acq(root) == root_exittab);
+  assert(trace_exitstub_acq(root) == root_exitstub);
+  assert(trace_ir_acq(child) == child_ir);
+  assert(trace_snap_acq(child) == child_snap);
+  assert(trace_snapmap_acq(child) == child_snapmap);
+  assert(trace_mcode_acq(child) == child_mcode);
+  assert(trace_szmcode_acq(child) == child_szmcode);
+  assert(trace_exittab_acq(child) == child_exittab);
+  assert(trace_exitstub_acq(child) == child_exitstub);
+  assert(lj_arena_lifetime_state_acq(root_arena, root_cell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_lifetime_state_acq(child_arena, child_cell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_root_state_acq(root_arena, root_cell) ==
+	 LJ_ARENA_ROOT_MEMBER);
+  assert(lj_arena_root_state_acq(child_arena, child_cell) ==
+	 LJ_ARENA_ROOT_MEMBER);
+  assert(J->mcarea == NULL && J->mctop == NULL && J->mcbot == NULL);
+  assert(gc2_smr_readers_acq(g) == 0);
+  assert(jit_token_acq(g) == 0);
+  assert(jit_owner_l_acq(J) == NULL);
+  assert(lj_trace_state_load(J) == LJ_TRACE_IDLE);
+}
+
+static void expect_scoped_retired_first_side(lua_State *L, jit_State *J,
+	global_State *g, GCproto *pt, GCtrace *root, GCtrace *child,
+	const BCIns *continuation, SnapShot *root_snap, MCode **root_exittab,
+	MCode *root_fallback, MCode *child_mcode)
+{
+  IRIns *child_ir = trace_ir_acq(child);
+  SnapShot *child_snap = trace_snap_acq(child);
+  SnapEntry *child_snapmap = trace_snapmap_acq(child);
+  MCode **child_exittab = trace_exittab_acq(child);
+  MCode *child_exitstub = trace_exitstub_acq(child);
+  GCArena *child_arena = lj_arena_of(child);
+  uint32_t child_cell = lj_arena_cellof(child);
+  const BCIns *root_startpc = trace_startpc_acq(root);
+  void *raw_child = trace_exittarget_arm64_encode(g, child_mcode);
+  void *raw_fallback = trace_exittarget_arm64_encode(g, root_fallback);
+
+  assert(raw_child != raw_fallback);
+  assert(la_loadptr_acq((void *const *)&root_exittab[PROBE_EXIT]) ==
+	 raw_child);
+  lj_trace_test_reset_retire_publish_calls();
+  assert(lj_trace_flushscope(J, PROBE_CHILD) == 1u);
+
+  assert(lj_trace_test_retire_publish_calls() == 1u);
+  assert(la_load64_acq(&child->retire_epoch) != 0);
+  assert(trace_retired_link_listed_acq(child));
+  assert(retired_find(J, child) == child);
+  assert(!lj_trace_body_destroyed_acq(child));
+  assert(trace_native_pin_closed_acq(child));
+  assert(trace_native_pins_acq(child) == 0);
+  assert(trace_traceno_acq(child) == 0);
+  assert(trace_root_acq(child) == PROBE_PARENT);
+  assert(trace_link_acq(child) == 0);
+  assert(trace_nextside_acq(child) == 0);
+
+  assert(traceref_safe(J, PROBE_PARENT) == root);
+  assert(trace_runnable_acq(root, PROBE_PARENT));
+  assert(la_load64_acq(&root->retire_epoch) == 0);
+  assert(!trace_retired_link_listed_acq(root));
+  assert(trace_nchild_acq(root) == 0);
+  assert(trace_nextside_acq(root) == 0);
+  assert(la_loadptr_acq((void *const *)&root_exittab[PROBE_EXIT]) ==
+	 raw_fallback);
+  assert(trace_exittarget_arm64_acq(root, PROBE_EXIT) == root_fallback);
+  assert(snap_topslot_acq(&root_snap[PROBE_EXIT]) == PROBE_TOPSLOT);
+  assert(snap_count_acq(&root_snap[PROBE_EXIT]) == SNAPCOUNT_DONE);
+  assert(proto_trace_acq(pt) == PROBE_PARENT);
+  assert(bc_op(loadbc(root_startpc)) == BC_JLOOP);
+  assert(bc_d(loadbc(root_startpc)) == PROBE_PARENT);
+
+  assert(trace_startpt_acq(child) == pt);
+  assert(trace_startpc_acq(child) == continuation);
+  assert(trace_ir_acq(child) == child_ir);
+  assert(trace_snap_acq(child) == child_snap);
+  assert(trace_snapmap_acq(child) == child_snapmap);
+  assert(trace_mcode_acq(child) == child_mcode);
+  assert(trace_exittab_acq(child) == child_exittab);
+  assert(trace_exitstub_acq(child) == child_exitstub);
+  assert(lj_arena_lifetime_state_acq(child_arena, child_cell) ==
+	 LJ_ARENA_LIFETIME_LIVE);
+  assert(lj_arena_root_state_acq(child_arena, child_cell) ==
+	 LJ_ARENA_ROOT_MEMBER);
+  assert(gc2_smr_readers_acq(g) == 0);
+  assert(jit_token_acq(g) == 0);
+  assert(jit_owner_l_acq(J) == NULL);
+  assert(lj_trace_state_load(J) == LJ_TRACE_IDLE);
+
+  expect_root_native_fallback(L, J);
+  expect_root_native_fallback(L, J);
+  assert(lj_trace_test_retire_publish_calls() == 1u);
+  assert(trace_nchild_acq(root) == 0 && trace_nextside_acq(root) == 0);
+  assert(la_loadptr_acq((void *const *)&root_exittab[PROBE_EXIT]) ==
+	 raw_fallback);
+  assert(gc2_smr_readers_acq(g) == 0);
+  assert(jit_token_acq(g) == 0);
+}
+
 static void dump_probe(const LJTraceArm64FirstSidePublishProbe *probe)
 {
   fprintf(stderr,
@@ -438,8 +753,9 @@ static void dump_child_body(GCproto *pt, const GCtrace *child)
       (void *)&mcode[i], (unsigned)mcode[i]);
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
+  const char *mode = argc > 1 ? argv[1] : "gc-claim";
   lua_State *L = luaL_newstate();
   jit_State *J;
   global_State *g;
@@ -457,6 +773,10 @@ int main(void)
   void *saved_cframe;
   int32_t saved_vmstate;
 
+  assert(argc <= 2);
+  assert(strcmp(mode, "gc-claim") == 0 ||
+	 strcmp(mode, "full-flush") == 0 ||
+	 strcmp(mode, "scoped") == 0);
   assert(L != NULL);
   luaL_openlibs(L);
   J = L2J(L);
@@ -571,15 +891,28 @@ int main(void)
   assert(!lj_trace_test_arm64_first_side_publish_arm(
 	J, PROBE_PARENT, PROBE_EXIT));
 
+  /* Exercise independent production inverses in fresh fixture processes. */
+  if (strcmp(mode, "full-flush") == 0) {
+    expect_full_flush_first_side(L, J, g, pt, root, child, continuation,
+	root_snap, root_exittab, root_fallback, child_mcode);
+  } else if (strcmp(mode, "scoped") == 0) {
+    expect_scoped_retired_first_side(L, J, g, pt, root, child,
+	continuation, root_snap, root_exittab, root_fallback, child_mcode);
+  } else {
+    expect_retired_first_side(L, J, g, pt, root, child, continuation,
+	root_snap, root_exittab, root_fallback, child_mcode);
+  }
+
   lua_close(L);
-  puts("t-arm64-jit-first-side-publish OK");
+  printf("t-arm64-jit-first-side-publish %s OK\n", mode);
   return 0;
 }
 
 #else
 
-int main(void)
+int main(int argc, char **argv)
 {
+  (void)argc; (void)argv;
   puts("t-arm64-jit-first-side-publish SKIP");
   return 0;
 }
