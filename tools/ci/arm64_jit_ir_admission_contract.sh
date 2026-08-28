@@ -65,6 +65,10 @@ grep -F 'case IR_SLOAD: case IR_ADDOV: case IR_SUBOV: case IR_MULOV:' \
   "$value_region" >/dev/null
 grep -F 'case IR_ADD:' "$value_region" >/dev/null
 grep -F 'return allow_add;' "$value_region" >/dev/null
+grep -F 'return op == IR_SLOAD || op == IR_ADD;' "$value_region" >/dev/null
+grep -F 'if (type == IRT_NUM)' "$value_region" >/dev/null
+grep -F 'rootop == BC_LOOP && ir.t.irt == (IRT_NUM|IRT_GUARD)' \
+  "$value_region" >/dev/null
 if grep -E 'case IR_(CONV|SUB|MUL|DIV|LT|GE|LE|GT|EQ|NE|USE|PHI|LOOP|XPOLL):' \
      "$value_region" >/dev/null; then
   echo "non-value IR entered the ARM64 integer producer set" >&2
@@ -129,6 +133,48 @@ for required in \
     exit 1
   }
 done
+
+# The mixed fixture is a second exact grammar, not a widening of the legacy
+# integer fixture. Pin its semantic shape, FPR-only post-RA policy, PHI
+# consistency, and every adjacent family which remains closed.
+for required in \
+  'static void make_numeric_trace(jit_State *J)' \
+  'assert(numeric_fixture_pt->framesize == 6);' \
+  'setir(N_K_ONE, IR_KINT, IRT_INT, 1, 0);' \
+  'setir(N_R_X, IR_SLOAD, IRT_NUM|IRT_GUARD,' \
+  'setir(N_R_STEP, IR_SLOAD, IRT_NUM|IRT_GUARD,' \
+  'setir(N_R_X_PRE, IR_ADD, IRT_NUM|IRT_ISPHI,' \
+  'setir(N_R_X_BODY, IR_ADD, IRT_NUM|IRT_ISPHI,' \
+  'setir(N_R_X_PHI, IR_PHI, IRT_NUM, N_R_X_PRE, N_R_X_BODY);' \
+  'fx.T.nsnap = 7;' \
+  'fx.T.nsnapmap = 27;' \
+  'setir(N_R_RENAME, IR_RENAME, IRT_NIL, N_R_I_PRE, 4);' \
+  'fx.ir[N_R_RENAME].r = RID_X27;' \
+  'fx.ir[N_R_X_PRE].r = RID_D15;' \
+  'fx.ir[N_R_X_BODY].r = RID_D15;' \
+  'fx.ir[N_R_X_PHI].r = RID_D15;' \
+  'fx.ir[N_R_X_PHI].r = RID_D14;' \
+  'fx.ir[N_R_X_PRE].r = RID_D14;' \
+  'fx.ir[N_R_I_PHI].r = RID_X27;' \
+  'fx.ir[N_R_X_PHI].s = 2;' \
+  'fx.ir[N_R_X].r = RID_X0;' \
+  'fx.ir[N_R_X_PRE].s = 2;' \
+  'fx.ir[N_R_RENAME].op1 = N_R_X_PRE;' \
+  'setir(N_K_ONE, IR_KNUM, IRT_NUM, 0, 0);' \
+  'setir(N_R_PRE_GUARD, IR_GT, IRT_NUM|IRT_GUARD,' \
+  'REJECT_NUMERIC_ADJACENT(IR_CONV, IRT_NUM|IRT_ISPHI,' \
+  'REJECT_NUMERIC_ADJACENT(IR_SUB, IRT_NUM|IRT_ISPHI,' \
+  'REJECT_NUMERIC_ADJACENT(IR_MUL, IRT_NUM|IRT_ISPHI,' \
+  'REJECT_NUMERIC_ADJACENT(IR_DIV, IRT_NUM|IRT_ISPHI,' \
+  'setir(N_R_X_PRE, IR_CALLN, IRT_NUM, N_R_X, IRCALL_lj_vm_modi);' \
+  'setir(N_R_X_PRE, IR_TNEW, IRT_TAB, 0, 0);' \
+  'test_numeric_positive_and_negative(J);' \
+  'test_numeric_postra_layout(J);'; do
+  grep -F "$required" "$root/tests/t-arm64-jit-ir-admission.c" >/dev/null || {
+    echo "ARM64 mixed NUM mutation coverage changed: $required" >&2
+    exit 1
+  }
+done
 postra_line=$(grep -n '!lj_asm_arm64_postra_admit(' "$trace_asm" | cut -d: -f1)
 marker_line=$(grep -n 'T->unused1 |= TRACE_ARM64_INT_FORL_ADMITTED;' \
   "$trace_asm" | cut -d: -f1)
@@ -151,7 +197,8 @@ for required in \
   'slot >= SPS_FIRST && slot < capacity && slot < SPS_LIMIT' \
   'if (last.o == IR_NOP)' \
   'nrename == 0 || nrename > LJ_MAX_PHI' \
-  'case IR_SLOAD: case IR_ADDOV: case IR_SUBOV: case IR_MULOV:' \
+  'case IR_SLOAD:' \
+  'case IR_ADDOV: case IR_SUBOV: case IR_MULOV:' \
   'case IR_ADD:' \
   'case IR_LT: case IR_GE: case IR_LE: case IR_GT:' \
   'case IR_EQ: case IR_NE:' \
@@ -159,9 +206,17 @@ for required in \
   'case IR_PHI:' \
   'MSize expected = (MSize)sps_scale(sps_align(highest_end));' \
   'spadjust != expected || highest_end > capacity' \
-  'ren.op2 >= nsnap || ren.r >= RID_MAX_GPR ||' \
-  '!rset_test(RSET_GPR, ren.r) || ren.s != SPS_NONE' \
-  'if (!arm64_postra_int_value(source, rootop, forl_idxslot, maxslots))' \
+  'ren.op2 >= nsnap || ren.s != SPS_NONE' \
+  'if (irt_type(source.t) == IRT_INT)' \
+  'ren.r >= RID_MAX_GPR || !rset_test(RSET_GPR, ren.r)' \
+  'else if (irt_type(source.t) == IRT_NUM)' \
+  'ren.r < RID_MIN_FPR || ren.r >= RID_MAX_FPR ||' \
+  '!rset_test(RSET_FPR, ren.r)' \
+  'if (!arm64_postra_int_value(source, rootop, forl_idxslot, maxslots) ||' \
+  'slot != SPS_NONE || ins.r < RID_MIN_FPR || ins.r >= RID_MAX_FPR ||' \
+  'suffix_is_nop || nrename != 1u || spadjust != 0 || highest_end != 0' \
+  'return iphi.r == ipre.r && iphi.r == ibody.r &&' \
+  'xphi.r == xpre.r && xphi.r == xbody.r;' \
   'mapofs != expected_mapofs || nent > nextofs-mapofs' \
   'nextofs-mapofs-nent != 1u+LJ_FR2' \
   'snapat < REF_FIRST || snapat >= semantic_nins' \
@@ -178,6 +233,8 @@ for required in \
   'for (renref = view->nins; renref-- > semantic_nins; )' \
   'if (ren.op1 == valueref && ren.op2 <= snapno)' \
   'if (ra_hasspill(regsp_spill(rs)))' \
+  'if (irt_type(source.t) == IRT_NUM ||' \
+  'regsp_reg(rs) < RID_MIN_FPR || regsp_reg(rs) >= RID_MAX_FPR ||' \
   'regsp_reg(rs) >= RID_MAX_GPR ||' \
   '!rset_test(RSET_GPR, regsp_reg(rs))' \
   'pcraw[n] = snapentry_acq(&view->snapmap[mapofs+nent+n]);' \
@@ -188,16 +245,19 @@ for required in \
     exit 1
   }
 done
-rename_range_line=$(grep -n 'ren.op2 >= nsnap || ren.r >= RID_MAX_GPR ||' \
+rename_range_line=$(grep -n 'ren.op2 >= nsnap || ren.s != SPS_NONE' \
   "$postra_region" | cut -d: -f1)
-rename_rset_line=$(grep -n '!rset_test(RSET_GPR, ren.r)' \
+rename_rset_line=$(grep -n 'ren.r >= RID_MAX_GPR || !rset_test(RSET_GPR, ren.r)' \
+  "$postra_region" | cut -d: -f1)
+rename_fpr_line=$(grep -n 'ren.r < RID_MIN_FPR || ren.r >= RID_MAX_FPR ||' \
   "$postra_region" | cut -d: -f1)
 snap_range_line=$(grep -n 'regsp_reg(rs) >= RID_MAX_GPR ||' \
   "$postra_region" | cut -d: -f1)
 snap_rset_line=$(grep -n '!rset_test(RSET_GPR, regsp_reg(rs))' \
   "$postra_region" | cut -d: -f1)
 test -n "$rename_range_line" && test -n "$rename_rset_line" &&
-test "$rename_range_line" -lt "$rename_rset_line"
+test -n "$rename_fpr_line" && test "$rename_range_line" -lt "$rename_rset_line" &&
+test "$rename_range_line" -lt "$rename_fpr_line"
 test -n "$snap_range_line" && test -n "$snap_rset_line" &&
 test "$snap_range_line" -lt "$snap_rset_line"
 if grep -E 'lj_mcode_|trace_save|traceslot_publish|lj_ir_call|asm_call|lj_trace_err' \
@@ -262,6 +322,11 @@ for required in \
   'ir->o != IR_KPRI || ir->t.irt != expected || ir->op12 != 0' \
   'ir->o != IR_KINT || ir->t.irt != IRT_INT' \
   'arm64_ir_int_value_op((IROp)ir->o, allow_add)' \
+  'arm64_ir_num_value_op((IROp)ir->o)' \
+  'startop != BC_LOOP || ir->t.irt != (IRT_NUM|IRT_ISPHI)' \
+  '!arm64_ir_num_binary(T, ir, ref)' \
+  'scalar_mode != (ARM64_IR_SCALAR_INT|ARM64_IR_SCALAR_NUM)' \
+  '!arm64_ir_numadd_shape(T, firstphi, reject)' \
   'arm64_ir_proto_range(pt, &lo, &hi)' \
   'startpc == NULL ||' \
   'startpc != J->startpc' \
@@ -430,4 +495,4 @@ grep -F '#if LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED' \
   -o "$fixture"
 "$fixture"
 
-echo "arm64_jit_ir_admission_contract OK: exact scalar LOOP/FORL grammar and bounded integer spill layout verified"
+echo "arm64_jit_ir_admission_contract OK: exact integer and mixed-NUM LOOP/FORL grammar, bounded integer spills, and FPR-only NUM layout verified"

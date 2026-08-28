@@ -98,6 +98,12 @@ if test -f "$native_loop_contract"; then
     sh "$native_loop_contract"
 fi
 
+numeric_loop_contract=$root/tools/ci/arm64_jit_numeric_loop_contract.sh
+if test -f "$numeric_loop_contract"; then
+  LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
+    sh "$numeric_loop_contract"
+fi
+
 exit_contract=$root/tools/ci/arm64_jit_exit_contract.sh
 if test -f "$exit_contract"; then
   LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
@@ -143,4 +149,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" LUA_PATH="$lua_path" \
   "$luajit" "$root/tools/test.lua" \
     m5_arm64_jit_fail_closed_safepoint_runtime
 
-echo "arm64_jit_fail_closed_gate OK: dynamic-step FORL stayed interpreted; constrained LOOP/FORL and literal-true JFUNCF entry contracts sound"
+echo "arm64_jit_fail_closed_gate OK: dynamic-step FORL stayed interpreted; constrained integer and mixed-NUM LOOP/FORL plus literal-true JFUNCF entry contracts sound"

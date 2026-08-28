@@ -59,10 +59,35 @@ enum {
   ADMISSION_IR_CAP = REF_BASE + 256
 };
 
+/* Exact recorder order for the first admitted mixed INT/NUM BC_LOOP root.
+** Keep these names distinct from the older all-integer policy fixture above:
+** the two fixtures deliberately exercise separate admission grammars. */
+enum {
+  N_K_ONE = REF_TRUE - 1,
+
+  N_R_I = REF_FIRST,
+  N_R_X,
+  N_R_STEP,
+  N_R_I_PRE,
+  N_R_X_PRE,
+  N_R_LIMIT,
+  N_R_PRE_GUARD,
+  N_R_LOOP,
+  N_R_XPOLL,
+  N_R_I_BODY,
+  N_R_X_BODY,
+  N_R_BODY_GUARD,
+  N_R_I_PHI,
+  N_R_X_PHI,
+  N_R_SEMANTIC_END,
+  N_R_RENAME = N_R_SEMANTIC_END,
+  N_R_POSTRA_END
+};
+
 typedef struct AdmissionFixture {
   GCtrace T;
   IRIns ir[ADMISSION_IR_CAP];
-  SnapShot snap[4];
+  SnapShot snap[7];
   SnapEntry snapmap[32];
 } AdmissionFixture;
 
@@ -73,6 +98,9 @@ static GCproto *fixture_pt;
 static const BCIns *fixture_forl_pc;
 static const BCIns *fixture_loop_pc;
 static const BCIns *fixture_snapshot_pc;
+static GCproto *numeric_fixture_pt;
+static const BCIns *numeric_fixture_loop_pc;
+static const BCIns *numeric_fixture_snapshot_pc;
 
 static BCIns loadbc(const BCIns *pc)
 {
@@ -194,6 +222,102 @@ static void make_forl_trace(jit_State *J)
   fx.ir[R_C].op2 = IRSLOAD_READONLY|IRSLOAD_INHERIT;
 }
 
+static void make_numeric_trace(jit_State *J)
+{
+  static const IRRef snaprefs[7] = {
+    N_R_I, N_R_I_PRE, N_R_LIMIT, N_R_PRE_GUARD,
+    N_R_LOOP, N_R_I_BODY, N_R_BODY_GUARD
+  };
+  static const uint16_t mapofs[7] = { 0, 2, 5, 10, 14, 18, 23 };
+  static const uint8_t nent[7] = { 0, 1, 3, 2, 2, 3, 2 };
+  static const uint8_t nslots[7] = { 6, 7, 7, 6, 6, 7, 6 };
+  SnapNo snapno;
+
+  assert(numeric_fixture_pt != NULL && numeric_fixture_loop_pc != NULL &&
+	 numeric_fixture_snapshot_pc != NULL);
+  assert(numeric_fixture_pt->framesize == 6);
+  memset(&fx, 0, sizeof(fx));
+
+  setir(N_K_ONE, IR_KINT, IRT_INT, 1, 0);
+  setir(REF_TRUE, IR_KPRI, IRT_TRUE, 0, 0);
+  setir(REF_FALSE, IR_KPRI, IRT_FALSE, 0, 0);
+  setir(REF_NIL, IR_KPRI, IRT_NIL, 0, 0);
+
+  setir(REF_BASE, IR_BASE, IRT_PGC, 0, 0);
+  setir(N_R_I, IR_SLOAD, IRT_INT|IRT_GUARD,
+	5, IRSLOAD_TYPECHECK);
+  setir(N_R_X, IR_SLOAD, IRT_NUM|IRT_GUARD,
+	3, IRSLOAD_TYPECHECK);
+  setir(N_R_STEP, IR_SLOAD, IRT_NUM|IRT_GUARD,
+	4, IRSLOAD_TYPECHECK);
+  setir(N_R_I_PRE, IR_ADDOV, IRT_INT|IRT_GUARD|IRT_ISPHI,
+	N_R_I, N_K_ONE);
+  setir(N_R_X_PRE, IR_ADD, IRT_NUM|IRT_ISPHI,
+	N_R_STEP, N_R_X);
+  setir(N_R_LIMIT, IR_SLOAD, IRT_INT|IRT_GUARD,
+	2, IRSLOAD_TYPECHECK);
+  setir(N_R_PRE_GUARD, IR_GT, IRT_INT|IRT_GUARD,
+	N_R_LIMIT, N_R_I_PRE);
+  setir(N_R_LOOP, IR_LOOP, IRT_NIL|IRT_GUARD, 0, 0);
+  setir(N_R_XPOLL, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0);
+  setir(N_R_I_BODY, IR_ADDOV, IRT_INT|IRT_GUARD|IRT_ISPHI,
+	N_R_I_PRE, N_K_ONE);
+  setir(N_R_X_BODY, IR_ADD, IRT_NUM|IRT_ISPHI,
+	N_R_X_PRE, N_R_STEP);
+  setir(N_R_BODY_GUARD, IR_LT, IRT_INT|IRT_GUARD,
+	N_R_I_BODY, N_R_LIMIT);
+  setir(N_R_I_PHI, IR_PHI, IRT_INT, N_R_I_PRE, N_R_I_BODY);
+  setir(N_R_X_PHI, IR_PHI, IRT_NUM, N_R_X_PRE, N_R_X_BODY);
+
+  for (snapno = 0; snapno < 7; snapno++) {
+    fx.snap[snapno].ref = snaprefs[snapno];
+    fx.snap[snapno].mapofs = mapofs[snapno];
+    fx.snap[snapno].nent = nent[snapno];
+    fx.snap[snapno].nslots = nslots[snapno];
+    fx.snap[snapno].topslot = 6;
+  }
+  fx.snapmap[2] = SNAP(6, 0, N_R_I);
+  fx.snapmap[5] = SNAP(3, 0, N_R_X_PRE);
+  fx.snapmap[6] = SNAP(5, 0, N_R_I_PRE);
+  fx.snapmap[7] = SNAP(6, 0, N_R_I_PRE);
+  fx.snapmap[10] = SNAP(3, 0, N_R_X_PRE);
+  fx.snapmap[11] = SNAP(5, 0, N_R_I_PRE);
+  fx.snapmap[14] = SNAP(3, 0, N_R_X_PRE);
+  fx.snapmap[15] = SNAP(5, 0, N_R_I_PRE);
+  fx.snapmap[18] = SNAP(3, 0, N_R_X_PRE);
+  fx.snapmap[19] = SNAP(5, 0, N_R_I_PRE);
+  fx.snapmap[20] = SNAP(6, 0, N_R_I_PRE);
+  fx.snapmap[23] = SNAP(3, 0, N_R_X_BODY);
+  fx.snapmap[24] = SNAP(5, 0, N_R_I_BODY);
+
+  fx.T.nk = N_K_ONE;
+  fx.T.nins = N_R_SEMANTIC_END;
+  fx.T.ir = fx.ir;
+  fx.T.nsnap = 7;
+  fx.T.snap = fx.snap;
+  fx.T.nsnapmap = 27;
+  fx.T.snapmap = fx.snapmap;
+  fx.T.traceno = 1;
+  fx.T.link = 1;
+  fx.T.root = 0;
+  fx.T.linktype = LJ_TRLINK_LOOP;
+  fx.T.sinktags = 0;
+  fx.T.startins = loadbc(numeric_fixture_loop_pc);
+  trace_startpt_rel(&fx.T, numeric_fixture_pt);
+  setmref(fx.T.startpc, numeric_fixture_loop_pc);
+  for (snapno = 0; snapno < 7; snapno++)
+    set_snapshot_payload(snapno, numeric_fixture_snapshot_pc, 0);
+
+  J->parent = 0;
+  J->exitno = 0;
+  J->pt = numeric_fixture_pt;
+  J->baseslot = 1 + LJ_FR2;
+  J->framedepth = 0;
+  J->retdepth = 0;
+  J->loopref = N_R_LOOP;
+  J->startpc = numeric_fixture_loop_pc;
+}
+
 static LJArm64IRReject expect_reject(jit_State *J,
 		LJArm64IRRejectReason reason, IROp op)
 {
@@ -239,6 +363,55 @@ static void expect_postra_result(LJArm64PostRAView *view, int admitted)
   assert(result == admitted);
   if (admitted)
     assert(semantic_nins == R_END);
+}
+
+static LJArm64PostRAView make_numeric_postra_view(jit_State *J)
+{
+  LJArm64PostRAView view;
+  make_numeric_trace(J);
+
+  /* Exact post-RA allocation observed for the admitted trace. The PHIs match
+  ** their right/body operands, as required by asm_phi() and its shuffle. */
+  fx.ir[N_R_I].r = RID_X2;
+  fx.ir[N_R_X].r = RID_D1;
+  fx.ir[N_R_STEP].r = RID_D0;
+  fx.ir[N_R_I_PRE].r = RID_X28;
+  fx.ir[N_R_X_PRE].r = RID_D15;
+  fx.ir[N_R_LIMIT].r = RID_X0;
+  fx.ir[N_R_I_BODY].r = RID_X28;
+  fx.ir[N_R_X_BODY].r = RID_D15;
+  fx.ir[N_R_I_PHI].r = RID_X28;
+  fx.ir[N_R_X_PHI].r = RID_D15;
+
+  /* The real trace has one suffix: move the loop-carried integer from x28 to
+  ** x27 starting at snapshot #4. */
+  setir(N_R_RENAME, IR_RENAME, IRT_NIL, N_R_I_PRE, 4);
+  fx.ir[N_R_RENAME].r = RID_X27;
+
+  view.ir = fx.ir;
+  view.snap = fx.snap;
+  view.snapmap = fx.snapmap;
+  view.proto_bc = proto_bc(numeric_fixture_pt);
+  view.nins = N_R_POSTRA_END;
+  view.nk = fx.T.nk;
+  view.nsnap = fx.T.nsnap;
+  view.nsnapmap = fx.T.nsnapmap;
+  view.spadjust = 0;
+  view.proto_sizebc = numeric_fixture_pt->sizebc;
+  view.root_topslot = 6;
+  view.startins = fx.T.startins;
+  view.base_delta = 0;
+  return view;
+}
+
+static void expect_numeric_postra_result(LJArm64PostRAView *view,
+	int admitted)
+{
+  IRRef semantic_nins = 0;
+  int result = lj_asm_arm64_postra_admit(view, &semantic_nins);
+  assert(result == admitted);
+  if (admitted)
+    assert(semantic_nins == N_R_SEMANTIC_END);
 }
 
 static void test_postra_spill_layout(jit_State *J)
@@ -434,6 +607,118 @@ static void test_postra_spill_layout(jit_State *J)
   view = make_postra_view(J);
   set_snapshot_payload(2, proto_bc(fixture_pt)+fixture_pt->sizebc, 0);
   expect_postra_result(&view, 0);
+}
+
+static void test_numeric_postra_layout(jit_State *J)
+{
+  LJArm64PostRAView view;
+
+  view = make_numeric_postra_view(J);
+  assert(fx.ir[N_R_RENAME].o == IR_RENAME);
+  assert(fx.ir[N_R_RENAME].op1 == N_R_I_PRE);
+  assert(fx.ir[N_R_RENAME].op2 == 4);
+  assert(fx.ir[N_R_RENAME].r == RID_X27);
+  expect_numeric_postra_result(&view, 1);
+
+  /* asm_phi() assigns the right/body register to the PHI and its final
+  ** shuffle resolves the left/head value into the same register. A different
+  ** FPR is valid only when all three move together. */
+  view = make_numeric_postra_view(J);
+  fx.ir[N_R_X_PHI].r = RID_D14;
+  expect_numeric_postra_result(&view, 0);
+  view = make_numeric_postra_view(J);
+  fx.ir[N_R_X_PRE].r = RID_D14;
+  expect_numeric_postra_result(&view, 0);
+  view = make_numeric_postra_view(J);
+  fx.ir[N_R_X_BODY].r = RID_D14;
+  expect_numeric_postra_result(&view, 0);
+  view = make_numeric_postra_view(J);
+  fx.ir[N_R_X_PRE].r = RID_D14;
+  fx.ir[N_R_X_BODY].r = RID_D14;
+  fx.ir[N_R_X_PHI].r = RID_D14;
+  expect_numeric_postra_result(&view, 1);
+  view = make_numeric_postra_view(J);
+  fx.ir[N_R_I_PHI].r = RID_X27;
+  expect_numeric_postra_result(&view, 0);
+  view = make_numeric_postra_view(J);
+  fx.ir[N_R_X_PHI].s = 2;
+  view.spadjust = 16;
+  expect_numeric_postra_result(&view, 0);
+  view = make_numeric_postra_view(J);
+  fx.ir[N_R_X_PHI].r = RID_X0;
+  expect_numeric_postra_result(&view, 0);
+  view = make_numeric_postra_view(J);
+  fx.ir[N_R_X_PHI].r = RID_MAX_FPR;
+  expect_numeric_postra_result(&view, 0);
+
+  /* A NUM producer is invalid even when no snapshot refers to it. */
+  view = make_numeric_postra_view(J);
+  fx.ir[N_R_X].r = RID_X0;
+  expect_numeric_postra_result(&view, 0);
+  view = make_numeric_postra_view(J);
+  fx.ir[N_R_X].r = RID_MAX_FPR;
+  expect_numeric_postra_result(&view, 0);
+
+  /* Snapshot-restored NUM values are subject to the same FPR certificate. */
+  view = make_numeric_postra_view(J);
+  fx.ir[N_R_X_PRE].r = RID_X0;
+  expect_numeric_postra_result(&view, 0);
+  view = make_numeric_postra_view(J);
+  fx.ir[N_R_X_PRE].r = RID_MAX_FPR;
+  expect_numeric_postra_result(&view, 0);
+
+  view = make_numeric_postra_view(J);
+  fx.ir[N_R_X_PRE].s = 2;
+  view.spadjust = 16;
+  expect_numeric_postra_result(&view, 0);
+  view = make_numeric_postra_view(J);
+  view.spadjust = 16;
+  expect_numeric_postra_result(&view, 0);
+
+  /* A type-directed synthetic NUM RENAME may choose any allocatable FPR. */
+  view = make_numeric_postra_view(J);
+  fx.ir[N_R_RENAME].op1 = N_R_X_PRE;
+  fx.ir[N_R_RENAME].r = RID_D14;
+  expect_numeric_postra_result(&view, 1);
+  view = make_numeric_postra_view(J);
+  fx.ir[N_R_RENAME].op1 = N_R_X_PRE;
+  fx.ir[N_R_RENAME].r = RID_X27;
+  expect_numeric_postra_result(&view, 0);
+  view = make_numeric_postra_view(J);
+  fx.ir[N_R_RENAME].op1 = N_R_X_PRE;
+  fx.ir[N_R_RENAME].r = RID_MAX_FPR;
+  expect_numeric_postra_result(&view, 0);
+
+  /* The post-RA pass independently retains the adjacent-family closures. */
+  view = make_numeric_postra_view(J);
+  setir(N_K_ONE, IR_KNUM, IRT_NUM, 0, 0);
+  expect_numeric_postra_result(&view, 0);
+  view = make_numeric_postra_view(J);
+  setir(N_R_PRE_GUARD, IR_GT, IRT_NUM|IRT_GUARD,
+	N_R_X_PRE, N_R_X);
+  expect_numeric_postra_result(&view, 0);
+  view = make_numeric_postra_view(J);
+  setir(N_R_X_PRE, IR_CONV, IRT_NUM|IRT_ISPHI,
+	N_R_X, IRCONV_NUM_INT);
+  expect_numeric_postra_result(&view, 0);
+  view = make_numeric_postra_view(J);
+  setir(N_R_X_PRE, IR_SUB, IRT_NUM|IRT_ISPHI, N_R_STEP, N_R_X);
+  expect_numeric_postra_result(&view, 0);
+  view = make_numeric_postra_view(J);
+  setir(N_R_X_PRE, IR_MUL, IRT_NUM|IRT_ISPHI, N_R_STEP, N_R_X);
+  expect_numeric_postra_result(&view, 0);
+  view = make_numeric_postra_view(J);
+  setir(N_R_X_PRE, IR_DIV, IRT_NUM|IRT_ISPHI, N_R_STEP, N_R_X);
+  expect_numeric_postra_result(&view, 0);
+  view = make_numeric_postra_view(J);
+  setir(N_R_X_PRE, IR_CALLN, IRT_NUM, N_R_X, IRCALL_lj_vm_modi);
+  expect_numeric_postra_result(&view, 0);
+  view = make_numeric_postra_view(J);
+  setir(N_R_X_PRE, IR_TNEW, IRT_TAB, 0, 0);
+  expect_numeric_postra_result(&view, 0);
+  view = make_numeric_postra_view(J);
+  view.startins = loadbc(fixture_forl_pc);
+  expect_numeric_postra_result(&view, 0);
 }
 
 typedef struct ThrowContext {
@@ -637,6 +922,89 @@ static void test_phi_and_xpoll_rejections(jit_State *J)
   expect_reject(J, LJ_ARM64_IR_REJECT_SNAPSHOT, IR_XPOLL);
 }
 
+static void test_numeric_positive_and_negative(jit_State *J)
+{
+  LJArm64IRReject reject;
+
+  make_numeric_trace(J);
+  if (!lj_asm_arm64_ir_admit(J, &fx.T, &reject))
+    fprintf(stderr, "numeric admission failed: reason=%d ref=%u op=%u "
+	    "detail=%u\n", (int)reject.reason, (unsigned)reject.ref,
+	    (unsigned)reject.op, (unsigned)reject.detail);
+  assert(reject.reason == LJ_ARM64_IR_REJECT_NONE);
+
+  /* NUM SLOADs use exactly the ordinary type-checking stack-load mode. */
+  make_numeric_trace(J);
+  fx.ir[N_R_X].t.irt = IRT_NUM;
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_SLOAD);
+  make_numeric_trace(J);
+  fx.ir[N_R_X].op1 = 1;
+  expect_reject(J, LJ_ARM64_IR_REJECT_OPERAND, IR_SLOAD);
+  make_numeric_trace(J);
+  fx.ir[N_R_X].op2 = IRSLOAD_READONLY;
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_SLOAD);
+
+  /* NUM ADD is loop-carried, reads only earlier NUM producers, and never
+  ** accepts a rematerialized KINT as an implicit conversion. */
+  make_numeric_trace(J);
+  fx.ir[N_R_X_PRE].t.irt = IRT_NUM;
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_ADD);
+  make_numeric_trace(J);
+  fx.ir[N_R_X_PRE].op1 = N_R_I;
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_ADD);
+  make_numeric_trace(J);
+  fx.ir[N_R_X_PRE].op1 = N_R_X_BODY;
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_ADD);
+  make_numeric_trace(J);
+  fx.ir[N_R_X_PRE].op1 = N_K_ONE;
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_ADD);
+
+  make_numeric_trace(J);
+  fx.ir[N_R_X_PHI].op2 = N_R_I_BODY;
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_PHI);
+
+  make_numeric_trace(J);
+  setir(N_K_ONE, IR_KNUM, IRT_NUM, 0, 0);
+  expect_reject(J, LJ_ARM64_IR_REJECT_CONSTANT, IR_KNUM);
+
+  make_numeric_trace(J);
+  setir(N_R_PRE_GUARD, IR_GT, IRT_NUM|IRT_GUARD,
+	N_R_X_PRE, N_R_X);
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_GT);
+
+#define REJECT_NUMERIC_ADJACENT(op, type, left, right) \
+  do { \
+    make_numeric_trace(J); \
+    setir(N_R_X_PRE, (op), (type), (left), (right)); \
+    expect_reject(J, LJ_ARM64_IR_REJECT_OPCODE, (op)); \
+  } while (0)
+  REJECT_NUMERIC_ADJACENT(IR_CONV, IRT_NUM|IRT_ISPHI,
+	N_R_X, IRCONV_NUM_INT);
+  REJECT_NUMERIC_ADJACENT(IR_SUB, IRT_NUM|IRT_ISPHI,
+	N_R_STEP, N_R_X);
+  REJECT_NUMERIC_ADJACENT(IR_MUL, IRT_NUM|IRT_ISPHI,
+	N_R_STEP, N_R_X);
+  REJECT_NUMERIC_ADJACENT(IR_DIV, IRT_NUM|IRT_ISPHI,
+	N_R_STEP, N_R_X);
+#undef REJECT_NUMERIC_ADJACENT
+
+  make_numeric_trace(J);
+  setir(N_R_X_PRE, IR_CALLN, IRT_NUM, N_R_X, IRCALL_lj_vm_modi);
+  reject = expect_reject(J, LJ_ARM64_IR_REJECT_CALL, IR_CALLN);
+  assert(reject.detail == IRCALL_lj_vm_modi);
+
+  make_numeric_trace(J);
+  setir(N_R_X_PRE, IR_TNEW, IRT_TAB, 0, 0);
+  expect_reject(J, LJ_ARM64_IR_REJECT_OPCODE, IR_TNEW);
+
+  make_numeric_trace(J);
+  fx.T.startins = loadbc(fixture_forl_pc);
+  setmref(fx.T.startpc, fixture_forl_pc);
+  J->startpc = fixture_forl_pc;
+  assert(!lj_asm_arm64_ir_admit(J, &fx.T, &reject));
+  assert(reject.reason != LJ_ARM64_IR_REJECT_NONE);
+}
+
 static void test_positive_and_negative(lua_State *L)
 {
   jit_State *J = L2J(L);
@@ -802,7 +1170,9 @@ static void test_positive_and_negative(lua_State *L)
 
   make_trace(J);
   fx.ir[R_A].t.irt = IRT_NUM|IRT_GUARD;
-  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_SLOAD);
+  /* NUM SLOAD itself is now part of the mixed-loop grammar; this otherwise
+  ** integer fixture still fails when SUBOV consumes it as an integer. */
+  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_SUBOV);
 
   make_trace(J);
   fx.ir[R_A].op1 = 1;
@@ -981,6 +1351,26 @@ int main(void)
   fixture_snapshot_pc = fixture_forl_pc + 1 + bc_j(loadbc(fixture_forl_pc));
   assert(fixture_snapshot_pc < proto_bc(fixture_pt)+fixture_pt->sizebc);
   assert(bc_op(loadbc(fixture_loop_pc+bc_j(loadbc(fixture_loop_pc)))) == BC_JMP);
+
+  assert(luaL_loadstring(L,
+	"return function(n,x,step) local i=0 "
+	"while i<n do i=i+1; x=x+step end return x end") == 0);
+  assert(lua_pcall(L, 0, 1, 0) == 0);
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  numeric_fixture_pt = funcproto(funcV(L->top-1));
+  assert(numeric_fixture_pt->framesize == 6);
+  for (i = 0; i < numeric_fixture_pt->sizebc; i++) {
+    const BCIns *pc = &proto_bc(numeric_fixture_pt)[i];
+    if (bc_op(loadbc(pc)) == BC_LOOP && numeric_fixture_loop_pc == NULL)
+      numeric_fixture_loop_pc = pc;
+  }
+  assert(numeric_fixture_loop_pc != NULL);
+  numeric_fixture_snapshot_pc = numeric_fixture_loop_pc +
+	bc_j(loadbc(numeric_fixture_loop_pc));
+  assert(numeric_fixture_snapshot_pc >= proto_bc(numeric_fixture_pt));
+  assert(numeric_fixture_snapshot_pc <
+	 proto_bc(numeric_fixture_pt)+numeric_fixture_pt->sizebc);
+  assert(bc_op(loadbc(numeric_fixture_snapshot_pc)) == BC_JMP);
   J = L2J(L);
   savedL = J->L;
   savedparent = J->parent;
@@ -994,6 +1384,8 @@ int main(void)
   J->L = L;
   test_positive_and_negative(L);
   test_postra_spill_layout(J);
+  test_numeric_positive_and_negative(J);
+  test_numeric_postra_layout(J);
   J->L = savedL;
   J->parent = savedparent;
   J->exitno = savedexit;
@@ -1003,9 +1395,9 @@ int main(void)
   J->framedepth = savedframedepth;
   J->retdepth = savedretdepth;
   J->startpc = savedstartpc;
-  L->top--;
+  L->top -= 2;
   lua_close(L);
-  puts("arm64_jit_ir_admission OK: scalar LOOP/FORL policy and integer spill layout verified");
+  puts("arm64_jit_ir_admission OK: integer and mixed NUM LOOP/FORL policy verified");
   return 0;
 }
 
