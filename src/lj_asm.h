@@ -95,6 +95,7 @@ typedef struct LJArm64SideShape {
   MSize child_pcpos[LJ_ARM64_SIDE_CHILD_NSNAP];
   uint32_t inherited_reg;
   uint32_t sload_reg;
+  int32_t addends[2];  /* Repeat addends[0] for a singleton exact set. */
 } LJArm64SideShape;
 
 /* Exact immutable view of the repeatedly observed first-side ARM64 allocator

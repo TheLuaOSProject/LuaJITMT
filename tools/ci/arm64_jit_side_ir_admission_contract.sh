@@ -26,6 +26,7 @@ pure_region=$tmpdir/pure-side-region.txt
 shape_region=$tmpdir/side-shape-region.txt
 second_postra_region=$tmpdir/side-second-postra-region.txt
 third_postra_region=$tmpdir/side-third-postra-region.txt
+return_negative_region=$tmpdir/side-return-negative-region.txt
 trace_asm=$tmpdir/trace-asm.txt
 head_side=$tmpdir/head-side.txt
 tail_side=$tmpdir/tail-side.txt
@@ -87,6 +88,7 @@ for required in \
   'MSize child_pcpos[LJ_ARM64_SIDE_CHILD_NSNAP];' \
   'uint32_t inherited_reg;' \
   'uint32_t sload_reg;' \
+  'int32_t addends[2];  /* Repeat addends[0] for a singleton exact set. */' \
   'lj_asm_arm64_side_shape(ExitNo exitno);'; do
   grep -F "$required" "$root/src/lj_asm.h" >/dev/null || {
     echo "ARM64 side descriptor schema changed: $required" >&2
@@ -114,9 +116,12 @@ sed -n '/^const LJArm64SideShape \*lj_asm_arm64_side_shape(/,/^}/p' \
 test -s "$shape_region"
 for required in \
   'static const LJArm64SideShape shapes[] = {' \
-  '{ 2u, 8u, 13u, { 13u, 14u, 3u, 17u, 7u }, RID_X28, RID_X27 },' \
-  '{ 6u, 9u, 10u, { 10u, 11u, 3u, 17u, 7u }, RID_X27, RID_X28 },' \
-  '{ 7u, 11u, 13u, { 13u, 14u, 3u, 17u, 7u }, RID_X28, RID_X27 }' \
+  '{ 2u, 8u, 13u, { 13u, 14u, 3u, 17u, 7u },' \
+  'RID_X28, RID_X27, { 1, 1 } },' \
+  '{ 6u, 9u, 10u, { 10u, 11u, 3u, 17u, 7u },' \
+  'RID_X27, RID_X28, { 1, 2 } },' \
+  '{ 7u, 11u, 13u, { 13u, 14u, 3u, 17u, 7u },' \
+  'RID_X28, RID_X27, { 1, 1 } }' \
   'if (shapes[i].exitno == exitno)' \
   'return &shapes[i];' \
   'return NULL;'; do
@@ -132,7 +137,7 @@ test "$(grep -Ec '^    \{ [0-9]+u, [0-9]+u, [0-9]+u, \{' \
 }
 
 for required in \
-  'ARM64_SIDE_K_ONE = REF_TRUE-1u' \
+  'ARM64_SIDE_K_ADDEND = REF_TRUE-1u' \
   'ARM64_SIDE_SEMANTIC_NINS = REF_BASE+7u' \
   'ARM64_SIDE_R_CGET = REF_BASE+2u' \
   'static const IRRef snaprefs[LJ_ARM64_SIDE_CHILD_NSNAP]' \
@@ -147,7 +152,7 @@ for required in \
   'shape = lj_asm_arm64_side_shape(view->exitno);' \
   'shape == NULL' \
   'view->proto_sizebc != 19u' \
-  'view->nk != ARM64_SIDE_K_ONE || view->nsnap != 5u' \
+  'view->nk != ARM64_SIDE_K_ADDEND || view->nsnap != 5u' \
   'view->nsnapmap != 17u' \
   'view->traceno == 0' \
   'view->traceno > UINT16_MAX || view->parent == 0' \
@@ -156,13 +161,14 @@ for required in \
   'view->link != view->parent' \
   'view->startins != BCINS_AD(BC_JMP, 0, 0)' \
   'view->linktype != LJ_TRLINK_ROOT' \
-  'ins.o != IR_KINT || ins.t.irt != IRT_INT || ins.i != 1' \
+  'ins.o != IR_KINT || ins.t.irt != IRT_INT ||' \
+  '(ins.i != shape->addends[0] && ins.i != shape->addends[1])' \
   'ARM64_SIDE_REQUIRE(REF_BASE, IR_BASE, IRT_PGC,' \
   'view->parent, view->exitno);' \
   'IRSLOAD_PARENT|IRSLOAD_INHERIT' \
   'ARM64_SIDE_R_CGET, IR_NOP, IRT_NIL, 0, 0' \
   'ARM64_SIDE_R_ADD, IR_ADDOV, IRT_INT|IRT_GUARD' \
-  'ARM64_SIDE_R_PARENT, ARM64_SIDE_K_ONE);' \
+  'ARM64_SIDE_R_PARENT, ARM64_SIDE_K_ADDEND);' \
   'ARM64_SIDE_R_GT, IR_GT, IRT_INT|IRT_GUARD' \
   'ARM64_SIDE_R_LIMIT, ARM64_SIDE_R_ADD);' \
   'ARM64_SIDE_R_XPOLL, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0' \
@@ -213,6 +219,10 @@ for required in \
   }
 done
 
+require_order "$pure_region" \
+  'shape = lj_asm_arm64_side_shape(view->exitno);' \
+  'shape->addends[0]' \
+  'descriptor lookup before exact addend membership'
 require_order "$pure_region" \
   'shape = lj_asm_arm64_side_shape(view->exitno);' \
   'shape->child_pcpos[snapno]' \
@@ -341,8 +351,11 @@ for required in \
   'fx.ir[REF_BASE].op2 = 7;' \
   'make_semantic(); fx.view.exitno = 3; fx.ir[REF_BASE].op2 = 3;' \
   'make_semantic(); fx.view.exitno = 8; fx.ir[REF_BASE].op2 = 8;' \
-  'setir(K_ONE, IR_KINT, IRT_INT, 2, 0)' \
-  'setir(K_ONE, IR_KNUM, IRT_NUM, 1, 0)' \
+  'setir(K_ADDEND, IR_KINT, IRT_INT, 2, 0)' \
+  'fx.ir[K_ADDEND].i = 3;' \
+  'fx.view.linktype = LJ_TRLINK_RETURN;' \
+  'fx.ir[R_GT].o = IR_LE;' \
+  'setir(K_ADDEND, IR_KNUM, IRT_NUM, 1, 0)' \
   'fx.ir[R_PARENT].op2 = IRSLOAD_PARENT' \
   'setir(R_CGET, IR_NOP, IRT_NIL, 0, 0)' \
   'fx.ir[ref].o == IR_NOP ? IR_XBAR : IR_NOP' \
@@ -419,13 +432,31 @@ for required in \
     exit 1
   }
 done
+sed -n '/Complete observed n=3\/n=4 return-linked tuple remains closed\./,/expect_semantic(0);/p' \
+  "$root/tests/t-arm64-jit-side-ir-admission.c" >"$return_negative_region"
+test -s "$return_negative_region"
+for required in \
+  'fx.view.exitno = 6;' \
+  'fx.ir[REF_BASE].op2 = 6;' \
+  'set_footer(0, 10, 0);' \
+  'set_footer(1, 11, 0);' \
+  'fx.ir[K_ADDEND].i = 2;' \
+  'fx.view.link = 0;' \
+  'fx.view.linktype = LJ_TRLINK_RETURN;' \
+  'fx.ir[R_GT].o = IR_LE;' \
+  'expect_semantic(0);'; do
+  grep -F "$required" "$return_negative_region" >/dev/null || {
+    echo "ARM64 side fixture lost combined return-linked negative: $required" >&2
+    exit 1
+  }
+done
 test "$(grep -Fc 'set_footer(0, 10, 0);' \
-  "$root/tests/t-arm64-jit-side-ir-admission.c")" = 4 || {
+  "$root/tests/t-arm64-jit-side-ir-admission.c")" = 8 || {
   echo "ARM64 side fixture lost exit-6 semantic/pre-head/post-RA coverage" >&2
   exit 1
 }
 test "$(grep -Fc 'set_footer(1, 11, 0);' \
-  "$root/tests/t-arm64-jit-side-ir-admission.c")" = 4 || {
+  "$root/tests/t-arm64-jit-side-ir-admission.c")" = 8 || {
   echo "ARM64 side fixture lost exit-6 second-footer coverage" >&2
   exit 1
 }
@@ -455,7 +486,7 @@ for required in \
   }
 done
 test "$(grep -Fc 'make_second_postra();' \
-  "$root/tests/t-arm64-jit-side-ir-admission.c")" = 4 || {
+  "$root/tests/t-arm64-jit-side-ir-admission.c")" = 6 || {
   echo "ARM64 side fixture lost exit-6 allocator/cross-certificate coverage" >&2
   exit 1
 }
@@ -478,7 +509,7 @@ for required in \
   }
 done
 test "$(grep -Fc 'make_third_postra();' \
-  "$root/tests/t-arm64-jit-side-ir-admission.c")" = 3 || {
+  "$root/tests/t-arm64-jit-side-ir-admission.c")" = 5 || {
   echo "ARM64 side fixture lost exit-7 allocator/cross-certificate coverage" >&2
   exit 1
 }

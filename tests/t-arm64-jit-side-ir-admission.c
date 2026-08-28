@@ -29,7 +29,7 @@
 #endif
 
 enum {
-  K_ONE = REF_TRUE-1u,
+  K_ADDEND = REF_TRUE-1u,
   R_PARENT = REF_BASE+1u,
   R_CGET = REF_BASE+2u,
   R_ADD = REF_BASE+3u,
@@ -84,7 +84,7 @@ static void make_semantic(void)
   MSize i;
 
   memset(&fx, 0, sizeof(fx));
-  setir(K_ONE, IR_KINT, IRT_INT, 1, 0);
+  setir(K_ADDEND, IR_KINT, IRT_INT, 1, 0);
   setir(REF_TRUE, IR_KPRI, IRT_TRUE, 0, 0);
   setir(REF_FALSE, IR_KPRI, IRT_FALSE, 0, 0);
   setir(REF_NIL, IR_KPRI, IRT_NIL, 0, 0);
@@ -92,7 +92,7 @@ static void make_semantic(void)
   setir(R_PARENT, IR_SLOAD, IRT_INT, 4,
 	IRSLOAD_PARENT|IRSLOAD_INHERIT);
   setir(R_CGET, IR_NOP, IRT_NIL, 0, 0);
-  setir(R_ADD, IR_ADDOV, IRT_INT|IRT_GUARD, R_PARENT, K_ONE);
+  setir(R_ADD, IR_ADDOV, IRT_INT|IRT_GUARD, R_PARENT, K_ADDEND);
   setir(R_LIMIT, IR_SLOAD, IRT_INT|IRT_GUARD, 2,
 	IRSLOAD_TYPECHECK);
   setir(R_GT, IR_GT, IRT_INT|IRT_GUARD, R_LIMIT, R_ADD);
@@ -121,7 +121,7 @@ static void make_semantic(void)
   fx.view.snapmap = fx.snapmap;
   fx.view.proto_bc = fx.proto;
   fx.view.nins = R_END;
-  fx.view.nk = K_ONE;
+  fx.view.nk = K_ADDEND;
   fx.view.nsnap = 5;
   fx.view.nsnapmap = 17;
   fx.view.proto_sizebc = 19;
@@ -182,6 +182,8 @@ static void test_semantic_header(void)
   set_footer(0, 10, 0);
   set_footer(1, 11, 0);
   expect_semantic(1);
+  fx.ir[K_ADDEND].i = 2;
+  expect_semantic(1);
 
   /* The third production descriptor keeps the original child footers while
   ** selecting the observed exit-7 parent with eleven snapshots. Parent
@@ -240,9 +242,51 @@ static void test_semantic_constants_and_ir(void)
   };
   MSize i;
 
-  SEMANTIC_MUTATION(setir(K_ONE, IR_KINT, IRT_INT, 2, 0));
-  SEMANTIC_MUTATION(setir(K_ONE, IR_KNUM, IRT_NUM, 1, 0));
-  SEMANTIC_MUTATION(setir(K_ONE, IR_KINT, IRT_NUM, 1, 0));
+  /* Addends are an exact descriptor-owned set: exit 6 admits 1 and 2,
+  ** while exits 2 and 7 remain singleton 1 descriptors. */
+  SEMANTIC_MUTATION(setir(K_ADDEND, IR_KINT, IRT_INT, 2, 0));
+  make_semantic();
+  fx.view.exitno = 6;
+  fx.ir[REF_BASE].op2 = 6;
+  set_footer(0, 10, 0);
+  set_footer(1, 11, 0);
+  fx.ir[K_ADDEND].i = 3;
+  expect_semantic(0);
+  make_semantic();
+  fx.view.exitno = 6;
+  fx.ir[REF_BASE].op2 = 6;
+  set_footer(0, 10, 0);
+  set_footer(1, 11, 0);
+  fx.ir[K_ADDEND].i = 2;
+  fx.view.link = 0;
+  fx.view.linktype = LJ_TRLINK_RETURN;
+  expect_semantic(0);
+  make_semantic();
+  fx.view.exitno = 6;
+  fx.ir[REF_BASE].op2 = 6;
+  set_footer(0, 10, 0);
+  set_footer(1, 11, 0);
+  fx.ir[K_ADDEND].i = 2;
+  fx.ir[R_GT].o = IR_LE;
+  expect_semantic(0);
+  /* Complete observed n=3/n=4 return-linked tuple remains closed. */
+  make_semantic();
+  fx.view.exitno = 6;
+  fx.ir[REF_BASE].op2 = 6;
+  set_footer(0, 10, 0);
+  set_footer(1, 11, 0);
+  fx.ir[K_ADDEND].i = 2;
+  fx.view.link = 0;
+  fx.view.linktype = LJ_TRLINK_RETURN;
+  fx.ir[R_GT].o = IR_LE;
+  expect_semantic(0);
+  make_semantic();
+  fx.view.exitno = 7;
+  fx.ir[REF_BASE].op2 = 7;
+  fx.ir[K_ADDEND].i = 2;
+  expect_semantic(0);
+  SEMANTIC_MUTATION(setir(K_ADDEND, IR_KNUM, IRT_NUM, 1, 0));
+  SEMANTIC_MUTATION(setir(K_ADDEND, IR_KINT, IRT_NUM, 1, 0));
   SEMANTIC_MUTATION(setir(REF_TRUE, IR_KPRI, IRT_FALSE, 0, 0));
   SEMANTIC_MUTATION(setir(REF_FALSE, IR_KINT, IRT_INT, 0, 0));
   SEMANTIC_MUTATION(fx.ir[REF_NIL].op1 = 1);
@@ -319,7 +363,7 @@ static void make_postra(void)
   MCode vmstore;
   make_semantic();
   setir(R_END, IR_NOP, IRT_NIL, 0, 0);
-  for (ref = K_ONE; ref <= REF_NIL; ref++) {
+  for (ref = K_ADDEND; ref <= REF_NIL; ref++) {
     fx.ir[ref].r = RID_INIT;
     fx.ir[ref].s = SPS_NONE;
   }
@@ -432,9 +476,15 @@ static void test_prehead(void)
 
   make_second_postra();
   expect_prehead(1);
+  fx.ir[K_ADDEND].i = 2;
+  expect_prehead(1);
 
   make_third_postra();
   expect_prehead(1);
+
+  make_second_postra(); fx.ir[K_ADDEND].i = 3; expect_prehead(0);
+  make_postra(); fx.ir[K_ADDEND].i = 2; expect_prehead(0);
+  make_third_postra(); fx.ir[K_ADDEND].i = 2; expect_prehead(0);
 
   /* Geometry and allocator shape form one descriptor: neither cross-product
   ** is admitted even though each half is independently known. */
@@ -488,7 +538,7 @@ static void test_prehead(void)
   PREHEAD_MUTATION(fx.ir[R_CGET].s = 2);
   PREHEAD_MUTATION(fx.ir[R_GT].r = RID_X0);
   PREHEAD_MUTATION(fx.ir[R_XPOLL].s = 2);
-  PREHEAD_MUTATION(fx.ir[K_ONE].r = RID_X0);
+  PREHEAD_MUTATION(fx.ir[K_ADDEND].r = RID_X0);
 
   /* Entry bytes do not exist yet at pre-head time. The full post-RA gate,
   ** tested below, is solely responsible for the emitted BTI/MOV/VM-state
@@ -520,9 +570,15 @@ static void test_postra(void)
 
   make_second_postra();
   expect_postra(1);
+  fx.ir[K_ADDEND].i = 2;
+  expect_postra(1);
 
   make_third_postra();
   expect_postra(1);
+
+  make_second_postra(); fx.ir[K_ADDEND].i = 3; expect_postra(0);
+  make_postra(); fx.ir[K_ADDEND].i = 2; expect_postra(0);
+  make_third_postra(); fx.ir[K_ADDEND].i = 2; expect_postra(0);
 
   make_postra();
   fx.snap[0].count = SNAPCOUNT_DONE;
@@ -645,7 +701,7 @@ static void test_postra(void)
   POSTRA_MUTATION(fx.ir[R_XPOLL].r = RID_X0);
   POSTRA_MUTATION(fx.ir[R_XPOLL].s = 2);
 
-  for (ref = K_ONE; ref <= REF_NIL; ref++) {
+  for (ref = K_ADDEND; ref <= REF_NIL; ref++) {
     make_postra(); fx.ir[ref].r = RID_X0; expect_postra(0);
     make_postra(); fx.ir[ref].s = 2; expect_postra(0);
   }

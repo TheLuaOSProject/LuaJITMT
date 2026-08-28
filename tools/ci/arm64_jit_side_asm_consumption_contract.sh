@@ -160,12 +160,12 @@ for required in \
   'static const uint8_t nslots[LJ_ARM64_SIDE_CHILD_NSNAP] =' \
   '{ 0, 3, 7, 11, 14 };' \
   '{ 1, 2, 2, 1, 1 };' \
-  'view->nk != ARM64_SIDE_K_ONE || view->nsnap != 5u ||' \
+  'view->nk != ARM64_SIDE_K_ADDEND || view->nsnap != 5u ||' \
   'view->nsnapmap != 17u || view->baseslot != 1u+LJ_FR2 ||' \
   'shape = lj_asm_arm64_side_shape(view->exitno);' \
   'view, snapno, shape->child_pcpos[snapno]))' \
   'ARM64_SIDE_REQUIRE(ARM64_SIDE_R_CGET, IR_NOP, IRT_NIL, 0, 0);' \
-  'ARM64_SIDE_R_PARENT, ARM64_SIDE_K_ONE);' \
+  'ARM64_SIDE_R_PARENT, ARM64_SIDE_K_ADDEND);' \
   'valueregs[0] = shape->sload_reg;' \
   'valueregs[2] = shape->inherited_reg;' \
   'view->parentmap[0] != REGSP(shape->inherited_reg, SPS_NONE)' \

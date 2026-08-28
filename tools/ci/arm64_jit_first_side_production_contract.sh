@@ -106,24 +106,31 @@ for required in \
   '__arm64_first_side_production_first' \
   '__arm64_first_side_production_second' \
   '__arm64_first_side_production_third' \
+  '__arm64_first_side_production_fourth' \
   '__arm64_first_side_production_unsupported' \
   "jit.opt.start('hotloop=1','hotexit=1','maxtrace=16')" \
   'local function third(n, bias)' \
   '__arm64_first_side_production_third=third;' \
+  'local function fourth(n, bias)' \
+  '__arm64_first_side_production_fourth=fourth;' \
   'local i=0' \
   'i=(i~=0 and i or i)+1' \
   'if i==0 then i=i+1 end' \
   'i=(i~=0 and i or i)+2' \
+  'i=(i~=0 and i or i)+3' \
   'call_named(L, "__arm64_first_side_production_second", 3, 0) == 3' \
   'call_named(L, "__arm64_first_side_production_second", 2, 0) == 2' \
   'call_named(L, "__arm64_first_side_production_third", 3, 0) == 3' \
   'call_named(L, "__arm64_first_side_production_third", 4, 0) == 4' \
+  'call_named(L, "__arm64_first_side_production_fourth", 3, 0) == 4' \
+  'call_named(L, "__arm64_first_side_production_fourth", 5, 0) == 6' \
+  'call_named(L, "__arm64_first_side_production_unsupported",' \
   'call_named(L, "__arm64_first_side_production_unsupported"' \
-  "assert(live==8, 'expected eight production traces, got '..live); " \
-  "assert(roots==5, 'expected five roots, got '..roots); " \
-  "assert(sides==3, 'expected three first sides, got '..sides)" \
+  "assert(live==10, 'expected ten production traces, got '..live); " \
+  "assert(roots==6, 'expected six roots, got '..roots); " \
+  "assert(sides==4, 'expected four first sides, got '..sides)" \
   'PRODUCTION_ROOT_ATTEMPTS = 64' \
-  'PRODUCTION_PAIR_COUNT = 3,' \
+  'PRODUCTION_PAIR_COUNT = 4,' \
   '*tracenop = foundno;' \
   'ExitNo exitno;' \
   'lua_Integer root_n;' \
@@ -136,13 +143,14 @@ for required in \
   'lua_Integer native_result;' \
   'Reg inherited_reg;' \
   'Reg sload_reg;' \
+  'int32_t addend;' \
   '.exitno = 2, .root_nsnap = 8, .continuation_pos = 13,' \
   '.child_pcpos = { 13, 14, 3, 17, 7 }' \
-  '.inherited_reg = RID_X28, .sload_reg = RID_X27' \
+  '.inherited_reg = RID_X28, .sload_reg = RID_X27, .addend = 1' \
   '.native_n = 3, .native_bias = 1, .native_result = 4,' \
   '.exitno = 6, .root_nsnap = 9, .continuation_pos = 10,' \
   '.child_pcpos = { 10, 11, 3, 17, 7 }' \
-  '.inherited_reg = RID_X27, .sload_reg = RID_X28' \
+  '.inherited_reg = RID_X27, .sload_reg = RID_X28, .addend = 1' \
   '.side_n = 3, .side_bias = 0, .side_result = 3,' \
   '.native_n = 2, .native_bias = 0, .native_result = 2,' \
   '.name = "__arm64_first_side_production_third"' \
@@ -150,7 +158,10 @@ for required in \
   '.side_n = 4, .side_bias = 0, .side_result = 4,' \
   '.native_n = 3, .native_bias = 0, .native_result = 3,' \
   '.exitno = 7, .root_nsnap = 11, .continuation_pos = 13,' \
-  '.side_n = 3, .side_bias = 0, .side_result = 4,' \
+  'PRODUCTION_CHILD_K_ADDEND = REF_TRUE-1u' \
+  'trace_nk_acq(pair->child) == PRODUCTION_CHILD_K_ADDEND' \
+  'PRODUCTION_CHILD_R_PARENT, PRODUCTION_CHILD_K_ADDEND);' \
+  'ins.i == pair->addend' \
   'trace_nsnap_acq(pair->root) == pair->root_nsnap' \
   'pair->exitno < pair->root_nsnap' \
   'selected_map_has_slot(pair->root, pair->exitno, 4)' \
@@ -178,10 +189,16 @@ for required in \
   'pairs[i].rootno != pairs[j].rootno' \
   'pairs[i].rootno != pairs[j].childno' \
   'pairs[i].childno != pairs[j].childno' \
-  'pairs[i].exitno != pairs[j].exitno' \
+  'pairs[i].exitno != pairs[j].exitno ||' \
+  'pairs[i].addend != pairs[j].addend' \
+  'pairs[1].exitno == 6 && pairs[1].addend == 1' \
+  'pairs[3].exitno == 6 && pairs[3].addend == 2' \
   'pairs[0].rootno != 1 && pairs[0].childno != 2' \
-  'live_trace_count(J) == 8u' \
-  'assert(lj_trace_test_retire_publish_calls() == 8u);' \
+  'live_trace_count(J) == 10u' \
+  'assert(lj_trace_test_retire_publish_calls() == 10u);' \
+  'expect_return_linked_variant_closed(L, J, g, &pairs[i]);' \
+  'lj_trace_test_abort_count() == 2' \
+  'count_after == count_before+2u && count_after < SNAPCOUNT_DONE' \
   'LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED != 0' \
   'pointer_bits(raw) == pointer_bits(encoded)' \
   'pair->child_mcode[0] == A64I_LE(A64I_BTI_J)' \
@@ -207,6 +224,15 @@ test "$(grep -Fc '__arm64_first_side_production_third=third;' \
   echo "production probes lost their single exit-7 global" >&2
   exit 1
 }
+test "$(grep -Fc 'local function fourth(n, bias)' "$fixture_source")" = 1 || {
+  echo "production probes lost their single exit-6 +2 function" >&2
+  exit 1
+}
+test "$(grep -Fc '__arm64_first_side_production_fourth=fourth;' \
+  "$fixture_source")" = 1 || {
+  echo "production probes lost their single exit-6 +2 global" >&2
+  exit 1
+}
 third_pair=$tmpdir/third-pair.txt
 sed -n '/\.name = "__arm64_first_side_production_third"/,/^    }/p' \
   "$fixture_source" >"$third_pair"
@@ -217,13 +243,29 @@ for required in \
   '.native_n = 3, .native_bias = 0, .native_result = 3,' \
   '.exitno = 7, .root_nsnap = 11, .continuation_pos = 13,' \
   '.child_pcpos = { 13, 14, 3, 17, 7 }' \
-  '.inherited_reg = RID_X28, .sload_reg = RID_X27'; do
+  '.inherited_reg = RID_X28, .sload_reg = RID_X27, .addend = 1'; do
   grep -F "$required" "$third_pair" >/dev/null || {
     echo "production exit-7 descriptor lost proof: $required" >&2
     exit 1
   }
 done
-test "$(grep -Fc 'local i=0' "$fixture_source")" = 5 || {
+fourth_pair=$tmpdir/fourth-pair.txt
+sed -n '/\.name = "__arm64_first_side_production_fourth"/,/^    }/p' \
+  "$fixture_source" >"$fourth_pair"
+for required in \
+  '.name = "__arm64_first_side_production_fourth"' \
+  '.root_n = 3, .root_bias = 0, .root_result = 4,' \
+  '.side_n = 5, .side_bias = 0, .side_result = 6,' \
+  '.native_n = 3, .native_bias = 0, .native_result = 4,' \
+  '.exitno = 6, .root_nsnap = 9, .continuation_pos = 10,' \
+  '.child_pcpos = { 10, 11, 3, 17, 7 }' \
+  '.inherited_reg = RID_X27, .sload_reg = RID_X28, .addend = 2'; do
+  grep -F "$required" "$fourth_pair" >/dev/null || {
+    echo "production exit-6 +2 descriptor lost proof: $required" >&2
+    exit 1
+  }
+done
+test "$(grep -Fc 'local i=0' "$fixture_source")" = 6 || {
   echo "production probes lost their deterministic zero loop seed" >&2
   exit 1
 }
@@ -232,9 +274,14 @@ test "$(grep -Fc '.side_n = 3, .side_bias = 0, .side_result = 3,' \
   echo "production exit-6 positive probe lost its recording trigger" >&2
   exit 1
 }
-test "$(grep -Fc '.side_n = 3, .side_bias = 0, .side_result = 4,' \
+test "$(grep -Fc '.side_n = 5, .side_bias = 0, .side_result = 6,' \
   "$fixture_source")" = 1 || {
-  echo "unsupported exit-6 probe lost its recording trigger" >&2
+  echo "production exit-6 +2 probe lost its root-linked trigger" >&2
+  exit 1
+}
+test "$(grep -Fc '.side_n = 7, .side_bias = 0, .side_result = 9,' \
+  "$fixture_source")" = 1 || {
+  echo "unsupported exit-6 +3 probe lost its recording trigger" >&2
   exit 1
 }
 test "$(grep -Fc \
@@ -261,6 +308,18 @@ test "$(grep -Fc \
   echo "production exit-7 smoke lost its repeated recording trigger" >&2
   exit 1
 }
+test "$(grep -Fc \
+  'call_named(L, "__arm64_first_side_production_fourth", 3, 0) == 4' \
+  "$fixture_source")" = 2 || {
+  echo "production exit-6 +2 smoke lost its return-linked negative controls" >&2
+  exit 1
+}
+test "$(grep -Fc \
+  'call_named(L, "__arm64_first_side_production_fourth", 5, 0) == 6' \
+  "$fixture_source")" = 4 || {
+  echo "production exit-6 +2 smoke lost its root-linked recording trigger" >&2
+  exit 1
+}
 test "$(grep -Fc 'attempt < PRODUCTION_ROOT_ATTEMPTS' \
   "$fixture_source")" = 2 || {
   echo "production root recording lost its bounded root-discovery coverage" >&2
@@ -274,7 +333,7 @@ test "$(grep -Fc \
 }
 test "$(grep -Fc 'for (i = 0; i < PRODUCTION_PAIR_COUNT; i++)' \
   "$fixture_source")" = 6 || {
-  echo "production first-side fixture lost three-pair loop coverage" >&2
+  echo "production first-side fixture lost four-pair loop coverage" >&2
   exit 1
 }
 test "$(grep -Fc 'for (j = i+1u; j < PRODUCTION_PAIR_COUNT; j++)' \
@@ -288,8 +347,8 @@ test "$(grep -Fc 'for (j = 0; j < i; j++)' "$fixture_source")" = 1 || {
 }
 test "$(grep -Fc \
   '.exitno = 6, .root_nsnap = 9, .continuation_pos = 10,' \
-  "$fixture_source")" = 2 || {
-  echo "production first-side fixture lost exit-6 positive/negative coupling" >&2
+  "$fixture_source")" = 3 || {
+  echo "production first-side fixture lost exit-6 +1/+2/+3 coupling" >&2
   exit 1
 }
 if grep -E 'ExitNo selected = UINT32_MAX|PRODUCTION_(EXIT|CONTINUATION_POS)' \

@@ -654,7 +654,7 @@ static int arm64_ir_constants(const GCtrace *T, LJArm64IRReject *reject)
 /* -- Pure ARM64 first-side admission ------------------------------------- */
 
 enum {
-  ARM64_SIDE_K_ONE = REF_TRUE-1u,
+  ARM64_SIDE_K_ADDEND = REF_TRUE-1u,
   ARM64_SIDE_R_PARENT = REF_BASE+1u,
   ARM64_SIDE_R_CGET = REF_BASE+2u,
   ARM64_SIDE_R_ADD = REF_BASE+3u,
@@ -667,9 +667,12 @@ enum {
 const LJArm64SideShape *lj_asm_arm64_side_shape(ExitNo exitno)
 {
   static const LJArm64SideShape shapes[] = {
-    { 2u, 8u, 13u, { 13u, 14u, 3u, 17u, 7u }, RID_X28, RID_X27 },
-    { 6u, 9u, 10u, { 10u, 11u, 3u, 17u, 7u }, RID_X27, RID_X28 },
-    { 7u, 11u, 13u, { 13u, 14u, 3u, 17u, 7u }, RID_X28, RID_X27 }
+    { 2u, 8u, 13u, { 13u, 14u, 3u, 17u, 7u },
+      RID_X28, RID_X27, { 1, 1 } },
+    { 6u, 9u, 10u, { 10u, 11u, 3u, 17u, 7u },
+      RID_X27, RID_X28, { 1, 2 } },
+    { 7u, 11u, 13u, { 13u, 14u, 3u, 17u, 7u },
+      RID_X28, RID_X27, { 1, 1 } }
   };
   MSize i;
   for (i = 0; i < sizeof(shapes)/sizeof(shapes[0]); i++)
@@ -739,7 +742,7 @@ int lj_asm_arm64_side_ir_admit(const LJArm64SideIRView *view,
 	(uintptr_t)view->proto_sizebc >
 	  (UINTPTR_MAX-proto)/sizeof(BCIns) ||
 	view->nins != ARM64_SIDE_SEMANTIC_NINS ||
-	view->nk != ARM64_SIDE_K_ONE || view->nsnap != 5u ||
+	view->nk != ARM64_SIDE_K_ADDEND || view->nsnap != 5u ||
 	view->nsnapmap != 17u || view->baseslot != 1u+LJ_FR2 ||
 	view->root_topslot != 5u || view->traceno == 0 ||
 	view->traceno > UINT16_MAX || view->parent == 0 ||
@@ -752,10 +755,11 @@ int lj_asm_arm64_side_ir_admit(const LJArm64SideIRView *view,
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE,
 	REF_BASE, IR_BASE, (uint16_t)view->exitno);
 
-  ins = ir_load_acq(&ir[ARM64_SIDE_K_ONE]);
-  if (ins.o != IR_KINT || ins.t.irt != IRT_INT || ins.i != 1)
+  ins = ir_load_acq(&ir[ARM64_SIDE_K_ADDEND]);
+  if (ins.o != IR_KINT || ins.t.irt != IRT_INT ||
+	(ins.i != shape->addends[0] && ins.i != shape->addends[1]))
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CONSTANT,
-	ARM64_SIDE_K_ONE, (IROp)ins.o, ins.t.irt);
+	ARM64_SIDE_K_ADDEND, (IROp)ins.o, ins.t.irt);
   for (snapno = REF_TRUE; snapno <= REF_NIL; snapno++) {
     IRType expected = (IRType)(REF_NIL-snapno);
     ins = ir_load_acq(&ir[snapno]);
@@ -780,7 +784,7 @@ int lj_asm_arm64_side_ir_admit(const LJArm64SideIRView *view,
 	IRSLOAD_PARENT|IRSLOAD_INHERIT);
   ARM64_SIDE_REQUIRE(ARM64_SIDE_R_CGET, IR_NOP, IRT_NIL, 0, 0);
   ARM64_SIDE_REQUIRE(ARM64_SIDE_R_ADD, IR_ADDOV, IRT_INT|IRT_GUARD,
-	ARM64_SIDE_R_PARENT, ARM64_SIDE_K_ONE);
+	ARM64_SIDE_R_PARENT, ARM64_SIDE_K_ADDEND);
   ARM64_SIDE_REQUIRE(ARM64_SIDE_R_LIMIT, IR_SLOAD, IRT_INT|IRT_GUARD, 2,
 	IRSLOAD_TYPECHECK);
   ARM64_SIDE_REQUIRE(ARM64_SIDE_R_GT, IR_GT, IRT_INT|IRT_GUARD,
@@ -876,7 +880,7 @@ int lj_asm_arm64_side_prehead_admit(const LJArm64SidePostRAView *view,
   ins = ir_load_acq(&ir[ARM64_SIDE_R_XPOLL]);
   if (ins.r != RID_INIT || ins.s != SPS_NONE)
     return 0;
-  for (ref = ARM64_SIDE_K_ONE; ref <= REF_NIL; ref++) {
+  for (ref = ARM64_SIDE_K_ADDEND; ref <= REF_NIL; ref++) {
     ins = ir_load_acq(&ir[ref]);
     if (ins.r != RID_INIT || ins.s != SPS_NONE)
       return 0;
