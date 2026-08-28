@@ -3,9 +3,10 @@
 ## Scope
 
 This checkpoint turns the observed x28-parent to x27-child transfer into an
-exact, immutable post-register-allocation certificate. It remains dormant:
-the production side recorder is still fail-closed, the assembler does not call
-the side helper, and no side admission marker is published.
+exact, immutable post-register-allocation certificate. The production side
+recorder remains fail-closed, but the assembler-consumption checkpoint now
+uses a pure pre-head layout half before parent/map consumption and the full
+entry-prefix half after allocation.
 
 ## Exact provenance and emitted transfer
 
@@ -28,10 +29,9 @@ non-BTI form. This proves the actual emitted transfer rather than inferring it
 from allocator fields.
 
 The pure view carries the parent-map pointer and exact extent instead of a
-caller-selected scalar. Its eventual production call site must construct those
-fields directly from `ASMState.parentmap` and `ASMState.parentmap_n`; until that
-call exists, the helper remains a fail-closed certificate rather than runtime
-authority.
+caller-selected scalar. Production constructs those fields directly from
+`ASMState.parentmap` and `ASMState.parentmap_n`. Its compact extent comes from
+`J->curfinal->nins`, which owns the trailing NOP during each assembler pass.
 
 ## Validation and remaining boundary
 
@@ -41,11 +41,12 @@ form selected by each build.
 It rejects null or misaligned map/entry pointers, wrong extents and stop points,
 every wrong parent register/spill form, missing or malformed BTI, short entry
 spans, a correct move displaced behind another instruction, and wrong move
-width/opcode/source/destination fields. The umbrella contract continues to
-require that no production side-helper call or side admission-bit writer
-exists.
+width/opcode/source/destination fields. It also proves that the pre-head half
+rejects every semantic/layout/map mutation while deliberately ignoring entry
+bytes that have not been emitted yet. The umbrella contract pins the exact
+production call and marker ordering while keeping recorder/publication gates
+closed.
 
-This closes only parent-map provenance and emitted head transfer. Parent trace
-lifetime/generation, acquire-loaded mcode identity, linked-tail revalidation,
-child publication order, authenticated parent-exit publication, and real side
+This closes assembler-side parent-map provenance and emitted head transfer.
+Child publication order, authenticated parent-exit publication and real side
 retirement remain closed gates.

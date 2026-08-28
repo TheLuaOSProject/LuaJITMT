@@ -4069,6 +4069,7 @@ typedef struct TraceArm64FirstSideLoopView {
   MSize szmcode;
   MSize mcloop;
   MSize topslot;
+  MSize spadjust;
   MSize nsnap;
   MSize nsnapmap;
   MSize mapofs;
@@ -4122,6 +4123,7 @@ static int trace_arm64_first_side_snapshot_valid(
   MSize i;
   BCReg previous = 0;
   int have_previous = 0;
+  int have_side_parent_slot = 0;
   const MSize footer = 1u + LJ_FR2;
 #if LJ_FR2
   SnapEntry rawpc[2];
@@ -4148,6 +4150,8 @@ static int trace_arm64_first_side_snapshot_valid(
         (have_previous && slot <= previous) ||
         !trace_arm64_first_side_mapref_valid(v, ref))
       return 0;
+    if (slot == 4u)
+      have_side_parent_slot = 1;
     previous = slot;
     have_previous = 1;
   }
@@ -4164,7 +4168,11 @@ static int trace_arm64_first_side_snapshot_valid(
   if ((const BCIns *)(uintptr_t)rawpc != pc)
     return 0;
 #endif
-  return snap_count_acq(&v->snap[v->exitno]) != SNAPCOUNT_DONE;
+  /* The exact first-side child has one IRSLOAD_PARENT for slot 4. Proving
+  ** that source here keeps lj_snap_regspmap()'s assertion-only search bounded
+  ** in release builds after the immediate assembler revalidation. */
+  return have_side_parent_slot &&
+    snap_count_acq(&v->snap[v->exitno]) != SNAPCOUNT_DONE;
 }
 
 /* Capture one selected root snapshot without deriving pointers until all
@@ -4216,6 +4224,7 @@ static int trace_arm64_first_side_view_acq(jit_State *J, TraceNo parent,
   v->szmcode = trace_szmcode_acq(T);
   v->mcloop = trace_mcloop_acq(T);
   v->topslot = trace_topslot_acq(T);
+  v->spadjust = trace_spadjust_acq(T);
   v->nsnap = trace_nsnap_acq(T);
   v->nsnapmap = trace_nsnapmap_acq(T);
 #if LJ_ABI_PAUTH
@@ -4239,6 +4248,7 @@ static int trace_arm64_first_side_view_acq(jit_State *J, TraceNo parent,
       v->mcloop == 0 || v->mcloop >= v->szmcode ||
       (v->mcloop & (sizeof(MCode)-1u)) != 0 ||
       v->topslot != (MSize)gco2pt(v->startpt)->framesize ||
+      v->spadjust != 0 ||
       v->nsnap == 0 || exitno >= v->nsnap || v->nsnapmap == 0 ||
       v->nsnap > ~(MSize)0/maxsnapmap ||
       v->nsnapmap > v->nsnap*maxsnapmap ||
@@ -4316,7 +4326,8 @@ static int trace_arm64_first_side_view_equal(
     a->exittarget_raw == b->exittarget_raw &&
     a->fallback_encoding == b->fallback_encoding &&
     a->szmcode == b->szmcode && a->mcloop == b->mcloop &&
-    a->topslot == b->topslot && a->nsnap == b->nsnap &&
+    a->topslot == b->topslot && a->spadjust == b->spadjust &&
+    a->nsnap == b->nsnap &&
     a->nsnapmap == b->nsnapmap && a->mapofs == b->mapofs &&
     a->nextofs == b->nextofs && a->snapref == b->snapref &&
     a->nslots == b->nslots && a->snaptopslot == b->snaptopslot &&
@@ -8226,6 +8237,34 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
   return 1;
 }
 #endif
+
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
+/* Dedicated fail-closed test ingress for the one armed first-side assembler
+** probe. Repeat the complete owner/generation proof on every recorder
+** dispatch; no ordinary helper build or unarmed side can take this path. */
+static int trace_arm64_side_asm_test_preflight(jit_State *J,
+	const BCIns *pc, lua_State **ownerp)
+{
+  lua_State *owner = jit_owner_l_acq(J);
+  TraceState state = lj_trace_state_load(J);
+  const BCIns *continuation;
+  *ownerp = owner;
+  if (owner == NULL ||
+	!lj_asm_arm64_test_side_probe_active(J->parent, J->exitno) ||
+	!lj_jit_token_held_l(owner, J))
+    return 0;
+  if (state == LJ_TRACE_START)
+    continuation = pc;
+  else if (state == LJ_TRACE_RECORD)
+    continuation = trace_startpc_acq(&J->cur);
+  else
+    return 0;
+  return continuation != NULL &&
+	lj_trace_arm64_first_side_loop_valid(
+	  J, owner, J->parent, J->exitno, continuation, pc,
+	  LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER);
+}
+#endif
 #endif
 
 /* A bytecode instruction is about to be executed. Record it. */
@@ -8243,6 +8282,14 @@ void lj_trace_ins(jit_State *J, const BCIns *pc)
   lua_State *L;
   int errcode;
 #if LJ_TARGET_ARM64
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
+  if (J->parent != 0) {
+    if (!trace_arm64_side_asm_test_preflight(J, pc, &L)) {
+      trace_arm64_abort_exact_owner(J, L);
+      return;
+    }
+  } else
+#endif
   if (!trace_arm64_root_recorder_preflight(J, pc, &L)) {
     trace_arm64_abort_exact_owner(J, L);
     return;
@@ -8381,8 +8428,19 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
   uint32_t hotexit = (uint32_t)jit_param_acq(J, JIT_P_hotexit);
   uint8_t count;
 #if LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED
+#if LJ_TARGET_ARM64 && defined(LJ_TRACE_TEST_HELPERS) && \
+    defined(LJ_ARM64_SIDE_ASM_TEST)
+  /* The one-shot native assembler probe is the only test-only bypass. It
+  ** consumes an exact expected parent/exit and lj_asm_trace() throws before
+  ** trace_stop(), so neither child nor parent-exit publication is reachable. */
+  if (!lj_asm_arm64_test_side_probe_ingress(parent, exitno)) {
+    UNUSED(pc); UNUSED(L); UNUSED(parent); UNUSED(exitno);
+    return;
+  }
+#else
   UNUSED(pc); UNUSED(L); UNUSED(parent); UNUSED(exitno);
   return;
+#endif
 #endif
   /* Side recording is speculative. If an exclusive trace reclaimer won the
   ** body gate, stay in the interpreter instead of waiting at a hot exit. */

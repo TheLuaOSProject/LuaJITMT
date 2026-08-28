@@ -6,7 +6,9 @@ This checkpoint replaces the synthetic first-side post-register-allocation
 layout with a native Apple Silicon observation. It does **not** open the
 production side recorder, publish a child trace, patch a parent exit, or make a
 side trace enterable. `LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED` remains `1` in
-the real tree and `TRACE_ARM64_INT_SIDE_ADMITTED` still has no writer.
+the real tree. A later assembler-consumption checkpoint now writes the
+scratch-only `TRACE_ARM64_INT_SIDE_ADMITTED` marker after full post-RA success,
+the last fallible snapshot fixup and final parent revalidation.
 
 The observation ran from commit `0d607af9` in a detached disposable worktree.
 A test-only overlay admitted only the already-certified parent 1 / exit 2
@@ -94,8 +96,8 @@ These fields prove the allocator-facing source and target and force the current
 helper does not by itself certify the live parent-map provenance or the emitted
 move. The later
 [head-shuffle certificate](aarch64-jit-first-side-head-shuffle-certificate-2026-08-27.md)
-now freezes both, while its production call site and parent-lifetime protection
-remain closed gates.
+now freezes both; its production call site and parent-lifetime protection are
+implemented in the assembler-consumption checkpoint.
 
 The four temporary snapshot machine-code offsets were 65, 61, 59, and 48
 words. They are assembler products, not semantic identity, and remain outside
@@ -132,13 +134,10 @@ published trace slot 2, committed machine code, or made the child runnable.
 `lj_asm_arm64_side_postra_admit()` now encodes the repeated live layout above,
 including the exact x28 parent map and x27 child inheritance target. Its pure
 fixture mutates every register byte, spill byte, suffix, top-slot, adjustment,
-and parent-map field. The helper remains dormant: production `lj_asm_trace()`
-does not call it, no side admission bit is set, and the side recorder stays
-closed. The later head-shuffle certificate freezes parent-map provenance and
-the actual x28-to-x27 move, but neither helper can participate in production
-until a pre-head validator runs while the exact parent lifetime is protected.
+and parent-map field. Production `lj_asm_trace()` now calls its split pre-head
+and full post-RA forms while the exact parent certificate is revalidated. The
+side recorder and publication path stay closed.
 
-The next production tranche still needs an exact parent lifetime/generation
-certificate through assembly, acquire-loaded parent mcode identity, linked-tail
-target revalidation, authenticated last publication of the parent exit slot,
-and child/root retirement ordering before side recording can open.
+The next production tranche still needs authenticated last publication of the
+parent exit slot and child/root retirement ordering before side recording can
+open.

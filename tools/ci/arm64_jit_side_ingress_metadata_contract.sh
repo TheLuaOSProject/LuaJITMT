@@ -33,6 +33,8 @@ abort_region=$tmpdir/side-parent-abort.txt
 abort_owner_region=$tmpdir/side-parent-abort-owner.txt
 terminal_region=$tmpdir/side-parent-terminal.txt
 production_regions=$tmpdir/side-ingress-production.txt
+asm_region=$tmpdir/side-parent-asm-consumption.txt
+asm_head_region=$tmpdir/side-parent-asm-head.txt
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_TRACE_TEST_HELPERS'
 
 require_order()
@@ -94,6 +96,9 @@ for required in \
   'snap_count_acq(&v->snap[v->exitno]) != SNAPCOUNT_DONE' \
   'UINT32_C(0x00ff0000)' \
   'v->nextofs != v->mapofs+v->nent+footer' \
+  'int have_side_parent_slot = 0;' \
+  'if (slot == 4u)' \
+  'return have_side_parent_slot &&' \
   '(uint8_t)pcbase != 0' \
   'v->exittarget_raw != v->fallback_encoding' \
   'trace_exittarget_arm64_encode(J2G(J), v->fallback)' \
@@ -205,11 +210,11 @@ for required in \
   }
 done
 
-# Pin the embedded value's dormant lifetime. Each destructive transition must
-# clear while its exact token transaction and selectors are still available;
+# Pin the embedded value's token-private lifetime. Each destructive transition
+# must clear while its exact token transaction and selectors are still available;
 # generic terminal release asserts that those paths already did so, then zeros
 # defensively before IDLE/token handoff. The normal abort clear means an
-# MCODELM restart must capture fresh; that future callsite is not frozen here.
+# MCODELM restart must capture fresh at the assembler callsite pinned below.
 sed -n '/^void lj_trace_initstate(global_State \*g)/,/^}/p' \
   "$root/src/lj_trace.c" >"$init_region"
 sed -n '/^static void trace_terminal_pin_preflight(global_State \*g)/,/^}/p' \
@@ -273,10 +278,11 @@ require_order "$preflight_region" \
   'if (J->arm64_side_parent.body != NULL) {' 'if (J->curfinal' \
   'shutdown certificate preflight before scratch-body checks'
 
-# Pin the dormant boundary: the only core-name occurrences are its comment,
-# definition and test-wrapper call, and none is in a production ingress.
+# Production recorder ingress remains dormant. The only core-name occurrences
+# are its comment, definition, metadata-test wrapper and the separately guarded
+# LJ_ARM64_SIDE_ASM_TEST native-probe preflight.
 test "$(grep -Fc 'lj_trace_arm64_first_side_loop_valid(' \
-  "$root/src/lj_trace.c")" = 3
+  "$root/src/lj_trace.c")" = 4
 sed -n '/^static TraceStartResult trace_start(jit_State \*J)/,/^}/p' \
   "$root/src/lj_trace.c" >"$production_regions"
 sed -n '/^void lj_trace_ins(jit_State \*J, const BCIns \*pc)/,/^}/p' \
@@ -288,13 +294,52 @@ if grep -F 'lj_trace_arm64_first_side_loop_valid' \
   echo "Stage 1 side-ingress checkpoint was wired into production" >&2
   exit 1
 fi
-for dormant in lj_trace_arm64_side_parent_capture \
-  lj_trace_arm64_side_parent_revalidate; do
-  test "$(grep -F "$dormant(" "$root"/src/*.c | wc -l | tr -d ' ')" = 1 || {
-    echo "dormant ARM64 side-parent API gained a production call: $dormant" >&2
-    exit 1
-  }
-done
+
+# The assembler is the sole production consumer. Capture occurs exactly once
+# after semantic admission and before the first fallible allocation. Three
+# revalidations live in lj_asm_trace (pre-regsp, pre-tail and post-snapshot),
+# plus the pre-head revalidation before raw parent/map consumption.
+sed -n '/^void lj_asm_trace(jit_State \*J, GCtrace \*T)/,/^}/p' \
+  "$root/src/lj_asm.c" >"$asm_region"
+sed -n '/^static void asm_head_side(ASMState \*as)/,/^}/p' \
+  "$root/src/lj_asm.c" >"$asm_head_region"
+test -s "$asm_region" && test -s "$asm_head_region"
+test "$(grep -F 'lj_trace_arm64_side_parent_capture(' \
+  "$root"/src/*.c | wc -l | tr -d ' ')" = 2 || {
+  echo "ARM64 side-parent capture is not definition plus sole assembler call" >&2
+  exit 1
+}
+test "$(grep -F 'lj_trace_arm64_side_parent_revalidate(' \
+  "$root"/src/*.c | wc -l | tr -d ' ')" = 5 || {
+  echo "ARM64 side-parent revalidation call set changed" >&2
+  exit 1
+}
+test "$(grep -Fc 'lj_trace_arm64_side_parent_capture(J)' \
+  "$asm_region")" = 1
+test "$(grep -Fc 'lj_trace_arm64_side_parent_revalidate(J)' \
+  "$asm_region")" = 3
+test "$(grep -Fc 'lj_trace_arm64_side_parent_revalidate(as->J)' \
+  "$asm_head_region")" = 1
+require_order "$asm_region" 'lj_asm_arm64_side_ir_admit(' \
+  'lj_trace_arm64_side_parent_capture(J)' \
+  'side semantic admission before parent capture'
+require_order "$asm_region" 'J->loopref != 0' \
+  'lj_asm_arm64_side_ir_admit(' \
+  'side non-loop shape before semantic admission'
+require_order "$asm_region" 'lj_trace_arm64_side_parent_capture(J)' \
+  'as->orignins = lj_ir_nextins(J);' \
+  'parent capture before first fallible IR growth'
+require_order "$asm_region" 'lj_trace_arm64_side_parent_revalidate(J)' \
+  'asm_setup_regsp(as);' \
+  'parent revalidation before regsp map construction'
+require_order "$asm_head_region" \
+  'lj_trace_arm64_side_parent_revalidate(as->J)' \
+  'trace_ir_acq(as->parent)' \
+  'pre-head revalidation before parent dereference'
+grep -F 'result == LJ_TRACE_ARM64_SIDE_PARENT_SMR_RETRY ?' \
+  "$root/src/lj_asm.c" >/dev/null
+grep -F 'LJ_TRERR_SMRRETRY : LJ_TRERR_RETRY' \
+  "$root/src/lj_asm.c" >/dev/null
 
 fixture_source=$root/tests/t-arm64-jit-side-ingress-metadata.c
 for required in \
@@ -307,6 +352,9 @@ for required in \
   'trace_exittarget_arm64_encode((global_State *)(void *)T,' \
   'saved_entry | SNAP_NORESTORE' \
   'saved_entry | UINT32_C(0x00800000)' \
+  'SNAP(4, 0, SIDE_META_R_VALUE)' \
+  'SNAP(2, 0, SIDE_META_R_VALUE)' \
+  'SNAP(4, 0, REF_DROP)' \
   'selected->count = SNAPCOUNT_DONE;' \
   'f->snap[SIDE_META_EXIT].count == before' \
   'J->parent = SIDE_META_PARENT+1;' \
@@ -350,6 +398,8 @@ for required in \
     exit 1
   }
 done
+test "$(grep -Fc 'assert(gc2_smr_readers_acq(g) == 0);' \
+  "$fixture_source")" -ge 7
 
 # arm64e compilation proves that both the exact PAC encoding check and its
 # wrong-discriminator mutation stay well-typed before publication is opened.
@@ -368,4 +418,4 @@ done
   "$fixture_source" "$archive" -lm -pthread -o "$fixture"
 "$fixture"
 
-echo "arm64_jit_side_ingress_metadata_contract OK: dormant first-level LOOP parent/snapshot/owner and lifetime/PAUTH certificates verified; side recorder remains closed"
+echo "arm64_jit_side_ingress_metadata_contract OK: first-level LOOP parent/snapshot/owner lifetime/PAUTH capture and assembler-consumption boundary verified; side recorder remains closed"

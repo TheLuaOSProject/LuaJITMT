@@ -54,11 +54,13 @@ LJ_FUNC int lj_trace_arm64_first_side_loop_valid(
   jit_State *J, lua_State *L, TraceNo parent, ExitNo exitno,
   const BCIns *continuation, const BCIns *pc, uint32_t context);
 
-/* Dormant first-side parent lifetime/authentication API. All operations are
-** bounded and token-private. Capture and revalidation require the exact active
-** ASM owner; SMR contention is reported separately from a stale identity.
-** Clear is lifecycle-only: initialization or exact token-owner teardown before
-** selector/scratch destruction and terminal token release. */
+/* First-side parent lifetime/authentication API. All operations are bounded
+** and token-private. The ARM64 assembler is the only production consumer;
+** recorder ingress and publication remain independently closed. Capture and
+** revalidation require the exact active ASM owner; SMR contention is reported
+** separately from a stale identity. Clear is lifecycle-only: initialization
+** or exact token-owner teardown before selector/scratch destruction and
+** terminal token release. */
 typedef enum LJTraceArm64SideParentResult {
   LJ_TRACE_ARM64_SIDE_PARENT_SMR_RETRY = -1,
   LJ_TRACE_ARM64_SIDE_PARENT_RETRY = 0,

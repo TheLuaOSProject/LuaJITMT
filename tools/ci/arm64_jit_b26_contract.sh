@@ -69,7 +69,7 @@ if grep -E 'ptrdiff_t|(^|[^[:alnum:]_])intptr_t|A64F_S26|A64F_S_OK|A64I_LE|lj_bs
   exit 1
 fi
 
-sed -n '/^static void asm_tail_fixup(/,/^}/p' \
+sed -n '/^static MCode \*asm_tail_fixup(/,/^}/p' \
   "$root/src/lj_asm_arm64.h" >"$fixup_region"
 sed -n '/^static void asm_tail_prep(/,/^}/p' \
   "$root/src/lj_asm_arm64.h" >"$prep_region"
@@ -77,17 +77,26 @@ test -s "$fixup_region" && test -s "$prep_region"
 test "$(grep -Fc 'lj_asm_arm64_b26_encode(' "$fixup_region")" = 1
 test "$(grep -Fc 'lj_asm_arm64_b26_encode(' "$prep_region")" = 2
 for required in \
+  'MCode *certified_parent_mcode)' \
+  '!as->parent || certified_parent_mcode == NULL' \
+  'target = certified_parent_mcode;' \
+  'branchpc = mcp;' \
   '(uintptr_t)(void *)mcp' \
   '(uintptr_t)(void *)target' \
   '} else if (lnk) {' \
   'lj_trace_err(as->J, LJ_TRERR_MCODEOV);' \
   'A64I_LDRx' \
-  'A64I_BR_AUTH'; do
+  'A64I_BR_AUTH' \
+  'return branchpc;'; do
   grep -F "$required" "$fixup_region" >/dev/null || {
     echo "ARM64 tail fixup lost B26/fallback invariant: $required" >&2
     exit 1
   }
 done
+if grep -F 'traceref(' "$fixup_region" >/dev/null; then
+  echo "ARM64 tail fixup regained an uncertified trace-slot dereference" >&2
+  exit 1
+fi
 for required in \
   '(uintptr_t)(void *)p' \
   '(uintptr_t)(void *)(p-1)' \
@@ -143,4 +152,4 @@ done
   "$fixture_source" "$archive" -lm -pthread -o "$fixture"
 "$fixture"
 
-echo "arm64_jit_b26_contract OK: exact signed B26 limits, all single-bit decode mutations and tail fallback/rejection paths verified"
+echo "arm64_jit_b26_contract OK: exact signed B26 limits, all single-bit decode mutations and certified linked-tail rejection paths verified"

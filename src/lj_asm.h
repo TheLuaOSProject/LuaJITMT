@@ -112,10 +112,50 @@ LJ_FUNC int lj_asm_arm64_postra_funcf_entry_admit(
 	IRRef *semantic_ninsp);
 LJ_FUNC int lj_asm_arm64_side_ir_admit(const LJArm64SideIRView *view,
 	LJArm64IRReject *reject);
+LJ_FUNC int lj_asm_arm64_side_prehead_admit(
+	const LJArm64SidePostRAView *view, IRRef *semantic_ninsp);
 LJ_FUNC int lj_asm_arm64_side_postra_admit(
 	const LJArm64SidePostRAView *view, IRRef *semantic_ninsp);
 #ifdef LJ_TRACE_TEST_HELPERS
 LJ_FUNC void lj_asm_arm64_test_force_exitstub_mcode_retry(uint32_t count);
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
+enum {
+  LJ_ARM64_SIDE_ASM_PROBE_CAPTURE = 0x01u,
+  LJ_ARM64_SIDE_ASM_PROBE_PARENTMAP = 0x02u,
+  LJ_ARM64_SIDE_ASM_PROBE_PREHEAD = 0x04u,
+  LJ_ARM64_SIDE_ASM_PROBE_POSTRA = 0x08u,
+  LJ_ARM64_SIDE_ASM_PROBE_TAIL = 0x10u,
+  LJ_ARM64_SIDE_ASM_PROBE_FINAL = 0x20u,
+  LJ_ARM64_SIDE_ASM_PROBE_MARKER = 0x40u,
+  LJ_ARM64_SIDE_ASM_PROBE_ALL = 0x7fu
+};
+typedef struct LJArm64SideAsmProbe {
+  uint32_t stages;
+  uint32_t capture_count;
+  TraceNo parent;
+  TraceNo child;
+  ExitNo exitno;
+  MSize parentmap_n;
+  MSize entry_words;
+  uint16_t parentmap0;
+  uint8_t branch_track;
+  uint8_t marker;
+  MCode entry[2];
+  GCtrace *cert_body;
+  MCode *cert_mcode;
+  const BCIns *cert_continuation;
+  BCIns cert_continuationins;
+  MCode *tail_target;
+  MCode *tail_pc;
+  MCode tail_ins;
+} LJArm64SideAsmProbe;
+LJ_FUNC void lj_asm_arm64_test_side_probe_arm(TraceNo parent, ExitNo exitno);
+LJ_FUNC int lj_asm_arm64_test_side_probe_ingress(TraceNo parent,
+	ExitNo exitno);
+LJ_FUNC int lj_asm_arm64_test_side_probe_active(TraceNo parent,
+	ExitNo exitno);
+LJ_FUNC int lj_asm_arm64_test_side_probe_read(LJArm64SideAsmProbe *out);
+#endif
 #endif
 #endif
 #if LJ_TARGET_ARM64 && defined(LJ_ARM64_EMIT_TEST_HELPERS)

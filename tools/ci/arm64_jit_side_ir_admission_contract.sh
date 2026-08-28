@@ -24,8 +24,28 @@ arm64e_fixture=$tmpdir/t-arm64e-jit-side-ir-admission
 audit_object=$tmpdir/lj_asm-arm64e.o
 pure_region=$tmpdir/pure-side-region.txt
 trace_asm=$tmpdir/trace-asm.txt
+head_side=$tmpdir/head-side.txt
+tail_side=$tmpdir/tail-side.txt
+post_snap=$tmpdir/post-snap.txt
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT'
 arm64e_xcflags="$xcflags -DLUAJIT_ENABLE_CET_BR"
+
+require_order()
+{
+  region=$1
+  before=$2
+  after=$3
+  label=$4
+  before_line=$(awk -v needle="$before" 'index($0, needle) { print NR; exit }' \
+    "$region")
+  after_line=$(awk -v needle="$after" 'index($0, needle) { print NR; exit }' \
+    "$region")
+  if test -z "$before_line" || test -z "$after_line" || \
+     test "$before_line" -ge "$after_line"; then
+    echo "ARM64 side assembler ordering changed: $label" >&2
+    exit 1
+  fi
+}
 
 test -f "$archive" || {
   echo "ARM64 side IR contract requires an existing experimental build" >&2
@@ -36,18 +56,24 @@ nm "$archive" | grep ' T _lj_asm_arm64_side_ir_admit$' >/dev/null || {
   echo "experimental archive lacks the pure ARM64 side semantic gate" >&2
   exit 1
 }
+nm "$archive" | grep ' T _lj_asm_arm64_side_prehead_admit$' >/dev/null || {
+  echo "experimental archive lacks the pure ARM64 side pre-head gate" >&2
+  exit 1
+}
 nm "$archive" | grep ' T _lj_asm_arm64_side_postra_admit$' >/dev/null || {
   echo "experimental archive lacks the pure ARM64 side post-RA gate" >&2
   exit 1
 }
 
-# This tranche reserves policy and tests only. Production recording, dispatch
-# and marker publication remain independently closed.
+# Production assembly now consumes the exact semantic, parent-lifetime and
+# post-RA certificates. Recording ingress, dispatch and trace publication
+# remain independently closed.
 grep -E '^#define LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
   "$root/src/lj_arch.h" >/dev/null
 grep -F '#define TRACE_ARM64_INT_SIDE_ADMITTED' "$root/src/lj_jit.h" | \
   grep -F '0x80' >/dev/null
 grep -F 'lj_asm_arm64_side_ir_admit' "$root/src/lj_asm.h" >/dev/null
+grep -F 'lj_asm_arm64_side_prehead_admit' "$root/src/lj_asm.h" >/dev/null
 grep -F 'lj_asm_arm64_side_postra_admit' "$root/src/lj_asm.h" >/dev/null
 grep -F 'sh "$root/tools/ci/arm64_jit_side_ir_admission_contract.sh"' \
   "$root/tools/ci/arm64_jit_fail_closed_gate.sh" >/dev/null
@@ -91,6 +117,7 @@ for required in \
   'expected > (uintptr_t)(UINT64_MAX >> 8)' \
   'SNAP(4, 0, ARM64_SIDE_R_PARENT)' \
   'SNAP(5, 0, ARM64_SIDE_R_ADD)' \
+  'int lj_asm_arm64_side_prehead_admit(' \
   'static const Reg valueregs[4]' \
   'RID_X27, RID_X28, RID_X28, RID_X27' \
   'view->nins != ARM64_SIDE_SEMANTIC_NINS+1u' \
@@ -108,7 +135,8 @@ for required in \
   'view->parentmap[0] != REGSP(RID_X28, SPS_NONE)' \
   'ins.r != RID_BASE || ins.s != SPS_NONE' \
   'ins.r != valueregs[ref-ARM64_SIDE_R_PARENT]' \
-  'ins.r != RID_INIT || ins.s != SPS_NONE'; do
+  'ins.r != RID_INIT || ins.s != SPS_NONE' \
+  '!lj_asm_arm64_side_prehead_admit(view, &semantic_nins)'; do
   grep -F "$required" "$pure_region" >/dev/null || {
     echo "ARM64 side certificate invariant changed: $required" >&2
     exit 1
@@ -126,15 +154,86 @@ awk '/^void lj_asm_trace\(/ { copy=1 }
      copy && /^#if LJ_TARGET_ARM64 && defined\(LJ_ARM64_EMIT_TEST_HELPERS\)/ {
        exit
      }' "$root/src/lj_asm.c" >"$trace_asm"
-if grep -E 'lj_asm_arm64_side_(ir|postra)_admit|TRACE_ARM64_INT_SIDE_ADMITTED' \
-     "$trace_asm" >/dev/null; then
-  echo "Stage 1 side certificate was wired into production assembly" >&2
-  exit 1
-fi
-if grep -F 'TRACE_ARM64_INT_SIDE_ADMITTED' "$root/src/lj_asm.c" >/dev/null; then
-  echo "Stage 1 assembler unexpectedly publishes the side admission marker" >&2
-  exit 1
-fi
+sed -n '/^static void asm_head_side(ASMState \*as)/,/^}/p' \
+  "$root/src/lj_asm.c" >"$head_side"
+awk '/^  \/\* Set trace entry point before fixing up tail/ { copy=1 }
+     copy { print }
+     copy && /T->szmcode =/ { exit }' \
+  "$root/src/lj_asm.c" >"$tail_side"
+awk '/^  T->szmcode =/ { copy=1 }
+     copy { print }
+     copy && /^}/ { exit }' "$root/src/lj_asm.c" >"$post_snap"
+test -s "$trace_asm" && test -s "$head_side" && test -s "$tail_side" && \
+  test -s "$post_snap"
+
+# Pin the bounded production-consumption boundary. The side semantic gate and
+# parent capture must precede every fallible allocation. Every raw parent-body
+# use is preceded by exact certificate revalidation, and only the full final
+# post-RA gate can lead to the scratch admission marker.
+test "$(grep -Fc 'lj_asm_arm64_side_ir_admit(' "$trace_asm")" = 1
+test "$(grep -Fc 'lj_asm_arm64_side_postra_admit(' "$trace_asm")" = 1
+test "$(grep -Fc 'lj_trace_arm64_side_parent_capture(J)' "$trace_asm")" = 1
+test "$(grep -Fc 'TRACE_ARM64_INT_SIDE_ADMITTED' "$trace_asm")" = 1
+require_order "$trace_asm" 'J->loopref != 0' \
+  'lj_asm_arm64_side_ir_admit(' \
+  'non-loop side shape before semantic admission'
+require_order "$trace_asm" 'lj_asm_arm64_side_ir_admit(' \
+  'lj_trace_arm64_side_parent_capture(J)' \
+  'semantic side gate before parent capture'
+require_order "$trace_asm" 'lj_trace_arm64_side_parent_capture(J)' \
+  'as->orignins = lj_ir_nextins(J);' \
+  'parent capture before IR growth'
+require_order "$trace_asm" 'lj_trace_arm64_side_parent_capture(J)' \
+  'J->curfinal = lj_trace_alloc(J->L, T);' \
+  'parent capture before scratch trace allocation'
+require_order "$trace_asm" 'lj_trace_arm64_side_parent_capture(J)' \
+  'lj_mcode_reserve(J, &as->mcbot)' \
+  'parent capture before mcode reservation'
+require_order "$trace_asm" 'lj_trace_arm64_side_parent_revalidate(J)' \
+  'asm_setup_regsp(as);' \
+  'parent revalidation before regsp map construction'
+grep -F 'as->parent = J->parent ? J->arm64_side_parent.body : NULL;' \
+  "$trace_asm" >/dev/null
+
+require_order "$head_side" 'lj_trace_arm64_side_parent_revalidate(as->J)' \
+  'as->parent != as->J->arm64_side_parent.body' \
+  'pre-head revalidation before identity comparison'
+require_order "$head_side" 'as->parent != as->J->arm64_side_parent.body' \
+  'lj_asm_arm64_side_prehead_admit(' \
+  'pre-head identity before layout validation'
+require_order "$head_side" 'lj_asm_arm64_side_prehead_admit(' \
+  'trace_ir_acq(as->parent)' \
+  'pre-head layout validation before parent IR dereference'
+require_order "$head_side" 'lj_asm_arm64_side_prehead_admit(' \
+  'as->parentmap[i - REF_FIRST]' \
+  'pre-head layout validation before parentmap indexing'
+grep -F 'view->parentmap = as->parentmap;' "$root/src/lj_asm.c" >/dev/null
+grep -F 'view->parentmap_n = as->parentmap_n;' "$root/src/lj_asm.c" >/dev/null
+grep -F 'view->nins = as->J->curfinal ? trace_nins_acq(as->J->curfinal) : 0;' \
+  "$root/src/lj_asm.c" >/dev/null
+
+require_order "$trace_asm" 'lj_asm_arm64_side_postra_admit(' \
+  'asm_snap_fixup_mcofs(as);' \
+  'full side post-RA gate before last fallible fixup'
+require_order "$post_snap" 'asm_snap_fixup_mcofs(as);' \
+  'lj_trace_arm64_side_parent_revalidate(J)' \
+  'last fallible fixup before final parent revalidation'
+require_order "$post_snap" 'lj_trace_arm64_side_parent_revalidate(J)' \
+  'TRACE_ARM64_INT_SIDE_ADMITTED' \
+  'final parent revalidation before side admission marker'
+require_order "$post_snap" 'TRACE_ARM64_INT_SIDE_ADMITTED' \
+  'asm_mcode_fixup(T->mcode, T->szmcode);' \
+  'side admission marker before no-throw mcode finalization'
+
+require_order "$tail_side" 'lj_trace_arm64_side_parent_revalidate(J)' \
+  'T->link != J->arm64_side_parent.parent' \
+  'tail parent revalidation before link identity'
+require_order "$tail_side" 'T->link != J->arm64_side_parent.parent' \
+  'certified_parent_mcode = J->arm64_side_parent.mcode;' \
+  'tail identity before certified target load'
+require_order "$tail_side" 'certified_parent_mcode = J->arm64_side_parent.mcode;' \
+  'tail_pc = asm_tail_fixup(as, T->link, certified_parent_mcode);' \
+  'certified target before tail finalization'
 
 for required in \
   'fx.view.traceno = 9;' \
@@ -170,6 +269,16 @@ for required in \
   'fx.postra.parentmap_n = 1;' \
   'fx.postra.entry_words = 1u+(MSize)LJ_ABI_BRANCH_TRACK;' \
   'fx.postra.branch_track = (uint8_t)LJ_ABI_BRANCH_TRACK;' \
+  'expect_prehead(1);' \
+  'lj_asm_arm64_side_prehead_admit(NULL, NULL)' \
+  'PREHEAD_MUTATION(fx.postra.semantic.exitno++)' \
+  'PREHEAD_MUTATION(fx.postra.parentmap = NULL)' \
+  'PREHEAD_MUTATION(fx.parentmap[0] = REGSP_INIT)' \
+  'PREHEAD_MUTATION(fx.ir[R_PARENT].r = RID_X0)' \
+  'fx.postra.entry = NULL; expect_prehead(1);' \
+  'fx.postra.entry_words = 0; expect_prehead(1);' \
+  '(uint8_t)!LJ_ABI_BRANCH_TRACK; expect_prehead(1);' \
+  'fx.entry[LJ_ABI_BRANCH_TRACK] ^= 1u; expect_prehead(1);' \
   'fx.postra.parentmap = NULL' \
   'fx.postra.parentmap_n = 2' \
   'fx.parentmap[0] = REGSP(RID_X28, 2)' \
@@ -223,4 +332,4 @@ grep -F 'as->parentmap_n = parentmap_n;' "$root/src/lj_asm.c" >/dev/null
   -o "$fixture"
 "$fixture"
 
-echo "arm64_jit_side_ir_admission_contract OK: ARM64/arm64e first-side semantic, post-RA and exact head-shuffle certificates verified; production gate remains closed"
+echo "arm64_jit_side_ir_admission_contract OK: ARM64/arm64e first-side semantic, pre-head, post-RA and assembler-consumption certificates verified; recorder/publication gates remain closed"

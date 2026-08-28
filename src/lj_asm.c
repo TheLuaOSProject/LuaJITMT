@@ -798,7 +798,7 @@ int lj_asm_arm64_side_ir_admit(const LJArm64SideIRView *view,
   return 1;
 }
 
-int lj_asm_arm64_side_postra_admit(const LJArm64SidePostRAView *view,
+int lj_asm_arm64_side_prehead_admit(const LJArm64SidePostRAView *view,
 	IRRef *semantic_ninsp)
 {
   static const Reg valueregs[4] = {
@@ -807,7 +807,6 @@ int lj_asm_arm64_side_postra_admit(const LJArm64SidePostRAView *view,
   const IRIns *ir;
   IRIns ins;
   IRRef ref;
-  MSize moveidx;
   if (view == NULL || (ir = view->semantic.ir) == NULL ||
 	!lj_asm_arm64_side_ir_admit(&view->semantic, NULL) ||
 	view->nins != ARM64_SIDE_SEMANTIC_NINS+1u ||
@@ -817,17 +816,7 @@ int lj_asm_arm64_side_postra_admit(const LJArm64SidePostRAView *view,
 	view->topslot != 5u || view->parent_topslot != 5u ||
 	view->parentmap == NULL || view->parentmap_n != 1u ||
 	((uintptr_t)(const void *)view->parentmap &
-	 (sizeof(uint16_t)-1u)) != 0 ||
-	view->entry == NULL ||
-	((uintptr_t)(const void *)view->entry & (sizeof(MCode)-1u)) != 0 ||
-	view->branch_track != (uint8_t)LJ_ABI_BRANCH_TRACK)
-    return 0;
-
-  moveidx = (MSize)LJ_ABI_BRANCH_TRACK;
-  if (view->entry_words <= moveidx ||
-	(view->branch_track && view->entry[0] != A64I_LE(A64I_BTI_J)) ||
-	view->entry[moveidx] != A64I_LE(A64I_MOVx | A64F_D(RID_X27) |
-				     A64F_M(RID_X28)))
+	 (sizeof(uint16_t)-1u)) != 0)
     return 0;
 
   ins = ir_load_acq(&ir[ARM64_SIDE_SEMANTIC_NINS]);
@@ -835,9 +824,9 @@ int lj_asm_arm64_side_postra_admit(const LJArm64SidePostRAView *view,
 	ins.op1 != 0 || ins.op2 != 0 || ins.r != 0 || ins.s != 0)
     return 0;
 
-  /* The map extent comes directly from lj_snap_regspmap(). The emitted entry
-  ** prefix proves that asm_head_side() consumes its sole x28 value into the
-  ** allocator-selected x27 child register before any body instruction. */
+  /* The map extent comes directly from lj_snap_regspmap(). The later full
+  ** post-RA certificate proves that asm_head_side() consumes its sole x28
+  ** value into allocator-selected x27 before any body instruction. */
   if (view->parentmap[0] != REGSP(RID_X28, SPS_NONE))
     return 0;
   ins = ir_load_acq(&ir[REF_BASE]);
@@ -862,6 +851,27 @@ int lj_asm_arm64_side_postra_admit(const LJArm64SidePostRAView *view,
   }
   if (semantic_ninsp)
     *semantic_ninsp = ARM64_SIDE_SEMANTIC_NINS;
+  return 1;
+}
+
+int lj_asm_arm64_side_postra_admit(const LJArm64SidePostRAView *view,
+	IRRef *semantic_ninsp)
+{
+  IRRef semantic_nins;
+  MSize moveidx;
+  if (!lj_asm_arm64_side_prehead_admit(view, &semantic_nins) ||
+	view->entry == NULL ||
+	((uintptr_t)(const void *)view->entry & (sizeof(MCode)-1u)) != 0 ||
+	view->branch_track != (uint8_t)LJ_ABI_BRANCH_TRACK)
+    return 0;
+  moveidx = (MSize)LJ_ABI_BRANCH_TRACK;
+  if (view->entry_words <= moveidx ||
+	(view->branch_track && view->entry[0] != A64I_LE(A64I_BTI_J)) ||
+	view->entry[moveidx] != A64I_LE(A64I_MOVx | A64F_D(RID_X27) |
+				     A64F_M(RID_X28)))
+    return 0;
+  if (semantic_ninsp)
+    *semantic_ninsp = semantic_nins;
   return 1;
 }
 
@@ -1447,6 +1457,9 @@ typedef struct ASMState {
 
   GCtrace *T;		/* Trace to assemble. */
   GCtrace *parent;	/* Parent trace (or NULL). */
+#if LJ_TARGET_ARM64
+  IRRef arm64_semantic_nins;  /* Exact pre-allocation side/root IR extent. */
+#endif
 
   MCode *mcbot;		/* Bottom of reserved MCode. */
   MCode *mctop;		/* Top of generated MCode. */
@@ -1478,6 +1491,77 @@ typedef struct ASMState {
 #define lj_assertA(c, ...)	lj_assertG_(J2G(as->J), (c), __VA_ARGS__)
 #else
 #define lj_assertA(c, ...)	((void)as)
+#endif
+
+#if LJ_TARGET_ARM64
+static void asm_arm64_side_ir_view_init(const jit_State *J,
+	const GCtrace *T, const IRIns *ir, IRRef nins, TraceNo parent,
+	ExitNo exitno, LJArm64SideIRView *view)
+{
+  GCproto *pt;
+  memset(view, 0, sizeof(*view));
+  if (J == NULL || T == NULL || (pt = J->pt) == NULL)
+    return;
+  view->ir = ir;
+  view->snap = trace_snap_acq((GCtrace *)T);
+  view->snapmap = trace_snapmap_acq((GCtrace *)T);
+  view->proto_bc = proto_bc(pt);
+  view->nins = nins;
+  view->nk = trace_nk_acq((GCtrace *)T);
+  view->nsnap = trace_nsnap_acq((GCtrace *)T);
+  view->nsnapmap = trace_nsnapmap_acq((GCtrace *)T);
+  view->proto_sizebc = pt->sizebc;
+  view->baseslot = J->baseslot;
+  /* T is still the zeroed recorder scratch trace at the initial semantic
+  ** gate. Match root admission authority instead of reading T->topslot,
+  ** which asm_head_side() does not publish until much later. */
+  view->root_topslot = pt->framesize;
+  view->traceno = trace_traceno_acq((GCtrace *)T);
+  view->parent = parent;
+  view->root = trace_root_acq((GCtrace *)T);
+  view->link = trace_link_acq((GCtrace *)T);
+  view->exitno = exitno;
+  view->startins = trace_startins_acq((GCtrace *)T);
+  view->linktype = trace_linktype_acq((GCtrace *)T);
+  view->sinktags = T->sinktags;
+  view->base_delta = (uint8_t)(J->baseslot-(1u+LJ_FR2));
+}
+
+static void asm_arm64_side_parent_result(jit_State *J,
+	LJTraceArm64SideParentResult result)
+{
+  if (result == LJ_TRACE_ARM64_SIDE_PARENT_OK)
+    return;
+  lj_trace_err(J, result == LJ_TRACE_ARM64_SIDE_PARENT_SMR_RETRY ?
+	LJ_TRERR_SMRRETRY : LJ_TRERR_RETRY);
+}
+
+static void asm_arm64_side_postra_view_init(ASMState *as,
+	const MCode *entry, MSize entry_words, LJArm64SidePostRAView *view)
+{
+  const LJTraceArm64SideParentCert *cert = &as->J->arm64_side_parent;
+  memset(view, 0, sizeof(*view));
+  asm_arm64_side_ir_view_init(as->J, as->T, as->ir,
+	as->arm64_semantic_nins, cert->parent, cert->exitno, &view->semantic);
+  view->parentmap = as->parentmap;
+  view->entry = entry;
+  /* J->cur.nins is reset to the semantic boundary on every assembler pass;
+  ** curfinal owns the allocator-visible trailing NOP extent. */
+  view->nins = as->J->curfinal ? trace_nins_acq(as->J->curfinal) : 0;
+  view->stopins = as->stopins;
+  view->orignins = as->orignins;
+  view->spadjust = trace_spadjust_acq(as->T);
+  /* Parent capture/revalidation already proves the canonical root has zero
+  ** stack adjustment and the same prototype frame extent. Do not dereference
+  ** the parent merely to build the pre-head view: the pure layout gate must
+  ** run before asm_head_side() performs its first parent-body load. */
+  view->parent_spadjust = 0;
+  view->parent_topslot = view->semantic.root_topslot;
+  view->topslot = as->topslot;
+  view->parentmap_n = as->parentmap_n;
+  view->entry_words = entry_words;
+  view->branch_track = (uint8_t)LJ_ABI_BRANCH_TRACK;
+}
 #endif
 
 #define IR(ref)			(&as->ir[(ref)])
@@ -3225,6 +3309,17 @@ static void asm_loop(ASMState *as)
 
 #if LJ_TARGET_ARM64 && defined(LJ_TRACE_TEST_HELPERS)
 static uint32_t asm_test_exitstub_mcode_retry_count;
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
+static uint32_t asm_test_side_probe_state;
+static LJArm64SideAsmProbe asm_test_side_probe;
+
+enum {
+  ASM_TEST_SIDE_PROBE_IDLE,
+  ASM_TEST_SIDE_PROBE_ARMED,
+  ASM_TEST_SIDE_PROBE_ACTIVE,
+  ASM_TEST_SIDE_PROBE_DONE
+};
+#endif
 
 void lj_asm_arm64_test_force_exitstub_mcode_retry(uint32_t count)
 {
@@ -3243,6 +3338,115 @@ static int asm_test_exitstub_mcode_retry_consume(void)
   }
   return 0;
 }
+
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
+void lj_asm_arm64_test_side_probe_arm(TraceNo parent, ExitNo exitno)
+{
+  la_store32_rel(&asm_test_side_probe_state, ASM_TEST_SIDE_PROBE_IDLE);
+  memset(&asm_test_side_probe, 0, sizeof(asm_test_side_probe));
+  asm_test_side_probe.parent = parent;
+  asm_test_side_probe.exitno = exitno;
+  la_store32_rel(&asm_test_side_probe_state, ASM_TEST_SIDE_PROBE_ARMED);
+}
+
+int lj_asm_arm64_test_side_probe_ingress(TraceNo parent, ExitNo exitno)
+{
+  uint32_t expect = ASM_TEST_SIDE_PROBE_ARMED;
+  if (asm_test_side_probe.parent != parent ||
+      asm_test_side_probe.exitno != exitno)
+    return 0;
+  return la_cas32(&asm_test_side_probe_state, &expect,
+	ASM_TEST_SIDE_PROBE_ACTIVE, LA_ACQ_REL, LA_ACQ);
+}
+
+int lj_asm_arm64_test_side_probe_read(LJArm64SideAsmProbe *out)
+{
+  uint32_t state = la_load32_acq(&asm_test_side_probe_state);
+  if (out != NULL && state != ASM_TEST_SIDE_PROBE_IDLE)
+    *out = asm_test_side_probe;
+  return state == ASM_TEST_SIDE_PROBE_DONE;
+}
+
+int lj_asm_arm64_test_side_probe_active(TraceNo parent, ExitNo exitno)
+{
+  return la_load32_acq(&asm_test_side_probe_state) ==
+	 ASM_TEST_SIDE_PROBE_ACTIVE &&
+	 asm_test_side_probe.parent == parent &&
+	 asm_test_side_probe.exitno == exitno;
+}
+
+static int asm_test_side_probe_active(void)
+{
+  return lj_asm_arm64_test_side_probe_active(
+	asm_test_side_probe.parent, asm_test_side_probe.exitno);
+}
+
+static void asm_test_side_probe_note(uint32_t stage)
+{
+  if (asm_test_side_probe_active())
+    asm_test_side_probe.stages |= stage;
+}
+
+static void asm_test_side_probe_capture(jit_State *J)
+{
+  if (asm_test_side_probe_active()) {
+    asm_test_side_probe.capture_count++;
+    asm_test_side_probe.cert_body = J->arm64_side_parent.body;
+    asm_test_side_probe.cert_mcode = J->arm64_side_parent.mcode;
+    asm_test_side_probe.cert_continuation =
+      J->arm64_side_parent.continuation;
+    asm_test_side_probe.cert_continuationins =
+      J->arm64_side_parent.continuationins;
+    asm_test_side_probe.parent = J->arm64_side_parent.parent;
+    asm_test_side_probe.exitno = J->arm64_side_parent.exitno;
+    asm_test_side_probe.stages |= LJ_ARM64_SIDE_ASM_PROBE_CAPTURE;
+  }
+}
+
+static void asm_test_side_probe_parentmap(const uint16_t *parentmap,
+	MSize parentmap_n)
+{
+  if (asm_test_side_probe_active()) {
+    asm_test_side_probe.parentmap_n = parentmap_n;
+    asm_test_side_probe.parentmap0 = parentmap_n ? parentmap[0] : REGSP_INIT;
+    asm_test_side_probe.stages |= LJ_ARM64_SIDE_ASM_PROBE_PARENTMAP;
+  }
+}
+
+static void asm_test_side_probe_postra(const MCode *entry, MSize entry_words)
+{
+  if (asm_test_side_probe_active()) {
+    asm_test_side_probe.entry_words = entry_words;
+    asm_test_side_probe.branch_track = (uint8_t)LJ_ABI_BRANCH_TRACK;
+    if (entry_words > 0)
+      asm_test_side_probe.entry[0] = entry[0];
+    if (entry_words > 1)
+      asm_test_side_probe.entry[1] = entry[1];
+    asm_test_side_probe.stages |= LJ_ARM64_SIDE_ASM_PROBE_POSTRA;
+  }
+}
+
+static void asm_test_side_probe_tail(MCode *target, MCode *tail_pc)
+{
+  if (asm_test_side_probe_active()) {
+    asm_test_side_probe.tail_target = target;
+    asm_test_side_probe.tail_pc = tail_pc;
+    asm_test_side_probe.tail_ins = tail_pc ? *tail_pc : 0;
+    asm_test_side_probe.stages |= LJ_ARM64_SIDE_ASM_PROBE_TAIL;
+  }
+}
+
+static int asm_test_side_probe_finish(GCtrace *T)
+{
+  if (!asm_test_side_probe_active())
+    return 0;
+  asm_test_side_probe.child = trace_traceno_acq(T);
+  asm_test_side_probe.marker =
+    (uint8_t)(la_load8_acq(&T->unused1) & TRACE_ARM64_INT_SIDE_ADMITTED);
+  la_store32_rel(&asm_test_side_probe_state, ASM_TEST_SIDE_PROBE_DONE);
+  return 1;
+}
+#endif
 #endif
 
 #if LJ_TARGET_X86ORX64
@@ -3493,14 +3697,39 @@ static void asm_head_side(ASMState *as)
   RegSet live = RSET_EMPTY;  /* Live parent registers. */
   RegSet pallow = RSET_GPR;  /* Registers needed by the parent stack check. */
   Reg pbase;
-  IRIns *irp = &trace_ir_acq(as->parent)[REF_BASE];  /* Parent base. */
-  MSize parent_topslot = trace_topslot_acq(as->parent);
-  int32_t parent_spadjust = (int32_t)trace_spadjust_acq(as->parent);
+  IRIns *irp;
+  MSize parent_topslot;
+  int32_t parent_spadjust;
   int32_t spadj, spdelta;
   int pass2 = 0;
   int pass3 = 0;
   IRRef i;
 
+#if LJ_TARGET_ARM64
+  {
+    LJArm64SidePostRAView prehead;
+    IRRef validated_semantic_nins;
+    asm_arm64_side_parent_result(as->J,
+	lj_trace_arm64_side_parent_revalidate(as->J));
+    if (LJ_UNLIKELY(as->parent != as->J->arm64_side_parent.body))
+      lj_trace_err(as->J, LJ_TRERR_RETRY);
+    asm_arm64_side_postra_view_init(as, NULL, 0, &prehead);
+    if (LJ_UNLIKELY(!lj_asm_arm64_side_prehead_admit(
+	  &prehead, &validated_semantic_nins) ||
+	validated_semantic_nins != as->arm64_semantic_nins)) {
+      setintV(&as->J->errinfo, (int32_t)IR_RENAME);
+      lj_trace_err_info(as->J, LJ_TRERR_NYIIR);
+    }
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
+    asm_test_side_probe_note(LJ_ARM64_SIDE_ASM_PROBE_PREHEAD);
+#endif
+  }
+#endif
+  irp = &trace_ir_acq(as->parent)[REF_BASE];  /* Certified parent base. */
+  parent_topslot = trace_topslot_acq(as->parent);
+  parent_spadjust = (int32_t)trace_spadjust_acq(as->parent);
+  if (LJ_UNLIKELY(parent_topslot != 5u || parent_spadjust != 0))
+    lj_trace_err(as->J, LJ_TRERR_RETRY);
   if (as->snapno && as->topslot > parent_topslot) {
     /* Force snap #0 alloc to prevent register overwrite in stack check. */
     asm_snap_alloc(as, 0);
@@ -3657,7 +3886,11 @@ static void asm_head_side(ASMState *as)
     ExitNo exitno = as->T->nsnap;
 #else
     /* Reuse the parent exit in the context of the parent trace. */
+#if LJ_TARGET_ARM64
+    ExitNo exitno = as->J->arm64_side_parent.exitno;
+#else
     ExitNo exitno = as->J->exitno;
+#endif
 #endif
     as->T->topslot = (uint8_t)as->topslot;  /* Remember for child traces. */
     checkmclim(as);
@@ -3722,6 +3955,7 @@ static void asm_xsave(ASMState *as)
 #endif
 }
 
+#if !LJ_TARGET_ARM64
 static GCtrace *asm_traceref_live(ASMState *as, TraceNo traceno)
 {
   jit_State *J = as->J;
@@ -3739,6 +3973,7 @@ static GCtrace *asm_traceref_live(ASMState *as, TraceNo traceno)
   lj_gc2_smr_read_leave(g);
   return T;
 }
+#endif
 
 /* Link to another trace. */
 static void asm_tail_link(ASMState *as)
@@ -3874,7 +4109,12 @@ static void asm_setup_regsp(ASMState *as)
   if (as->parent) {
     uint16_t *p;
     MSize parentmap_n;
-    lastir = lj_snap_regspmap(as->J, as->parent, as->J->exitno, ir);
+#if LJ_TARGET_ARM64
+    ExitNo parent_exitno = as->J->arm64_side_parent.exitno;
+#else
+    ExitNo parent_exitno = as->J->exitno;
+#endif
+    lastir = lj_snap_regspmap(as->J, as->parent, parent_exitno, ir);
     parentmap_n = (MSize)(lastir-ir);
     if (parentmap_n > LJ_MAX_JSLOTS)
       lj_trace_err(as->J, LJ_TRERR_NYICOAL);
@@ -4135,7 +4375,24 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
 #if LJ_TARGET_ARM64
   {
     LJArm64IRReject reject;
-    if (LJ_UNLIKELY(!lj_asm_arm64_ir_admit(J, T, &reject))) {
+    if (J->parent != 0) {
+      LJArm64SideIRView sideview;
+      if (LJ_UNLIKELY(J->loopref != 0)) {
+	setintV(&J->errinfo, (int32_t)IR_LOOP);
+	lj_trace_err_info(J, LJ_TRERR_NYIIR);
+      }
+      asm_arm64_side_ir_view_init(J, T, T->ir, T->nins,
+	J->parent, J->exitno, &sideview);
+      if (LJ_UNLIKELY(!lj_asm_arm64_side_ir_admit(&sideview, &reject))) {
+	setintV(&J->errinfo, (int32_t)reject.op);
+	lj_trace_err_info(J, LJ_TRERR_NYIIR);
+      }
+      asm_arm64_side_parent_result(J,
+	lj_trace_arm64_side_parent_capture(J));
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
+      asm_test_side_probe_capture(J);
+#endif
+    } else if (LJ_UNLIKELY(!lj_asm_arm64_ir_admit(J, T, &reject))) {
       /* Use the established deterministic assembler error. The exact rejected
       ** opcode remains available through errinfo; CALL helper IDs and shape
       ** details are exposed by the pure admission result used by diagnostics. */
@@ -4159,7 +4416,12 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
   as->loopref = J->loopref;
   as->realign = NULL;
   as->loopinv = 0;
+#if LJ_TARGET_ARM64
+  as->arm64_semantic_nins = arm64_semantic_nins;
+  as->parent = J->parent ? J->arm64_side_parent.body : NULL;
+#else
   as->parent = J->parent ? asm_traceref_live(as, J->parent) : NULL;
+#endif
 #ifdef LUAJIT_RANDOM_RA
   (void)lj_prng_u64(&J2TG(J)->prng);  /* Ensure PRNG step between traces. */
 #endif
@@ -4221,7 +4483,17 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
     as->gcsteps = 0;
     as->sectref = as->loopref;
     as->fuseref = (as->flags & JIT_F_OPT_FUSE) ? as->loopref : FUSE_DISABLED;
+#if LJ_TARGET_ARM64
+    if (J->parent != 0)
+      asm_arm64_side_parent_result(J,
+	lj_trace_arm64_side_parent_revalidate(J));
+#endif
     asm_setup_regsp(as);
+#if LJ_TARGET_ARM64 && defined(LJ_TRACE_TEST_HELPERS) && \
+    defined(LJ_ARM64_SIDE_ASM_TEST)
+    if (J->parent != 0)
+      asm_test_side_probe_parentmap(as->parentmap, as->parentmap_n);
+#endif
     if (!as->loopref)
       asm_tail_link(as);
 
@@ -4295,48 +4567,64 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
 
 #if LJ_TARGET_ARM64
   {
-    GCtrace finalview = *T;
-    LJArm64PostRAView postraview;
-    LJArm64IRReject reject;
     IRIns *finalir = J->curfinal->ir;
     IRRef finalnins = T->nins;
     IRRef validated_semantic_nins;
+    if (J->parent != 0) {
+      LJArm64SidePostRAView sidepostra;
+      asm_arm64_side_postra_view_init(as, as->mcp,
+	(MSize)(as->mctoporig-as->mcp), &sidepostra);
+      if (LJ_UNLIKELY(!lj_asm_arm64_side_postra_admit(
+	    &sidepostra, &validated_semantic_nins) ||
+	  validated_semantic_nins != arm64_semantic_nins)) {
+	setintV(&J->errinfo, (int32_t)IR_RENAME);
+	lj_trace_err_info(J, LJ_TRERR_NYIIR);
+      }
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
+      asm_test_side_probe_postra(as->mcp,
+	(MSize)(as->mctoporig-as->mcp));
+#endif
+    } else {
+      GCtrace finalview = *T;
+      LJArm64PostRAView postraview;
+      LJArm64IRReject reject;
 
-    /* Re-run the complete semantic policy against the register-allocated
-    ** compact IR. Header and snapshot authority still comes from the current
-    ** recorder trace; RENAME/NOP capacity lies beyond this semantic view. */
-    finalview.ir = finalir;
-    finalview.nins = arm64_semantic_nins;
-    if (LJ_UNLIKELY(!lj_asm_arm64_ir_admit(J, &finalview, &reject))) {
-      setintV(&J->errinfo, (int32_t)reject.op);
-      lj_trace_err_info(J, LJ_TRERR_NYIIR);
-    }
+      /* Re-run the complete semantic policy against the register-allocated
+      ** compact IR. Header and snapshot authority still comes from the current
+      ** recorder trace; RENAME/NOP capacity lies beyond this semantic view. */
+      finalview.ir = finalir;
+      finalview.nins = arm64_semantic_nins;
+      if (LJ_UNLIKELY(!lj_asm_arm64_ir_admit(J, &finalview, &reject))) {
+	setintV(&J->errinfo, (int32_t)reject.op);
+	lj_trace_err_info(J, LJ_TRERR_NYIIR);
+      }
 
-    postraview.ir = finalir;
-    postraview.snap = T->snap;
-    postraview.snapmap = T->snapmap;
-    postraview.proto_bc = proto_bc(J->pt);
-    postraview.nins = finalnins;
-    postraview.nk = T->nk;
-    postraview.nsnap = T->nsnap;
-    postraview.nsnapmap = T->nsnapmap;
-    postraview.spadjust = T->spadjust;
-    postraview.proto_sizebc = J->pt->sizebc;
-    postraview.root_topslot = T->topslot;
-    postraview.startins = T->startins;
-    postraview.base_delta = (uint8_t)(J->baseslot-2u);
-    if (LJ_UNLIKELY(!lj_asm_arm64_postra_admit(
-	  &postraview, &validated_semantic_nins) ||
-	validated_semantic_nins != arm64_semantic_nins)) {
-      setintV(&J->errinfo, (int32_t)IR_RENAME);
-      lj_trace_err_info(J, LJ_TRERR_NYIIR);
+      postraview.ir = finalir;
+      postraview.snap = T->snap;
+      postraview.snapmap = T->snapmap;
+      postraview.proto_bc = proto_bc(J->pt);
+      postraview.nins = finalnins;
+      postraview.nk = T->nk;
+      postraview.nsnap = T->nsnap;
+      postraview.nsnapmap = T->nsnapmap;
+      postraview.spadjust = T->spadjust;
+      postraview.proto_sizebc = J->pt->sizebc;
+      postraview.root_topslot = T->topslot;
+      postraview.startins = T->startins;
+      postraview.base_delta = (uint8_t)(J->baseslot-2u);
+      if (LJ_UNLIKELY(!lj_asm_arm64_postra_admit(
+	    &postraview, &validated_semantic_nins) ||
+	  validated_semantic_nins != arm64_semantic_nins)) {
+	setintV(&J->errinfo, (int32_t)IR_RENAME);
+	lj_trace_err_info(J, LJ_TRERR_NYIIR);
+      }
+      if (bc_op(T->startins) == BC_FORL)
+	T->unused1 |= TRACE_ARM64_INT_FORL_ADMITTED;
+      else if (bc_op(T->startins) == BC_FUNCF)
+	T->unused1 |= TRACE_ARM64_TRUE_FUNCF_ADMITTED;
+      else
+	T->unused1 |= TRACE_ARM64_INT_LOOP_ADMITTED;
     }
-    if (bc_op(T->startins) == BC_FORL)
-      T->unused1 |= TRACE_ARM64_INT_FORL_ADMITTED;
-    else if (bc_op(T->startins) == BC_FUNCF)
-      T->unused1 |= TRACE_ARM64_TRUE_FUNCF_ADMITTED;
-    else
-      T->unused1 |= TRACE_ARM64_INT_LOOP_ADMITTED;
   }
 #endif
 
@@ -4345,14 +4633,59 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
   T->mcloop = as->mcloop ? (MSize)((char *)as->mcloop - (char *)as->mcp) : 0;
   if (as->loopref)
     asm_loop_tail_fixup(as);
-  else
+  else {
+#if LJ_TARGET_ARM64
+    MCode *certified_parent_mcode = NULL;
+    MCode *tail_pc;
+    if (J->parent != 0) {
+      asm_arm64_side_parent_result(J,
+	lj_trace_arm64_side_parent_revalidate(J));
+      if (LJ_UNLIKELY(T->link != J->arm64_side_parent.parent ||
+	    as->parent != J->arm64_side_parent.body))
+	lj_trace_err(J, LJ_TRERR_RETRY);
+      certified_parent_mcode = J->arm64_side_parent.mcode;
+    }
+    tail_pc = asm_tail_fixup(as, T->link, certified_parent_mcode);
+    (void)tail_pc;
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
+    if (J->parent != 0)
+      asm_test_side_probe_tail(certified_parent_mcode, tail_pc);
+#endif
+#else
     asm_tail_fixup(as, T->link);  /* Note: this may change as->mctop! */
+#endif
+  }
   T->szmcode = (MSize)((char *)as->mctop - (char *)as->mcp);
   asm_snap_fixup_mcofs(as);
+#if LJ_TARGET_ARM64
+  if (J->parent != 0) {
+    asm_arm64_side_parent_result(J,
+	lj_trace_arm64_side_parent_revalidate(J));
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
+    asm_test_side_probe_note(LJ_ARM64_SIDE_ASM_PROBE_FINAL);
+#endif
+    /* Publish the scratch-only marker after the exact side post-RA gate and
+    ** the last fallible assembler operation both succeeded. */
+    T->unused1 |= TRACE_ARM64_INT_SIDE_ADMITTED;
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
+    asm_test_side_probe_note(LJ_ARM64_SIDE_ASM_PROBE_MARKER);
+#endif
+  }
+#endif
 #if LJ_TARGET_MCODE_FIXUP
   asm_mcode_fixup(T->mcode, T->szmcode);
 #endif
   lj_mcode_sync(T->mcode, as->mctoporig);
+#if LJ_TARGET_ARM64 && defined(LJ_TRACE_TEST_HELPERS) && \
+    defined(LJ_ARM64_SIDE_ASM_TEST) && \
+    LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED
+  if (J->parent != 0) {
+    /* The one-shot native probe must never return to trace_stop(). Even an
+    ** incomplete diagnostic aborts this private attempt fail-closed. */
+    (void)asm_test_side_probe_finish(T);
+    lj_trace_err(J, LJ_TRERR_NYIIR);
+  }
+#endif
 }
 
 #if LJ_TARGET_ARM64 && defined(LJ_ARM64_EMIT_TEST_HELPERS)

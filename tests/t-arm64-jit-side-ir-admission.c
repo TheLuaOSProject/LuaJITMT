@@ -1,7 +1,8 @@
 /*
 ** Pure contract for the first bounded ARM64 side-trace grammar and the exact
 ** allocator layout captured by an abort-before-publication native probe.
-** The production side recorder remains closed; no generated code runs here.
+** Production assembly consumes this certificate, but the side recorder and
+** publication path remain closed; no generated code runs here.
 */
 
 #include <assert.h>
@@ -327,6 +328,66 @@ static void expect_postra(int admitted)
     assert(semantic_nins == R_END);
 }
 
+static void expect_prehead(int admitted)
+{
+  IRRef semantic_nins = 0;
+  int result = lj_asm_arm64_side_prehead_admit(&fx.postra,
+	&semantic_nins);
+  if (result != admitted)
+    fprintf(stderr, "prehead result=%d wanted=%d\n", result, admitted);
+  assert(result == admitted);
+  if (admitted)
+    assert(semantic_nins == R_END);
+}
+
+#define PREHEAD_MUTATION(stmt) \
+  do { make_postra(); stmt; expect_prehead(0); } while (0)
+
+static void test_prehead(void)
+{
+  make_postra();
+  expect_prehead(1);
+  assert(!lj_asm_arm64_side_prehead_admit(NULL, NULL));
+
+  /* The pre-head certificate covers the complete semantic/layout authority
+  ** needed before asm_head_side() indexes the inherited-register map. */
+  PREHEAD_MUTATION(fx.postra.semantic.ir = NULL);
+  PREHEAD_MUTATION(fx.postra.semantic.exitno++);
+  PREHEAD_MUTATION(fx.postra.nins--);
+  PREHEAD_MUTATION(fx.postra.stopins++);
+  PREHEAD_MUTATION(fx.postra.orignins++);
+  PREHEAD_MUTATION(fx.postra.spadjust = 16);
+  PREHEAD_MUTATION(fx.postra.parent_spadjust = 16);
+  PREHEAD_MUTATION(fx.postra.topslot = 6);
+  PREHEAD_MUTATION(fx.postra.parent_topslot = 6);
+  PREHEAD_MUTATION(setir(R_END, IR_RENAME, IRT_NIL, R_ADD, 0));
+  PREHEAD_MUTATION(fx.postra.parentmap = NULL);
+  PREHEAD_MUTATION(fx.postra.parentmap =
+    (const uint16_t *)(const void *)((const char *)fx.parentmap+1));
+  PREHEAD_MUTATION(fx.postra.parentmap_n = 0);
+  PREHEAD_MUTATION(fx.postra.parentmap_n = 2);
+  PREHEAD_MUTATION(fx.parentmap[0] = REGSP_INIT);
+  PREHEAD_MUTATION(fx.parentmap[0] = REGSP(RID_X27, SPS_NONE));
+  PREHEAD_MUTATION(fx.ir[REF_BASE].r = RID_X0);
+  PREHEAD_MUTATION(fx.ir[R_PARENT].r = RID_X0);
+  PREHEAD_MUTATION(fx.ir[R_VALUE].s = 2);
+  PREHEAD_MUTATION(fx.ir[R_GT].r = RID_X0);
+  PREHEAD_MUTATION(fx.ir[R_XPOLL].s = 2);
+  PREHEAD_MUTATION(fx.ir[K_ONE].r = RID_X0);
+
+  /* Entry bytes do not exist yet at pre-head time. The full post-RA gate,
+  ** tested below, is solely responsible for the emitted BTI/MOV prefix. */
+  make_postra(); fx.postra.entry = NULL; expect_prehead(1);
+  make_postra(); fx.postra.entry =
+    (const MCode *)(const void *)((const char *)fx.entry+1);
+  expect_prehead(1);
+  make_postra(); fx.postra.entry_words = 0; expect_prehead(1);
+  make_postra(); fx.postra.branch_track =
+    (uint8_t)!LJ_ABI_BRANCH_TRACK; expect_prehead(1);
+  make_postra(); fx.entry[0] = A64I_LE(A64I_NOP); expect_prehead(1);
+  make_postra(); fx.entry[LJ_ABI_BRANCH_TRACK] ^= 1u; expect_prehead(1);
+}
+
 #define POSTRA_MUTATION(stmt) \
   do { make_postra(); stmt; expect_postra(0); } while (0)
 
@@ -436,6 +497,7 @@ int main(void)
   test_semantic_header();
   test_semantic_constants_and_ir();
   test_semantic_snapshots();
+  test_prehead();
   test_postra();
   puts("t-arm64-jit-side-ir-admission OK");
   return 0;

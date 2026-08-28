@@ -2,16 +2,16 @@
 
 ## Scope
 
-This dormant tranche closes the representation and validation gap identified
-after the first-side semantic, post-RA and head-shuffle certificates. It adds a
-token-private identity for the exact published LOOP parent that a future first
-side assembler may borrow. It does **not** call the new capture or revalidation
-API from `trace_hotside()`, `trace_start()`, `lj_trace_ins()`, `lj_asm_trace()`
-or `trace_stop()`. It does not assemble or publish a child, retarget a parent
-exit, or set `TRACE_ARM64_INT_SIDE_ADMITTED`.
+This tranche closed the representation and validation gap identified after the
+first-side semantic, post-RA and head-shuffle certificates. It added a
+token-private identity for the exact published LOOP parent borrowed by the
+first-side assembler. The subsequent assembler-consumption checkpoint now
+captures and revalidates it inside `lj_asm_trace()`. Recorder ingress,
+`trace_stop()` publication, parent-exit retargeting and retirement remain
+closed.
 
-`LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED` remains `1`. The new functions are an
-executable contract for the future wiring, not side-recording admission.
+`LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED` remains `1`. Assembler consumption is
+not side-recording admission.
 
 ## Stored identity
 
@@ -90,19 +90,23 @@ clears before either its terminal early return or repurposing
 exact transaction already cleared it and defensively zeros the payload before
 IDLE/token handoff; VM terminal preflight also requires it empty.
 
-Because capture/revalidation are still dormant, no successful production
-transaction owns this certificate yet. The eventual integration must:
+The assembler-consumption checkpoint now:
 
 1. capture afresh for every `lj_asm_trace()` attempt;
 2. recapture after the existing abort clear on an owner-local
    `LJ_TRERR_MCODELM` restart;
-3. revalidate before parent-map/head consumption and again before linked-tail
-   finalization; and
-4. retain a final exact parent/root certificate through child publication and
-   the authenticated last parent-exit-slot store, then clear the successful
-   attempt before generic terminal release.
+3. revalidate before parent-map/head consumption, linked-tail finalization and
+   after the last fallible snapshot fixup; and
+4. consume only the certified parent body, exit and raw mcode target.
 
-This tranche therefore does not claim parent linking, side-child/root retirement
+The selected parent snapshot certificate additionally proves that canonical
+slot 4 exists before the assertion-only `lj_snap_regspmap()` search, keeping
+that release-build scan bounded.
+
+The remaining publication transaction must retain the exact parent/root
+certificate through child publication and the authenticated last
+parent-exit-slot store, then clear the successful attempt before generic
+terminal release. This checkpoint does not claim side-child/root retirement
 ordering or enterable side code.
 
 ## Synthetic mutation contract
@@ -126,7 +130,7 @@ read-only ingress audit from the new bounded-SMR region, checks the exact
 six-field schema, PAUTH derivation, two one-shot admission/leave pairs, absence
 of blocking/mutation surfaces, the init/start/downrec/abort/terminal cleanup
 ordering, shutdown empty-state preflight, logical-TG-token/physical-actor split,
-and absence of production capture/revalidation calls. It runs the fixture
+and the exact assembler capture/revalidation call set and ordering. It runs the fixture
 natively on ARM64 and compiles both the helper and fixture with
 warnings-as-errors for arm64e. The existing full arm64e root-entry contract
 rebuilds the archive and executes this same fixture with `LJ_ABI_PAUTH=1`;

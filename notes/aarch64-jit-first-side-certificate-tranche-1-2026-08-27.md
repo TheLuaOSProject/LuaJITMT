@@ -7,16 +7,18 @@ after a native abort-before-publication observation. See
 `notes/aarch64-jit-first-side-postra-observation-2026-08-27.md` for the exact
 x28-parent to x27-child shuffle and the resulting immutable certificate.
 
-This tranche adds both pure assembler-side policy for one observed first-level
+This tranche added both pure assembler-side policy for one observed first-level
 integer side trace and a dormant, read-only recorder-ingress certificate for
-its admitted LOOP parent. It does **not** open side recording, assemble a
-production side trace, publish a child, patch a parent exit, or make the side
-trace enterable. `LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED` remains `1`.
+its admitted LOOP parent. The later assembler-consumption checkpoint now uses
+that policy, but still does **not** open side recording, publish a child, patch
+a parent exit, or make the side trace enterable.
+`LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED` remains `1`.
 
-`TRACE_ARM64_INT_SIDE_ADMITTED` reserves bit `0x80`, but no assembler or trace
-path sets it. The pure helpers take copied views rather than `jit_State` or a
-published `GCtrace`, so their mutation tests cannot accidentally exercise
-publication or retirement.
+`TRACE_ARM64_INT_SIDE_ADMITTED` reserves bit `0x80`. Production assembly now
+sets it only on private scratch after exact post-RA success, final snapshot
+fixup and parent revalidation. The pure helpers still take copied views rather
+than `jit_State` or a published `GCtrace`, so their mutation tests cannot
+accidentally exercise publication or retirement.
 
 The recorder-ingress helper is likewise not called from `trace_hotside()`,
 `lj_trace_ins()`, or `trace_start()`. Its caller must eventually provide either
@@ -118,25 +120,25 @@ head shuffles it into x27. The current helper now freezes that observed layout,
 including the exact post-RA register and spill bytes. Those fields force the
 current `asm_head_side()` algorithm onto its x28-to-x27 shuffle path. The later
 [head-shuffle certificate](aarch64-jit-first-side-head-shuffle-certificate-2026-08-27.md)
-now also freezes the exact parent-map provenance and emitted move. Both helpers
-remain dormant and cannot set the side admission bit; a production call site
-still needs pre-head validation under a live parent certificate. Parent
-lifetime, authenticated linking, publication order, retirement, and wider IR
-surfaces remain separate gates.
+now also freezes the exact parent-map provenance and emitted move. Production
+assembly runs the split pre-head/full helpers under the live parent certificate
+and uses its authenticated raw link target. Publication order, retirement, and
+wider IR surfaces remain separate gates.
 
 ## Validation
 
 `tools/ci/arm64_jit_side_ir_admission_contract.sh` builds the pure test against
-the experimental archive, recompiles the assembler for arm64e, asserts that no
-production call site or marker publication was added, and applies extensive
+the experimental archive, recompiles the assembler for arm64e, pins the exact
+production call and marker ordering, and applies extensive
 field, constant, IR, snapshot, footer, register, spill, and suffix mutations.
 The existing ARM64 IR-admission and fail-closed contracts remain required.
 The fail-closed umbrella invokes the side contract directly.
 
 `tools/ci/arm64_jit_side_ingress_metadata_contract.sh` runs the dedicated
 metadata/generation/owner mutation fixture, checks both public and test-helper
-symbols, audits the helper for mutation surfaces, proves there are no production
-call sites while the side recorder macro is closed, and compiles the checkpoint
+symbols, audits the helper for mutation surfaces, proves the assembler is the
+sole production certificate consumer while the side recorder macro is closed,
+and compiles the checkpoint
 and PAC-specific wrong-discriminator fixture for arm64e. The root-entry contract
 also runs that fixture against its arm64e archive so the authenticated positive
 and wrong-discriminator negative execute, rather than merely compile. The

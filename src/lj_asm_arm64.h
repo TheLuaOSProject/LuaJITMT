@@ -2017,9 +2017,11 @@ static Reg asm_head_side_base(ASMState *as, IRIns *irp)
 /* -- Tail of trace ------------------------------------------------------- */
 
 /* Fixup the tail code. */
-static void asm_tail_fixup(ASMState *as, TraceNo lnk)
+static MCode *asm_tail_fixup(ASMState *as, TraceNo lnk,
+	MCode *certified_parent_mcode)
 {
   MCode *mcp = as->mctail;
+  MCode *branchpc;
   MCode *target;
   MCode branch;
   /* Undo the sp adjustment in BC_JLOOP when exiting to the interpreter. */
@@ -2030,8 +2032,16 @@ static void asm_tail_fixup(ASMState *as, TraceNo lnk)
     *mcp++ = (A64I_ADDx^k) | A64F_D(RID_SP) | A64F_N(RID_SP);
   }
   /* Emit exit branch. */
-  target = lnk ? traceref(as->J, lnk)->mcode :
-    (MCode *)(void *)emit_asmlabel_addr(lj_vm_exit_interp);
+  if (lnk) {
+    /* All admitted non-loop ARM64 links are certified side-parent links.
+    ** Root loops use asm_loop_tail_fixup() and interpreter tails use lnk=0. */
+    if (LJ_UNLIKELY(!as->parent || certified_parent_mcode == NULL))
+      lj_trace_err(as->J, LJ_TRERR_RETRY);
+    target = certified_parent_mcode;
+  } else {
+    target = (MCode *)(void *)emit_asmlabel_addr(lj_vm_exit_interp);
+  }
+  branchpc = mcp;
   if (lj_asm_arm64_b26_encode((uintptr_t)(void *)mcp,
 	(uintptr_t)(void *)target, &branch)) {
     *mcp++ = branch;
@@ -2042,6 +2052,7 @@ static void asm_tail_fixup(ASMState *as, TraceNo lnk)
     *mcp++ = A64I_BR_AUTH | A64F_N(RID_LR);
   }
   while (as->mctop > mcp) *--as->mctop = A64I_LE(A64I_NOP);
+  return branchpc;
 }
 
 /* Prepare tail of code. */

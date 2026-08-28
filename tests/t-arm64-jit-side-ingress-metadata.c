@@ -231,7 +231,7 @@ static void side_meta_install(lua_State *L, SideMetaFixture *f)
     f->snap[i].topslot = f->pt->framesize;
     f->snap[i].nent = SIDE_META_NENT;
     f->snap[i].count = 0;
-    f->snapmap[mapofs] = SNAP(2, 0, SIDE_META_R_VALUE);
+    f->snapmap[mapofs] = SNAP(4, 0, SIDE_META_R_VALUE);
     side_meta_pack_pc(&f->snapmap[mapofs+SIDE_META_NENT],
                       &bc[footer_pc[i]], 0);
     trace_exittarget_arm64_rel(G(L), T, (ExitNo)i, fallback);
@@ -372,6 +372,12 @@ static void test_metadata_mutations(lua_State *L, SideMetaFixture *f)
   T->startins = BCINS_AJ(BC_LOOP, bc_a(f->loopins), 0);
   expect_metadata_reject(L, f);
   T->startins = f->loopins;
+  T->spadjust = 16;
+  expect_metadata_reject(L, f);
+  T->spadjust = 0;
+  T->topslot--;
+  expect_metadata_reject(L, f);
+  T->topslot = f->pt->framesize;
 
   bc_publish(f->looppc, f->loopins);
   expect_metadata_reject(L, f);
@@ -443,7 +449,9 @@ static void test_metadata_mutations(lua_State *L, SideMetaFixture *f)
   expect_metadata_reject(L, f);
   f->snapmap[selected->mapofs] = saved_entry | UINT32_C(0x00800000);
   expect_metadata_reject(L, f);
-  f->snapmap[selected->mapofs] = SNAP(2, 0, REF_DROP);
+  f->snapmap[selected->mapofs] = SNAP(2, 0, SIDE_META_R_VALUE);
+  expect_metadata_reject(L, f);
+  f->snapmap[selected->mapofs] = SNAP(4, 0, REF_DROP);
   expect_metadata_reject(L, f);
   f->snapmap[selected->mapofs] = saved_entry;
 
@@ -839,6 +847,7 @@ static void test_parent_lifetime_certificate(lua_State *L, SideMetaFixture *f)
 
   lj_trace_arm64_side_parent_clear(J);
   assert(side_parent_cert_empty(&J->arm64_side_parent));
+  assert(gc2_smr_readers_acq(g) == 0);
   lj_trace_state_store(J, LJ_TRACE_IDLE);
   lj_jit_token_release_l(L, J);
   assert(jit_token_acq(g) == 0 && jit_owner_l_acq(J) == NULL);
