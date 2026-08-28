@@ -80,6 +80,26 @@ acquire_lock() {
   } >"$lock_dir/owner" 2>/dev/null || true
 }
 
+require_fixture_sequence() {
+  region_start=$1
+  region_end=$2
+  required=$3
+  region=$(
+    awk -v start="$region_start" -v finish="$region_end" '
+      !copy && index($0, start) { copy=1 }
+      copy && index($0, finish) { exit }
+      copy { print }
+    ' "$fixture_source" | tr '\n\t' '  ' | tr -s ' '
+  )
+  case "$region" in
+    *"$required"*) ;;
+    *)
+      echo "ARM64 dynamic-args NUM fixture lost scoped proof: $required" >&2
+      exit 1
+      ;;
+  esac
+}
+
 test -f "$fixture_source"
 for required in \
   'function __arm64_pure_numeric_args(x,limit,step)' \
@@ -88,12 +108,16 @@ for required in \
   'while x<=limit do x=x+step end return x end' \
   'function __arm64_pure_numeric_args_descending(x,limit,step)' \
   'while x>limit do x=x-step end return x end' \
+  'function __arm64_pure_numeric_args_descending_inclusive' \
+  '(x,limit,step) while x>=limit do x=x-step end return x end' \
   'NUMERIC_ARGS_STRICT, BC_ISGE, 3, 4, BC_ADDVV, IR_ADD,' \
   'IR_GT, IR_LT, A64I_FADDd, 0, CC_HS, CC_LO,' \
   'NUMERIC_ARGS_INCLUSIVE, BC_ISGT, 3, 4, BC_ADDVV, IR_ADD,' \
   'IR_GE, IR_LE, A64I_FADDd, 0, CC_HI, CC_LS,' \
   'NUMERIC_ARGS_STRICT, BC_ISGE, 4, 3, BC_SUBVV, IR_SUB,' \
   'IR_LT, IR_GT, A64I_FSUBd, 1, CC_HS, CC_LO,' \
+  'NUMERIC_ARGS_INCLUSIVE, BC_ISGT, 4, 3, BC_SUBVV, IR_SUB,' \
+  'IR_LE, IR_GE, A64I_FSUBd, 1, CC_HI, CC_LS,' \
   'pt->framesize == 5 && pt->sizebc == 13 && pt->numparams == 3' \
   'pt->sizeuv == 0 && pt->sizekn == 0 && pt->sizekgc == 0' \
   'pt->flags == PROTO_HAS_RETURN' \
@@ -162,10 +186,16 @@ for required in \
   'MUTATION_FINITE, 0.75' \
   'MUTATION_FINITE, 19.75' \
   '{ 0.5, -0.625, 0.375, -0.625 },' \
+  '{ 0.375, -0.625, 0.25, -0.875 },' \
+  '{ 20.25, 0.25, 0.5, -0.25 },' \
+  '** -0.75, 0.125, or -1.125 respectively instead of -0.875.' \
   'profile->reuse.x, profile->reuse.limit, profile->reuse.step,' \
   '1.0, 0.25, 0.375, 0, 0, 0) == 0.25' \
+  '1.0, 0.25, 0.375, 0, 0, 0) == -0.125' \
   '1.0, 0.5, 0.5, 0, 0, 0) == 0.5' \
+  '1.0, 0.5, 0.5, 0, 0, 0) == 0.0' \
   '0.5, 0.5, 0.5, 0, 0, 0) == 0.5' \
+  '0.5, 0.5, 0.5, 0, 0, 0) == 0.0' \
   '0.625, 1.0, 0.375, 0, 0, 0) == 1.375' \
   '1.0, 1.0, 0.375, 0, 0, 0) == 1.375' \
   'expect_native_exit(X_OR_STEP_TYPE_EXIT, X_OR_STEP_TYPE_EXIT);' \
@@ -182,35 +212,119 @@ for required in \
   'function __arm64_fixed_half_inclusive(limit) local x=0.5' \
   'function __arm64_fixed_initializer_descending(limit,step) local x=20.5' \
   'function __arm64_fixed_half_descending(limit) local x=20.5' \
+  'function __arm64_fixed_initializer_descending_inclusive(limit,step)' \
+  'function __arm64_fixed_half_descending_inclusive(limit) local x=20.5' \
+  'expect_no_trace(L, "__arm64_fixed_initializer_descending_inclusive");' \
+  'expect_no_trace(L, "__arm64_fixed_half_descending_inclusive");' \
   'function __arm64_args_negative(x,limit,step)' \
   'while x<limit do x=x-step end return x end' \
   'while x<limit do x=x*step end return x end' \
   'while x<limit do x=x/step end return x end' \
   'while x>limit do x=x+step end return x end' \
   'while x>=limit do x=x+step end return x end' \
+  'expect_no_trace(L, "__arm64_args_ge");' \
   'while limit>=x do x=x+step end return x end' \
   'while x<=limit do x=step+x end return x end' \
   'while x<limit do x=x+step+step end return x end' \
   'while x<=limit do x=x+step+step end return x end' \
-  'function __arm64_args_descending_inclusive(x,limit,step)' \
-  'while x>=limit do x=x-step end return x end' \
   'function __arm64_args_inclusive_sub(x,limit,step)' \
   'while x<=limit do x=x-step end return x end' \
   'function __arm64_args_descending_mul(x,limit,step)' \
   'while x>limit do x=x*step end return x end' \
+  'function __arm64_args_descending_inclusive_mul(x,limit,step)' \
+  'while x>=limit do x=x*step end return x end' \
+  'expect_no_trace(L, "__arm64_args_descending_inclusive_mul");' \
   'function __arm64_args_descending_div(x,limit,step)' \
   'while x>limit do x=x/step end return x end' \
+  'function __arm64_args_descending_inclusive_div(x,limit,step)' \
+  'while x>=limit do x=x/step end return x end' \
+  'expect_no_trace(L, "__arm64_args_descending_inclusive_div");' \
   'function __arm64_args_reversed_descending_compare(x,limit,step)' \
   'while limit<x do x=x-step end return x end' \
+  'function __arm64_args_reversed_descending_inclusive_compare' \
+  '(x,limit,step) while limit<=x do x=x-step end return x end' \
+  'expect_no_trace(L, "__arm64_args_reversed_descending_inclusive_compare");' \
   'function __arm64_args_reversed_sub(x,limit,step)' \
   'while x>limit do x=step-x end return x end' \
+  'function __arm64_args_reversed_inclusive_sub(x,limit,step)' \
+  'while x>=limit do x=step-x end return x end' \
+  'expect_no_trace(L, "__arm64_args_reversed_inclusive_sub");' \
   'function __arm64_args_extra_sub(x,limit,step)' \
   'while x>limit do x=x-step-step end return x end' \
+  'function __arm64_args_extra_inclusive_sub(x,limit,step)' \
+  'while x>=limit do x=x-step-step end return x end' \
+  'expect_no_trace(L, "__arm64_args_extra_inclusive_sub");' \
+  'test_positive_and_guard_exits(&strict_profile);' \
+  'test_positive_and_guard_exits(&inclusive_profile);' \
   'test_positive_and_guard_exits(&descending_profile);' \
+  'test_positive_and_guard_exits(&descending_inclusive_profile);' \
   'run_lua(L, "jit.flush()")' \
   'proto_trace_acq(pt) == 0'; do
   grep -F "$required" "$fixture_source" >/dev/null || {
     echo "ARM64 dynamic-args NUM fixture lost proof: $required" >&2
+    exit 1
+  }
+done
+
+for required in \
+  'if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING) { test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_QNAN_X, profile->mutation.x, MUTATION_QNAN, 0.0);' \
+  'test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile, POSTADMISSION_PINF_X, profile->mutation.x);' \
+  'test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_NINF_X, profile->mutation.x, MUTATION_NINF, 0.0);' \
+  'test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_QNAN_LIMIT, profile->mutation.limit, MUTATION_FINITE, 19.75);' \
+  'test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_PINF_LIMIT, profile->mutation.limit, MUTATION_FINITE, 19.75);' \
+  'test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile, POSTADMISSION_NINF_LIMIT, profile->mutation.limit);' \
+  'test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_QNAN_STEP, profile->mutation.step, MUTATION_QNAN, 0.0);' \
+  'test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_PINF_STEP, profile->mutation.step, MUTATION_NINF, 0.0);' \
+  'test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile, POSTADMISSION_NINF_STEP, profile->mutation.step);'; do
+  require_fixture_sequence \
+    'test_xpoll_lifecycle(L, pt, idle_vmstate, profile);' \
+    '} else {' "$required"
+done
+
+for required in \
+  'if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING && profile->comparison == NUMERIC_ARGS_INCLUSIVE) {' \
+  'assert(call_triple(L, profile->name, 1.0, 0.25, 0.375, 0, 0, 0) == -0.125); expect_single_exit(FINAL_EXIT);' \
+  'assert(call_triple(L, profile->name, 1.0, 0.5, 0.5, 0, 0, 0) == 0.0); expect_single_exit(FINAL_EXIT);' \
+  'assert(call_triple(L, profile->name, 0.5, 0.5, 0.5, 0, 0, 0) == 0.0); expect_single_exit(PRECOND_EXIT);'; do
+  require_fixture_sequence \
+    '/* The same trace must consume different accumulator' \
+    'test_xpoll_lifecycle(L, pt, idle_vmstate, profile);' "$required"
+done
+
+test "$(grep -Fc 'test_positive_and_guard_exits(&' \
+  "$fixture_source")" -eq 4 || {
+  echo "ARM64 dynamic-args NUM fixture lost a positive profile" >&2
+  exit 1
+}
+for profile in strict_profile inclusive_profile descending_profile \
+  descending_inclusive_profile; do
+  test "$(grep -Fc \
+    "test_positive_and_guard_exits(&$profile);" "$fixture_source")" -eq 1 || {
+    echo "ARM64 dynamic-args NUM fixture lost exact $profile invocation" >&2
+    exit 1
+  }
+done
+
+# Keep the fail-closed proof bodies live: source-token checks alone would not
+# detect main() silently ceasing to execute one of their containing suites.
+main_region=$(
+  awk '
+    /^int main\(int argc, char \*\*argv\)/ { copy=1 }
+    copy { print }
+    copy && /^#else/ { exit }
+  ' "$fixture_source"
+)
+test -n "$main_region"
+for suite in \
+  test_fixed_initializers_remain_separate \
+  test_sub_rejected \
+  test_mul_rejected \
+  test_div_rejected \
+  test_adjacent_comparisons_rejected \
+  test_extra_add_rejected \
+  test_descending_adjacent_rejected; do
+  test "$(printf '%s\n' "$main_region" | grep -Fc "$suite();")" -eq 1 || {
+    echo "ARM64 dynamic-args NUM fixture lost exact $suite invocation" >&2
     exit 1
   }
 done
@@ -362,4 +476,4 @@ while test "$run" -le "$pauth_runs"; do
   run=$((run+1))
 done
 
-echo "arm64_jit_pure_numeric_args_contract OK: ascending ADD and descending SUB dynamic-accumulator NUM roots and lifecycle proved on ARM64/arm64e"
+echo "arm64_jit_pure_numeric_args_contract OK: ADD_LT/ADD_LE/SUB_GT/SUB_GE dynamic-accumulator NUM roots and lifecycle proved on ARM64/arm64e"
