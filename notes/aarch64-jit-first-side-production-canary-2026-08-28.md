@@ -113,6 +113,16 @@ publishing IDLE and releasing the recorder token, while retaining the existing
 global mirror store. The native-loop post-admission profile/re-entry scenario
 dynamically covers the in-call abort and immediate root re-entry.
 
+After that repair, the complete
+`tools/ci/arm64_jit_fail_closed_gate.sh` umbrella passed from a clean restart.
+The run covered the production first-side canary, native LOOP/FORL/JFUNCF
+entry, randomized arm64 and arm64e/BTI authenticated exits, live trace
+flush/reuse, recorder and VM safepoints, and every earlier fail-closed source
+contract. In particular, all four native-loop executions passed across the
+strict arm64 and arm64e variants, including the profile/exit/re-entry sequence
+that originally exposed the stale TG state. The only repeated diagnostic was
+the same pre-existing unused `ccall_rawchild_wait` warning.
+
 ## Next step
 
 Generalize one certificate dimension at a time while retaining the same
