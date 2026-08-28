@@ -9962,6 +9962,7 @@ static LJ_AINLINE void trace_pendpatch(jit_State *J, int force)
 static void trace_terminal_release(lua_State *L, jit_State *J)
 {
   global_State *g = J2G(J);
+  TGState *tg = L ? L2TG(L) : NULL;
 #if LJ_TARGET_ARM64
   /* A completed first-side transaction moved its one-shot seam to DONE.
   ** Every other terminal path converts a retained ACTIVE claim to ABORTED. */
@@ -9973,6 +9974,12 @@ static void trace_terminal_release(lua_State *L, jit_State *J)
 	     "ARM64 side-parent certificate reached terminal release");
   lj_trace_arm64_side_parent_clear(J);
 #endif
+  /* lj_vm_cpcall returns through the C unwind landing even though recorder
+  ** completion resumes the interrupted Lua interpreter frame. Restore both
+  ** VM-state mirrors before making IDLE/token handoff visible; otherwise an
+  ** in-call side abort can make the next checked native entry look like C. */
+  if (tg != NULL)
+    lj_tg_vmstate_store_rel(tg, (int32_t)~LJ_VMST_INTERP);
   setvmstate(g, INTERP);
   lj_trace_state_store(J, LJ_TRACE_IDLE);
   lj_jit_token_release_l(L, J);

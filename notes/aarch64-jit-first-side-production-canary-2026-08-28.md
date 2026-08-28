@@ -102,6 +102,17 @@ recorder safepoint contract independently pins the same mutation boundaries
 and cleanup order. The only focused build diagnostic was the pre-existing
 unused `ccall_rawchild_wait` warning.
 
+The first umbrella run exposed an adjacent terminal-state bug: an unsupported
+side attempt could enter the recorder, reject in its bounded grammar, and
+return through `lj_vm_cpcall`'s C unwind landing. Generic terminal release had
+restored only the legacy universe-global VM-state mirror, leaving the physical
+TG marked as C while the same Lua frame continued in the interpreter. The next
+checked JLOOP entry therefore rejected until a later VM boundary repaired the
+TG state. `trace_terminal_release` now restores the owner TG to INTERP before
+publishing IDLE and releasing the recorder token, while retaining the existing
+global mirror store. The native-loop post-admission profile/re-entry scenario
+dynamically covers the in-call abort and immediate root re-entry.
+
 ## Next step
 
 Generalize one certificate dimension at a time while retaining the same

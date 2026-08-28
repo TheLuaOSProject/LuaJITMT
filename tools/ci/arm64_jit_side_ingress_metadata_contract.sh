@@ -302,8 +302,16 @@ require_order "$terminal_region" \
   'terminal assertion before defensive clear'
 require_order "$terminal_region" \
   'lj_trace_arm64_side_parent_clear(J);' \
+  'lj_tg_vmstate_store_rel(tg, (int32_t)~LJ_VMST_INTERP);' \
+  'terminal clear before TG interpreter-state restoration'
+require_order "$terminal_region" \
+  'lj_tg_vmstate_store_rel(tg, (int32_t)~LJ_VMST_INTERP);' \
+  'setvmstate(g, INTERP);' \
+  'terminal TG interpreter-state restoration before legacy mirror'
+require_order "$terminal_region" \
+  'setvmstate(g, INTERP);' \
   'lj_trace_state_store(J, LJ_TRACE_IDLE);' \
-  'terminal clear before IDLE publication'
+  'terminal VM-state restoration before IDLE publication'
 require_order "$terminal_region" \
   'lj_trace_state_store(J, LJ_TRACE_IDLE);' 'lj_jit_token_release_l(L, J);' \
   'terminal IDLE publication before token release'

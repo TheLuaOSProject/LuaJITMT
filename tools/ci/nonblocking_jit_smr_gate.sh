@@ -97,10 +97,10 @@ fi
 terminal=$(sed -n '/^static void trace_terminal_release(/,/^}/p' \
   "$ROOT/src/lj_trace.c")
 terminal_order=$(printf '%s\n' "$terminal" | rg -o \
-  'setvmstate|lj_trace_state_store|lj_jit_token_release_l|lj_dispatch_update' | \
+  'lj_tg_vmstate_store_rel|setvmstate|lj_trace_state_store|lj_jit_token_release_l|lj_dispatch_update' | \
   tr '\n' ' ')
 if [ "$terminal_order" != \
-     "setvmstate lj_trace_state_store lj_jit_token_release_l lj_dispatch_update " ]; then
+     "lj_tg_vmstate_store_rel setvmstate lj_trace_state_store lj_jit_token_release_l lj_dispatch_update " ]; then
   printf 'unexpected terminal recorder release order: %s\n' \
     "$terminal_order" >&2
   bad=1
