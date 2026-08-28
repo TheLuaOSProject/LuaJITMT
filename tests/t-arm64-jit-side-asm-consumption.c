@@ -42,7 +42,19 @@ enum {
   PROBE_PARENT = 1,
   PROBE_CHILD = 2,
   PROBE_EXIT = 2,
-  PROBE_CONTINUATION_POS = 13
+  PROBE_CHILD_EXIT = 3,
+  PROBE_CONTINUATION_POS = 13,
+  PROBE_TOPSLOT = 5,
+  PROBE_CHILD_NSNAP = 5,
+  PROBE_CHILD_NSNAPMAP = 17,
+  PROBE_CHILD_K_ONE = REF_TRUE-1u,
+  PROBE_CHILD_R_PARENT = REF_BASE+1u,
+  PROBE_CHILD_R_CGET = REF_BASE+2u,
+  PROBE_CHILD_R_ADD = REF_BASE+3u,
+  PROBE_CHILD_R_LIMIT = REF_BASE+4u,
+  PROBE_CHILD_R_GT = REF_BASE+5u,
+  PROBE_CHILD_R_XPOLL = REF_BASE+6u,
+  PROBE_CHILD_SEMANTIC_NINS = REF_BASE+7u
 };
 
 static void run_lua(lua_State *L, const char *chunk)
@@ -171,6 +183,95 @@ static void expect_root_shape(jit_State *J, GCproto *pt, GCtrace **rootp,
   *continuationp = continuation;
 }
 
+/* The probe aborts before trace_stop(), so the recorder scratch is the only
+** surviving copy of the child's semantic IR and snapshots. Register
+** allocation is instead certified by the PREHEAD/POSTRA probe stages below;
+** its compact body has already been retired when this helper runs. */
+static void expect_aborted_child_shape(jit_State *J, GCproto *pt,
+	const BCIns *continuation)
+{
+  static const IRRef snaprefs[PROBE_CHILD_NSNAP] = {
+    PROBE_CHILD_R_CGET, PROBE_CHILD_R_ADD, PROBE_CHILD_R_LIMIT,
+    PROBE_CHILD_R_GT, PROBE_CHILD_R_XPOLL
+  };
+  static const MSize mapofs[PROBE_CHILD_NSNAP] = { 0, 3, 7, 11, 14 };
+  static const uint8_t nent[PROBE_CHILD_NSNAP] = { 1, 2, 2, 1, 1 };
+  static const uint8_t nslots[PROBE_CHILD_NSNAP] = { 5, 6, 6, 5, 5 };
+  static const MSize pcpos[PROBE_CHILD_NSNAP] = { 13, 14, 3, 17, 7 };
+  GCtrace *child = &J->cur;
+  IRIns *ir = trace_ir_acq(child);
+  SnapShot *snap = trace_snap_acq(child);
+  SnapEntry *snapmap = trace_snapmap_acq(child);
+  IRIns ins;
+  SnapNo snapno;
+
+  assert(trace_traceno_acq(child) == 0);  /* Terminal abort owns no slot. */
+  assert(trace_root_acq(child) == PROBE_PARENT);
+  assert(trace_link_acq(child) == 0);
+  assert(trace_linktype_acq(child) == LJ_TRLINK_NONE);
+  assert(trace_startpt_acq(child) == pt);
+  assert(trace_startpc_acq(child) == continuation);
+  assert(trace_startins_acq(child) == BCINS_AD(BC_JMP, 0, 0));
+  assert(trace_topslot_acq(child) == PROBE_TOPSLOT);
+  assert(trace_spadjust_acq(child) == 0);
+  assert(trace_nk_acq(child) == PROBE_CHILD_K_ONE);
+  assert(trace_nins_acq(child) == PROBE_CHILD_SEMANTIC_NINS+1u);
+  assert(trace_nsnap_acq(child) == PROBE_CHILD_NSNAP);
+  assert(trace_nsnapmap_acq(child) == PROBE_CHILD_NSNAPMAP);
+  assert(ir != NULL && snap != NULL && snapmap != NULL);
+
+#define EXPECT_ABORTED_CHILD_IR(ref, op, type, a, b) \
+  do { \
+    ins = ir_load_acq(&ir[(ref)]); \
+    assert(ins.o == (op) && ins.t.irt == (type)); \
+    assert(ins.op1 == (a) && ins.op2 == (b)); \
+  } while (0)
+  EXPECT_ABORTED_CHILD_IR(REF_BASE, IR_BASE, IRT_PGC,
+	PROBE_PARENT, PROBE_EXIT);
+  EXPECT_ABORTED_CHILD_IR(PROBE_CHILD_R_PARENT, IR_SLOAD, IRT_INT, 4,
+	IRSLOAD_PARENT|IRSLOAD_INHERIT);
+  EXPECT_ABORTED_CHILD_IR(PROBE_CHILD_R_CGET, IR_NOP, IRT_NIL, 0, 0);
+  EXPECT_ABORTED_CHILD_IR(PROBE_CHILD_R_ADD, IR_ADDOV,
+	IRT_INT|IRT_GUARD, PROBE_CHILD_R_PARENT, PROBE_CHILD_K_ONE);
+  EXPECT_ABORTED_CHILD_IR(PROBE_CHILD_R_LIMIT, IR_SLOAD,
+	IRT_INT|IRT_GUARD, 2, IRSLOAD_TYPECHECK);
+  EXPECT_ABORTED_CHILD_IR(PROBE_CHILD_R_GT, IR_GT, IRT_INT|IRT_GUARD,
+	PROBE_CHILD_R_LIMIT, PROBE_CHILD_R_ADD);
+  EXPECT_ABORTED_CHILD_IR(PROBE_CHILD_R_XPOLL, IR_XPOLL,
+	IRT_NIL|IRT_GUARD, 1, 0);
+  EXPECT_ABORTED_CHILD_IR(PROBE_CHILD_SEMANTIC_NINS, IR_NOP,
+	IRT_NIL, 0, 0);
+#undef EXPECT_ABORTED_CHILD_IR
+  ins = ir_load_acq(&ir[PROBE_CHILD_K_ONE]);
+  assert(ins.o == IR_KINT && ins.t.irt == IRT_INT && ins.i == 1);
+
+  for (snapno = 0; snapno < PROBE_CHILD_NSNAP; snapno++) {
+    SnapShot *ss = &snap[snapno];
+    assert(snap_ref_acq(ss) == snaprefs[snapno]);
+    assert(snap_mapofs_acq(ss) == mapofs[snapno]);
+    assert(snap_nent_acq(ss) == nent[snapno]);
+    assert(snap_nslots_acq(ss) == nslots[snapno]);
+    assert(snap_topslot_acq(ss) == PROBE_TOPSLOT);
+    assert(snap_pc_acq(&snapmap[mapofs[snapno]+nent[snapno]]) ==
+	   proto_bc(pt)+pcpos[snapno]);
+  }
+  assert(snap_ref_acq(&snap[PROBE_CHILD_EXIT]) == PROBE_CHILD_R_GT);
+  assert(snapentry_acq(&snapmap[0]) ==
+	 SNAP(4, 0, PROBE_CHILD_R_PARENT));
+  assert(snapentry_acq(&snapmap[3]) ==
+	 SNAP(4, 0, PROBE_CHILD_R_PARENT));
+  assert(snapentry_acq(&snapmap[4]) ==
+	 SNAP(5, 0, PROBE_CHILD_R_PARENT));
+  assert(snapentry_acq(&snapmap[7]) ==
+	 SNAP(4, 0, PROBE_CHILD_R_ADD));
+  assert(snapentry_acq(&snapmap[8]) ==
+	 SNAP(5, 0, PROBE_CHILD_R_ADD));
+  assert(snapentry_acq(&snapmap[11]) ==
+	 SNAP(4, 0, PROBE_CHILD_R_ADD));
+  assert(snapentry_acq(&snapmap[14]) ==
+	 SNAP(4, 0, PROBE_CHILD_R_ADD));
+}
+
 static void dump_probe(const LJArm64SideAsmProbe *probe)
 {
   fprintf(stderr,
@@ -286,6 +387,10 @@ int main(void)
   if (probe.stages != LJ_ARM64_SIDE_ASM_PROBE_ALL)
     dump_probe(&probe);
   assert(probe.stages == LJ_ARM64_SIDE_ASM_PROBE_ALL);
+  /* These stages are recorded only after the real compact body proves
+  ** PARENT=x27, semantic CGET NOP=INIT, ADD=x28 and LIMIT=x27. */
+  assert((probe.stages & LJ_ARM64_SIDE_ASM_PROBE_PREHEAD) != 0);
+  assert((probe.stages & LJ_ARM64_SIDE_ASM_PROBE_POSTRA) != 0);
   assert(probe.compact_geometry_reject == 1);
   assert(probe.compact_init == 1);
   assert(probe.compact_reset == 1);
@@ -330,13 +435,17 @@ int main(void)
   assert(probe.tail_ins == expected_tail);
   assert(probe.marker == TRACE_ARM64_INT_SIDE_ADMITTED);
 
+  /* This inspects only private recorder buffers after the synchronous abort;
+  ** it neither obtains nor publishes a trace-slot identity. */
+  expect_aborted_child_shape(J, pt, continuation);
+
   assert(lj_trace_test_mcode_retries() == 1);
   assert(lj_trace_test_abort_count() == 2);
   assert(lj_trace_test_last_abort_error() == LJ_TRERR_NYIIR);
   assert(lj_trace_test_exittab_allocs() == 2);
   assert(lj_trace_test_exittab_frees() == 2);
-  assert(lj_trace_test_exittab_last_alloc_slots() == 5);
-  assert(lj_trace_test_exittab_last_free_slots() == 5);
+  assert(lj_trace_test_exittab_last_alloc_slots() == 6);
+  assert(lj_trace_test_exittab_last_free_slots() == 6);
 
   /* The private side was discarded before trace_stop/publication. */
   slot2 = traceref_safe(J, PROBE_CHILD);

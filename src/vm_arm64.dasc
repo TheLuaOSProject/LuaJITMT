@@ -2392,7 +2392,8 @@ static void build_subroutines(BuildCtx *ctx)
   |  br_auth RB
   |
   |6:  // Dispatch a local cell opcode without function-header reshaping.
-  |  ldr RB, [TMP1, #GG_G2DISP]
+  |  add TMP0, DISPATCH, INS, uxtb #3
+  |  ldr RB, [TMP0]
   |   decode_RA RA, INS
   |   lsr RC, INS, #16
   |  br_auth RB

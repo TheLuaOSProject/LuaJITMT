@@ -71,6 +71,32 @@ LJ_FUNC LJTraceArm64SideParentResult
 lj_trace_arm64_side_parent_capture(jit_State *J);
 LJ_FUNC LJTraceArm64SideParentResult
 lj_trace_arm64_side_parent_revalidate(jit_State *J);
+#if defined(LJ_TRACE_TEST_HELPERS) && \
+    defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST)
+enum {
+  LJ_TRACE_ARM64_FIRST_SIDE_PUBLISH_IDLE,
+  LJ_TRACE_ARM64_FIRST_SIDE_PUBLISH_CONFIGURING,
+  LJ_TRACE_ARM64_FIRST_SIDE_PUBLISH_ARMED,
+  LJ_TRACE_ARM64_FIRST_SIDE_PUBLISH_ACTIVE,
+  LJ_TRACE_ARM64_FIRST_SIDE_PUBLISH_DONE,
+  LJ_TRACE_ARM64_FIRST_SIDE_PUBLISH_ABORTED
+};
+typedef struct LJTraceArm64FirstSidePublishProbe {
+  uint32_t state;
+  uint32_t attempts;
+  uint32_t publishes;
+  uint32_t failure;
+  TraceNo parent;
+  TraceNo child;
+  ExitNo exitno;
+} LJTraceArm64FirstSidePublishProbe;
+LJ_FUNC int lj_trace_test_arm64_first_side_publish_arm(
+  jit_State *J, TraceNo parent, ExitNo exitno);
+LJ_FUNC int lj_trace_test_arm64_first_side_publish_read(
+  LJTraceArm64FirstSidePublishProbe *out);
+LJ_FUNC int lj_trace_test_arm64_first_side_publish_asm_authorized(
+  jit_State *J);
+#endif
 #if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
 /* Test-only real-body round trip through the production compact initializer
 ** and rollback constructor. All result words are exact booleans. */

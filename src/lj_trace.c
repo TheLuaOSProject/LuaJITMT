@@ -3948,7 +3948,10 @@ static int trace_root_entry_loop_view_acq(const GCtrace *T, TraceNo traceno,
   v->traceno = trace_traceno_acq(T);
   v->admission = la_load8_acq(&T->unused1);
   return v->retire_epoch == 0 && v->traceno == traceno &&
-	 trace_root_acq(T) == 0 && v->nextside == 0 && v->nchild == 0 &&
+	 trace_root_acq(T) == 0 &&
+	 ((v->nextside == 0 && v->nchild == 0) ||
+	  (sourceop == (uint32_t)BC_JLOOP && v->nextside != 0 &&
+	   v->nextside != traceno && v->nchild == 1)) &&
 	 (function_root ?
 	  (v->link == 0 && v->linktype == LJ_TRLINK_RETURN &&
 	   v->mcloop == 0 && v->spadjust == 0) :
@@ -4732,9 +4735,167 @@ lj_trace_arm64_side_parent_revalidate(jit_State *J)
   return result;
 }
 
-#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
-static uint32_t trace_test_arm64_side_publish_seal_failure;
-static uint32_t trace_test_arm64_side_publish_raw_negative;
+#if defined(LJ_TRACE_TEST_HELPERS) && \
+    defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST)
+typedef struct TraceArm64FirstSidePublishTestState {
+  uint32_t state;
+  uint32_t attempts;
+  uint32_t publishes;
+  uint32_t failure;
+  jit_State *J;
+  TraceNo parent;
+  TraceNo child;
+  ExitNo exitno;
+} TraceArm64FirstSidePublishTestState;
+
+static TraceArm64FirstSidePublishTestState
+  trace_test_arm64_first_side_publish;
+
+static int trace_arm64_first_side_publish_test_identity(jit_State *J,
+	TraceNo parent, ExitNo exitno, uint32_t state)
+{
+  return la_load32_acq(&trace_test_arm64_first_side_publish.state) == state &&
+	trace_test_arm64_first_side_publish.J == J &&
+	trace_test_arm64_first_side_publish.parent == parent &&
+	trace_test_arm64_first_side_publish.exitno == exitno;
+}
+
+int lj_trace_test_arm64_first_side_publish_arm(jit_State *J,
+	TraceNo parent, ExitNo exitno)
+{
+  uint32_t old;
+  if (J == NULL || parent == 0)
+    return 0;
+  old = la_load32_acq(&trace_test_arm64_first_side_publish.state);
+  for (;;) {
+    if (old != LJ_TRACE_ARM64_FIRST_SIDE_PUBLISH_IDLE)
+      return 0;
+    if (la_cas32(&trace_test_arm64_first_side_publish.state, &old,
+	  LJ_TRACE_ARM64_FIRST_SIDE_PUBLISH_CONFIGURING,
+	  LA_ACQ_REL, LA_ACQ))
+      break;
+  }
+  trace_test_arm64_first_side_publish.J = J;
+  trace_test_arm64_first_side_publish.parent = parent;
+  trace_test_arm64_first_side_publish.child = 0;
+  trace_test_arm64_first_side_publish.exitno = exitno;
+  la_store32_rel(&trace_test_arm64_first_side_publish.attempts, 0);
+  la_store32_rel(&trace_test_arm64_first_side_publish.publishes, 0);
+  la_store32_rel(&trace_test_arm64_first_side_publish.failure, 0);
+  la_store32_rel(&trace_test_arm64_first_side_publish.state,
+	LJ_TRACE_ARM64_FIRST_SIDE_PUBLISH_ARMED);
+  return 1;
+}
+
+static int trace_arm64_first_side_publish_test_armed(jit_State *J,
+	TraceNo parent, ExitNo exitno)
+{
+  return trace_arm64_first_side_publish_test_identity(
+	J, parent, exitno, LJ_TRACE_ARM64_FIRST_SIDE_PUBLISH_ARMED);
+}
+
+static int trace_arm64_first_side_publish_test_claim(jit_State *J,
+	TraceNo parent, ExitNo exitno)
+{
+  uint32_t expect = LJ_TRACE_ARM64_FIRST_SIDE_PUBLISH_ARMED;
+  if (!trace_arm64_first_side_publish_test_armed(J, parent, exitno) ||
+	!la_cas32(&trace_test_arm64_first_side_publish.state, &expect,
+	  LJ_TRACE_ARM64_FIRST_SIDE_PUBLISH_ACTIVE, LA_ACQ_REL, LA_ACQ))
+    return 0;
+  la_store32_rel(&trace_test_arm64_first_side_publish.attempts, 1);
+  return trace_arm64_first_side_publish_test_identity(
+	J, parent, exitno, LJ_TRACE_ARM64_FIRST_SIDE_PUBLISH_ACTIVE);
+}
+
+static int trace_arm64_first_side_publish_test_active(jit_State *J,
+	TraceNo parent, ExitNo exitno)
+{
+  return trace_arm64_first_side_publish_test_identity(
+	J, parent, exitno, LJ_TRACE_ARM64_FIRST_SIDE_PUBLISH_ACTIVE);
+}
+
+int lj_trace_test_arm64_first_side_publish_asm_authorized(jit_State *J)
+{
+  return J != NULL &&
+	trace_arm64_first_side_publish_test_active(J, J->parent, J->exitno) &&
+	trace_arm64_side_parent_asm_owner_base(J, NULL);
+}
+
+static void trace_arm64_first_side_publish_test_failure(jit_State *J,
+	uint32_t failure)
+{
+  uint32_t expected = 0;
+  if (J != NULL && failure != 0 &&
+	trace_arm64_first_side_publish_test_active(J, J->parent, J->exitno))
+    (void)la_cas32(&trace_test_arm64_first_side_publish.failure, &expected,
+	failure, LA_ACQ_REL, LA_ACQ);
+}
+
+static void trace_arm64_first_side_publish_test_cancel(jit_State *J)
+{
+  uint32_t expect = LJ_TRACE_ARM64_FIRST_SIDE_PUBLISH_ACTIVE;
+  if (J != NULL &&
+	la_load32_acq(&trace_test_arm64_first_side_publish.state) == expect &&
+	trace_test_arm64_first_side_publish.J == J)
+    (void)la_cas32(&trace_test_arm64_first_side_publish.state, &expect,
+	LJ_TRACE_ARM64_FIRST_SIDE_PUBLISH_ABORTED, LA_ACQ_REL, LA_ACQ);
+}
+
+static void trace_arm64_first_side_publish_test_complete(jit_State *J,
+	TraceNo child)
+{
+  uint32_t expect = LJ_TRACE_ARM64_FIRST_SIDE_PUBLISH_ACTIVE;
+  if (LJ_UNLIKELY(J == NULL || child == 0 ||
+	trace_test_arm64_first_side_publish.J != J ||
+	la_load32_acq(&trace_test_arm64_first_side_publish.failure) != 0))
+    abort();
+  trace_test_arm64_first_side_publish.child = child;
+  la_store32_rel(&trace_test_arm64_first_side_publish.publishes, 1);
+  if (LJ_UNLIKELY(!la_cas32(&trace_test_arm64_first_side_publish.state,
+	&expect, LJ_TRACE_ARM64_FIRST_SIDE_PUBLISH_DONE,
+	LA_ACQ_REL, LA_ACQ)))
+    abort();
+}
+
+int lj_trace_test_arm64_first_side_publish_read(
+	LJTraceArm64FirstSidePublishProbe *out)
+{
+  uint32_t first, second;
+  if (out == NULL)
+    return 0;
+  memset(out, 0, sizeof(*out));
+  first = la_load32_acq(&trace_test_arm64_first_side_publish.state);
+  out->state = first;
+  out->attempts =
+    la_load32_acq(&trace_test_arm64_first_side_publish.attempts);
+  out->publishes =
+    la_load32_acq(&trace_test_arm64_first_side_publish.publishes);
+  out->failure =
+    la_load32_acq(&trace_test_arm64_first_side_publish.failure);
+  /* CONFIGURING precedes the release publication of the immutable selector
+  ** payload. ACTIVE permits complete() to write child before its DONE release.
+  ** Never touch either set of plain fields until the corresponding acquire
+  ** state makes the read data-race-free. */
+  if (first >= LJ_TRACE_ARM64_FIRST_SIDE_PUBLISH_ARMED) {
+    out->parent = trace_test_arm64_first_side_publish.parent;
+    out->exitno = trace_test_arm64_first_side_publish.exitno;
+  }
+  if (first == LJ_TRACE_ARM64_FIRST_SIDE_PUBLISH_DONE)
+    out->child = trace_test_arm64_first_side_publish.child;
+  second = la_load32_acq(&trace_test_arm64_first_side_publish.state);
+  if (first != second)
+    return 0;
+  out->state = second;
+  return second == LJ_TRACE_ARM64_FIRST_SIDE_PUBLISH_DONE;
+}
+#else
+#define trace_arm64_first_side_publish_test_armed(J, parent, exitno) 0
+#define trace_arm64_first_side_publish_test_claim(J, parent, exitno) 0
+#define trace_arm64_first_side_publish_test_active(J, parent, exitno) 0
+#define trace_arm64_first_side_publish_test_failure(J, failure) ((void)0)
+#define trace_arm64_first_side_publish_test_cancel(J) ((void)0)
+#define trace_arm64_first_side_publish_test_complete(J, child) ((void)0)
+#endif
 
 typedef struct TraceArm64SidePublishPlan {
   TraceVec *tracev;
@@ -4753,6 +4914,25 @@ typedef struct TraceArm64SidePublishPlan {
   MSize parent_topslot;
   MSize child_topslot;
 } TraceArm64SidePublishPlan;
+
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
+static uint32_t trace_test_arm64_side_publish_seal_failure;
+static uint32_t trace_test_arm64_side_publish_raw_negative;
+#endif
+
+static void trace_arm64_side_publish_note_failure(jit_State *J,
+	uint32_t failure)
+{
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
+  UNUSED(J);
+  la_store32_rel(&trace_test_arm64_side_publish_seal_failure, failure);
+#elif defined(LJ_TRACE_TEST_HELPERS) && \
+    defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST)
+  trace_arm64_first_side_publish_test_failure(J, failure);
+#else
+  UNUSED(J); UNUSED(failure);
+#endif
+}
 
 /* Reconstruct the exact allocator contract captured by lj_trace_alloc(). The
 ** token-private J->curfinal identity owns this allocation, while the stored
@@ -4862,7 +5042,7 @@ static int trace_arm64_side_publish_child_valid(jit_State *J, GCtrace *T,
   exittab = trace_exittab_acq(T);
   exitstub = trace_exitstub_acq(T);
   nexits = trace_exittab_nslots_acq(T);
-  if (nsnap == 0 || nsnap != 4u || trace_nsnapmap_acq(T) != 13u ||
+  if (nsnap == 0 || nsnap != 5u || trace_nsnapmap_acq(T) != 17u ||
       mcode == NULL || szmcode <= sizeof(MCode) ||
       (szmcode & (sizeof(MCode)-1u)) != 0 ||
       ((uintptr_t)(void *)mcode & (sizeof(MCode)-1u)) != 0 ||
@@ -4940,25 +5120,55 @@ static int trace_arm64_side_publish_child_valid(jit_State *J, GCtrace *T,
   return 1;
 
 fail_current:
-  la_store32_rel(&trace_test_arm64_side_publish_seal_failure, 1);
+  trace_arm64_side_publish_note_failure(J, 1);
   return 0;
 fail_body:
-  la_store32_rel(&trace_test_arm64_side_publish_seal_failure, 2);
+  trace_arm64_side_publish_note_failure(J, 2);
   return 0;
 fail_mcode:
-  la_store32_rel(&trace_test_arm64_side_publish_seal_failure, 3);
+  trace_arm64_side_publish_note_failure(J, 3);
   return 0;
 fail_layout:
-  la_store32_rel(&trace_test_arm64_side_publish_seal_failure, 4);
+  trace_arm64_side_publish_note_failure(J, 4);
   return 0;
 fail_exittab:
-  la_store32_rel(&trace_test_arm64_side_publish_seal_failure, 5);
+  trace_arm64_side_publish_note_failure(J, 5);
   return 0;
 fail_postra:
-  la_store32_rel(&trace_test_arm64_side_publish_seal_failure, 6);
+  trace_arm64_side_publish_note_failure(J, 6);
   return 0;
 }
 
+/* Capture every direct destination while a short-lived SMR reader protects
+** the parent generation. This remains rollback-capable and leaves no reader
+** on either result. */
+static LJTraceArm64SideParentResult trace_arm64_side_publish_plan_prepare(
+	jit_State *J, GCtrace *T, TraceArm64SidePublishPlan *plan)
+{
+  LJTraceArm64SideParentCert cert;
+  TraceArm64FirstSideLoopView parentview;
+  global_State *g;
+  LJTraceArm64SideParentResult result = LJ_TRACE_ARM64_SIDE_PARENT_RETRY;
+
+  if (J == NULL || T == NULL || plan == NULL ||
+	!trace_arm64_side_parent_asm_owner_base(J, NULL))
+    return result;
+  cert = J->arm64_side_parent;
+  g = J2G(J);
+  memset(plan, 0, sizeof(*plan));
+  if (!lj_gc2_smr_read_try(g))
+    return LJ_TRACE_ARM64_SIDE_PARENT_SMR_RETRY;
+  if (!trace_arm64_side_parent_revalidate_held(J, &cert, &parentview)) {
+    trace_arm64_side_publish_note_failure(J, 7);
+  } else if (trace_arm64_side_publish_child_valid(
+	J, T, &cert, &parentview, plan)) {
+    result = LJ_TRACE_ARM64_SIDE_PARENT_OK;
+  }
+  lj_gc2_smr_read_leave(g);
+  return result;
+}
+
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
 /* Final one-shot lifetime/topology seal. Success leaves state=PUBLISH and the
 ** one-shot SMR reader held: the future infallible suffix must retain it through
 ** the final parent-exit CAS. Failure leaves no reader. The unchanged low
@@ -5144,6 +5354,276 @@ int lj_trace_test_arm64_first_side_loop_valid(jit_State *J, lua_State *L,
 }
 #endif
 
+typedef struct TraceArm64FirstChildEntryView {
+  TraceVec *tracev;
+  GCtrace *body;
+  GCobj *startpt;
+  const BCIns *startpc;
+  IRIns *ir;
+  SnapShot *snap;
+  SnapEntry *snapmap;
+  MCode *mcode;
+  MCode **exittab;
+  MCode *exitstub;
+  void *parent_target;
+  uint64_t retire_epoch;
+  MSize szmcode;
+  MSize topslot;
+  MSize spadjust;
+  MSize nsnap;
+  MSize nsnapmap;
+  IRRef nins;
+  IRRef nk;
+  TraceNo traceno;
+  TraceNo root;
+  TraceNo link;
+  TraceNo nextroot;
+  TraceNo nextside;
+  MSize nchild;
+  TraceLink linktype;
+  uint8_t admission;
+  uint8_t parent_snap_topslot;
+  uint8_t parent_snap_count;
+#if LJ_ABI_PAUTH
+  uintptr_t mcauth_bits;
+#endif
+} TraceArm64FirstChildEntryView;
+
+static int trace_root_entry_first_child_view_equal(
+	const TraceArm64FirstChildEntryView *a,
+	const TraceArm64FirstChildEntryView *b)
+{
+  return a->tracev == b->tracev && a->body == b->body &&
+	a->startpt == b->startpt && a->startpc == b->startpc &&
+	a->ir == b->ir && a->snap == b->snap && a->snapmap == b->snapmap &&
+	a->mcode == b->mcode && a->exittab == b->exittab &&
+	a->exitstub == b->exitstub && a->parent_target == b->parent_target &&
+	a->retire_epoch == b->retire_epoch && a->szmcode == b->szmcode &&
+	a->topslot == b->topslot && a->spadjust == b->spadjust &&
+	a->nsnap == b->nsnap && a->nsnapmap == b->nsnapmap &&
+	a->nins == b->nins && a->nk == b->nk &&
+	a->traceno == b->traceno && a->root == b->root &&
+	a->link == b->link && a->nextroot == b->nextroot &&
+	a->nextside == b->nextside && a->nchild == b->nchild &&
+	a->linktype == b->linktype && a->admission == b->admission &&
+	a->parent_snap_topslot == b->parent_snap_topslot &&
+	a->parent_snap_count == b->parent_snap_count
+#if LJ_ABI_PAUTH
+	&& a->mcauth_bits == b->mcauth_bits
+#endif
+	;
+}
+
+/* Validate the only published side topology admitted so far. A childless root
+** remains the fast case. A one-child root must name the exact post-RA grammar,
+** GC membership and raw arm64/arm64e exit encoding before native root entry. */
+static int trace_root_entry_first_child_view_acq(jit_State *J,
+	GCtrace *parent, TraceNo parentno, uint32_t sourceop,
+	const TraceArm64LoopView *rootview,
+	TraceArm64FirstChildEntryView *view)
+{
+  global_State *g = J2G(J);
+  TraceVec *tv;
+  GCtrace *child;
+  GCobj *o;
+  GCproto *pt;
+  SnapShot *parentsnap;
+  SnapEntry *parentmap;
+  const BCIns *continuation;
+  LJArm64SidePostRAView postra;
+  GCArena *arena;
+  GCSize size;
+  SnapNo checked_nsnap;
+  IRRef semantic_nins, admitted_nins;
+  MCode *fallback;
+  MSize nexits, i;
+  uint16_t parentmap0 = REGSP(RID_X28, SPS_NONE);
+  uintptr_t mcodep, fallbackp;
+
+  memset(view, 0, sizeof(*view));
+  if (rootview->nchild == 0)
+    return rootview->nextside == 0;
+  if (sourceop != (uint32_t)BC_JLOOP || rootview->nchild != 1 ||
+	rootview->nextside == 0 || rootview->nextside == parentno ||
+	rootview->traceno != parentno ||
+	rootview->admission != TRACE_ARM64_INT_LOOP_ADMITTED ||
+	bc_op(rootview->startins) != BC_LOOP || rootview->nsnap != 8u ||
+	rootview->topslot != 5u || rootview->startpt == NULL)
+    return 0;
+  pt = gco2pt(rootview->startpt);
+  if (pt->sizebc != 19u || pt->framesize != 5u ||
+	rootview->snap == NULL || rootview->snapmap == NULL ||
+	rootview->nsnapmap == 0 || rootview->exittab == NULL)
+    return 0;
+
+  parentsnap = &rootview->snap[2];
+  if (snap_mapofs_acq(parentsnap) > rootview->nsnapmap ||
+	snap_nent_acq(parentsnap) >
+	  rootview->nsnapmap-snap_mapofs_acq(parentsnap) ||
+	(1u+LJ_FR2) > rootview->nsnapmap-snap_mapofs_acq(parentsnap)-
+	  snap_nent_acq(parentsnap))
+    return 0;
+  parentmap = &rootview->snapmap[snap_mapofs_acq(parentsnap)];
+  continuation = snap_pc_acq(&parentmap[snap_nent_acq(parentsnap)]);
+  if (continuation != proto_bc(pt)+13u)
+    return 0;
+
+  tv = tracevec_acq(J);
+  if (tv == NULL || tv != tracevec_acq(J) ||
+	(MSize)parentno >= tv->sizetrace ||
+	(MSize)rootview->nextside >= tv->sizetrace ||
+	gcref_acq(tv->slot[parentno]) != obj2gco(parent))
+    return 0;
+  o = gcref_acq(tv->slot[rootview->nextside]);
+  child = traceref_fromgco_safe(o);
+  if (!trace_runnable_acq(child, rootview->nextside))
+    return 0;
+
+  view->tracev = tv;
+  view->body = child;
+  view->startpt = trace_startptgco_acq(child);
+  view->startpc = trace_startpc_acq(child);
+  view->ir = trace_ir_acq(child);
+  view->snap = trace_snap_acq(child);
+  view->snapmap = trace_snapmap_acq(child);
+  view->mcode = trace_mcode_acq(child);
+  view->exittab = trace_exittab_acq(child);
+  view->exitstub = trace_exitstub_acq(child);
+  view->parent_target =
+	la_loadptr_acq((void *const *)&rootview->exittab[2]);
+  view->retire_epoch = la_load64_acq(&child->retire_epoch);
+  view->szmcode = trace_szmcode_acq(child);
+  view->topslot = trace_topslot_acq(child);
+  view->spadjust = trace_spadjust_acq(child);
+  view->nsnap = trace_nsnap_acq(child);
+  view->nsnapmap = trace_nsnapmap_acq(child);
+  view->nins = trace_nins_acq(child);
+  view->nk = trace_nk_acq(child);
+  view->traceno = trace_traceno_acq(child);
+  view->root = trace_root_acq(child);
+  view->link = trace_link_acq(child);
+  view->nextroot = trace_nextroot_acq(child);
+  view->nextside = trace_nextside_acq(child);
+  view->nchild = trace_nchild_acq(child);
+  view->linktype = trace_linktype_acq(child);
+  view->admission = la_load8_acq(&child->unused1);
+  view->parent_snap_topslot = (uint8_t)snap_topslot_acq(parentsnap);
+  view->parent_snap_count = (uint8_t)snap_count_acq(parentsnap);
+#if LJ_ABI_PAUTH
+  view->mcauth_bits =
+	trace_arm64_first_side_function_bits(trace_mcauth_acq(child));
+#endif
+
+  if (view->retire_epoch != 0 || view->traceno != rootview->nextside ||
+	view->root != parentno || view->link != parentno ||
+	view->nextroot != 0 || view->nextside != 0 || view->nchild != 0 ||
+	view->linktype != LJ_TRLINK_ROOT ||
+	view->startpt != rootview->startpt || view->startpc != continuation ||
+	trace_startins_acq(child) != BCINS_AD(BC_JMP, 0, 0) ||
+	view->admission != TRACE_ARM64_INT_SIDE_ADMITTED ||
+	view->spadjust != 0 || view->topslot != rootview->topslot ||
+	view->nsnap != 5u || view->nsnapmap != 17u ||
+	view->ir == NULL || view->snap == NULL || view->snapmap == NULL ||
+	view->nins <= REF_FIRST || view->nk == 0 || view->nk > REF_TRUE ||
+	view->mcode == NULL || view->szmcode <= sizeof(MCode) ||
+	(view->szmcode & (sizeof(MCode)-1u)) != 0 ||
+	view->exittab == NULL || view->exitstub == NULL ||
+	view->parent_snap_topslot != view->topslot ||
+	view->parent_snap_count != SNAPCOUNT_DONE ||
+	view->parent_target != trace_exittarget_arm64_encode(g, view->mcode) ||
+	(trace_native_pinword_acq(child) & TRACE_NATIVE_PIN_CLOSED) != 0 ||
+	trace_retired_link_acq(child) != TRACE_RETIRED_LINK_UNLINKED ||
+	!trace_size_checked(g, child, &size, &checked_nsnap) ||
+	checked_nsnap != view->nsnap || !trace_body_refs_valid(g, child, NULL))
+    return 0;
+  UNUSED(size);
+
+  arena = lj_arena_of(child);
+  if (arena == NULL || lj_arena_ishuge(arena) ||
+	lj_arena_lifetime_state_acq(arena, lj_arena_cellof(child)) !=
+	  LJ_ARENA_LIFETIME_LIVE ||
+	lj_arena_root_state_acq(arena, lj_arena_cellof(child)) !=
+	  LJ_ARENA_ROOT_MEMBER)
+    return 0;
+
+  mcodep = (uintptr_t)(void *)view->mcode;
+  if ((uintptr_t)(void *)view->exitstub <
+	  (uintptr_t)ARM64_EXIT_FALLBACK_WORDS*sizeof(MCode))
+    return 0;
+  fallbackp = (uintptr_t)(void *)view->exitstub-
+	(uintptr_t)ARM64_EXIT_FALLBACK_WORDS*sizeof(MCode);
+  if (mcodep > UINTPTR_MAX-(uintptr_t)view->szmcode ||
+	mcodep+(uintptr_t)view->szmcode > fallbackp ||
+	fallbackp-(mcodep+(uintptr_t)view->szmcode) > sizeof(MCode))
+    return 0;
+  fallback = (MCode *)(void *)fallbackp;
+  nexits = trace_exittab_nslots_acq(child);
+  if (nexits != 6u)
+    return 0;
+  for (i = 0; i < nexits; i++)
+    if (la_loadptr_acq((void *const *)&view->exittab[i]) !=
+	trace_exittarget_arm64_encode(g, fallback))
+      return 0;
+
+#if LJ_ABI_PAUTH
+  {
+    ASMFunction expected = lj_ptr_sign(
+	  ptrauth_nop_cast(ASMFunction, view->mcode), child);
+    if (view->mcauth_bits !=
+	  trace_arm64_first_side_function_bits(expected))
+      return 0;
+  }
+#endif
+
+  memset(&postra, 0, sizeof(postra));
+  semantic_nins = view->nins-1u;
+  postra.semantic.ir = view->ir;
+  postra.semantic.snap = view->snap;
+  postra.semantic.snapmap = view->snapmap;
+  postra.semantic.proto_bc = proto_bc(pt);
+  postra.semantic.nins = semantic_nins;
+  postra.semantic.nk = view->nk;
+  postra.semantic.nsnap = view->nsnap;
+  postra.semantic.nsnapmap = view->nsnapmap;
+  postra.semantic.proto_sizebc = pt->sizebc;
+  postra.semantic.baseslot = 1u+LJ_FR2;
+  postra.semantic.root_topslot = rootview->topslot;
+  postra.semantic.traceno = view->traceno;
+  postra.semantic.parent = parentno;
+  postra.semantic.root = view->root;
+  postra.semantic.link = view->link;
+  postra.semantic.exitno = 2u;
+  postra.semantic.startins = trace_startins_acq(child);
+  postra.semantic.linktype = view->linktype;
+  postra.semantic.sinktags = child->sinktags;
+  postra.semantic.base_delta = 0;
+  postra.parentmap = &parentmap0;
+  postra.entry = view->mcode;
+  postra.nins = view->nins;
+  postra.stopins = REF_BASE+1u;
+  postra.orignins = semantic_nins;
+  postra.spadjust = view->spadjust;
+  postra.parent_spadjust = rootview->spadjust;
+  postra.topslot = view->topslot;
+  postra.parent_topslot = rootview->topslot;
+  postra.parentmap_n = 1u;
+  postra.entry_words = view->szmcode/sizeof(MCode);
+  postra.branch_track = (uint8_t)LJ_ABI_BRANCH_TRACK;
+  if (!lj_asm_arm64_side_postra_admit(&postra, &admitted_nins) ||
+	admitted_nins != semantic_nins)
+    return 0;
+
+  return tracevec_acq(J) == tv &&
+	gcref_acq(tv->slot[parentno]) == obj2gco(parent) &&
+	gcref_acq(tv->slot[view->traceno]) == obj2gco(child) &&
+	trace_runnable_acq(parent, parentno) &&
+	trace_runnable_acq(child, view->traceno) &&
+	trace_nchild_acq(parent) == 1 &&
+	trace_nextside_acq(parent) == view->traceno &&
+	la_loadptr_acq((void *const *)&rootview->exittab[2]) ==
+	  view->parent_target;
+}
+
 /* Validate and publish one root-trace entry intent without allocating,
 ** waiting, entering SMR, invoking callbacks or raising an error. The gate
 ** close/recheck handshake makes the published TG-local jit_base the lifetime
@@ -5164,6 +5644,7 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
   GCfunc *fn;
   GCproto *pt;
   TraceArm64LoopView view, view2;
+  TraceArm64FirstChildEntryView childview, childview2;
   MCode *mcode;
   MSize szmcode;
   ASMFunction target;
@@ -5230,6 +5711,8 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
       !trace_root_entry_start_valid(sourceop, trace_startins_acq(T)) ||
       !trace_root_entry_loop_view_acq(T, traceno, pc, pt, sourceop, &view) ||
       !trace_root_entry_arm64_layout_valid(&view, sourceins) ||
+      !trace_root_entry_first_child_view_acq(
+	J, T, traceno, sourceop, &view, &childview) ||
       !trace_root_entry_bytecode_valid(pc, pt, traceno, sourceop,
 				       view.startins, sourceins))
     goto reject_published;
@@ -5258,6 +5741,9 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
 				      &view2) ||
       !trace_root_entry_arm64_layout_valid(&view2, sourceins) ||
       !trace_root_entry_loop_view_equal(&view, &view2) ||
+      !trace_root_entry_first_child_view_acq(
+	J, T2, traceno, sourceop, &view2, &childview2) ||
+      !trace_root_entry_first_child_view_equal(&childview, &childview2) ||
       !trace_root_entry_start_valid(sourceop, view2.startins) ||
       !trace_root_entry_bytecode_valid(pc, pt, traceno, sourceop,
 				       view2.startins, sourceins))
@@ -6352,7 +6838,7 @@ static void trace_compact_body_init(jit_State *J,
 #endif
 }
 
-#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
+#if LJ_TARGET_ARM64
 static void trace_compact_body_reset(const TraceCompactBodyPlan *plan)
 {
   trace_compact_scratch_init(plan->body, plan->ir, plan->nins, plan->nk,
@@ -6418,6 +6904,258 @@ static int trace_compact_body_initialized_valid(jit_State *J,
   return 1;
 }
 
+static int trace_arm64_side_publish_initialized_revalidate_held(
+	jit_State *J, GCtrace *T, const LJTraceArm64SideParentCert *cert,
+	const TraceCompactBodyPlan *compact,
+	const TraceArm64SidePublishPlan *plan)
+{
+  TraceArm64FirstSideLoopView view;
+  GCtrace *body;
+
+  if (J == NULL || T == NULL || cert == NULL || compact == NULL ||
+	plan == NULL || T != &J->cur || (body = J->curfinal) == NULL ||
+	body != plan->childbody || body != compact->body ||
+	compact->source != T || cert->tracev == NULL ||
+	cert->tracev != J->arm64_side_parent.tracev ||
+	cert->body != J->arm64_side_parent.body ||
+	cert->mcode != J->arm64_side_parent.mcode ||
+	cert->continuation != J->arm64_side_parent.continuation ||
+	cert->continuationins != J->arm64_side_parent.continuationins ||
+	cert->parent != J->arm64_side_parent.parent ||
+	cert->exitno != J->arm64_side_parent.exitno ||
+	cert->child != J->arm64_side_parent.child ||
+	!trace_compact_body_initialized_valid(J, compact) ||
+	!trace_arm64_side_parent_revalidate_held(J, cert, &view))
+    return 0;
+
+  return plan->tracev == cert->tracev &&
+	plan->childslot == &cert->tracev->slot[cert->child] &&
+	plan->parent == cert->body && plan->childbody == body &&
+	plan->parentsnap == &view.snap[cert->exitno] &&
+	plan->parent_exitslot == &view.exittab[cert->exitno] &&
+	plan->parent_fallback == view.fallback &&
+	plan->parent_fallback_encoding == view.fallback_encoding &&
+	plan->child_mcode == trace_mcode_acq(body) &&
+	plan->child_target_encoding ==
+	  trace_exittarget_arm64_encode(J2G(J), trace_mcode_acq(body)) &&
+	plan->parentno == cert->parent && plan->childno == cert->child &&
+	plan->exitno == cert->exitno &&
+	plan->parent_topslot == view.snaptopslot &&
+	plan->child_topslot == trace_topslot_acq(body) &&
+	trace_traceno_acq(body) == cert->child &&
+	trace_root_acq(body) == cert->parent &&
+	trace_link_acq(body) == cert->parent &&
+	trace_linktype_acq(body) == LJ_TRLINK_ROOT &&
+	trace_nextroot_acq(body) == 0 && trace_nextside_acq(body) == 0 &&
+	trace_nchild_acq(body) == 0 &&
+	la_load8_acq(&body->unused1) == TRACE_ARM64_INT_SIDE_ADMITTED &&
+	gcref_acq(*plan->childslot) == (const GCobj *)LJ_TRACE_PENDING &&
+	la_loadptr_acq((void *const *)plan->parent_exitslot) ==
+	  plan->parent_fallback_encoding &&
+	snap_topslot_acq(plan->parentsnap) == plan->parent_topslot;
+}
+
+static LJ_NORET void trace_arm64_side_publish_failstop(jit_State *J,
+	uint32_t failure, const char *why)
+{
+  trace_arm64_side_publish_note_failure(J, failure);
+  lj_assertJ(0, "%s", why);
+  UNUSED(why);
+  abort();
+}
+
+static int trace_arm64_first_side_publish_enabled(jit_State *J)
+{
+#if defined(LJ_TRACE_TEST_HELPERS) && \
+    defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST)
+  return J != NULL && trace_arm64_first_side_publish_test_active(
+	J, J->parent, J->exitno);
+#else
+  UNUSED(J);
+  return 0;
+#endif
+}
+
+/* Publish the one certified first child. All refusal points precede the
+** ASM->PUBLISH CAS. The suffix after it has one finite operation per shared
+** destination and aborts the process on any impossible generation mismatch. */
+static int trace_stop_arm64_first_side(jit_State *J)
+{
+  global_State *g = J2G(J);
+  lua_State *L = J->L;
+  GCtrace *T = &J->cur;
+  GCtrace *body = J->curfinal;
+  LJTraceArm64SideParentCert cert;
+  TraceArm64SidePublishPlan plan;
+  TraceCompactBodyPlan compact;
+  LJMCodeCommitPlan mcode;
+  LJGCNewRootPublishPlan gcroot;
+  LJVMEVENTPrepareResult prepared;
+  LJVMEVENTAbsenceReservation absence;
+  LJTraceArm64SideParentResult plan_result;
+  GCobj *pending;
+  void *raw_expected;
+  ptrdiff_t oldtop;
+  uint16_t expected16;
+  uint8_t expected8;
+  MSize oldcount;
+  int event_status, checkpoint;
+  int compact_initialized = 0;
+  int gcroot_armed = 0;
+  int absence_armed = 0;
+  int smr_held = 0;
+  TraceError retry_error = LJ_TRERR_RETRY;
+  uint32_t failure = 0;
+
+  memset(&plan, 0, sizeof(plan));
+  memset(&compact, 0, sizeof(compact));
+  memset(&mcode, 0, sizeof(mcode));
+  memset(&gcroot, 0, sizeof(gcroot));
+  memset(&prepared, 0, sizeof(prepared));
+  memset(&absence, 0, sizeof(absence));
+
+  if (LJ_UNLIKELY(!trace_arm64_first_side_publish_enabled(J) ||
+	L == NULL || body == NULL || bc_op(trace_startins_acq(T)) != BC_JMP)) {
+    failure = 20;
+    goto rollback;
+  }
+
+  oldtop = savestack(L, L->top);
+  event_status = lj_vmevent_prepare_try(L, LJ_VMEVENT_TRACE, &prepared);
+  L->top = restorestack(L, oldtop);
+  if (event_status != LJ_VMEVENT_PREPARE_ABSENT || prepared.argbase != 0) {
+    failure = 21;
+    goto rollback;
+  }
+
+  plan_result = trace_arm64_side_publish_plan_prepare(J, T, &plan);
+  if (plan_result != LJ_TRACE_ARM64_SIDE_PARENT_OK) {
+    retry_error = plan_result == LJ_TRACE_ARM64_SIDE_PARENT_SMR_RETRY ?
+	LJ_TRERR_SMRRETRY : LJ_TRERR_RETRY;
+    failure = 22;
+    goto rollback;
+  }
+  if (!lj_mcode_commit_prepare(J, trace_mcode_acq(T), &mcode)) {
+    failure = 23;
+    goto rollback;
+  }
+  lj_mcode_sync_core(J);
+  J->postproc = LJ_POST_NONE;
+  if (!trace_compact_body_plan(J, body, &compact)) {
+    failure = 24;
+    goto rollback;
+  }
+  trace_compact_body_init(J, &compact);
+  compact_initialized = 1;
+  if (LJ_UNLIKELY(!trace_compact_body_initialized_valid(J, &compact)))
+    trace_arm64_side_publish_failstop(
+	J, 25, "ARM64 compact side body initialization lost");
+  if (!lj_gc_linkobj_new_sealed_prepare(g, obj2gco(body), &gcroot)) {
+    failure = 26;
+    goto rollback;
+  }
+  gcroot_armed = 1;
+  if (!lj_vmevent_absence_reserve(
+	g, LJ_VMEVENT_TRACE, &prepared, &absence)) {
+    failure = 27;
+    goto rollback;
+  }
+  absence_armed = 1;
+
+  cert = J->arm64_side_parent;
+  if (!lj_gc2_smr_read_try(g)) {
+    retry_error = LJ_TRERR_SMRRETRY;
+    failure = 28;
+    goto rollback;
+  }
+  smr_held = 1;
+  if (!trace_arm64_side_publish_initialized_revalidate_held(
+	J, T, &cert, &compact, &plan) ||
+	!trace_arm64_first_side_publish_enabled(J)) {
+    failure = 29;
+    goto rollback;
+  }
+  if (!lj_trace_state_publish_try(J)) {
+    failure = 30;
+    goto rollback;
+  }
+
+  /* Irreversible finite suffix. The raw parent exit is the last runnable
+  ** publication; every preceding edge remains unreachable from native code. */
+  lj_mcode_commit_publish(J, &mcode);
+  lj_gc_linkobj_new_sealed_publish(&gcroot);
+  gcroot_armed = 0;
+
+  J->cur.traceno = 0;
+  J->cur.exittab = NULL;
+  J->cur.exitstub = NULL;
+  J->curfinal = NULL;
+
+  pending = (GCobj *)LJ_TRACE_PENDING;
+  if (LJ_UNLIKELY(!gcref_cas(plan.childslot, &pending,
+	obj2gco(plan.childbody))))
+    trace_arm64_side_publish_failstop(
+	J, 31, "ARM64 first-side slot publication lost");
+  checkpoint = lj_gc_pubtrace_checkpoint_nodrain(
+	g, plan.childno, plan.childbody);
+  if (LJ_UNLIKELY(checkpoint != LJ_GC2_TRACE_PUBLISH_QUEUED &&
+	checkpoint != LJ_GC2_TRACE_PUBLISH_VETOED))
+    trace_arm64_side_publish_failstop(
+	J, 32, "ARM64 first-side GC checkpoint invalid");
+
+  if (plan.child_topslot > plan.parent_topslot) {
+    expected8 = (uint8_t)plan.parent_topslot;
+    if (LJ_UNLIKELY(!snap_topslot_cas_acqrel(
+	  plan.parentsnap, &expected8, plan.child_topslot)))
+      trace_arm64_side_publish_failstop(
+	  J, 33, "ARM64 first-side snapshot topslot publication lost");
+  } else if (LJ_UNLIKELY(
+	snap_topslot_acq(plan.parentsnap) != plan.parent_topslot)) {
+    trace_arm64_side_publish_failstop(
+	J, 34, "ARM64 first-side snapshot topslot generation lost");
+  }
+  expected16 = 0;
+  if (LJ_UNLIKELY(!trace_nchild_cas_acqrel(
+	plan.parent, &expected16, 1)))
+    trace_arm64_side_publish_failstop(
+	J, 35, "ARM64 first-side child count publication lost");
+  expected16 = 0;
+  if (LJ_UNLIKELY(!trace_nextside_cas_acqrel(
+	plan.parent, &expected16, plan.childno)))
+    trace_arm64_side_publish_failstop(
+	J, 36, "ARM64 first-side topology publication lost");
+  oldcount = snap_count_xchg_acqrel(plan.parentsnap, SNAPCOUNT_DONE);
+  if (LJ_UNLIKELY(oldcount == SNAPCOUNT_DONE))
+    trace_arm64_side_publish_failstop(
+	J, 37, "ARM64 first-side snapshot was already terminal");
+  raw_expected = plan.parent_fallback_encoding;
+  if (LJ_UNLIKELY(!trace_exittarget_arm64_raw_cas_acqrel(
+	plan.parent_exitslot, &raw_expected, plan.child_target_encoding)))
+    trace_arm64_side_publish_failstop(
+	J, 38, "ARM64 first-side runnable edge publication lost");
+
+  lj_vmevent_absence_release(&absence);
+  absence_armed = 0;
+  lj_trace_arm64_side_parent_clear(J);
+  lj_gc2_smr_read_leave(g);
+  smr_held = 0;
+  trace_arm64_first_side_publish_test_complete(J, plan.childno);
+  return 0;
+
+rollback:
+  trace_arm64_side_publish_note_failure(J, failure ? failure : 39);
+  if (absence_armed)
+    lj_vmevent_absence_release(&absence);
+  if (smr_held)
+    lj_gc2_smr_read_leave(g);
+  if (gcroot_armed)
+    lj_gc_linkobj_new_sealed_abort(&gcroot);
+  if (compact_initialized)
+    trace_compact_body_reset(&compact);
+  lj_trace_err(J, retry_error);
+}
+
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
 static int trace_compact_side_cert_equal(
 	const LJTraceArm64SideParentCert *a,
 	const LJTraceArm64SideParentCert *b)
@@ -6544,6 +7282,7 @@ int lj_trace_test_arm64_side_compact_roundtrip(jit_State *J, GCtrace *T,
 	*pauth_ok == (uint32_t)LJ_ABI_PAUTH;
 }
 #endif
+#endif  /* LJ_TARGET_ARM64 */
 
 /* Allocate space for copy of T. */
 GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T)
@@ -8338,6 +9077,14 @@ static int trace_stop(jit_State *J)
   int addroot = 0;
   int root_patch_lost = 0;
 
+#if LJ_TARGET_ARM64
+  /* The certified one-shot first child has its own finite transaction. Never
+  ** let it enter the generic side path, whose SMR wait and topology stores are
+  ** not a publication seal. */
+  if (op == BC_JMP && trace_arm64_first_side_publish_enabled(J))
+    return trace_stop_arm64_first_side(J);
+#endif
+
   switch (op) {
   case BC_FORL:
     /* The matching FORI is patched after trace publication. */
@@ -8514,6 +9261,7 @@ static TraceStartResult trace_downrec(jit_State *J)
 #if LJ_TARGET_ARM64
   /* Every down-recursion outcome ends the side attempt. Clear before the RETM
   ** early return or any root-selector repurpose. */
+  trace_arm64_first_side_publish_test_cancel(J);
   lj_trace_arm64_side_parent_clear(J);
 #endif
   if (bc_op(ins) == BC_RETM)
@@ -8703,6 +9451,9 @@ static void trace_terminal_release(lua_State *L, jit_State *J)
 {
   global_State *g = J2G(J);
 #if LJ_TARGET_ARM64
+  /* A completed first-side transaction moved its one-shot seam to DONE.
+  ** Every other terminal path converts a retained ACTIVE claim to ABORTED. */
+  trace_arm64_first_side_publish_test_cancel(J);
   /* Successful/abort transactions must close their exact identity before the
   ** generic terminal transition. Keep a defensive release-build clear so a
   ** stale dormant value can never cross IDLE or token handoff. */
@@ -9021,6 +9772,32 @@ static int trace_arm64_side_asm_test_preflight(jit_State *J,
 	  LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER);
 }
 #endif
+
+#if defined(LJ_TRACE_TEST_HELPERS) && \
+    defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST)
+/* Revalidate the J-bound publication claim on every recorder dispatch. */
+static int trace_arm64_first_side_publish_test_preflight(jit_State *J,
+	const BCIns *pc, lua_State **ownerp)
+{
+  lua_State *owner = jit_owner_l_acq(J);
+  TraceState state = lj_trace_state_load(J);
+  const BCIns *continuation;
+  *ownerp = owner;
+  if (owner == NULL || !trace_arm64_first_side_publish_test_active(
+	J, J->parent, J->exitno) || !lj_jit_token_held_l(owner, J))
+    return 0;
+  if (state == LJ_TRACE_START)
+    continuation = pc;
+  else if (state == LJ_TRACE_RECORD)
+    continuation = trace_startpc_acq(&J->cur);
+  else
+    return 0;
+  return continuation != NULL &&
+	lj_trace_arm64_first_side_loop_valid(
+	  J, owner, J->parent, J->exitno, continuation, pc,
+	  LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER);
+}
+#endif
 #endif
 
 /* A bytecode instruction is about to be executed. Record it. */
@@ -9038,7 +9815,16 @@ void lj_trace_ins(jit_State *J, const BCIns *pc)
   lua_State *L;
   int errcode;
 #if LJ_TARGET_ARM64
-#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
+#if defined(LJ_TRACE_TEST_HELPERS) && \
+    defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST)
+  if (J->parent != 0) {
+    if (!trace_arm64_first_side_publish_test_preflight(J, pc, &L)) {
+      trace_arm64_first_side_publish_test_cancel(J);
+      trace_arm64_abort_exact_owner(J, L);
+      return;
+    }
+  } else
+#elif defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
   if (J->parent != 0) {
     if (!trace_arm64_side_asm_test_preflight(J, pc, &L)) {
       trace_arm64_abort_exact_owner(J, L);
@@ -9185,6 +9971,14 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
   uint8_t count;
 #if LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED
 #if LJ_TARGET_ARM64 && defined(LJ_TRACE_TEST_HELPERS) && \
+    defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST)
+  /* Merely observe the exact armed intent here. The claim is delayed until
+  ** the ordinary token and post-token parent generation are both retained. */
+  if (!trace_arm64_first_side_publish_test_armed(J, parent, exitno)) {
+    UNUSED(pc); UNUSED(L); UNUSED(parent); UNUSED(exitno);
+    return;
+  }
+#elif LJ_TARGET_ARM64 && defined(LJ_TRACE_TEST_HELPERS) && \
     defined(LJ_ARM64_SIDE_ASM_TEST)
   /* The one-shot native assembler probe is the only test-only bypass. It
   ** consumes an exact expected parent/exit and lj_asm_trace() throws before
@@ -9274,9 +10068,21 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
       goto out;
     }
     snap = &trace_snap_acq(parentT)[exitno];
+#if LJ_TARGET_ARM64 && defined(LJ_TRACE_TEST_HELPERS) && \
+    defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST)
+    if (!trace_arm64_first_side_publish_test_claim(
+	  J, parent, exitno)) {
+      lj_jit_token_release_l(L, J);
+      goto out;
+    }
+#endif
     for (;;) {
       count = (uint8_t)snap_count_acq(snap);
       if (count == SNAPCOUNT_DONE) {
+#if LJ_TARGET_ARM64 && defined(LJ_TRACE_TEST_HELPERS) && \
+    defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST)
+	trace_arm64_first_side_publish_test_cancel(J);
+#endif
 	lj_jit_token_release_l(L, J);
 	goto out;
       }
@@ -9292,8 +10098,13 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
     if (!lj_trace_state_aborted(
 	      lj_trace_state_store_active(J, LJ_TRACE_START)))
       lj_trace_ins(J, pc);
-    else
+    else {
+#if LJ_TARGET_ARM64 && defined(LJ_TRACE_TEST_HELPERS) && \
+    defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST)
+      trace_arm64_first_side_publish_test_cancel(J);
+#endif
       lj_jit_token_release_l(L, J);
+    }
     return;
   }
 out:

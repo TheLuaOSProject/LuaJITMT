@@ -93,12 +93,16 @@ test -s "$pure_region"
 for required in \
   'ARM64_SIDE_K_ONE = REF_TRUE-1u' \
   'ARM64_SIDE_SEMANTIC_NINS = REF_BASE+7u' \
-  'static const IRRef snaprefs[4]' \
-  'static const MSize mapofs[4] = { 0, 3, 7, 10 };' \
-  'static const uint8_t nent[4] = { 1, 2, 1, 1 };' \
-  'static const uint8_t nslots[4] = { 5, 6, 5, 5 };' \
-  'static const MSize pcpos[4] = { 13, 3, 17, 7 };' \
+  'ARM64_SIDE_R_CGET = REF_BASE+2u' \
+  'static const IRRef snaprefs[5]' \
+  'ARM64_SIDE_R_CGET, ARM64_SIDE_R_ADD, ARM64_SIDE_R_LIMIT' \
+  'static const MSize mapofs[5] = { 0, 3, 7, 11, 14 };' \
+  'static const uint8_t nent[5] = { 1, 2, 2, 1, 1 };' \
+  'static const uint8_t nslots[5] = { 5, 6, 6, 5, 5 };' \
+  'static const MSize pcpos[5] = { 13, 14, 3, 17, 7 };' \
   'view->proto_sizebc != 19u' \
+  'view->nk != ARM64_SIDE_K_ONE || view->nsnap != 5u' \
+  'view->nsnapmap != 17u' \
   'view->traceno == 0' \
   'view->traceno > UINT16_MAX || view->parent == 0' \
   'view->parent > UINT16_MAX || view->traceno == view->parent' \
@@ -110,26 +114,40 @@ for required in \
   'ARM64_SIDE_REQUIRE(REF_BASE, IR_BASE, IRT_PGC,' \
   'view->parent, view->exitno);' \
   'IRSLOAD_PARENT|IRSLOAD_INHERIT' \
+  'ARM64_SIDE_R_CGET, IR_NOP, IRT_NIL, 0, 0' \
   'ARM64_SIDE_R_ADD, IR_ADDOV, IRT_INT|IRT_GUARD' \
+  'ARM64_SIDE_R_PARENT, ARM64_SIDE_K_ONE);' \
   'ARM64_SIDE_R_GT, IR_GT, IRT_INT|IRT_GUARD' \
   'ARM64_SIDE_R_LIMIT, ARM64_SIDE_R_ADD);' \
   'ARM64_SIDE_R_XPOLL, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0' \
   'expected > (uintptr_t)(UINT64_MAX >> 8)' \
+  'for (snapno = 0; snapno < 5u; snapno++)' \
+  'snapno+1u < 5u ? mapofs[snapno+1u] : 17u' \
+  '&view->snapmap[8]' \
+  '&view->snapmap[11]' \
+  '&view->snapmap[14]' \
   'SNAP(4, 0, ARM64_SIDE_R_PARENT)' \
   'SNAP(5, 0, ARM64_SIDE_R_ADD)' \
   'int lj_asm_arm64_side_prehead_admit(' \
   'static const Reg valueregs[4]' \
-  'RID_X27, RID_X28, RID_X28, RID_X27' \
+  'RID_X27, RID_INIT, RID_X28, RID_X27' \
   'view->nins != ARM64_SIDE_SEMANTIC_NINS+1u' \
   'view->stopins != ARM64_SIDE_R_PARENT' \
   'view->orignins != ARM64_SIDE_SEMANTIC_NINS' \
   'view->spadjust != 0 || view->parent_spadjust != 0' \
   'view->parentmap == NULL || view->parentmap_n != 1u' \
   'view->branch_track != (uint8_t)LJ_ABI_BRANCH_TRACK' \
-  'view->entry_words <= moveidx' \
+  'headidx = (MSize)LJ_ABI_BRANCH_TRACK' \
+  'view->entry_words < headidx+4u' \
   'view->entry[0] != A64I_LE(A64I_BTI_J)' \
-  'A64I_MOVx | A64F_D(RID_X27)' \
-  'A64F_M(RID_X28)' \
+  'view->entry[headidx] != A64I_LE(A64I_MOVx |' \
+  'A64F_D(RID_X27) | A64F_M(RID_X28)' \
+  'A64I_MOVZw |' \
+  'A64F_U16(view->semantic.traceno)' \
+  'view->entry[headidx+2u] != A64I_LE(A64I_DMB_ISH)' \
+  'A64I_STRw | A64F_D(RID_TMP) | A64F_N(RID_DISPATCH)' \
+  'A64F_U12((uint32_t)DISPATCH_TG(vmstate) >> 2)' \
+  'view->entry[headidx+3u] != A64I_LE(vmstore)' \
   'ins.o != IR_NOP || ins.t.irt != IRT_NIL' \
   'ins.op1 != 0 || ins.op2 != 0 || ins.r != 0 || ins.s != 0' \
   'view->parentmap[0] != REGSP(RID_X28, SPS_NONE)' \
@@ -242,13 +260,22 @@ for required in \
   'fx.view.traceno = UINT16_MAX;' \
   'fx.view.parent = fx.view.root = fx.view.link = UINT16_MAX-1u;' \
   'BCIns proto[19];' \
+  'SnapShot snap[5];' \
+  'SnapEntry snapmap[17];' \
+  'MCode entry[5];' \
+  'static const uint32_t mapofs[5] = { 0, 3, 7, 11, 14 };' \
+  'static const uint8_t nent[5] = { 1, 2, 2, 1, 1 };' \
+  'static const MSize pcpos[5] = { 13, 14, 3, 17, 7 };' \
   'fx.view.proto_sizebc = 19;' \
   'fx.view.traceno = fx.view.parent' \
   'fx.view.exitno++' \
   'setir(K_ONE, IR_KINT, IRT_INT, 2, 0)' \
   'setir(K_ONE, IR_KNUM, IRT_NUM, 1, 0)' \
   'fx.ir[R_PARENT].op2 = IRSLOAD_PARENT' \
-  'fx.ir[R_VALUE].op2 |= IRSLOAD_PARENT' \
+  'setir(R_CGET, IR_NOP, IRT_NIL, 0, 0)' \
+  'fx.ir[ref].o == IR_NOP ? IR_XBAR : IR_NOP' \
+  'fx.ir[R_CGET].t.irt = IRT_INT' \
+  'fx.ir[R_ADD].op1 = R_CGET' \
   'fx.ir[R_ADD].op2 = R_PARENT' \
   'fx.ir[R_GT].op2 = R_PARENT' \
   'fx.ir[R_XPOLL].op1 = 0' \
@@ -261,20 +288,26 @@ for required in \
   'fx.snap[i].nslots++' \
   'set_footer(i, pcpos[i], 1)' \
   'SNAP(4, SNAP_NORESTORE, R_PARENT)' \
+  'fx.snapmap[3] = SNAP(4, 0, R_ADD)' \
+  'fx.snapmap[4] = SNAP(5, 0, R_CGET)' \
+  'fx.snapmap[8] = SNAP(5, 0, R_PARENT)' \
   'fx.postra.spadjust = 16' \
   'fx.postra.parent_spadjust = 16' \
   'setir(R_END, IR_RENAME, IRT_NIL, R_ADD, 0)' \
   'fx.postra.stopins = R_PARENT;' \
   'fx.postra.orignins = R_END;' \
   'fx.postra.parentmap_n = 1;' \
-  'fx.postra.entry_words = 1u+(MSize)LJ_ABI_BRANCH_TRACK;' \
+  'fx.postra.entry_words = headidx+4u;' \
   'fx.postra.branch_track = (uint8_t)LJ_ABI_BRANCH_TRACK;' \
+  'fx.postra.semantic.traceno = 9;' \
+  'A64F_U16(fx.postra.semantic.traceno) | A64F_D(RID_TMP)' \
   'expect_prehead(1);' \
   'lj_asm_arm64_side_prehead_admit(NULL, NULL)' \
   'PREHEAD_MUTATION(fx.postra.semantic.exitno++)' \
   'PREHEAD_MUTATION(fx.postra.parentmap = NULL)' \
   'PREHEAD_MUTATION(fx.parentmap[0] = REGSP_INIT)' \
   'PREHEAD_MUTATION(fx.ir[R_PARENT].r = RID_X0)' \
+  'PREHEAD_MUTATION(fx.ir[R_CGET].r = RID_X0)' \
   'fx.postra.entry = NULL; expect_prehead(1);' \
   'fx.postra.entry_words = 0; expect_prehead(1);' \
   '(uint8_t)!LJ_ABI_BRANCH_TRACK; expect_prehead(1);' \
@@ -286,11 +319,18 @@ for required in \
   'fx.parentmap[0] = REGSP(RID_D0, 0)' \
   'fx.postra.entry = NULL' \
   'fx.postra.entry_words = 0' \
+  'fx.postra.entry_words = headidx+3u' \
   'fx.postra.branch_track =' \
   'fx.entry[0] = A64I_LE(A64I_NOP)' \
   'A64I_MOVw | A64F_D(RID_X27)' \
   'A64F_M(RID_X26)' \
-  'fx.entry[LJ_ABI_BRANCH_TRACK+1u] =' \
+  'A64I_MOVZx |' \
+  'A64F_U16(fx.postra.semantic.traceno+1u)' \
+  'fx.entry[headidx+2u] = A64I_LE(A64I_NOP)' \
+  'fx.entry[headidx+3u] = A64I_LE(A64I_LDRw |' \
+  'A64F_D(RID_X0) | A64F_N(RID_DISPATCH)' \
+  'A64F_D(RID_TMP) | A64F_N(RID_BASE)' \
+  'A64I_LE(vmstore ^ A64F_U12(1u))' \
   'fx.ir[ref].r = RID_X0' \
   'fx.ir[ref].r = RID_D0' \
   'fx.ir[ref].s = 2' \

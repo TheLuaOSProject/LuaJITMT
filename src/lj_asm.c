@@ -656,7 +656,7 @@ static int arm64_ir_constants(const GCtrace *T, LJArm64IRReject *reject)
 enum {
   ARM64_SIDE_K_ONE = REF_TRUE-1u,
   ARM64_SIDE_R_PARENT = REF_BASE+1u,
-  ARM64_SIDE_R_VALUE = REF_BASE+2u,
+  ARM64_SIDE_R_CGET = REF_BASE+2u,
   ARM64_SIDE_R_ADD = REF_BASE+3u,
   ARM64_SIDE_R_LIMIT = REF_BASE+4u,
   ARM64_SIDE_R_GT = REF_BASE+5u,
@@ -692,14 +692,14 @@ static int arm64_side_snapshot_footer(const LJArm64SideIRView *view,
 int lj_asm_arm64_side_ir_admit(const LJArm64SideIRView *view,
 	LJArm64IRReject *reject)
 {
-  static const IRRef snaprefs[4] = {
-    ARM64_SIDE_R_VALUE, ARM64_SIDE_R_LIMIT,
+  static const IRRef snaprefs[5] = {
+    ARM64_SIDE_R_CGET, ARM64_SIDE_R_ADD, ARM64_SIDE_R_LIMIT,
     ARM64_SIDE_R_GT, ARM64_SIDE_R_XPOLL
   };
-  static const MSize mapofs[4] = { 0, 3, 7, 10 };
-  static const uint8_t nent[4] = { 1, 2, 1, 1 };
-  static const uint8_t nslots[4] = { 5, 6, 5, 5 };
-  static const MSize pcpos[4] = { 13, 3, 17, 7 };
+  static const MSize mapofs[5] = { 0, 3, 7, 11, 14 };
+  static const uint8_t nent[5] = { 1, 2, 2, 1, 1 };
+  static const uint8_t nslots[5] = { 5, 6, 6, 5, 5 };
+  static const MSize pcpos[5] = { 13, 14, 3, 17, 7 };
   const IRIns *ir;
   IRIns ins;
   uintptr_t proto;
@@ -720,8 +720,8 @@ int lj_asm_arm64_side_ir_admit(const LJArm64SideIRView *view,
 	(uintptr_t)view->proto_sizebc >
 	  (UINTPTR_MAX-proto)/sizeof(BCIns) ||
 	view->nins != ARM64_SIDE_SEMANTIC_NINS ||
-	view->nk != ARM64_SIDE_K_ONE || view->nsnap != 4u ||
-	view->nsnapmap != 13u || view->baseslot != 1u+LJ_FR2 ||
+	view->nk != ARM64_SIDE_K_ONE || view->nsnap != 5u ||
+	view->nsnapmap != 17u || view->baseslot != 1u+LJ_FR2 ||
 	view->root_topslot != 5u || view->traceno == 0 ||
 	view->traceno > UINT16_MAX || view->parent == 0 ||
 	view->parent > UINT16_MAX || view->traceno == view->parent ||
@@ -759,10 +759,9 @@ int lj_asm_arm64_side_ir_admit(const LJArm64SideIRView *view,
 	view->parent, view->exitno);
   ARM64_SIDE_REQUIRE(ARM64_SIDE_R_PARENT, IR_SLOAD, IRT_INT, 4,
 	IRSLOAD_PARENT|IRSLOAD_INHERIT);
-  ARM64_SIDE_REQUIRE(ARM64_SIDE_R_VALUE, IR_SLOAD, IRT_INT|IRT_GUARD, 5,
-	IRSLOAD_TYPECHECK);
+  ARM64_SIDE_REQUIRE(ARM64_SIDE_R_CGET, IR_NOP, IRT_NIL, 0, 0);
   ARM64_SIDE_REQUIRE(ARM64_SIDE_R_ADD, IR_ADDOV, IRT_INT|IRT_GUARD,
-	ARM64_SIDE_R_VALUE, ARM64_SIDE_K_ONE);
+	ARM64_SIDE_R_PARENT, ARM64_SIDE_K_ONE);
   ARM64_SIDE_REQUIRE(ARM64_SIDE_R_LIMIT, IR_SLOAD, IRT_INT|IRT_GUARD, 2,
 	IRSLOAD_TYPECHECK);
   ARM64_SIDE_REQUIRE(ARM64_SIDE_R_GT, IR_GT, IRT_INT|IRT_GUARD,
@@ -770,9 +769,9 @@ int lj_asm_arm64_side_ir_admit(const LJArm64SideIRView *view,
   ARM64_SIDE_REQUIRE(ARM64_SIDE_R_XPOLL, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0);
 #undef ARM64_SIDE_REQUIRE
 
-  for (snapno = 0; snapno < 4u; snapno++) {
+  for (snapno = 0; snapno < 5u; snapno++) {
     const SnapShot *snap = &view->snap[snapno];
-    MSize nextofs = snapno+1u < 4u ? mapofs[snapno+1u] : 13u;
+    MSize nextofs = snapno+1u < 5u ? mapofs[snapno+1u] : 17u;
     if (snap_ref_acq(snap) != snaprefs[snapno] ||
 	snap_mapofs_acq(snap) != mapofs[snapno] ||
 	snap_nent_acq(snap) != nent[snapno] ||
@@ -786,12 +785,16 @@ int lj_asm_arm64_side_ir_admit(const LJArm64SideIRView *view,
   if (snapentry_acq(&view->snapmap[0]) !=
 	SNAP(4, 0, ARM64_SIDE_R_PARENT) ||
       snapentry_acq(&view->snapmap[3]) !=
-	SNAP(4, 0, ARM64_SIDE_R_ADD) ||
+	SNAP(4, 0, ARM64_SIDE_R_PARENT) ||
       snapentry_acq(&view->snapmap[4]) !=
-	SNAP(5, 0, ARM64_SIDE_R_ADD) ||
+	SNAP(5, 0, ARM64_SIDE_R_PARENT) ||
       snapentry_acq(&view->snapmap[7]) !=
 	SNAP(4, 0, ARM64_SIDE_R_ADD) ||
-      snapentry_acq(&view->snapmap[10]) !=
+      snapentry_acq(&view->snapmap[8]) !=
+	SNAP(5, 0, ARM64_SIDE_R_ADD) ||
+      snapentry_acq(&view->snapmap[11]) !=
+	SNAP(4, 0, ARM64_SIDE_R_ADD) ||
+      snapentry_acq(&view->snapmap[14]) !=
 	SNAP(4, 0, ARM64_SIDE_R_ADD))
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
 	ARM64_SIDE_R_ADD, IR_XPOLL, 0xffffu);
@@ -802,7 +805,7 @@ int lj_asm_arm64_side_prehead_admit(const LJArm64SidePostRAView *view,
 	IRRef *semantic_ninsp)
 {
   static const Reg valueregs[4] = {
-    RID_X27, RID_X28, RID_X28, RID_X27
+    RID_X27, RID_INIT, RID_X28, RID_X27
   };
   const IRIns *ir;
   IRIns ins;
@@ -858,17 +861,25 @@ int lj_asm_arm64_side_postra_admit(const LJArm64SidePostRAView *view,
 	IRRef *semantic_ninsp)
 {
   IRRef semantic_nins;
-  MSize moveidx;
+  MSize headidx;
+  MCode vmstore;
   if (!lj_asm_arm64_side_prehead_admit(view, &semantic_nins) ||
 	view->entry == NULL ||
 	((uintptr_t)(const void *)view->entry & (sizeof(MCode)-1u)) != 0 ||
 	view->branch_track != (uint8_t)LJ_ABI_BRANCH_TRACK)
     return 0;
-  moveidx = (MSize)LJ_ABI_BRANCH_TRACK;
-  if (view->entry_words <= moveidx ||
+  headidx = (MSize)LJ_ABI_BRANCH_TRACK;
+  vmstore = A64I_STRw | A64F_D(RID_TMP) | A64F_N(RID_DISPATCH) |
+	    A64F_U12((uint32_t)DISPATCH_TG(vmstate) >> 2);
+  if (view->entry_words < headidx+4u ||
 	(view->branch_track && view->entry[0] != A64I_LE(A64I_BTI_J)) ||
-	view->entry[moveidx] != A64I_LE(A64I_MOVx | A64F_D(RID_X27) |
-				     A64F_M(RID_X28)))
+	view->entry[headidx] != A64I_LE(A64I_MOVx |
+				     A64F_D(RID_X27) | A64F_M(RID_X28)) ||
+	view->entry[headidx+1u] != A64I_LE(A64I_MOVZw |
+				     A64F_U16(view->semantic.traceno) |
+				     A64F_D(RID_TMP)) ||
+	view->entry[headidx+2u] != A64I_LE(A64I_DMB_ISH) ||
+	view->entry[headidx+3u] != A64I_LE(vmstore))
     return 0;
   if (semantic_ninsp)
     *semantic_ninsp = semantic_nins;
@@ -4392,6 +4403,12 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
     LJArm64IRReject reject;
     if (J->parent != 0) {
       LJArm64SideIRView sideview;
+#if defined(LJ_TRACE_TEST_HELPERS) && \
+    defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST)
+      if (LJ_UNLIKELY(
+	    !lj_trace_test_arm64_first_side_publish_asm_authorized(J)))
+	lj_trace_err(J, LJ_TRERR_RETRY);
+#endif
       if (LJ_UNLIKELY(J->loopref != 0)) {
 	setintV(&J->errinfo, (int32_t)IR_LOOP);
 	lj_trace_err_info(J, LJ_TRERR_NYIIR);
@@ -4691,6 +4708,12 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
   asm_mcode_fixup(T->mcode, T->szmcode);
 #endif
   lj_mcode_sync(T->mcode, as->mctoporig);
+#if LJ_TARGET_ARM64 && defined(LJ_TRACE_TEST_HELPERS) && \
+    defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST)
+  if (J->parent != 0 && LJ_UNLIKELY(
+	!lj_trace_test_arm64_first_side_publish_asm_authorized(J)))
+    lj_trace_err(J, LJ_TRERR_RETRY);
+#endif
 #if LJ_TARGET_ARM64 && defined(LJ_TRACE_TEST_HELPERS) && \
     defined(LJ_ARM64_SIDE_ASM_TEST) && \
     LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED

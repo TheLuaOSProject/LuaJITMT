@@ -20,6 +20,7 @@
 #include "lj_jit.h"
 #include "lj_target.h"
 #include "lj_asm.h"
+#include "lj_tg.h"
 
 #if !LJ_HASJIT || !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED
 #error "side admission fixture requires the production ARM64 side gate closed"
@@ -28,7 +29,7 @@
 enum {
   K_ONE = REF_TRUE-1u,
   R_PARENT = REF_BASE+1u,
-  R_VALUE = REF_BASE+2u,
+  R_CGET = REF_BASE+2u,
   R_ADD = REF_BASE+3u,
   R_LIMIT = REF_BASE+4u,
   R_GT = REF_BASE+5u,
@@ -39,11 +40,11 @@ enum {
 
 typedef struct SideFixture {
   IRIns ir[SIDE_IR_CAP];
-  SnapShot snap[4];
-  SnapEntry snapmap[13];
+  SnapShot snap[5];
+  SnapEntry snapmap[17];
   BCIns proto[19];
   uint16_t parentmap[1];
-  MCode entry[3];
+  MCode entry[5];
   LJArm64SideIRView view;
   LJArm64SidePostRAView postra;
 } SideFixture;
@@ -70,12 +71,14 @@ static void set_footer(MSize snapno, MSize pcpos, uint8_t basedelta)
 
 static void make_semantic(void)
 {
-  static const IRRef snaprefs[4] = { R_VALUE, R_LIMIT, R_GT, R_XPOLL };
-  static const uint32_t mapofs[4] = { 0, 3, 7, 10 };
-  static const uint8_t nent[4] = { 1, 2, 1, 1 };
-  static const uint8_t nslots[4] = { 5, 6, 5, 5 };
-  static const uint8_t count[4] = { 0, 0, 0, SNAPCOUNT_DONE };
-  static const MSize pcpos[4] = { 13, 3, 17, 7 };
+  static const IRRef snaprefs[5] = {
+    R_CGET, R_ADD, R_LIMIT, R_GT, R_XPOLL
+  };
+  static const uint32_t mapofs[5] = { 0, 3, 7, 11, 14 };
+  static const uint8_t nent[5] = { 1, 2, 2, 1, 1 };
+  static const uint8_t nslots[5] = { 5, 6, 6, 5, 5 };
+  static const uint8_t count[5] = { 0, 0, 0, 0, SNAPCOUNT_DONE };
+  static const MSize pcpos[5] = { 13, 14, 3, 17, 7 };
   MSize i;
 
   memset(&fx, 0, sizeof(fx));
@@ -86,15 +89,14 @@ static void make_semantic(void)
   setir(REF_BASE, IR_BASE, IRT_PGC, 1, 2);
   setir(R_PARENT, IR_SLOAD, IRT_INT, 4,
 	IRSLOAD_PARENT|IRSLOAD_INHERIT);
-  setir(R_VALUE, IR_SLOAD, IRT_INT|IRT_GUARD, 5,
-	IRSLOAD_TYPECHECK);
-  setir(R_ADD, IR_ADDOV, IRT_INT|IRT_GUARD, R_VALUE, K_ONE);
+  setir(R_CGET, IR_NOP, IRT_NIL, 0, 0);
+  setir(R_ADD, IR_ADDOV, IRT_INT|IRT_GUARD, R_PARENT, K_ONE);
   setir(R_LIMIT, IR_SLOAD, IRT_INT|IRT_GUARD, 2,
 	IRSLOAD_TYPECHECK);
   setir(R_GT, IR_GT, IRT_INT|IRT_GUARD, R_LIMIT, R_ADD);
   setir(R_XPOLL, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0);
 
-  for (i = 0; i < 4; i++) {
+  for (i = 0; i < 5; i++) {
     fx.snap[i].ref = (IRRef1)snaprefs[i];
     fx.snap[i].mapofs = mapofs[i];
     fx.snap[i].nslots = nslots[i];
@@ -103,11 +105,13 @@ static void make_semantic(void)
     fx.snap[i].count = count[i];
   }
   fx.snapmap[0] = SNAP(4, 0, R_PARENT);
-  fx.snapmap[3] = SNAP(4, 0, R_ADD);
-  fx.snapmap[4] = SNAP(5, 0, R_ADD);
+  fx.snapmap[3] = SNAP(4, 0, R_PARENT);
+  fx.snapmap[4] = SNAP(5, 0, R_PARENT);
   fx.snapmap[7] = SNAP(4, 0, R_ADD);
-  fx.snapmap[10] = SNAP(4, 0, R_ADD);
-  for (i = 0; i < 4; i++)
+  fx.snapmap[8] = SNAP(5, 0, R_ADD);
+  fx.snapmap[11] = SNAP(4, 0, R_ADD);
+  fx.snapmap[14] = SNAP(4, 0, R_ADD);
+  for (i = 0; i < 5; i++)
     set_footer(i, pcpos[i], 0);
 
   fx.view.ir = fx.ir;
@@ -116,8 +120,8 @@ static void make_semantic(void)
   fx.view.proto_bc = fx.proto;
   fx.view.nins = R_END;
   fx.view.nk = K_ONE;
-  fx.view.nsnap = 4;
-  fx.view.nsnapmap = 13;
+  fx.view.nsnap = 5;
+  fx.view.nsnapmap = 17;
   fx.view.proto_sizebc = 19;
   fx.view.baseslot = 1+LJ_FR2;
   fx.view.root_topslot = 5;
@@ -204,7 +208,7 @@ static void test_semantic_constants_and_ir(void)
 {
   IRRef ref;
   static const IRRef refs[] = {
-    REF_BASE, R_PARENT, R_VALUE, R_ADD, R_LIMIT, R_GT, R_XPOLL
+    REF_BASE, R_PARENT, R_CGET, R_ADD, R_LIMIT, R_GT, R_XPOLL
   };
   MSize i;
 
@@ -218,7 +222,7 @@ static void test_semantic_constants_and_ir(void)
   for (i = 0; i < sizeof(refs)/sizeof(refs[0]); i++) {
     ref = refs[i];
     make_semantic();
-    fx.ir[ref].o = IR_NOP;
+    fx.ir[ref].o = fx.ir[ref].o == IR_NOP ? IR_XBAR : IR_NOP;
     expect_semantic(0);
     make_semantic();
     fx.ir[ref].t.irt ^= IRT_GUARD;
@@ -232,7 +236,8 @@ static void test_semantic_constants_and_ir(void)
   }
   SEMANTIC_MUTATION(fx.ir[R_PARENT].op2 = IRSLOAD_PARENT);
   SEMANTIC_MUTATION(fx.ir[R_PARENT].t.irt |= IRT_GUARD);
-  SEMANTIC_MUTATION(fx.ir[R_VALUE].op2 |= IRSLOAD_PARENT);
+  SEMANTIC_MUTATION(fx.ir[R_CGET].t.irt = IRT_INT);
+  SEMANTIC_MUTATION(fx.ir[R_ADD].op1 = R_CGET);
   SEMANTIC_MUTATION(fx.ir[R_ADD].op2 = R_PARENT);
   SEMANTIC_MUTATION(fx.ir[R_LIMIT].op1 = 3);
   SEMANTIC_MUTATION(fx.ir[R_GT].op1 = R_PARENT);
@@ -246,20 +251,20 @@ static void test_semantic_constants_and_ir(void)
 
 static void test_semantic_snapshots(void)
 {
-  static const MSize pcpos[4] = { 13, 3, 17, 7 };
+  static const MSize pcpos[5] = { 13, 14, 3, 17, 7 };
   MSize i;
 
   /* Exit hotness/count is mutable and outside this immutable certificate. */
   make_semantic();
-  for (i = 0; i < 4; i++)
+  for (i = 0; i < 5; i++)
     fx.snap[i].count = (uint8_t)(31u+i*37u);
   expect_semantic(1);
   make_semantic();
-  for (i = 0; i < 4; i++)
+  for (i = 0; i < 5; i++)
     fx.snap[i].mcofs = (uint16_t)(100u+i);
   expect_semantic(1);
 
-  for (i = 0; i < 4; i++) {
+  for (i = 0; i < 5; i++) {
     make_semantic(); fx.snap[i].ref++; expect_semantic(0);
     make_semantic(); fx.snap[i].mapofs++; expect_semantic(0);
     make_semantic(); fx.snap[i].nent++; expect_semantic(0);
@@ -271,15 +276,19 @@ static void test_semantic_snapshots(void)
   SEMANTIC_MUTATION(fx.snapmap[0] = SNAP(3, 0, R_PARENT));
   SEMANTIC_MUTATION(fx.snapmap[0] = SNAP(4, SNAP_NORESTORE, R_PARENT));
   SEMANTIC_MUTATION(fx.snapmap[0] = SNAP(4, 0, R_ADD));
-  SEMANTIC_MUTATION(fx.snapmap[3] = SNAP(4, 0, R_PARENT));
-  SEMANTIC_MUTATION(fx.snapmap[4] = SNAP(5, 0, R_VALUE));
-  SEMANTIC_MUTATION(fx.snapmap[7] = SNAP(4, SNAP_FRAME, R_ADD));
-  SEMANTIC_MUTATION(fx.snapmap[10] = SNAP(5, 0, R_ADD));
+  SEMANTIC_MUTATION(fx.snapmap[3] = SNAP(4, 0, R_ADD));
+  SEMANTIC_MUTATION(fx.snapmap[4] = SNAP(5, 0, R_CGET));
+  SEMANTIC_MUTATION(fx.snapmap[7] = SNAP(4, 0, R_PARENT));
+  SEMANTIC_MUTATION(fx.snapmap[8] = SNAP(5, 0, R_PARENT));
+  SEMANTIC_MUTATION(fx.snapmap[11] = SNAP(4, SNAP_FRAME, R_ADD));
+  SEMANTIC_MUTATION(fx.snapmap[14] = SNAP(5, 0, R_ADD));
 }
 
 static void make_postra(void)
 {
   IRRef ref;
+  MSize headidx = (MSize)LJ_ABI_BRANCH_TRACK;
+  MCode vmstore;
   make_semantic();
   setir(R_END, IR_NOP, IRT_NIL, 0, 0);
   for (ref = K_ONE; ref <= REF_NIL; ref++) {
@@ -289,7 +298,7 @@ static void make_postra(void)
   fx.ir[REF_BASE].r = RID_BASE;
   fx.ir[REF_BASE].s = SPS_NONE;
   fx.ir[R_PARENT].r = RID_X27;
-  fx.ir[R_VALUE].r = RID_X28;
+  fx.ir[R_CGET].r = RID_INIT;
   fx.ir[R_ADD].r = RID_X28;
   fx.ir[R_LIMIT].r = RID_X27;
   fx.ir[R_GT].r = RID_INIT;
@@ -299,10 +308,15 @@ static void make_postra(void)
   fx.parentmap[0] = REGSP(RID_X28, SPS_NONE);
 #if LJ_ABI_BRANCH_TRACK
   fx.entry[0] = A64I_LE(A64I_BTI_J);
-  fx.entry[1] = A64I_LE(A64I_MOVx | A64F_D(RID_X27) | A64F_M(RID_X28));
-#else
-  fx.entry[0] = A64I_LE(A64I_MOVx | A64F_D(RID_X27) | A64F_M(RID_X28));
 #endif
+  vmstore = A64I_STRw | A64F_D(RID_TMP) | A64F_N(RID_DISPATCH) |
+	    A64F_U12((uint32_t)DISPATCH_TG(vmstate) >> 2);
+  fx.entry[headidx] = A64I_LE(A64I_MOVx |
+	A64F_D(RID_X27) | A64F_M(RID_X28));
+  fx.entry[headidx+1u] = A64I_LE(A64I_MOVZw |
+	A64F_U16(fx.postra.semantic.traceno) | A64F_D(RID_TMP));
+  fx.entry[headidx+2u] = A64I_LE(A64I_DMB_ISH);
+  fx.entry[headidx+3u] = A64I_LE(vmstore);
   fx.postra.parentmap = fx.parentmap;
   fx.postra.entry = fx.entry;
   fx.postra.nins = R_END+1u;
@@ -313,7 +327,7 @@ static void make_postra(void)
   fx.postra.topslot = 5;
   fx.postra.parent_topslot = 5;
   fx.postra.parentmap_n = 1;
-  fx.postra.entry_words = 1u+(MSize)LJ_ABI_BRANCH_TRACK;
+  fx.postra.entry_words = headidx+4u;
   fx.postra.branch_track = (uint8_t)LJ_ABI_BRANCH_TRACK;
 }
 
@@ -321,8 +335,17 @@ static void expect_postra(int admitted)
 {
   IRRef semantic_nins = 0;
   int result = lj_asm_arm64_side_postra_admit(&fx.postra, &semantic_nins);
-  if (result != admitted)
-    fprintf(stderr, "postra result=%d wanted=%d\n", result, admitted);
+  if (result != admitted) {
+    MSize h = (MSize)LJ_ABI_BRANCH_TRACK;
+    fprintf(stderr,
+      "postra result=%d wanted=%d prehead=%d words=%u "
+      "prefix=%#x/%#x/%#x/%#x\n",
+	result, admitted,
+	lj_asm_arm64_side_prehead_admit(&fx.postra, NULL),
+	(unsigned)fx.postra.entry_words, (unsigned)fx.entry[h],
+	(unsigned)fx.entry[h+1u], (unsigned)fx.entry[h+2u],
+	(unsigned)fx.entry[h+3u]);
+  }
   assert(result == admitted);
   if (admitted)
     assert(semantic_nins == R_END);
@@ -370,13 +393,15 @@ static void test_prehead(void)
   PREHEAD_MUTATION(fx.parentmap[0] = REGSP(RID_X27, SPS_NONE));
   PREHEAD_MUTATION(fx.ir[REF_BASE].r = RID_X0);
   PREHEAD_MUTATION(fx.ir[R_PARENT].r = RID_X0);
-  PREHEAD_MUTATION(fx.ir[R_VALUE].s = 2);
+  PREHEAD_MUTATION(fx.ir[R_CGET].r = RID_X0);
+  PREHEAD_MUTATION(fx.ir[R_CGET].s = 2);
   PREHEAD_MUTATION(fx.ir[R_GT].r = RID_X0);
   PREHEAD_MUTATION(fx.ir[R_XPOLL].s = 2);
   PREHEAD_MUTATION(fx.ir[K_ONE].r = RID_X0);
 
   /* Entry bytes do not exist yet at pre-head time. The full post-RA gate,
-  ** tested below, is solely responsible for the emitted BTI/MOV prefix. */
+  ** tested below, is solely responsible for the emitted BTI/MOV/VM-state
+  ** prefix. */
   make_postra(); fx.postra.entry = NULL; expect_prehead(1);
   make_postra(); fx.postra.entry =
     (const MCode *)(const void *)((const char *)fx.entry+1);
@@ -394,13 +419,25 @@ static void test_prehead(void)
 static void test_postra(void)
 {
   IRRef ref;
+  MSize headidx = (MSize)LJ_ABI_BRANCH_TRACK;
+  MCode vmstore = A64I_STRw | A64F_D(RID_TMP) |
+	A64F_N(RID_DISPATCH) |
+	A64F_U12((uint32_t)DISPATCH_TG(vmstate) >> 2);
   make_postra();
   expect_postra(1);
   assert(!lj_asm_arm64_side_postra_admit(NULL, NULL));
 
   make_postra();
   fx.snap[0].count = SNAPCOUNT_DONE;
-  fx.snap[3].count = 0;
+  fx.snap[4].count = 0;
+  expect_postra(1);
+
+  /* The published trace number is relational and encoded in the VM-state
+  ** prefix, not fixed to the initial child slot used by this fixture. */
+  make_postra();
+  fx.postra.semantic.traceno = 9;
+  fx.entry[headidx+1u] = A64I_LE(A64I_MOVZw |
+	A64F_U16(fx.postra.semantic.traceno) | A64F_D(RID_TMP));
   expect_postra(1);
 
   POSTRA_MUTATION(fx.postra.semantic.ir = NULL);
@@ -434,43 +471,75 @@ static void test_postra(void)
   POSTRA_MUTATION(fx.postra.entry =
     (const MCode *)(const void *)((const char *)fx.entry+1));
   POSTRA_MUTATION(fx.postra.entry_words = 0);
+  POSTRA_MUTATION(fx.postra.entry_words = headidx+3u);
   POSTRA_MUTATION(fx.postra.branch_track =
     (uint8_t)!LJ_ABI_BRANCH_TRACK);
 #if LJ_ABI_BRANCH_TRACK
-  make_postra();
-  fx.postra.entry_words = 1;
-  expect_postra(0);
   make_postra();
   fx.entry[0] = A64I_LE(A64I_NOP);
   expect_postra(0);
 #endif
   make_postra();
-  fx.entry[LJ_ABI_BRANCH_TRACK] ^= 1u;
+  fx.entry[headidx] ^= 1u;
   expect_postra(0);
   make_postra();
-  fx.entry[LJ_ABI_BRANCH_TRACK] =
+  fx.entry[headidx] =
     A64I_LE(A64I_MOVw | A64F_D(RID_X27) | A64F_M(RID_X28));
   expect_postra(0);
   make_postra();
-  fx.entry[LJ_ABI_BRANCH_TRACK] =
+  fx.entry[headidx] =
     A64I_LE(A64I_MOVx | A64F_D(RID_X27) | A64F_M(RID_X26));
   expect_postra(0);
   make_postra();
-  fx.entry[LJ_ABI_BRANCH_TRACK] =
+  fx.entry[headidx] =
     A64I_LE(A64I_MOVx | A64F_D(RID_X28) | A64F_M(RID_X27));
   expect_postra(0);
   make_postra();
-  fx.entry[LJ_ABI_BRANCH_TRACK] = A64I_LE(A64I_NOP);
-  fx.entry[LJ_ABI_BRANCH_TRACK+1u] =
+  fx.entry[headidx] = A64I_LE(A64I_NOP);
+  fx.entry[headidx+1u] =
     A64I_LE(A64I_MOVx | A64F_D(RID_X27) | A64F_M(RID_X28));
   fx.postra.entry_words++;
+  expect_postra(0);
+  make_postra();
+  fx.entry[headidx+1u] = A64I_LE(A64I_MOVZx |
+	A64F_U16(fx.postra.semantic.traceno) | A64F_D(RID_TMP));
+  expect_postra(0);
+  make_postra();
+  fx.entry[headidx+1u] = A64I_LE(A64I_MOVZw |
+	A64F_U16(fx.postra.semantic.traceno+1u) | A64F_D(RID_TMP));
+  expect_postra(0);
+  make_postra();
+  fx.entry[headidx+1u] = A64I_LE(A64I_MOVZw |
+	A64F_U16(fx.postra.semantic.traceno) | A64F_D(RID_X0));
+  expect_postra(0);
+  make_postra();
+  fx.entry[headidx+2u] = A64I_LE(A64I_NOP);
+  expect_postra(0);
+  make_postra();
+  fx.entry[headidx+3u] = A64I_LE(A64I_LDRw |
+	A64F_D(RID_TMP) | A64F_N(RID_DISPATCH) |
+	A64F_U12((uint32_t)DISPATCH_TG(vmstate) >> 2));
+  expect_postra(0);
+  make_postra();
+  fx.entry[headidx+3u] = A64I_LE(A64I_STRw |
+	A64F_D(RID_X0) | A64F_N(RID_DISPATCH) |
+	A64F_U12((uint32_t)DISPATCH_TG(vmstate) >> 2));
+  expect_postra(0);
+  make_postra();
+  fx.entry[headidx+3u] = A64I_LE(A64I_STRw |
+	A64F_D(RID_TMP) | A64F_N(RID_BASE) |
+	A64F_U12((uint32_t)DISPATCH_TG(vmstate) >> 2));
+  expect_postra(0);
+  make_postra();
+  fx.entry[headidx+3u] = A64I_LE(vmstore ^ A64F_U12(1u));
   expect_postra(0);
   POSTRA_MUTATION(fx.ir[REF_BASE].r = RID_X0);
   POSTRA_MUTATION(fx.ir[REF_BASE].s = 2);
 
   for (ref = R_PARENT; ref <= R_LIMIT; ref++) {
     make_postra(); fx.ir[ref].r = RID_X0; expect_postra(0);
-    make_postra(); fx.ir[ref].r = RID_INIT; expect_postra(0);
+    make_postra(); fx.ir[ref].r = fx.ir[ref].r == RID_INIT ?
+	RID_X0 : RID_INIT; expect_postra(0);
     make_postra(); fx.ir[ref].r = RID_D0; expect_postra(0);
     make_postra(); fx.ir[ref].s = 2; expect_postra(0);
   }

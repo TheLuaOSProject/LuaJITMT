@@ -147,6 +147,34 @@ for required in \
   }
 done
 
+# Freeze the resumed-CGET grammar consumed by both real ARM64 assembler gates.
+# The semantic CGET is a NOP because its value is already inherited from the
+# parent; ADD therefore consumes the parent value directly. The real POSTRA
+# stage below binds this grammar to the observed register allocation.
+for required in \
+  'ARM64_SIDE_R_CGET = REF_BASE+2u,' \
+  'ARM64_SIDE_R_ADD = REF_BASE+3u,' \
+  'static const MSize mapofs[5] = { 0, 3, 7, 11, 14 };' \
+  'static const uint8_t nent[5] = { 1, 2, 2, 1, 1 };' \
+  'static const uint8_t nslots[5] = { 5, 6, 6, 5, 5 };' \
+  'static const MSize pcpos[5] = { 13, 14, 3, 17, 7 };' \
+  'view->nk != ARM64_SIDE_K_ONE || view->nsnap != 5u ||' \
+  'view->nsnapmap != 17u || view->baseslot != 1u+LJ_FR2 ||' \
+  'ARM64_SIDE_REQUIRE(ARM64_SIDE_R_CGET, IR_NOP, IRT_NIL, 0, 0);' \
+  'ARM64_SIDE_R_PARENT, ARM64_SIDE_K_ONE);' \
+  'RID_X27, RID_INIT, RID_X28, RID_X27' \
+  'view->parentmap[0] != REGSP(RID_X28, SPS_NONE)' \
+  'A64F_D(RID_X27) | A64F_M(RID_X28)) ||'; do
+  grep -F "$required" "$root/src/lj_asm.c" >/dev/null || {
+    echo "ARM64 resumed-CGET assembler shape changed: $required" >&2
+    exit 1
+  }
+done
+if grep -F 'ARM64_SIDE_R_VALUE' "$root/src/lj_asm.c" >/dev/null; then
+  echo "ARM64 side assembler regained the pre-CGET semantic value" >&2
+  exit 1
+fi
+
 # The ordinary trace-save path and the future bounded first-child path share
 # one private compact-body constructor. Planning is read-only; initialization
 # and rollback cannot publish, allocate, wait, invoke callbacks or alter parent
@@ -329,11 +357,30 @@ done
 for required in \
   "jit.opt.start('hotloop=1','hotexit=1','maxtrace=3')" \
   'if bias~=0 then i=i+1 end' \
+  'PROBE_CHILD_EXIT = 3,' \
+  'PROBE_CHILD_R_CGET = REF_BASE+2u,' \
+  'PROBE_CHILD_R_ADD = REF_BASE+3u,' \
+  'PROBE_CHILD_NSNAP = 5,' \
+  'PROBE_CHILD_NSNAPMAP = 17,' \
+  'static const MSize mapofs[PROBE_CHILD_NSNAP] = { 0, 3, 7, 11, 14 };' \
+  'static const uint8_t nent[PROBE_CHILD_NSNAP] = { 1, 2, 2, 1, 1 };' \
+  'static const uint8_t nslots[PROBE_CHILD_NSNAP] = { 5, 6, 6, 5, 5 };' \
+  'static const MSize pcpos[PROBE_CHILD_NSNAP] = { 13, 14, 3, 17, 7 };' \
+  'EXPECT_ABORTED_CHILD_IR(PROBE_CHILD_R_CGET, IR_NOP, IRT_NIL, 0, 0);' \
+  'IRT_INT|IRT_GUARD, PROBE_CHILD_R_PARENT, PROBE_CHILD_K_ONE);' \
+  'assert(trace_nsnap_acq(child) == PROBE_CHILD_NSNAP);' \
+  'assert(trace_nsnapmap_acq(child) == PROBE_CHILD_NSNAPMAP);' \
+  'assert(snap_ref_acq(&snap[PROBE_CHILD_EXIT]) == PROBE_CHILD_R_GT);' \
+  'assert(lj_trace_test_exittab_last_alloc_slots() == 6);' \
+  'assert(lj_trace_test_exittab_last_free_slots() == 6);' \
+  'expect_aborted_child_shape(J, pt, continuation);' \
   'lj_trace_test_reset_exit_stats();' \
   'lj_trace_test_reset_exittab_stats();' \
   'lj_asm_arm64_test_side_probe_arm(PROBE_PARENT, PROBE_EXIT);' \
   'lj_asm_arm64_test_force_exitstub_mcode_retry(1);' \
   'assert(probe.stages == LJ_ARM64_SIDE_ASM_PROBE_ALL);' \
+  'assert((probe.stages & LJ_ARM64_SIDE_ASM_PROBE_PREHEAD) != 0);' \
+  'assert((probe.stages & LJ_ARM64_SIDE_ASM_PROBE_POSTRA) != 0);' \
   'assert(probe.compact_geometry_reject == 1);' \
   'assert(probe.compact_init == 1);' \
   'assert(probe.compact_reset == 1);' \
@@ -497,4 +544,4 @@ if nm "$archive" | grep -E \
 fi
 restore_needed=0
 
-echo "arm64_jit_side_asm_consumption_contract OK: exact first-side assembly, compact-body init/reset, MCODELM recapture and raw ARM64e negative dry publication seal proved without publication"
+echo "arm64_jit_side_asm_consumption_contract OK: resumed-CGET first-side assembly, exact semantic snapshots/post-RA gate, compact-body init/reset, MCODELM recapture and raw ARM64e negative dry publication seal proved without publication"

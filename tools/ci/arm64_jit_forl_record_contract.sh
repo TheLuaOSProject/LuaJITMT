@@ -204,9 +204,9 @@ done
 
 # Trace/mcode publication precedes the immutable recovery sidecar and one
 # full-word bytecode CAS. FORI is intentionally left untouched in this stage.
-awk '/^static int trace_stop/ { copy=1 }
+awk '/^static int trace_stop\(jit_State \*J\)/ { copy=1 }
      copy { print }
-     copy && /^static / && !/^static int trace_stop/ { exit }' \
+     copy && /^static / && !/^static int trace_stop\(jit_State \*J\)/ { exit }' \
   "$trace_source" >"$trace_stop"
 commit_line=$(grep -n 'lj_mcode_commit(J, J->cur.mcode);' "$trace_stop" | cut -d: -f1)
 sync_line=$(grep -n 'lj_mcode_sync_core(J);' "$trace_stop" | cut -d: -f1)

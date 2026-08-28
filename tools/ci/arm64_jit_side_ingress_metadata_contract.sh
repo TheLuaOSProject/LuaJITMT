@@ -33,6 +33,8 @@ abort_region=$tmpdir/side-parent-abort.txt
 abort_owner_region=$tmpdir/side-parent-abort-owner.txt
 terminal_region=$tmpdir/side-parent-terminal.txt
 production_regions=$tmpdir/side-ingress-production.txt
+ins_region=$tmpdir/side-ingress-ins.txt
+first_publish_ingress_region=$tmpdir/side-ingress-first-publish-test.txt
 asm_region=$tmpdir/side-parent-asm-consumption.txt
 asm_head_region=$tmpdir/side-parent-asm-head.txt
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_TRACE_TEST_HELPERS'
@@ -129,7 +131,7 @@ fi
 # publish only the exact source/destination local certificate. It may not acquire/release the
 # JIT token, wait for SMR, mutate parent metadata or set side admission.
 awk '/^static int trace_arm64_side_parent_asm_owner_base/ { copy=1 }
-     copy && /^#if defined\(LJ_TRACE_TEST_HELPERS\) && defined\(LJ_ARM64_SIDE_ASM_TEST\)/ { exit }
+     copy && /^#if defined\(LJ_TRACE_TEST_HELPERS\)/ { exit }
      copy { print }' "$root/src/lj_trace.c" >"$cert_region"
 test -s "$cert_region"
 for required in \
@@ -283,16 +285,40 @@ require_order "$preflight_region" \
   'shutdown certificate preflight before scratch-body checks'
 
 # Production recorder ingress remains dormant. The only core-name occurrences
-# are its comment, definition, metadata-test wrapper and the separately guarded
-# LJ_ARM64_SIDE_ASM_TEST native-probe preflight.
+# are its comment, definition, metadata-test wrapper and the two separately
+# guarded native-probe preflights. The first-publication fixture may consume the
+# checkpoint from lj_trace_ins, but only inside its test-only compile-time seam.
 test "$(grep -Fc 'lj_trace_arm64_first_side_loop_valid(' \
-  "$root/src/lj_trace.c")" = 4
+  "$root/src/lj_trace.c")" = 5
 sed -n '/^static TraceStartResult trace_start(jit_State \*J)/,/^}/p' \
   "$root/src/lj_trace.c" >"$production_regions"
-sed -n '/^void lj_trace_ins(jit_State \*J, const BCIns \*pc)/,/^}/p' \
-  "$root/src/lj_trace.c" >>"$production_regions"
+sed -n '/^void lj_trace_ins(jit_State \*J, const BCIns \*pc)/,/^static int trace_hot_root_start_valid/p' \
+  "$root/src/lj_trace.c" >"$ins_region"
 sed -n '/^static void trace_hotside(jit_State \*J, const BCIns \*pc,/,/^}/p' \
   "$root/src/lj_trace.c" >>"$production_regions"
+test -s "$ins_region"
+cat "$ins_region" >>"$production_regions"
+awk '
+  /^#if defined\(LJ_TRACE_TEST_HELPERS\) && \\/ {
+    candidate=1; block=$0 ORS; next
+  }
+  candidate {
+    block=block $0 ORS
+    if ($0 == "#endif") {
+      if (index(block, "defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST)") &&
+          index(block, "trace_arm64_first_side_publish_test_preflight") &&
+          index(block, "lj_trace_arm64_first_side_loop_valid("))
+        printf "%s", block
+      candidate=0; block=""
+    }
+  }' "$root/src/lj_trace.c" >"$first_publish_ingress_region"
+test -s "$first_publish_ingress_region"
+test "$(grep -Fc 'lj_trace_arm64_first_side_loop_valid(' \
+  "$first_publish_ingress_region")" = 1
+test "$(grep -Fc 'trace_arm64_first_side_publish_test_preflight(' \
+  "$ins_region")" = 1
+grep -F 'defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST)' \
+  "$first_publish_ingress_region" >/dev/null
 if grep -F 'lj_trace_arm64_first_side_loop_valid' \
      "$production_regions" >/dev/null; then
   echo "Stage 1 side-ingress checkpoint was wired into production" >&2

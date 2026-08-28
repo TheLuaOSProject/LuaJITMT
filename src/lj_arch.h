@@ -533,9 +533,25 @@
 #if defined(LJ_ARM64_SIDE_ASM_TEST) && !defined(LJ_TRACE_TEST_HELPERS)
 #error "LJ_ARM64_SIDE_ASM_TEST requires LJ_TRACE_TEST_HELPERS"
 #endif
+#if defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST) && \
+    !defined(LJ_TRACE_TEST_HELPERS)
+#error "LJ_ARM64_FIRST_SIDE_PUBLISH_TEST requires LJ_TRACE_TEST_HELPERS"
+#endif
+#if defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST) && \
+    defined(LJ_ARM64_SIDE_ASM_TEST)
+#error "ARM64 side assembler and first-side publish tests are mutually exclusive"
+#endif
 #if defined(LJ_ARM64_SIDE_ASM_TEST) && \
     (!defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL) || !LJ_TARGET_ARM64)
 #error "LJ_ARM64_SIDE_ASM_TEST requires the experimental ARM64 JIT"
+#endif
+#if defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST) && \
+    (!defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL) || !LJ_TARGET_ARM64)
+#error "LJ_ARM64_FIRST_SIDE_PUBLISH_TEST requires the experimental ARM64 JIT"
+#endif
+#if defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST) && \
+    (defined(LUAJIT_USE_GDBJIT) || defined(LUAJIT_USE_PERFTOOLS))
+#error "LJ_ARM64_FIRST_SIDE_PUBLISH_TEST excludes deferred debug/perf registration"
 #endif
 
 #if defined(LUAJIT_MT_ARM64_BOOTSTRAP)
@@ -587,6 +603,10 @@
 #if defined(LJ_ARM64_SIDE_ASM_TEST) && \
     LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED != 1
 #error "LJ_ARM64_SIDE_ASM_TEST requires closed ARM64 side recording"
+#endif
+#if defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST) && \
+    LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED != 1
+#error "LJ_ARM64_FIRST_SIDE_PUBLISH_TEST requires closed ARM64 side recording"
 #endif
 #ifndef LJ_ARM64_JIT_EXIT_TARGET_SLOTS
 #define LJ_ARM64_JIT_EXIT_TARGET_SLOTS			0
