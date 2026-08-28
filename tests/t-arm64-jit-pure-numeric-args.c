@@ -1,10 +1,12 @@
 /*
-** Native macOS ARM64 contract for the exact dynamic-accumulator pure-NUM root.
+** Native macOS ARM64 contract for exact strict and inclusive
+** dynamic-accumulator pure-NUM roots.
 **
-** This certifies one intentionally narrow loop: three live NUM parameters
-** (initial accumulator, limit, and step), ADD-only recurrence, and ordered
-** comparisons. Adjacent arithmetic and bytecode families remain fail-closed,
-** while the already-admitted fixed-initializer roots stay distinct.
+** This certifies two intentionally narrow comparison profiles over one loop
+** geometry: three live NUM parameters (initial accumulator, limit, and step),
+** an ADD-only recurrence, and either exact < or <= ordered comparisons.
+** Adjacent arithmetic and bytecode families remain fail-closed, while the
+** already-admitted fixed-initializer roots stay distinct.
 */
 
 #include <assert.h>
@@ -73,8 +75,37 @@ enum {
   FINAL_EXIT = 4
 };
 
+typedef enum NumericArgsComparison {
+  NUMERIC_ARGS_STRICT,
+  NUMERIC_ARGS_INCLUSIVE
+} NumericArgsComparison;
+
+typedef struct NumericArgsProfile {
+  const char *name;
+  NumericArgsComparison comparison;
+  BCOp bytecode_op;
+  IROp precondition_op;
+  IROp body_op;
+  A64CC precondition_exit_cc;
+  A64CC body_loop_cc;
+  lua_Number long_result;
+  lua_Number sensitive_result;
+  lua_Number integer_limit_result;
+} NumericArgsProfile;
+
+static const NumericArgsProfile strict_profile = {
+  "__arm64_pure_numeric_args", NUMERIC_ARGS_STRICT,
+  BC_ISGE, IR_GT, IR_LT, CC_HS, CC_LO, 20.25, 1.0, 20.0
+};
+
+static const NumericArgsProfile inclusive_profile = {
+  "__arm64_pure_numeric_args_inclusive", NUMERIC_ARGS_INCLUSIVE,
+  BC_ISGT, IR_GE, IR_LE, CC_HI, CC_LS, 20.5, 1.375, 20.5
+};
+
 #define QNAN_BITS UINT64_C(0x7ff8000000000000)
 #define PINF_BITS UINT64_C(0x7ff0000000000000)
+#define NINF_BITS UINT64_C(0xfff0000000000000)
 
 static const IRRef expected_snaprefs[] = {
   R_X, R_LIMIT, R_PRECOND, R_LOOP, R_COND
@@ -149,7 +180,14 @@ typedef enum PostAdmissionRequest {
   POSTADMISSION_PROFILE,
   POSTADMISSION_STOPREQ,
   POSTADMISSION_QNAN_X,
-  POSTADMISSION_PINF_X
+  POSTADMISSION_PINF_X,
+  POSTADMISSION_NINF_X_STOP,
+  POSTADMISSION_QNAN_LIMIT,
+  POSTADMISSION_PINF_LIMIT_STOP,
+  POSTADMISSION_NINF_LIMIT,
+  POSTADMISSION_QNAN_STEP,
+  POSTADMISSION_PINF_STEP,
+  POSTADMISSION_NINF_STEP_STOP
 } PostAdmissionRequest;
 
 typedef struct PostAdmissionPublisher {
@@ -157,7 +195,7 @@ typedef struct PostAdmissionPublisher {
   global_State *g;
   TGState *tg;
   uint64_t epoch;
-  lua_Number expected_x;
+  lua_Number expected_value;
   PostAdmissionRequest request;
   uint32_t saw_stage;
   uint32_t saw_jit_base;
@@ -215,22 +253,57 @@ static void *publish_postadmission_request(void *arg)
     lj_tg_poll_rel(tg, 1);
   } else {
     TValue live;
+    TValue *target;
     uint64_t replacement;
-    /* The initial accumulator occupies base[0]. Admission has finished and
-    ** the owner has published this frame, but native SLOAD/FADD have not run. */
-    lj_tv_load_acq(&live, &base[0]);
+    int stop_after_mutation;
+    /* Admission has finished and the owner has published this frame, but
+    ** native SLOAD/FADD have not run. Arguments occupy base[0..2]. */
+    if (publisher->request == POSTADMISSION_QNAN_X ||
+	publisher->request == POSTADMISSION_PINF_X ||
+	publisher->request == POSTADMISSION_NINF_X_STOP) {
+      target = &base[0];
+    } else if (publisher->request == POSTADMISSION_QNAN_LIMIT ||
+	publisher->request == POSTADMISSION_PINF_LIMIT_STOP ||
+	publisher->request == POSTADMISSION_NINF_LIMIT) {
+      target = &base[1];
+    } else {
+      target = &base[2];
+    }
+    lj_tv_load_acq(&live, target);
     assert(tvisnum(&live));
-    assert(numV(&live) == publisher->expected_x);
-    replacement = publisher->request == POSTADMISSION_QNAN_X ?
-	QNAN_BITS : PINF_BITS;
-    tv_rawstore_rel(&base[0], replacement);
-    lj_tv_load_acq(&live, &base[0]);
+    assert(numV(&live) == publisher->expected_value);
+    if (publisher->request == POSTADMISSION_QNAN_X ||
+	publisher->request == POSTADMISSION_QNAN_LIMIT ||
+	publisher->request == POSTADMISSION_QNAN_STEP) {
+      replacement = QNAN_BITS;
+    } else if (publisher->request == POSTADMISSION_NINF_X_STOP ||
+	publisher->request == POSTADMISSION_NINF_LIMIT ||
+	publisher->request == POSTADMISSION_NINF_STEP_STOP) {
+      replacement = NINF_BITS;
+    } else {
+      replacement = PINF_BITS;
+    }
+    stop_after_mutation =
+      publisher->request == POSTADMISSION_NINF_X_STOP ||
+      publisher->request == POSTADMISSION_PINF_LIMIT_STOP ||
+      publisher->request == POSTADMISSION_NINF_STEP_STOP;
+    tv_rawstore_rel(target, replacement);
+    lj_tv_load_acq(&live, target);
     assert(tvisnum(&live));
-    if (publisher->request == POSTADMISSION_QNAN_X)
+    if (replacement == QNAN_BITS)
       assert(tvisnan(&live));
-    else
+    else if (replacement == PINF_BITS)
       assert(isinf(numV(&live)) && numV(&live) > 0);
+    else
+      assert(isinf(numV(&live)) && numV(&live) < 0);
     la_store32_rel(&publisher->mutated, 1);
+    if (stop_after_mutation) {
+      gc2_hs_actions_rel(g, LJ_GC2_HS_STOPREQ);
+      gc2_hs_pending_rel(g, 1);
+      gc2_hs_epoch_rel(g, publisher->epoch+1u);
+      lj_tg_reqmask_rel(tg, LJ_GC2_HS_STOPREQ);
+      lj_tg_poll_rel(tg, 1);
+    }
   }
   la_store32_rel(&publisher->published, 1);
   lj_trace_test_root_entry_release();
@@ -246,7 +319,8 @@ static void expect_bc_ad(const BCIns *bc, MSize pos, BCOp op,
   assert(bc_d(ins) == d);
 }
 
-static void expect_proto_shape(const GCproto *pt)
+static void expect_proto_shape(const GCproto *pt,
+	const NumericArgsProfile *profile)
 {
   const BCIns *bc = proto_bc(pt);
   BCIns ins;
@@ -256,7 +330,7 @@ static void expect_proto_shape(const GCproto *pt)
   expect_bc_ad(bc, 0, BC_FUNCF, 5, 0);
   expect_bc_ad(bc, 1, BC_CGET, 3, 0);
   expect_bc_ad(bc, 2, BC_CGET, 4, 1);
-  expect_bc_ad(bc, 3, BC_ISGE, 3, 4);
+  expect_bc_ad(bc, 3, profile->bytecode_op, 3, 4);
   ins = (BCIns)la_load32_acq((const uint32_t *)&bc[4]);
   assert(bc_op(ins) == BC_JMP && bc_a(ins) == 3 && bc_j(ins) == 6);
   ins = (BCIns)la_load32_acq((const uint32_t *)&bc[5]);
@@ -323,7 +397,8 @@ static void dump_unexpected_postra(const GCtrace *T)
   }
 }
 
-static void expect_ir_shape(const GCtrace *T)
+static void expect_ir_shape(const GCtrace *T,
+	const NumericArgsProfile *profile)
 {
   const IRIns *ir = trace_ir_acq(T);
   IRIns suffix;
@@ -348,12 +423,14 @@ static void expect_ir_shape(const GCtrace *T)
   expect_ir(ir, R_X_PRE, IR_ADD, IRT_NUM|IRT_ISPHI, R_STEP, R_X);
   expect_ir(ir, R_LIMIT, IR_SLOAD, IRT_NUM|IRT_GUARD,
 	    3, IRSLOAD_TYPECHECK);
-  expect_ir(ir, R_PRECOND, IR_GT, IRT_NUM|IRT_GUARD, R_LIMIT, R_X_PRE);
+  expect_ir(ir, R_PRECOND, profile->precondition_op,
+	IRT_NUM|IRT_GUARD, R_LIMIT, R_X_PRE);
   expect_ir(ir, R_LOOP, IR_LOOP, IRT_NIL|IRT_GUARD, 0, 0);
   expect_ir(ir, R_XPOLL, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0);
   expect_ir(ir, R_X_BODY, IR_ADD, IRT_NUM|IRT_ISPHI,
 	    R_X_PRE, R_STEP);
-  expect_ir(ir, R_COND, IR_LT, IRT_NUM|IRT_GUARD, R_X_BODY, R_LIMIT);
+  expect_ir(ir, R_COND, profile->body_op,
+	IRT_NUM|IRT_GUARD, R_X_BODY, R_LIMIT);
   expect_ir(ir, R_X_PHI, IR_PHI, IRT_NUM, R_X_PRE, R_X_BODY);
   suffix = ir_load_acq(&ir[R_NOP]);
   assert(suffix.o == IR_NOP && suffix.t.irt == IRT_NIL);
@@ -428,7 +505,8 @@ static int32_t sign_extend_branch(uint32_t value, unsigned bits)
   return (int32_t)(value << (32u-bits)) >> (32u-bits);
 }
 
-static void expect_dynamic_fp_mcode(const GCtrace *T)
+static void expect_dynamic_fp_mcode(const GCtrace *T,
+	const NumericArgsProfile *profile)
 {
   const IRIns *ir = trace_ir_acq(T);
   const MCode *mcode = trace_mcode_acq(T);
@@ -489,13 +567,13 @@ static void expect_dynamic_fp_mcode(const GCtrace *T)
       assert((branch & UINT32_C(0xff000010)) == A64I_BCC);
       delta = sign_extend_branch((branch >> 5) & 0x7ffffu, 19);
       target = &mcode[i+1u]+delta;
-      if ((branch & 15u) == CC_HS) {
+      if ((branch & 15u) == profile->precondition_exit_cc) {
         assert(target == pretarget);
         npre++;
       } else {
         uint32_t exit_branch;
         int32_t exit_delta;
-        assert((branch & 15u) == CC_LO);
+        assert((branch & 15u) == profile->body_loop_cc);
         assert(target == looptarget);
         assert(i+2u < nword);
         exit_branch = mcode[i+2u];
@@ -514,7 +592,8 @@ static void expect_dynamic_fp_mcode(const GCtrace *T)
   assert(nfcmp == 2 && npre == 1 && nbody == 1);
 }
 
-static void expect_only_args_root(lua_State *L, GCproto *pt)
+static void expect_only_args_root(lua_State *L, GCproto *pt,
+	const NumericArgsProfile *profile)
 {
   jit_State *J = L2J(L);
   GCtrace *T = traceref_safe(J, 1);
@@ -523,7 +602,7 @@ static void expect_only_args_root(lua_State *L, GCproto *pt)
   TraceNo traceno;
   uint8_t admission;
 
-  expect_proto_shape(pt);
+  expect_proto_shape(pt, profile);
   assert(trace_runnable_acq(T, 1));
   assert(trace_traceno_acq(T) == 1 && trace_root_acq(T) == 0);
   assert(trace_link_acq(T) == 1 && trace_linktype_acq(T) == LJ_TRLINK_LOOP);
@@ -539,7 +618,10 @@ static void expect_only_args_root(lua_State *L, GCproto *pt)
   assert(trace_mcloop_acq(T) > 0 &&
 	 trace_mcloop_acq(T) < trace_szmcode_acq(T));
 #if LJ_ABI_BRANCH_TRACK
+  assert(trace_szmcode_acq(T) == 140 && trace_mcloop_acq(T) == 80);
   assert(trace_mcode_acq(T)[0] == A64I_BTI_J);
+#else
+  assert(trace_szmcode_acq(T) == 136 && trace_mcloop_acq(T) == 76);
 #endif
   pc = trace_startpc_acq(T);
   if (pc != proto_bc(pt)+5u)
@@ -552,9 +634,9 @@ static void expect_only_args_root(lua_State *L, GCproto *pt)
   patched = (BCIns)la_load32_acq((const uint32_t *)pc);
   assert(bc_op(patched) == BC_JLOOP && bc_d(patched) == 1);
   assert(proto_trace_acq(pt) == 1);
-  expect_ir_shape(T);
+  expect_ir_shape(T, profile);
   expect_snapshot_shape(T, pt);
-  expect_dynamic_fp_mcode(T);
+  expect_dynamic_fp_mcode(T, profile);
   for (traceno = 2; (MSize)traceno < trace_sizetrace_acq(J); traceno++)
     assert(!trace_runnable_acq(traceref_safe(J, traceno), traceno));
 }
@@ -618,7 +700,7 @@ static void assert_publisher_done(PostAdmissionPublisher *publisher)
 }
 
 static void test_xpoll_lifecycle(lua_State *L, GCproto *pt,
-	int32_t idle_vmstate)
+	int32_t idle_vmstate, const NumericArgsProfile *profile)
 {
   global_State *g = G(L);
   TGState *tg = L2TG(L);
@@ -648,8 +730,8 @@ static void test_xpoll_lifecycle(lua_State *L, GCproto *pt,
   };
   assert(pthread_create(&worker, NULL, publish_postadmission_request,
 	&publisher) == 0);
-  assert(call_triple(L, "__arm64_pure_numeric_args",
-	0.25, 20.25, 0.25, 0, 0, 0) == 20.25);
+  assert(call_triple(L, profile->name,
+	0.25, 20.25, 0.25, 0, 0, 0) == profile->long_result);
   assert(pthread_join(worker, NULL) == 0);
   assert_publisher_done(&publisher);
   expect_profile_exit_and_reentry();
@@ -662,7 +744,7 @@ static void test_xpoll_lifecycle(lua_State *L, GCproto *pt,
   assert(lj_tg_profile_request_acq(tg) == 0);
   assert_native_idle(L, idle_vmstate);
   assert(L->cframe == saved_cframe);
-  expect_only_args_root(L, pt);
+  expect_only_args_root(L, pt, profile);
 
   clear_stopreq(tg);
   lj_trace_test_root_entry_reset();
@@ -673,7 +755,7 @@ static void test_xpoll_lifecycle(lua_State *L, GCproto *pt,
   };
   assert(pthread_create(&worker, NULL, publish_postadmission_request,
 	&publisher) == 0);
-  lua_getglobal(L, "__arm64_pure_numeric_args");
+  lua_getglobal(L, profile->name);
   assert(lua_isfunction(L, -1));
   lua_pushnumber(L, 0.5);
   lua_pushnumber(L, 20.25);
@@ -702,20 +784,28 @@ static void test_xpoll_lifecycle(lua_State *L, GCproto *pt,
   clear_stopreq(tg);
   assert((lj_tg_flags_acq(tg) &
 	  (TGF_STOPREQ|TGF_STOPREQ_FRESH)) == 0);
-  expect_only_args_root(L, pt);
+  expect_only_args_root(L, pt, profile);
 
   lj_trace_test_root_entry_reset();
   lj_trace_test_reset_exit_stats();
-  assert(call_triple(L, "__arm64_pure_numeric_args",
-	0.25, 20.25, 0.25, 0, 0, 0) == 20.25);
+  assert(call_triple(L, profile->name,
+	0.25, 20.25, 0.25, 0, 0, 0) == profile->long_result);
   expect_single_exit(FINAL_EXIT);
   assert_native_idle(L, idle_vmstate);
   assert(L->cframe == saved_cframe);
-  expect_only_args_root(L, pt);
+  expect_only_args_root(L, pt, profile);
 }
 
-static void test_x_mutation(lua_State *L, GCproto *pt,
-	int32_t idle_vmstate, PostAdmissionRequest request)
+typedef enum MutationResult {
+  MUTATION_FINITE,
+  MUTATION_QNAN,
+  MUTATION_PINF
+} MutationResult;
+
+static void test_terminating_mutation(lua_State *L, GCproto *pt,
+	int32_t idle_vmstate, const NumericArgsProfile *profile,
+	PostAdmissionRequest request, lua_Number expected_live,
+	MutationResult result_kind, lua_Number expected_result)
 {
   global_State *g = G(L);
   TGState *tg = L2TG(L);
@@ -728,19 +818,21 @@ static void test_x_mutation(lua_State *L, GCproto *pt,
   lj_trace_test_reset_exit_stats();
   lj_trace_test_root_entry_pause(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION);
   publisher = (PostAdmissionPublisher){
-    L, g, tg, epoch, 0.5, request, 0, 0, 0, 0
+    L, g, tg, epoch, expected_live, request, 0, 0, 0, 0
   };
   assert(pthread_create(&worker, NULL, publish_postadmission_request,
 	&publisher) == 0);
-  result = call_triple(L, "__arm64_pure_numeric_args",
-	0.5, 20.25, 0.5, 0, 0, 0);
+  result = call_triple(L, profile->name,
+	0.25, 20.25, 0.5, 0, 0, 0);
   assert(pthread_join(worker, NULL) == 0);
   assert_publisher_done(&publisher);
   assert(la_load32_acq(&publisher.mutated) == 1);
-  if (request == POSTADMISSION_QNAN_X)
+  if (result_kind == MUTATION_QNAN)
     assert(isnan(result));
-  else
+  else if (result_kind == MUTATION_PINF)
     assert(isinf(result) && result > 0);
+  else
+    assert(result == expected_result);
   expect_single_exit(PRECOND_EXIT);
   assert(gc2_hs_epoch_acq(g) == epoch);
   assert(lj_tg_hs_epoch_ack_acq(tg) == epoch);
@@ -749,15 +841,75 @@ static void test_x_mutation(lua_State *L, GCproto *pt,
   assert(lj_tg_poll_acq(tg) == 0);
   assert(lj_tg_profile_request_acq(tg) == 0);
   assert_native_idle(L, idle_vmstate);
-  expect_only_args_root(L, pt);
+  expect_only_args_root(L, pt, profile);
 
   lj_trace_test_root_entry_reset();
   lj_trace_test_reset_exit_stats();
-  assert(call_triple(L, "__arm64_pure_numeric_args",
-	0.25, 20.25, 0.25, 0, 0, 0) == 20.25);
+  assert(call_triple(L, profile->name,
+	0.25, 20.25, 0.25, 0, 0, 0) == profile->long_result);
   expect_single_exit(FINAL_EXIT);
   assert_native_idle(L, idle_vmstate);
-  expect_only_args_root(L, pt);
+  expect_only_args_root(L, pt, profile);
+}
+
+static void test_nonterminating_mutation_stop(lua_State *L, GCproto *pt,
+	int32_t idle_vmstate, const NumericArgsProfile *profile,
+	PostAdmissionRequest request, lua_Number expected_live)
+{
+  global_State *g = G(L);
+  TGState *tg = L2TG(L);
+  uint64_t epoch = gc2_hs_epoch_acq(g);
+  PostAdmissionPublisher publisher;
+  pthread_t worker;
+  int status;
+
+  clear_stopreq(tg);
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  lj_trace_test_root_entry_pause(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION);
+  publisher = (PostAdmissionPublisher){
+    L, g, tg, epoch, expected_live, request, 0, 0, 0, 0
+  };
+  assert(pthread_create(&worker, NULL, publish_postadmission_request,
+	&publisher) == 0);
+  lua_getglobal(L, profile->name);
+  assert(lua_isfunction(L, -1));
+  lua_pushnumber(L, 0.25);
+  lua_pushnumber(L, 20.25);
+  lua_pushnumber(L, 0.5);
+  status = lua_pcall(L, 3, 1, 0);
+  assert(pthread_join(worker, NULL) == 0);
+  assert(status == LUA_ERRRUN);
+  assert(lua_isstring(L, -1));
+  assert(strstr(lua_tostring(L, -1),
+	"thread interrupted: VM shutdown") != NULL);
+  lua_pop(L, 1);
+  assert_publisher_done(&publisher);
+  assert(la_load32_acq(&publisher.mutated) == 1);
+  expect_single_exit(XPOLL_EXIT);
+  assert(gc2_hs_actions_acq(g) == LJ_GC2_HS_STOPREQ);
+  assert(gc2_hs_epoch_acq(g) == epoch+1u);
+  assert(lj_tg_hs_epoch_ack_acq(tg) == epoch+1u);
+  assert(gc2_hs_leader_acq(g) == 0);
+  assert(gc2_hs_pending_acq(g) == 0);
+  assert(lj_tg_reqmask_acq(tg) == 0);
+  assert(lj_tg_poll_acq(tg) == 0);
+  assert(lj_tg_profile_request_acq(tg) == 0);
+  assert((lj_tg_flags_acq(tg) & TGF_STOPREQ) != 0);
+  assert((lj_tg_flags_acq(tg) & TGF_STOPREQ_FRESH) == 0);
+  assert_native_idle(L, idle_vmstate);
+  clear_stopreq(tg);
+  assert((lj_tg_flags_acq(tg) &
+	  (TGF_STOPREQ|TGF_STOPREQ_FRESH)) == 0);
+  expect_only_args_root(L, pt, profile);
+
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  assert(call_triple(L, profile->name,
+	0.25, 20.25, 0.25, 0, 0, 0) == profile->long_result);
+  expect_single_exit(FINAL_EXIT);
+  assert_native_idle(L, idle_vmstate);
+  expect_only_args_root(L, pt, profile);
 }
 
 static void expect_no_trace(lua_State *L, const char *name)
@@ -770,7 +922,7 @@ static void expect_no_trace(lua_State *L, const char *name)
     assert(!trace_runnable_acq(traceref_safe(J, traceno), traceno));
 }
 
-static void test_positive_and_guard_exits(void)
+static void test_positive_and_guard_exits(const NumericArgsProfile *profile)
 {
   lua_State *L = luaL_newstate();
   TGState *tg;
@@ -785,30 +937,75 @@ static void test_positive_and_guard_exits(void)
   luaL_openlibs(L);
   tg = L2TG(L);
   idle_vmstate = lj_tg_vmstate_load_acq(tg);
-  run_lua(L,
-    "jit.flush(); jit.on(); "
-    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
-    "function __arm64_pure_numeric_args(x,limit,step) "
-      "while x<limit do x=x+step end return x end");
+  if (profile->comparison == NUMERIC_ARGS_INCLUSIVE) {
+    run_lua(L,
+      "jit.flush(); jit.on(); "
+      "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
+      "function __arm64_pure_numeric_args_inclusive(x,limit,step) "
+	"while x<=limit do x=x+step end return x end");
+  } else {
+    run_lua(L,
+      "jit.flush(); jit.on(); "
+      "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
+      "function __arm64_pure_numeric_args(x,limit,step) "
+	"while x<limit do x=x+step end return x end");
+  }
 
-  assert(call_triple(L, "__arm64_pure_numeric_args",
+  assert(call_triple(L, profile->name,
 	0.5, 20.25, 0.5, 0, 0, 0) == 20.5);
-  pt = global_proto(L, "__arm64_pure_numeric_args");
-  expect_only_args_root(L, pt);
+  pt = global_proto(L, profile->name);
+  expect_only_args_root(L, pt, profile);
   assert_native_idle(L, idle_vmstate);
 
   /* The same trace must consume different accumulator, limit, and step NUMs
   ** without recording or specializing a second root. */
   lj_trace_test_root_entry_reset();
   lj_trace_test_reset_exit_stats();
-  assert(call_triple(L, "__arm64_pure_numeric_args",
-	0.25, 1.0, 0.375, 0, 0, 0) == 1.0);
+  assert(call_triple(L, profile->name,
+	0.25, 1.0, 0.375, 0, 0, 0) == profile->sensitive_result);
   expect_single_exit(FINAL_EXIT);
-  expect_only_args_root(L, pt);
+  expect_only_args_root(L, pt, profile);
 
-  test_xpoll_lifecycle(L, pt, idle_vmstate);
-  test_x_mutation(L, pt, idle_vmstate, POSTADMISSION_QNAN_X);
-  test_x_mutation(L, pt, idle_vmstate, POSTADMISSION_PINF_X);
+  if (profile->comparison == NUMERIC_ARGS_INCLUSIVE) {
+    /* Equality must pass both the preheader and loop-body guards. */
+    lj_trace_test_root_entry_reset();
+    lj_trace_test_reset_exit_stats();
+    assert(call_triple(L, profile->name,
+	0.625, 1.0, 0.375, 0, 0, 0) == 1.375);
+    expect_single_exit(FINAL_EXIT);
+    expect_only_args_root(L, pt, profile);
+
+    /* The interpreter's initial equality enters JLOOP, then the native
+    ** preheader returns the first value strictly above the limit. */
+    lj_trace_test_root_entry_reset();
+    lj_trace_test_reset_exit_stats();
+    assert(call_triple(L, profile->name,
+	1.0, 1.0, 0.375, 0, 0, 0) == 1.375);
+    expect_single_exit(PRECOND_EXIT);
+    expect_only_args_root(L, pt, profile);
+  }
+
+  test_xpoll_lifecycle(L, pt, idle_vmstate, profile);
+  test_terminating_mutation(L, pt, idle_vmstate, profile,
+    POSTADMISSION_QNAN_X, 0.25, MUTATION_QNAN, 0.0);
+  test_terminating_mutation(L, pt, idle_vmstate, profile,
+    POSTADMISSION_PINF_X, 0.25, MUTATION_PINF, 0.0);
+  if (profile->comparison == NUMERIC_ARGS_INCLUSIVE) {
+    test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile,
+      POSTADMISSION_NINF_X_STOP, 0.25);
+    test_terminating_mutation(L, pt, idle_vmstate, profile,
+      POSTADMISSION_QNAN_LIMIT, 20.25, MUTATION_FINITE, 0.75);
+    test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile,
+      POSTADMISSION_PINF_LIMIT_STOP, 20.25);
+    test_terminating_mutation(L, pt, idle_vmstate, profile,
+      POSTADMISSION_NINF_LIMIT, 20.25, MUTATION_FINITE, 0.75);
+    test_terminating_mutation(L, pt, idle_vmstate, profile,
+      POSTADMISSION_QNAN_STEP, 0.5, MUTATION_QNAN, 0.0);
+    test_terminating_mutation(L, pt, idle_vmstate, profile,
+      POSTADMISSION_PINF_STEP, 0.5, MUTATION_PINF, 0.0);
+    test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile,
+      POSTADMISSION_NINF_STEP_STOP, 0.5);
+  }
 
   /* Repeated hot exits try to start side traces. The side recorder must stay
   ** closed for every speculative guard family. Both live x and live step
@@ -816,36 +1013,36 @@ static void test_positive_and_guard_exits(void)
   lj_trace_test_root_entry_reset();
   lj_trace_test_reset_exit_stats();
   for (i = 0; i < 4; i++)
-    assert(call_triple(L, "__arm64_pure_numeric_args",
+    assert(call_triple(L, profile->name,
 	  1, 20.25, 0.5, 1, 0, 0) == 20.5);
   /* An integer x exits before the first recurrence. The interpreter updates
   ** the accumulator to NUM, so the same call can re-enter and finish native. */
   expect_native_exit(X_OR_STEP_TYPE_EXIT, FINAL_EXIT);
-  expect_only_args_root(L, pt);
+  expect_only_args_root(L, pt, profile);
 
   lj_trace_test_root_entry_reset();
   lj_trace_test_reset_exit_stats();
   for (i = 0; i < 4; i++)
-    assert(call_triple(L, "__arm64_pure_numeric_args",
+    assert(call_triple(L, profile->name,
 	  0.5, 20.25, 1, 0, 0, 1) == 20.5);
   expect_native_exit(X_OR_STEP_TYPE_EXIT, X_OR_STEP_TYPE_EXIT);
-  expect_only_args_root(L, pt);
+  expect_only_args_root(L, pt, profile);
 
   lj_trace_test_root_entry_reset();
   lj_trace_test_reset_exit_stats();
   for (i = 0; i < 4; i++)
-    assert(call_triple(L, "__arm64_pure_numeric_args",
-	  0.5, 20, 0.5, 0, 1, 0) == 20.0);
+    assert(call_triple(L, profile->name,
+	  0.5, 20, 0.5, 0, 1, 0) == profile->integer_limit_result);
   expect_native_exit(LIMIT_TYPE_EXIT, LIMIT_TYPE_EXIT);
-  expect_only_args_root(L, pt);
+  expect_only_args_root(L, pt, profile);
 
   lj_trace_test_root_entry_reset();
   lj_trace_test_reset_exit_stats();
   for (i = 0; i < 4; i++)
-    assert(call_triple(L, "__arm64_pure_numeric_args",
+    assert(call_triple(L, profile->name,
 	  0.5, 0.75, 0.5, 0, 0, 0) == 1.0);
   expect_native_exit(PRECOND_EXIT, PRECOND_EXIT);
-  expect_only_args_root(L, pt);
+  expect_only_args_root(L, pt, profile);
   T = traceref_safe(L2J(L), 1);
   assert(trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0);
   assert_native_idle(L, idle_vmstate);
@@ -901,6 +1098,21 @@ static void test_fixed_initializers_remain_separate(void)
   assert(trace_startpc_acq(T) == proto_bc(pt)+6u);
   assert(trace_nk_acq(T) < REF_TRUE);
 
+  run_lua(L,
+    "jit.flush(); "
+    "function __arm64_fixed_initializer_inclusive(limit,step) local x=0.5 "
+      "while x<=limit do x=x+step end return x end "
+    "assert(__arm64_fixed_initializer_inclusive(20.25,0.5)==20.5)");
+  expect_no_trace(L, "__arm64_fixed_initializer_inclusive");
+
+  run_lua(L,
+    "jit.flush(); "
+    "function __arm64_fixed_half_inclusive(limit) local x=0.5 "
+      "while x<=limit do x=x+0.5 end return x end "
+    "assert(__arm64_fixed_half_inclusive(20.25)==20.5)");
+  pt = global_proto(L, "__arm64_fixed_half_inclusive");
+  expect_no_trace(L, "__arm64_fixed_half_inclusive");
+
   run_lua(L, "jit.flush()");
   assert(proto_trace_acq(pt) == 0);
   lua_close(L);
@@ -954,7 +1166,7 @@ static void test_div_rejected(void)
   lua_close(L);
 }
 
-static void test_adjacent_compare_rejected(void)
+static void test_adjacent_comparisons_rejected(void)
 {
   lua_State *L = luaL_newstate();
   assert(L != NULL);
@@ -962,11 +1174,35 @@ static void test_adjacent_compare_rejected(void)
   run_lua(L,
     "jit.flush(); jit.on(); "
     "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
-    "function __arm64_args_negative(x,limit,step) "
-      "while x<=limit do x=x+step end return x end");
-  assert(call_triple(L, "__arm64_args_negative",
+    "function __arm64_args_gt(x,limit,step) "
+      "while x>limit do x=x+step end return x end");
+  assert(call_triple(L, "__arm64_args_gt",
+	20.5, 0.5, -0.5, 0, 0, 0) == 0.5);
+  expect_no_trace(L, "__arm64_args_gt");
+
+  run_lua(L,
+    "jit.flush(); "
+    "function __arm64_args_ge(x,limit,step) "
+      "while x>=limit do x=x+step end return x end");
+  assert(call_triple(L, "__arm64_args_ge",
+	20.5, 0.5, -0.5, 0, 0, 0) == 0.0);
+  expect_no_trace(L, "__arm64_args_ge");
+
+  run_lua(L,
+    "jit.flush(); "
+    "function __arm64_args_reversed_compare(x,limit,step) "
+      "while limit>=x do x=x+step end return x end");
+  assert(call_triple(L, "__arm64_args_reversed_compare",
 	0.5, 20.25, 0.5, 0, 0, 0) == 20.5);
-  expect_no_trace(L, "__arm64_args_negative");
+  expect_no_trace(L, "__arm64_args_reversed_compare");
+
+  run_lua(L,
+    "jit.flush(); "
+    "function __arm64_args_reversed_add(x,limit,step) "
+      "while x<=limit do x=step+x end return x end");
+  assert(call_triple(L, "__arm64_args_reversed_add",
+	0.5, 20.25, 0.5, 0, 0, 0) == 20.5);
+  expect_no_trace(L, "__arm64_args_reversed_add");
   lua_close(L);
 }
 
@@ -983,6 +1219,14 @@ static void test_extra_add_rejected(void)
   assert(call_triple(L, "__arm64_args_negative",
 	0.5, 20.25, 0.25, 0, 0, 0) == 20.5);
   expect_no_trace(L, "__arm64_args_negative");
+
+  run_lua(L,
+    "jit.flush(); "
+    "function __arm64_args_extra_inclusive(x,limit,step) "
+      "while x<=limit do x=x+step+step end return x end");
+  assert(call_triple(L, "__arm64_args_extra_inclusive",
+	0.5, 20.25, 0.25, 0, 0, 0) == 20.5);
+  expect_no_trace(L, "__arm64_args_extra_inclusive");
   lua_close(L);
 }
 
@@ -992,12 +1236,13 @@ int main(int argc, char **argv)
   if (argc == 2)
     assert(strcmp(argv[1], "direct") == 0 ||
 	   strcmp(argv[1], "randomized") == 0);
-  test_positive_and_guard_exits();
+  test_positive_and_guard_exits(&strict_profile);
+  test_positive_and_guard_exits(&inclusive_profile);
   test_fixed_initializers_remain_separate();
   test_sub_rejected();
   test_mul_rejected();
   test_div_rejected();
-  test_adjacent_compare_rejected();
+  test_adjacent_comparisons_rejected();
   test_extra_add_rejected();
   puts("t-arm64-jit-pure-numeric-args OK");
   return 0;

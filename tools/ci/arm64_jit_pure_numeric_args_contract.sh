@@ -84,12 +84,17 @@ test -f "$fixture_source"
 for required in \
   'function __arm64_pure_numeric_args(x,limit,step)' \
   'while x<limit do x=x+step end return x end' \
+  'function __arm64_pure_numeric_args_inclusive(x,limit,step)' \
+  'while x<=limit do x=x+step end return x end' \
+  'BC_ISGE, IR_GT, IR_LT, CC_HS, CC_LO, 20.25, 1.0, 20.0' \
+  'BC_ISGT, IR_GE, IR_LE, CC_HI, CC_LS, 20.5, 1.375, 20.5' \
   'pt->framesize == 5 && pt->sizebc == 13 && pt->numparams == 3' \
   'pt->sizeuv == 0 && pt->sizekn == 0 && pt->sizekgc == 0' \
   'pt->flags2 == PROTO2_CELLOPS' \
   'assert(pc == proto_bc(pt)+5u);' \
   '#define QNAN_BITS UINT64_C(0x7ff8000000000000)' \
   '#define PINF_BITS UINT64_C(0x7ff0000000000000)' \
+  '#define NINF_BITS UINT64_C(0xfff0000000000000)' \
   'static const MSize expected_mapofs[] = { 0, 2, 6, 9, 12 };' \
   'static const uint8_t expected_nslots[] = { 5, 6, 5, 5, 5 };' \
   'static const uint8_t expected_pcpos[] = { 6, 2, 11, 6, 11 };' \
@@ -99,9 +104,9 @@ for required in \
   'expect_ir(ir, R_STEP, IR_SLOAD, IRT_NUM|IRT_GUARD,' \
   'expect_ir(ir, R_X_PRE, IR_ADD, IRT_NUM|IRT_ISPHI, R_STEP, R_X);' \
   'expect_ir(ir, R_LIMIT, IR_SLOAD, IRT_NUM|IRT_GUARD,' \
-  'expect_ir(ir, R_PRECOND, IR_GT, IRT_NUM|IRT_GUARD, R_LIMIT, R_X_PRE);' \
+  'expect_ir(ir, R_PRECOND, profile->precondition_op,' \
   'expect_ir(ir, R_X_BODY, IR_ADD, IRT_NUM|IRT_ISPHI,' \
-  'expect_ir(ir, R_COND, IR_LT, IRT_NUM|IRT_GUARD, R_X_BODY, R_LIMIT);' \
+  'expect_ir(ir, R_COND, profile->body_op,' \
   'expect_ir(ir, R_X_PHI, IR_PHI, IRT_NUM, R_X_PRE, R_X_BODY);' \
   'assert(xpre == xbody && xpre == xphi);' \
   'assert(step != xphi && limit != xphi && step != limit);' \
@@ -109,14 +114,32 @@ for required in \
   'if ((ins & fadd_mask) == A64I_FADDd)' \
   'assert(nfadd == 2);' \
   'assert(nfcmp == 2 && npre == 1 && nbody == 1);' \
+  'trace_szmcode_acq(T) == 140 && trace_mcloop_acq(T) == 80' \
+  'trace_szmcode_acq(T) == 136 && trace_mcloop_acq(T) == 76' \
+  'profile->precondition_exit_cc' \
+  'profile->body_loop_cc' \
   'POSTADMISSION_PROFILE' \
   'POSTADMISSION_STOPREQ' \
   'POSTADMISSION_QNAN_X' \
   'POSTADMISSION_PINF_X' \
-  'tv_rawstore_rel(&base[0], replacement);' \
+  'POSTADMISSION_NINF_X_STOP' \
+  'POSTADMISSION_QNAN_LIMIT' \
+  'POSTADMISSION_PINF_LIMIT_STOP' \
+  'POSTADMISSION_NINF_LIMIT' \
+  'POSTADMISSION_QNAN_STEP' \
+  'POSTADMISSION_PINF_STEP' \
+  'POSTADMISSION_NINF_STEP_STOP' \
+  'target = &base[0];' \
+  'target = &base[1];' \
+  'target = &base[2];' \
+  'tv_rawstore_rel(target, replacement);' \
   'isnan(result)' \
   'isinf(result) && result > 0' \
-  '0.25, 1.0, 0.375, 0, 0, 0) == 1.0' \
+  '0.25, 20.25, 0.5, 0, 0, 0' \
+  'MUTATION_FINITE, 0.75' \
+  '0.25, 1.0, 0.375, 0, 0, 0) == profile->sensitive_result' \
+  '0.625, 1.0, 0.375, 0, 0, 0) == 1.375' \
+  '1.0, 1.0, 0.375, 0, 0, 0) == 1.375' \
   'expect_native_exit(X_OR_STEP_TYPE_EXIT, X_OR_STEP_TYPE_EXIT);' \
   'expect_native_exit(LIMIT_TYPE_EXIT, LIMIT_TYPE_EXIT);' \
   'expect_native_exit(PRECOND_EXIT, PRECOND_EXIT);' \
@@ -125,12 +148,18 @@ for required in \
   'trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0' \
   'function __arm64_fixed_initializer(limit,step) local x=0.5' \
   'function __arm64_fixed_half(limit) local x=0.5' \
+  'function __arm64_fixed_initializer_inclusive(limit,step) local x=0.5' \
+  'function __arm64_fixed_half_inclusive(limit) local x=0.5' \
   'function __arm64_args_negative(x,limit,step)' \
   'while x<limit do x=x-step end return x end' \
   'while x<limit do x=x*step end return x end' \
   'while x<limit do x=x/step end return x end' \
-  'while x<=limit do x=x+step end return x end' \
+  'while x>limit do x=x+step end return x end' \
+  'while x>=limit do x=x+step end return x end' \
+  'while limit>=x do x=x+step end return x end' \
+  'while x<=limit do x=step+x end return x end' \
   'while x<limit do x=x+step+step end return x end' \
+  'while x<=limit do x=x+step+step end return x end' \
   'run_lua(L, "jit.flush()")' \
   'proto_trace_acq(pt) == 0'; do
   grep -F "$required" "$fixture_source" >/dev/null || {
@@ -139,7 +168,7 @@ for required in \
   }
 done
 test "$(grep -Fc 'assert(gc2_hs_leader_acq(g) == 0);' \
-  "$fixture_source")" -eq 3 || {
+  "$fixture_source")" -eq 4 || {
   echo "ARM64 dynamic-args NUM lifecycle lost handshake cleanup proof" >&2
   exit 1
 }
@@ -147,6 +176,8 @@ test "$(grep -Fc 'assert(gc2_hs_leader_acq(g) == 0);' \
 for required in \
   '/* LT       */ CC_GE + (CC_HS << 4),' \
   '/* GT    x  */ CC_LE + (CC_HS << 4),' \
+  '/* GE    x  */ CC_LT + (CC_HI << 4),' \
+  '/* LE       */ CC_GT + (CC_HI << 4),' \
   'asm_guardcc(as, (asm_compmap[ir->o] >> 4));' \
   'emit_nm(as, ai, left, right);' \
   'asm_fparith(as, ir, A64I_FADDd);' \
@@ -158,6 +189,11 @@ for required in \
 done
 grep -F 'CC_HS = CC_CS, CC_LO = CC_CC' "$target_source" >/dev/null || {
   echo "ARM64 dynamic-args NUM condition aliases changed" >&2
+  exit 1
+}
+grep -F 'CC_HI, CC_LS, CC_GE, CC_LT, CC_GT, CC_LE, CC_AL' \
+  "$target_source" >/dev/null || {
+  echo "ARM64 inclusive dynamic-args condition codes changed" >&2
   exit 1
 }
 
@@ -268,4 +304,4 @@ while test "$run" -le "$pauth_runs"; do
   run=$((run+1))
 done
 
-echo "arm64_jit_pure_numeric_args_contract OK: exact dynamic-accumulator NUM root and lifecycle proved on ARM64/arm64e"
+echo "arm64_jit_pure_numeric_args_contract OK: strict/inclusive dynamic-accumulator NUM roots and lifecycle proved on ARM64/arm64e"
