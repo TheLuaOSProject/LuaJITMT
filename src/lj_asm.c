@@ -248,8 +248,15 @@ enum {
 enum {
   ARM64_NUMDYN_ADD_LT = 1u,
   ARM64_NUMDYN_ADD_LE = 2u,
-  ARM64_NUMDYN_SUB_GT = 3u
+  ARM64_NUMDYN_SUB_GT = 3u,
+  ARM64_NUMDYN_SUB_GE = 4u
 };
+
+static int arm64_numdynamic_is_sub(unsigned grammar_profile)
+{
+  return grammar_profile == ARM64_NUMDYN_SUB_GT ||
+	 grammar_profile == ARM64_NUMDYN_SUB_GE;
+}
 
 enum {
   ARM64_NUMADD_K_ONE = REF_TRUE-1u,
@@ -757,6 +764,12 @@ static int arm64_postra_numdynamic_kernel(const LJArm64PostRAView *view,
     first_right = ARM64_NUMSTEP_R_STEP;
     preop = IR_LT;
     bodyop = IR_GT;
+  } else if (grammar_profile == ARM64_NUMDYN_SUB_GE) {
+    recurrence_op = IR_SUB;
+    first_left = ARM64_NUMSTEP_R_X;
+    first_right = ARM64_NUMSTEP_R_STEP;
+    preop = IR_LE;
+    bodyop = IR_GE;
   } else {
     return 0;
   }
@@ -835,10 +848,13 @@ static unsigned arm64_numacc_grammar_profile(const BCIns *proto_bc,
 	bc_d(compare) == 4)
       return ARM64_NUMDYN_ADD_LE;
   } else if (bc_op(recurrence) == BC_SUBVV && bc_a(recurrence) == 3 &&
-	bc_b(recurrence) == 3 && bc_c(recurrence) == 4 &&
-	bc_op(compare) == BC_ISGE && bc_a(compare) == 4 &&
-	bc_d(compare) == 3) {
-    return ARM64_NUMDYN_SUB_GT;
+	bc_b(recurrence) == 3 && bc_c(recurrence) == 4) {
+    if (bc_op(compare) == BC_ISGE && bc_a(compare) == 4 &&
+	bc_d(compare) == 3)
+      return ARM64_NUMDYN_SUB_GT;
+    if (bc_op(compare) == BC_ISGT && bc_a(compare) == 4 &&
+	bc_d(compare) == 3)
+      return ARM64_NUMDYN_SUB_GE;
   }
   return 0;
 }
@@ -971,7 +987,7 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
   if (rootop == BC_LOOP) {
     numdynamic_profile = arm64_numacc_grammar_profile(view->proto_bc,
 	view->proto_sizebc);
-    allow_num_sub = numdynamic_profile == ARM64_NUMDYN_SUB_GT;
+    allow_num_sub = arm64_numdynamic_is_sub(numdynamic_profile);
   }
   nsnap = view->nsnap;
   nsnapmap = view->nsnapmap;
@@ -1977,6 +1993,12 @@ static int arm64_ir_numdynamic_kernel(const GCtrace *T, IRRef xslot,
     first_right = ARM64_NUMSTEP_R_STEP;
     preop = IR_LT;
     bodyop = IR_GT;
+  } else if (grammar_profile == ARM64_NUMDYN_SUB_GE) {
+    recurrence_op = IR_SUB;
+    first_left = ARM64_NUMSTEP_R_X;
+    first_right = ARM64_NUMSTEP_R_STEP;
+    preop = IR_LE;
+    bodyop = IR_GE;
   } else {
     return 0;
   }
@@ -2030,7 +2052,10 @@ static int arm64_ir_numstep_shape(const jit_State *J, const GCtrace *T,
 static int arm64_ir_numacc_shape(const jit_State *J, const GCtrace *T,
 	const GCproto *pt, IRRef firstphi, LJArm64IRReject *reject)
 {
-  unsigned grammar_profile = 0;
+  unsigned grammar_profile = arm64_numacc_grammar_profile(
+	proto_bc(pt), pt->sizebc);
+  IROp recurrence_op = arm64_numdynamic_is_sub(grammar_profile) ?
+	IR_SUB : IR_ADD;
   if (T->nk != REF_TRUE || T->nins != ARM64_NUMACC_SEMANTIC_NINS ||
 	firstphi != ARM64_NUMACC_R_X_PHI ||
 	!arm64_ir_numacc_bytecode(pt, trace_startpc_acq((GCtrace *)T),
@@ -2039,12 +2064,10 @@ static int arm64_ir_numacc_shape(const jit_State *J, const GCtrace *T,
 	  T->nsnapmap, proto_bc(pt), pt->sizebc,
 	  (uint8_t)(J->baseslot-2u)))
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE,
-	ARM64_NUMACC_R_X,
-	grammar_profile == ARM64_NUMDYN_SUB_GT ? IR_SUB : IR_ADD, 7);
+	ARM64_NUMACC_R_X, recurrence_op, 7);
   if (!arm64_ir_numdynamic_kernel(T, 2, 4, 3, grammar_profile))
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
-	ARM64_NUMACC_R_X,
-	grammar_profile == ARM64_NUMDYN_SUB_GT ? IR_SUB : IR_ADD, 8);
+	ARM64_NUMACC_R_X, recurrence_op, 8);
   return 1;
 }
 
@@ -2371,7 +2394,7 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
   if (startop == BC_LOOP &&
 	arm64_ir_numacc_bytecode(pt, trace_startpc_acq((GCtrace *)T),
 	  &numdynamic_profile))
-    allow_num_sub = numdynamic_profile == ARM64_NUMDYN_SUB_GT;
+    allow_num_sub = arm64_numdynamic_is_sub(numdynamic_profile);
   if (startop == BC_FORL)
     forl_idxslot = (MSize)(1u+LJ_FR2+bc_a(T->startins));
   if (T->sinktags != 0)
