@@ -183,12 +183,21 @@ static void test_semantic_header(void)
   set_footer(1, 11, 0);
   expect_semantic(1);
 
+  /* The third production descriptor keeps the original child footers while
+  ** selecting the observed exit-7 parent with eleven snapshots. Parent
+  ** snapshot count is pinned in the production descriptor table; the pure
+  ** child view proves its exit/IR/snapshot half here. */
+  make_semantic();
+  fx.view.exitno = 7;
+  fx.ir[REF_BASE].op2 = 7;
+  expect_semantic(1);
+
   /* Nearby exits are not implicitly admitted by the relational BASE check. */
   make_semantic(); fx.view.exitno = 1; fx.ir[REF_BASE].op2 = 1;
   expect_semantic(0);
   make_semantic(); fx.view.exitno = 3; fx.ir[REF_BASE].op2 = 3;
   expect_semantic(0);
-  make_semantic(); fx.view.exitno = 7; fx.ir[REF_BASE].op2 = 7;
+  make_semantic(); fx.view.exitno = 8; fx.ir[REF_BASE].op2 = 8;
   expect_semantic(0);
 
   SEMANTIC_MUTATION(fx.view.ir = NULL);
@@ -366,6 +375,20 @@ static void make_second_postra(void)
 	A64F_D(RID_X28) | A64F_M(RID_X27));
 }
 
+static void make_third_postra(void)
+{
+  MSize headidx = (MSize)LJ_ABI_BRANCH_TRACK;
+  make_postra();
+  fx.postra.semantic.exitno = 7;
+  fx.ir[REF_BASE].op2 = 7;
+  fx.ir[R_PARENT].r = RID_X27;
+  fx.ir[R_ADD].r = RID_X28;
+  fx.ir[R_LIMIT].r = RID_X27;
+  fx.parentmap[0] = REGSP(RID_X28, SPS_NONE);
+  fx.entry[headidx] = A64I_LE(A64I_MOVx |
+	A64F_D(RID_X27) | A64F_M(RID_X28));
+}
+
 static void expect_postra(int admitted)
 {
   IRRef semantic_nins = 0;
@@ -410,6 +433,9 @@ static void test_prehead(void)
   make_second_postra();
   expect_prehead(1);
 
+  make_third_postra();
+  expect_prehead(1);
+
   /* Geometry and allocator shape form one descriptor: neither cross-product
   ** is admitted even though each half is independently known. */
   make_postra();
@@ -421,6 +447,18 @@ static void test_prehead(void)
   make_second_postra();
   fx.postra.semantic.exitno = 2;
   fx.ir[REF_BASE].op2 = 2;
+  set_footer(0, 13, 0);
+  set_footer(1, 14, 0);
+  expect_prehead(0);
+  make_third_postra();
+  fx.postra.semantic.exitno = 6;
+  fx.ir[REF_BASE].op2 = 6;
+  set_footer(0, 10, 0);
+  set_footer(1, 11, 0);
+  expect_prehead(0);
+  make_second_postra();
+  fx.postra.semantic.exitno = 7;
+  fx.ir[REF_BASE].op2 = 7;
   set_footer(0, 13, 0);
   set_footer(1, 14, 0);
   expect_prehead(0);
@@ -481,6 +519,9 @@ static void test_postra(void)
   assert(!lj_asm_arm64_side_postra_admit(NULL, NULL));
 
   make_second_postra();
+  expect_postra(1);
+
+  make_third_postra();
   expect_postra(1);
 
   make_postra();

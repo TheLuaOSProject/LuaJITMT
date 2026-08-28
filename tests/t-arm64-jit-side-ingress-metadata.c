@@ -47,7 +47,10 @@ enum {
   SIDE_META_SECOND_EXIT = 6,
   SIDE_META_SECOND_PC_POS = 10,
   SIDE_META_SECOND_NSNAP = 9,
-  SIDE_META_CAP_NSNAP = SIDE_META_SECOND_NSNAP,
+  SIDE_META_THIRD_EXIT = 7,
+  SIDE_META_THIRD_PC_POS = 13,
+  SIDE_META_THIRD_NSNAP = 11,
+  SIDE_META_CAP_NSNAP = SIDE_META_THIRD_NSNAP,
   SIDE_META_NENT = 1,
   SIDE_META_FOOTER = 1 + LJ_FR2,
   SIDE_META_MAP_STRIDE = SIDE_META_NENT + SIDE_META_FOOTER,
@@ -173,7 +176,7 @@ static void side_meta_install(lua_State *L, SideMetaFixture *f)
   BCIns *bc;
   MCode *fallback, *gates;
   const BCPos footer_pc[SIDE_META_CAP_NSNAP] =
-    { 3, 7, 13, 17, 3, 7, 10, 17, 3 };
+    { 3, 7, 13, 17, 3, 7, 10, 13, 3, 7, 3 };
   MSize i;
 
   memset(f, 0, sizeof(*f));
@@ -368,6 +371,79 @@ static void test_second_descriptor(lua_State *L, SideMetaFixture *f)
   T->nsnap = saved_nsnap;
   T->nsnapmap = saved_nsnapmap;
   memcpy(&f->snapmap[footer], saved_footer, sizeof(saved_footer));
+  assert(jit_token_acq(G(L)) == 0 && jit_owner_l_acq(J) == NULL &&
+         lj_trace_state_load(J) == LJ_TRACE_IDLE);
+}
+
+static void test_third_descriptor(lua_State *L, SideMetaFixture *f)
+{
+  jit_State *J = L2J(L);
+  GCtrace *T = &f->parent_trace;
+  const BCIns *continuation =
+    &proto_bc(f->pt)[SIDE_META_THIRD_PC_POS];
+  SnapShot *selected = &f->snap[SIDE_META_THIRD_EXIT];
+  MSize footer = selected->mapofs+selected->nent;
+  SnapEntry saved_footer[SIDE_META_FOOTER];
+  MSize saved_nsnap = T->nsnap;
+  MSize saved_nsnapmap = T->nsnapmap;
+  TraceNo saved_parent = J->parent;
+  ExitNo saved_exitno = J->exitno;
+  uint8_t before = selected->count;
+
+  memcpy(saved_footer, &f->snapmap[footer], sizeof(saved_footer));
+  side_meta_pack_pc(&f->snapmap[footer], continuation, 0);
+  /* Exit 7 couples the first descriptor's continuation geometry with a
+  ** separately observed eleven-snapshot parent. Neither half is admitted on
+  ** its own, and the other known exits remain tied to their own parent shape. */
+  assert(!lj_trace_test_arm64_first_side_loop_valid(
+    J, NULL, SIDE_META_PARENT, SIDE_META_THIRD_EXIT, continuation, NULL,
+    LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA));
+  T->nsnap = SIDE_META_THIRD_NSNAP;
+  T->nsnapmap = SIDE_META_CAP_NSNAPMAP;
+  assert(!lj_trace_test_arm64_first_side_loop_valid(
+    J, NULL, SIDE_META_PARENT, SIDE_META_EXIT,
+    &proto_bc(f->pt)[SIDE_META_PC_POS], NULL,
+    LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA));
+  assert(!lj_trace_test_arm64_first_side_loop_valid(
+    J, NULL, SIDE_META_PARENT, SIDE_META_SECOND_EXIT,
+    &proto_bc(f->pt)[SIDE_META_SECOND_PC_POS], NULL,
+    LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA));
+  assert(!lj_trace_test_arm64_first_side_loop_valid(
+    J, NULL, SIDE_META_PARENT, SIDE_META_THIRD_EXIT,
+    &proto_bc(f->pt)[SIDE_META_SECOND_PC_POS], NULL,
+    LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA));
+  assert(lj_trace_test_arm64_first_side_loop_valid(
+    J, NULL, SIDE_META_PARENT, SIDE_META_THIRD_EXIT, continuation, NULL,
+    LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA));
+  assert(lj_trace_test_arm64_first_side_loop_valid(
+    J, L, SIDE_META_PARENT, SIDE_META_THIRD_EXIT,
+    continuation, continuation, LJ_TRACE_ARM64_SIDE_CONTEXT_IDLE));
+
+  assert(lj_jit_token_try_l(L, J));
+  assert(lj_trace_test_arm64_first_side_loop_valid(
+    J, L, SIDE_META_PARENT, SIDE_META_THIRD_EXIT,
+    continuation, continuation, LJ_TRACE_ARM64_SIDE_CONTEXT_CLAIM));
+  jit_owner_l_rel(J, L);
+  J->parent = SIDE_META_PARENT;
+  J->exitno = SIDE_META_THIRD_EXIT;
+  lj_trace_state_store(J, LJ_TRACE_START);
+  assert(lj_trace_test_arm64_first_side_loop_valid(
+    J, L, SIDE_META_PARENT, SIDE_META_THIRD_EXIT,
+    continuation, continuation, LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER));
+  lj_trace_state_store(J, LJ_TRACE_IDLE);
+  jit_owner_l_rel(J, NULL);
+  J->parent = saved_parent;
+  J->exitno = saved_exitno;
+  lj_jit_token_release_l(L, J);
+
+  assert(selected->count == before);
+  T->nsnap = saved_nsnap;
+  T->nsnapmap = saved_nsnapmap;
+  memcpy(&f->snapmap[footer], saved_footer, sizeof(saved_footer));
+  assert(T->nsnap == saved_nsnap && T->nsnapmap == saved_nsnapmap);
+  assert(memcmp(&f->snapmap[footer], saved_footer,
+                sizeof(saved_footer)) == 0);
+  assert(J->parent == saved_parent && J->exitno == saved_exitno);
   assert(jit_token_acq(G(L)) == 0 && jit_owner_l_acq(J) == NULL &&
          lj_trace_state_load(J) == LJ_TRACE_IDLE);
 }
@@ -997,6 +1073,7 @@ int main(void)
     "end\n");
   side_meta_install(L, &fixture);
   test_second_descriptor(L, &fixture);
+  test_third_descriptor(L, &fixture);
   test_metadata_mutations(L, &fixture);
   test_context_mutations(L, &fixture);
   test_parent_lifetime_certificate(L, &fixture);

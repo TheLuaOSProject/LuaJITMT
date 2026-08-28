@@ -668,7 +668,8 @@ const LJArm64SideShape *lj_asm_arm64_side_shape(ExitNo exitno)
 {
   static const LJArm64SideShape shapes[] = {
     { 2u, 8u, 13u, { 13u, 14u, 3u, 17u, 7u }, RID_X28, RID_X27 },
-    { 6u, 9u, 10u, { 10u, 11u, 3u, 17u, 7u }, RID_X27, RID_X28 }
+    { 6u, 9u, 10u, { 10u, 11u, 3u, 17u, 7u }, RID_X27, RID_X28 },
+    { 7u, 11u, 13u, { 13u, 14u, 3u, 17u, 7u }, RID_X28, RID_X27 }
   };
   MSize i;
   for (i = 0; i < sizeof(shapes)/sizeof(shapes[0]); i++)

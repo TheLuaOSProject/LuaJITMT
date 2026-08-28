@@ -25,6 +25,7 @@ audit_object=$tmpdir/lj_asm-arm64e.o
 pure_region=$tmpdir/pure-side-region.txt
 shape_region=$tmpdir/side-shape-region.txt
 second_postra_region=$tmpdir/side-second-postra-region.txt
+third_postra_region=$tmpdir/side-third-postra-region.txt
 trace_asm=$tmpdir/trace-asm.txt
 head_side=$tmpdir/head-side.txt
 tail_side=$tmpdir/tail-side.txt
@@ -114,7 +115,8 @@ test -s "$shape_region"
 for required in \
   'static const LJArm64SideShape shapes[] = {' \
   '{ 2u, 8u, 13u, { 13u, 14u, 3u, 17u, 7u }, RID_X28, RID_X27 },' \
-  '{ 6u, 9u, 10u, { 10u, 11u, 3u, 17u, 7u }, RID_X27, RID_X28 }' \
+  '{ 6u, 9u, 10u, { 10u, 11u, 3u, 17u, 7u }, RID_X27, RID_X28 },' \
+  '{ 7u, 11u, 13u, { 13u, 14u, 3u, 17u, 7u }, RID_X28, RID_X27 }' \
   'if (shapes[i].exitno == exitno)' \
   'return &shapes[i];' \
   'return NULL;'; do
@@ -124,8 +126,8 @@ for required in \
   }
 done
 test "$(grep -Ec '^    \{ [0-9]+u, [0-9]+u, [0-9]+u, \{' \
-  "$shape_region")" = 2 || {
-  echo "ARM64 side descriptor table is no longer exactly two rows" >&2
+  "$shape_region")" = 3 || {
+  echo "ARM64 side descriptor table is no longer exactly three rows" >&2
   exit 1
 }
 
@@ -335,8 +337,10 @@ for required in \
   'fx.ir[REF_BASE].op2 = 6;' \
   'set_footer(0, 10, 0);' \
   'set_footer(1, 11, 0);' \
+  'fx.view.exitno = 7;' \
+  'fx.ir[REF_BASE].op2 = 7;' \
   'make_semantic(); fx.view.exitno = 3; fx.ir[REF_BASE].op2 = 3;' \
-  'make_semantic(); fx.view.exitno = 7; fx.ir[REF_BASE].op2 = 7;' \
+  'make_semantic(); fx.view.exitno = 8; fx.ir[REF_BASE].op2 = 8;' \
   'setir(K_ONE, IR_KINT, IRT_INT, 2, 0)' \
   'setir(K_ONE, IR_KNUM, IRT_NUM, 1, 0)' \
   'fx.ir[R_PARENT].op2 = IRSLOAD_PARENT' \
@@ -371,6 +375,8 @@ for required in \
   'A64F_U16(fx.postra.semantic.traceno) | A64F_D(RID_TMP)' \
   'expect_prehead(1);' \
   'fx.postra.semantic.exitno = 6;' \
+  'fx.postra.semantic.exitno = 7;' \
+  'make_third_postra();' \
   'lj_asm_arm64_side_prehead_admit(NULL, NULL)' \
   'PREHEAD_MUTATION(fx.postra.semantic.exitno++)' \
   'PREHEAD_MUTATION(fx.postra.parentmap = NULL)' \
@@ -414,17 +420,17 @@ for required in \
   }
 done
 test "$(grep -Fc 'set_footer(0, 10, 0);' \
-  "$root/tests/t-arm64-jit-side-ir-admission.c")" = 3 || {
+  "$root/tests/t-arm64-jit-side-ir-admission.c")" = 4 || {
   echo "ARM64 side fixture lost exit-6 semantic/pre-head/post-RA coverage" >&2
   exit 1
 }
 test "$(grep -Fc 'set_footer(1, 11, 0);' \
-  "$root/tests/t-arm64-jit-side-ir-admission.c")" = 3 || {
+  "$root/tests/t-arm64-jit-side-ir-admission.c")" = 4 || {
   echo "ARM64 side fixture lost exit-6 second-footer coverage" >&2
   exit 1
 }
 test "$(grep -Fc 'fx.postra.semantic.exitno = 6;' \
-  "$root/tests/t-arm64-jit-side-ir-admission.c")" = 2 || {
+  "$root/tests/t-arm64-jit-side-ir-admission.c")" = 3 || {
   echo "ARM64 side fixture lost exit-6 pre-head/post-RA admission" >&2
   exit 1
 }
@@ -449,8 +455,46 @@ for required in \
   }
 done
 test "$(grep -Fc 'make_second_postra();' \
-  "$root/tests/t-arm64-jit-side-ir-admission.c")" = 3 || {
+  "$root/tests/t-arm64-jit-side-ir-admission.c")" = 4 || {
   echo "ARM64 side fixture lost exit-6 allocator/cross-certificate coverage" >&2
+  exit 1
+}
+awk '/^static void make_third_postra\(/ { copy=1 }
+     copy { print }
+     copy && /^}/ { exit }' \
+  "$root/tests/t-arm64-jit-side-ir-admission.c" >"$third_postra_region"
+test -s "$third_postra_region"
+for required in \
+  'fx.postra.semantic.exitno = 7;' \
+  'fx.ir[REF_BASE].op2 = 7;' \
+  'fx.ir[R_PARENT].r = RID_X27;' \
+  'fx.ir[R_ADD].r = RID_X28;' \
+  'fx.ir[R_LIMIT].r = RID_X27;' \
+  'fx.parentmap[0] = REGSP(RID_X28, SPS_NONE);' \
+  'A64F_D(RID_X27) | A64F_M(RID_X28))'; do
+  grep -F "$required" "$third_postra_region" >/dev/null || {
+    echo "ARM64 exit-7 allocator tuple changed: $required" >&2
+    exit 1
+  }
+done
+test "$(grep -Fc 'make_third_postra();' \
+  "$root/tests/t-arm64-jit-side-ir-admission.c")" = 3 || {
+  echo "ARM64 side fixture lost exit-7 allocator/cross-certificate coverage" >&2
+  exit 1
+}
+test "$(grep -Fc 'fx.postra.semantic.exitno = 7;' \
+  "$root/tests/t-arm64-jit-side-ir-admission.c")" = 2 || {
+  echo "ARM64 side fixture lost exit-7 pre-head/post-RA admission" >&2
+  exit 1
+}
+test "$(grep -Fc 'set_footer(0, 13, 0);' \
+  "$root/tests/t-arm64-jit-side-ir-admission.c")" = 2 || {
+  echo "ARM64 side fixture lost exit-7/exit-6 geometry cross-certificate" >&2
+  exit 1
+}
+test "$(grep -Fc 'set_footer(1, 14, 0);' \
+  "$root/tests/t-arm64-jit-side-ir-admission.c")" = 2 || {
+  echo "ARM64 side fixture lost exit-7 second-footer cross-certificate" >&2
   exit 1
 }
 

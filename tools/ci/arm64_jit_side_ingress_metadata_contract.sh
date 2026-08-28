@@ -40,6 +40,7 @@ first_publish_ingress_region=$tmpdir/side-ingress-first-publish-test.txt
 asm_region=$tmpdir/side-parent-asm-consumption.txt
 asm_head_region=$tmpdir/side-parent-asm-head.txt
 second_descriptor_region=$tmpdir/side-ingress-second-descriptor.txt
+third_descriptor_region=$tmpdir/side-ingress-third-descriptor.txt
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_TRACE_TEST_HELPERS'
 
 require_order()
@@ -484,6 +485,10 @@ awk '/^static void test_second_descriptor\(/ { copy=1 }
      copy { print }
      copy && /^}/ { exit }' "$fixture_source" >"$second_descriptor_region"
 test -s "$second_descriptor_region"
+awk '/^static void test_third_descriptor\(/ { copy=1 }
+     copy { print }
+     copy && /^}/ { exit }' "$fixture_source" >"$third_descriptor_region"
+test -s "$third_descriptor_region"
 for required in \
   'SIDE_META_PARENT = 1' \
   'SIDE_META_EXIT = 2' \
@@ -492,8 +497,14 @@ for required in \
   'SIDE_META_SECOND_EXIT = 6' \
   'SIDE_META_SECOND_PC_POS = 10' \
   'SIDE_META_SECOND_NSNAP = 9' \
-  'SIDE_META_CAP_NSNAP = SIDE_META_SECOND_NSNAP' \
+  'SIDE_META_THIRD_EXIT = 7' \
+  'SIDE_META_THIRD_PC_POS = 13' \
+  'SIDE_META_THIRD_NSNAP = 11' \
+  'SIDE_META_CAP_NSNAP = SIDE_META_THIRD_NSNAP' \
+  'const BCPos footer_pc[SIDE_META_CAP_NSNAP]' \
+  '{ 3, 7, 13, 17, 3, 7, 10, 13, 3, 7, 3 };' \
   'test_second_descriptor(L, &fixture);' \
+  'test_third_descriptor(L, &fixture);' \
   'TRACE_ARM64_INT_SIDE_ADMITTED' \
   'TRACE_EXITTAB_MCODE' \
   'trace_exittarget_arm64_rel(G(L), T, (ExitNo)i, fallback);' \
@@ -521,6 +532,49 @@ for required in \
   'LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER'; do
   grep -F "$required" "$fixture_source" >/dev/null || {
     echo "ARM64 side-ingress mutation coverage changed: $required" >&2
+    exit 1
+  }
+done
+test "$(grep -Fc \
+  'assert(!lj_trace_test_arm64_first_side_loop_valid(' \
+  "$third_descriptor_region")" = 4 || {
+  echo "ARM64 third side descriptor lost its four coupled rejections" >&2
+  exit 1
+}
+test "$(grep -Fc \
+  'assert(lj_trace_test_arm64_first_side_loop_valid(' \
+  "$third_descriptor_region")" = 4 || {
+  echo "ARM64 third side descriptor lost its four context admissions" >&2
+  exit 1
+}
+for required in \
+  '&proto_bc(f->pt)[SIDE_META_THIRD_PC_POS]' \
+  'SnapShot *selected = &f->snap[SIDE_META_THIRD_EXIT];' \
+  'SIDE_META_PARENT, SIDE_META_THIRD_EXIT, continuation, NULL,' \
+  'T->nsnap = SIDE_META_THIRD_NSNAP;' \
+  'T->nsnapmap = SIDE_META_CAP_NSNAPMAP;' \
+  'J, NULL, SIDE_META_PARENT, SIDE_META_EXIT,' \
+  '&proto_bc(f->pt)[SIDE_META_PC_POS], NULL,' \
+  'J, NULL, SIDE_META_PARENT, SIDE_META_SECOND_EXIT,' \
+  '&proto_bc(f->pt)[SIDE_META_SECOND_PC_POS], NULL,' \
+  'J, NULL, SIDE_META_PARENT, SIDE_META_THIRD_EXIT,' \
+  'J, L, SIDE_META_PARENT, SIDE_META_THIRD_EXIT,' \
+  'LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA' \
+  'LJ_TRACE_ARM64_SIDE_CONTEXT_IDLE' \
+  'LJ_TRACE_ARM64_SIDE_CONTEXT_CLAIM' \
+  'J->exitno = SIDE_META_THIRD_EXIT;' \
+  'LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER' \
+  'assert(selected->count == before);' \
+  'T->nsnap = saved_nsnap;' \
+  'T->nsnapmap = saved_nsnapmap;' \
+  'memcpy(&f->snapmap[footer], saved_footer, sizeof(saved_footer));' \
+  'T->nsnap == saved_nsnap && T->nsnapmap == saved_nsnapmap' \
+  'memcmp(&f->snapmap[footer], saved_footer,' \
+  'J->parent == saved_parent && J->exitno == saved_exitno' \
+  'jit_token_acq(G(L)) == 0 && jit_owner_l_acq(J) == NULL' \
+  'lj_trace_state_load(J) == LJ_TRACE_IDLE'; do
+  grep -F "$required" "$third_descriptor_region" >/dev/null || {
+    echo "ARM64 third side descriptor coverage changed: $required" >&2
     exit 1
   }
 done
