@@ -112,13 +112,37 @@ Focused validation passed:
 - strict LOOP/FORL/JFUNCF root entry plus metadata ingress on arm64 and
   authenticated arm64e.
 
-The only build diagnostic was the existing unused
+The only focused-build diagnostic was the existing unused
 `ccall_rawchild_wait` warning.
+
+The complete `tools/ci/arm64_jit_fail_closed_gate.sh` umbrella then passed
+from commit `787f5f64`. In addition to the three-side production contract, it
+covered every source/runtime contract enumerated by that umbrella, arm64 and
+arm64e/BTI root entry and exit authentication, LOOP/FORL/JFUNCF recording and
+native entry, mcode publication/retirement, live flush and trace-slot reuse,
+and VM and recorder safepoint races.
+
+Cross-architecture regression on the same commit also passed:
+
+- the thin macOS x86_64 platform build and binary smoke test;
+- all 509 stock tests with zero failures;
+- a Rosetta x86_64 JIT loop that published trace 1 with `linktype=loop`; and
+- restoration of the thin arm64 experimental-helper build, followed by a
+  native health check that joined a lockless worker and then published and
+  completed a loop with trace 1 published and the JIT enabled after
+  multithreading activation.
+
+The restored archive exports the ordinary trace-test helpers but not the
+first-side observation seam. The x86 build showed only the existing unused
+`topofs` warning; the arm64 builds showed only the existing unused
+`ccall_rawchild_wait` warning. The x86 platform builder also emitted and
+discarded its expected preliminary non-GC64 configuration diagnostic before
+selecting the supported GC64 build.
 
 ## Remaining boundary
 
 The three-row table is still an exact whitelist, not a general first-side
 policy. Broad first sides, side-of-side recording, stitching, debug/perf
 registration during side publication, and JIT FFI remain closed. The next
-bounded milestone should be selected from those gates only after the complete
-ARM64 umbrella and x86 regression pass for this row.
+bounded milestone can now be selected from those gates with this complete
+ARM64 and x86 regression checkpoint as its baseline.
