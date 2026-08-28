@@ -19,6 +19,7 @@
 #include "lj_strfmt.h"
 #include "lj_jit.h"
 #include "lj_gdbjit.h"
+#include "lj_trace.h"
 #include "lj_dispatch.h"
 #include "lj_thr.h"
 
@@ -122,29 +123,6 @@ Stack level 0, frame at 0xffffd7c0:
 
 /* -- GDB JIT API --------------------------------------------------------- */
 
-/* GDB JIT actions. */
-enum {
-  GDBJIT_NOACTION = 0,
-  GDBJIT_REGISTER,
-  GDBJIT_UNREGISTER
-};
-
-/* GDB JIT entry. */
-typedef struct GDBJITentry {
-  struct GDBJITentry *next_entry;
-  struct GDBJITentry *prev_entry;
-  const char *symfile_addr;
-  uint64_t symfile_size;
-} GDBJITentry;
-
-/* GDB JIT descriptor. */
-typedef struct GDBJITdesc {
-  uint32_t version;
-  uint32_t action_flag;
-  GDBJITentry *relevant_entry;
-  GDBJITentry *first_entry;
-} GDBJITdesc;
-
 GDBJITdesc __jit_debug_descriptor = {
   1, GDBJIT_NOACTION, NULL, NULL
 };
@@ -152,6 +130,10 @@ GDBJITdesc __jit_debug_descriptor = {
 #ifdef LJ_GDBJIT_TEST_HELPERS
 static uint32_t gdbjit_test_register_callbacks;
 static uint32_t gdbjit_test_register_callbacks_ready;
+static GCtrace *gdbjit_test_register_target;
+static jit_State *gdbjit_test_register_jit;
+static const GCtrace *gdbjit_test_register_parent;
+static uint32_t gdbjit_test_register_exitno;
 #endif
 
 static LJ_AINLINE GDBJITentry *gdbjit_entry_next_acq(const GDBJITentry *entry)
@@ -203,11 +185,28 @@ void LJ_NOINLINE __jit_debug_register_code()
 #ifdef LJ_GDBJIT_TEST_HELPERS
   GDBJITentry *relevant = (GDBJITentry *)la_loadptr_acq((void *const *)
     &__jit_debug_descriptor.relevant_entry);
+  GCtrace *target = (GCtrace *)la_loadptr_acq(
+    (void *const *)&gdbjit_test_register_target);
+  jit_State *J = (jit_State *)la_loadptr_acq(
+    (void *const *)&gdbjit_test_register_jit);
+  const GCtrace *parent = (const GCtrace *)la_loadptr_acq(
+    (void *const *)&gdbjit_test_register_parent);
+  TraceNo targetno = target != NULL ? trace_traceno_acq(target) : 0;
   uint32_t action = la_load32_acq(&__jit_debug_descriptor.action_flag);
+  int side_ready = 1;
+#if LJ_TARGET_ARM64 && defined(LJ_TRACE_TEST_HELPERS)
+  if (parent != NULL)
+    side_ready = lj_trace_test_arm64_gdbjit_callback_ready(
+      J, parent, (ExitNo)la_load32_acq(&gdbjit_test_register_exitno), target);
+#else
+  UNUSED(J); UNUSED(parent);
+#endif
   (void)la_add32_acqrel(&gdbjit_test_register_callbacks, 1);
   if (action == GDBJIT_REGISTER && relevant != NULL &&
       gdbjit_desc_first_acq() == relevant &&
-      relevant->symfile_addr != NULL && relevant->symfile_size != 0)
+      relevant->symfile_addr != NULL && relevant->symfile_size != 0 &&
+      target != NULL && trace_gdbjit_entry_acq(target) == (void *)relevant &&
+      targetno != 0 && trace_runnable_acq(target, targetno) && side_ready)
     (void)la_add32_acqrel(&gdbjit_test_register_callbacks_ready, 1);
 #endif
   __asm__ __volatile__("");
@@ -408,6 +407,11 @@ struct GDBJITPrepared {
   size_t sz;
   GCtrace *target;
   uint8_t state;
+#ifdef LJ_GDBJIT_TEST_HELPERS
+  jit_State *test_J;
+  const GCtrace *test_exact_parent;
+  ExitNo test_exitno;
+#endif
   GDBJITobj obj;
 };
 
@@ -850,9 +854,14 @@ void lj_gdbjit_test_reset(void)
   la_store32_rel(&gdbjit_test_counters.commit_successes, 0);
   la_store32_rel(&gdbjit_test_counters.commit_lock_omits, 0);
   la_store32_rel(&gdbjit_test_counters.aborts, 0);
+  la_store32_rel(&gdbjit_test_counters.aborts_after_token, 0);
   la_store32_rel(&gdbjit_test_prepare_alloc_omit, 0);
   la_store32_rel(&gdbjit_test_register_callbacks, 0);
   la_store32_rel(&gdbjit_test_register_callbacks_ready, 0);
+  la_storeptr_rel((void **)&gdbjit_test_register_target, NULL);
+  la_storeptr_rel((void **)&gdbjit_test_register_jit, NULL);
+  la_storeptr_rel((void **)&gdbjit_test_register_parent, NULL);
+  la_store32_rel(&gdbjit_test_register_exitno, 0);
 }
 
 void lj_gdbjit_test_force_prepare_alloc_omit(void)
@@ -877,6 +886,8 @@ void lj_gdbjit_test_stats(LJGDBJITTestStats *stats)
   stats->commit_lock_omits =
     la_load32_acq(&gdbjit_test_counters.commit_lock_omits);
   stats->aborts = la_load32_acq(&gdbjit_test_counters.aborts);
+  stats->aborts_after_token =
+    la_load32_acq(&gdbjit_test_counters.aborts_after_token);
   stats->register_callbacks =
     la_load32_acq(&gdbjit_test_register_callbacks);
   stats->register_callbacks_ready =
@@ -1049,6 +1060,11 @@ GDBJITPrepared *lj_gdbjit_preparetrace(jit_State *J, GCtrace *T,
   eo->sz = sz;
   eo->target = T;
   eo->state = GDBJIT_PREPARED;
+#ifdef LJ_GDBJIT_TEST_HELPERS
+  eo->test_J = J;
+  eo->test_exact_parent = exact_parent;
+  eo->test_exitno = J->exitno;
+#endif
   memcpy(&eo->obj, &ctx.obj, ctx.objsize);
   eo->entry.symfile_addr = (const char *)&eo->obj;
   eo->entry.symfile_size = ctx.objsize;
@@ -1088,7 +1104,20 @@ int lj_gdbjit_committrace(GCtrace *T, GDBJITPrepared *prep)
   gdbjit_desc_first_rel(&eo->entry);
   gdbjit_desc_relevant_rel(&eo->entry);
   gdbjit_desc_action_rel(GDBJIT_REGISTER);
+#ifdef LJ_GDBJIT_TEST_HELPERS
+  la_storeptr_rel((void **)&gdbjit_test_register_target, T);
+  la_storeptr_rel((void **)&gdbjit_test_register_jit, eo->test_J);
+  la_storeptr_rel((void **)&gdbjit_test_register_parent,
+	(void *)eo->test_exact_parent);
+  la_store32_rel(&gdbjit_test_register_exitno, (uint32_t)eo->test_exitno);
+#endif
   __jit_debug_register_code();
+#ifdef LJ_GDBJIT_TEST_HELPERS
+  la_storeptr_rel((void **)&gdbjit_test_register_target, NULL);
+  la_storeptr_rel((void **)&gdbjit_test_register_jit, NULL);
+  la_storeptr_rel((void **)&gdbjit_test_register_parent, NULL);
+  la_store32_rel(&gdbjit_test_register_exitno, 0);
+#endif
   gdbjit_lock_release();
   gdbjit_test_note(commit_successes);
   return 1;
@@ -1099,6 +1128,11 @@ void lj_gdbjit_aborttrace(global_State *g, GDBJITPrepared *prep)
   GDBJITentryobj *eo = (GDBJITentryobj *)prep;
   if (eo != NULL && eo->state != GDBJIT_COMMITTED) {
     gdbjit_test_note(aborts);
+#ifdef LJ_GDBJIT_TEST_HELPERS
+    if (g != NULL && jit_token_acq(g) == 0 &&
+	lj_trace_state_load(G2J(g)) == LJ_TRACE_IDLE)
+      gdbjit_test_note(aborts_after_token);
+#endif
     lj_mem_free(g, eo, eo->sz);
   }
 }

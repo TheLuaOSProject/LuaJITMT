@@ -108,6 +108,43 @@ static uint32_t trace_test_exittab_last_free_nslots;
 static uint32_t trace_test_mcode_retry_count;
 static uint32_t trace_test_abort_count;
 static uint32_t trace_test_last_abort_error_code;
+#if LJ_TARGET_ARM64 && defined(LUAJIT_USE_GDBJIT)
+static uint32_t trace_test_arm64_gdbjit_post_prepare_rollback;
+static uint32_t trace_test_arm64_gdbjit_post_prepare_traceno;
+
+enum {
+  TRACE_TEST_ARM64_GDBJIT_ROLLBACK_NONE,
+  TRACE_TEST_ARM64_GDBJIT_ROLLBACK_RECORDER,
+  TRACE_TEST_ARM64_GDBJIT_ROLLBACK_EXTERNAL
+};
+
+void lj_trace_test_arm64_gdbjit_force_post_prepare_rollback(void)
+{
+  la_store32_rel(&trace_test_arm64_gdbjit_post_prepare_traceno, 0);
+  la_store32_rel(&trace_test_arm64_gdbjit_post_prepare_rollback,
+	TRACE_TEST_ARM64_GDBJIT_ROLLBACK_RECORDER);
+}
+
+void lj_trace_test_arm64_gdbjit_force_post_prepare_external_error(void)
+{
+  la_store32_rel(&trace_test_arm64_gdbjit_post_prepare_traceno, 0);
+  la_store32_rel(&trace_test_arm64_gdbjit_post_prepare_rollback,
+	TRACE_TEST_ARM64_GDBJIT_ROLLBACK_EXTERNAL);
+}
+
+TraceNo lj_trace_test_arm64_gdbjit_post_prepare_traceno(void)
+{
+  return (TraceNo)la_load32_acq(
+    &trace_test_arm64_gdbjit_post_prepare_traceno);
+}
+
+static uint32_t trace_test_arm64_gdbjit_take_post_prepare_rollback(void)
+{
+  return la_xchg32_acqrel(
+    &trace_test_arm64_gdbjit_post_prepare_rollback,
+    TRACE_TEST_ARM64_GDBJIT_ROLLBACK_NONE);
+}
+#endif
 
 void lj_trace_test_reset_exittab_stats(void)
 {
@@ -7207,6 +7244,29 @@ static int trace_stop_arm64_first_side(jit_State *J)
     failure = 24;
     goto rollback;
   }
+  cert = J->arm64_side_parent;
+#ifdef LUAJIT_USE_GDBJIT
+  if (LJ_UNLIKELY(J->gdbjit_pending_abort != NULL))
+    trace_arm64_side_publish_failstop(
+	J, 40, "stale GDBJIT preparation before ARM64 side publication");
+  J->gdbjit_pending_abort = lj_gdbjit_preparetrace(J, body, cert.body);
+#if defined(LJ_TRACE_TEST_HELPERS)
+  {
+    uint32_t test_rollback =
+      trace_test_arm64_gdbjit_take_post_prepare_rollback();
+    if (test_rollback != TRACE_TEST_ARM64_GDBJIT_ROLLBACK_NONE)
+      la_store32_rel(&trace_test_arm64_gdbjit_post_prepare_traceno,
+	(uint32_t)trace_traceno_acq(&J->cur));
+    if (test_rollback == TRACE_TEST_ARM64_GDBJIT_ROLLBACK_RECORDER) {
+      failure = 41;
+      goto rollback;
+    } else if (test_rollback == TRACE_TEST_ARM64_GDBJIT_ROLLBACK_EXTERNAL) {
+      setboolV(J->L->top++, 1);
+      lj_err_throw(J->L, LUA_ERRRUN);
+    }
+  }
+#endif
+#endif
   trace_compact_body_init(J, &compact);
   compact_initialized = 1;
   if (LJ_UNLIKELY(!trace_compact_body_initialized_valid(J, &compact)))
@@ -7224,7 +7284,6 @@ static int trace_stop_arm64_first_side(jit_State *J)
   }
   absence_armed = 1;
 
-  cert = J->arm64_side_parent;
   if (!lj_gc2_smr_read_try(g)) {
     retry_error = LJ_TRERR_SMRRETRY;
     failure = 28;
@@ -7301,9 +7360,18 @@ static int trace_stop_arm64_first_side(jit_State *J)
   lj_trace_arm64_side_parent_clear(J);
   lj_gc2_smr_read_leave(g);
   smr_held = 0;
+#ifdef LUAJIT_USE_GDBJIT
+  /* The semantic edge is live before the debugger callback can observe this
+  ** child. Drop the side reader first; the recorder token still retains and
+  ** serializes the body. A descriptor miss is optional metadata loss, with
+  ** terminal release owning the deferred free after token handoff. */
+  if (J->gdbjit_pending_abort != NULL &&
+      lj_gdbjit_committrace(body, J->gdbjit_pending_abort))
+    J->gdbjit_pending_abort = NULL;
+#endif
   trace_arm64_first_side_publish_test_complete(J, plan.childno);
   /* Match generic trace_stop() bookkeeping. A TRACE callback was proved
-  ** absent and reserved before publication; debug/perf builds are compile-time
+  ** absent and reserved before publication; PERFTOOLS remains compile-time
   ** excluded from this canary. */
   if (++J->gc_pressure_traces >= TRACE_GC_PRESSURE_BATCH) {
     J->gc_pressure_traces = 0;
@@ -8021,6 +8089,30 @@ static int trace_arm64_first_side_retire_plan(jit_State *J, GCtrace *T,
     trace_nchild_acq(parent) == 1 &&
     la_load64_acq(&parent->retire_epoch) == 0;
 }
+
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LUAJIT_USE_GDBJIT)
+int lj_trace_test_arm64_gdbjit_callback_ready(jit_State *J,
+	const GCtrace *parent, ExitNo exitno, const GCtrace *child)
+{
+  TraceArm64FirstSideRetirePlan plan;
+  global_State *g;
+  int ready;
+  if (J == NULL || parent == NULL || child == NULL || !lj_jit_token_held(J))
+    return 0;
+  g = J2G(J);
+  if (!lj_gc2_smr_read_try(g))
+    return 0;
+  ready = trace_arm64_first_side_retire_plan(
+    J, (GCtrace *)(void *)child, 0, &plan) &&
+    plan.parent == parent && plan.exitno == exitno &&
+    plan.raw_target_bits == plan.child_encoding_bits &&
+    snap_count_acq(plan.parentsnap) == SNAPCOUNT_DONE &&
+    trace_nextside_acq(parent) == plan.childno &&
+    trace_nchild_acq(parent) == 1;
+  lj_gc2_smr_read_leave(g);
+  return ready;
+}
+#endif
 
 /* Remove the only native inbound edge before retirement publication. Raw
 ** authenticated bits are the authority on arm64e; a same-address word with a
@@ -9075,6 +9167,9 @@ void lj_trace_initstate(global_State *g)
 #if LJ_TARGET_ARM64
   lj_trace_arm64_side_parent_clear(J);
 #endif
+#if LJ_TARGET_ARM64 && defined(LUAJIT_USE_GDBJIT)
+  J->gdbjit_pending_abort = NULL;
+#endif
   J->trace_reclaim_epoch = 0;
   J->mcode_reclaim_epoch = 0;
   J->trace_pin_release_seq = 0;
@@ -9137,6 +9232,12 @@ static void trace_terminal_pin_preflight(global_State *g)
 #if LJ_TARGET_ARM64
   if (J->arm64_side_parent.body != NULL) {
     lj_assertG(0, "ARM64 side-parent certificate survived terminal release");
+    abort();
+  }
+#endif
+#if LJ_TARGET_ARM64 && defined(LUAJIT_USE_GDBJIT)
+  if (J->gdbjit_pending_abort != NULL) {
+    lj_assertG(0, "GDBJIT preparation survived terminal release");
     abort();
   }
 #endif
@@ -9494,6 +9595,12 @@ static TraceStartResult trace_start(jit_State *J)
 
   lj_assertJ(lj_jit_token_held(J),
 	     "trace start without recorder-token ownership");
+#if LJ_TARGET_ARM64 && defined(LUAJIT_USE_GDBJIT)
+  if (LJ_UNLIKELY(J->gdbjit_pending_abort != NULL)) {
+    lj_assertJ(0, "trace start retained a GDBJIT preparation");
+    abort();
+  }
+#endif
 #if LJ_TARGET_ARM64
   /* Every fresh recorder setup starts without a prior ASM attempt's private
   ** parent identity. Future side admission must capture again after setup. */
@@ -10016,6 +10123,11 @@ static void trace_terminal_release(lua_State *L, jit_State *J)
 {
   global_State *g = J2G(J);
   TGState *tg = L ? L2TG(L) : NULL;
+#if LJ_TARGET_ARM64 && defined(LUAJIT_USE_GDBJIT)
+  GDBJITPrepared *gdbjit_pending_abort = J->gdbjit_pending_abort;
+  /* Detach token-private ownership before IDLE exposes J to a new recorder. */
+  J->gdbjit_pending_abort = NULL;
+#endif
 #if LJ_TARGET_ARM64
   /* A completed first-side transaction moved its one-shot seam to DONE.
   ** Every other terminal path converts a retained ACTIVE claim to ABORTED. */
@@ -10037,6 +10149,10 @@ static void trace_terminal_release(lua_State *L, jit_State *J)
   lj_trace_state_store(J, LJ_TRACE_IDLE);
   lj_jit_token_release_l(L, J);
   lj_dispatch_update(g, 0);
+#if LJ_TARGET_ARM64 && defined(LUAJIT_USE_GDBJIT)
+  if (gdbjit_pending_abort != NULL)
+    lj_gdbjit_aborttrace(g, gdbjit_pending_abort);
+#endif
 }
 
 /* State machine for the trace compiler. Protected callback. */

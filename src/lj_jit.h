@@ -10,6 +10,10 @@
 #if LJ_HASJIT
 #include "lj_ir.h"
 
+#if LJ_TARGET_ARM64 && defined(LUAJIT_USE_GDBJIT)
+struct GDBJITPrepared;
+#endif
+
 /* -- JIT engine flags ---------------------------------------------------- */
 
 /* General JIT engine flags. 4 bits. */
@@ -1003,6 +1007,9 @@ LJ_STATIC_ASSERT(sizeof(LJTraceArm64SideParentCert) == 6*sizeof(uint64_t));
 typedef struct jit_State {
   GCtrace cur;		/* Current trace. */
   GCtrace *curfinal;	/* Final address of current trace (set during asm). */
+#if LJ_TARGET_ARM64 && defined(LUAJIT_USE_GDBJIT)
+  struct GDBJITPrepared *gdbjit_pending_abort;  /* Token-private metadata. */
+#endif
 
   lua_State *L;		/* Current Lua state. */
   const BCIns *pc;	/* Current PC. */

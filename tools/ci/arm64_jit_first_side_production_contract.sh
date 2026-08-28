@@ -397,7 +397,7 @@ check_macros() {
   fi
 }
 
-check_registration_closed() {
+check_registration_gates() {
   target_flags=$1
   xcflags=$2
   tag=$3
@@ -407,9 +407,11 @@ check_registration_closed() {
     "$cc" $target_flags -mmacosx-version-min="$minver" $xcflags \
       -DLUAJIT_USE_$feature -I"$root/src" -dM -E -x c \
       -include lj_arch.h /dev/null >"$macros"
-    grep -E '^#define LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
+    expected=0
+    if test "$feature" = PERFTOOLS; then expected=1; fi
+    grep -E "^#define LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED[[:space:]]+$expected\$" \
       "$macros" >/dev/null || {
-      echo "production first-side gate stayed open with $feature ($tag)" >&2
+      echo "production first-side registration gate mismatch with $feature ($tag)" >&2
       exit 1
     }
     grep -E '^#define LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
@@ -468,8 +470,8 @@ compile_fixture() {
   printf '%s\n' "$fixture"
 }
 
-check_registration_closed '-arch arm64' "$base_xcflags" arm64
-check_registration_closed '-arch arm64e -mbranch-protection=bti' \
+check_registration_gates '-arch arm64' "$base_xcflags" arm64
+check_registration_gates '-arch arm64e -mbranch-protection=bti' \
   "$base_xcflags -DLUAJIT_ENABLE_CET_BR" arm64e
 
 # A truly ordinary archive (no trace helpers at all) must publish all four

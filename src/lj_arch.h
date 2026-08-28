@@ -581,11 +581,12 @@
 #define LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED		1
 #if defined(LJ_ARM64_SIDE_ASM_TEST) || \
     defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST) || \
-    defined(LUAJIT_USE_GDBJIT) || defined(LUAJIT_USE_PERFTOOLS)
+    defined(LUAJIT_USE_PERFTOOLS)
 #define LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED	1
 #else
 /* Production canary: only the exact certified first child is admitted. The
-** broad side gate stays closed for every other first side and side-of-side. */
+** broad side gate stays closed for every other first side and side-of-side.
+** Optional GDBJIT metadata has its own bounded publication transaction. */
 #define LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED	0
 #endif
 #define LJ_ARM64_JIT_EXIT_TARGET_SLOTS			1

@@ -6,6 +6,7 @@ source_file=$root/src/lj_gdbjit.c
 header_file=$root/src/lj_gdbjit.h
 trace_source=$root/src/lj_trace.c
 fixture_source=$root/tests/t-arm64-jit-gdbjit-prepare.c
+smoke_source=$root/tests/t-arm64-jit-gdbjit-first-side-smoke.c
 
 for required in \
   'GDBJITPrepared *lj_gdbjit_preparetrace' \
@@ -15,6 +16,9 @@ for required in \
   'gdbjit_buildobj_bounded(&ctx, filenamelen)' \
   'filenamelen*2u+alignslop' \
   'relevant->symfile_size != 0' \
+  'trace_gdbjit_entry_acq(target) == (void *)relevant' \
+  'targetno != 0 && trace_runnable_acq(target, targetno)' \
+  'lj_trace_test_arm64_gdbjit_callback_ready(' \
   'lj_gdbjit_test_descriptor_lock_acquire' \
   'lj_gdbjit_test_prepared_object_size' \
   'lj_gdbjit_aborttrace(J2G(J), prep)'; do
@@ -33,12 +37,20 @@ for required in \
   'lj_gdbjit_aborttrace(global_State *g, GDBJITPrepared *prep)' \
   'lj_gdbjit_test_descriptor_lock_acquire(void)' \
   'lj_gdbjit_test_prepared_symfile_size(' \
+  'typedef struct GDBJITentry {' \
+  'typedef struct GDBJITdesc {' \
+  'extern GDBJITdesc __jit_debug_descriptor;' \
   'The caller must retain T and serialize its retirement through commit.'; do
   grep -F "$required" "$header_file" >/dev/null || {
     echo "GDBJIT prepare header lost contract: $required" >&2
     exit 1
   }
 done
+grep -F 'struct GDBJITPrepared *gdbjit_pending_abort;' \
+  "$root/src/lj_jit.h" >/dev/null || {
+  echo "GDBJIT deferred-abort owner lost from jit_State" >&2
+  exit 1
+}
 
 commit_text=$(sed -n '/^int lj_gdbjit_committrace(/,/^}/p' "$source_file")
 abort_text=$(sed -n '/^void lj_gdbjit_aborttrace(/,/^}/p' "$source_file")
@@ -100,10 +112,57 @@ if printf '%s\n' "$abort_text" | \
   echo "GDBJIT abort regained target or descriptor dependence" >&2
   exit 1
 fi
-if grep -E 'lj_gdbjit_(prepare|commit)trace' "$trace_source" >/dev/null; then
-  echo "GDBJIT split was wired into production trace publication prematurely" >&2
-  exit 1
-fi
+side_text=$(sed -n \
+  '/^static int trace_stop_arm64_first_side(/,/^}/p' "$trace_source")
+terminal_text=$(sed -n \
+  '/^static void trace_terminal_release(/,/^}/p' "$trace_source")
+test -n "$side_text" && test -n "$terminal_text"
+for required in \
+  'J->gdbjit_pending_abort = lj_gdbjit_preparetrace(J, body, cert.body);' \
+  'lj_gdbjit_committrace(body, J->gdbjit_pending_abort)' \
+  'J->gdbjit_pending_abort = NULL;'; do
+  printf '%s\n' "$side_text" | grep -F "$required" >/dev/null || {
+    echo "GDBJIT first-side integration lost contract: $required" >&2
+    exit 1
+  }
+done
+prepare_line=$(printf '%s\n' "$side_text" | \
+  grep -nF 'lj_gdbjit_preparetrace(J, body, cert.body)' | cut -d: -f1)
+compact_line=$(printf '%s\n' "$side_text" | \
+  grep -nF 'trace_compact_body_init(J, &compact);' | cut -d: -f1)
+publish_line=$(printf '%s\n' "$side_text" | \
+  grep -nF 'lj_trace_state_publish_try(J)' | cut -d: -f1)
+edge_line=$(printf '%s\n' "$side_text" | \
+  grep -nF 'trace_exittarget_arm64_raw_cas_acqrel(' | tail -n 1 | cut -d: -f1)
+commit_line=$(printf '%s\n' "$side_text" | \
+  grep -nF 'lj_gdbjit_committrace(body, J->gdbjit_pending_abort)' | \
+  cut -d: -f1)
+smr_leave_line=$(printf '%s\n' "$side_text" | \
+  grep -nF 'lj_gc2_smr_read_leave(g);' | head -n 1 | cut -d: -f1)
+test -n "$prepare_line" && test -n "$compact_line" && \
+test -n "$publish_line" && test -n "$edge_line" && \
+test -n "$smr_leave_line" && test -n "$commit_line" && \
+test "$prepare_line" -lt "$compact_line" && \
+test "$compact_line" -lt "$publish_line" && \
+test "$publish_line" -lt "$edge_line" && \
+test "$edge_line" -lt "$smr_leave_line" && \
+test "$smr_leave_line" -lt "$commit_line"
+
+detach_line=$(printf '%s\n' "$terminal_text" | \
+  grep -nF 'J->gdbjit_pending_abort = NULL;' | cut -d: -f1)
+idle_line=$(printf '%s\n' "$terminal_text" | \
+  grep -nF 'lj_trace_state_store(J, LJ_TRACE_IDLE);' | cut -d: -f1)
+release_line=$(printf '%s\n' "$terminal_text" | \
+  grep -nF 'lj_jit_token_release_l(L, J);' | cut -d: -f1)
+dispatch_line=$(printf '%s\n' "$terminal_text" | \
+  grep -nF 'lj_dispatch_update(g, 0);' | cut -d: -f1)
+abort_line=$(printf '%s\n' "$terminal_text" | \
+  grep -nF 'lj_gdbjit_aborttrace(g, gdbjit_pending_abort);' | cut -d: -f1)
+test -n "$detach_line" && test -n "$idle_line" && \
+test -n "$release_line" && test -n "$dispatch_line" && \
+test -n "$abort_line" && \
+test "$detach_line" -lt "$idle_line" && test "$idle_line" -lt "$release_line" && \
+test "$release_line" -lt "$dispatch_line" && test "$dispatch_line" -lt "$abort_line"
 if grep -F 'lj_mem_newt' "$source_file" >/dev/null; then
   echo "GDBJIT preparation retained the throwing allocator" >&2
   exit 1
@@ -125,13 +184,64 @@ for required in \
   'lj_gdbjit_committrace(&other, prep)' \
   'symfile_size == object_size' \
   'hi == lo+1u' \
-  'trace_gdbjit_entry_acq(T) != NULL'; do
+  'trace_gdbjit_entry_acq(T) != NULL' \
+  'run_side_case(GDBJIT_SIDE_SUCCESS_SCOPED);' \
+  'run_side_case(GDBJIT_SIDE_ALLOC_OMIT);' \
+  'run_side_case(GDBJIT_SIDE_LOCK_OMIT);' \
+  'run_side_case(GDBJIT_SIDE_POST_PREPARE_ROLLBACK);' \
+  'run_side_case(GDBJIT_SIDE_POST_PREPARE_EXTERNAL_ERROR);' \
+  'run_side_case(GDBJIT_SIDE_SUCCESS_FULL_FLUSH);' \
+  'run_side_case(GDBJIT_SIDE_RETIRE_LOCK_OMIT);' \
+  'run_unsupported_side_case();' \
+  '__gdbjit_unsupported_side' \
+  'lj_trace_test_arm64_gdbjit_force_post_prepare_rollback();' \
+  'lj_trace_test_arm64_gdbjit_force_post_prepare_external_error();' \
+  'lj_trace_test_arm64_gdbjit_post_prepare_traceno();' \
+  'stats->aborts_after_token ==' \
+  'status == LUA_ERRRUN' \
+  'lua_isboolean(L, -1) && lua_toboolean(L, -1)' \
+  'lj_trace_test_arm64_gdbjit_callback_ready(' \
+  'J->gdbjit_pending_abort == NULL' \
+  'childno == rollback_slot' \
+  'lj_trace_flushscope(J, childno) == 1u' \
+  'lj_trace_flushall_gc(L) == 0' \
+  'trace_retired_link_listed_acq(child)' \
+  'reclaim_trace_at(g, mature_epoch) == 0' \
+  'reclaim_trace_at(g, mature_epoch) >= 1u' \
+  'gc2_smr_readers_acq(G(L)) == 0' \
+  'stats.prepare_bounds_omits == 0' \
+  'stats.prepare_alloc_omits == 0' \
+  'stats.commit_lock_omits == 0' \
+  'stats.aborts_after_token == 0'; do
   grep -F "$required" "$fixture_source" >/dev/null || {
     echo "GDBJIT prepare fixture lost proof: $required" >&2
     exit 1
   }
 done
 test "$(grep -Fc 'lj_gdbjit_committrace(&target, prep)' "$fixture_source")" = 2
+
+for required in \
+  'production GDBJIT first-side smoke must not use test helpers' \
+  'trace_gdbjit_entry_acq(root) == root_entry' \
+  'child_entry != NULL && child_entry != root_entry' \
+  'trace_nextside_acq(root) == childno' \
+  'snap_count_acq(&rootsnap[2]) == SNAPCOUNT_DONE' \
+  'pointer_bits(trace_exittarget_arm64_encode(g, child_mcode))' \
+  'trace_exittarget_arm64_acq(root, 2) == child_mcode' \
+  'A64I_LE(A64I_BTI_J)' \
+  'ASMFunction expected = lj_ptr_sign(' \
+  'descriptor_first_acq() == child_entry' \
+  'entry_next_acq(child_entry) == root_entry' \
+  'assert_quiescent(L, J);' \
+  'lj_trace_flushscope(J, childno) == 1u' \
+  'pointer_bits(root_fallback_raw)' \
+  'lj_trace_flushall_gc(L) == 0' \
+  'descriptor_first_acq() == NULL'; do
+  grep -F "$required" "$smoke_source" >/dev/null || {
+    echo "production GDBJIT smoke lost proof: $required" >&2
+    exit 1
+  }
+done
 
 if test "${LJ_GDBJIT_SOURCE_ONLY:-0}" = 1; then
   echo "arm64_jit_gdbjit_prepare_contract OK: bounded source contract"
@@ -156,6 +266,8 @@ gdb_xcflags="$ordinary_xcflags -DLUAJIT_USE_GDBJIT"
 test_xcflags="$gdb_xcflags -DLJ_GDBJIT_TEST_HELPERS"
 pauth_xcflags="$test_xcflags -DLUAJIT_ENABLE_CET_BR"
 pauth_gdb_xcflags="$gdb_xcflags -DLUAJIT_ENABLE_CET_BR"
+nohelper_gdb_xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUAJIT_USE_GDBJIT'
+nohelper_pauth_gdb_xcflags="$nohelper_gdb_xcflags -DLUAJIT_ENABLE_CET_BR"
 archive=$root/src/libluajit.a
 lock_dir=$root/src/.lj-test-run.lock
 lock_held=0
@@ -230,6 +342,14 @@ pauth_fixture=$tmpdir/t-arm64-jit-gdbjit-prepare-arm64e
 pauth_fixture_obj=$tmpdir/t-arm64-jit-gdbjit-prepare-arm64e.o
 pauth_source_obj=$tmpdir/lj_gdbjit-arm64e.o
 pauth_test_source_obj=$tmpdir/lj_gdbjit-arm64e-test.o
+smoke_fixture=$tmpdir/t-arm64-jit-gdbjit-first-side-smoke
+smoke_fixture_obj=$tmpdir/t-arm64-jit-gdbjit-first-side-smoke.o
+smoke_trace_obj=$tmpdir/lj_trace-arm64-nohelper.o
+smoke_gdbjit_obj=$tmpdir/lj_gdbjit-arm64-nohelper.o
+pauth_smoke_fixture=$tmpdir/t-arm64-jit-gdbjit-first-side-smoke-arm64e
+pauth_smoke_fixture_obj=$tmpdir/t-arm64-jit-gdbjit-first-side-smoke-arm64e.o
+pauth_smoke_trace_obj=$tmpdir/lj_trace-arm64e-nohelper.o
+pauth_smoke_gdbjit_obj=$tmpdir/lj_gdbjit-arm64e-nohelper.o
 macros=$tmpdir/macros-arm64.txt
 pauth_macros=$tmpdir/macros-arm64e.txt
 
@@ -250,7 +370,7 @@ for setting in \
   'LJ_HASJIT 1' \
   'LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1' \
-  'LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED 1'; do
+  'LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED 0'; do
   grep -F "#define $setting" "$macros" >/dev/null || {
     echo "ARM64 GDBJIT prepare gate mismatch: $setting" >&2
     exit 1
@@ -284,6 +404,44 @@ while test "$run" -le "${LJ_ARM64_GDBJIT_RUNS:-2}"; do
   run=$((run+1))
 done
 
+# Build and run the same integration without either helper macro. Compile both
+# changed production translation units with warnings fatal before linking.
+env MACOSX_DEPLOYMENT_TARGET="$minver" \
+  make -C "$root/src" clean TARGET_FLAGS='-arch arm64' \
+    XCFLAGS="$nohelper_gdb_xcflags"
+env MACOSX_DEPLOYMENT_TARGET="$minver" \
+  make -C "$root/src" -j"$jobs" TARGET_FLAGS='-arch arm64' \
+    XCFLAGS="$nohelper_gdb_xcflags"
+test "$(lipo -archs "$archive")" = arm64
+if nm "$archive" | grep -E \
+     ' T _lj_(gdbjit_test_|trace_test_)' >/dev/null; then
+  echo "production ARM64 GDBJIT archive retained test helpers" >&2
+  exit 1
+fi
+# shellcheck disable=SC2086 # nohelper_gdb_xcflags expands to arguments.
+"$cc" -std=gnu11 -O2 -fomit-frame-pointer -Wall -Wextra -Werror \
+  -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -U_FORTIFY_SOURCE \
+  -fno-stack-protector -DLUAJIT_UNWIND_EXTERNAL -arch arm64 \
+  -mmacosx-version-min="$minver" $nohelper_gdb_xcflags -I"$root/src" \
+  -c "$trace_source" -o "$smoke_trace_obj"
+# shellcheck disable=SC2086 # nohelper_gdb_xcflags expands to arguments.
+"$cc" -std=gnu11 -O2 -fomit-frame-pointer -Wall -Wextra -Werror \
+  -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -U_FORTIFY_SOURCE \
+  -fno-stack-protector -DLUAJIT_UNWIND_EXTERNAL -arch arm64 \
+  -mmacosx-version-min="$minver" $nohelper_gdb_xcflags -I"$root/src" \
+  -c "$source_file" -o "$smoke_gdbjit_obj"
+# shellcheck disable=SC2086 # nohelper_gdb_xcflags expands to arguments.
+"$cc" -std=gnu11 -O2 -Wall -Wextra -Werror -arch arm64 \
+  -mmacosx-version-min="$minver" $nohelper_gdb_xcflags -I"$root/src" \
+  -c "$smoke_source" -o "$smoke_fixture_obj"
+"$cc" -arch arm64 -mmacosx-version-min="$minver" \
+  "$smoke_fixture_obj" "$archive" -lm -pthread -o "$smoke_fixture"
+run=1
+while test "$run" -le "${LJ_ARM64_GDBJIT_NOHELPER_RUNS:-1}"; do
+  "$smoke_fixture"
+  run=$((run+1))
+done
+
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" clean \
     TARGET_FLAGS='-arch arm64e -mbranch-protection=bti' \
@@ -305,7 +463,7 @@ for setting in \
   'LJ_ABI_BRANCH_TRACK 1' \
   'LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED 0' \
   'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1' \
-  'LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED 1'; do
+  'LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED 0'; do
   grep -F "#define $setting" "$pauth_macros" >/dev/null || {
     echo "ARM64e GDBJIT prepare gate mismatch: $setting" >&2
     exit 1
@@ -341,6 +499,49 @@ while test "$run" -le "${LJ_ARM64_GDBJIT_PAUTH_RUNS:-2}"; do
   run=$((run+1))
 done
 
+env MACOSX_DEPLOYMENT_TARGET="$minver" \
+  make -C "$root/src" clean \
+    TARGET_FLAGS='-arch arm64e -mbranch-protection=bti' \
+    XCFLAGS="$nohelper_pauth_gdb_xcflags"
+env MACOSX_DEPLOYMENT_TARGET="$minver" \
+  make -C "$root/src" -j"$jobs" \
+    TARGET_FLAGS='-arch arm64e -mbranch-protection=bti' \
+    XCFLAGS="$nohelper_pauth_gdb_xcflags"
+test "$(lipo -archs "$archive")" = arm64e
+if nm "$archive" | grep -E \
+     ' T _lj_(gdbjit_test_|trace_test_)' >/dev/null; then
+  echo "production ARM64e GDBJIT archive retained test helpers" >&2
+  exit 1
+fi
+# shellcheck disable=SC2086 # nohelper_pauth_gdb_xcflags expands.
+"$cc" -std=gnu11 -O2 -fomit-frame-pointer -Wall -Wextra -Werror \
+  -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -U_FORTIFY_SOURCE \
+  -fno-stack-protector -DLUAJIT_UNWIND_EXTERNAL -arch arm64e \
+  -mbranch-protection=bti -mmacosx-version-min="$minver" \
+  $nohelper_pauth_gdb_xcflags -I"$root/src" -c "$trace_source" \
+  -o "$pauth_smoke_trace_obj"
+# shellcheck disable=SC2086 # nohelper_pauth_gdb_xcflags expands.
+"$cc" -std=gnu11 -O2 -fomit-frame-pointer -Wall -Wextra -Werror \
+  -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -U_FORTIFY_SOURCE \
+  -fno-stack-protector -DLUAJIT_UNWIND_EXTERNAL -arch arm64e \
+  -mbranch-protection=bti -mmacosx-version-min="$minver" \
+  $nohelper_pauth_gdb_xcflags -I"$root/src" -c "$source_file" \
+  -o "$pauth_smoke_gdbjit_obj"
+# shellcheck disable=SC2086 # nohelper_pauth_gdb_xcflags expands.
+"$cc" -std=gnu11 -O2 -Wall -Wextra -Werror -arch arm64e \
+  -mbranch-protection=bti -mmacosx-version-min="$minver" \
+  $nohelper_pauth_gdb_xcflags -I"$root/src" -c "$smoke_source" \
+  -o "$pauth_smoke_fixture_obj"
+"$cc" -arch arm64e -mbranch-protection=bti \
+  -mmacosx-version-min="$minver" "$pauth_smoke_fixture_obj" "$archive" \
+  -lm -pthread -o "$pauth_smoke_fixture"
+otool -hv "$pauth_smoke_fixture" | grep -E 'ARM64[[:space:]]+E' >/dev/null
+run=1
+while test "$run" -le "${LJ_ARM64_GDBJIT_PAUTH_NOHELPER_RUNS:-1}"; do
+  "$pauth_smoke_fixture"
+  run=$((run+1))
+done
+
 # Leave the checkout in the ordinary thin experimental ARM64 configuration.
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" clean TARGET_FLAGS='-arch arm64' \
@@ -356,4 +557,4 @@ if nm "$archive" | grep -E \
 fi
 restore_needed=0
 
-echo "arm64_jit_gdbjit_prepare_contract OK: bounded registration and one-shot omissions ran on ARM64/ARM64e; ordinary ARM64 was restored"
+echo "arm64_jit_gdbjit_prepare_contract OK: helper and production root/first-side registration, rollback, and retirement omissions ran on ARM64/ARM64e; ordinary ARM64 was restored"

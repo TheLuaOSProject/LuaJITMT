@@ -112,6 +112,16 @@ LJ_FUNC int lj_trace_test_arm64_side_publish_seal(jit_State *J, GCtrace *T);
 LJ_FUNC uint32_t lj_trace_test_arm64_side_publish_seal_failure(void);
 LJ_FUNC uint32_t lj_trace_test_arm64_side_publish_raw_negative(void);
 #endif
+#if defined(LJ_TRACE_TEST_HELPERS) && LJ_TARGET_ARM64 && \
+    defined(LUAJIT_USE_GDBJIT)
+/* Force one prepared exact side to roll back before semantic publication. */
+LJ_FUNC void lj_trace_test_arm64_gdbjit_force_post_prepare_rollback(void);
+LJ_FUNC void
+lj_trace_test_arm64_gdbjit_force_post_prepare_external_error(void);
+LJ_FUNC TraceNo lj_trace_test_arm64_gdbjit_post_prepare_traceno(void);
+LJ_FUNC int lj_trace_test_arm64_gdbjit_callback_ready(jit_State *J,
+  const GCtrace *parent, ExitNo exitno, const GCtrace *child);
+#endif
 #endif
 
 LJ_FUNC GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T);

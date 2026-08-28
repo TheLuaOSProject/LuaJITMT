@@ -13,6 +13,31 @@ typedef struct GDBJITPrepared GDBJITPrepared;
 
 #if LJ_HASJIT && defined(LUAJIT_USE_GDBJIT)
 
+/* Standard debugger-visible GDB JIT interface. Keep these types shared with
+** production-only ABI probes so every declaration of the external descriptor
+** is compatible with its definition. */
+enum {
+  GDBJIT_NOACTION = 0,
+  GDBJIT_REGISTER,
+  GDBJIT_UNREGISTER
+};
+
+typedef struct GDBJITentry {
+  struct GDBJITentry *next_entry;
+  struct GDBJITentry *prev_entry;
+  const char *symfile_addr;
+  uint64_t symfile_size;
+} GDBJITentry;
+
+typedef struct GDBJITdesc {
+  uint32_t version;
+  uint32_t action_flag;
+  GDBJITentry *relevant_entry;
+  GDBJITentry *first_entry;
+} GDBJITdesc;
+
+extern GDBJITdesc __jit_debug_descriptor;
+
 /* Optional debugger metadata is prepared before semantic trace publication.
 ** A NULL result means omission, never a recorder error. If T is J->curfinal,
 ** preparation reads the still-private J->cur image; exact_parent, when non-NULL,
@@ -40,6 +65,7 @@ typedef struct LJGDBJITTestStats {
   uint32_t commit_successes;
   uint32_t commit_lock_omits;
   uint32_t aborts;
+  uint32_t aborts_after_token;
   uint32_t register_callbacks;
   uint32_t register_callbacks_ready;
 } LJGDBJITTestStats;

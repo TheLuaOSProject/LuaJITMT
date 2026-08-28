@@ -13,11 +13,15 @@
 #include "lualib.h"
 
 #include "lj_obj.h"
+#include "lj_atomic.h"
 #include "lj_func.h"
+#include "lj_gc2.h"
 #include "lj_state.h"
 #include "lj_str.h"
 #include "lj_ir.h"
 #include "lj_jit.h"
+#include "lj_snap.h"
+#include "lj_trace.h"
 #include "lj_dispatch.h"
 #include "lj_gdbjit.h"
 
@@ -26,9 +30,10 @@
 #if !LJ_TARGET_ARM64 || !defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL) || \
     !LJ_HASJIT || LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED || \
     !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED || \
-    !LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED || \
-    !defined(LUAJIT_USE_GDBJIT) || !defined(LJ_GDBJIT_TEST_HELPERS)
-#error "fixture requires the closed-side experimental ARM64 GDBJIT build"
+    LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED || \
+    !defined(LUAJIT_USE_GDBJIT) || !defined(LJ_TRACE_TEST_HELPERS) || \
+    !defined(LJ_GDBJIT_TEST_HELPERS)
+#error "fixture requires the exact-first-side experimental ARM64 GDBJIT build"
 #endif
 
 typedef enum GDBJITCase {
@@ -44,6 +49,19 @@ static const char fixture_lua[] =
   "  local i,s=0,0\n"
   "  while i<n do i=i+1 s=s+i end\n"
   "  return s\n"
+  "end\n"
+  "function __gdbjit_first_side(n, bias)\n"
+  "  local i=0\n"
+  "  while i<n do\n"
+  "    i=i+1\n"
+  "    if bias~=0 then i=i+1 end\n"
+  "  end\n"
+  "  return i\n"
+  "end\n"
+  "function __gdbjit_unsupported_side(n, bias)\n"
+  "  local i=0\n"
+  "  while i<n do i=(i~=0 and i or i)+3 end\n"
+  "  return i\n"
   "end\n";
 
 static char *chunkname_with_payload(size_t payload)
@@ -101,6 +119,7 @@ static GCtrace *published_root(lua_State *L)
 static void assert_stats(GDBJITCase which, const LJGDBJITTestStats *stats)
 {
   assert(stats->prepare_attempts == 1);
+  assert(stats->aborts_after_token == 0);
   switch (which) {
   case GDBJIT_CASE_NORMAL:
   case GDBJIT_CASE_MEDIUM_NAME:
@@ -111,6 +130,7 @@ static void assert_stats(GDBJITCase which, const LJGDBJITTestStats *stats)
     assert(stats->commit_successes == 1);
     assert(stats->commit_lock_omits == 0);
     assert(stats->aborts == 0);
+    assert(stats->aborts_after_token == 0);
     break;
   case GDBJIT_CASE_ALLOC_OMIT:
     assert(stats->prepare_successes == 0);
@@ -138,6 +158,7 @@ static void assert_stats(GDBJITCase which, const LJGDBJITTestStats *stats)
     assert(stats->commit_successes == 0);
     assert(stats->commit_lock_omits == 0);
     assert(stats->aborts == 0);
+    assert(stats->aborts_after_token == 0);
     break;
   }
   if (which == GDBJIT_CASE_NORMAL || which == GDBJIT_CASE_MEDIUM_NAME) {
@@ -367,6 +388,405 @@ static void run_case(GDBJITCase which)
   free(dynamic_name);
 }
 
+typedef enum GDBJITSideCase {
+  GDBJIT_SIDE_SUCCESS_SCOPED,
+  GDBJIT_SIDE_ALLOC_OMIT,
+  GDBJIT_SIDE_LOCK_OMIT,
+  GDBJIT_SIDE_POST_PREPARE_ROLLBACK,
+  GDBJIT_SIDE_POST_PREPARE_EXTERNAL_ERROR,
+  GDBJIT_SIDE_SUCCESS_FULL_FLUSH,
+  GDBJIT_SIDE_RETIRE_LOCK_OMIT
+} GDBJITSideCase;
+
+static lua_Integer call_named_pair(lua_State *L, const char *name,
+	lua_Integer n, lua_Integer bias)
+{
+  lua_Integer result;
+  int status;
+  lua_getglobal(L, name);
+  assert(lua_isfunction(L, -1));
+  lua_pushinteger(L, n);
+  lua_pushinteger(L, bias);
+  status = lua_pcall(L, 2, 1, 0);
+  if (status != LUA_OK) {
+    fprintf(stderr, "GDBJIT first-side call failed: %s\n",
+	    lua_tostring(L, -1));
+    assert(status == LUA_OK);
+  }
+  assert(lua_isnumber(L, -1));
+  result = lua_tointeger(L, -1);
+  lua_pop(L, 1);
+  return result;
+}
+
+static void call_first_side_expect_external_error(lua_State *L)
+{
+  int status;
+  lua_getglobal(L, "__gdbjit_first_side");
+  assert(lua_isfunction(L, -1));
+  lua_pushinteger(L, 3);
+  lua_pushinteger(L, 1);
+  status = lua_pcall(L, 2, 1, 0);
+  assert(status == LUA_ERRRUN);
+  assert(lua_isboolean(L, -1) && lua_toboolean(L, -1));
+  lua_pop(L, 1);
+}
+
+static GCproto *named_proto(lua_State *L, const char *name)
+{
+  GCfunc *fn;
+  GCproto *pt;
+  lua_getglobal(L, name);
+  assert(lua_isfunction(L, -1));
+  fn = funcV(L->top-1);
+  assert(isluafunc(fn));
+  pt = funcproto(fn);
+  lua_pop(L, 1);
+  return pt;
+}
+
+#define call_first_side_pair(L, n, bias) \
+  call_named_pair((L), "__gdbjit_first_side", (n), (bias))
+
+static GCtrace *record_first_side_root(lua_State *L, jit_State *J,
+	TraceNo *rootnop)
+{
+  GCproto *pt = named_proto(L, "__gdbjit_first_side");
+  GCtrace *root = NULL;
+  unsigned attempt;
+  for (attempt = 0; attempt < 64; attempt++) {
+    TraceNo rootno;
+    assert(call_first_side_pair(L, 3, 0) == 3);
+    rootno = proto_trace_acq(pt);
+    if (rootno != 0) {
+      root = traceref_safe(J, rootno);
+      if (trace_runnable_acq(root, rootno)) {
+	*rootnop = rootno;
+	break;
+      }
+    }
+  }
+  assert(root != NULL && *rootnop != 0);
+  assert(trace_root_acq(root) == 0);
+  assert(trace_link_acq(root) == *rootnop);
+  assert(trace_linktype_acq(root) == LJ_TRLINK_LOOP);
+  assert(trace_nchild_acq(root) == 0);
+  assert(trace_nextside_acq(root) == 0);
+  assert(trace_gdbjit_entry_acq(root) != NULL);
+  return root;
+}
+
+static GCtrace *record_first_side_child(lua_State *L, jit_State *J,
+	GCtrace *root, TraceNo *childnop)
+{
+  GCtrace *child = NULL;
+  unsigned attempt;
+  for (attempt = 0; attempt < 8; attempt++) {
+    assert(call_first_side_pair(L, 3, 1) == 4);
+    *childnop = trace_nextside_acq(root);
+    if (*childnop != 0) {
+      child = traceref_safe(J, *childnop);
+      if (trace_runnable_acq(child, *childnop))
+	break;
+    }
+  }
+  assert(child != NULL && *childnop != 0);
+  return child;
+}
+
+static void assert_published_child(lua_State *L, jit_State *J,
+	GCtrace *root, TraceNo rootno, GCtrace *child, TraceNo childno,
+	int registered)
+{
+  int token;
+  assert(trace_root_acq(child) == rootno);
+  assert(trace_link_acq(child) == rootno);
+  assert(trace_linktype_acq(child) == LJ_TRLINK_ROOT);
+  assert(trace_nchild_acq(root) == 1);
+  assert(trace_nextside_acq(root) == childno);
+  assert((trace_gdbjit_entry_acq(child) != NULL) == registered);
+  if (registered)
+    assert(trace_gdbjit_entry_acq(child) != trace_gdbjit_entry_acq(root));
+  token = lj_jit_token_acquire_wait(J);
+  assert(token == 1);
+  assert(lj_trace_test_arm64_gdbjit_callback_ready(
+	J, root, 2, child));
+  lj_jit_token_release(J);
+
+  lj_trace_test_reset_exit_stats();
+  assert(call_first_side_pair(L, 3, 1) == 4);
+  assert(lj_trace_test_exit_calls() == 1);
+  assert(lj_trace_test_first_exit_parent() == childno);
+  assert(lj_trace_test_first_exitno() == 3);
+  assert(lj_trace_test_last_exit_parent() == childno);
+  assert(lj_trace_test_last_exitno() == 3);
+}
+
+static uint32_t reclaim_trace_at(global_State *g, uint64_t epoch)
+{
+  jit_State *J = G2J(g);
+  uint32_t reclaimed;
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(lj_gc2_test_idle_reclaim_enter(g));
+  assert(lj_jit_token_try(J));
+  reclaimed = lj_trace_reclaim_retired(g, epoch);
+  lj_jit_token_release(J);
+  lj_gc2_test_idle_reclaim_leave(g);
+  return reclaimed;
+}
+
+static void assert_side_stats(GDBJITSideCase which,
+	const LJGDBJITTestStats *stats)
+{
+  assert(stats->prepare_attempts == 1);
+  assert(stats->prepare_bounds_omits == 0);
+  assert(stats->aborts_after_token ==
+	 (which == GDBJIT_SIDE_LOCK_OMIT ||
+	  which == GDBJIT_SIDE_POST_PREPARE_ROLLBACK ||
+	  which == GDBJIT_SIDE_POST_PREPARE_EXTERNAL_ERROR));
+  if (which == GDBJIT_SIDE_ALLOC_OMIT) {
+    assert(stats->prepare_successes == 0);
+    assert(stats->prepare_alloc_omits == 1);
+    assert(stats->commit_attempts == 0);
+    assert(stats->commit_successes == 0);
+    assert(stats->commit_lock_omits == 0);
+    assert(stats->aborts == 0);
+    assert(stats->register_callbacks == 0);
+    assert(stats->register_callbacks_ready == 0);
+  } else if (which == GDBJIT_SIDE_LOCK_OMIT) {
+    assert(stats->prepare_successes == 1);
+    assert(stats->prepare_alloc_omits == 0);
+    assert(stats->commit_attempts == 1);
+    assert(stats->commit_successes == 0);
+    assert(stats->commit_lock_omits == 1);
+    assert(stats->aborts == 1);
+    assert(stats->register_callbacks == 0);
+    assert(stats->register_callbacks_ready == 0);
+  } else if (which == GDBJIT_SIDE_POST_PREPARE_ROLLBACK ||
+	     which == GDBJIT_SIDE_POST_PREPARE_EXTERNAL_ERROR) {
+    assert(stats->prepare_successes == 1);
+    assert(stats->prepare_alloc_omits == 0);
+    assert(stats->commit_attempts == 0);
+    assert(stats->commit_successes == 0);
+    assert(stats->commit_lock_omits == 0);
+    assert(stats->aborts == 1);
+    assert(stats->register_callbacks == 0);
+    assert(stats->register_callbacks_ready == 0);
+  } else {
+    assert(stats->prepare_successes == 1);
+    assert(stats->prepare_alloc_omits == 0);
+    assert(stats->commit_attempts == 1);
+    assert(stats->commit_successes == 1);
+    assert(stats->commit_lock_omits == 0);
+    assert(stats->aborts == 0);
+    assert(stats->register_callbacks == 1);
+    assert(stats->register_callbacks_ready == 1);
+  }
+}
+
+static void assert_side_quiescent(lua_State *L, jit_State *J)
+{
+  assert(J->curfinal == NULL);
+  assert(J->gdbjit_pending_abort == NULL);
+  assert(lj_trace_state_load(J) == LJ_TRACE_IDLE);
+  assert(jit_token_acq(G(L)) == 0);
+  assert(jit_owner_l_acq(J) == NULL);
+  assert(gc2_smr_readers_acq(G(L)) == 0);
+}
+
+static void run_side_case(GDBJITSideCase which)
+{
+  lua_State *L = ljt_lua_newstate_openlibs();
+  global_State *g = G(L);
+  jit_State *J = G2J(g);
+  GCtrace *root;
+  GCtrace *child;
+  SnapShot *rootsnap;
+  TraceNo rootno = 0, childno = 0;
+  TraceNo rollback_slot = 0;
+  MSize rollback_count = 0;
+  void *root_entry;
+  LJGDBJITTestStats stats;
+  int descriptor_held = 0;
+  int closed = 0;
+  int rollback_case = which == GDBJIT_SIDE_POST_PREPARE_ROLLBACK ||
+	which == GDBJIT_SIDE_POST_PREPARE_EXTERNAL_ERROR;
+
+  ljt_lua_dostring(L,
+    "jit.flush()\n"
+    "jit.on()\n"
+    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=4')\n");
+  ljt_lua_assert_ok(L,
+    luaL_loadbuffer(L, fixture_lua, sizeof(fixture_lua)-1u,
+	"@gdbjit-first-side.lua"),
+    "load GDBJIT first-side fixture");
+  ljt_lua_pcall(L, 0, 0, "install GDBJIT first-side fixture");
+
+  root = record_first_side_root(L, J, &rootno);
+  root_entry = trace_gdbjit_entry_acq(root);
+  assert(root_entry != NULL);
+  rootsnap = trace_snap_acq(root);
+  assert(rootsnap != NULL && trace_nsnap_acq(root) > 2);
+  if (rollback_case) {
+    rollback_count = snap_count_acq(&rootsnap[2]);
+    assert(rollback_count < SNAPCOUNT_DONE);
+  }
+  lj_gdbjit_test_reset();
+
+  if (which == GDBJIT_SIDE_ALLOC_OMIT) {
+    lj_gdbjit_test_force_prepare_alloc_omit();
+  } else if (which == GDBJIT_SIDE_LOCK_OMIT) {
+    assert(lj_gdbjit_test_descriptor_lock_acquire() == 1);
+    descriptor_held = 1;
+  } else if (which == GDBJIT_SIDE_POST_PREPARE_ROLLBACK) {
+    lj_trace_test_arm64_gdbjit_force_post_prepare_rollback();
+  } else if (which == GDBJIT_SIDE_POST_PREPARE_EXTERNAL_ERROR) {
+    lj_trace_test_arm64_gdbjit_force_post_prepare_external_error();
+  }
+
+  if (rollback_case) {
+    if (which == GDBJIT_SIDE_POST_PREPARE_EXTERNAL_ERROR)
+      call_first_side_expect_external_error(L);
+    else
+      assert(call_first_side_pair(L, 3, 1) == 4);
+    assert(trace_nextside_acq(root) == 0);
+    assert(trace_nchild_acq(root) == 0);
+    assert(trace_runnable_acq(root, rootno));
+    assert(trace_gdbjit_entry_acq(root) == root_entry);
+    assert(snap_count_acq(&rootsnap[2]) >= rollback_count);
+    assert(snap_count_acq(&rootsnap[2]) < SNAPCOUNT_DONE);
+    rollback_slot = lj_trace_test_arm64_gdbjit_post_prepare_traceno();
+    assert(rollback_slot != 0);
+    assert(traceref_safe(J, rollback_slot) == NULL);
+  } else {
+    int registered = which == GDBJIT_SIDE_SUCCESS_SCOPED ||
+	which == GDBJIT_SIDE_SUCCESS_FULL_FLUSH ||
+	which == GDBJIT_SIDE_RETIRE_LOCK_OMIT;
+    child = record_first_side_child(L, J, root, &childno);
+    assert_published_child(
+	L, J, root, rootno, child, childno, registered);
+    assert(trace_gdbjit_entry_acq(root) == root_entry);
+  }
+
+  if (descriptor_held)
+    lj_gdbjit_test_descriptor_lock_release();
+  assert_side_quiescent(L, J);
+  lj_gdbjit_test_stats(&stats);
+  assert_side_stats(which, &stats);
+
+  if (rollback_case) {
+    lj_gdbjit_test_reset();
+    child = record_first_side_child(L, J, root, &childno);
+    assert(childno == rollback_slot);
+    assert_published_child(L, J, root, rootno, child, childno, 1);
+    lj_gdbjit_test_stats(&stats);
+    assert_side_stats(GDBJIT_SIDE_SUCCESS_SCOPED, &stats);
+  }
+
+  if (which == GDBJIT_SIDE_SUCCESS_SCOPED) {
+    assert(lj_trace_flushscope(J, childno) == 1u);
+    assert(trace_gdbjit_entry_acq(child) == NULL);
+    assert(trace_gdbjit_entry_acq(root) == root_entry);
+    assert(trace_nchild_acq(root) == 0);
+    assert(trace_nextside_acq(root) == 0);
+    lj_gdbjit_test_stats(&stats);
+    assert(stats.register_callbacks == 2);
+    assert(stats.register_callbacks_ready == 1);
+    assert(call_first_side_pair(L, 3, 0) == 3);
+  } else if (which == GDBJIT_SIDE_SUCCESS_FULL_FLUSH) {
+    assert(lj_trace_flushall_gc(L) == 0);
+    assert(trace_gdbjit_entry_acq(child) == NULL);
+    assert(trace_gdbjit_entry_acq(root) == NULL);
+    lj_gdbjit_test_stats(&stats);
+    assert(stats.register_callbacks == 3);
+    assert(stats.register_callbacks_ready == 1);
+  } else if (which == GDBJIT_SIDE_RETIRE_LOCK_OMIT) {
+    uint64_t mature_epoch, retire_stamp;
+    assert(lj_gdbjit_test_descriptor_lock_acquire() == 1);
+    assert(lj_trace_flushscope(J, childno) == 1u);
+    assert(trace_gdbjit_entry_acq(child) != NULL);
+    assert(trace_retired_link_listed_acq(child));
+    retire_stamp = la_load64_acq(&child->retire_epoch);
+    assert(retire_stamp != 0 && retire_stamp != UINT64_MAX);
+    mature_epoch = retire_stamp-1u+LJ_FLUSH_EPOCHS;
+    assert(trace_nchild_acq(root) == 0);
+    assert(trace_nextside_acq(root) == 0);
+    lj_gdbjit_test_stats(&stats);
+    assert(stats.register_callbacks == 1);
+    assert(reclaim_trace_at(g, mature_epoch) == 0);
+    assert(trace_gdbjit_entry_acq(child) != NULL);
+    assert(trace_retired_link_listed_acq(child));
+    lj_gdbjit_test_stats(&stats);
+    assert(stats.register_callbacks == 1);
+    lj_gdbjit_test_descriptor_lock_release();
+    assert(reclaim_trace_at(g, mature_epoch) >= 1u);
+    assert(traceref_safe(J, childno) == NULL);
+    assert(trace_gdbjit_entry_acq(root) == root_entry);
+    lj_gdbjit_test_stats(&stats);
+    assert(stats.register_callbacks == 2);
+    assert(stats.register_callbacks_ready == 1);
+    lua_close(L);
+    closed = 1;
+    lj_gdbjit_test_stats(&stats);
+    assert(stats.register_callbacks == 3);
+    assert(stats.register_callbacks_ready == 1);
+  }
+
+  if (!closed)
+    lua_close(L);
+}
+
+static void run_unsupported_side_case(void)
+{
+  lua_State *L = ljt_lua_newstate_openlibs();
+  jit_State *J = G2J(G(L));
+  GCproto *pt;
+  GCtrace *root = NULL;
+  TraceNo rootno = 0;
+  LJGDBJITTestStats stats;
+  unsigned attempt;
+
+  ljt_lua_dostring(L,
+    "jit.flush()\n"
+    "jit.on()\n"
+    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=4')\n");
+  ljt_lua_assert_ok(L,
+    luaL_loadbuffer(L, fixture_lua, sizeof(fixture_lua)-1u,
+	"@gdbjit-unsupported-side.lua"),
+    "load GDBJIT unsupported-side fixture");
+  ljt_lua_pcall(L, 0, 0, "install GDBJIT unsupported-side fixture");
+  pt = named_proto(L, "__gdbjit_unsupported_side");
+  for (attempt = 0; attempt < 64; attempt++) {
+    assert(call_named_pair(L, "__gdbjit_unsupported_side", 4, 0) == 6);
+    rootno = proto_trace_acq(pt);
+    if (rootno != 0) {
+      root = traceref_safe(J, rootno);
+      if (trace_runnable_acq(root, rootno))
+	break;
+    }
+  }
+  assert(root != NULL && trace_gdbjit_entry_acq(root) != NULL);
+  lj_gdbjit_test_reset();
+  for (attempt = 0; attempt < 8; attempt++)
+    assert(call_named_pair(L, "__gdbjit_unsupported_side", 7, 0) == 9);
+  assert(trace_nextside_acq(root) == 0);
+  assert(trace_nchild_acq(root) == 0);
+  assert_side_quiescent(L, J);
+  lj_gdbjit_test_stats(&stats);
+  assert(stats.prepare_attempts == 0);
+  assert(stats.prepare_successes == 0);
+  assert(stats.prepare_bounds_omits == 0);
+  assert(stats.prepare_alloc_omits == 0);
+  assert(stats.commit_attempts == 0);
+  assert(stats.commit_successes == 0);
+  assert(stats.commit_lock_omits == 0);
+  assert(stats.aborts == 0);
+  assert(stats.aborts_after_token == 0);
+  assert(stats.register_callbacks == 0);
+  assert(stats.register_callbacks_ready == 0);
+  lua_close(L);
+}
+
 int main(void)
 {
   run_case(GDBJIT_CASE_NORMAL);
@@ -374,6 +794,14 @@ int main(void)
   run_case(GDBJIT_CASE_ALLOC_OMIT);
   run_case(GDBJIT_CASE_LOCK_OMIT);
   run_case(GDBJIT_CASE_LONG_NAME);
+  run_side_case(GDBJIT_SIDE_SUCCESS_SCOPED);
+  run_side_case(GDBJIT_SIDE_ALLOC_OMIT);
+  run_side_case(GDBJIT_SIDE_LOCK_OMIT);
+  run_side_case(GDBJIT_SIDE_POST_PREPARE_ROLLBACK);
+  run_side_case(GDBJIT_SIDE_POST_PREPARE_EXTERNAL_ERROR);
+  run_side_case(GDBJIT_SIDE_SUCCESS_FULL_FLUSH);
+  run_side_case(GDBJIT_SIDE_RETIRE_LOCK_OMIT);
+  run_unsupported_side_case();
   puts("t-arm64-jit-gdbjit-prepare OK");
   return 0;
 }
