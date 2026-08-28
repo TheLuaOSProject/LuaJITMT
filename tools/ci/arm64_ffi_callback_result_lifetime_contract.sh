@@ -114,12 +114,60 @@ for required in \
   'ccallback_depth_acq(cb) != 0' \
   'ccallback_L_acq(cb) != NULL' \
   'ccallback_slot_acq(cb) != 0' \
+  'ccallback_native_had_stopreq_acq(cb) != 0' \
+  'lj_tg_ffi_call_func_acq(tg) != NULL' \
+  'lj_tg_load_cur_L(tg) != L' \
+  'lj_tg_load_thread_L(tg) != L' \
   'ccallback_auto_detach_rel(cb, 0);' \
   'threading_detach_scope_quiescent(g, tg, L)' \
   'threading_jit_detach_preabort_ready(g, tg)' \
+  'ccallback_auto_detach_rel(cb, 1);' \
   'threading_detach_commit(L, tg, 0);'; do
   printf '%s\n' "$pending_body" | grep -F "$required" >/dev/null || {
     echo "callback pending-detach contract lost: $required" >&2
+    exit 1
+  }
+done
+pending_clear=$(line_of "$pending_body" 'ccallback_auto_detach_rel(cb, 0);')
+pending_scope=$(line_of "$pending_body" \
+  'threading_detach_scope_quiescent(g, tg, L)')
+pending_jit=$(line_of "$pending_body" \
+  'threading_jit_detach_preabort_ready(g, tg)')
+pending_restore=$(line_of "$pending_body" \
+  'ccallback_auto_detach_rel(cb, 1);')
+pending_commit=$(line_of "$pending_body" \
+  'threading_detach_commit(L, tg, 0);')
+test "$pending_clear" -lt "$pending_scope" && \
+  test "$pending_scope" -le "$pending_jit" && \
+  test "$pending_jit" -lt "$pending_restore" && \
+  test "$pending_restore" -lt "$pending_commit"
+
+for required in \
+  '^|[.]define KBASE,[[:space:]]+rdi' \
+  '^|[.]define PC,[[:space:]]+rsi' \
+  '^|[[:space:]]+push rdi; push rsi; push rbx' \
+  '^|[.]define KBASE,[[:space:]]+r15' \
+  '^|[.]define PC,[[:space:]]+rbx' \
+  '^|[[:space:]]+push rbx; push r15; push r14'; do
+  grep -E "$required" "$x64_vm" >/dev/null || {
+    echo "x64 callback-result saved-register contract lost: $required" >&2
+    exit 1
+  }
+done
+for required in \
+  'err->winerr = (uint32_t)GetLastError();' \
+  'SetLastError((DWORD)err->winerr);'; do
+  grep -F "$required" "$callback_source" >/dev/null || {
+    echo "Win64 callback error-pair contract lost: $required" >&2
+    exit 1
+  }
+done
+for required in \
+  'la_storefunc_rel(&ccallback_test_after_detach_hook, hook);' \
+  'la_xchgfunc_acqrel(' \
+  '&ccallback_test_after_detach_hook, NULL);'; do
+  grep -F "$required" "$callback_source" >/dev/null || {
+    echo "callback result test-hook atomic contract lost: $required" >&2
     exit 1
   }
 done
@@ -128,7 +176,7 @@ for required in \
   'lj_ccallback_test_set_after_detach_hook(result_after_detach_hold);' \
   'assert(mt_live_acq(g) == 0);' \
   'assert(lj_tg_reclaim_dead(g) == 1u);' \
-  'assert(intctx.result == 55);' \
+  'assert(intctx.result == UINT64_C(0xfedcba9876543210));' \
   'assert(fpctx.fp_result == 13.0);' \
   'assert(intctx.errnum == E2BIG);' \
   'assert(fpctx.errnum == EILSEQ);'; do
@@ -247,4 +295,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
     TARGET_FLAGS='-arch arm64' XCFLAGS="$restore_xcflags"
 restore_needed=0
 
-echo "arm64_ffi_callback_result_lifetime_contract OK: arm64, arm64e/BTI and x86_64 copied integer/FP results across physical TG reclaim"
+echo "arm64_ffi_callback_result_lifetime_contract OK: arm64, arm64e/BTI and x86_64 copied 64-bit integer/FP results across physical TG reclaim"

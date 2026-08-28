@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <pthread.h>
+#include <stdint.h>
 #include <stdio.h>
 
 #include "lua.h"
@@ -20,13 +21,13 @@
 
 #include "lib/lua_fixture_helpers.h"
 
-typedef int (*AutoCallback)(int, int, int, int, int,
-			    int, int, int, int, int);
+typedef uint64_t (*AutoCallback)(int, int, int, int, int,
+				 int, int, int, int, int);
 typedef double (*AutoFpCallback)(double);
 
 typedef struct AutoCtx {
   int status;
-  int result;
+  uint64_t result;
   double fp_result;
   TGState *after_tg;
   int signal_call;
@@ -189,7 +190,7 @@ static void *foreign_result_worker(void *arg)
     return NULL;
   }
   errno = E2BIG;
-  ctx->result = saved_cb(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+  ctx->result = saved_cb(-1, 0, 0, 0, 0, 0, 0, 0, 0, 0);
   ctx->errnum = errno;
   ctx->after_tg = lj_thr_get_tg();
   ctx->status = 0;
@@ -256,7 +257,7 @@ static void test_result_reload_after_reclaim(global_State *g)
   release_result_after_detach_hold();
   assert(pthread_join(intpt, NULL) == 0);
   assert(intctx.status == 0);
-  assert(intctx.result == 55);
+  assert(intctx.result == UINT64_C(0xfedcba9876543210));
   assert(intctx.errnum == E2BIG);
   assert(intctx.after_tg == NULL);
 
@@ -302,7 +303,7 @@ int main(void)
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "ffi.cdef[[\n"
-    "typedef int (*lj_m7_auto_cb_t)(int, int, int, int, int,\n"
+    "typedef uint64_t (*lj_m7_auto_cb_t)(int, int, int, int, int,\n"
     "                               int, int, int, int, int);\n"
     "typedef void (*lj_m7_capture_auto_cb_t)(lj_m7_auto_cb_t);\n"
     "typedef double (*lj_m7_auto_fp_cb_t)(double);\n"
@@ -311,6 +312,7 @@ int main(void)
     "local cb = ffi.cast('lj_m7_auto_cb_t',\n"
     "  function(a, b, c, d, e, f, g, h, i, j)\n"
     "    if not lj_m7_check_auto_context() then return -7007 end\n"
+    "    if a == -1 then return 0xfedcba9876543210ULL end\n"
     "    return a + b + c + d + e + f + g + h + i + j\n"
     "  end)\n"
     "local capture = ffi.cast('lj_m7_capture_auto_cb_t',\n"
@@ -407,7 +409,7 @@ int main(void)
   ljt_lua_dostring(L, "collectgarbage('collect')\n");
   lua_close(L);
 #ifdef LJ_CCALLBACK_TEST_HELPERS
-  printf("t-ffi-callback-auto-attach OK: integer/FP results and errno survived post-detach TG reclaim\n");
+  printf("t-ffi-callback-auto-attach OK: 64-bit integer/FP results and errno survived post-detach TG reclaim\n");
 #else
   printf("t-ffi-callback-auto-attach OK: TLS-less pthread callback auto-attach and stale return verified\n");
 #endif
