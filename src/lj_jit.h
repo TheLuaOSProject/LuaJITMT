@@ -942,6 +942,22 @@ typedef struct FoldState {
   IRIns right[2];	/* Instruction referenced by right operand. */
 } FoldState;
 
+#if LJ_TARGET_ARM64
+/* Token-private identity for one admitted first-level side parent. The
+** published parent body remains the lifetime discriminator; mcode is the raw
+** linked-tail identity and is authenticated again from the body on every
+** capture/revalidation. A NULL body is the sole empty representation. */
+typedef struct LJTraceArm64SideParentCert {
+  GCtrace *body;
+  MCode *mcode;
+  const BCIns *continuation;
+  BCIns continuationins;
+  TraceNo parent;
+  ExitNo exitno;
+} LJTraceArm64SideParentCert;
+LJ_STATIC_ASSERT(sizeof(LJTraceArm64SideParentCert) == 5*sizeof(uint64_t));
+#endif
+
 /* JIT compiler state. */
 typedef struct jit_State {
   GCtrace cur;		/* Current trace. */
@@ -1056,6 +1072,9 @@ typedef struct jit_State {
   uint64_t trace_pin_release_seq;  /* Atomic final-release notification. */
   uint64_t trace_reclaim_pin_seq;  /* Token-owned trace-scan notification. */
   uint64_t mcode_reclaim_pin_seq;  /* Token-owned mcode-scan notification. */
+#if LJ_TARGET_ARM64
+  LJTraceArm64SideParentCert arm64_side_parent;
+#endif
 } jit_State;
 
 /* J->L is token-private while recording, but dispatch, VM events and GC-side

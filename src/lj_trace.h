@@ -53,6 +53,22 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
 LJ_FUNC int lj_trace_arm64_first_side_loop_valid(
   jit_State *J, lua_State *L, TraceNo parent, ExitNo exitno,
   const BCIns *continuation, const BCIns *pc, uint32_t context);
+
+/* Dormant first-side parent lifetime/authentication API. All operations are
+** bounded and token-private. Capture and revalidation require the exact active
+** ASM owner; SMR contention is reported separately from a stale identity.
+** Clear is lifecycle-only: initialization or exact token-owner teardown before
+** selector/scratch destruction and terminal token release. */
+typedef enum LJTraceArm64SideParentResult {
+  LJ_TRACE_ARM64_SIDE_PARENT_SMR_RETRY = -1,
+  LJ_TRACE_ARM64_SIDE_PARENT_RETRY = 0,
+  LJ_TRACE_ARM64_SIDE_PARENT_OK = 1
+} LJTraceArm64SideParentResult;
+LJ_FUNC void lj_trace_arm64_side_parent_clear(jit_State *J);
+LJ_FUNC LJTraceArm64SideParentResult
+lj_trace_arm64_side_parent_capture(jit_State *J);
+LJ_FUNC LJTraceArm64SideParentResult
+lj_trace_arm64_side_parent_revalidate(jit_State *J);
 #endif
 
 LJ_FUNC GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T);

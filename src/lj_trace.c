@@ -4082,6 +4082,7 @@ typedef struct TraceArm64FirstSideLoopView {
 #if LJ_FR2
   SnapEntry footer1;
 #endif
+  BCIns continuationins;
   ExitNo exitno;
   TraceNo traceno;
   TraceNo link;
@@ -4091,7 +4092,21 @@ typedef struct TraceArm64FirstSideLoopView {
   TraceLink linktype;
   uint64_t retire_epoch;
   uint8_t admission;
+#if LJ_ABI_PAUTH
+  uintptr_t mcauth_bits;
+#endif
 } TraceArm64FirstSideLoopView;
+
+#if LJ_ABI_PAUTH
+static LJ_AINLINE uintptr_t trace_arm64_first_side_function_bits(
+	ASMFunction target)
+{
+  uintptr_t bits;
+  LJ_STATIC_ASSERT(sizeof(bits) == sizeof(target));
+  memcpy(&bits, &target, sizeof(bits));
+  return bits;
+}
+#endif
 
 static int trace_arm64_first_side_mapref_valid(
     const TraceArm64FirstSideLoopView *v, IRRef ref)
@@ -4203,6 +4218,9 @@ static int trace_arm64_first_side_view_acq(jit_State *J, TraceNo parent,
   v->topslot = trace_topslot_acq(T);
   v->nsnap = trace_nsnap_acq(T);
   v->nsnapmap = trace_nsnapmap_acq(T);
+#if LJ_ABI_PAUTH
+  v->mcauth_bits = trace_arm64_first_side_function_bits(trace_mcauth_acq(T));
+#endif
 
   maxsnapmap = (MSize)LJ_MAX_JSLOTS + (MSize)LJ_STACK_EXTRA + 32u;
   if (v->retire_epoch != 0 || v->traceno != parent || v->root != 0 ||
@@ -4230,6 +4248,15 @@ static int trace_arm64_first_side_view_acq(jit_State *J, TraceNo parent,
       (uintptr_t)(void *)v->exitstub <
 	(uintptr_t)ARM64_EXIT_FALLBACK_WORDS*sizeof(MCode))
     return 0;
+
+#if LJ_ABI_PAUTH
+  {
+    ASMFunction expected = lj_ptr_sign(
+      ptrauth_nop_cast(ASMFunction, v->mcode), T);
+    if (v->mcauth_bits != trace_arm64_first_side_function_bits(expected))
+      return 0;
+  }
+#endif
 
   mcodep = (uintptr_t)(void *)v->mcode;
   fallbackp = (uintptr_t)(void *)v->exitstub -
@@ -4294,7 +4321,9 @@ static int trace_arm64_first_side_view_equal(
     a->nextofs == b->nextofs && a->snapref == b->snapref &&
     a->nslots == b->nslots && a->snaptopslot == b->snaptopslot &&
     a->mcofs == b->mcofs && a->nent == b->nent &&
-    a->footer0 == b->footer0 && a->exitno == b->exitno &&
+    a->footer0 == b->footer0 &&
+    a->continuationins == b->continuationins &&
+    a->exitno == b->exitno &&
 #if LJ_FR2
     a->footer1 == b->footer1 &&
 #endif
@@ -4302,11 +4331,15 @@ static int trace_arm64_first_side_view_equal(
     a->root == b->root && a->nextside == b->nextside &&
     a->nchild == b->nchild && a->linktype == b->linktype &&
     a->retire_epoch == b->retire_epoch &&
-    a->admission == b->admission;
+    a->admission == b->admission
+#if LJ_ABI_PAUTH
+    && a->mcauth_bits == b->mcauth_bits
+#endif
+    ;
 }
 
 static int trace_arm64_first_side_loop_generation_valid(
-    const TraceArm64FirstSideLoopView *v, TraceNo parent,
+    TraceArm64FirstSideLoopView *v, TraceNo parent,
     const BCIns *continuation)
 {
   GCproto *pt = gco2pt(v->startpt);
@@ -4350,12 +4383,16 @@ static int trace_arm64_first_side_loop_generation_valid(
   shadow2 = proto_jit_startins_acq(pt, v->startpc);
   continuation2 =
     (BCIns)la_load32_acq((const uint32_t *)continuation);
-  return live2 == live1 && back2 == back1 && shadow2 == shadow1 &&
-    continuation2 == continuation1;
+  if (live2 != live1 || back2 != back1 || shadow2 != shadow1 ||
+      continuation2 != continuation1)
+    return 0;
+  v->continuationins = continuation2;
+  return 1;
 }
 
-static int trace_arm64_first_side_metadata_valid(jit_State *J,
-    TraceNo parent, ExitNo exitno, const BCIns *pc, GCproto **ptp)
+static int trace_arm64_first_side_metadata_view_valid(jit_State *J,
+    TraceNo parent, ExitNo exitno, const BCIns *pc, GCproto **ptp,
+    TraceArm64FirstSideLoopView *viewp)
 {
   TraceArm64FirstSideLoopView first, second;
   if (J == NULL || pc == NULL || parent == 0 ||
@@ -4369,7 +4406,16 @@ static int trace_arm64_first_side_metadata_valid(jit_State *J,
     return 0;
   if (ptp)
     *ptp = gco2pt(first.startpt);
+  if (viewp)
+    *viewp = second;
   return 1;
+}
+
+static int trace_arm64_first_side_metadata_valid(jit_State *J,
+    TraceNo parent, ExitNo exitno, const BCIns *pc, GCproto **ptp)
+{
+  return trace_arm64_first_side_metadata_view_valid(
+    J, parent, exitno, pc, ptp, NULL);
 }
 
 static int trace_arm64_first_side_context_valid(jit_State *J, lua_State *L,
@@ -4462,6 +4508,187 @@ int lj_trace_arm64_first_side_loop_valid(jit_State *J, lua_State *L,
     return 0;
   return trace_arm64_first_side_context_valid(
     J, L, secondpt, parent, exitno, continuation, pc, context);
+}
+
+/* The certificate is useful only while the exact recorder owner retains the
+** token. Keep this predicate separate from the older START/RECORD checkpoint:
+** an ASM owner has completed recording and must pin its immutable scratch
+** identity, not the current incoming bytecode. */
+static int trace_arm64_side_parent_asm_owner_base(jit_State *J,
+    lua_State **Lp)
+{
+  lua_State *L;
+  global_State *g;
+  TGState *tg;
+  uint32_t actor, tid;
+
+  if (J == NULL)
+    return 0;
+  g = J2G(J);
+  tg = J2TG(J);
+  actor = lj_thr_actor_current();
+  tid = tg ? lj_tg_tid_acq(tg) : 0;
+  /* The token carries the logical TG id, while actor_id names its current
+  ** physical executor. Prove both before dereferencing published J->L. */
+  if (tg == NULL || tg->gl != g || !lj_thr_id_is_owner(tid) ||
+      !lj_thr_id_is_owner(actor) || lj_tg_actor_acq(tg) != actor ||
+      jit_token_acq(g) != tid || !lj_jit_token_held(J) ||
+      lj_trace_state_load(J) != LJ_TRACE_ASM ||
+      (L = jit_owner_l_acq(J)) == NULL)
+    return 0;
+  if (G(L) != g || L2J(L) != J || L->tg_hint != tg ||
+      lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+      lj_tg_load_cur_L(tg) != L || !lj_tg_owns_state_acq(tg, L) ||
+      lj_tg_actor_acq(tg) != actor ||
+      !lj_jit_token_held_l(L, J) || lj_tg_tid_acq(tg) != tid ||
+      (lj_tg_hookmask_combined_load(g, tg) & (HOOK_GC|HOOK_VMEVENT)) != 0 ||
+      trace_root_entry_request_pending(tg) || !lj_jit_trace_stream_idle(g))
+    return 0;
+  if (jit_token_acq(g) != tid || lj_tg_actor_acq(tg) != actor ||
+      lj_thr_actor_current() != actor ||
+      lj_trace_state_load(J) != LJ_TRACE_ASM || jit_owner_l_acq(J) != L)
+    return 0;
+  if (Lp)
+    *Lp = L;
+  return 1;
+}
+
+static int trace_arm64_side_parent_asm_owner_exact(jit_State *J,
+    TraceNo parent, ExitNo exitno, const BCIns *continuation)
+{
+  lua_State *L;
+  GCfunc *fn;
+  GCproto *pt;
+  TValue *stack, *maxstack;
+  uintptr_t basep, stackp, maxstackp;
+  TraceNo child;
+
+  if (parent == 0 || continuation == NULL ||
+      !trace_arm64_side_parent_asm_owner_base(J, &L))
+    return 0;
+  stack = mref_acq(L->stack, TValue);
+  maxstack = mref_acq(L->maxstack, TValue);
+  basep = (uintptr_t)(void *)L->base;
+  stackp = (uintptr_t)(void *)stack;
+  maxstackp = (uintptr_t)(void *)maxstack;
+  if (stack == NULL || maxstack == NULL || maxstackp <= stackp ||
+      basep < stackp+(uintptr_t)(1u+LJ_FR2)*sizeof(TValue) ||
+      basep >= maxstackp || (basep-stackp) % sizeof(TValue) != 0)
+    return 0;
+  fn = curr_func(L);
+  if (!isluafunc(fn) || (pt = funcproto(fn)) == NULL || J->fn != fn ||
+      J->pt != pt || J->pc == NULL ||
+      !trace_pc_in_proto_range(J->pc, proto_bc(pt), pt->sizebc) ||
+      !trace_pc_in_proto_range(continuation, proto_bc(pt), pt->sizebc))
+    return 0;
+  child = trace_traceno_acq(&J->cur);
+  if (J->parent != parent || J->exitno != exitno || child == 0 ||
+      child == parent || trace_root_acq(&J->cur) != parent ||
+      trace_link_acq(&J->cur) != parent ||
+      trace_linktype_acq(&J->cur) != LJ_TRLINK_ROOT ||
+      trace_startptgco_acq(&J->cur) != obj2gco(pt) ||
+      trace_startpc_acq(&J->cur) != continuation ||
+      trace_startins_acq(&J->cur) != BCINS_AD(BC_JMP, 0, 0) ||
+      J->framedepth != 0 || J->retdepth != 0 ||
+      J->baseslot != (BCReg)(1+LJ_FR2))
+    return 0;
+  /* Asynchronous abort can clear ACTIVE without the recorder token. Recheck
+  ** both that publication and every token-private selector at the boundary. */
+  return trace_arm64_side_parent_asm_owner_base(J, NULL) &&
+    J->parent == parent && J->exitno == exitno &&
+    trace_traceno_acq(&J->cur) == child &&
+    trace_root_acq(&J->cur) == parent &&
+    trace_link_acq(&J->cur) == parent &&
+    trace_startpc_acq(&J->cur) == continuation;
+}
+
+void lj_trace_arm64_side_parent_clear(jit_State *J)
+{
+  /* Callers are either initializing an unpublished jit_State or still own its
+  ** exact recorder token. This private payload deliberately has no atomics. */
+  if (J != NULL)
+    memset(&J->arm64_side_parent, 0, sizeof(J->arm64_side_parent));
+}
+
+LJTraceArm64SideParentResult
+lj_trace_arm64_side_parent_capture(jit_State *J)
+{
+  LJTraceArm64SideParentCert local;
+  TraceArm64FirstSideLoopView view;
+  const BCIns *continuation;
+  TraceNo parent;
+  ExitNo exitno;
+  global_State *g;
+  LJTraceArm64SideParentResult result = LJ_TRACE_ARM64_SIDE_PARENT_RETRY;
+
+  if (J == NULL)
+    return result;
+  if (!trace_arm64_side_parent_asm_owner_base(J, NULL))
+    return result;
+  /* Failed authorized capture never leaves a partial or replayable
+  ** predecessor. Authenticate the private owner before performing this clear. */
+  lj_trace_arm64_side_parent_clear(J);
+  parent = J->parent;
+  exitno = J->exitno;
+  continuation = trace_startpc_acq(&J->cur);
+  if (!trace_arm64_side_parent_asm_owner_exact(
+        J, parent, exitno, continuation))
+    return result;
+  g = J2G(J);
+  if (!lj_gc2_smr_read_try(g))
+    return LJ_TRACE_ARM64_SIDE_PARENT_SMR_RETRY;
+  if (!trace_arm64_side_parent_asm_owner_exact(
+        J, parent, exitno, continuation) ||
+      !trace_arm64_first_side_metadata_view_valid(
+        J, parent, exitno, continuation, NULL, &view) ||
+      view.parent == NULL || view.mcode == NULL ||
+      !trace_arm64_side_parent_asm_owner_exact(
+        J, parent, exitno, continuation))
+    goto out;
+  local.body = view.parent;
+  local.mcode = view.mcode;
+  local.continuation = continuation;
+  local.continuationins = view.continuationins;
+  local.parent = parent;
+  local.exitno = exitno;
+  /* This is the sole successful publication into token-private recorder state. */
+  J->arm64_side_parent = local;
+  result = LJ_TRACE_ARM64_SIDE_PARENT_OK;
+out:
+  lj_gc2_smr_read_leave(g);
+  return result;
+}
+
+LJTraceArm64SideParentResult
+lj_trace_arm64_side_parent_revalidate(jit_State *J)
+{
+  LJTraceArm64SideParentCert local;
+  TraceArm64FirstSideLoopView view;
+  global_State *g;
+  LJTraceArm64SideParentResult result = LJ_TRACE_ARM64_SIDE_PARENT_RETRY;
+
+  if (J == NULL || !trace_arm64_side_parent_asm_owner_base(J, NULL))
+    return result;
+  local = J->arm64_side_parent;
+  if (local.body == NULL || local.mcode == NULL ||
+      local.continuation == NULL || local.parent == 0 ||
+      !trace_arm64_side_parent_asm_owner_exact(
+        J, local.parent, local.exitno, local.continuation))
+    return result;
+  g = J2G(J);
+  if (!lj_gc2_smr_read_try(g))
+    return LJ_TRACE_ARM64_SIDE_PARENT_SMR_RETRY;
+  if (trace_arm64_side_parent_asm_owner_exact(
+        J, local.parent, local.exitno, local.continuation) &&
+      trace_arm64_first_side_metadata_view_valid(
+        J, local.parent, local.exitno, local.continuation, NULL, &view) &&
+      view.parent == local.body && view.mcode == local.mcode &&
+      view.continuationins == local.continuationins &&
+      trace_arm64_side_parent_asm_owner_exact(
+        J, local.parent, local.exitno, local.continuation))
+    result = LJ_TRACE_ARM64_SIDE_PARENT_OK;
+  lj_gc2_smr_read_leave(g);
+  return result;
 }
 
 #ifdef LJ_TRACE_TEST_HELPERS
@@ -6777,6 +7004,9 @@ void lj_trace_initstate(global_State *g)
   jit_State *J = G2J(g);
   TValue *tv;
 
+#if LJ_TARGET_ARM64
+  lj_trace_arm64_side_parent_clear(J);
+#endif
   J->trace_reclaim_epoch = 0;
   J->mcode_reclaim_epoch = 0;
   J->trace_pin_release_seq = 0;
@@ -6836,6 +7066,12 @@ static void trace_terminal_pin_preflight(global_State *g)
   TraceVec *tv = tracevec_acq(J);
   GCtrace *T;
   TraceNo i, sizetrace = trace_sizetrace_acq(J);
+#if LJ_TARGET_ARM64
+  if (J->arm64_side_parent.body != NULL) {
+    lj_assertG(0, "ARM64 side-parent certificate survived terminal release");
+    abort();
+  }
+#endif
   if (J->curfinal && trace_native_pins_acq(J->curfinal) != 0) {
     lj_assertG(0, "unfinished recorder body pinned at VM close");
     abort();
@@ -7190,6 +7426,11 @@ static TraceStartResult trace_start(jit_State *J)
 
   lj_assertJ(lj_jit_token_held(J),
 	     "trace start without recorder-token ownership");
+#if LJ_TARGET_ARM64
+  /* Every fresh recorder setup starts without a prior ASM attempt's private
+  ** parent identity. Future side admission must capture again after setup. */
+  lj_trace_arm64_side_parent_clear(J);
+#endif
   J->root_startins_pending = 0;
 
   /* The TRACE-start callback may execute this prototype and mutate shared
@@ -7503,6 +7744,11 @@ static TraceStartResult trace_downrec(jit_State *J)
   lj_assertJ(J->pt != NULL, "no active prototype");
   ins = (BCIns)la_load32_acq((const uint32_t *)J->pc);
   lj_assertJ(bc_isret(bc_op(ins)), "not at a return bytecode");
+#if LJ_TARGET_ARM64
+  /* Every down-recursion outcome ends the side attempt. Clear before the RETM
+  ** early return or any root-selector repurpose. */
+  lj_trace_arm64_side_parent_clear(J);
+#endif
   if (bc_op(ins) == BC_RETM)
     return TRACE_START_RESULT_IDLE;  /* NYI: down-recursion with RETM. */
   J->parent = 0;
@@ -7526,6 +7772,11 @@ static TraceAbortResult trace_abort(jit_State *J)
   TraceError e = LJ_TRERR_RECERR;
   TraceNo traceno;
 
+#if LJ_TARGET_ARM64
+  /* Close the exact ASM-attempt identity before mcode/scratch teardown. An
+  ** MCODELM restart is a new attempt and must capture a fresh certificate. */
+  lj_trace_arm64_side_parent_clear(J);
+#endif
   J->postproc = LJ_POST_NONE;
   J->root_startins_pending = 0;
   lj_mcode_abort(J);
@@ -7684,6 +7935,14 @@ static LJ_AINLINE void trace_pendpatch(jit_State *J, int force)
 static void trace_terminal_release(lua_State *L, jit_State *J)
 {
   global_State *g = J2G(J);
+#if LJ_TARGET_ARM64
+  /* Successful/abort transactions must close their exact identity before the
+  ** generic terminal transition. Keep a defensive release-build clear so a
+  ** stale dormant value can never cross IDLE or token handoff. */
+  lj_assertJ(J->arm64_side_parent.body == NULL,
+	     "ARM64 side-parent certificate reached terminal release");
+  lj_trace_arm64_side_parent_clear(J);
+#endif
   setvmstate(g, INTERP);
   lj_trace_state_store(J, LJ_TRACE_IDLE);
   lj_jit_token_release_l(L, J);
@@ -7842,6 +8101,11 @@ void lj_trace_abort_owner(lua_State *L)
   if (!lj_jit_token_held_l(L, J))
     return;
   g = J2G(J);
+#if LJ_TARGET_ARM64
+  /* Detach teardown invalidates the scratch/selectors below. End their private
+  ** parent identity while this exact token owner is still established. */
+  lj_trace_arm64_side_parent_clear(J);
+#endif
   lj_trace_state_abort(J);
   trace_pendpatch(J, 1);
   J->postproc = LJ_POST_NONE;

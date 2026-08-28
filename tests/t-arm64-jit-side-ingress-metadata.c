@@ -23,6 +23,7 @@
 #include "lj_bc.h"
 #include "lj_dispatch.h"
 #include "lj_func.h"
+#include "lj_gc2.h"
 #include "lj_ir.h"
 #include "lj_jit.h"
 #include "lj_target.h"
@@ -69,9 +70,11 @@ typedef struct SideMetaFixture {
   int32_t saved_framedepth;
   int32_t saved_retdepth;
   BCReg saved_baseslot;
+  LJTraceArm64SideParentCert saved_parent_cert;
   TValue saved_frame_function;
   GCtrace parent_trace;
   SideMetaTraceVec2 tracev;
+  SideMetaTraceVec2 replacement_tracev;
   IRIns ir[SIDE_META_R_END];
   SnapShot snap[SIDE_META_NSNAP];
   SnapEntry snapmap[SIDE_META_NSNAPMAP];
@@ -180,6 +183,7 @@ static void side_meta_install(lua_State *L, SideMetaFixture *f)
   f->saved_framedepth = J->framedepth;
   f->saved_retdepth = J->retdepth;
   f->saved_baseslot = J->baseslot;
+  f->saved_parent_cert = J->arm64_side_parent;
   copyTV(L, &f->saved_frame_function, L->base-2);
   setfuncV(L, L->base-2, f->fn);
   assert(curr_func(L) == f->fn);
@@ -204,6 +208,10 @@ static void side_meta_install(lua_State *L, SideMetaFixture *f)
   T->nsnap = SIDE_META_NSNAP;
   T->nsnapmap = SIDE_META_NSNAPMAP;
   T->mcode = f->mcode;
+#if LJ_ABI_PAUTH
+  la_storefunc_rel(&T->mcauth, lj_ptr_sign(
+    ptrauth_nop_cast(ASMFunction, T->mcode), T));
+#endif
   T->szmcode = SIDE_META_BODY_WORDS * (MSize)sizeof(MCode);
   T->mcloop = sizeof(MCode);
   fallback = f->mcode + SIDE_META_BODY_WORDS;
@@ -262,6 +270,7 @@ static void side_meta_remove(lua_State *L, SideMetaFixture *f)
   J->framedepth = f->saved_framedepth;
   J->retdepth = f->saved_retdepth;
   J->baseslot = f->saved_baseslot;
+  J->arm64_side_parent = f->saved_parent_cert;
   copyTV(L, L->base-2, &f->saved_frame_function);
 }
 
@@ -579,6 +588,262 @@ static void test_context_mutations(lua_State *L, SideMetaFixture *f)
   assert(jit_token_acq(G(L)) == 0 && jit_owner_l_acq(J) == NULL);
 }
 
+static int side_parent_cert_empty(const LJTraceArm64SideParentCert *cert)
+{
+  return cert->body == NULL && cert->mcode == NULL &&
+    cert->continuation == NULL && cert->continuationins == 0 &&
+    cert->parent == 0 && cert->exitno == 0;
+}
+
+static int side_parent_cert_equal(const LJTraceArm64SideParentCert *a,
+                                  const LJTraceArm64SideParentCert *b)
+{
+  return a->body == b->body && a->mcode == b->mcode &&
+    a->continuation == b->continuation &&
+    a->continuationins == b->continuationins &&
+    a->parent == b->parent && a->exitno == b->exitno;
+}
+
+static void side_parent_prepare_asm(lua_State *L, SideMetaFixture *f)
+{
+  jit_State *J = L2J(L);
+  const BCIns *continuation =
+    &proto_bc(f->pt)[SIDE_META_PC_POS];
+
+  assert(lj_jit_token_try_l(L, J));
+  jit_owner_l_rel(J, L);
+  J->parent = SIDE_META_PARENT;
+  J->exitno = SIDE_META_EXIT;
+  J->pc = continuation+1;
+  J->fn = f->fn;
+  J->pt = f->pt;
+  J->framedepth = 0;
+  J->retdepth = 0;
+  J->baseslot = (BCReg)(1+LJ_FR2);
+  memset(&J->cur, 0, sizeof(J->cur));
+  trace_traceno_rel(&J->cur, SIDE_META_PARENT+1);
+  J->cur.root = SIDE_META_PARENT;
+  trace_link_rel(&J->cur, SIDE_META_PARENT);
+  J->cur.linktype = LJ_TRLINK_ROOT;
+  trace_startpt_rel(&J->cur, f->pt);
+  setmref(J->cur.startpc, continuation);
+  J->cur.startins = BCINS_AD(BC_JMP, 0, 0);
+  lj_trace_state_store(J, LJ_TRACE_ASM);
+}
+
+static void test_parent_lifetime_certificate(lua_State *L, SideMetaFixture *f)
+{
+  jit_State *J = L2J(L);
+  global_State *g = G(L);
+  GCtrace *T = &f->parent_trace;
+  const BCIns *continuation = &proto_bc(f->pt)[SIDE_META_PC_POS];
+  LJTraceArm64SideParentCert cert, before, sentinel;
+  GCtrace replacement;
+  SnapEntry saved_footer[SIDE_META_FOOTER];
+  MSize footer = f->snap[SIDE_META_EXIT].mapofs+
+    f->snap[SIDE_META_EXIT].nent;
+  BCIns saved_continuationins =
+    (BCIns)la_load32_acq((const uint32_t *)continuation);
+  uint32_t expect;
+
+  LJ_STATIC_ASSERT(LJ_TRACE_ARM64_SIDE_PARENT_SMR_RETRY == -1);
+  LJ_STATIC_ASSERT(LJ_TRACE_ARM64_SIDE_PARENT_RETRY == 0);
+  LJ_STATIC_ASSERT(LJ_TRACE_ARM64_SIDE_PARENT_OK == 1);
+
+  /* An unauthorized call cannot clear token-private state. */
+  sentinel.body = T;
+  sentinel.mcode = T->mcode;
+  sentinel.continuation = continuation;
+  sentinel.continuationins = saved_continuationins;
+  sentinel.parent = SIDE_META_PARENT;
+  sentinel.exitno = SIDE_META_EXIT;
+  J->arm64_side_parent = sentinel;
+  assert(lj_trace_arm64_side_parent_capture(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
+  assert(side_parent_cert_equal(&J->arm64_side_parent, &sentinel));
+  lj_trace_arm64_side_parent_clear(J);
+  assert(side_parent_cert_empty(&J->arm64_side_parent));
+
+  side_parent_prepare_asm(L, f);
+  assert(lj_trace_arm64_side_parent_capture(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_OK);
+  cert = J->arm64_side_parent;
+  assert(cert.body == T && cert.mcode == T->mcode &&
+         cert.continuation == continuation &&
+         cert.continuationins == saved_continuationins &&
+         cert.parent == SIDE_META_PARENT && cert.exitno == SIDE_META_EXIT);
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_OK);
+
+  /* Every stored identity component is independently authoritative. */
+  J->arm64_side_parent.body = &replacement;
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
+  J->arm64_side_parent = cert;
+  J->arm64_side_parent.mcode = cert.mcode+1;
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
+  J->arm64_side_parent = cert;
+  J->arm64_side_parent.continuation = continuation+1;
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
+  J->arm64_side_parent = cert;
+  J->arm64_side_parent.continuationins ^= UINT32_C(0x00000100);
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
+  J->arm64_side_parent = cert;
+  J->arm64_side_parent.parent++;
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
+  J->arm64_side_parent = cert;
+  J->arm64_side_parent.exitno--;
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
+  J->arm64_side_parent = cert;
+
+  /* A TraceVec replacement is legal when the exact slot still publishes the
+  ** certified body. The vector itself is deliberately not stored. */
+  f->replacement_tracev = f->tracev;
+  tracevec_rel(J, (TraceVec *)&f->replacement_tracev);
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_OK);
+  tracevec_rel(J, (TraceVec *)&f->tracev);
+
+  /* Slot replacement by an otherwise identical allocation is an identity
+  ** change, even if its raw mcode and all semantic fields match. */
+  replacement = *T;
+#if LJ_ABI_PAUTH
+  la_storefunc_rel(&replacement.mcauth, lj_ptr_sign(
+    ptrauth_nop_cast(ASMFunction, replacement.mcode), &replacement));
+#endif
+  setgcrefrel(f->tracev.slot[SIDE_META_PARENT], obj2gco(&replacement));
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
+  setgcrefrel(f->tracev.slot[SIDE_META_PARENT], obj2gco(T));
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_OK);
+
+  setgcrefrel(f->tracev.slot[SIDE_META_PARENT], NULL);
+  before = J->arm64_side_parent;
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
+  assert(side_parent_cert_equal(&J->arm64_side_parent, &before));
+  setgcrefrel(f->tracev.slot[SIDE_META_PARENT], obj2gco(T));
+
+  memcpy(saved_footer, &f->snapmap[footer], sizeof(saved_footer));
+  side_meta_pack_pc(&f->snapmap[footer], continuation+1, 0);
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
+  memcpy(&f->snapmap[footer], saved_footer, sizeof(saved_footer));
+
+  bc_publish((const uint32_t *)continuation,
+             saved_continuationins ^ UINT32_C(0x00000100));
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
+  bc_publish((const uint32_t *)continuation, saved_continuationins);
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_OK);
+
+  {
+    MCode *saved_mcode = T->mcode;
+    T->mcode = saved_mcode+1;
+    assert(lj_trace_arm64_side_parent_revalidate(J) ==
+           LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
+    T->mcode = saved_mcode;
+  }
+#if LJ_ABI_PAUTH
+  {
+    GCtrace wrong_discriminator;
+    ASMFunction saved_mcauth = trace_mcauth_acq(T);
+    memset(&wrong_discriminator, 0, sizeof(wrong_discriminator));
+    la_storefunc_rel(&T->mcauth, NULL);
+    assert(lj_trace_arm64_side_parent_revalidate(J) ==
+           LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
+    la_storefunc_rel(&T->mcauth, saved_mcauth);
+    assert(lj_trace_arm64_side_parent_revalidate(J) ==
+           LJ_TRACE_ARM64_SIDE_PARENT_OK);
+    la_storefunc_rel(&T->mcauth,
+      ptrauth_nop_cast(ASMFunction, T->mcode));
+    assert(lj_trace_arm64_side_parent_revalidate(J) ==
+           LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
+    la_storefunc_rel(&T->mcauth, saved_mcauth);
+    assert(lj_trace_arm64_side_parent_revalidate(J) ==
+           LJ_TRACE_ARM64_SIDE_PARENT_OK);
+    la_storefunc_rel(&T->mcauth, lj_ptr_sign(
+      ptrauth_nop_cast(ASMFunction, T->mcode), NULL));
+    assert(lj_trace_arm64_side_parent_revalidate(J) ==
+           LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
+    la_storefunc_rel(&T->mcauth, saved_mcauth);
+    assert(lj_trace_arm64_side_parent_revalidate(J) ==
+           LJ_TRACE_ARM64_SIDE_PARENT_OK);
+    la_storefunc_rel(&T->mcauth, lj_ptr_sign(
+      ptrauth_nop_cast(ASMFunction, T->mcode), &wrong_discriminator));
+    assert(lj_trace_arm64_side_parent_revalidate(J) ==
+           LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
+    la_storefunc_rel(&T->mcauth, saved_mcauth);
+    assert(lj_trace_arm64_side_parent_revalidate(J) ==
+           LJ_TRACE_ARM64_SIDE_PARENT_OK);
+  }
+#endif
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_OK);
+
+  /* Exact ASM owner/state is part of both operations and is checked again
+  ** after metadata capture to observe an asynchronous ACTIVE clear. */
+  lj_trace_state_abort(J);
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
+  lj_trace_state_store(J, LJ_TRACE_ASM);
+  jit_owner_l_rel(J, NULL);
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
+  jit_owner_l_rel(J, L);
+  lj_jit_token_release_l(L, J);
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
+  assert(lj_jit_token_try_l(L, J));
+  jit_owner_l_rel(J, L);
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_OK);
+
+  /* Closed SMR is a distinct bounded outcome and leaks no reader. Revalidate
+  ** preserves the existing cert, while an authorized fresh capture clears it
+  ** before reporting the failed admission. */
+  assert(gc2_smr_readers_acq(g) == 0);
+  expect = LJ_GC2_SMR_OPEN;
+  assert(gc2_smr_reclaiming_cas(
+    g, &expect, LJ_GC2_SMR_META_EXCLUSIVE));
+  before = J->arm64_side_parent;
+  assert(lj_trace_arm64_side_parent_revalidate(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_SMR_RETRY);
+  assert(side_parent_cert_equal(&J->arm64_side_parent, &before));
+  assert(gc2_smr_readers_acq(g) == 0);
+  assert(lj_trace_arm64_side_parent_capture(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_SMR_RETRY);
+  assert(side_parent_cert_empty(&J->arm64_side_parent));
+  assert(gc2_smr_readers_acq(g) == 0);
+  gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
+
+  assert(lj_trace_arm64_side_parent_capture(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_OK);
+  assert(gc2_smr_readers_acq(g) == 0);
+  setgcrefrel(f->tracev.slot[SIDE_META_PARENT], NULL);
+  assert(lj_trace_arm64_side_parent_capture(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_RETRY);
+  assert(side_parent_cert_empty(&J->arm64_side_parent));
+  assert(gc2_smr_readers_acq(g) == 0);
+  setgcrefrel(f->tracev.slot[SIDE_META_PARENT], obj2gco(T));
+  assert(lj_trace_arm64_side_parent_capture(J) ==
+         LJ_TRACE_ARM64_SIDE_PARENT_OK);
+  assert(gc2_smr_readers_acq(g) == 0);
+
+  lj_trace_arm64_side_parent_clear(J);
+  assert(side_parent_cert_empty(&J->arm64_side_parent));
+  lj_trace_state_store(J, LJ_TRACE_IDLE);
+  lj_jit_token_release_l(L, J);
+  assert(jit_token_acq(g) == 0 && jit_owner_l_acq(J) == NULL);
+}
+
 int main(void)
 {
   lua_State *L = luaL_newstate();
@@ -598,9 +863,10 @@ int main(void)
   side_meta_install(L, &fixture);
   test_metadata_mutations(L, &fixture);
   test_context_mutations(L, &fixture);
+  test_parent_lifetime_certificate(L, &fixture);
   side_meta_remove(L, &fixture);
   lua_close(L);
-  puts("t-arm64-jit-side-ingress-metadata OK: closed first-level LOOP metadata, snapshot and owner generations verified");
+  puts("t-arm64-jit-side-ingress-metadata OK: closed first-level LOOP metadata, parent lifetime/authentication and owner generations verified");
   return 0;
 }
 
