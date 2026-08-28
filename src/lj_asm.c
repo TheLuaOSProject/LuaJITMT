@@ -4716,7 +4716,8 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
 #endif
 #if LJ_TARGET_ARM64 && defined(LJ_TRACE_TEST_HELPERS) && \
     defined(LJ_ARM64_SIDE_ASM_TEST) && \
-    LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED
+    LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED && \
+    LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED
   if (J->parent != 0) {
     /* The one-shot native probe must never return to trace_stop(). Even an
     ** incomplete diagnostic aborts this private attempt fail-closed. */

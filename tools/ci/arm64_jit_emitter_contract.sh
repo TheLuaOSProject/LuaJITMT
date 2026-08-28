@@ -37,6 +37,7 @@ fi
 for setting in \
   'LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED' \
   'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED' \
+  'LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED' \
   'LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED'; do
   grep -F "$setting" "$root/tests/t-arm64-jit-emitter.c" >/dev/null || {
     echo "ARM64 emitter fixture lost granular setting $setting" >&2

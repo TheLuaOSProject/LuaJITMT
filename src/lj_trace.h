@@ -44,23 +44,26 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
 ** trace metadata resident with either a GC2 SMR reader or the recorder token.
 ** `continuation` is the immutable selected snapshot PC; `pc` is the current
 ** incoming bytecode. METADATA validates only the published generation. IDLE
-** and OWNER/START require both PCs to match; OWNER/RECORD permits later PCs in
-** the same prototype while pinning recorder scratch to `continuation`. None of
-** these modes claims the token, updates an exit count or starts recording. */
+** requires an unclaimed recorder; CLAIM requires the exact TG token before
+** owner/selector publication. OWNER/START requires both PCs to match, while
+** OWNER/RECORD permits later PCs in the same prototype and pins recorder
+** scratch to `continuation`. The validator itself is observational: it never
+** claims a token, updates an exit count or starts recording. */
 #define LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA	0u
 #define LJ_TRACE_ARM64_SIDE_CONTEXT_IDLE		1u
-#define LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER	2u
+#define LJ_TRACE_ARM64_SIDE_CONTEXT_CLAIM	2u
+#define LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER	3u
 LJ_FUNC int lj_trace_arm64_first_side_loop_valid(
   jit_State *J, lua_State *L, TraceNo parent, ExitNo exitno,
   const BCIns *continuation, const BCIns *pc, uint32_t context);
 
 /* First-side parent lifetime/authentication API. All operations are bounded
-** and token-private. The ARM64 assembler is the only production consumer;
-** recorder ingress and publication remain independently closed. Capture and
-** revalidation require the exact active ASM owner; SMR contention is reported
-** separately from a stale identity. Clear is lifecycle-only: initialization
-** or exact token-owner teardown before selector/scratch destruction and
-** terminal token release. */
+** and token-private. The ARM64 assembler captures it only for the exact
+** production first-side canary; all broader side grammars remain closed.
+** Capture and revalidation require the exact active ASM owner; SMR contention
+** is reported separately from a stale identity. Clear is lifecycle-only:
+** initialization or exact token-owner teardown before selector/scratch
+** destruction and terminal token release. */
 typedef enum LJTraceArm64SideParentResult {
   LJ_TRACE_ARM64_SIDE_PARENT_SMR_RETRY = -1,
   LJ_TRACE_ARM64_SIDE_PARENT_RETRY = 0,

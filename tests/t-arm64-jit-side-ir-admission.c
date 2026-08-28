@@ -1,8 +1,9 @@
 /*
 ** Pure contract for the first bounded ARM64 side-trace grammar and the exact
 ** allocator layout captured by an abort-before-publication native probe.
-** Production assembly consumes this certificate, but the side recorder and
-** publication path remain closed; no generated code runs here.
+** Production assembly consumes this certificate for the exact first-side
+** canary. Broader side grammars remain closed and no generated code runs in
+** this pure fixture.
 */
 
 #include <assert.h>
@@ -22,8 +23,9 @@
 #include "lj_asm.h"
 #include "lj_tg.h"
 
-#if !LJ_HASJIT || !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED
-#error "side admission fixture requires the production ARM64 side gate closed"
+#if !LJ_HASJIT || !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED || \
+    LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED
+#error "side admission fixture requires the exact ARM64 first-side canary"
 #endif
 
 enum {

@@ -65,10 +65,12 @@ nm "$archive" | grep ' T _lj_asm_arm64_side_postra_admit$' >/dev/null || {
   exit 1
 }
 
-# Production assembly now consumes the exact semantic, parent-lifetime and
-# post-RA certificates. Recording ingress, dispatch and trace publication
-# remain independently closed.
+# Production assembly consumes the exact semantic, parent-lifetime and post-RA
+# certificates for the bounded first-side canary. The broad side gate stays
+# closed for every unsupported first side and side-of-side.
 grep -E '^#define LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
+  "$root/src/lj_arch.h" >/dev/null
+grep -E '^#define LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
   "$root/src/lj_arch.h" >/dev/null
 grep -F '#define TRACE_ARM64_INT_SIDE_ADMITTED' "$root/src/lj_jit.h" | \
   grep -F '0x80' >/dev/null
@@ -372,4 +374,4 @@ grep -F 'as->parentmap_n = parentmap_n;' "$root/src/lj_asm.c" >/dev/null
   -o "$fixture"
 "$fixture"
 
-echo "arm64_jit_side_ir_admission_contract OK: ARM64/arm64e first-side semantic, pre-head, post-RA and assembler-consumption certificates verified; recorder/publication gates remain closed"
+echo "arm64_jit_side_ir_admission_contract OK: ARM64/arm64e exact first-side semantic, pre-head, post-RA and assembler-consumption certificates verified; broad side gate remains closed"

@@ -238,6 +238,8 @@ grep -E '^#define LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
   "$ordinary_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
   "$ordinary_macros" >/dev/null
+grep -E '^#define LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
+  "$ordinary_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
   "$ordinary_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+0$' \
@@ -479,11 +481,13 @@ env LUA_PATH="$root/src/?.lua;$root/src/jit/?.lua;;" "$root/src/luajit" -e '
   assert(f(20) == 210); assert(f(20) == 210); assert(f(20) == 210)
   assert(f(20) == 210); assert(f(20) == 210)
   assert(util.traceinfo(1), "open integer-loop root did not record")
-  assert(util.traceinfo(2) == nil, "closed side/stitch surface published trace 2")
+  assert(util.traceinfo(2) == nil,
+         "root-only workload unexpectedly published trace 2")
 '
 
 # Arm64e/BTI admits the same exact root recorder and all three certified root
-# entry families, while side and stitch surfaces remain independently closed.
+# entry families. The exact first-side canary is open, while unsupported side
+# grammars and stitch remain independently closed.
 env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" clean \
     TARGET_FLAGS='-arch arm64e -mbranch-protection=bti' \
@@ -512,6 +516,8 @@ grep -E '^#define LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+0$' \
 grep -E '^#define LJ_ARM64_JIT_FORL_NATIVE_ENTRY_FAIL_CLOSED[[:space:]]+0$' \
   "$pauth_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
+  "$pauth_macros" >/dev/null
+grep -E '^#define LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
   "$pauth_macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
   "$pauth_macros" >/dev/null
@@ -567,8 +573,8 @@ pauth_branch=$(grep -nE 'braa[[:space:]]+x1, x0$' \
 test "$pauth_sub" -lt "$pauth_branch"
 
 # Exercise a genuinely hot loop with JIT enabled. The authenticated JLOOP must
-# execute the exact root, while the closed side/stitch surfaces leave slot 2
-# empty.
+# execute the exact root; this root-only workload has no admitted first side,
+# and unsupported side/stitch paths leave slot 2 empty.
 env LUA_PATH="$root/src/?.lua;$root/src/jit/?.lua;;" "$root/src/luajit" -e '
   local util = require("jit.util")
   jit.flush(); jit.on(); assert(jit.status())
@@ -581,7 +587,7 @@ env LUA_PATH="$root/src/?.lua;$root/src/jit/?.lua;;" "$root/src/luajit" -e '
   for _ = 1, 8 do assert(f(20) == 210) end
   assert(util.traceinfo(1), "open arm64e integer-loop root did not record")
   assert(util.traceinfo(2) == nil,
-         "closed arm64e side/stitch surface published trace 2")
+         "root-only arm64e workload unexpectedly published trace 2")
 '
 
 # Leave the isolated checkout in its ordinary native experimental mode.

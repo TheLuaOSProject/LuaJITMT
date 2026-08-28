@@ -34,8 +34,9 @@
 #if !LJ_TARGET_OSX || !LJ_TARGET_ARM64 || !LJ_HASJIT || \
     LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED || \
     LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED != 1 || \
+    LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED != 1 || \
     LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED
-#error "side assembler probe requires admitted roots and closed ARM64 sides"
+#error "side assembler probe requires admitted roots and closed production sides"
 #endif
 
 enum {

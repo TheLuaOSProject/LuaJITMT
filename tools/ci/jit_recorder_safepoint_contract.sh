@@ -59,6 +59,11 @@ for gate_region in \
     exit 1
   }
 done
+grep -F '#elif LJ_TARGET_ARM64 && !LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED' \
+  "$trace_side" >/dev/null || {
+  echo "recorder safepoint contract lost exact ARM64 first-side admission" >&2
+  exit 1
+}
 
 entry_ack=$(line_of "$trace_hot" 'lj_safepoint_ack_check(L)' 1)
 # Match both the current global setter and the generation-aware owner-local
@@ -107,6 +112,7 @@ arm_side_gate=$(line_of "$trace_side" '#if LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSE
 arm_side_return=$(line_of "$trace_side" 'return;' 1)
 side_smr_try=$(line_of "$trace_side" '!lj_gc2_smr_read_try(g)' 1)
 inner_pending=$(line_of "$trace_side" 'lj_safepoint_owner_poll_pending(L)' 1)
+side_idle_cert=$(line_of "$trace_side" 'LJ_TRACE_ARM64_SIDE_CONTEXT_IDLE' 1)
 first_snap_cas=$(line_of "$trace_side" 'snap_count_cas_acqrel(' 1)
 side_token=$(line_of "$trace_side" 'lj_jit_token_try_l(L, J)' 1)
 late_pending=$(line_of "$trace_side" 'lj_safepoint_owner_poll_pending(L)' 2)
@@ -114,11 +120,19 @@ late_release=$(line_of "$trace_side" 'lj_jit_token_release_l(L, J)' 1)
 late_smr_leave=$(line_of "$trace_side" 'lj_gc2_smr_read_leave(g)' 2)
 late_rearm=$(line_of "$trace_side" 'lj_safepoint_owner_rearm_counted_poll(L)' 2)
 side_stream_recheck=$(line_of "$trace_side" 'lj_jit_trace_stream_idle(g)' 2)
+side_parent_reload=$(line_of "$trace_side" 'parentT = traceref_safe(J, parent);' 2)
+side_claim_cert=$(line_of "$trace_side" 'LJ_TRACE_ARM64_SIDE_CONTEXT_CLAIM' 1)
+claim_release=$(line_of "$trace_side" 'lj_jit_token_release_l(L, J)' 4)
+claim_request_smr_leave=$(line_of "$trace_side" 'lj_gc2_smr_read_leave(g)' 3)
+side_out_smr_leave=$(line_of "$trace_side" 'lj_gc2_smr_read_leave(g)' 5)
 second_snap_cas=$(line_of "$trace_side" 'snap_count_cas_acqrel(' 2)
 for value in "$arm_side_gate" "$arm_side_return" "$side_smr_try" "$inner_pending" \
-             "$first_snap_cas" "$side_token" "$late_pending" \
+             "$side_idle_cert" "$first_snap_cas" "$side_token" "$late_pending" \
              "$late_release" "$late_smr_leave" "$late_rearm" \
-             "$side_stream_recheck" "$second_snap_cas"; do
+             "$side_stream_recheck" "$side_parent_reload" \
+             "$side_claim_cert" "$claim_release" \
+             "$claim_request_smr_leave" "$side_out_smr_leave" \
+             "$second_snap_cas"; do
   test -n "$value" || {
     echo "recorder safepoint contract lost a side-admission edge" >&2
     exit 1
@@ -126,13 +140,21 @@ for value in "$arm_side_gate" "$arm_side_return" "$side_smr_try" "$inner_pending
 done
 test "$arm_side_gate" -lt "$arm_side_return"
 test "$arm_side_return" -lt "$side_smr_try"
+test "$side_smr_try" -lt "$side_idle_cert"
 test "$inner_pending" -lt "$first_snap_cas"
+test "$side_idle_cert" -lt "$first_snap_cas"
+test "$first_snap_cas" -lt "$side_token"
 test "$side_token" -lt "$late_pending"
 test "$late_pending" -lt "$late_release"
 test "$late_release" -lt "$late_smr_leave"
 test "$late_smr_leave" -lt "$late_rearm"
 test "$late_rearm" -lt "$side_stream_recheck"
+test "$side_stream_recheck" -lt "$side_parent_reload"
+test "$side_parent_reload" -lt "$side_claim_cert"
+test "$side_claim_cert" -lt "$second_snap_cas"
 test "$late_rearm" -lt "$second_snap_cas"
+test "$claim_release" -lt "$claim_request_smr_leave"
+test "$claim_release" -lt "$side_out_smr_leave"
 if grep -F 'lj_safepoint_ack_check(L)' "$trace_side" >/dev/null; then
   echo "trace_hotside acknowledges while jit_base is still published" >&2
   exit 1
@@ -208,4 +230,4 @@ for vm in vm_x64.dasc vm_arm64.dasc; do
   test -n "$clear" && test -n "$ack" && test "$clear" -lt "$ack"
 done
 
-echo "jit_recorder_safepoint_contract OK: granular root/side/stitch gates and cleanup ordered"
+echo "jit_recorder_safepoint_contract OK: granular root/exact-first-side/stitch admission and cleanup ordered"

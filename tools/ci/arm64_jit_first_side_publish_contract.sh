@@ -175,6 +175,7 @@ grep -F 'LJ_ARM64_FIRST_SIDE_PUBLISH_TEST excludes deferred debug/perf registrat
 # helper and call-site ordering checks.
 for required in \
   'LJ_ARM64_FIRST_SIDE_PUBLISH_TEST requires closed ARM64 side recording' \
+  'LJ_ARM64_FIRST_SIDE_PUBLISH_TEST requires closed production first-side recording' \
   'LJ_TRACE_ARM64_FIRST_SIDE_PUBLISH_DONE' \
   'lj_trace_test_arm64_first_side_publish_arm(' \
   'lj_trace_test_arm64_first_side_publish_read(' \
@@ -563,6 +564,7 @@ build_and_run() {
     "LJ_ABI_PAUTH $expected_pauth" \
     "LJ_ABI_BRANCH_TRACK $expected_bti" \
     'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1' \
+    'LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED 1' \
     'LJ_ARM64_FIRST_SIDE_PUBLISH_TEST 1'; do
     grep -E "^#define ${setting}$" "$macros" >/dev/null || {
       echo "first-side publication gate mismatch ($tag): $setting" >&2

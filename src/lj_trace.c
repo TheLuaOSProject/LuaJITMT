@@ -4534,6 +4534,13 @@ static int trace_arm64_first_side_context_valid(jit_State *J, lua_State *L,
         jit_owner_l_acq(J) != NULL ||
         jit_token_acq(g) != 0)
       return 0;
+  } else if (context == LJ_TRACE_ARM64_SIDE_CONTEXT_CLAIM) {
+    /* The hot-exit path has acquired the exact TG token but deliberately has
+    ** not published recorder ownership or selectors yet. This checkpoint
+    ** closes the IDLE-view/token-CAS race before the terminal hot-count CAS. */
+    if (pc != continuation || state != LJ_TRACE_IDLE ||
+	jit_owner_l_acq(J) != NULL || !lj_jit_token_held_l(L, J))
+      return 0;
   } else if (context == LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER) {
     if (jit_owner_l_acq(J) != L || !lj_jit_token_held_l(L, J) ||
         J->parent != parent ||
@@ -7062,12 +7069,34 @@ static LJ_NORET void trace_arm64_side_publish_failstop(jit_State *J,
 
 static int trace_arm64_first_side_publish_enabled(jit_State *J)
 {
+  const LJTraceArm64SideParentCert *cert;
+  int certified;
+
+  if (J == NULL)
+    return 0;
+  cert = &J->arm64_side_parent;
+  certified = cert->tracev != NULL && cert->body != NULL &&
+	cert->mcode != NULL && cert->continuation != NULL &&
+	cert->parent != 0 && cert->child != 0 &&
+	cert->child != cert->parent && cert->parent == J->parent &&
+	cert->exitno == J->exitno &&
+	cert->child == trace_traceno_acq(&J->cur) &&
+	trace_root_acq(&J->cur) == cert->parent &&
+	trace_link_acq(&J->cur) == cert->parent &&
+	trace_linktype_acq(&J->cur) == LJ_TRLINK_ROOT &&
+	trace_startpc_acq(&J->cur) == cert->continuation &&
+	trace_startins_acq(&J->cur) == BCINS_AD(BC_JMP, 0, 0) &&
+	la_load8_acq(&J->cur.unused1) == TRACE_ARM64_INT_SIDE_ADMITTED &&
+	trace_arm64_side_parent_asm_owner_exact(
+	  J, cert->parent, cert->exitno, cert->continuation);
 #if defined(LJ_TRACE_TEST_HELPERS) && \
     defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST)
-  return J != NULL && trace_arm64_first_side_publish_test_active(
+  return certified && trace_arm64_first_side_publish_test_active(
 	J, J->parent, J->exitno);
+#elif !LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED
+  return certified;
 #else
-  UNUSED(J);
+  UNUSED(certified);
   return 0;
 #endif
 }
@@ -7236,6 +7265,13 @@ static int trace_stop_arm64_first_side(jit_State *J)
   lj_gc2_smr_read_leave(g);
   smr_held = 0;
   trace_arm64_first_side_publish_test_complete(J, plan.childno);
+  /* Match generic trace_stop() bookkeeping. A TRACE callback was proved
+  ** absent and reserved before publication; debug/perf builds are compile-time
+  ** excluded from this canary. */
+  if (++J->gc_pressure_traces >= TRACE_GC_PRESSURE_BATCH) {
+    J->gc_pressure_traces = 0;
+    return J->freetrace > TRACE_GC_PRESSURE_BATCH;
+  }
   return 0;
 
 rollback:
@@ -9551,11 +9587,14 @@ static int trace_stop(jit_State *J)
   int root_patch_lost = 0;
 
 #if LJ_TARGET_ARM64
-  /* The certified one-shot first child has its own finite transaction. Never
-  ** let it enter the generic side path, whose SMR wait and topology stores are
-  ** not a publication seal. */
-  if (op == BC_JMP && trace_arm64_first_side_publish_enabled(J))
-    return trace_stop_arm64_first_side(J);
+  /* Every ARM64 side must either own the exact first-child certificate and its
+  ** finite transaction or abort before publication. The generic side path has
+  ** blocking SMR and non-transactional topology stores and is unreachable. */
+  if (op == BC_JMP) {
+    if (trace_arm64_first_side_publish_enabled(J))
+      return trace_stop_arm64_first_side(J);
+    lj_trace_err(J, LJ_TRERR_RETRY);
+  }
 #endif
 
   switch (op) {
@@ -10246,18 +10285,20 @@ static int trace_arm64_side_asm_test_preflight(jit_State *J,
 }
 #endif
 
-#if defined(LJ_TRACE_TEST_HELPERS) && \
-    defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST)
-/* Revalidate the J-bound publication claim on every recorder dispatch. */
-static int trace_arm64_first_side_publish_test_preflight(jit_State *J,
+#if !LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED || \
+    (defined(LJ_TRACE_TEST_HELPERS) && \
+     defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST))
+/* Revalidate the token-owned exact first-side generation on every recorder
+** dispatch. START has not initialized scratch; RECORD must retain the exact
+** synthetic-JMP child identity produced by lj_record_setup(). */
+static int trace_arm64_first_side_recorder_preflight(jit_State *J,
 	const BCIns *pc, lua_State **ownerp)
 {
   lua_State *owner = jit_owner_l_acq(J);
   TraceState state = lj_trace_state_load(J);
   const BCIns *continuation;
   *ownerp = owner;
-  if (owner == NULL || !trace_arm64_first_side_publish_test_active(
-	J, J->parent, J->exitno) || !lj_jit_token_held_l(owner, J))
+  if (owner == NULL || !lj_jit_token_held_l(owner, J))
     return 0;
   if (state == LJ_TRACE_START)
     continuation = pc;
@@ -10269,6 +10310,21 @@ static int trace_arm64_first_side_publish_test_preflight(jit_State *J,
 	lj_trace_arm64_first_side_loop_valid(
 	  J, owner, J->parent, J->exitno, continuation, pc,
 	  LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER);
+}
+#endif
+
+#if defined(LJ_TRACE_TEST_HELPERS) && \
+    defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST)
+/* The one-shot seam adds observation state, never production authority. */
+static int trace_arm64_first_side_publish_test_preflight(jit_State *J,
+	const BCIns *pc, lua_State **ownerp)
+{
+  if (!trace_arm64_first_side_publish_test_active(
+	J, J->parent, J->exitno)) {
+    *ownerp = jit_owner_l_acq(J);
+    return 0;
+  }
+  return trace_arm64_first_side_recorder_preflight(J, pc, ownerp);
 }
 #endif
 #endif
@@ -10300,6 +10356,13 @@ void lj_trace_ins(jit_State *J, const BCIns *pc)
 #elif defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
   if (J->parent != 0) {
     if (!trace_arm64_side_asm_test_preflight(J, pc, &L)) {
+      trace_arm64_abort_exact_owner(J, L);
+      return;
+    }
+  } else
+#elif !LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED
+  if (J->parent != 0) {
+    if (!trace_arm64_first_side_recorder_preflight(J, pc, &L)) {
       trace_arm64_abort_exact_owner(J, L);
       return;
     }
@@ -10460,6 +10523,9 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
     UNUSED(pc); UNUSED(L); UNUSED(parent); UNUSED(exitno);
     return;
   }
+#elif LJ_TARGET_ARM64 && !LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED
+  /* The broad gate remains closed. Exact production admission is performed
+  ** below only after a nonwaiting SMR reader protects the parent body. */
 #else
   UNUSED(pc); UNUSED(L); UNUSED(parent); UNUSED(exitno);
   return;
@@ -10496,6 +10562,13 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
     trace_test_admission_note_side_gate_block();
     return;
   }
+#if LJ_TARGET_ARM64 && !LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED
+  /* Refuse unsupported first sides and every side-of-side before mutating the
+  ** selected snapshot count. IDLE proves that no recorder token is published. */
+  if (!lj_trace_arm64_first_side_loop_valid(
+	J, L, parent, exitno, pc, pc, LJ_TRACE_ARM64_SIDE_CONTEXT_IDLE))
+    goto out;
+#endif
   if (!(lj_tg_hookmask_combined_load(g, L2TG(L)) &
 	(HOOK_GC|HOOK_VMEVENT)) &&
       lj_jit_trace_stream_idle(g) &&
@@ -10541,6 +10614,22 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
       goto out;
     }
     snap = &trace_snap_acq(parentT)[exitno];
+#if LJ_TARGET_ARM64 && !LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED
+    /* Reprove the complete generation with this TG's token held but before
+    ** owner/selectors are published or the terminal count is changed. */
+    if (!lj_trace_arm64_first_side_loop_valid(
+	  J, L, parent, exitno, pc, pc,
+	  LJ_TRACE_ARM64_SIDE_CONTEXT_CLAIM)) {
+      lj_jit_token_release_l(L, J);
+      if (lj_safepoint_owner_poll_pending(L)) {
+	lj_gc2_smr_read_leave(g);
+	lj_safepoint_owner_rearm_counted_poll(L);
+	trace_test_admission_note_side_clean_release(L, J);
+	return;
+      }
+      goto out;
+    }
+#endif
 #if LJ_TARGET_ARM64 && defined(LJ_TRACE_TEST_HELPERS) && \
     defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST)
     if (!trace_arm64_first_side_publish_test_claim(

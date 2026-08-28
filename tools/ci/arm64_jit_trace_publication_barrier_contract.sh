@@ -137,6 +137,8 @@ test "$(lipo -archs "$archive")" = arm64
 "$cc" -arch arm64 -mmacosx-version-min="$minver" $test_xcflags \
   -I"$root/src" -dM -E -x c -include lj_arch.h /dev/null >"$macros"
 grep -F '#define LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1' "$macros" >/dev/null
+grep -F '#define LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED 0' \
+  "$macros" >/dev/null
 nm "$archive" | grep ' T _lj_gc_pubtrace_checkpoint_nodrain$' >/dev/null
 nm "$archive" | grep ' T _lj_gc2_trace_publish_checkpoint_nodrain$' >/dev/null
 

@@ -28,8 +28,9 @@
 
 #if !LJ_HASJIT || LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED || \
     !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED || \
+    LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED || \
     !LJ_ARM64_JIT_STITCH_RECORDER_FAIL_CLOSED
-#error "t-arm64-jit-emitter requires root-open, side/stitch-closed recording"
+#error "t-arm64-jit-emitter requires root/exact-first-side open and broad side/stitch closed"
 #endif
 
 #define ENC_ADDx_IMM(rd, rn, imm) \

@@ -249,7 +249,8 @@ for setting in \
   'LJ_TARGET_ARM64 1' \
   'LJ_HASJIT 1' \
   'LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED 0' \
-  'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1'; do
+  'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1' \
+  'LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED 1'; do
   grep -F "#define $setting" "$macros" >/dev/null || {
     echo "ARM64 GDBJIT prepare gate mismatch: $setting" >&2
     exit 1
@@ -303,7 +304,8 @@ for setting in \
   'LJ_ABI_PAUTH 1' \
   'LJ_ABI_BRANCH_TRACK 1' \
   'LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED 0' \
-  'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1'; do
+  'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1' \
+  'LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED 1'; do
   grep -F "#define $setting" "$pauth_macros" >/dev/null || {
     echo "ARM64e GDBJIT prepare gate mismatch: $setting" >&2
     exit 1

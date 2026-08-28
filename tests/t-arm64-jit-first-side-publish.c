@@ -1,7 +1,8 @@
 /*
 ** Exact one-shot publication proof for the first ARM64 side trace.
-** The ordinary ARM64 side recorder stays fail-closed; this dedicated build
-** admits only parent 1 / exit 2 and publishes its child as trace 2.
+** The broad ARM64 side recorder stays fail-closed. This dedicated seam closes
+** the ordinary production canary and admits only parent 1 / exit 2, publishing
+** its child as trace 2.
 */
 
 #include <assert.h>
@@ -35,8 +36,9 @@
 #if !LJ_TARGET_OSX || !LJ_TARGET_ARM64 || !LJ_HASJIT || \
     LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED || \
     LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED != 1 || \
+    LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED != 1 || \
     LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED
-#error "first-side publication probe requires admitted roots and closed ARM64 sides"
+#error "first-side publication probe requires admitted roots and closed production sides"
 #endif
 
 enum {

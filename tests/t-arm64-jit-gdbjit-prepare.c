@@ -26,6 +26,7 @@
 #if !LJ_TARGET_ARM64 || !defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL) || \
     !LJ_HASJIT || LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED || \
     !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED || \
+    !LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED || \
     !defined(LUAJIT_USE_GDBJIT) || !defined(LJ_GDBJIT_TEST_HELPERS)
 #error "fixture requires the closed-side experimental ARM64 GDBJIT build"
 #endif

@@ -127,6 +127,7 @@ grep -F 'LJ_ARM64_SIDE_ASM_TEST requires LJ_TRACE_TEST_HELPERS' \
 for required in \
   'defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)' \
   'LJ_ARM64_SIDE_ASM_TEST requires closed ARM64 side recording' \
+  'LJ_ARM64_SIDE_ASM_TEST requires closed production first-side recording' \
   'asm_test_side_probe_capture(J);' \
   'asm_test_side_probe_parentmap(as->parentmap, as->parentmap_n);' \
   'asm_test_side_probe_note(LJ_ARM64_SIDE_ASM_PROBE_PREHEAD);' \
@@ -447,6 +448,7 @@ for setting in \
   'LJ_ABI_PAUTH 0' \
   'LJ_ABI_BRANCH_TRACK 0' \
   'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1' \
+  'LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED 1' \
   'LJ_ARM64_SIDE_ASM_TEST 1'; do
   grep -E "^#define ${setting}$" "$macros" >/dev/null || {
     echo "ARM64 side-assembler probe gate mismatch: $setting" >&2
@@ -506,6 +508,7 @@ for setting in \
   'LJ_ABI_PAUTH 1' \
   'LJ_ABI_BRANCH_TRACK 1' \
   'LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED 1' \
+  'LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED 1' \
   'LJ_ARM64_SIDE_ASM_TEST 1'; do
   grep -E "^#define ${setting}$" "$pauth_macros" >/dev/null || {
     echo "ARM64e side-assembler probe gate mismatch: $setting" >&2

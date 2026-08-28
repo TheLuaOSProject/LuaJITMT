@@ -1,7 +1,8 @@
 /*
 ** Synthetic, read-only contract for the first ARM64 side-recording ingress
-** certificate. The production side gate remains closed and this fixture never
-** updates a snapshot count or starts the recorder.
+** certificate. The broad side gate remains closed; the exact production
+** first-side canary is open, but this fixture never updates a snapshot count
+** or starts the recorder.
 */
 
 #include <assert.h>
@@ -32,6 +33,9 @@
 
 #if !LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED
 #error "side ingress metadata checkpoint must land with recording closed"
+#endif
+#if LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED
+#error "ordinary ARM64 helper build must expose the exact first-side canary"
 #endif
 
 enum {
@@ -510,6 +514,28 @@ static void test_context_mutations(lua_State *L, SideMetaFixture *f)
   assert(!side_meta_check(L, f, pc, LJ_TRACE_ARM64_SIDE_CONTEXT_IDLE));
   lj_tg_store_cur_L(tg, L);
 
+  /* The claim checkpoint is still an IDLE recorder with no published owner or
+  ** selectors, but the exact TG owns the low token. Exercise that deliberately
+  ** narrow state independently of the later START/RECORD owner checkpoint. */
+  assert(lj_jit_token_try_l(L, J));
+  assert(side_meta_check(L, f, pc, LJ_TRACE_ARM64_SIDE_CONTEXT_CLAIM));
+  assert(!side_meta_check(L, f, pc, LJ_TRACE_ARM64_SIDE_CONTEXT_IDLE));
+  assert(!side_meta_check_at(L, f, pc, pc+1,
+                             LJ_TRACE_ARM64_SIDE_CONTEXT_CLAIM));
+  assert(!side_meta_check_at(L, f, pc+1, pc+1,
+                             LJ_TRACE_ARM64_SIDE_CONTEXT_CLAIM));
+  lj_tg_reqmask_rel(tg, 1);
+  assert(!side_meta_check(L, f, pc, LJ_TRACE_ARM64_SIDE_CONTEXT_CLAIM));
+  lj_tg_reqmask_rel(tg, 0);
+  jit_owner_l_rel(J, L);
+  assert(!side_meta_check(L, f, pc, LJ_TRACE_ARM64_SIDE_CONTEXT_CLAIM));
+  jit_owner_l_rel(J, NULL);
+  lj_trace_state_store(J, LJ_TRACE_START);
+  assert(!side_meta_check(L, f, pc, LJ_TRACE_ARM64_SIDE_CONTEXT_CLAIM));
+  lj_trace_state_store(J, LJ_TRACE_IDLE);
+  lj_jit_token_release_l(L, J);
+  assert(!side_meta_check(L, f, pc, LJ_TRACE_ARM64_SIDE_CONTEXT_CLAIM));
+
   assert(lj_jit_token_try_l(L, J));
   lj_trace_state_store(J, LJ_TRACE_START);
   assert(!side_meta_check(L, f, pc, LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER));
@@ -902,7 +928,7 @@ int main(void)
   test_parent_lifetime_certificate(L, &fixture);
   side_meta_remove(L, &fixture);
   lua_close(L);
-  puts("t-arm64-jit-side-ingress-metadata OK: closed first-level LOOP metadata, parent lifetime/authentication and owner generations verified");
+  puts("t-arm64-jit-side-ingress-metadata OK: exact first-level LOOP metadata, idle/claim/owner contexts and parent lifetime/authentication verified");
   return 0;
 }
 

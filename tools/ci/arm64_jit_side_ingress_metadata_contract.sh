@@ -33,6 +33,8 @@ abort_region=$tmpdir/side-parent-abort.txt
 abort_owner_region=$tmpdir/side-parent-abort-owner.txt
 terminal_region=$tmpdir/side-parent-terminal.txt
 production_regions=$tmpdir/side-ingress-production.txt
+hotside_region=$tmpdir/side-ingress-hotside.txt
+recorder_region=$tmpdir/side-ingress-recorder-preflight.txt
 ins_region=$tmpdir/side-ingress-ins.txt
 first_publish_ingress_region=$tmpdir/side-ingress-first-publish-test.txt
 asm_region=$tmpdir/side-parent-asm-consumption.txt
@@ -56,6 +58,33 @@ require_order()
   fi
 }
 
+nth_line()
+{
+  region=$1
+  needle=$2
+  occurrence=$3
+  awk -v needle="$needle" -v occurrence="$occurrence" '
+    index($0, needle) && ++seen == occurrence { print NR; exit }
+  ' "$region"
+}
+
+require_nth_order()
+{
+  region=$1
+  before=$2
+  before_n=$3
+  after=$4
+  after_n=$5
+  label=$6
+  before_line=$(nth_line "$region" "$before" "$before_n")
+  after_line=$(nth_line "$region" "$after" "$after_n")
+  if test -z "$before_line" || test -z "$after_line" || \
+     test "$before_line" -ge "$after_line"; then
+    echo "ARM64 side-ingress mutation ordering changed: $label" >&2
+    exit 1
+  fi
+}
+
 test -f "$archive" || {
   echo "ARM64 side-ingress contract requires an existing experimental build" >&2
   exit 1
@@ -66,6 +95,8 @@ test "$(lipo -archs "$archive")" = arm64
 "$cc" -arch arm64 -mmacosx-version-min="$minver" $xcflags \
   -I"$root/src" -dM -E -include lj_arch.h -x c /dev/null >"$macros"
 grep -E '^#define LJ_ARM64_JIT_SIDE_RECORDER_FAIL_CLOSED[[:space:]]+1$' \
+  "$macros" >/dev/null
+grep -E '^#define LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
   "$macros" >/dev/null
 grep -E '^#define LJ_ARM64_JIT_EXIT_TARGET_SLOTS[[:space:]]+1$' \
   "$macros" >/dev/null
@@ -285,46 +316,94 @@ require_order "$preflight_region" \
   'if (J->arm64_side_parent.body != NULL) {' 'if (J->curfinal' \
   'shutdown certificate preflight before scratch-body checks'
 
-# Production recorder ingress remains dormant. The only core-name occurrences
-# are its comment, definition, metadata-test wrapper and the two separately
-# guarded native-probe preflights. The first-publication fixture may consume the
-# checkpoint from lj_trace_ins, but only inside its test-only compile-time seam.
+# The broad side gate remains closed, while the ordinary build opens exactly
+# the certified first child. Pin the two production hot-exit checkpoints, the
+# token-owned per-instruction preflight, and the separately guarded one-shot
+# test seam. Unsupported first sides and side-of-side must still fail closed.
 test "$(grep -Fc 'lj_trace_arm64_first_side_loop_valid(' \
-  "$root/src/lj_trace.c")" = 5
+  "$root/src/lj_trace.c")" = 7
 sed -n '/^static TraceStartResult trace_start(jit_State \*J)/,/^}/p' \
   "$root/src/lj_trace.c" >"$production_regions"
+sed -n '/^static int trace_arm64_first_side_recorder_preflight(/,/^}/p' \
+  "$root/src/lj_trace.c" >"$recorder_region"
 sed -n '/^void lj_trace_ins(jit_State \*J, const BCIns \*pc)/,/^static int trace_hot_root_start_valid/p' \
   "$root/src/lj_trace.c" >"$ins_region"
 sed -n '/^static void trace_hotside(jit_State \*J, const BCIns \*pc,/,/^}/p' \
-  "$root/src/lj_trace.c" >>"$production_regions"
+  "$root/src/lj_trace.c" >"$hotside_region"
+cat "$hotside_region" >>"$production_regions"
 test -s "$ins_region"
+test -s "$hotside_region"
+test -s "$recorder_region"
 cat "$ins_region" >>"$production_regions"
-awk '
-  /^#if defined\(LJ_TRACE_TEST_HELPERS\) && \\/ {
-    candidate=1; block=$0 ORS; next
-  }
-  candidate {
-    block=block $0 ORS
-    if ($0 == "#endif") {
-      if (index(block, "defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST)") &&
-          index(block, "trace_arm64_first_side_publish_test_preflight") &&
-          index(block, "lj_trace_arm64_first_side_loop_valid("))
-        printf "%s", block
-      candidate=0; block=""
-    }
-  }' "$root/src/lj_trace.c" >"$first_publish_ingress_region"
+sed -n '/^static int trace_arm64_first_side_publish_test_preflight(/,/^}/p' \
+  "$root/src/lj_trace.c" >"$first_publish_ingress_region"
 test -s "$first_publish_ingress_region"
-test "$(grep -Fc 'lj_trace_arm64_first_side_loop_valid(' \
+test "$(grep -Fc 'trace_arm64_first_side_recorder_preflight(' \
   "$first_publish_ingress_region")" = 1
 test "$(grep -Fc 'trace_arm64_first_side_publish_test_preflight(' \
   "$ins_region")" = 1
-grep -F 'defined(LJ_ARM64_FIRST_SIDE_PUBLISH_TEST)' \
+grep -F 'trace_arm64_first_side_publish_test_active(' \
   "$first_publish_ingress_region" >/dev/null
-if grep -F 'lj_trace_arm64_first_side_loop_valid' \
-     "$production_regions" >/dev/null; then
-  echo "Stage 1 side-ingress checkpoint was wired into production" >&2
-  exit 1
-fi
+test "$(grep -Fc 'lj_trace_arm64_first_side_loop_valid(' \
+  "$production_regions")" = 2
+test "$(grep -Fc 'LJ_TRACE_ARM64_SIDE_CONTEXT_IDLE' \
+  "$production_regions")" = 1
+test "$(grep -Fc 'LJ_TRACE_ARM64_SIDE_CONTEXT_CLAIM' \
+  "$production_regions")" = 1
+test "$(grep -Fc 'trace_arm64_first_side_recorder_preflight(J, pc, &L)' \
+  "$ins_region")" = 1
+test "$(grep -Fc 'lj_trace_arm64_first_side_loop_valid(' \
+  "$recorder_region")" = 1
+grep -F 'LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER' "$recorder_region" >/dev/null
+require_order "$production_regions" \
+  'LJ_TRACE_ARM64_SIDE_CONTEXT_IDLE' 'lj_jit_token_try_l(L, J)' \
+  'idle certificate before token claim'
+require_order "$production_regions" \
+  'lj_jit_token_try_l(L, J)' 'LJ_TRACE_ARM64_SIDE_CONTEXT_CLAIM' \
+  'token claim before claim certificate'
+require_order "$production_regions" \
+  'LJ_TRACE_ARM64_SIDE_CONTEXT_CLAIM' 'jit_owner_l_rel(J, L)' \
+  'claim certificate before owner publication'
+require_nth_order "$hotside_region" \
+  'lj_gc2_smr_read_try(g)' 1 \
+  'LJ_TRACE_ARM64_SIDE_CONTEXT_IDLE' 1 \
+  'SMR admission before idle certificate'
+require_nth_order "$hotside_region" \
+  'LJ_TRACE_ARM64_SIDE_CONTEXT_IDLE' 1 \
+  'snap_count_cas_acqrel(snap, &count, count + 1u)' 1 \
+  'idle certificate before first count mutation'
+require_nth_order "$hotside_region" \
+  'snap_count_cas_acqrel(snap, &count, count + 1u)' 1 \
+  'lj_jit_token_try_l(L, J)' 1 \
+  'pre-threshold count before token claim'
+require_nth_order "$hotside_region" \
+  'lj_jit_token_try_l(L, J)' 1 \
+  'parentT = traceref_safe(J, parent);' 2 \
+  'token claim before protected parent reload'
+require_nth_order "$hotside_region" \
+  'parentT = traceref_safe(J, parent);' 2 \
+  'LJ_TRACE_ARM64_SIDE_CONTEXT_CLAIM' 1 \
+  'protected parent reload before claim certificate'
+require_nth_order "$hotside_region" \
+  'LJ_TRACE_ARM64_SIDE_CONTEXT_CLAIM' 1 \
+  'snap_count_cas_acqrel(snap, &count, count + 1u)' 2 \
+  'claim certificate before terminal count mutation'
+require_nth_order "$hotside_region" \
+  'snap_count_cas_acqrel(snap, &count, count + 1u)' 2 \
+  'jit_owner_l_rel(J, L)' 1 \
+  'terminal count mutation before owner publication'
+require_nth_order "$hotside_region" \
+  'lj_jit_token_release_l(L, J);' 1 \
+  'lj_gc2_smr_read_leave(g);' 2 \
+  'post-token request releases token before SMR lease'
+require_nth_order "$hotside_region" \
+  'lj_jit_token_release_l(L, J);' 4 \
+  'lj_gc2_smr_read_leave(g);' 3 \
+  'failed claim releases token before request-path SMR leave'
+require_nth_order "$hotside_region" \
+  'lj_jit_token_release_l(L, J);' 4 \
+  'lj_gc2_smr_read_leave(g);' 5 \
+  'failed claim releases token before shared out-path SMR leave'
 
 # The assembler is the sole production consumer. Capture occurs exactly once
 # after semantic admission and before the first fallible allocation. Three
@@ -400,6 +479,7 @@ for required in \
   'lj_trace_state_store(J, LJ_TRACE_RECORD_1ST);' \
   'LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA' \
   'LJ_TRACE_ARM64_SIDE_CONTEXT_IDLE' \
+  'LJ_TRACE_ARM64_SIDE_CONTEXT_CLAIM' \
   'LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER'; do
   grep -F "$required" "$fixture_source" >/dev/null || {
     echo "ARM64 side-ingress mutation coverage changed: $required" >&2
@@ -453,4 +533,4 @@ test "$(grep -Fc 'assert(gc2_smr_readers_acq(g) == 0);' \
   "$fixture_source" "$archive" -lm -pthread -o "$fixture"
 "$fixture"
 
-echo "arm64_jit_side_ingress_metadata_contract OK: first-level LOOP parent/snapshot/owner lifetime/PAUTH capture and assembler-consumption boundary verified; side recorder remains closed"
+echo "arm64_jit_side_ingress_metadata_contract OK: exact first-level LOOP idle/claim/owner admission, parent lifetime/PAUTH and assembler-consumption boundary verified; broad side gate remains closed"
