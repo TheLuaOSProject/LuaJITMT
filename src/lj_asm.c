@@ -387,7 +387,7 @@ static int arm64_postra_scalar_value(IRIns ir, BCOp rootop,
 static int arm64_postra_numadd_shape(const LJArm64PostRAView *view,
 	IRRef semantic_nins)
 {
-  IRIns k;
+  IRIns k, ipre, ibody, iphi, xpre, xbody, xphi;
   if (bc_op(view->startins) != BC_LOOP ||
 	view->nk != ARM64_NUMADD_K_ONE ||
 	semantic_nins != ARM64_NUMADD_SEMANTIC_NINS)
@@ -428,7 +428,17 @@ static int arm64_postra_numadd_shape(const LJArm64PostRAView *view,
     return 0;
   }
 #undef ARM64_NUMADD_POSTRA_INS
-  return 1;
+  ipre = ir_load_acq(&view->ir[ARM64_NUMADD_R_I_PRE]);
+  ibody = ir_load_acq(&view->ir[ARM64_NUMADD_R_I_BODY]);
+  iphi = ir_load_acq(&view->ir[ARM64_NUMADD_R_I_PHI]);
+  xpre = ir_load_acq(&view->ir[ARM64_NUMADD_R_X_PRE]);
+  xbody = ir_load_acq(&view->ir[ARM64_NUMADD_R_X_BODY]);
+  xphi = ir_load_acq(&view->ir[ARM64_NUMADD_R_X_PHI]);
+  /* asm_phi() assigns the PHI register from its right (loop-body) value and
+  ** asm_phi_shuffle() resolves the left value into that same register. With
+  ** spills categorically closed, any mismatch is not a realizable layout. */
+  return iphi.r == ipre.r && iphi.r == ibody.r &&
+    xphi.r == xpre.r && xphi.r == xbody.r;
 }
 
 static int arm64_ir_funcf_snapshots(const SnapShot *snap,
