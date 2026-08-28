@@ -2,7 +2,7 @@
 ** Native macOS ARM64 contract for the first mixed scalar BC_LOOP root.
 ** Integer induction controls the loop. The accumulator and its invariant
 ** step are doubles, so native execution exercises FPR allocation without
-** admitting numeric comparisons, conversions, multiplication or KNUMs.
+** relying on the separately certified KNUM/ordered-FP-guard root.
 */
 
 #include <assert.h>
@@ -689,9 +689,13 @@ static void test_positive_and_hot_type_exit(void)
   lua_close(L);
 }
 
-static void test_knum_fp_compare_rejected(void)
+static void test_pure_num_root_isolated(void)
 {
   lua_State *L = luaL_newstate();
+  jit_State *J;
+  GCproto *pt;
+  GCtrace *T;
+  const IRIns *ir;
   assert(L != NULL);
   luaL_openlibs(L);
   run_lua(L,
@@ -699,8 +703,26 @@ static void test_knum_fp_compare_rejected(void)
     "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
     "function __arm64_numeric_negative(limit) local x=0.5 "
       "while x<limit do x=x+0.5 end return x end");
-  assert(call_one_num(L, "__arm64_numeric_negative", 20.0) == 20.0);
-  expect_no_trace(L, "__arm64_numeric_negative");
+  assert(call_one_num(L, "__arm64_numeric_negative", 20.25) == 20.5);
+  J = L2J(L);
+  pt = global_proto(L, "__arm64_numeric_negative");
+  T = traceref_safe(J, 1);
+  assert(proto_trace_acq(pt) == 1);
+  assert(trace_runnable_acq(T, 1));
+  assert(trace_root_acq(T) == 0 && trace_link_acq(T) == 1);
+  assert(trace_linktype_acq(T) == LJ_TRLINK_LOOP);
+  assert(trace_topslot_acq(T) == 4 && trace_spadjust_acq(T) == 0);
+  assert(trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0);
+  assert((la_load8_acq(&T->unused1) &
+	  (TRACE_ARM64_INT_LOOP_ADMITTED | TRACE_ARM64_INT_FORL_ADMITTED |
+	   TRACE_ARM64_TRUE_FUNCF_ADMITTED | TRACE_ARM64_INT_SIDE_ADMITTED)) ==
+	 TRACE_ARM64_INT_LOOP_ADMITTED);
+  assert(trace_nk_acq(T) == REF_TRUE-2u);
+  ir = trace_ir_acq(T);
+  assert(ir[REF_TRUE-2u].o == IR_KNUM);
+  assert(ir[REF_TRUE-2u].t.irt == IRT_NUM);
+  assert(ir_knum(&ir[REF_TRUE-2u])->u64 ==
+	 UINT64_C(0x3fe0000000000000));
   lua_close(L);
 }
 
@@ -741,7 +763,7 @@ int main(int argc, char **argv)
     assert(strcmp(argv[1], "direct") == 0 ||
 	   strcmp(argv[1], "randomized") == 0);
   test_positive_and_hot_type_exit();
-  test_knum_fp_compare_rejected();
+  test_pure_num_root_isolated();
   test_conversion_rejected();
   test_num_mul_rejected();
   puts("t-arm64-jit-numeric-loop OK");

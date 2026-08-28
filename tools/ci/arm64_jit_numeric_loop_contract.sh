@@ -119,8 +119,12 @@ for required in \
   'TRACE_ARM64_INT_LOOP_ADMITTED' \
   'trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0' \
   'expect_native_exit(0, 6);' \
+  'static void test_pure_num_root_isolated(void)' \
   'function __arm64_numeric_negative(limit) local x=0.5' \
   'while x<limit do x=x+0.5 end return x end' \
+  'assert(proto_trace_acq(pt) == 1);' \
+  'assert(ir[REF_TRUE-2u].o == IR_KNUM);' \
+  'UINT64_C(0x3fe0000000000000)' \
   'while i<n do i=i+1; x=x+i end return x end' \
   'while i<n do i=i+1; x=x*step end return x end' \
   'run_lua(L, "jit.flush()")' \
@@ -131,8 +135,11 @@ for required in \
   }
 done
 
-if grep -E 'IR_(KNUM|CONV|MUL|DIV)|IRT_NUM\|IRT_GUARD.*IR_(LT|GT)' \
-     "$fixture_source" >/dev/null; then
+if awk '/^static void expect_ir_shape\(/ { copy=1 }
+        copy { print }
+        copy && /^}/ { exit }' "$fixture_source" | \
+     grep -E 'IR_(KNUM|CONV|MUL|DIV)|IR_(LT|GT), IRT_NUM\|IRT_GUARD' \
+       >/dev/null; then
   echo "ARM64 numeric positive IR certificate gained a closed family" >&2
   exit 1
 fi
@@ -258,4 +265,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
     XCFLAGS="$xcflags"
 restore_needed=0
 
-echo "arm64_jit_numeric_loop_contract OK: exact spill-free mixed INT/NUM loop and FPR-restoring XPOLL lifecycle ran on ARM64 and ARM64e/BTI; KNUM/FP-compare, CONV, MUL and sides stayed closed"
+echo "arm64_jit_numeric_loop_contract OK: exact spill-free mixed INT/NUM loop and FPR-restoring XPOLL lifecycle ran on ARM64 and ARM64e/BTI; the separate half-step root stayed isolated while CONV, MUL and mixed-root sides remained closed"
