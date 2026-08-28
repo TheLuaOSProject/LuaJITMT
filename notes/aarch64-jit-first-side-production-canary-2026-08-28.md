@@ -13,8 +13,9 @@ The opening is deliberately granular:
   `LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED` to `0`;
 - the assembler-only and one-shot publication fixtures set the granular gate
   back to `1`; and
-- GDBJIT and PERFTOOLS builds also keep it at `1`, because the finite
-  transaction does not yet integrate deferred registration callbacks.
+- PERFTOOLS builds keep it at `1`; GDBJIT now keeps it open through the bounded
+  split transaction documented in
+  `aarch64-jit-first-side-gdbjit-2026-08-28.md`.
 
 Unsupported first-side shapes, side-of-side recording, TRACE callbacks and
 the generic ARM64 side publication path remain closed.
@@ -92,8 +93,8 @@ Silicon host with:
 - helper arm64 GC-claim, scoped-flush and full-flush runs;
 - helper arm64e/BTI/PAUTH versions of the same three runs;
 - strict fixture compilation with `-Wall -Wextra -Werror`;
-- arm64 and arm64e preprocessing proofs that GDBJIT and PERFTOOLS close the
-  granular gate; and
+- arm64 and arm64e preprocessing proofs that GDBJIT opens and PERFTOOLS closes
+  the granular gate; and
 - restoration of the ordinary experimental helper build afterward.
 
 The metadata contract additionally covers valid and rejected CLAIM states and

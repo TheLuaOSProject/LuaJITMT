@@ -1,5 +1,10 @@
 # ARM64 GDBJIT preparation checkpoint (2026-08-27)
 
+This note records the pre-integration split. Exact first-side integration is now
+implemented and validated in
+`aarch64-jit-first-side-gdbjit-2026-08-28.md`; the future-tense constraints below
+describe the state at this checkpoint.
+
 ## Scope
 
 This checkpoint isolates optional GDB JIT metadata from the future first-side
