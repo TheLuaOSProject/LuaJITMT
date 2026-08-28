@@ -29,6 +29,7 @@ value_region=$tmpdir/value-region.txt
 postra_region=$tmpdir/postra-region.txt
 positive_region=$tmpdir/positive-region.txt
 numhalf_region=$tmpdir/numhalf-region.txt
+numstep_region=$tmpdir/numstep-region.txt
 audit_object=$tmpdir/lj_asm-arm64e.o
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT'
 
@@ -182,7 +183,7 @@ done
 # mixed-NUM profile, snapshots, suffix, register file or spill policy.
 awk '/^static void make_numhalf_trace\(/ { copying = 1 }
      copying { print }
-     copying && /^static LJArm64IRReject expect_reject\(/ { exit }' \
+     copying && /^static void make_numstep_trace\(/ { exit }' \
   "$root/tests/t-arm64-jit-ir-admission.c" >"$numhalf_region"
 test -s "$numhalf_region"
 test "$(grep -c 'IR_KNUM' "$numhalf_region")" -eq 1
@@ -220,8 +221,8 @@ for required in \
   'static int arm64_postra_numhalf_shape(const LJArm64PostRAView *view,' \
   '!arm64_postra_numhalf_constant(view->ir, view->nk, 1)' \
   '!arm64_postra_numhalf_shape(view, semantic_nins)' \
-  'constant_profile != ARM64_IR_KPROFILE_HALF || !suffix_is_nop ||' \
-  'nrename != 0 || spadjust != 0 || highest_end != 0'; do
+  'if (!suffix_is_nop || nrename != 0 || spadjust != 0 || highest_end != 0)' \
+  'if (constant_profile == ARM64_IR_KPROFILE_HALF)'; do
   grep -F "$required" "$classifier" >/dev/null || {
     echo "ARM64 pure NUM production contract changed: $required" >&2
     exit 1
@@ -272,6 +273,113 @@ for required in \
   'test_numhalf_postra_layout(J);'; do
   grep -F "$required" "$root/tests/t-arm64-jit-ir-admission.c" >/dev/null || {
     echo "ARM64 pure NUM mutation coverage changed: $required" >&2
+    exit 1
+  }
+done
+
+# The dynamic-step pure-NUM fixture is a fourth, separately certified grammar.
+# Its prototype uses +0.5 only to initialize x; its IR has no constants and
+# carries X, STEP and LIMIT entirely in FPRs.
+awk '/^static void make_numstep_trace\(/ { copying = 1 }
+     copying { print }
+     copying && /^static LJArm64IRReject expect_reject\(/ { exit }' \
+  "$root/tests/t-arm64-jit-ir-admission.c" >"$numstep_region"
+test -s "$numstep_region"
+test "$(grep -c 'IR_KNUM' "$numstep_region" || true)" -eq 0
+test "$(grep -c 'IR_SLOAD' "$numstep_region")" -eq 3
+test "$(grep -c 'IR_ADD,' "$numstep_region")" -eq 2
+test "$(grep -c 'IR_GT' "$numstep_region")" -eq 1
+test "$(grep -c 'IR_LT' "$numstep_region")" -eq 1
+test "$(grep -c 'IR_LOOP' "$numstep_region")" -eq 1
+test "$(grep -c 'IR_XPOLL' "$numstep_region")" -eq 1
+test "$(grep -c 'IR_PHI' "$numstep_region")" -eq 1
+
+for required in \
+  'ARM64_NUMSTEP_R_X = REF_FIRST,' \
+  'ARM64_NUMSTEP_R_STEP,' \
+  'ARM64_NUMSTEP_SEMANTIC_NINS' \
+  'static int arm64_numstep_snapshots(const SnapShot *snap,' \
+  'static const uint8_t nslots[5] = { 5, 6, 5, 5, 5 };' \
+  'static const uint8_t pcpos[5] = { 7, 3, 12, 7, 12 };' \
+  'SNAP(5, 0, ARM64_NUMSTEP_R_X_PRE),' \
+  'SNAP(4, 0, ARM64_NUMSTEP_R_X_BODY)' \
+  'nsnap != 5 || nsnapmap != 15 || proto_sizebc != 14' \
+  'static int arm64_ir_numstep_bytecode(const GCproto *pt,' \
+  'pt->sizebc != 14 || pt->numparams != 2 || pt->sizeuv != 0' \
+  'pt->sizekn != 1 || pt->sizekgc != 0' \
+  'proto_knumtv(pt, 0)->u64 != ARM64_NUMHALF_BITS' \
+  'if (startpc != bc+6)' \
+  'bc_op(ins) != BC_LOOP || bc_a(ins) != 3 || bc_j(ins) != 5' \
+  'bc_op(ins) != BC_ADDVV || bc_a(ins) != 3 ||' \
+  'return bc_op(ins) == BC_JMP && bc_a(ins) == 3 && bc_j(ins) == -10;' \
+  'static int arm64_ir_numstep_shape(const jit_State *J, const GCtrace *T,' \
+  'T->nk != REF_TRUE || T->nins != ARM64_NUMSTEP_SEMANTIC_NINS' \
+  '!arm64_ir_numstep_bytecode(pt, trace_startpc_acq((GCtrace *)T))' \
+  '!arm64_ir_numstep_shape(J, T, pt, firstphi, reject)' \
+  'static int arm64_postra_numstep_shape(const LJArm64PostRAView *view,' \
+  'view->nk != REF_TRUE ||' \
+  '} else if (constant_profile == ARM64_IR_KPROFILE_INT) {' \
+  '!arm64_postra_numstep_shape(view, semantic_nins)' \
+  '} else if (constant_profile == ARM64_IR_KPROFILE_INT &&' \
+  'T->nk == REF_TRUE) {' \
+  'xphi.r == xpre.r && xphi.r == xbody.r &&' \
+  'step.r != xphi.r && limit.r != xphi.r && step.r != limit.r &&' \
+  'x.r != step.r;'; do
+  grep -F "$required" "$classifier" >/dev/null || {
+    echo "ARM64 dynamic-step NUM production contract changed: $required" >&2
+    exit 1
+  }
+done
+
+for required in \
+  'static void make_numstep_trace(jit_State *J)' \
+  'assert(numstep_fixture_pt->framesize == 5);' \
+  'assert(numstep_fixture_pt->sizebc == 14);' \
+  'assert(numstep_fixture_pt->numparams == 2);' \
+  'setir(D_R_X, IR_SLOAD, IRT_NUM|IRT_GUARD,' \
+  'setir(D_R_STEP, IR_SLOAD, IRT_NUM|IRT_GUARD,' \
+  'setir(D_R_X_PRE, IR_ADD, IRT_NUM|IRT_ISPHI,' \
+  'setir(D_R_PRE_GUARD, IR_GT, IRT_NUM|IRT_GUARD,' \
+  'setir(D_R_X_BODY, IR_ADD, IRT_NUM|IRT_ISPHI,' \
+  'setir(D_R_BODY_GUARD, IR_LT, IRT_NUM|IRT_GUARD,' \
+  'setir(D_R_X_PHI, IR_PHI, IRT_NUM, D_R_X_PRE, D_R_X_BODY);' \
+  'fx.T.nk = REF_TRUE;' \
+  'static const uint8_t nslots[5] = { 5, 6, 5, 5, 5 };' \
+  'static const MSize pcpos[5] = { 7, 3, 12, 7, 12 };' \
+  'fx.ir[D_R_STEP].r = RID_D1;' \
+  'fx.ir[D_R_X_PRE].r = RID_D15;' \
+  'fx.ir[D_R_LIMIT].r = RID_D0;' \
+  'fx.ir[D_R_X].r = fx.ir[D_R_LIMIT].r;' \
+  'fx.ir[D_R_X].r = fx.ir[D_R_X_PHI].r;' \
+  'fx.ir[D_R_STEP].r = fx.ir[D_R_X_PHI].r;' \
+  'fx.ir[D_R_LIMIT].r = fx.ir[D_R_X_PHI].r;' \
+  'fx.ir[D_R_STEP].r = fx.ir[D_R_LIMIT].r;' \
+  'fx.ir[D_R_X].r = fx.ir[D_R_STEP].r;' \
+  'fx.ir[value_refs[i]].r = RID_X0;' \
+  'fx.ir[value_refs[i]].r = RID_MAX_FPR;' \
+  'fx.ir[value_refs[i]].s = 2;' \
+  'setir(D_R_NOP, IR_RENAME, IRT_NIL, D_R_X_PRE, 3);' \
+  'fx.T.nk = REF_TRUE-1u;' \
+  'fx.T.nk = H_K_HALF;' \
+  'REJECT_NUMSTEP_ADJACENT(IR_CONV, IRT_NUM|IRT_ISPHI,' \
+  'REJECT_NUMSTEP_ADJACENT(IR_SUB, IRT_NUM|IRT_ISPHI,' \
+  'REJECT_NUMSTEP_ADJACENT(IR_MUL, IRT_NUM|IRT_ISPHI,' \
+  'REJECT_NUMSTEP_ADJACENT(IR_DIV, IRT_NUM|IRT_ISPHI,' \
+  'fx.snapmap[9] = SNAP(4, SNAP_NORESTORE, D_R_X_PRE);' \
+  'bc_publish((const uint32_t *)pc, saved ^ masks[bitno]);' \
+  'numstep_fixture_pt->framesize = 4;' \
+  'numstep_fixture_pt->sizebc = 13;' \
+  'numstep_fixture_pt->numparams = 1;' \
+  'numstep_fixture_pt->sizeuv = 1;' \
+  'numstep_fixture_pt->sizekn = 0;' \
+  'numstep_fixture_pt->sizekgc = 1;' \
+  'proto_knumtv(numstep_fixture_pt, 0)->u64 = UINT64_C(0xbfe0000000000000);' \
+  'proto_knumtv(numstep_fixture_pt, 0)->u64 = UINT64_C(0x7ff0000000000000);' \
+  'proto_knumtv(numstep_fixture_pt, 0)->u64 = UINT64_C(0x7ff8000000000000);' \
+  'test_numstep_positive_and_negative(J);' \
+  'test_numstep_postra_layout(J);'; do
+  grep -F "$required" "$root/tests/t-arm64-jit-ir-admission.c" >/dev/null || {
+    echo "ARM64 dynamic-step NUM mutation coverage changed: $required" >&2
     exit 1
   }
 done
@@ -601,4 +709,4 @@ grep -F '#if LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED' \
   -o "$fixture"
 "$fixture"
 
-echo "arm64_jit_ir_admission_contract OK: exact integer, mixed-NUM and pure-NUM LOOP/FORL grammar, bounded integer spills, and FPR-only NUM layout verified"
+echo "arm64_jit_ir_admission_contract OK: exact integer, mixed-NUM, fixed-half and dynamic-step pure-NUM LOOP/FORL grammars, bounded integer spills, and FPR-only NUM layouts verified"
