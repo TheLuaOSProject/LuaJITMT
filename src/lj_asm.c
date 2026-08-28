@@ -3445,8 +3445,15 @@ static int asm_test_side_probe_finish(jit_State *J, GCtrace *T)
   asm_test_side_probe.child = trace_traceno_acq(T);
   asm_test_side_probe.marker =
     (uint8_t)(la_load8_acq(&T->unused1) & TRACE_ARM64_INT_SIDE_ADMITTED);
-  if (lj_trace_test_arm64_side_publish_seal(J, T))
-    asm_test_side_probe.stages |= LJ_ARM64_SIDE_ASM_PROBE_SEAL;
+  if (lj_trace_test_arm64_side_compact_roundtrip(J, T,
+	&asm_test_side_probe.compact_geometry_reject,
+	&asm_test_side_probe.compact_init,
+	&asm_test_side_probe.compact_reset,
+	&asm_test_side_probe.compact_pauth)) {
+    asm_test_side_probe.stages |= LJ_ARM64_SIDE_ASM_PROBE_COMPACT;
+    if (lj_trace_test_arm64_side_publish_seal(J, T))
+      asm_test_side_probe.stages |= LJ_ARM64_SIDE_ASM_PROBE_SEAL;
+  }
   asm_test_side_probe.seal_failure =
     lj_trace_test_arm64_side_publish_seal_failure();
   asm_test_side_probe.raw_negative =

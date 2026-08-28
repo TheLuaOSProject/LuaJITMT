@@ -174,10 +174,14 @@ static void expect_root_shape(jit_State *J, GCproto *pt, GCtrace **rootp,
 static void dump_probe(const LJArm64SideAsmProbe *probe)
 {
   fprintf(stderr,
-    "side assembler probe stages=%#x captures=%u seal_failure=%u raw_negative=%u "
+    "side assembler probe stages=%#x captures=%u compact=%u/%u/%u/%u "
+    "seal_failure=%u raw_negative=%u "
     "parent=%u child=%u "
     "exit=%u mapn=%u entry_words=%u tail_pc=%p tail=%#x marker=%#x\n",
     (unsigned)probe->stages, (unsigned)probe->capture_count,
+    (unsigned)probe->compact_geometry_reject,
+    (unsigned)probe->compact_init, (unsigned)probe->compact_reset,
+    (unsigned)probe->compact_pauth,
     (unsigned)probe->seal_failure, (unsigned)probe->raw_negative,
     (unsigned)probe->parent, (unsigned)probe->child,
     (unsigned)probe->exitno, (unsigned)probe->parentmap_n,
@@ -282,6 +286,10 @@ int main(void)
   if (probe.stages != LJ_ARM64_SIDE_ASM_PROBE_ALL)
     dump_probe(&probe);
   assert(probe.stages == LJ_ARM64_SIDE_ASM_PROBE_ALL);
+  assert(probe.compact_geometry_reject == 1);
+  assert(probe.compact_init == 1);
+  assert(probe.compact_reset == 1);
+  assert(probe.compact_pauth == (uint32_t)LJ_ABI_PAUTH);
   assert(probe.seal_failure == 0);
   assert(probe.raw_negative == (uint32_t)LJ_ABI_PAUTH);
   assert(probe.capture_count == 2);

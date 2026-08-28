@@ -6107,11 +6107,6 @@ static TraceNo trace_findfree(jit_State *J)
   return J->freetrace;
 }
 
-#define TRACE_APPENDVEC(field, szfield, tp) \
-  T->field = (tp *)p; \
-  memcpy(p, J->cur.field, J->cur.szfield*sizeof(tp)); \
-  p += J->cur.szfield*sizeof(tp);
-
 #ifdef LUAJIT_USE_PERFTOOLS
 /*
 ** Create symbol table of JIT-compiled code. For use with Linux perf tools.
@@ -6171,6 +6166,385 @@ static void perftools_addtrace(jit_State *J, GCtrace *T)
 }
 #endif
 
+typedef struct TraceCompactBodyPlan {
+  GCtrace *body;
+  GCtrace *source;
+  IRIns *ir;
+  SnapShot *snap;
+  SnapEntry *snapmap;
+  const SnapShot *source_snap;
+  const SnapEntry *source_snapmap;
+  IRRef nins;
+  IRRef nk;
+  SnapNo nsnap;
+  MSize nsnapmap;
+  GCSize size;
+} TraceCompactBodyPlan;
+
+/* Restore the exact semantic constructor header for a compact trace body.
+** The reserved snapshot tail stays opaque: it has no ownership until the
+** private body initializer installs its derived pointers. */
+static void trace_compact_scratch_init(GCtrace *T, IRIns *ir,
+	IRRef nins, IRRef nk, SnapNo nsnap, MSize nsnapmap)
+{
+  setgcrefnullrel(T->nextgc);
+  la_store8_rel(&T->gct, (uint8_t)~LJ_TTRACE);
+  lj_obj_setgcflags(obj2gco(T), 0);
+#if LJ_GC64
+  la_store32_rel(&T->unused_gc64, 0);
+#endif
+  setgcrefnullrel(T->gclist);
+  trace_traceno_rel(T, 0);
+  la_storeptr_rel((void **)&T->ir, ir);
+  la_store32_rel(&T->nins, nins);
+  la_store32_rel(&T->nk, nk);
+  la_store16_rel(&T->nsnap, (uint16_t)nsnap);
+  la_store32_rel(&T->nsnapmap, nsnapmap);
+  la_storeptr_rel((void **)&T->snap, NULL);
+  la_storeptr_rel((void **)&T->snapmap, NULL);
+  trace_startpt_clear(T);
+  setmrefrel(T->startpc, NULL);
+  la_store32_rel(&T->startins, 0);
+  la_store32_rel(&T->szmcode, 0);
+  la_storeptr_rel((void **)&T->mcode, NULL);
+  trace_exittab_rel(T, NULL);
+  trace_exitstub_rel(T, NULL);
+#if LJ_ABI_PAUTH
+  la_storefunc_rel(&T->mcauth, NULL);
+#endif
+  la_store32_rel(&T->mcloop, 0);
+  trace_nchild_rel(T, 0);
+  la_store16_rel(&T->spadjust, 0);
+  trace_link_rel(T, 0);
+  traceno16_rel(&T->root, 0);
+  trace_nextroot_rel(T, 0);
+  trace_nextside_rel(T, 0);
+  la_store8_rel(&T->sinktags, 0);
+  la_store8_rel(&T->topslot, 0);
+  la_store8_rel(&T->linktype, 0);
+  la_store8_rel(&T->unused1, 0);
+  la_store32_rel(&T->native_pins, 0);
+  la_store64_rel(&T->retire_epoch, 0);
+  trace_retired_link_unlinked_rel(T);
+#ifdef LUAJIT_USE_GDBJIT
+  trace_gdbjit_entry_rel(T, NULL);
+#endif
+}
+
+/* Capture the complete compact geometry without mutating either owner. This
+** is the last fallible validation before private body initialization. */
+static int trace_compact_body_plan(jit_State *J, GCtrace *body,
+	TraceCompactBodyPlan *plan)
+{
+  TraceCompactBodyPlan local;
+  GCtrace *source;
+  GCSize size, expected;
+  SnapNo checked_nsnap;
+  char *p;
+
+  if (J == NULL || body == NULL || plan == NULL || body != J->curfinal)
+    return 0;
+  source = &J->cur;
+  if (body == source || la_load8_acq(&body->gct) != (uint8_t)~LJ_TTRACE ||
+      gcref_acq(body->nextgc) != NULL ||
+      lj_obj_gcflags(obj2gco(body)) != 0 ||
+      gcref_acq(body->gclist) != NULL ||
+      trace_traceno_acq(body) != 0 || trace_link_acq(body) != 0 ||
+      trace_root_acq(body) != 0 || trace_nextroot_acq(body) != 0 ||
+      trace_nextside_acq(body) != 0 || trace_nchild_acq(body) != 0 ||
+      trace_spadjust_acq(body) != 0 || trace_startptgco_acq(body) != NULL ||
+      trace_startpc_acq(body) != NULL || trace_startins_acq(body) != 0 ||
+      trace_snap_acq(body) != NULL || trace_snapmap_acq(body) != NULL ||
+      trace_szmcode_acq(body) != 0 || trace_mcode_acq(body) != NULL ||
+      trace_exittab_acq(body) != NULL || trace_exitstub_acq(body) != NULL ||
+      trace_mcloop_acq(body) != 0 || la_load8_acq(&body->sinktags) != 0 ||
+      trace_topslot_acq(body) != 0 || trace_linktype_acq(body) != 0 ||
+      la_load8_acq(&body->unused1) != 0 ||
+      trace_native_pinword_acq(body) != 0 ||
+      la_load64_acq(&body->retire_epoch) != 0 ||
+      trace_retired_link_acq(body) != TRACE_RETIRED_LINK_UNLINKED)
+    return 0;
+#if LJ_GC64
+  if (la_load32_acq(&body->unused_gc64) != 0)
+    return 0;
+#endif
+#if LJ_ABI_PAUTH
+  if (trace_mcauth_acq(body) != NULL)
+    return 0;
+#endif
+#ifdef LUAJIT_USE_GDBJIT
+  if (trace_gdbjit_entry_acq(body) != NULL)
+    return 0;
+#endif
+
+  local.nins = trace_nins_acq(body);
+  local.nk = trace_nk_acq(body);
+  local.nsnap = trace_nsnap_acq(body);
+  local.nsnapmap = trace_nsnapmap_acq(body);
+  if (local.nins != trace_nins_acq(source) ||
+      local.nk != trace_nk_acq(source) ||
+      local.nsnap != trace_nsnap_acq(source) ||
+      local.nsnapmap != trace_nsnapmap_acq(source) ||
+      (local.nsnap != 0 && trace_snap_acq(source) == NULL) ||
+      (local.nsnapmap != 0 && trace_snapmap_acq(source) == NULL) ||
+      !trace_size_checked(J2G(J), body, &size, &checked_nsnap))
+    return 0;
+
+  p = (char *)body + ((sizeof(GCtrace)+7)&~7);
+  local.ir = trace_ir_acq(body);
+  if (local.ir == NULL || &local.ir[local.nk] != (IRIns *)p)
+    return 0;
+  p += (MSize)(local.nins-local.nk) * sizeof(IRIns);
+  local.snap = (SnapShot *)p;
+  p += (MSize)local.nsnap * sizeof(SnapShot);
+  local.snapmap = (SnapEntry *)p;
+  p += local.nsnapmap * sizeof(SnapEntry);
+  expected = (GCSize)(p-(char *)body);
+  if (checked_nsnap != local.nsnap || size != expected)
+    return 0;
+
+  local.body = body;
+  local.source = source;
+  local.source_snap = trace_snap_acq(source);
+  local.source_snapmap = trace_snapmap_acq(source);
+  local.size = size;
+  *plan = local;
+  return 1;
+}
+
+/* Initialize only the private compact body. This deliberately performs no
+** allocation, callback, ownership transfer, GC-root/slot publication, mcode
+** commit, SMR operation or recorder-state transition. */
+static void trace_compact_body_init(jit_State *J,
+	const TraceCompactBodyPlan *plan)
+{
+  GCtrace *T = plan->body;
+  GCtrace *source = plan->source;
+
+  /* Preserve the upstream trace_save() semantic-header copy. Destination-only
+  ** ownership is replaced below before this private body can be published. */
+  memcpy(T, source, sizeof(GCtrace));
+  setgcrefnullrel(T->nextgc);
+  newwhite(J2G(J), T);
+  la_store8_rel(&T->gct, (uint8_t)~LJ_TTRACE);
+#if LJ_GC64
+  la_store32_rel(&T->unused_gc64, 0);
+#endif
+  setgcrefnullrel(T->gclist);
+  la_storeptr_rel((void **)&T->ir, plan->ir);
+  if (plan->nsnap != 0)
+    memcpy(plan->snap, plan->source_snap,
+	   (MSize)plan->nsnap*sizeof(SnapShot));
+  if (plan->nsnapmap != 0)
+    memcpy(plan->snapmap, plan->source_snapmap,
+	   plan->nsnapmap*sizeof(SnapEntry));
+  la_storeptr_rel((void **)&T->snap, plan->snap);
+  la_storeptr_rel((void **)&T->snapmap, plan->snapmap);
+#if LJ_ABI_PAUTH
+  la_storefunc_rel(&T->mcauth, lj_ptr_sign(
+	 ptrauth_nop_cast(ASMFunction, trace_mcode_acq(source)), T));
+#endif
+  la_store32_rel(&T->native_pins, 0);
+  la_store64_rel(&T->retire_epoch, 0);
+  trace_retired_link_unlinked_rel(T);
+#ifdef LUAJIT_USE_GDBJIT
+  trace_gdbjit_entry_rel(T, NULL);
+#endif
+}
+
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
+static void trace_compact_body_reset(const TraceCompactBodyPlan *plan)
+{
+  trace_compact_scratch_init(plan->body, plan->ir, plan->nins, plan->nk,
+	plan->nsnap, plan->nsnapmap);
+}
+
+static int trace_compact_body_initialized_valid(jit_State *J,
+	const TraceCompactBodyPlan *plan)
+{
+  global_State *g = J2G(J);
+  GCtrace *T = plan->body;
+  GCtrace *source = plan->source;
+
+  if (T != J->curfinal || source != &J->cur ||
+      la_load8_acq(&T->gct) != (uint8_t)~LJ_TTRACE ||
+      gcref_acq(T->nextgc) != NULL ||
+      lj_obj_gcflags(obj2gco(T)) != (uint8_t)curwhite(g) ||
+      gcref_acq(T->gclist) != NULL ||
+      trace_nins_acq(T) != plan->nins || trace_nk_acq(T) != plan->nk ||
+      trace_nsnap_acq(T) != plan->nsnap ||
+      trace_nsnapmap_acq(T) != plan->nsnapmap ||
+      trace_ir_acq(T) != plan->ir || trace_snap_acq(T) != plan->snap ||
+      trace_snapmap_acq(T) != plan->snapmap ||
+      trace_startptgco_acq(T) != trace_startptgco_acq(source) ||
+      trace_startpc_acq(T) != trace_startpc_acq(source) ||
+      trace_startins_acq(T) != trace_startins_acq(source) ||
+      trace_szmcode_acq(T) != trace_szmcode_acq(source) ||
+      trace_mcode_acq(T) != trace_mcode_acq(source) ||
+      trace_exittab_acq(T) != trace_exittab_acq(source) ||
+      trace_exitstub_acq(T) != trace_exitstub_acq(source) ||
+      trace_mcloop_acq(T) != trace_mcloop_acq(source) ||
+      trace_nchild_acq(T) != trace_nchild_acq(source) ||
+      trace_spadjust_acq(T) != trace_spadjust_acq(source) ||
+      trace_traceno_acq(T) != trace_traceno_acq(source) ||
+      trace_link_acq(T) != trace_link_acq(source) ||
+      trace_root_acq(T) != trace_root_acq(source) ||
+      trace_nextroot_acq(T) != trace_nextroot_acq(source) ||
+      trace_nextside_acq(T) != trace_nextside_acq(source) ||
+      la_load8_acq(&T->sinktags) != la_load8_acq(&source->sinktags) ||
+      trace_topslot_acq(T) != trace_topslot_acq(source) ||
+      trace_linktype_acq(T) != trace_linktype_acq(source) ||
+      la_load8_acq(&T->unused1) != la_load8_acq(&source->unused1) ||
+      trace_native_pinword_acq(T) != 0 ||
+      la_load64_acq(&T->retire_epoch) != 0 ||
+      trace_retired_link_acq(T) != TRACE_RETIRED_LINK_UNLINKED ||
+      !trace_body_refs_valid(g, T, NULL))
+    return 0;
+#if LJ_GC64
+  if (la_load32_acq(&T->unused_gc64) != 0)
+    return 0;
+#endif
+#ifdef LUAJIT_USE_GDBJIT
+  if (trace_gdbjit_entry_acq(T) != NULL)
+    return 0;
+#endif
+  if ((plan->nsnap != 0 &&
+       memcmp(plan->snap, plan->source_snap,
+	      (MSize)plan->nsnap*sizeof(SnapShot)) != 0) ||
+      (plan->nsnapmap != 0 &&
+       memcmp(plan->snapmap, plan->source_snapmap,
+	      plan->nsnapmap*sizeof(SnapEntry)) != 0))
+    return 0;
+  return 1;
+}
+
+static int trace_compact_side_cert_equal(
+	const LJTraceArm64SideParentCert *a,
+	const LJTraceArm64SideParentCert *b)
+{
+  return a->tracev == b->tracev && a->body == b->body &&
+	a->mcode == b->mcode && a->continuation == b->continuation &&
+	a->continuationins == b->continuationins && a->parent == b->parent &&
+	a->exitno == b->exitno && a->child == b->child;
+}
+
+static int trace_compact_side_owner_unchanged(jit_State *J,
+	const GCtrace *source_header, GCtrace *body,
+	const LJTraceArm64SideParentCert *cert, GCRef *childslot,
+	GCobj *childslot_value, TraceState state, uint32_t readers)
+{
+  return J->curfinal == body &&
+	memcmp(&J->cur, source_header, sizeof(*source_header)) == 0 &&
+	trace_compact_side_cert_equal(&J->arm64_side_parent, cert) &&
+	childslot != NULL && gcref_acq(*childslot) == childslot_value &&
+	lj_trace_state_load(J) == state &&
+	gc2_smr_readers_acq(J2G(J)) == readers;
+}
+
+#define TRACE_TEST_COMPACT_IR_MAX 4096u
+int lj_trace_test_arm64_side_compact_roundtrip(jit_State *J, GCtrace *T,
+	uint32_t *geometry_reject, uint32_t *init_ok, uint32_t *reset_ok,
+	uint32_t *pauth_ok)
+{
+  TraceCompactBodyPlan plan, reset_plan, rejected_plan;
+  LJTraceArm64SideParentCert cert;
+  GCtrace source_header, negative_header;
+  GCtrace *body;
+  GCRef *childslot;
+  GCobj *childslot_value;
+  TraceState state;
+  uint8_t saved_ir[TRACE_TEST_COMPACT_IR_MAX];
+  MSize irbytes, saved_nsnapmap;
+  uint32_t readers;
+  int initialized = 0;
+  int reset = 0;
+#if LJ_ABI_PAUTH
+  int pauth = 0;
+#endif
+
+  if (geometry_reject != NULL) *geometry_reject = 0;
+  if (init_ok != NULL) *init_ok = 0;
+  if (reset_ok != NULL) *reset_ok = 0;
+  if (pauth_ok != NULL) *pauth_ok = 0;
+  if (J == NULL || T == NULL || T != &J->cur ||
+      geometry_reject == NULL || init_ok == NULL || reset_ok == NULL ||
+      pauth_ok == NULL || J->curfinal == NULL)
+    return 0;
+  body = J->curfinal;
+  cert = J->arm64_side_parent;
+  if (cert.tracev == NULL || cert.child == 0 ||
+      (MSize)cert.child >= cert.tracev->sizetrace)
+    return 0;
+  childslot = &cert.tracev->slot[cert.child];
+  childslot_value = gcref_acq(*childslot);
+  if (childslot_value != (GCobj *)LJ_TRACE_PENDING)
+    return 0;
+  memcpy(&source_header, &J->cur, sizeof(source_header));
+  state = lj_trace_state_load(J);
+  readers = gc2_smr_readers_acq(J2G(J));
+
+  /* A count mismatch must be rejected before the validator's first write. */
+  saved_nsnapmap = trace_nsnapmap_acq(body);
+  if (saved_nsnapmap == UINT32_MAX)
+    return 0;
+  body->nsnapmap = saved_nsnapmap+1u;
+  memcpy(&negative_header, body, sizeof(negative_header));
+  if (!trace_compact_body_plan(J, body, &rejected_plan) &&
+      memcmp(body, &negative_header, sizeof(negative_header)) == 0 &&
+      trace_compact_side_owner_unchanged(J, &source_header, body, &cert,
+	childslot, childslot_value, state, readers))
+    *geometry_reject = 1;
+  body->nsnapmap = saved_nsnapmap;
+  if (*geometry_reject == 0 ||
+      !trace_compact_body_plan(J, body, &plan))
+    return 0;
+
+  irbytes = (MSize)(plan.nins-plan.nk) * sizeof(IRIns);
+  if (irbytes > TRACE_TEST_COMPACT_IR_MAX)
+    return 0;
+  memcpy(saved_ir, &plan.ir[plan.nk], irbytes);
+  trace_compact_body_init(J, &plan);
+  initialized = trace_compact_body_initialized_valid(J, &plan) &&
+	memcmp(saved_ir, &plan.ir[plan.nk], irbytes) == 0 &&
+	trace_compact_side_owner_unchanged(J, &source_header, body, &cert,
+	  childslot, childslot_value, state, readers);
+#if LJ_ABI_PAUTH
+  {
+    ASMFunction expected = lj_ptr_sign(
+	  ptrauth_nop_cast(ASMFunction, trace_mcode_acq(body)), body);
+    ASMFunction actual = trace_mcauth_acq(body);
+    pauth = trace_arm64_first_side_function_bits(actual) ==
+	trace_arm64_first_side_function_bits(expected) &&
+	ptrauth_nop_cast(MCode *, lj_ptr_strip(actual)) ==
+	  trace_mcode_acq(body);
+    initialized = initialized && pauth;
+  }
+#endif
+  trace_compact_body_reset(&plan);
+  if (trace_compact_body_plan(J, body, &reset_plan)) {
+    reset = reset_plan.body == plan.body && reset_plan.source == plan.source &&
+	reset_plan.ir == plan.ir && reset_plan.nins == plan.nins &&
+	reset_plan.nk == plan.nk && reset_plan.nsnap == plan.nsnap &&
+	reset_plan.nsnapmap == plan.nsnapmap && reset_plan.size == plan.size &&
+	memcmp(saved_ir, &plan.ir[plan.nk], irbytes) == 0 &&
+	trace_compact_side_owner_unchanged(J, &source_header, body, &cert,
+	  childslot, childslot_value, state, readers) &&
+	trace_arm64_side_publish_body_alloc_valid(J, T, body);
+  }
+  if (LJ_UNLIKELY(!reset)) {
+    lj_assertJ(0, "test compact-body rollback did not restore constructor");
+    abort();
+  }
+  *init_ok = (uint32_t)initialized;
+  *reset_ok = (uint32_t)reset;
+#if LJ_ABI_PAUTH
+  *pauth_ok = (uint32_t)pauth;
+#endif
+  return *geometry_reject != 0 && initialized && reset &&
+	*pauth_ok == (uint32_t)LJ_ABI_PAUTH;
+}
+#endif
+
 /* Allocate space for copy of T. */
 GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T)
 {
@@ -6182,48 +6556,8 @@ GCtrace * LJ_FASTCALL lj_trace_alloc(lua_State *L, GCtrace *T)
   GCtrace *T2 = (GCtrace *)lj_mem_newgco_raw(
     L, (MSize)sz, LJ_AF_TRAVERSABLE|LJ_AF_ROOT_CONSTRUCT);
   char *p = (char *)T2 + sztr;
-  setgcrefnull(T2->nextgc);
-  T2->gct = ~LJ_TTRACE;
-  lj_obj_setgcflags(obj2gco(T2), 0);
-#if LJ_GC64
-  T2->unused_gc64 = 0;
-#endif
-  setgcrefnull(T2->gclist);
-  T2->traceno = 0;
-  T2->ir = (IRIns *)p - T->nk;
-  T2->nins = T->nins;
-  T2->nk = T->nk;
-  T2->nsnap = T->nsnap;
-  T2->nsnapmap = T->nsnapmap;
-  T2->snap = NULL;
-  T2->snapmap = NULL;
-  trace_startpt_clear(T2);
-  setmref(T2->startpc, NULL);
-  T2->startins = 0;
-  T2->szmcode = 0;
-  T2->mcode = NULL;
-  T2->exittab = NULL;
-  T2->exitstub = NULL;
-#if LJ_ABI_PAUTH
-  T2->mcauth = NULL;
-#endif
-  T2->mcloop = 0;
-  T2->nchild = 0;
-  T2->spadjust = 0;
-  trace_link_rel(T2, 0);
-  T2->root = 0;
-  trace_nextroot_rel(T2, 0);
-  trace_nextside_rel(T2, 0);
-  T2->sinktags = 0;
-  T2->topslot = 0;
-  T2->linktype = 0;
-  T2->unused1 = 0;
-  T2->native_pins = 0;
-  T2->retire_epoch = 0;
-  trace_retired_link_unlinked_rel(T2);
-#ifdef LUAJIT_USE_GDBJIT
-  T2->gdbjit_entry = NULL;
-#endif
+  trace_compact_scratch_init(T2, (IRIns *)p-T->nk, T->nins, T->nk,
+	T->nsnap, T->nsnapmap);
   memcpy(p, T->ir + T->nk, szins);
   return T2;
 }
@@ -6301,23 +6635,13 @@ static void trace_exittab_resetroot(jit_State *J, TraceNo rootno)
 /* Save current trace by copying and compacting it. */
 static void trace_save(jit_State *J, GCtrace *T)
 {
-  size_t sztr = ((sizeof(GCtrace)+7)&~7);
-  size_t szins = (J->cur.nins-J->cur.nk)*sizeof(IRIns);
-  char *p = (char *)T + sztr;
+  TraceCompactBodyPlan plan;
   global_State *g = J2G(J);
-  memcpy(T, &J->cur, sizeof(GCtrace));
-  newwhite(g, T);
-  T->gct = ~LJ_TTRACE;
-  T->native_pins = 0;
-  T->retire_epoch = 0;
-  trace_retired_link_unlinked_rel(T);
-  T->ir = (IRIns *)p - J->cur.nk;  /* The IR has already been copied above. */
-#if LJ_ABI_PAUTH
-  T->mcauth = lj_ptr_sign((ASMFunction)T->mcode, T);
-#endif
-  p += szins;
-  TRACE_APPENDVEC(snap, nsnap, SnapShot)
-  TRACE_APPENDVEC(snapmap, nsnapmap, SnapEntry)
+  if (LJ_UNLIKELY(!trace_compact_body_plan(J, T, &plan))) {
+    lj_assertJ(0, "invalid compact trace body at publication");
+    abort();
+  }
+  trace_compact_body_init(J, &plan);
   J->cur.traceno = 0;
   J->cur.exittab = NULL;
   J->cur.exitstub = NULL;

@@ -128,11 +128,16 @@ enum {
   LJ_ARM64_SIDE_ASM_PROBE_FINAL = 0x20u,
   LJ_ARM64_SIDE_ASM_PROBE_MARKER = 0x40u,
   LJ_ARM64_SIDE_ASM_PROBE_SEAL = 0x80u,
-  LJ_ARM64_SIDE_ASM_PROBE_ALL = 0xffu
+  LJ_ARM64_SIDE_ASM_PROBE_COMPACT = 0x100u,
+  LJ_ARM64_SIDE_ASM_PROBE_ALL = 0x1ffu
 };
 typedef struct LJArm64SideAsmProbe {
   uint32_t stages;
   uint32_t capture_count;
+  uint32_t compact_geometry_reject;
+  uint32_t compact_init;
+  uint32_t compact_reset;
+  uint32_t compact_pauth;
   uint32_t seal_failure;
   uint32_t raw_negative;
   TraceNo parent;

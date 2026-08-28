@@ -72,6 +72,11 @@ lj_trace_arm64_side_parent_capture(jit_State *J);
 LJ_FUNC LJTraceArm64SideParentResult
 lj_trace_arm64_side_parent_revalidate(jit_State *J);
 #if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
+/* Test-only real-body round trip through the production compact initializer
+** and rollback constructor. All result words are exact booleans. */
+LJ_FUNC int lj_trace_test_arm64_side_compact_roundtrip(jit_State *J,
+  GCtrace *T, uint32_t *geometry_reject, uint32_t *init_ok,
+  uint32_t *reset_ok, uint32_t *pauth_ok);
 /* Test-only dry seal: proves and enters exact PUBLISH, exercises an asynchronous
 ** abort against it, then restores ASM before the mandatory unpublished abort. */
 LJ_FUNC int lj_trace_test_arm64_side_publish_seal(jit_State *J, GCtrace *T);

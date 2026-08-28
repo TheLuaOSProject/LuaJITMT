@@ -104,6 +104,11 @@ pauth_fixture=$tmpdir/t-arm64-jit-side-asm-consumption-arm64e
 pauth_obj=$tmpdir/t-arm64-jit-side-asm-consumption-arm64e.o
 pauth_macros=$tmpdir/macros-arm64e.txt
 bad_macros=$tmpdir/bad-macros.txt
+compact_scratch_region=$tmpdir/trace-compact-scratch.txt
+compact_plan_region=$tmpdir/trace-compact-plan.txt
+compact_init_region=$tmpdir/trace-compact-init.txt
+compact_reset_region=$tmpdir/trace-compact-reset.txt
+trace_save_region=$tmpdir/trace-save.txt
 restore_needed=1
 
 # The bypass is deliberately impossible in an ordinary helper build, and the
@@ -129,6 +134,8 @@ for required in \
   'asm_test_side_probe_tail(certified_parent_mcode, tail_pc);' \
   'asm_test_side_probe_note(LJ_ARM64_SIDE_ASM_PROBE_FINAL);' \
   'asm_test_side_probe_note(LJ_ARM64_SIDE_ASM_PROBE_MARKER);' \
+  'lj_trace_test_arm64_side_compact_roundtrip(J, T,' \
+  'LJ_ARM64_SIDE_ASM_PROBE_COMPACT' \
   'lj_trace_test_arm64_side_publish_seal(J, T)' \
   'LJ_ARM64_SIDE_ASM_PROBE_SEAL' \
   '(void)asm_test_side_probe_finish(J, T);' \
@@ -139,6 +146,142 @@ for required in \
     exit 1
   }
 done
+
+# The ordinary trace-save path and the future bounded first-child path share
+# one private compact-body constructor. Planning is read-only; initialization
+# and rollback cannot publish, allocate, wait, invoke callbacks or alter parent
+# topology. trace_save itself remains only an ownership/publication suffix.
+awk '/^static void trace_compact_scratch_init\(/ { copy=1 }
+     copy { print }
+     copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$compact_scratch_region"
+awk '/^static int trace_compact_body_plan\(/ { copy=1 }
+     copy { print }
+     copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$compact_plan_region"
+awk '/^static void trace_compact_body_init\(/ { copy=1 }
+     copy { print }
+     copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$compact_init_region"
+awk '/^static void trace_compact_body_reset\(/ { copy=1 }
+     copy { print }
+     copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$compact_reset_region"
+sed -n '/^static void trace_save(/,/^int LJ_FASTCALL lj_trace_free_gc(/p' \
+  "$root/src/lj_trace.c" >"$trace_save_region"
+for region in "$compact_scratch_region" "$compact_plan_region" \
+  "$compact_init_region" "$compact_reset_region" "$trace_save_region"; do
+  test -s "$region" || {
+    echo "ARM64 compact-body contract region is empty: $region" >&2
+    exit 1
+  }
+done
+for required in \
+  'body != J->curfinal' \
+  'local.nins != trace_nins_acq(source)' \
+  'local.nk != trace_nk_acq(source)' \
+  'local.nsnap != trace_nsnap_acq(source)' \
+  'local.nsnapmap != trace_nsnapmap_acq(source)' \
+  '!trace_size_checked(J2G(J), body, &size, &checked_nsnap)' \
+  '&local.ir[local.nk] != (IRIns *)p' \
+  'size != expected' \
+  '*plan = local;'; do
+  grep -F "$required" "$compact_plan_region" >/dev/null || {
+    echo "ARM64 compact-body planning invariant changed: $required" >&2
+    exit 1
+  }
+done
+for required in \
+  'memcpy(T, source, sizeof(GCtrace));' \
+  'memcpy(plan->snap, plan->source_snap,' \
+  'memcpy(plan->snapmap, plan->source_snapmap,' \
+  'la_storeptr_rel((void **)&T->snap, plan->snap);' \
+  'la_storeptr_rel((void **)&T->snapmap, plan->snapmap);' \
+  'ptrauth_nop_cast(ASMFunction, trace_mcode_acq(source)), T)' \
+  'trace_retired_link_unlinked_rel(T);'; do
+  grep -F "$required" "$compact_init_region" >/dev/null || {
+    echo "ARM64 compact-body initializer invariant changed: $required" >&2
+    exit 1
+  }
+done
+for required in \
+  'trace_compact_scratch_init(plan->body, plan->ir, plan->nins, plan->nk,' \
+  'setgcrefnullrel(T->nextgc);' \
+  'lj_obj_setgcflags(obj2gco(T), 0);' \
+  'la_storeptr_rel((void **)&T->snap, NULL);' \
+  'trace_startpt_clear(T);' \
+  'trace_exittab_rel(T, NULL);' \
+  'trace_exitstub_rel(T, NULL);' \
+  'trace_nchild_rel(T, 0);' \
+  'trace_nextside_rel(T, 0);' \
+  'la_store32_rel(&T->native_pins, 0);' \
+  'la_store64_rel(&T->retire_epoch, 0);' \
+  'trace_retired_link_unlinked_rel(T);'; do
+  grep -F "$required" "$compact_reset_region" "$compact_scratch_region" \
+    >/dev/null || {
+    echo "ARM64 compact-body reset invariant changed: $required" >&2
+    exit 1
+  }
+done
+for forbidden in \
+  'lj_gc_linkobj' 'traceslot_' 'lj_gc_pubtrace' 'lj_mcode_commit' \
+  'lj_mcode_publish' 'lj_mcode_sync' 'lj_gc2_smr_' 'lj_mem_' \
+  'perftools_' 'lj_vmevent' 'lj_trace_state' 'lj_gdbjit_addtrace' \
+  'lj_gdbjit_preparetrace' 'lj_gdbjit_committrace' \
+  'J->curfinal =' 'J->cur.traceno =' 'J->cur.exittab =' \
+  'J->cur.exitstub =' \
+  'trace_nextside_cas' 'trace_exittarget_arm64_raw_cas'; do
+  if grep -F "$forbidden" "$compact_scratch_region" \
+       "$compact_plan_region" "$compact_init_region" \
+       "$compact_reset_region" >/dev/null; then
+    echo "ARM64 private compact-body step gained forbidden action: $forbidden" >&2
+    exit 1
+  fi
+done
+test "$(grep -Fc 'trace_compact_body_plan(J, T, &plan)' \
+  "$trace_save_region")" = 1
+test "$(grep -Fc 'trace_compact_body_init(J, &plan);' \
+  "$trace_save_region")" = 1
+test "$(grep -Fc 'abort();' "$trace_save_region")" = 1
+for forbidden in \
+  'memcpy(T, &J->cur, sizeof(GCtrace))' 'newwhite' 'TRACE_APPENDVEC' \
+  'mcauth =' 'trace_mcauth' 'la_storefunc_rel(&T->mcauth' \
+  'T->snap' 'T->snapmap' 'memcpy(' 'trace_compact_body_reset'; do
+  if grep -F "$forbidden" "$trace_save_region" >/dev/null; then
+    echo "trace_save regained private compaction operation: $forbidden" >&2
+    exit 1
+  fi
+done
+test "$(grep -Fc 'TRACE_APPENDVEC' "$root/src/lj_trace.c")" = 0
+test "$(grep -Fc 'memcpy(T, &J->cur, sizeof(GCtrace))' \
+  "$root/src/lj_trace.c")" = 0
+test "$(grep -Fc 'memcpy(T, source, sizeof(GCtrace));' \
+  "$root/src/lj_trace.c")" = 1
+compact_init_line=$(grep -n 'trace_compact_body_init(J, &plan);' \
+  "$trace_save_region" | cut -d: -f1)
+owner_clear_line=$(grep -n 'J->cur.traceno = 0;' "$trace_save_region" | \
+  cut -d: -f1)
+exittab_clear_line=$(grep -n 'J->cur.exittab = NULL;' \
+  "$trace_save_region" | cut -d: -f1)
+exitstub_clear_line=$(grep -n 'J->cur.exitstub = NULL;' \
+  "$trace_save_region" | cut -d: -f1)
+curfinal_clear_line=$(grep -n 'J->curfinal = NULL;' \
+  "$trace_save_region" | cut -d: -f1)
+root_publish_line=$(grep -n 'lj_gc_linkobj_new(g, obj2gco(T));' \
+  "$trace_save_region" | cut -d: -f1)
+slot_publish_line=$(grep -n 'traceslot_publish(J, T->traceno, T);' \
+  "$trace_save_region" | cut -d: -f1)
+pubtrace_line=$(grep -n 'lj_gc_pubtrace(g, T->traceno);' \
+  "$trace_save_region" | cut -d: -f1)
+gdb_publish_line=$(grep -n 'lj_gdbjit_addtrace(J, T);' \
+  "$trace_save_region" | cut -d: -f1)
+perf_publish_line=$(grep -n 'perftools_addtrace(J, T);' \
+  "$trace_save_region" | cut -d: -f1)
+test "$compact_init_line" -lt "$owner_clear_line"
+test "$owner_clear_line" -lt "$exittab_clear_line"
+test "$exittab_clear_line" -lt "$exitstub_clear_line"
+test "$exitstub_clear_line" -lt "$curfinal_clear_line"
+test "$curfinal_clear_line" -lt "$root_publish_line"
+test "$root_publish_line" -lt "$slot_publish_line"
+test "$slot_publish_line" -lt "$pubtrace_line"
+test "$pubtrace_line" -lt "$gdb_publish_line"
+test "$gdb_publish_line" -lt "$perf_publish_line"
 for required in \
   'LJ_TRACE_PUBLISH' \
   'if (old == (uint32_t)LJ_TRACE_PUBLISH)' \
@@ -191,6 +334,10 @@ for required in \
   'lj_asm_arm64_test_side_probe_arm(PROBE_PARENT, PROBE_EXIT);' \
   'lj_asm_arm64_test_force_exitstub_mcode_retry(1);' \
   'assert(probe.stages == LJ_ARM64_SIDE_ASM_PROBE_ALL);' \
+  'assert(probe.compact_geometry_reject == 1);' \
+  'assert(probe.compact_init == 1);' \
+  'assert(probe.compact_reset == 1);' \
+  'assert(probe.compact_pauth == (uint32_t)LJ_ABI_PAUTH);' \
   'assert(probe.seal_failure == 0);' \
   'assert(probe.raw_negative == (uint32_t)LJ_ABI_PAUTH);' \
   'assert(probe.capture_count == 2);' \
@@ -258,11 +405,16 @@ for setting in \
   }
 done
 test "$(lipo -archs "$archive")" = arm64
+if nm -g "$archive" | grep -E '_trace_compact_(scratch|body)_' >/dev/null; then
+  echo "private compact-body helper escaped the LuaJIT archive" >&2
+  exit 1
+fi
 for symbol in \
   _lj_asm_arm64_test_side_probe_arm \
   _lj_asm_arm64_test_side_probe_ingress \
   _lj_asm_arm64_test_side_probe_active \
   _lj_asm_arm64_test_side_probe_read \
+  _lj_trace_test_arm64_side_compact_roundtrip \
   _lj_trace_test_arm64_side_publish_seal \
   _lj_trace_test_arm64_side_publish_seal_failure \
   _lj_trace_test_arm64_side_publish_raw_negative; do
@@ -338,11 +490,11 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
   make -C "$root/src" -j"$jobs" TARGET_FLAGS='-arch arm64' \
     XCFLAGS="$ordinary_xcflags"
 if nm "$archive" | grep -E \
-     '_lj_asm_arm64_test_side_probe_(arm|ingress|active|read)$|_lj_trace_test_arm64_side_publish_(seal(_failure)?|raw_negative)$' \
+     '_lj_asm_arm64_test_side_probe_(arm|ingress|active|read)$|_lj_trace_test_arm64_side_(compact_roundtrip|publish_(seal(_failure)?|raw_negative))$' \
      >/dev/null; then
   echo "ordinary ARM64 helper build retained special side-probe APIs" >&2
   exit 1
 fi
 restore_needed=0
 
-echo "arm64_jit_side_asm_consumption_contract OK: exact first-side assembly, compact allocation geometry, MCODELM recapture and raw ARM64e negative dry publication seal proved without publication"
+echo "arm64_jit_side_asm_consumption_contract OK: exact first-side assembly, compact-body init/reset, MCODELM recapture and raw ARM64e negative dry publication seal proved without publication"
