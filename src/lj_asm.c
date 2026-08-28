@@ -74,9 +74,10 @@ int lj_asm_arm64_b26_encode(uintptr_t source, uintptr_t target, MCode *insp)
 ** lockless runtime has proved safe. Keep native publication to optimized,
 ** self-linked scalar BC_LOOP roots, separately certified constant-step
 ** integer BC_FORL roots, and the exact literal-true fixed-function root.
-** Numeric LOOP admission is presently limited to one exact spill-free
-** dynamic NUM-add accumulator shape. In particular, this list admits no
-** IR CALL helper ID and no heap operation.
+** Numeric LOOP admission is presently limited to two exact spill-free
+** accumulator shapes: one dynamic mixed INT/NUM root and one pure NUM root
+** with a canonical +0.5 constant. In particular, this list admits no IR CALL
+** helper ID and no heap operation.
 */
 
 static int arm64_ir_reject(LJArm64IRReject *reject,
@@ -238,6 +239,11 @@ enum {
 };
 
 enum {
+  ARM64_IR_KPROFILE_INT = 1u,
+  ARM64_IR_KPROFILE_HALF = 2u
+};
+
+enum {
   ARM64_NUMADD_K_ONE = REF_TRUE-1u,
   ARM64_NUMADD_R_I = REF_FIRST,
   ARM64_NUMADD_R_X,
@@ -255,6 +261,96 @@ enum {
   ARM64_NUMADD_R_X_PHI,
   ARM64_NUMADD_SEMANTIC_NINS
 };
+
+enum {
+  ARM64_NUMHALF_K_HALF = REF_TRUE-2u,
+  ARM64_NUMHALF_R_X = REF_FIRST,
+  ARM64_NUMHALF_R_X_PRE,
+  ARM64_NUMHALF_R_LIMIT,
+  ARM64_NUMHALF_R_PRE_GUARD,
+  ARM64_NUMHALF_R_LOOP,
+  ARM64_NUMHALF_R_XPOLL,
+  ARM64_NUMHALF_R_X_BODY,
+  ARM64_NUMHALF_R_BODY_GUARD,
+  ARM64_NUMHALF_R_X_PHI,
+  ARM64_NUMHALF_SEMANTIC_NINS
+};
+
+#define ARM64_NUMHALF_BITS UINT64_C(0x3fe0000000000000)
+
+static int arm64_ir_numhalf_constant(const IRIns *ir, IRRef nk)
+{
+  const IRIns *k;
+  if (ir == NULL || nk != ARM64_NUMHALF_K_HALF)
+    return 0;
+  k = &ir[ARM64_NUMHALF_K_HALF];
+  return k->o == IR_KNUM && k->t.irt == IRT_NUM && k->op12 == 0 &&
+	 k[1].tv.u64 == ARM64_NUMHALF_BITS;
+}
+
+static int arm64_postra_numhalf_constant(const IRIns *ir, IRRef nk,
+	int require_evict)
+{
+  IRIns k, payload;
+  if (ir == NULL || nk != ARM64_NUMHALF_K_HALF)
+    return 0;
+  k = ir_load_acq(&ir[ARM64_NUMHALF_K_HALF]);
+  payload = ir_load_acq(&ir[ARM64_NUMHALF_K_HALF+1u]);
+  return k.o == IR_KNUM && k.t.irt == IRT_NUM && k.op12 == 0 &&
+	 (!require_evict || (k.r == RID_INIT && k.s == SPS_NONE)) &&
+	 payload.tv.u64 == ARM64_NUMHALF_BITS;
+}
+
+static int arm64_numhalf_snapshots(const SnapShot *snap,
+	const SnapEntry *snapmap, MSize nsnap, MSize nsnapmap,
+	const BCIns *proto_bc, MSize proto_sizebc, uint8_t base_delta)
+{
+  static const IRRef refs[5] = {
+    ARM64_NUMHALF_R_X, ARM64_NUMHALF_R_LIMIT,
+    ARM64_NUMHALF_R_PRE_GUARD, ARM64_NUMHALF_R_LOOP,
+    ARM64_NUMHALF_R_BODY_GUARD
+  };
+  static const uint16_t mapofs[5] = { 0, 2, 6, 9, 12 };
+  static const uint8_t nent[5] = { 0, 2, 1, 1, 1 };
+  static const uint8_t nslots[5] = { 4, 5, 4, 4, 4 };
+  static const uint8_t pcpos[5] = { 7, 3, 11, 7, 11 };
+  static const SnapEntry entries[5] = {
+    SNAP(3, 0, ARM64_NUMHALF_R_X_PRE),
+    SNAP(4, 0, ARM64_NUMHALF_R_X_PRE),
+    SNAP(3, 0, ARM64_NUMHALF_R_X_PRE),
+    SNAP(3, 0, ARM64_NUMHALF_R_X_PRE),
+    SNAP(3, 0, ARM64_NUMHALF_R_X_BODY)
+  };
+  MSize snapno, entry = 0;
+  if (snap == NULL || snapmap == NULL || proto_bc == NULL ||
+	nsnap != 5 || nsnapmap != 15 || proto_sizebc != 13)
+    return 0;
+  for (snapno = 0; snapno < 5; snapno++) {
+    const SnapShot *s = &snap[snapno];
+    SnapEntry pcraw[1+LJ_FR2];
+    uint64_t pcbase;
+    uintptr_t expected;
+    MSize n;
+    if (snap_ref_acq(s) != refs[snapno] ||
+	snap_mapofs_acq(s) != mapofs[snapno] ||
+	snap_nent_acq(s) != nent[snapno] ||
+	snap_nslots_acq(s) != nslots[snapno] ||
+	snap_topslot_acq(s) != 4)
+      return 0;
+    for (n = 0; n < nent[snapno]; n++)
+      if (snapentry_acq(&snapmap[mapofs[snapno]+n]) != entries[entry++])
+	return 0;
+    for (n = 0; n < 1u+LJ_FR2; n++)
+      pcraw[n] = snapentry_acq(&snapmap[mapofs[snapno]+nent[snapno]+n]);
+    LJ_STATIC_ASSERT(sizeof(pcraw) == sizeof(pcbase));
+    memcpy(&pcbase, pcraw, sizeof(pcbase));
+    expected = (uintptr_t)(const void *)(proto_bc+pcpos[snapno]);
+    if ((uint8_t)pcbase != base_delta ||
+	(uintptr_t)(pcbase >> 8) != expected)
+      return 0;
+  }
+  return entry == 5;
+}
 
 /* Return true only for an admitted integer constant. */
 static int arm64_ir_int_kref(const GCtrace *T, IRRef target)
@@ -343,7 +439,7 @@ static int arm64_postra_spill_slot(MSize slot, MSize capacity)
 }
 
 static int arm64_postra_constants(const LJArm64PostRAView *view,
-	unsigned *scalar_modep)
+	unsigned *scalar_modep, unsigned *constant_profilep)
 {
   IRRef ref;
   unsigned scalar_mode = 0;
@@ -352,6 +448,11 @@ static int arm64_postra_constants(const LJArm64PostRAView *view,
     if (k.o != IR_KPRI || k.t.irt != (uint8_t)(REF_NIL-ref) || k.op12 != 0)
       return 0;
   }
+  if (arm64_postra_numhalf_constant(view->ir, view->nk, 0)) {
+    *scalar_modep = ARM64_IR_SCALAR_NUM;
+    *constant_profilep = ARM64_IR_KPROFILE_HALF;
+    return 1;
+  }
   for (ref = view->nk; ref < REF_TRUE; ref++) {
     IRIns k = ir_load_acq(&view->ir[ref]);
     if (k.o != IR_KINT || k.t.irt != IRT_INT)
@@ -359,6 +460,7 @@ static int arm64_postra_constants(const LJArm64PostRAView *view,
     scalar_mode |= ARM64_IR_SCALAR_INT;
   }
   *scalar_modep = scalar_mode;
+  *constant_profilep = ARM64_IR_KPROFILE_INT;
   return 1;
 }
 
@@ -441,6 +543,52 @@ static int arm64_postra_numadd_shape(const LJArm64PostRAView *view,
     xphi.r == xpre.r && xphi.r == xbody.r;
 }
 
+static int arm64_postra_numhalf_shape(const LJArm64PostRAView *view,
+	IRRef semantic_nins)
+{
+  IRIns xpre, xbody, xphi;
+  if (bc_op(view->startins) != BC_LOOP || bc_a(view->startins) != 2 ||
+	view->root_topslot != 4 || view->proto_sizebc != 13 ||
+	view->nk != ARM64_NUMHALF_K_HALF ||
+	semantic_nins != ARM64_NUMHALF_SEMANTIC_NINS ||
+	!arm64_postra_numhalf_constant(view->ir, view->nk, 1) ||
+	!arm64_numhalf_snapshots(view->snap, view->snapmap,
+	  view->nsnap, view->nsnapmap, view->proto_bc,
+	  view->proto_sizebc, view->base_delta))
+    return 0;
+#define ARM64_NUMHALF_POSTRA_INS(ref, op, type, left, right) \
+  (ir_load_acq(&view->ir[(ref)]).o == (op) && \
+   ir_load_acq(&view->ir[(ref)]).t.irt == (type) && \
+   ir_load_acq(&view->ir[(ref)]).op1 == (left) && \
+   ir_load_acq(&view->ir[(ref)]).op2 == (right))
+  if (!ARM64_NUMHALF_POSTRA_INS(ARM64_NUMHALF_R_X, IR_SLOAD,
+	IRT_NUM|IRT_GUARD, 3, IRSLOAD_TYPECHECK) ||
+      !ARM64_NUMHALF_POSTRA_INS(ARM64_NUMHALF_R_X_PRE, IR_ADD,
+	IRT_NUM|IRT_ISPHI, ARM64_NUMHALF_R_X, ARM64_NUMHALF_K_HALF) ||
+      !ARM64_NUMHALF_POSTRA_INS(ARM64_NUMHALF_R_LIMIT, IR_SLOAD,
+	IRT_NUM|IRT_GUARD, 2, IRSLOAD_TYPECHECK) ||
+      !ARM64_NUMHALF_POSTRA_INS(ARM64_NUMHALF_R_PRE_GUARD, IR_GT,
+	IRT_NUM|IRT_GUARD, ARM64_NUMHALF_R_LIMIT, ARM64_NUMHALF_R_X_PRE) ||
+      !ARM64_NUMHALF_POSTRA_INS(ARM64_NUMHALF_R_LOOP, IR_LOOP,
+	IRT_NIL|IRT_GUARD, 0, 0) ||
+      !ARM64_NUMHALF_POSTRA_INS(ARM64_NUMHALF_R_XPOLL, IR_XPOLL,
+	IRT_NIL|IRT_GUARD, 1, 0) ||
+      !ARM64_NUMHALF_POSTRA_INS(ARM64_NUMHALF_R_X_BODY, IR_ADD,
+	IRT_NUM|IRT_ISPHI, ARM64_NUMHALF_R_X_PRE,
+	ARM64_NUMHALF_K_HALF) ||
+      !ARM64_NUMHALF_POSTRA_INS(ARM64_NUMHALF_R_BODY_GUARD, IR_LT,
+	IRT_NUM|IRT_GUARD, ARM64_NUMHALF_R_X_BODY,
+	ARM64_NUMHALF_R_LIMIT) ||
+      !ARM64_NUMHALF_POSTRA_INS(ARM64_NUMHALF_R_X_PHI, IR_PHI,
+	IRT_NUM, ARM64_NUMHALF_R_X_PRE, ARM64_NUMHALF_R_X_BODY))
+    return 0;
+#undef ARM64_NUMHALF_POSTRA_INS
+  xpre = ir_load_acq(&view->ir[ARM64_NUMHALF_R_X_PRE]);
+  xbody = ir_load_acq(&view->ir[ARM64_NUMHALF_R_X_BODY]);
+  xphi = ir_load_acq(&view->ir[ARM64_NUMHALF_R_X_PHI]);
+  return xphi.r == xpre.r && xphi.r == xbody.r;
+}
+
 static int arm64_ir_funcf_snapshots(const SnapShot *snap,
 	const SnapEntry *snapmap, MSize nsnap, MSize nsnapmap,
 	const BCIns *proto_bc, MSize proto_sizebc, MSize root_topslot,
@@ -509,7 +657,7 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
   MSize maxslots, forl_idxslot = 0;
   uintptr_t proto_lo, proto_hi, proto_bytes;
   BCOp rootop;
-  unsigned nintadd = 0, scalar_mode = 0;
+  unsigned nintadd = 0, scalar_mode = 0, constant_profile = 0;
   int suffix_is_nop = 0;
 
   LJ_STATIC_ASSERT(SPS_FIRST == 2);
@@ -529,7 +677,7 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
     return 0;
   if (rootop == BC_FUNCF)
     return arm64_postra_funcf_admit(view, view->startins, semantic_ninsp);
-  if (!arm64_postra_constants(view, &scalar_mode))
+  if (!arm64_postra_constants(view, &scalar_mode, &constant_profile))
     return 0;
   maxslots = view->root_topslot+1u+LJ_FR2;
   if (rootop == BC_FORL) {
@@ -626,6 +774,20 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
       }
       break;
     case IR_LT: case IR_GE: case IR_LE: case IR_GT:
+      if (irt_type(ins.t) == IRT_INT) {
+	if (!arm64_ir_type_flags(ins.t, IRT_INT, IRT_GUARD, IRT_GUARD))
+	  return 0;
+	scalar_mode |= ARM64_IR_SCALAR_INT;
+      } else if (irt_type(ins.t) == IRT_NUM) {
+	if (!arm64_ir_type_flags(ins.t, IRT_NUM, IRT_GUARD, IRT_GUARD))
+	  return 0;
+	scalar_mode |= ARM64_IR_SCALAR_NUM;
+      } else {
+	return 0;
+      }
+      if (slot != SPS_NONE)
+	return 0;
+      break;
     case IR_EQ: case IR_NE:
       if (!arm64_ir_type_flags(ins.t, IRT_INT, IRT_GUARD, IRT_GUARD) ||
 	  slot != SPS_NONE)
@@ -665,11 +827,21 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
       (rootop == BC_LOOP && nintadd != 0u))
     return 0;
 
-  if ((scalar_mode & ARM64_IR_SCALAR_NUM) != 0 &&
-      (scalar_mode != (ARM64_IR_SCALAR_INT|ARM64_IR_SCALAR_NUM) ||
-       suffix_is_nop || nrename != 1u || spadjust != 0 || highest_end != 0 ||
-       !arm64_postra_numadd_shape(view, semantic_nins)))
-    return 0;
+  if ((scalar_mode & ARM64_IR_SCALAR_NUM) != 0) {
+    if (scalar_mode == (ARM64_IR_SCALAR_INT|ARM64_IR_SCALAR_NUM)) {
+      if (constant_profile != ARM64_IR_KPROFILE_INT || suffix_is_nop ||
+	  nrename != 1u || spadjust != 0 || highest_end != 0 ||
+	  !arm64_postra_numadd_shape(view, semantic_nins))
+	return 0;
+    } else if (scalar_mode == ARM64_IR_SCALAR_NUM) {
+      if (constant_profile != ARM64_IR_KPROFILE_HALF || !suffix_is_nop ||
+	  nrename != 0 || spadjust != 0 || highest_end != 0 ||
+	  !arm64_postra_numhalf_shape(view, semantic_nins))
+	return 0;
+    } else {
+      return 0;
+    }
+  }
 
   if (highest_end <= SPS_FIXED) {
     if (spadjust != 0)
@@ -842,7 +1014,15 @@ static int arm64_ir_num_ref(const GCtrace *T, IRRef ref, IRRef before)
 	 arm64_ir_num_value_op((IROp)ir->o);
 }
 
-static int arm64_ir_constants(const GCtrace *T, LJArm64IRReject *reject)
+static int arm64_ir_num_add_ref(const GCtrace *T, IRRef ref, IRRef before)
+{
+  if (ref == ARM64_NUMHALF_K_HALF)
+    return arm64_ir_numhalf_constant(T->ir, T->nk);
+  return arm64_ir_num_ref(T, ref, before);
+}
+
+static int arm64_ir_constants(const GCtrace *T, LJArm64IRReject *reject,
+	unsigned *constant_profilep)
 {
   IRRef ref;
   if (T->nk > REF_TRUE || T->nk == 0)
@@ -855,12 +1035,17 @@ static int arm64_ir_constants(const GCtrace *T, LJArm64IRReject *reject)
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CONSTANT, ref,
 			     IR_KPRI, ir->t.irt);
   }
+  if (arm64_ir_numhalf_constant(T->ir, T->nk)) {
+    *constant_profilep = ARM64_IR_KPROFILE_HALF;
+    return 1;
+  }
   for (ref = T->nk; ref < REF_TRUE; ref++) {
     const IRIns *ir = &T->ir[ref];
     if (ir->o != IR_KINT || ir->t.irt != IRT_INT)
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CONSTANT, ref,
 			     (IROp)ir->o, 0);
   }
+  *constant_profilep = ARM64_IR_KPROFILE_INT;
   return 1;
 }
 
@@ -1225,6 +1410,13 @@ static int arm64_ir_num_binary(const GCtrace *T, const IRIns *ir,
 	 arm64_ir_num_ref(T, ir->op2, before);
 }
 
+static int arm64_ir_num_add_binary(const GCtrace *T, const IRIns *ir,
+	IRRef before)
+{
+  return arm64_ir_num_add_ref(T, ir->op1, before) &&
+	 arm64_ir_num_add_ref(T, ir->op2, before);
+}
+
 /* First spill-free NUM execution canary. Integer induction keeps every
 ** comparison and overflow edge in the already-certified family, while a
 ** dynamic NUM accumulator proves FPR loads, ADD, PHI, snapshots and exits.
@@ -1274,6 +1466,95 @@ static int arm64_ir_numadd_shape(const GCtrace *T, IRRef firstphi,
 	ARM64_NUMADD_R_I, IR_ADD, 2);
   }
 #undef ARM64_NUMADD_INS
+  return 1;
+}
+
+static int arm64_ir_numhalf_bytecode(const GCproto *pt,
+	const BCIns *startpc)
+{
+  const BCIns *bc;
+  BCIns ins;
+  if (pt == NULL || startpc == NULL || pt->framesize != 4 ||
+	pt->sizebc != 13 || pt->numparams != 1 || pt->sizeuv != 0 ||
+	pt->sizekn != 1 || pt->sizekgc != 0 ||
+	proto_knumtv(pt, 0)->u64 != ARM64_NUMHALF_BITS)
+    return 0;
+  bc = proto_bc(pt);
+  if (startpc != bc+6)
+    return 0;
+#define ARM64_NUMHALF_BC_AD(pos, op, a, d) \
+  (bc_op((ins = arm64_ir_bc_acq((uintptr_t)bc, (pos)))) == (op) && \
+   bc_a(ins) == (a) && bc_d(ins) == (d))
+  if (!ARM64_NUMHALF_BC_AD(0, BC_FUNCF, 4, 0) ||
+      !ARM64_NUMHALF_BC_AD(1, BC_KNUM, 1, 0) ||
+      !ARM64_NUMHALF_BC_AD(2, BC_CGET, 2, 1) ||
+      !ARM64_NUMHALF_BC_AD(3, BC_CGET, 3, 0) ||
+      !ARM64_NUMHALF_BC_AD(4, BC_ISGE, 2, 3) ||
+      !ARM64_NUMHALF_BC_AD(11, BC_CGET, 2, 1) ||
+      !ARM64_NUMHALF_BC_AD(12, BC_RET1, 2, 2))
+    return 0;
+#undef ARM64_NUMHALF_BC_AD
+  ins = arm64_ir_bc_acq((uintptr_t)bc, 5);
+  if (bc_op(ins) != BC_JMP || bc_a(ins) != 2 || bc_j(ins) != 5)
+    return 0;
+  ins = arm64_ir_bc_acq((uintptr_t)bc, 6);
+  if (bc_op(ins) != BC_LOOP || bc_a(ins) != 2 || bc_j(ins) != 4)
+    return 0;
+  ins = arm64_ir_bc_acq((uintptr_t)bc, 7);
+  if (bc_op(ins) != BC_CGET || bc_a(ins) != 2 || bc_d(ins) != 1)
+    return 0;
+  ins = arm64_ir_bc_acq((uintptr_t)bc, 8);
+  if (bc_op(ins) != BC_ADDVN || bc_a(ins) != 2 ||
+	bc_b(ins) != 2 || bc_c(ins) != 0)
+    return 0;
+  ins = arm64_ir_bc_acq((uintptr_t)bc, 9);
+  if (bc_op(ins) != BC_CSET || bc_a(ins) != 1 || bc_d(ins) != 2)
+    return 0;
+  ins = arm64_ir_bc_acq((uintptr_t)bc, 10);
+  return bc_op(ins) == BC_JMP && bc_a(ins) == 2 && bc_j(ins) == -9;
+}
+
+/* Exact pure-NUM canary for canonical KNUM loading and ordered FP guards. */
+static int arm64_ir_numhalf_shape(const jit_State *J, const GCtrace *T,
+	const GCproto *pt, IRRef firstphi, LJArm64IRReject *reject)
+{
+  const IRIns *ir = T->ir;
+  if (T->nk != ARM64_NUMHALF_K_HALF ||
+	T->nins != ARM64_NUMHALF_SEMANTIC_NINS ||
+	firstphi != ARM64_NUMHALF_R_X_PHI ||
+	!arm64_ir_numhalf_constant(ir, T->nk) ||
+	!arm64_ir_numhalf_bytecode(pt, trace_startpc_acq((GCtrace *)T)) ||
+	!arm64_numhalf_snapshots(T->snap, T->snapmap, T->nsnap,
+	  T->nsnapmap, proto_bc(pt), pt->sizebc,
+	  (uint8_t)(J->baseslot-2u)))
+    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE,
+	ARM64_NUMHALF_R_X, IR_ADD, 3);
+#define ARM64_NUMHALF_INS(ref, op, type, left, right) \
+  (ir[(ref)].o == (op) && ir[(ref)].t.irt == (type) && \
+   ir[(ref)].op1 == (left) && ir[(ref)].op2 == (right))
+  if (!ARM64_NUMHALF_INS(ARM64_NUMHALF_R_X, IR_SLOAD,
+	IRT_NUM|IRT_GUARD, 3, IRSLOAD_TYPECHECK) ||
+      !ARM64_NUMHALF_INS(ARM64_NUMHALF_R_X_PRE, IR_ADD,
+	IRT_NUM|IRT_ISPHI, ARM64_NUMHALF_R_X, ARM64_NUMHALF_K_HALF) ||
+      !ARM64_NUMHALF_INS(ARM64_NUMHALF_R_LIMIT, IR_SLOAD,
+	IRT_NUM|IRT_GUARD, 2, IRSLOAD_TYPECHECK) ||
+      !ARM64_NUMHALF_INS(ARM64_NUMHALF_R_PRE_GUARD, IR_GT,
+	IRT_NUM|IRT_GUARD, ARM64_NUMHALF_R_LIMIT, ARM64_NUMHALF_R_X_PRE) ||
+      !ARM64_NUMHALF_INS(ARM64_NUMHALF_R_LOOP, IR_LOOP,
+	IRT_NIL|IRT_GUARD, 0, 0) ||
+      !ARM64_NUMHALF_INS(ARM64_NUMHALF_R_XPOLL, IR_XPOLL,
+	IRT_NIL|IRT_GUARD, 1, 0) ||
+      !ARM64_NUMHALF_INS(ARM64_NUMHALF_R_X_BODY, IR_ADD,
+	IRT_NUM|IRT_ISPHI, ARM64_NUMHALF_R_X_PRE,
+	ARM64_NUMHALF_K_HALF) ||
+      !ARM64_NUMHALF_INS(ARM64_NUMHALF_R_BODY_GUARD, IR_LT,
+	IRT_NUM|IRT_GUARD, ARM64_NUMHALF_R_X_BODY,
+	ARM64_NUMHALF_R_LIMIT) ||
+      !ARM64_NUMHALF_INS(ARM64_NUMHALF_R_X_PHI, IR_PHI,
+	IRT_NUM, ARM64_NUMHALF_R_X_PRE, ARM64_NUMHALF_R_X_BODY))
+    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
+	ARM64_NUMHALF_R_X, IR_ADD, 4);
+#undef ARM64_NUMHALF_INS
   return 1;
 }
 
@@ -1555,7 +1836,7 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
   GCproto *pt;
   uintptr_t proto_lo, proto_hi;
   unsigned nloop = 0, nxpoll = 0, nphi = 0;
-  unsigned scalar_mode = 0;
+  unsigned scalar_mode = 0, constant_profile = 0;
   BCOp startop;
   if (reject) {
     reject->reason = LJ_ARM64_IR_REJECT_NONE;
@@ -1600,7 +1881,7 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
   if (T->sinktags != 0)
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SINK, REF_BASE,
 			   IR_TNEW, T->sinktags);
-  if (!arm64_ir_constants(T, reject))
+  if (!arm64_ir_constants(T, reject, &constant_profile))
     return 0;
   if (T->nsnap == 0 || T->snap == NULL || T->snapmap == NULL)
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
@@ -1650,11 +1931,28 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
       }
       break;
     case IR_LT: case IR_GE: case IR_LE: case IR_GT:
+      if (irt_type(ir->t) == IRT_INT) {
+	if (!arm64_ir_type_flags(ir->t, IRT_INT, IRT_GUARD, IRT_GUARD) ||
+	    !arm64_ir_int_binary(T, ir, ref, startop == BC_FORL))
+	  return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE, ref,
+				   (IROp)ir->o, ir->t.irt);
+	scalar_mode |= ARM64_IR_SCALAR_INT;
+      } else if (irt_type(ir->t) == IRT_NUM) {
+	if (!arm64_ir_type_flags(ir->t, IRT_NUM, IRT_GUARD, IRT_GUARD) ||
+	    !arm64_ir_num_binary(T, ir, ref))
+	  return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE, ref,
+				   (IROp)ir->o, ir->t.irt);
+	scalar_mode |= ARM64_IR_SCALAR_NUM;
+      } else {
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE, ref,
+				 (IROp)ir->o, ir->t.irt);
+      }
+      break;
     case IR_EQ: case IR_NE:
       if (!arm64_ir_type_flags(ir->t, IRT_INT, IRT_GUARD, IRT_GUARD) ||
 	  !arm64_ir_int_binary(T, ir, ref, startop == BC_FORL))
 	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE, ref,
-					 (IROp)ir->o, ir->t.irt);
+				 (IROp)ir->o, ir->t.irt);
       scalar_mode |= ARM64_IR_SCALAR_INT;
       break;
     case IR_ADDOV: case IR_SUBOV: case IR_MULOV:
@@ -1675,7 +1973,7 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
 	} else if (irt_type(ir->t) == IRT_NUM) {
 	  scalar_mode |= ARM64_IR_SCALAR_NUM;
 	  if (startop != BC_LOOP || ir->t.irt != (IRT_NUM|IRT_ISPHI) ||
-	      !arm64_ir_num_binary(T, ir, ref))
+	      !arm64_ir_num_add_binary(T, ir, ref))
 	    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE, ref,
 					   IR_ADD, ir->t.irt);
 	} else {
@@ -1747,11 +2045,21 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
 			   (uint16_t)((nloop << 8) | nxpoll));
   if (!arm64_ir_phi_marks(T, firstphi, T->nins, reject))
     return 0;
-  if ((scalar_mode & ARM64_IR_SCALAR_NUM) != 0 &&
-      (scalar_mode != (ARM64_IR_SCALAR_INT|ARM64_IR_SCALAR_NUM) ||
-       startop != BC_LOOP ||
-       !arm64_ir_numadd_shape(T, firstphi, reject)))
-    return 0;
+  if ((scalar_mode & ARM64_IR_SCALAR_NUM) != 0) {
+    if (scalar_mode == (ARM64_IR_SCALAR_INT|ARM64_IR_SCALAR_NUM)) {
+      if (constant_profile != ARM64_IR_KPROFILE_INT ||
+	  startop != BC_LOOP || !arm64_ir_numadd_shape(T, firstphi, reject))
+	return 0;
+    } else if (scalar_mode == ARM64_IR_SCALAR_NUM) {
+      if (constant_profile != ARM64_IR_KPROFILE_HALF ||
+	  startop != BC_LOOP ||
+	  !arm64_ir_numhalf_shape(J, T, pt, firstphi, reject))
+	return 0;
+    } else {
+      return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE,
+	firstphi ? firstphi : REF_BASE, IR_PHI, (uint16_t)scalar_mode);
+    }
+  }
   if (startop == BC_FORL &&
       !arm64_ir_forl_shape(J, T, loopref, xpollref, firstphi, reject))
     return 0;
