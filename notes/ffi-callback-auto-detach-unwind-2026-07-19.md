@@ -39,7 +39,7 @@ the physical callback frame. It is deliberately not driven by
 deleted on its landing path, while a foreign exception may be deleted before
 the cleanup-phase callback continuation has been processed.
 
-The internal `lj_threading_detach_callback_unwind()` path is narrower than the
+The internal `lj_threading_detach_callback_pending()` path is narrower than the
 public API. It requires the exact current secondary TG/state pair, callback
 depth zero, no callback carrier/slot/native-stop snapshot/FFI call root, and the
 pending bit exactly one. It clears only that bit, then reuses the unchanged
@@ -52,9 +52,14 @@ errno/Win32 LastError pair around all lifecycle work. The outgoing pair remains
 the body throw-edge value or the setup/result snapshot selected by the callback
 frame; registry retirement, futex wakes, and TG cleanup cannot replace it.
 
-Normal callback return still uses the public detach path. Attached callbacks
-never publish the debt, and nested callbacks propagate only the outer
-auto-attached frame's bit.
+At the time of this checkpoint normal callback return still used the public
+detach path. The 2026-08-28 result-lifetime hardening now uses the same exact
+pending-detach helper for supported ARM64/GC64-x64 auto-attached returns, but
+only after assembly copies TG-owned result carriers into ABI-preserved
+registers. Attached callbacks never publish the debt, nested callbacks
+propagate only the outer auto-attached frame's bit, and legacy backends retain
+eager public detach. See
+`aarch64-ffi-callback-result-lifetime-2026-08-28.md`.
 
 ## Regression contract
 

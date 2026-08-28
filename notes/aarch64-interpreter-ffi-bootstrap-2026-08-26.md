@@ -116,12 +116,13 @@ The following are blockers for a fully lockless ARM VM claim:
    here are only the first explicit subset.
 4. The ARM64 JIT backend, trace lifecycle, XPOLL lowering, executable-memory
    publication, and instruction-cache synchronization remain unported.
-5. PAUTH/BTI and arm64e callback entry variants were not exercised on this
-   host.
-6. As on the inherited x86 callback path, automatic detach drops `mt_live`
-   before assembly reloads the TG callback result.  No reproduction was found,
-   but a later hardening should retain explicit lifetime authority through the
-   final result reload.
+5. Closed on 2026-08-28: PAUTH/BTI and arm64e callback entry/result variants
+   now have native executable contracts on this host.
+6. Closed on 2026-08-28: automatic detach formerly dropped `mt_live` before
+   ARM64/x64 assembly reloaded the TG callback result. The result continuation
+   now copies its carriers before an exact deferred detach, with a deterministic
+   physical-reclaim regression in
+   `aarch64-ffi-callback-result-lifetime-2026-08-28.md`.
 
 The first root-publication worklist is concrete:
 
