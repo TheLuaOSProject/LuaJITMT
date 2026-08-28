@@ -85,6 +85,18 @@ typedef struct LJArm64SideIRView {
   uint8_t base_delta;
 } LJArm64SideIRView;
 
+enum { LJ_ARM64_SIDE_CHILD_NSNAP = 5 };
+
+/* Exact root/child bytecode geometry for one admitted first-side shape. */
+typedef struct LJArm64SideShape {
+  ExitNo exitno;
+  MSize parent_nsnap;
+  MSize continuation_pc;
+  MSize child_pcpos[LJ_ARM64_SIDE_CHILD_NSNAP];
+  uint32_t inherited_reg;
+  uint32_t sload_reg;
+} LJArm64SideShape;
+
 /* Exact immutable view of the repeatedly observed first-side ARM64 allocator
 ** layout. Production dispatch remains separate and fail-closed. */
 typedef struct LJArm64SidePostRAView {
@@ -112,6 +124,7 @@ LJ_FUNC int lj_asm_arm64_postra_funcf_entry_admit(
 	IRRef *semantic_ninsp);
 LJ_FUNC int lj_asm_arm64_side_ir_admit(const LJArm64SideIRView *view,
 	LJArm64IRReject *reject);
+LJ_FUNC const LJArm64SideShape *lj_asm_arm64_side_shape(ExitNo exitno);
 LJ_FUNC int lj_asm_arm64_side_prehead_admit(
 	const LJArm64SidePostRAView *view, IRRef *semantic_ninsp);
 LJ_FUNC int lj_asm_arm64_side_postra_admit(

@@ -99,14 +99,60 @@ test -f "$fixture_source" || {
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lj-arm64-first-side-production.XXXXXX")
 restore_needed=1
 
-# Freeze the ordinary nature of this contract. It discovers trace numbers from
-# live prototype/topology state and never arms either historical side seam.
+# Freeze the ordinary nature of this contract. Trace identities come from live
+# prototype/topology state, while the only admitted parent exits are the two
+# coupled production descriptors. Neither historical side seam is armed.
 for required in \
   '__arm64_first_side_production_first' \
   '__arm64_first_side_production_second' \
   '__arm64_first_side_production_unsupported' \
+  'local i=0' \
+  'i=(i~=0 and i or i)+1' \
+  'i=(i~=0 and i or i)+2' \
+  'call_named(L, "__arm64_first_side_production_second", 3, 0) == 3' \
+  'call_named(L, "__arm64_first_side_production_second", 2, 0) == 2' \
+  'call_named(L, "__arm64_first_side_production_unsupported", 3, 0) == 4' \
   '*tracenop = foundno;' \
+  'ExitNo exitno;' \
+  'MSize root_nsnap;' \
+  'MSize continuation_pos;' \
+  'MSize child_pcpos[PRODUCTION_CHILD_NSNAP];' \
+  'lua_Integer native_n;' \
+  'lua_Integer native_bias;' \
+  'lua_Integer native_result;' \
+  'Reg inherited_reg;' \
+  'Reg sload_reg;' \
+  '.exitno = 2, .root_nsnap = 8, .continuation_pos = 13,' \
+  '.child_pcpos = { 13, 14, 3, 17, 7 }' \
+  '.inherited_reg = RID_X28, .sload_reg = RID_X27' \
+  '.native_n = 3, .native_bias = 1, .native_result = 4,' \
+  '.exitno = 6, .root_nsnap = 9, .continuation_pos = 10,' \
+  '.child_pcpos = { 10, 11, 3, 17, 7 }' \
+  '.inherited_reg = RID_X27, .sload_reg = RID_X28' \
+  '.side_bias = 0, .side_result = 3,' \
+  '.native_n = 2, .native_bias = 0, .native_result = 2,' \
+  '.side_bias = 0, .side_result = 4,' \
+  'trace_nsnap_acq(pair->root) == pair->root_nsnap' \
+  'pair->exitno < pair->root_nsnap' \
+  'selected_map_has_slot(pair->root, pair->exitno, 4)' \
+  'proto_bc(pair->pt)+pair->continuation_pos' \
+  'pair->child_pcpos[0] == pair->continuation_pos' \
+  'ins.r == pair->sload_reg && ins.s == SPS_NONE' \
+  'ins.r == pair->inherited_reg && ins.s == SPS_NONE' \
+  'A64F_D(pair->sload_reg)' \
+  'A64F_M(pair->inherited_reg)' \
+  'pair->rootno, pair->exitno);' \
+  'snap_count_acq(&pair->root_snap[pair->exitno]) != SNAPCOUNT_DONE' \
+  'pair->root_exittab[pair->exitno]' \
+  'pair->root_snap[pair->exitno]' \
   'childno = trace_nextside_acq(pair->root);' \
+  'expect_post_token_request_cleanup(L, J, g, tg, &pairs[0]);' \
+  'expect_post_token_request_cleanup(L, J, g, tg, &pairs[1]);' \
+  'expect_native_child(L, J, &pairs[1]);' \
+  'call_named(L, pair->name, pair->native_n, pair->native_bias)' \
+  'pair->native_result' \
+  'expect_edge(g, &pairs[1], pairs[1].child_mcode);' \
+  'pairs[0].exitno != pairs[1].exitno' \
   'pairs[0].rootno != 1 && pairs[0].childno != 2' \
   'LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED != 0' \
   'pointer_bits(raw) == pointer_bits(encoded)' \
@@ -124,6 +170,53 @@ for required in \
     exit 1
   }
 done
+test "$(grep -Fc 'local i=0' "$fixture_source")" = 4 || {
+  echo "production probes lost their deterministic zero loop seed" >&2
+  exit 1
+}
+test "$(grep -Fc '.side_bias = 0, .side_result = 3,' \
+  "$fixture_source")" = 1 || {
+  echo "production exit-6 positive probe lost its recording trigger" >&2
+  exit 1
+}
+test "$(grep -Fc '.side_bias = 0, .side_result = 4,' \
+  "$fixture_source")" = 1 || {
+  echo "unsupported exit-6 probe lost its recording trigger" >&2
+  exit 1
+}
+test "$(grep -Fc \
+  'call_named(L, "__arm64_first_side_production_second", 3, 0) == 3' \
+  "$fixture_source")" = 2 || {
+  echo "production exit-6 smoke lost its repeated recording trigger" >&2
+  exit 1
+}
+test "$(grep -Fc \
+  'call_named(L, "__arm64_first_side_production_second", 2, 0) == 2' \
+  "$fixture_source")" = 1 || {
+  echo "production exit-6 smoke lost its separate native input" >&2
+  exit 1
+}
+test "$(grep -Fc \
+  'call_named(L, "__arm64_first_side_production_unsupported", 3, 0) == 4' \
+  "$fixture_source")" = 3 || {
+  echo "unsupported exit-6 smoke lost its repeated NYI trigger" >&2
+  exit 1
+}
+test "$(grep -Fc 'for (i = 0; i < 2; i++)' "$fixture_source")" = 3 || {
+  echo "production first-side fixture lost two-pair retirement coverage" >&2
+  exit 1
+}
+test "$(grep -Fc \
+  '.exitno = 6, .root_nsnap = 9, .continuation_pos = 10,' \
+  "$fixture_source")" = 2 || {
+  echo "production first-side fixture lost exit-6 positive/negative coupling" >&2
+  exit 1
+}
+if grep -E 'ExitNo selected = UINT32_MAX|PRODUCTION_(EXIT|CONTINUATION_POS)' \
+     "$fixture_source" >/dev/null; then
+  echo "production first-side fixture regained arbitrary exit discovery" >&2
+  exit 1
+fi
 if grep -E 'lj_trace_test_arm64_first_side_publish_(arm|read)\(' \
      "$fixture_source" >/dev/null; then
   echo "production first-side fixture called the one-shot publication seam" >&2

@@ -664,6 +664,19 @@ enum {
   ARM64_SIDE_SEMANTIC_NINS = REF_BASE+7u
 };
 
+const LJArm64SideShape *lj_asm_arm64_side_shape(ExitNo exitno)
+{
+  static const LJArm64SideShape shapes[] = {
+    { 2u, 8u, 13u, { 13u, 14u, 3u, 17u, 7u }, RID_X28, RID_X27 },
+    { 6u, 9u, 10u, { 10u, 11u, 3u, 17u, 7u }, RID_X27, RID_X28 }
+  };
+  MSize i;
+  for (i = 0; i < sizeof(shapes)/sizeof(shapes[0]); i++)
+    if (shapes[i].exitno == exitno)
+      return &shapes[i];
+  return NULL;
+}
+
 static int arm64_side_snapshot_footer(const LJArm64SideIRView *view,
 	MSize snapno, MSize expected_pcpos)
 {
@@ -692,14 +705,17 @@ static int arm64_side_snapshot_footer(const LJArm64SideIRView *view,
 int lj_asm_arm64_side_ir_admit(const LJArm64SideIRView *view,
 	LJArm64IRReject *reject)
 {
-  static const IRRef snaprefs[5] = {
+  static const IRRef snaprefs[LJ_ARM64_SIDE_CHILD_NSNAP] = {
     ARM64_SIDE_R_CGET, ARM64_SIDE_R_ADD, ARM64_SIDE_R_LIMIT,
     ARM64_SIDE_R_GT, ARM64_SIDE_R_XPOLL
   };
-  static const MSize mapofs[5] = { 0, 3, 7, 11, 14 };
-  static const uint8_t nent[5] = { 1, 2, 2, 1, 1 };
-  static const uint8_t nslots[5] = { 5, 6, 6, 5, 5 };
-  static const MSize pcpos[5] = { 13, 14, 3, 17, 7 };
+  static const MSize mapofs[LJ_ARM64_SIDE_CHILD_NSNAP] =
+    { 0, 3, 7, 11, 14 };
+  static const uint8_t nent[LJ_ARM64_SIDE_CHILD_NSNAP] =
+    { 1, 2, 2, 1, 1 };
+  static const uint8_t nslots[LJ_ARM64_SIDE_CHILD_NSNAP] =
+    { 5, 6, 6, 5, 5 };
+  const LJArm64SideShape *shape;
   const IRIns *ir;
   IRIns ins;
   uintptr_t proto;
@@ -715,8 +731,10 @@ int lj_asm_arm64_side_ir_admit(const LJArm64SideIRView *view,
 	view->snapmap == NULL || view->proto_bc == NULL)
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE,
 	REF_BASE, IR_BASE, 0);
+  shape = lj_asm_arm64_side_shape(view->exitno);
   proto = (uintptr_t)(const void *)view->proto_bc;
-  if ((proto & (sizeof(BCIns)-1u)) != 0 || view->proto_sizebc != 19u ||
+  if (shape == NULL || (proto & (sizeof(BCIns)-1u)) != 0 ||
+	view->proto_sizebc != 19u ||
 	(uintptr_t)view->proto_sizebc >
 	  (UINTPTR_MAX-proto)/sizeof(BCIns) ||
 	view->nins != ARM64_SIDE_SEMANTIC_NINS ||
@@ -726,7 +744,7 @@ int lj_asm_arm64_side_ir_admit(const LJArm64SideIRView *view,
 	view->traceno > UINT16_MAX || view->parent == 0 ||
 	view->parent > UINT16_MAX || view->traceno == view->parent ||
 	view->root != view->parent ||
-	view->link != view->parent || view->exitno != 2u ||
+	view->link != view->parent ||
 	view->startins != BCINS_AD(BC_JMP, 0, 0) ||
 	view->linktype != LJ_TRLINK_ROOT || view->sinktags != 0 ||
 	view->base_delta != 0)
@@ -769,16 +787,18 @@ int lj_asm_arm64_side_ir_admit(const LJArm64SideIRView *view,
   ARM64_SIDE_REQUIRE(ARM64_SIDE_R_XPOLL, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0);
 #undef ARM64_SIDE_REQUIRE
 
-  for (snapno = 0; snapno < 5u; snapno++) {
+  for (snapno = 0; snapno < LJ_ARM64_SIDE_CHILD_NSNAP; snapno++) {
     const SnapShot *snap = &view->snap[snapno];
-    MSize nextofs = snapno+1u < 5u ? mapofs[snapno+1u] : 17u;
+    MSize nextofs = snapno+1u < LJ_ARM64_SIDE_CHILD_NSNAP ?
+	mapofs[snapno+1u] : 17u;
     if (snap_ref_acq(snap) != snaprefs[snapno] ||
 	snap_mapofs_acq(snap) != mapofs[snapno] ||
 	snap_nent_acq(snap) != nent[snapno] ||
 	snap_nslots_acq(snap) != nslots[snapno] ||
 	snap_topslot_acq(snap) != 5u ||
 	nextofs-mapofs[snapno] != nent[snapno]+1u+LJ_FR2 ||
-	!arm64_side_snapshot_footer(view, snapno, pcpos[snapno]))
+	!arm64_side_snapshot_footer(
+	  view, snapno, shape->child_pcpos[snapno]))
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
 	snaprefs[snapno], IR_XPOLL, (uint16_t)snapno);
   }
@@ -804,9 +824,8 @@ int lj_asm_arm64_side_ir_admit(const LJArm64SideIRView *view,
 int lj_asm_arm64_side_prehead_admit(const LJArm64SidePostRAView *view,
 	IRRef *semantic_ninsp)
 {
-  static const Reg valueregs[4] = {
-    RID_X27, RID_INIT, RID_X28, RID_X27
-  };
+  Reg valueregs[4];
+  const LJArm64SideShape *shape;
   const IRIns *ir;
   IRIns ins;
   IRRef ref;
@@ -822,15 +841,24 @@ int lj_asm_arm64_side_prehead_admit(const LJArm64SidePostRAView *view,
 	 (sizeof(uint16_t)-1u)) != 0)
     return 0;
 
+  shape = lj_asm_arm64_side_shape(view->semantic.exitno);
+  if (shape == NULL)
+    return 0;
+  valueregs[0] = shape->sload_reg;
+  valueregs[1] = RID_INIT;
+  valueregs[2] = shape->inherited_reg;
+  valueregs[3] = shape->sload_reg;
+
   ins = ir_load_acq(&ir[ARM64_SIDE_SEMANTIC_NINS]);
   if (ins.o != IR_NOP || ins.t.irt != IRT_NIL ||
 	ins.op1 != 0 || ins.op2 != 0 || ins.r != 0 || ins.s != 0)
     return 0;
 
   /* The map extent comes directly from lj_snap_regspmap(). The later full
-  ** post-RA certificate proves that asm_head_side() consumes its sole x28
-  ** value into allocator-selected x27 before any body instruction. */
-  if (view->parentmap[0] != REGSP(RID_X28, SPS_NONE))
+  ** post-RA certificate proves that asm_head_side() consumes the descriptor's
+  ** sole inherited value into its allocator-selected SLOAD register before
+  ** any body instruction. */
+  if (view->parentmap[0] != REGSP(shape->inherited_reg, SPS_NONE))
     return 0;
   ins = ir_load_acq(&ir[REF_BASE]);
   if (ins.r != RID_BASE || ins.s != SPS_NONE)
@@ -860,10 +888,12 @@ int lj_asm_arm64_side_prehead_admit(const LJArm64SidePostRAView *view,
 int lj_asm_arm64_side_postra_admit(const LJArm64SidePostRAView *view,
 	IRRef *semantic_ninsp)
 {
+  const LJArm64SideShape *shape;
   IRRef semantic_nins;
   MSize headidx;
   MCode vmstore;
   if (!lj_asm_arm64_side_prehead_admit(view, &semantic_nins) ||
+	(shape = lj_asm_arm64_side_shape(view->semantic.exitno)) == NULL ||
 	view->entry == NULL ||
 	((uintptr_t)(const void *)view->entry & (sizeof(MCode)-1u)) != 0 ||
 	view->branch_track != (uint8_t)LJ_ABI_BRANCH_TRACK)
@@ -874,7 +904,8 @@ int lj_asm_arm64_side_postra_admit(const LJArm64SidePostRAView *view,
   if (view->entry_words < headidx+4u ||
 	(view->branch_track && view->entry[0] != A64I_LE(A64I_BTI_J)) ||
 	view->entry[headidx] != A64I_LE(A64I_MOVx |
-				     A64F_D(RID_X27) | A64F_M(RID_X28)) ||
+				     A64F_D(shape->sload_reg) |
+				     A64F_M(shape->inherited_reg)) ||
 	view->entry[headidx+1u] != A64I_LE(A64I_MOVZw |
 				     A64F_U16(view->semantic.traceno) |
 				     A64F_D(RID_TMP)) ||

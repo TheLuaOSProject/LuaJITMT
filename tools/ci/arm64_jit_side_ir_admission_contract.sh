@@ -23,6 +23,8 @@ fixture=$tmpdir/t-arm64-jit-side-ir-admission
 arm64e_fixture=$tmpdir/t-arm64e-jit-side-ir-admission
 audit_object=$tmpdir/lj_asm-arm64e.o
 pure_region=$tmpdir/pure-side-region.txt
+shape_region=$tmpdir/side-shape-region.txt
+second_postra_region=$tmpdir/side-second-postra-region.txt
 trace_asm=$tmpdir/trace-asm.txt
 head_side=$tmpdir/head-side.txt
 tail_side=$tmpdir/tail-side.txt
@@ -75,6 +77,21 @@ grep -E '^#define LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED[[:space:]]+0$' \
 grep -F '#define TRACE_ARM64_INT_SIDE_ADMITTED' "$root/src/lj_jit.h" | \
   grep -F '0x80' >/dev/null
 grep -F 'lj_asm_arm64_side_ir_admit' "$root/src/lj_asm.h" >/dev/null
+for required in \
+  'enum { LJ_ARM64_SIDE_CHILD_NSNAP = 5 };' \
+  'typedef struct LJArm64SideShape {' \
+  'ExitNo exitno;' \
+  'MSize parent_nsnap;' \
+  'MSize continuation_pc;' \
+  'MSize child_pcpos[LJ_ARM64_SIDE_CHILD_NSNAP];' \
+  'uint32_t inherited_reg;' \
+  'uint32_t sload_reg;' \
+  'lj_asm_arm64_side_shape(ExitNo exitno);'; do
+  grep -F "$required" "$root/src/lj_asm.h" >/dev/null || {
+    echo "ARM64 side descriptor schema changed: $required" >&2
+    exit 1
+  }
+done
 grep -F 'lj_asm_arm64_side_prehead_admit' "$root/src/lj_asm.h" >/dev/null
 grep -F 'lj_asm_arm64_side_postra_admit' "$root/src/lj_asm.h" >/dev/null
 grep -F 'sh "$root/tools/ci/arm64_jit_side_ir_admission_contract.sh"' \
@@ -91,17 +108,42 @@ awk '/^\/\* -- Pure ARM64 first-side admission/ { copy=1 }
      copy && /^static int arm64_ir_funcf_snapshots/ { exit }' \
   "$root/src/lj_asm.c" >"$pure_region"
 test -s "$pure_region"
+sed -n '/^const LJArm64SideShape \*lj_asm_arm64_side_shape(/,/^}/p' \
+  "$root/src/lj_asm.c" >"$shape_region"
+test -s "$shape_region"
+for required in \
+  'static const LJArm64SideShape shapes[] = {' \
+  '{ 2u, 8u, 13u, { 13u, 14u, 3u, 17u, 7u }, RID_X28, RID_X27 },' \
+  '{ 6u, 9u, 10u, { 10u, 11u, 3u, 17u, 7u }, RID_X27, RID_X28 }' \
+  'if (shapes[i].exitno == exitno)' \
+  'return &shapes[i];' \
+  'return NULL;'; do
+  grep -F "$required" "$shape_region" >/dev/null || {
+    echo "ARM64 side descriptor table changed: $required" >&2
+    exit 1
+  }
+done
+test "$(grep -Ec '^    \{ [0-9]+u, [0-9]+u, [0-9]+u, \{' \
+  "$shape_region")" = 2 || {
+  echo "ARM64 side descriptor table is no longer exactly two rows" >&2
+  exit 1
+}
 
 for required in \
   'ARM64_SIDE_K_ONE = REF_TRUE-1u' \
   'ARM64_SIDE_SEMANTIC_NINS = REF_BASE+7u' \
   'ARM64_SIDE_R_CGET = REF_BASE+2u' \
-  'static const IRRef snaprefs[5]' \
+  'static const IRRef snaprefs[LJ_ARM64_SIDE_CHILD_NSNAP]' \
   'ARM64_SIDE_R_CGET, ARM64_SIDE_R_ADD, ARM64_SIDE_R_LIMIT' \
-  'static const MSize mapofs[5] = { 0, 3, 7, 11, 14 };' \
-  'static const uint8_t nent[5] = { 1, 2, 2, 1, 1 };' \
-  'static const uint8_t nslots[5] = { 5, 6, 6, 5, 5 };' \
-  'static const MSize pcpos[5] = { 13, 14, 3, 17, 7 };' \
+  'static const MSize mapofs[LJ_ARM64_SIDE_CHILD_NSNAP]' \
+  '{ 0, 3, 7, 11, 14 };' \
+  'static const uint8_t nent[LJ_ARM64_SIDE_CHILD_NSNAP]' \
+  '{ 1, 2, 2, 1, 1 };' \
+  'static const uint8_t nslots[LJ_ARM64_SIDE_CHILD_NSNAP]' \
+  '{ 5, 6, 6, 5, 5 };' \
+  'const LJArm64SideShape *shape;' \
+  'shape = lj_asm_arm64_side_shape(view->exitno);' \
+  'shape == NULL' \
   'view->proto_sizebc != 19u' \
   'view->nk != ARM64_SIDE_K_ONE || view->nsnap != 5u' \
   'view->nsnapmap != 17u' \
@@ -109,7 +151,7 @@ for required in \
   'view->traceno > UINT16_MAX || view->parent == 0' \
   'view->parent > UINT16_MAX || view->traceno == view->parent' \
   'view->root != view->parent' \
-  'view->link != view->parent || view->exitno != 2u' \
+  'view->link != view->parent' \
   'view->startins != BCINS_AD(BC_JMP, 0, 0)' \
   'view->linktype != LJ_TRLINK_ROOT' \
   'ins.o != IR_KINT || ins.t.irt != IRT_INT || ins.i != 1' \
@@ -123,16 +165,21 @@ for required in \
   'ARM64_SIDE_R_LIMIT, ARM64_SIDE_R_ADD);' \
   'ARM64_SIDE_R_XPOLL, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0' \
   'expected > (uintptr_t)(UINT64_MAX >> 8)' \
-  'for (snapno = 0; snapno < 5u; snapno++)' \
-  'snapno+1u < 5u ? mapofs[snapno+1u] : 17u' \
+  'for (snapno = 0; snapno < LJ_ARM64_SIDE_CHILD_NSNAP; snapno++)' \
+  'snapno+1u < LJ_ARM64_SIDE_CHILD_NSNAP ?' \
+  'view, snapno, shape->child_pcpos[snapno]))' \
   '&view->snapmap[8]' \
   '&view->snapmap[11]' \
   '&view->snapmap[14]' \
   'SNAP(4, 0, ARM64_SIDE_R_PARENT)' \
   'SNAP(5, 0, ARM64_SIDE_R_ADD)' \
   'int lj_asm_arm64_side_prehead_admit(' \
-  'static const Reg valueregs[4]' \
-  'RID_X27, RID_INIT, RID_X28, RID_X27' \
+  'Reg valueregs[4];' \
+  'shape = lj_asm_arm64_side_shape(view->semantic.exitno);' \
+  'valueregs[0] = shape->sload_reg;' \
+  'valueregs[1] = RID_INIT;' \
+  'valueregs[2] = shape->inherited_reg;' \
+  'valueregs[3] = shape->sload_reg;' \
   'view->nins != ARM64_SIDE_SEMANTIC_NINS+1u' \
   'view->stopins != ARM64_SIDE_R_PARENT' \
   'view->orignins != ARM64_SIDE_SEMANTIC_NINS' \
@@ -143,7 +190,8 @@ for required in \
   'view->entry_words < headidx+4u' \
   'view->entry[0] != A64I_LE(A64I_BTI_J)' \
   'view->entry[headidx] != A64I_LE(A64I_MOVx |' \
-  'A64F_D(RID_X27) | A64F_M(RID_X28)' \
+  'A64F_D(shape->sload_reg)' \
+  'A64F_M(shape->inherited_reg)' \
   'A64I_MOVZw |' \
   'A64F_U16(view->semantic.traceno)' \
   'view->entry[headidx+2u] != A64I_LE(A64I_DMB_ISH)' \
@@ -152,7 +200,7 @@ for required in \
   'view->entry[headidx+3u] != A64I_LE(vmstore)' \
   'ins.o != IR_NOP || ins.t.irt != IRT_NIL' \
   'ins.op1 != 0 || ins.op2 != 0 || ins.r != 0 || ins.s != 0' \
-  'view->parentmap[0] != REGSP(RID_X28, SPS_NONE)' \
+  'view->parentmap[0] != REGSP(shape->inherited_reg, SPS_NONE)' \
   'ins.r != RID_BASE || ins.s != SPS_NONE' \
   'ins.r != valueregs[ref-ARM64_SIDE_R_PARENT]' \
   'ins.r != RID_INIT || ins.s != SPS_NONE' \
@@ -163,12 +211,24 @@ for required in \
   }
 done
 
+require_order "$pure_region" \
+  'shape = lj_asm_arm64_side_shape(view->exitno);' \
+  'shape->child_pcpos[snapno]' \
+  'descriptor lookup before child snapshot geometry indexing'
+require_order "$pure_region" \
+  'shape = lj_asm_arm64_side_shape(view->semantic.exitno);' \
+  'view->parentmap[0] != REGSP(shape->inherited_reg, SPS_NONE)' \
+  'descriptor lookup before pre-head inherited-register indexing'
+require_order "$pure_region" \
+  '(shape = lj_asm_arm64_side_shape(view->semantic.exitno)) == NULL' \
+  'A64F_D(shape->sload_reg)' \
+  'descriptor lookup before post-RA head-move validation'
+
 if grep -E 'snap_count_acq|trace_save|traceslot_publish|lj_mcode_|lj_ir_call|asm_call|lj_trace_err|trace_exittarget' \
      "$pure_region" >/dev/null; then
   echo "pure ARM64 side certificate gained mutable-count or publication effects" >&2
   exit 1
 fi
-
 awk '/^void lj_asm_trace\(/ { copy=1 }
      copy { print }
      copy && /^#if LJ_TARGET_ARM64 && defined\(LJ_ARM64_EMIT_TEST_HELPERS\)/ {
@@ -271,6 +331,12 @@ for required in \
   'fx.view.proto_sizebc = 19;' \
   'fx.view.traceno = fx.view.parent' \
   'fx.view.exitno++' \
+  'fx.view.exitno = 6;' \
+  'fx.ir[REF_BASE].op2 = 6;' \
+  'set_footer(0, 10, 0);' \
+  'set_footer(1, 11, 0);' \
+  'make_semantic(); fx.view.exitno = 3; fx.ir[REF_BASE].op2 = 3;' \
+  'make_semantic(); fx.view.exitno = 7; fx.ir[REF_BASE].op2 = 7;' \
   'setir(K_ONE, IR_KINT, IRT_INT, 2, 0)' \
   'setir(K_ONE, IR_KNUM, IRT_NUM, 1, 0)' \
   'fx.ir[R_PARENT].op2 = IRSLOAD_PARENT' \
@@ -304,6 +370,7 @@ for required in \
   'fx.postra.semantic.traceno = 9;' \
   'A64F_U16(fx.postra.semantic.traceno) | A64F_D(RID_TMP)' \
   'expect_prehead(1);' \
+  'fx.postra.semantic.exitno = 6;' \
   'lj_asm_arm64_side_prehead_admit(NULL, NULL)' \
   'PREHEAD_MUTATION(fx.postra.semantic.exitno++)' \
   'PREHEAD_MUTATION(fx.postra.parentmap = NULL)' \
@@ -346,6 +413,46 @@ for required in \
     exit 1
   }
 done
+test "$(grep -Fc 'set_footer(0, 10, 0);' \
+  "$root/tests/t-arm64-jit-side-ir-admission.c")" = 3 || {
+  echo "ARM64 side fixture lost exit-6 semantic/pre-head/post-RA coverage" >&2
+  exit 1
+}
+test "$(grep -Fc 'set_footer(1, 11, 0);' \
+  "$root/tests/t-arm64-jit-side-ir-admission.c")" = 3 || {
+  echo "ARM64 side fixture lost exit-6 second-footer coverage" >&2
+  exit 1
+}
+test "$(grep -Fc 'fx.postra.semantic.exitno = 6;' \
+  "$root/tests/t-arm64-jit-side-ir-admission.c")" = 2 || {
+  echo "ARM64 side fixture lost exit-6 pre-head/post-RA admission" >&2
+  exit 1
+}
+awk '/^static void make_second_postra\(/ { copy=1 }
+     copy { print }
+     copy && /^}/ { exit }' \
+  "$root/tests/t-arm64-jit-side-ir-admission.c" >"$second_postra_region"
+test -s "$second_postra_region"
+for required in \
+  'fx.postra.semantic.exitno = 6;' \
+  'fx.ir[REF_BASE].op2 = 6;' \
+  'set_footer(0, 10, 0);' \
+  'set_footer(1, 11, 0);' \
+  'fx.ir[R_PARENT].r = RID_X28;' \
+  'fx.ir[R_ADD].r = RID_X27;' \
+  'fx.ir[R_LIMIT].r = RID_X28;' \
+  'fx.parentmap[0] = REGSP(RID_X27, SPS_NONE);' \
+  'A64F_D(RID_X28) | A64F_M(RID_X27))'; do
+  grep -F "$required" "$second_postra_region" >/dev/null || {
+    echo "ARM64 exit-6 allocator tuple changed: $required" >&2
+    exit 1
+  }
+done
+test "$(grep -Fc 'make_second_postra();' \
+  "$root/tests/t-arm64-jit-side-ir-admission.c")" = 3 || {
+  echo "ARM64 side fixture lost exit-6 allocator/cross-certificate coverage" >&2
+  exit 1
+}
 
 grep -F 'MSize parentmap_n;  /* Number of entries copied from lj_snap_regspmap(). */' \
   "$root/src/lj_asm.c" >/dev/null

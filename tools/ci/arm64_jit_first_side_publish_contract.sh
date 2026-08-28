@@ -117,6 +117,7 @@ missing_helpers=$tmpdir/missing-helpers.txt
 mutual_exclusion=$tmpdir/mutual-exclusion.txt
 debug_registration=$tmpdir/debug-registration.txt
 cell_resume_region=$tmpdir/arm64-cell-resume.txt
+publish_child_region=$tmpdir/first-side-publish-child.txt
 retire_plan_region=$tmpdir/first-side-retire-plan.txt
 retire_edge_region=$tmpdir/first-side-retire-edge.txt
 retire_topology_region=$tmpdir/first-side-retire-topology.txt
@@ -188,6 +189,50 @@ for required in \
   }
 done
 
+# Production and the one-shot seam share the exact child seal verifier. Its
+# descriptor is selected only after the cert/J/parent view agrees, and the
+# coupled parent snapshot count and inherited register feed the post-RA gate.
+awk '/^static int trace_arm64_side_publish_child_valid\(/ { copy=1 }
+     copy { print }
+     copy && /^}/ { exit }' "$trace_source" >"$publish_child_region"
+test -s "$publish_child_region"
+for required in \
+  'const LJArm64SideShape *shape;' \
+  'shape = lj_asm_arm64_side_shape(cert->exitno);' \
+  'shape == NULL || parentview->nsnap != shape->parent_nsnap' \
+  'parentmap = (uint16_t)REGSP(shape->inherited_reg, SPS_NONE);' \
+  'postra.semantic.exitno = cert->exitno;' \
+  'postra.parentmap = &parentmap;' \
+  'lj_asm_arm64_side_postra_admit(&postra, &admitted_nins)' \
+  'plan->parentsnap = &parentview->snap[cert->exitno];' \
+  'plan->parent_exitslot = &parentview->exittab[cert->exitno];'; do
+  grep -F "$required" "$publish_child_region" >/dev/null || {
+    echo "first-side child publication descriptor changed: $required" >&2
+    exit 1
+  }
+done
+if grep -E 'parentmap[[:space:]]*=[[:space:]]*REGSP\(RID_X(27|28)' \
+     "$publish_child_region" >/dev/null; then
+  echo "first-side child publication regained a fixed inherited register" >&2
+  exit 1
+fi
+require_order "$publish_child_region" \
+  'gcref_acq(cert->tracev->slot[cert->child])' \
+  'shape = lj_asm_arm64_side_shape(cert->exitno);' \
+  'cert/J/parent view agreement before child descriptor lookup'
+require_order "$publish_child_region" \
+  'shape == NULL || parentview->nsnap != shape->parent_nsnap' \
+  'parentmap = (uint16_t)REGSP(shape->inherited_reg, SPS_NONE);' \
+  'parent snapshot coupling before inherited-register construction'
+require_order "$publish_child_region" \
+  'parentmap = (uint16_t)REGSP(shape->inherited_reg, SPS_NONE);' \
+  'lj_asm_arm64_side_postra_admit(&postra, &admitted_nins)' \
+  'descriptor-derived parent map before post-RA admission'
+require_order "$publish_child_region" \
+  'shape = lj_asm_arm64_side_shape(cert->exitno);' \
+  'plan->parentsnap = &parentview->snap[cert->exitno];' \
+  'descriptor lookup before publication snapshot indexing'
+
 # The exact inverse is finite: compare/exchange the authenticated raw parent
 # edge to fallback, publish retirement at each caller, then compare/exchange
 # the sole first-child topology. The terminal snapshot is intentionally sticky.
@@ -233,6 +278,18 @@ for region in "$retire_plan_region" "$retire_edge_region" \
 done
 
 for required in \
+  'exitno = (ExitNo)base.op2;' \
+  'shape = lj_asm_arm64_side_shape(exitno);' \
+  'shape == NULL' \
+  'parent_nsnap = trace_nsnap_acq(parent);' \
+  'parent_nexits = trace_exittab_nslots_acq(parent);' \
+  'parent_nsnap != shape->parent_nsnap' \
+  '(MSize)exitno >= parent_nsnap' \
+  '(MSize)exitno >= parent_nexits' \
+  'parent_nexits != parent_nsnap' \
+  'trace_startpc_acq(T) != proto_bc(pt)+shape->continuation_pc' \
+  'plan->parentsnap = &snap[exitno];' \
+  'plan->parent_exitslot = &exittab[exitno];' \
   'exitstub_trace_fallback_addr_(' \
   'trace_exittarget_arm64_encode(' \
   'la_loadptr_acq((void *const *)plan->parent_exitslot)' \
@@ -244,6 +301,27 @@ for required in \
     exit 1
   }
 done
+if grep -E 'exitno != 2|snap\[2\]|exittab\[2\]' \
+     "$retire_plan_region" >/dev/null; then
+  echo "first-side retirement regained a literal parent exit" >&2
+  exit 1
+fi
+require_order "$retire_plan_region" \
+  'shape = lj_asm_arm64_side_shape(exitno);' \
+  'plan->parentsnap = &snap[exitno];' \
+  'supported descriptor lookup before retirement snapshot indexing'
+require_order "$retire_plan_region" \
+  'shape = lj_asm_arm64_side_shape(exitno);' \
+  'plan->parent_exitslot = &exittab[exitno];' \
+  'supported descriptor lookup before retirement edge indexing'
+require_order "$retire_plan_region" \
+  '(MSize)exitno >= parent_nsnap' \
+  'plan->parentsnap = &snap[exitno];' \
+  'selected snapshot bound before retirement pointer'
+require_order "$retire_plan_region" \
+  '(MSize)exitno >= parent_nexits' \
+  'plan->parent_exitslot = &exittab[exitno];' \
+  'selected exit-table bound before retirement pointer'
 grep -F 'trace_exittarget_arm64_raw_cas_acqrel(' \
   "$retire_edge_region" >/dev/null || {
   echo "first-side raw retirement helper lost authenticated edge CAS" >&2

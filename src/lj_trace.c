@@ -4435,7 +4435,7 @@ static int trace_arm64_first_side_loop_generation_valid(
   if (endpos < 0 || endpos >= (int64_t)pt->sizebc)
     return 0;
   backpc = &bc[(BCPos)endpos];
-  /* The canonical offset-13 continuation is a live CGET. BC_JMP belongs to
+  /* An admitted descriptor continuation is a live CGET. BC_JMP belongs to
   ** J->cur.startins only after side setup, so pin this instruction generation
   ** without incorrectly requiring a JMP opcode at the parent continuation. */
   continuation1 =
@@ -4468,14 +4468,21 @@ static int trace_arm64_first_side_metadata_view_valid(jit_State *J,
     TraceNo parent, ExitNo exitno, const BCIns *pc, GCproto **ptp,
     TraceArm64FirstSideLoopView *viewp)
 {
+  const LJArm64SideShape *shape = lj_asm_arm64_side_shape(exitno);
   TraceArm64FirstSideLoopView first, second;
-  if (J == NULL || pc == NULL || parent == 0 ||
+  if (J == NULL || pc == NULL || parent == 0 || shape == NULL ||
       !trace_arm64_first_side_view_acq(J, parent, exitno, &first) ||
       !trace_arm64_first_side_snapshot_valid(&first, pc) ||
       !trace_arm64_first_side_loop_generation_valid(&first, parent, pc) ||
+      first.nsnap != shape->parent_nsnap ||
+      (MSize)proto_bcpos(gco2pt(first.startpt), pc) !=
+	shape->continuation_pc ||
       !trace_arm64_first_side_view_acq(J, parent, exitno, &second) ||
       !trace_arm64_first_side_snapshot_valid(&second, pc) ||
       !trace_arm64_first_side_loop_generation_valid(&second, parent, pc) ||
+      second.nsnap != shape->parent_nsnap ||
+      (MSize)proto_bcpos(gco2pt(second.startpt), pc) !=
+	shape->continuation_pc ||
       !trace_arm64_first_side_view_equal(&first, &second))
     return 0;
   if (ptp)
@@ -5042,6 +5049,7 @@ static int trace_arm64_side_publish_child_valid(jit_State *J, GCtrace *T,
     TraceArm64SidePublishPlan *plan)
 {
   GCtrace *body = J->curfinal;
+  const LJArm64SideShape *shape;
   LJArm64SidePostRAView postra;
   IRRef finalnins, semantic_nins, admitted_nins;
   MCode *mcode, *exitstub, *fallback;
@@ -5049,7 +5057,7 @@ static int trace_arm64_side_publish_child_valid(jit_State *J, GCtrace *T,
   void *fallback_encoding;
   uintptr_t fallback_encoding_bits;
   MSize szmcode, nsnap, nexits, i;
-  uint16_t parentmap = REGSP(RID_X28, SPS_NONE);
+  uint16_t parentmap;
   char *compact;
 
   if (T == NULL || T != &J->cur || body == NULL || cert == NULL ||
@@ -5078,6 +5086,10 @@ static int trace_arm64_side_publish_child_valid(jit_State *J, GCtrace *T,
       gcref_acq(cert->tracev->slot[cert->child]) !=
 	(const GCobj *)LJ_TRACE_PENDING)
     goto fail_current;
+  shape = lj_asm_arm64_side_shape(cert->exitno);
+  if (shape == NULL || parentview->nsnap != shape->parent_nsnap)
+    goto fail_current;
+  parentmap = (uint16_t)REGSP(shape->inherited_reg, SPS_NONE);
 
   /* lj_trace_alloc() owns only compact IR storage at this boundary. Snapshot,
   ** exit-table, mcode and semantic-header ownership remain in J->cur until the
@@ -5472,6 +5484,7 @@ typedef struct TraceArm64FirstChildEntryView {
   uint8_t admission;
   uint8_t parent_snap_topslot;
   uint8_t parent_snap_count;
+  ExitNo parent_exitno;
 #if LJ_ABI_PAUTH
   uintptr_t mcauth_bits;
 #endif
@@ -5496,7 +5509,8 @@ static int trace_root_entry_first_child_view_equal(
 	a->nextside == b->nextside && a->nchild == b->nchild &&
 	a->linktype == b->linktype && a->admission == b->admission &&
 	a->parent_snap_topslot == b->parent_snap_topslot &&
-	a->parent_snap_count == b->parent_snap_count
+	a->parent_snap_count == b->parent_snap_count &&
+	a->parent_exitno == b->parent_exitno
 #if LJ_ABI_PAUTH
 	&& a->mcauth_bits == b->mcauth_bits
 #endif
@@ -5512,6 +5526,7 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
 	TraceArm64FirstChildEntryView *view)
 {
   global_State *g = J2G(J);
+  const LJArm64SideShape *shape;
   TraceVec *tv;
   GCtrace *child;
   GCobj *o;
@@ -5519,14 +5534,16 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
   SnapShot *parentsnap;
   SnapEntry *parentmap;
   const BCIns *continuation;
+  IRIns base;
   LJArm64SidePostRAView postra;
   GCArena *arena;
   GCSize size;
   SnapNo checked_nsnap;
   IRRef semantic_nins, admitted_nins;
   MCode *fallback;
-  MSize nexits, i;
-  uint16_t parentmap0 = REGSP(RID_X28, SPS_NONE);
+  MSize nexits, parent_nexits, i;
+  ExitNo parent_exitno;
+  uint16_t parentmap0;
   uintptr_t mcodep, fallbackp, fallback_encoding_bits;
 
   memset(view, 0, sizeof(*view));
@@ -5536,25 +5553,13 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
 	rootview->nextside == 0 || rootview->nextside == parentno ||
 	rootview->traceno != parentno ||
 	rootview->admission != TRACE_ARM64_INT_LOOP_ADMITTED ||
-	bc_op(rootview->startins) != BC_LOOP || rootview->nsnap != 8u ||
+	bc_op(rootview->startins) != BC_LOOP ||
 	rootview->topslot != 5u || rootview->startpt == NULL)
     return 0;
   pt = gco2pt(rootview->startpt);
   if (pt->sizebc != 19u || pt->framesize != 5u ||
 	rootview->snap == NULL || rootview->snapmap == NULL ||
 	rootview->nsnapmap == 0 || rootview->exittab == NULL)
-    return 0;
-
-  parentsnap = &rootview->snap[2];
-  if (snap_mapofs_acq(parentsnap) > rootview->nsnapmap ||
-	snap_nent_acq(parentsnap) >
-	  rootview->nsnapmap-snap_mapofs_acq(parentsnap) ||
-	(1u+LJ_FR2) > rootview->nsnapmap-snap_mapofs_acq(parentsnap)-
-	  snap_nent_acq(parentsnap))
-    return 0;
-  parentmap = &rootview->snapmap[snap_mapofs_acq(parentsnap)];
-  continuation = snap_pc_acq(&parentmap[snap_nent_acq(parentsnap)]);
-  if (continuation != proto_bc(pt)+13u)
     return 0;
 
   tv = tracevec_acq(J);
@@ -5578,10 +5583,6 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
   view->mcode = trace_mcode_acq(child);
   view->exittab = trace_exittab_acq(child);
   view->exitstub = trace_exitstub_acq(child);
-  view->parent_target =
-	la_loadptr_acq((void *const *)&rootview->exittab[2]);
-  view->parent_target_bits =
-	trace_arm64_first_side_pointer_bits(view->parent_target);
   view->retire_epoch = la_load64_acq(&child->retire_epoch);
   view->szmcode = trace_szmcode_acq(child);
   view->topslot = trace_topslot_acq(child);
@@ -5598,8 +5599,6 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
   view->nchild = trace_nchild_acq(child);
   view->linktype = trace_linktype_acq(child);
   view->admission = la_load8_acq(&child->unused1);
-  view->parent_snap_topslot = (uint8_t)snap_topslot_acq(parentsnap);
-  view->parent_snap_count = (uint8_t)snap_count_acq(parentsnap);
 #if LJ_ABI_PAUTH
   view->mcauth_bits =
 	trace_arm64_first_side_function_bits(trace_mcauth_acq(child));
@@ -5609,7 +5608,7 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
 	view->root != parentno || view->link != parentno ||
 	view->nextroot != 0 || view->nextside != 0 || view->nchild != 0 ||
 	view->linktype != LJ_TRLINK_ROOT ||
-	view->startpt != rootview->startpt || view->startpc != continuation ||
+	view->startpt != rootview->startpt || view->startpc == NULL ||
 	trace_startins_acq(child) != BCINS_AD(BC_JMP, 0, 0) ||
 	view->admission != TRACE_ARM64_INT_SIDE_ADMITTED ||
 	view->spadjust != 0 || view->topslot != rootview->topslot ||
@@ -5619,10 +5618,6 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
 	view->mcode == NULL || view->szmcode <= sizeof(MCode) ||
 	(view->szmcode & (sizeof(MCode)-1u)) != 0 ||
 	view->exittab == NULL || view->exitstub == NULL ||
-	view->parent_snap_topslot != view->topslot ||
-	view->parent_snap_count != SNAPCOUNT_DONE ||
-	view->parent_target_bits != trace_arm64_first_side_pointer_bits(
-	  trace_exittarget_arm64_encode(g, view->mcode)) ||
 	(trace_native_pinword_acq(child) & TRACE_NATIVE_PIN_CLOSED) != 0 ||
 	trace_retired_link_acq(child) != TRACE_RETIRED_LINK_UNLINKED ||
 	!trace_size_checked(g, child, &size, &checked_nsnap) ||
@@ -5670,6 +5665,47 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
   }
 #endif
 
+  /* The compact child is now geometrically and referentially valid. Derive
+  ** its selected parent exit from immutable IR_BASE, then bound that value
+  ** against both parent arrays before forming either selected pointer. */
+  base = ir_load_acq(&view->ir[REF_BASE]);
+  if (base.o != IR_BASE || base.t.irt != IRT_PGC ||
+	(TraceNo)base.op1 != parentno)
+    return 0;
+  parent_exitno = (ExitNo)base.op2;
+  shape = lj_asm_arm64_side_shape(parent_exitno);
+  parent_nexits = trace_exittab_nslots_acq(parent);
+  if (shape == NULL || rootview->nsnap != shape->parent_nsnap ||
+	(MSize)base.op2 >= rootview->nsnap ||
+	(MSize)base.op2 >= parent_nexits ||
+	parent_nexits != rootview->nsnap)
+    return 0;
+  view->parent_exitno = parent_exitno;
+  parentmap0 = (uint16_t)REGSP(shape->inherited_reg, SPS_NONE);
+  parentsnap = &rootview->snap[parent_exitno];
+  if (snap_mapofs_acq(parentsnap) > rootview->nsnapmap ||
+	snap_nent_acq(parentsnap) >
+	  rootview->nsnapmap-snap_mapofs_acq(parentsnap) ||
+	(1u+LJ_FR2) > rootview->nsnapmap-snap_mapofs_acq(parentsnap)-
+	  snap_nent_acq(parentsnap))
+    return 0;
+  parentmap = &rootview->snapmap[snap_mapofs_acq(parentsnap)];
+  continuation = snap_pc_acq(&parentmap[snap_nent_acq(parentsnap)]);
+  view->parent_target = la_loadptr_acq(
+    (void *const *)&rootview->exittab[parent_exitno]);
+  view->parent_target_bits =
+	trace_arm64_first_side_pointer_bits(view->parent_target);
+  view->parent_snap_topslot = (uint8_t)snap_topslot_acq(parentsnap);
+  view->parent_snap_count = (uint8_t)snap_count_acq(parentsnap);
+  if (continuation != proto_bc(pt)+shape->continuation_pc ||
+	view->startpc != continuation ||
+	bc_op((BCIns)la_load32_acq((const uint32_t *)continuation)) != BC_CGET ||
+	view->parent_snap_topslot != view->topslot ||
+	view->parent_snap_count != SNAPCOUNT_DONE ||
+	view->parent_target_bits != trace_arm64_first_side_pointer_bits(
+	  trace_exittarget_arm64_encode(g, view->mcode)))
+    return 0;
+
   memset(&postra, 0, sizeof(postra));
   semantic_nins = view->nins-1u;
   postra.semantic.ir = view->ir;
@@ -5687,7 +5723,7 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
   postra.semantic.parent = parentno;
   postra.semantic.root = view->root;
   postra.semantic.link = view->link;
-  postra.semantic.exitno = 2u;
+  postra.semantic.exitno = parent_exitno;
   postra.semantic.startins = trace_startins_acq(child);
   postra.semantic.linktype = view->linktype;
   postra.semantic.sinktags = child->sinktags;
@@ -5716,7 +5752,8 @@ static int trace_root_entry_first_child_view_acq(jit_State *J,
 	trace_nchild_acq(parent) == 1 &&
 	trace_nextside_acq(parent) == view->traceno &&
 	trace_arm64_first_side_pointer_bits(
-	  la_loadptr_acq((void *const *)&rootview->exittab[2])) ==
+	  la_loadptr_acq(
+	    (void *const *)&rootview->exittab[parent_exitno])) ==
 	  view->parent_target_bits;
 }
 
@@ -7824,9 +7861,11 @@ static int trace_arm64_first_side_retire_plan(jit_State *J, GCtrace *T,
     int retired, TraceArm64FirstSideRetirePlan *plan)
 {
   global_State *g;
+  const LJArm64SideShape *shape;
   TraceVec *tv;
   GCtrace *parent;
   GCobj *startpt;
+  GCproto *pt;
   IRIns *ir;
   IRIns base;
   SnapShot *snap;
@@ -7841,6 +7880,8 @@ static int trace_arm64_first_side_retire_plan(jit_State *J, GCtrace *T,
   MSize mapofs;
   MSize nent;
   MSize nsnapmap;
+  MSize parent_nsnap;
+  MSize parent_nexits;
   uint8_t childflags;
   uint8_t parentflags;
 
@@ -7857,12 +7898,14 @@ static int trace_arm64_first_side_retire_plan(jit_State *J, GCtrace *T,
   childno = trace_traceno_acq(T);
   parentno = trace_root_acq(T);
   ir = trace_ir_acq(T);
-  if (childno == 0 || parentno == 0 || childno == parentno || ir == NULL)
+  if (childno == 0 || parentno == 0 || childno == parentno || ir == NULL ||
+      trace_nins_acq(T) <= REF_BASE)
     return 0;
   base = ir_load_acq(&ir[REF_BASE]);
   exitno = (ExitNo)base.op2;
+  shape = lj_asm_arm64_side_shape(exitno);
   if (base.o != IR_BASE || base.t.irt != IRT_PGC ||
-      (TraceNo)base.op1 != parentno || exitno != 2u ||
+      (TraceNo)base.op1 != parentno || shape == NULL ||
       trace_link_acq(T) != parentno ||
       trace_linktype_acq(T) != LJ_TRLINK_ROOT ||
       trace_nextroot_acq(T) != 0 || trace_nextside_acq(T) != 0 ||
@@ -7900,14 +7943,20 @@ static int trace_arm64_first_side_retire_plan(jit_State *J, GCtrace *T,
       gcref_acq(tv->slot[childno]) != obj2gco(T))
     return 0;
   parent = traceref_fromgco_safe(gcref_acq(tv->slot[parentno]));
-  if (parent == NULL || trace_traceno_acq(parent) != parentno ||
+  if (parent == NULL)
+    return 0;
+  parent_nsnap = trace_nsnap_acq(parent);
+  parent_nexits = trace_exittab_nslots_acq(parent);
+  if (trace_traceno_acq(parent) != parentno ||
       trace_root_acq(parent) != 0 || trace_link_acq(parent) != parentno ||
       trace_linktype_acq(parent) != LJ_TRLINK_LOOP ||
       trace_nchild_acq(parent) != 1 ||
       trace_nextside_acq(parent) != childno ||
       la_load64_acq(&parent->retire_epoch) != 0 ||
       trace_topslot_acq(parent) != 5u || trace_spadjust_acq(parent) != 0 ||
-      trace_nsnap_acq(parent) != 8u)
+      parent_nsnap != shape->parent_nsnap ||
+      (MSize)exitno >= parent_nsnap ||
+      (MSize)exitno >= parent_nexits || parent_nexits != parent_nsnap)
     return 0;
   parentflags = la_load8_acq(&parent->unused1);
   if ((parentflags &
@@ -7919,6 +7968,10 @@ static int trace_arm64_first_side_retire_plan(jit_State *J, GCtrace *T,
   if (startpt == NULL || !checkptrGC(startpt) ||
       startpt->gch.gct != (uint32_t)~LJ_TPROTO ||
       trace_startptgco_acq(parent) != startpt)
+    return 0;
+  pt = gco2pt(startpt);
+  if (pt->sizebc != 19u || pt->framesize != 5u ||
+      trace_startpc_acq(T) != proto_bc(pt)+shape->continuation_pc)
     return 0;
 
   snap = trace_snap_acq(parent);

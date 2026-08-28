@@ -39,6 +39,7 @@ ins_region=$tmpdir/side-ingress-ins.txt
 first_publish_ingress_region=$tmpdir/side-ingress-first-publish-test.txt
 asm_region=$tmpdir/side-parent-asm-consumption.txt
 asm_head_region=$tmpdir/side-parent-asm-head.txt
+second_descriptor_region=$tmpdir/side-ingress-second-descriptor.txt
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT -DLJ_TRACE_TEST_HELPERS'
 
 require_order()
@@ -138,6 +139,14 @@ for required in \
   'trace_exittarget_arm64_encode(J2G(J), v->fallback)' \
   'live1 != expected || shadow1 != v->startins' \
   'continuation2 != continuation1' \
+  'const LJArm64SideShape *shape = lj_asm_arm64_side_shape(exitno);' \
+  'shape == NULL' \
+  'first.nsnap != shape->parent_nsnap' \
+  '(MSize)proto_bcpos(gco2pt(first.startpt), pc) !=' \
+  'second.nsnap != shape->parent_nsnap' \
+  '(MSize)proto_bcpos(gco2pt(second.startpt), pc) !=' \
+  'shape->continuation_pc' \
+  'trace_arm64_first_side_view_equal(&first, &second)' \
   'J->parent != parent' \
   'J->exitno != exitno' \
   'pc != continuation' \
@@ -151,6 +160,17 @@ for required in \
     exit 1
   }
 done
+require_order "$helper_region" 'lj_asm_arm64_side_shape(exitno)' \
+  'trace_arm64_first_side_view_acq(J, parent, exitno, &first)' \
+  'supported descriptor lookup before selected parent view indexing'
+require_order "$helper_region" \
+  'trace_arm64_first_side_loop_generation_valid(&first, parent, pc)' \
+  'proto_bcpos(gco2pt(first.startpt), pc)' \
+  'first generation/range validation before exact-PC position conversion'
+require_order "$helper_region" \
+  'trace_arm64_first_side_loop_generation_valid(&second, parent, pc)' \
+  'proto_bcpos(gco2pt(second.startpt), pc)' \
+  'second generation/range validation before exact-PC position conversion'
 if grep -E 'lj_jit_token_(try|release)|lj_trace_state_store|snap_count_(cas|rel)|trace_nchild_inc|trace_nextside_rel|trace_exittarget_arm64_rel|bc_publish|lj_gc2_smr_read_(try|enter|leave)|la_(store|cas|add|or|and)[0-9a-z_]*\(' \
      "$helper_region" >/dev/null; then
   echo "read-only ARM64 side-ingress checkpoint gained a mutation" >&2
@@ -460,10 +480,20 @@ grep -F 'LJ_TRERR_SMRRETRY : LJ_TRERR_RETRY' \
   "$root/src/lj_asm.c" >/dev/null
 
 fixture_source=$root/tests/t-arm64-jit-side-ingress-metadata.c
+awk '/^static void test_second_descriptor\(/ { copy=1 }
+     copy { print }
+     copy && /^}/ { exit }' "$fixture_source" >"$second_descriptor_region"
+test -s "$second_descriptor_region"
 for required in \
   'SIDE_META_PARENT = 1' \
   'SIDE_META_EXIT = 2' \
   'SIDE_META_PC_POS = 13' \
+  'SIDE_META_NSNAP = 8' \
+  'SIDE_META_SECOND_EXIT = 6' \
+  'SIDE_META_SECOND_PC_POS = 10' \
+  'SIDE_META_SECOND_NSNAP = 9' \
+  'SIDE_META_CAP_NSNAP = SIDE_META_SECOND_NSNAP' \
+  'test_second_descriptor(L, &fixture);' \
   'TRACE_ARM64_INT_SIDE_ADMITTED' \
   'TRACE_EXITTAB_MCODE' \
   'trace_exittarget_arm64_rel(G(L), T, (ExitNo)i, fallback);' \
@@ -491,6 +521,31 @@ for required in \
   'LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER'; do
   grep -F "$required" "$fixture_source" >/dev/null || {
     echo "ARM64 side-ingress mutation coverage changed: $required" >&2
+    exit 1
+  }
+done
+for required in \
+  '&proto_bc(f->pt)[SIDE_META_SECOND_PC_POS]' \
+  'SIDE_META_PARENT, SIDE_META_SECOND_EXIT, continuation, NULL,' \
+  'T->nsnap = SIDE_META_SECOND_NSNAP;' \
+  'T->nsnapmap = SIDE_META_CAP_NSNAPMAP;' \
+  'J, NULL, SIDE_META_PARENT, SIDE_META_EXIT,' \
+  '&proto_bc(f->pt)[SIDE_META_PC_POS], NULL,' \
+  'J, NULL, SIDE_META_PARENT, SIDE_META_SECOND_EXIT,' \
+  'J, L, SIDE_META_PARENT, SIDE_META_SECOND_EXIT,' \
+  'LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA' \
+  'LJ_TRACE_ARM64_SIDE_CONTEXT_IDLE' \
+  'LJ_TRACE_ARM64_SIDE_CONTEXT_CLAIM' \
+  'J->exitno = SIDE_META_SECOND_EXIT;' \
+  'LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER' \
+  'assert(selected->count == before);' \
+  'T->nsnap = saved_nsnap;' \
+  'T->nsnapmap = saved_nsnapmap;' \
+  'memcpy(&f->snapmap[footer], saved_footer, sizeof(saved_footer));' \
+  'jit_token_acq(G(L)) == 0 && jit_owner_l_acq(J) == NULL' \
+  'lj_trace_state_load(J) == LJ_TRACE_IDLE'; do
+  grep -F "$required" "$second_descriptor_region" >/dev/null || {
+    echo "ARM64 second side descriptor coverage changed: $required" >&2
     exit 1
   }
 done

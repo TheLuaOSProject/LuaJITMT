@@ -66,6 +66,8 @@ pending_region=$tmpdir/pending-region.txt
 source_gate_region=$tmpdir/source-gate-region.txt
 loop_view_region=$tmpdir/loop-view-region.txt
 layout_region=$tmpdir/layout-region.txt
+first_child_region=$tmpdir/first-child-region.txt
+first_child_equal_region=$tmpdir/first-child-equal-region.txt
 vm_disasm=$tmpdir/vm.disasm
 vm_reloc=$tmpdir/vm.reloc
 jloop_region=$tmpdir/vm-jloop.txt
@@ -457,6 +459,97 @@ for required in 'postra.ir = v->ir;' 'postra.snap = v->snap;' \
   'return lj_asm_arm64_postra_admit(&postra, NULL);'; do
   grep -F "$required" "$layout_region" >/dev/null
 done
+awk '/^static int trace_root_entry_first_child_view_acq/ { copy=1 }
+     copy { print }
+     copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$first_child_region"
+test -s "$first_child_region"
+awk '/^static int trace_root_entry_first_child_view_equal/ { copy=1 }
+     copy { print }
+     copy && /^}/ { exit }' \
+  "$root/src/lj_trace.c" >"$first_child_equal_region"
+test -s "$first_child_equal_region"
+grep -F 'a->parent_exitno == b->parent_exitno' \
+  "$first_child_equal_region" >/dev/null || {
+  echo "root-entry first-child race view lost selected-exit equality" >&2
+  exit 1
+}
+grep -F 'trace_root_entry_first_child_view_equal(&childview, &childview2)' \
+  "$helper_region" >/dev/null || {
+  echo "root-entry helper lost double-capture first-child equality" >&2
+  exit 1
+}
+for required in \
+  'base = ir_load_acq(&view->ir[REF_BASE]);' \
+  '(TraceNo)base.op1 != parentno' \
+  'parent_exitno = (ExitNo)base.op2;' \
+  'shape = lj_asm_arm64_side_shape(parent_exitno);' \
+  'shape == NULL || rootview->nsnap != shape->parent_nsnap' \
+  '(MSize)base.op2 >= rootview->nsnap' \
+  '(MSize)base.op2 >= parent_nexits' \
+  'parent_nexits != rootview->nsnap' \
+  'view->parent_exitno = parent_exitno;' \
+  'parentmap0 = (uint16_t)REGSP(shape->inherited_reg, SPS_NONE);' \
+  'parentsnap = &rootview->snap[parent_exitno];' \
+  'continuation != proto_bc(pt)+shape->continuation_pc' \
+  'rootview->exittab[parent_exitno]' \
+  'postra.semantic.exitno = parent_exitno;'; do
+  grep -F "$required" "$first_child_region" >/dev/null || {
+    echo "root-entry dynamic first-side exit lost: $required" >&2
+    exit 1
+  }
+done
+if grep -E 'rootview->(snap|exittab)\[2\]|semantic\.exitno = 2' \
+     "$first_child_region" >/dev/null; then
+  echo "root-entry first-child verifier regained a literal parent exit" >&2
+  exit 1
+fi
+first_child_size=$(awk -v needle='trace_size_checked(g, child' \
+  'index($0, needle) { print NR; exit }' "$first_child_region")
+first_child_refs=$(awk -v needle='trace_body_refs_valid(g, child' \
+  'index($0, needle) { print NR; exit }' "$first_child_region")
+first_child_base=$(awk -v needle='base = ir_load_acq(&view->ir[REF_BASE]);' \
+  'index($0, needle) { print NR; exit }' "$first_child_region")
+first_child_selector=$(awk -v needle='parent_exitno = (ExitNo)base.op2;' \
+  'index($0, needle) { print NR; exit }' "$first_child_region")
+first_child_shape=$(awk -v needle='shape = lj_asm_arm64_side_shape(parent_exitno);' \
+  'index($0, needle) { print NR; exit }' "$first_child_region")
+first_child_snap=$(awk -v needle='parentsnap = &rootview->snap[parent_exitno];' \
+  'index($0, needle) { print NR; exit }' "$first_child_region")
+first_child_parentmap=$(awk \
+  -v needle='parentmap0 = (uint16_t)REGSP(shape->inherited_reg, SPS_NONE);' \
+  'index($0, needle) { print NR; exit }' "$first_child_region")
+first_child_snap_bound=$(awk -v needle='(MSize)base.op2 >= rootview->nsnap' \
+  'index($0, needle) { print NR; exit }' "$first_child_region")
+first_child_edge_bound=$(awk -v needle='(MSize)base.op2 >= parent_nexits' \
+  'index($0, needle) { print NR; exit }' "$first_child_region")
+first_child_edge=$(awk -v needle='rootview->exittab[parent_exitno]' \
+  'index($0, needle) && ++seen == 1 { print NR; exit }' "$first_child_region")
+first_child_postra=$(awk -v needle='lj_asm_arm64_side_postra_admit' \
+  'index($0, needle) { print NR; exit }' "$first_child_region")
+first_child_final_edge=$(awk -v needle='rootview->exittab[parent_exitno]' \
+  'index($0, needle) && ++seen == 2 { print NR; exit }' "$first_child_region")
+test -n "$first_child_size" && test -n "$first_child_refs" && \
+test -n "$first_child_base" && test -n "$first_child_selector" && \
+test -n "$first_child_shape" && test -n "$first_child_parentmap" && \
+test -n "$first_child_snap" && \
+test -n "$first_child_snap_bound" && test -n "$first_child_edge_bound" && \
+test -n "$first_child_edge" && test -n "$first_child_postra" && \
+test -n "$first_child_final_edge" && \
+test "$first_child_size" -lt "$first_child_base" && \
+test "$first_child_refs" -lt "$first_child_base" && \
+test "$first_child_base" -lt "$first_child_selector" && \
+test "$first_child_selector" -lt "$first_child_shape" && \
+test "$first_child_shape" -lt "$first_child_snap_bound" && \
+test "$first_child_snap_bound" -lt "$first_child_parentmap" && \
+test "$first_child_parentmap" -lt "$first_child_snap" && \
+test "$first_child_edge_bound" -lt "$first_child_edge" && \
+test "$first_child_edge" -lt "$first_child_postra" && \
+test "$first_child_postra" -lt "$first_child_final_edge"
+test "$(grep -Fc 'rootview->exittab[parent_exitno]' \
+  "$first_child_region")" = 2 || {
+  echo "root-entry first-child verifier lost its final dynamic edge reread" >&2
+  exit 1
+}
 awk '/^static LJ_AINLINE int trace_root_entry_request_pending/ { copy=1 }
      copy { print }
      copy && /^}/ { exit }' "$root/src/lj_trace.c" >"$pending_region"

@@ -174,6 +174,23 @@ static void test_semantic_header(void)
   fx.ir[REF_BASE].op1 = UINT16_MAX-1u;
   expect_semantic(1);
 
+  /* The second production descriptor preserves the IR/map grammar while
+  ** selecting exit 6 and its observed first two bytecode footers. */
+  make_semantic();
+  fx.view.exitno = 6;
+  fx.ir[REF_BASE].op2 = 6;
+  set_footer(0, 10, 0);
+  set_footer(1, 11, 0);
+  expect_semantic(1);
+
+  /* Nearby exits are not implicitly admitted by the relational BASE check. */
+  make_semantic(); fx.view.exitno = 1; fx.ir[REF_BASE].op2 = 1;
+  expect_semantic(0);
+  make_semantic(); fx.view.exitno = 3; fx.ir[REF_BASE].op2 = 3;
+  expect_semantic(0);
+  make_semantic(); fx.view.exitno = 7; fx.ir[REF_BASE].op2 = 7;
+  expect_semantic(0);
+
   SEMANTIC_MUTATION(fx.view.ir = NULL);
   SEMANTIC_MUTATION(fx.view.snap = NULL);
   SEMANTIC_MUTATION(fx.view.snapmap = NULL);
@@ -333,6 +350,22 @@ static void make_postra(void)
   fx.postra.branch_track = (uint8_t)LJ_ABI_BRANCH_TRACK;
 }
 
+static void make_second_postra(void)
+{
+  MSize headidx = (MSize)LJ_ABI_BRANCH_TRACK;
+  make_postra();
+  fx.postra.semantic.exitno = 6;
+  fx.ir[REF_BASE].op2 = 6;
+  set_footer(0, 10, 0);
+  set_footer(1, 11, 0);
+  fx.ir[R_PARENT].r = RID_X28;
+  fx.ir[R_ADD].r = RID_X27;
+  fx.ir[R_LIMIT].r = RID_X28;
+  fx.parentmap[0] = REGSP(RID_X27, SPS_NONE);
+  fx.entry[headidx] = A64I_LE(A64I_MOVx |
+	A64F_D(RID_X28) | A64F_M(RID_X27));
+}
+
 static void expect_postra(int admitted)
 {
   IRRef semantic_nins = 0;
@@ -373,6 +406,24 @@ static void test_prehead(void)
   make_postra();
   expect_prehead(1);
   assert(!lj_asm_arm64_side_prehead_admit(NULL, NULL));
+
+  make_second_postra();
+  expect_prehead(1);
+
+  /* Geometry and allocator shape form one descriptor: neither cross-product
+  ** is admitted even though each half is independently known. */
+  make_postra();
+  fx.postra.semantic.exitno = 6;
+  fx.ir[REF_BASE].op2 = 6;
+  set_footer(0, 10, 0);
+  set_footer(1, 11, 0);
+  expect_prehead(0);
+  make_second_postra();
+  fx.postra.semantic.exitno = 2;
+  fx.ir[REF_BASE].op2 = 2;
+  set_footer(0, 13, 0);
+  set_footer(1, 14, 0);
+  expect_prehead(0);
 
   /* The pre-head certificate covers the complete semantic/layout authority
   ** needed before asm_head_side() indexes the inherited-register map. */
@@ -428,6 +479,9 @@ static void test_postra(void)
   make_postra();
   expect_postra(1);
   assert(!lj_asm_arm64_side_postra_admit(NULL, NULL));
+
+  make_second_postra();
+  expect_postra(1);
 
   make_postra();
   fx.snap[0].count = SNAPCOUNT_DONE;

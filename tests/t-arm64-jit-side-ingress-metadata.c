@@ -43,14 +43,19 @@ enum {
   SIDE_META_CHILD = 2,
   SIDE_META_EXIT = 2,
   SIDE_META_PC_POS = 13,
-  SIDE_META_NSNAP = 4,
+  SIDE_META_NSNAP = 8,
+  SIDE_META_SECOND_EXIT = 6,
+  SIDE_META_SECOND_PC_POS = 10,
+  SIDE_META_SECOND_NSNAP = 9,
+  SIDE_META_CAP_NSNAP = SIDE_META_SECOND_NSNAP,
   SIDE_META_NENT = 1,
   SIDE_META_FOOTER = 1 + LJ_FR2,
   SIDE_META_MAP_STRIDE = SIDE_META_NENT + SIDE_META_FOOTER,
   SIDE_META_NSNAPMAP = SIDE_META_NSNAP * SIDE_META_MAP_STRIDE,
+  SIDE_META_CAP_NSNAPMAP = SIDE_META_CAP_NSNAP * SIDE_META_MAP_STRIDE,
   SIDE_META_BODY_WORDS = 4,
   SIDE_META_EXIT_WORDS = ARM64_EXIT_FALLBACK_WORDS +
-    ARM64_EXIT_GATE_WORDS * SIDE_META_NSNAP,
+    ARM64_EXIT_GATE_WORDS * SIDE_META_CAP_NSNAP,
   SIDE_META_MCODE_WORDS = SIDE_META_BODY_WORDS + SIDE_META_EXIT_WORDS,
   SIDE_META_R_VALUE = REF_FIRST,
   SIDE_META_R_END
@@ -81,10 +86,10 @@ typedef struct SideMetaFixture {
   SideMetaTraceVec3 tracev;
   SideMetaTraceVec3 replacement_tracev;
   IRIns ir[SIDE_META_R_END];
-  SnapShot snap[SIDE_META_NSNAP];
-  SnapEntry snapmap[SIDE_META_NSNAPMAP];
+  SnapShot snap[SIDE_META_CAP_NSNAP];
+  SnapEntry snapmap[SIDE_META_CAP_NSNAPMAP];
   _Alignas(8) MCode mcode[SIDE_META_MCODE_WORDS];
-  _Alignas(8) MCode *exittab[SIDE_META_NSNAP];
+  _Alignas(8) MCode *exittab[SIDE_META_CAP_NSNAP];
   GCfunc *fn;
   GCproto *pt;
   BCIns *looppc;
@@ -167,7 +172,8 @@ static void side_meta_install(lua_State *L, SideMetaFixture *f)
   GCtrace *T = &f->parent_trace;
   BCIns *bc;
   MCode *fallback, *gates;
-  const BCPos footer_pc[SIDE_META_NSNAP] = { 3, 7, 13, 17 };
+  const BCPos footer_pc[SIDE_META_CAP_NSNAP] =
+    { 3, 7, 13, 17, 3, 7, 10, 17, 3 };
   MSize i;
 
   memset(f, 0, sizeof(*f));
@@ -227,7 +233,7 @@ static void side_meta_install(lua_State *L, SideMetaFixture *f)
   side_meta_setir(f->ir, REF_BASE, IR_BASE, IRT_PGC, 0, 0);
   side_meta_setir(f->ir, SIDE_META_R_VALUE, IR_SLOAD,
                   IRT_INT|IRT_GUARD, 2, IRSLOAD_TYPECHECK);
-  for (i = 0; i < SIDE_META_NSNAP; i++) {
+  for (i = 0; i < SIDE_META_CAP_NSNAP; i++) {
     MSize mapofs = i*SIDE_META_MAP_STRIDE;
     assert(footer_pc[i] < f->pt->sizebc);
     f->snap[i].mapofs = (uint32_t)mapofs;
@@ -297,6 +303,73 @@ static int side_meta_check(lua_State *L, SideMetaFixture *f,
                            const BCIns *pc, uint32_t context)
 {
   return side_meta_check_at(L, f, pc, pc, context);
+}
+
+static void test_second_descriptor(lua_State *L, SideMetaFixture *f)
+{
+  jit_State *J = L2J(L);
+  GCtrace *T = &f->parent_trace;
+  const BCIns *continuation =
+    &proto_bc(f->pt)[SIDE_META_SECOND_PC_POS];
+  SnapShot *selected = &f->snap[SIDE_META_SECOND_EXIT];
+  MSize footer = selected->mapofs+selected->nent;
+  SnapEntry saved_footer[SIDE_META_FOOTER];
+  MSize saved_nsnap = T->nsnap;
+  MSize saved_nsnapmap = T->nsnapmap;
+  TraceNo saved_parent = J->parent;
+  ExitNo saved_exitno = J->exitno;
+  uint8_t before = selected->count;
+
+  memcpy(saved_footer, &f->snapmap[footer], sizeof(saved_footer));
+  side_meta_pack_pc(&f->snapmap[footer], continuation, 0);
+  /* Exit 6 is not a free-standing alternative: its parent snapshot count and
+  ** continuation offset belong to the same exact descriptor. */
+  assert(!lj_trace_test_arm64_first_side_loop_valid(
+    J, NULL, SIDE_META_PARENT, SIDE_META_SECOND_EXIT, continuation, NULL,
+    LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA));
+  T->nsnap = SIDE_META_SECOND_NSNAP;
+  T->nsnapmap = SIDE_META_CAP_NSNAPMAP;
+  assert(!lj_trace_test_arm64_first_side_loop_valid(
+    J, NULL, SIDE_META_PARENT, SIDE_META_EXIT,
+    &proto_bc(f->pt)[SIDE_META_PC_POS], NULL,
+    LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA));
+  assert(!lj_trace_test_arm64_first_side_loop_valid(
+    J, NULL, SIDE_META_PARENT, SIDE_META_SECOND_EXIT,
+    &proto_bc(f->pt)[SIDE_META_PC_POS], NULL,
+    LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA));
+  assert(lj_trace_test_arm64_first_side_loop_valid(
+    J, NULL, SIDE_META_PARENT, SIDE_META_SECOND_EXIT, continuation, NULL,
+    LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA));
+  assert(lj_trace_test_arm64_first_side_loop_valid(
+    J, L, SIDE_META_PARENT, SIDE_META_SECOND_EXIT,
+    continuation, continuation,
+    LJ_TRACE_ARM64_SIDE_CONTEXT_IDLE));
+
+  assert(lj_jit_token_try_l(L, J));
+  assert(lj_trace_test_arm64_first_side_loop_valid(
+    J, L, SIDE_META_PARENT, SIDE_META_SECOND_EXIT,
+    continuation, continuation,
+    LJ_TRACE_ARM64_SIDE_CONTEXT_CLAIM));
+  jit_owner_l_rel(J, L);
+  J->parent = SIDE_META_PARENT;
+  J->exitno = SIDE_META_SECOND_EXIT;
+  lj_trace_state_store(J, LJ_TRACE_START);
+  assert(lj_trace_test_arm64_first_side_loop_valid(
+    J, L, SIDE_META_PARENT, SIDE_META_SECOND_EXIT,
+    continuation, continuation,
+    LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER));
+  lj_trace_state_store(J, LJ_TRACE_IDLE);
+  jit_owner_l_rel(J, NULL);
+  J->parent = saved_parent;
+  J->exitno = saved_exitno;
+  lj_jit_token_release_l(L, J);
+
+  assert(selected->count == before);
+  T->nsnap = saved_nsnap;
+  T->nsnapmap = saved_nsnapmap;
+  memcpy(&f->snapmap[footer], saved_footer, sizeof(saved_footer));
+  assert(jit_token_acq(G(L)) == 0 && jit_owner_l_acq(J) == NULL &&
+         lj_trace_state_load(J) == LJ_TRACE_IDLE);
 }
 
 static void expect_metadata_reject(lua_State *L, SideMetaFixture *f)
@@ -923,6 +996,7 @@ int main(void)
     "  return i\n"
     "end\n");
   side_meta_install(L, &fixture);
+  test_second_descriptor(L, &fixture);
   test_metadata_mutations(L, &fixture);
   test_context_mutations(L, &fixture);
   test_parent_lifetime_certificate(L, &fixture);
