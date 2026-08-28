@@ -28,6 +28,7 @@ call_region=$tmpdir/call-region.txt
 value_region=$tmpdir/value-region.txt
 postra_region=$tmpdir/postra-region.txt
 positive_region=$tmpdir/positive-region.txt
+numhalf_region=$tmpdir/numhalf-region.txt
 audit_object=$tmpdir/lj_asm-arm64e.o
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT'
 
@@ -175,6 +176,105 @@ for required in \
     exit 1
   }
 done
+
+# The pure-NUM fixture is a third, separate exact grammar. It admits one
+# canonical two-slot +0.5 KNUM and ordered FP guards without widening the
+# mixed-NUM profile, snapshots, suffix, register file or spill policy.
+awk '/^static void make_numhalf_trace\(/ { copying = 1 }
+     copying { print }
+     copying && /^static LJArm64IRReject expect_reject\(/ { exit }' \
+  "$root/tests/t-arm64-jit-ir-admission.c" >"$numhalf_region"
+test -s "$numhalf_region"
+test "$(grep -c 'IR_KNUM' "$numhalf_region")" -eq 1
+test "$(grep -c 'IR_SLOAD' "$numhalf_region")" -eq 2
+test "$(grep -c 'IR_ADD,' "$numhalf_region")" -eq 2
+test "$(grep -c 'IR_GT' "$numhalf_region")" -eq 1
+test "$(grep -c 'IR_LT' "$numhalf_region")" -eq 1
+test "$(grep -c 'IR_LOOP' "$numhalf_region")" -eq 1
+test "$(grep -c 'IR_XPOLL' "$numhalf_region")" -eq 1
+test "$(grep -c 'IR_PHI' "$numhalf_region")" -eq 1
+
+for required in \
+  '#define ARM64_NUMHALF_BITS UINT64_C(0x3fe0000000000000)' \
+  'ARM64_NUMHALF_K_HALF = REF_TRUE-2u' \
+  'k->o == IR_KNUM && k->t.irt == IRT_NUM && k->op12 == 0' \
+  'k[1].tv.u64 == ARM64_NUMHALF_BITS;' \
+  'k.r == RID_INIT && k.s == SPS_NONE' \
+  'static int arm64_numhalf_snapshots(const SnapShot *snap,' \
+  'static const uint16_t mapofs[5] = { 0, 2, 6, 9, 12 };' \
+  'static const uint8_t nent[5] = { 0, 2, 1, 1, 1 };' \
+  'static const uint8_t nslots[5] = { 4, 5, 4, 4, 4 };' \
+  'static const uint8_t pcpos[5] = { 7, 3, 11, 7, 11 };' \
+  'nsnap != 5 || nsnapmap != 15 || proto_sizebc != 13' \
+  '(uintptr_t)(pcbase >> 8) != expected' \
+  'static int arm64_ir_numhalf_bytecode(const GCproto *pt,' \
+  'pt->sizebc != 13 || pt->numparams != 1 || pt->sizeuv != 0' \
+  'proto_knumtv(pt, 0)->u64 != ARM64_NUMHALF_BITS' \
+  'if (startpc != bc+6)' \
+  'bc_op(ins) != BC_LOOP || bc_a(ins) != 2 || bc_j(ins) != 4' \
+  'bc_op(ins) != BC_ADDVN || bc_a(ins) != 2 ||' \
+  'return bc_op(ins) == BC_JMP && bc_a(ins) == 2 && bc_j(ins) == -9;' \
+  'static int arm64_ir_numhalf_shape(const jit_State *J, const GCtrace *T,' \
+  '!arm64_ir_numhalf_bytecode(pt, trace_startpc_acq((GCtrace *)T))' \
+  '!arm64_ir_numhalf_shape(J, T, pt, firstphi, reject)' \
+  'static int arm64_postra_numhalf_shape(const LJArm64PostRAView *view,' \
+  '!arm64_postra_numhalf_constant(view->ir, view->nk, 1)' \
+  '!arm64_postra_numhalf_shape(view, semantic_nins)' \
+  'constant_profile != ARM64_IR_KPROFILE_HALF || !suffix_is_nop ||' \
+  'nrename != 0 || spadjust != 0 || highest_end != 0'; do
+  grep -F "$required" "$classifier" >/dev/null || {
+    echo "ARM64 pure NUM production contract changed: $required" >&2
+    exit 1
+  }
+done
+
+for required in \
+  'static void make_numhalf_trace(jit_State *J)' \
+  'H_K_HALF = REF_TRUE - 2,' \
+  'H_K_HALF_PAYLOAD = REF_TRUE - 1,' \
+  'fx.ir[H_K_HALF_PAYLOAD].tv.u64 = UINT64_C(0x3fe0000000000000);' \
+  'static const IRRef snaprefs[5] = {' \
+  'static const uint16_t mapofs[5] = { 0, 2, 6, 9, 12 };' \
+  'static const uint8_t nent[5] = { 0, 2, 1, 1, 1 };' \
+  'static const uint8_t nslots[5] = { 4, 5, 4, 4, 4 };' \
+  'static const MSize pcpos[5] = { 7, 3, 11, 7, 11 };' \
+  'setir(H_R_PRE_GUARD, IR_GT, IRT_NUM|IRT_GUARD,' \
+  'setir(H_R_BODY_GUARD, IR_LT, IRT_NUM|IRT_GUARD,' \
+  'setir(H_R_X_PHI, IR_PHI, IRT_NUM, H_R_X_PRE, H_R_X_BODY);' \
+  'fx.T.nsnap = 5;' \
+  'fx.T.nsnapmap = 15;' \
+  'fx.ir[H_K_HALF].r = RID_INIT;' \
+  'fx.ir[H_R_X].r = RID_D2;' \
+  'fx.ir[H_R_X_PRE].r = RID_D15;' \
+  'fx.ir[H_R_LIMIT].r = RID_D0;' \
+  'setir(H_R_NOP, IR_NOP, IRT_NIL, 0, 0);' \
+  'fx.ir[H_K_HALF_PAYLOAD].tv.u64 ^= UINT64_C(1);' \
+  'fx.ir[H_K_HALF_PAYLOAD].tv.u64 = UINT64_C(0xbfe0000000000000);' \
+  'fx.ir[H_K_HALF_PAYLOAD].tv.u64 = UINT64_C(0x7ff0000000000000);' \
+  'fx.ir[H_K_HALF_PAYLOAD].tv.u64 = UINT64_C(0x7ff8000000000000);' \
+  'fx.ir[H_K_HALF].r = RID_D0;' \
+  'fx.ir[fprrefs[i]].r = RID_X0;' \
+  'fx.ir[fprrefs[i]].r = RID_MAX_FPR;' \
+  'fx.ir[fprrefs[i]].s = 2;' \
+  'setir(H_R_NOP, IR_RENAME, IRT_NIL, H_R_X_PRE, 3);' \
+  'IR_LT, IR_GE, IR_LE, IR_EQ, IR_NE' \
+  'IR_GT, IR_GE, IR_LE, IR_EQ, IR_NE' \
+  'REJECT_NUMHALF_ADJACENT(IR_CONV, IRT_NUM|IRT_ISPHI,' \
+  'REJECT_NUMHALF_ADJACENT(IR_SUB, IRT_NUM|IRT_ISPHI,' \
+  'REJECT_NUMHALF_ADJACENT(IR_MUL, IRT_NUM|IRT_ISPHI,' \
+  'REJECT_NUMHALF_ADJACENT(IR_DIV, IRT_NUM|IRT_ISPHI,' \
+  'fx.snapmap[6] = SNAP(3, 0, H_K_HALF);' \
+  'fx.snapmap[9] = SNAP(3, SNAP_NORESTORE, H_R_X_PRE);' \
+  'proto_bc(numhalf_fixture_pt)+wrong_pcpos[i], 0);' \
+  'numhalf_fixture_pt->framesize = 5;' \
+  'numhalf_fixture_pt->sizebc = 12;' \
+  'test_numhalf_positive_and_negative(J);' \
+  'test_numhalf_postra_layout(J);'; do
+  grep -F "$required" "$root/tests/t-arm64-jit-ir-admission.c" >/dev/null || {
+    echo "ARM64 pure NUM mutation coverage changed: $required" >&2
+    exit 1
+  }
+done
 postra_line=$(grep -n '!lj_asm_arm64_postra_admit(' "$trace_asm" | cut -d: -f1)
 marker_line=$(grep -n 'T->unused1 |= TRACE_ARM64_INT_FORL_ADMITTED;' \
   "$trace_asm" | cut -d: -f1)
@@ -214,7 +314,8 @@ for required in \
   '!rset_test(RSET_FPR, ren.r)' \
   'if (!arm64_postra_int_value(source, rootop, forl_idxslot, maxslots) ||' \
   'slot != SPS_NONE || ins.r < RID_MIN_FPR || ins.r >= RID_MAX_FPR ||' \
-  'suffix_is_nop || nrename != 1u || spadjust != 0 || highest_end != 0' \
+  'constant_profile != ARM64_IR_KPROFILE_INT || suffix_is_nop ||' \
+  'nrename != 1u || spadjust != 0 || highest_end != 0' \
   'return iphi.r == ipre.r && iphi.r == ibody.r &&' \
   'xphi.r == xpre.r && xphi.r == xbody.r;' \
   'mapofs != expected_mapofs || nent > nextofs-mapofs' \
@@ -325,7 +426,8 @@ for required in \
   'arm64_ir_num_value_op((IROp)ir->o)' \
   'startop != BC_LOOP || ir->t.irt != (IRT_NUM|IRT_ISPHI)' \
   '!arm64_ir_num_binary(T, ir, ref)' \
-  'scalar_mode != (ARM64_IR_SCALAR_INT|ARM64_IR_SCALAR_NUM)' \
+  'scalar_mode == (ARM64_IR_SCALAR_INT|ARM64_IR_SCALAR_NUM)' \
+  'scalar_mode == ARM64_IR_SCALAR_NUM' \
   '!arm64_ir_numadd_shape(T, firstphi, reject)' \
   'arm64_ir_proto_range(pt, &lo, &hi)' \
   'startpc == NULL ||' \
@@ -389,6 +491,10 @@ for required in \
   'setir(REF_TRUE, IR_KINT, IRT_INT, 1, 0);' \
   'setir(REF_FALSE, IR_KNUM, IRT_NUM, 0, 0);' \
   'setir(K_STOP, IR_KNUM, IRT_NUM, 0, 0);' \
+  'fx.ir[H_K_HALF_PAYLOAD].tv.u64 = UINT64_C(0x3fe0000000000000);' \
+  'fx.ir[R_PRECOND].op2 = R_A;' \
+  'fx.ir[R_BODY2].op2 = R_C;' \
+  'fx.ir[R_LOOPCOND].op2 = R_A;' \
   'fixture_loop_pc-loopbackpc));' \
   'BCINS_AJ(BC_LOOP, fixture_pt->framesize+1u, bc_j(loop))' \
   'fx.ir[R_PHI2].op1 = R_SUM1;' \
@@ -495,4 +601,4 @@ grep -F '#if LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED' \
   -o "$fixture"
 "$fixture"
 
-echo "arm64_jit_ir_admission_contract OK: exact integer and mixed-NUM LOOP/FORL grammar, bounded integer spills, and FPR-only NUM layout verified"
+echo "arm64_jit_ir_admission_contract OK: exact integer, mixed-NUM and pure-NUM LOOP/FORL grammar, bounded integer spills, and FPR-only NUM layout verified"

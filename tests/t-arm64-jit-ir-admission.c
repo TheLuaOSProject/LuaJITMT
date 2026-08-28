@@ -84,6 +84,26 @@ enum {
   N_R_POSTRA_END
 };
 
+/* Exact recorder order for the first pure-NUM BC_LOOP root. The KNUM
+** occupies a header plus the following 64-bit payload slot. */
+enum {
+  H_K_HALF = REF_TRUE - 2,
+  H_K_HALF_PAYLOAD = REF_TRUE - 1,
+
+  H_R_X = REF_FIRST,
+  H_R_X_PRE,
+  H_R_LIMIT,
+  H_R_PRE_GUARD,
+  H_R_LOOP,
+  H_R_XPOLL,
+  H_R_X_BODY,
+  H_R_BODY_GUARD,
+  H_R_X_PHI,
+  H_R_SEMANTIC_END,
+  H_R_NOP = H_R_SEMANTIC_END,
+  H_R_POSTRA_END
+};
+
 typedef struct AdmissionFixture {
   GCtrace T;
   IRIns ir[ADMISSION_IR_CAP];
@@ -101,6 +121,8 @@ static const BCIns *fixture_snapshot_pc;
 static GCproto *numeric_fixture_pt;
 static const BCIns *numeric_fixture_loop_pc;
 static const BCIns *numeric_fixture_snapshot_pc;
+static GCproto *numhalf_fixture_pt;
+static const BCIns *numhalf_fixture_loop_pc;
 
 static BCIns loadbc(const BCIns *pc)
 {
@@ -318,6 +340,86 @@ static void make_numeric_trace(jit_State *J)
   J->startpc = numeric_fixture_loop_pc;
 }
 
+static void make_numhalf_trace(jit_State *J)
+{
+  static const IRRef snaprefs[5] = {
+    H_R_X, H_R_LIMIT, H_R_PRE_GUARD, H_R_LOOP, H_R_BODY_GUARD
+  };
+  static const uint16_t mapofs[5] = { 0, 2, 6, 9, 12 };
+  static const uint8_t nent[5] = { 0, 2, 1, 1, 1 };
+  static const uint8_t nslots[5] = { 4, 5, 4, 4, 4 };
+  static const MSize pcpos[5] = { 7, 3, 11, 7, 11 };
+  SnapNo snapno;
+
+  assert(numhalf_fixture_pt != NULL && numhalf_fixture_loop_pc != NULL);
+  assert(numhalf_fixture_pt->framesize == 4);
+  assert(numhalf_fixture_pt->sizebc == 13);
+  memset(&fx, 0, sizeof(fx));
+
+  setir(H_K_HALF, IR_KNUM, IRT_NUM, 0, 0);
+  fx.ir[H_K_HALF_PAYLOAD].tv.u64 = UINT64_C(0x3fe0000000000000);
+  setir(REF_TRUE, IR_KPRI, IRT_TRUE, 0, 0);
+  setir(REF_FALSE, IR_KPRI, IRT_FALSE, 0, 0);
+  setir(REF_NIL, IR_KPRI, IRT_NIL, 0, 0);
+
+  setir(REF_BASE, IR_BASE, IRT_PGC, 0, 0);
+  setir(H_R_X, IR_SLOAD, IRT_NUM|IRT_GUARD,
+	3, IRSLOAD_TYPECHECK);
+  setir(H_R_X_PRE, IR_ADD, IRT_NUM|IRT_ISPHI,
+	H_R_X, H_K_HALF);
+  setir(H_R_LIMIT, IR_SLOAD, IRT_NUM|IRT_GUARD,
+	2, IRSLOAD_TYPECHECK);
+  setir(H_R_PRE_GUARD, IR_GT, IRT_NUM|IRT_GUARD,
+	H_R_LIMIT, H_R_X_PRE);
+  setir(H_R_LOOP, IR_LOOP, IRT_NIL|IRT_GUARD, 0, 0);
+  setir(H_R_XPOLL, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0);
+  setir(H_R_X_BODY, IR_ADD, IRT_NUM|IRT_ISPHI,
+	H_R_X_PRE, H_K_HALF);
+  setir(H_R_BODY_GUARD, IR_LT, IRT_NUM|IRT_GUARD,
+	H_R_X_BODY, H_R_LIMIT);
+  setir(H_R_X_PHI, IR_PHI, IRT_NUM, H_R_X_PRE, H_R_X_BODY);
+
+  for (snapno = 0; snapno < 5; snapno++) {
+    fx.snap[snapno].ref = snaprefs[snapno];
+    fx.snap[snapno].mapofs = mapofs[snapno];
+    fx.snap[snapno].nent = nent[snapno];
+    fx.snap[snapno].nslots = nslots[snapno];
+    fx.snap[snapno].topslot = 4;
+  }
+  fx.snapmap[2] = SNAP(3, 0, H_R_X_PRE);
+  fx.snapmap[3] = SNAP(4, 0, H_R_X_PRE);
+  fx.snapmap[6] = SNAP(3, 0, H_R_X_PRE);
+  fx.snapmap[9] = SNAP(3, 0, H_R_X_PRE);
+  fx.snapmap[12] = SNAP(3, 0, H_R_X_BODY);
+
+  fx.T.nk = H_K_HALF;
+  fx.T.nins = H_R_SEMANTIC_END;
+  fx.T.ir = fx.ir;
+  fx.T.nsnap = 5;
+  fx.T.snap = fx.snap;
+  fx.T.nsnapmap = 15;
+  fx.T.snapmap = fx.snapmap;
+  fx.T.traceno = 1;
+  fx.T.link = 1;
+  fx.T.root = 0;
+  fx.T.linktype = LJ_TRLINK_LOOP;
+  fx.T.sinktags = 0;
+  fx.T.startins = loadbc(numhalf_fixture_loop_pc);
+  trace_startpt_rel(&fx.T, numhalf_fixture_pt);
+  setmref(fx.T.startpc, numhalf_fixture_loop_pc);
+  for (snapno = 0; snapno < 5; snapno++)
+    set_snapshot_payload(snapno, proto_bc(numhalf_fixture_pt)+pcpos[snapno], 0);
+
+  J->parent = 0;
+  J->exitno = 0;
+  J->pt = numhalf_fixture_pt;
+  J->baseslot = 1 + LJ_FR2;
+  J->framedepth = 0;
+  J->retdepth = 0;
+  J->loopref = H_R_LOOP;
+  J->startpc = numhalf_fixture_loop_pc;
+}
+
 static LJArm64IRReject expect_reject(jit_State *J,
 		LJArm64IRRejectReason reason, IROp op)
 {
@@ -326,6 +428,11 @@ static LJArm64IRReject expect_reject(jit_State *J,
     fprintf(stderr, "unexpected admission: wanted reason=%d op=%u\n",
 	(int)reason, (unsigned)op);
   assert(reject.reason != LJ_ARM64_IR_REJECT_NONE);
+  if (reject.reason != reason)
+    fprintf(stderr, "reject reason mismatch: wanted=%d got=%d ref=%u "
+	    "op=%u detail=%u\n", (int)reason, (int)reject.reason,
+	    (unsigned)reject.ref, (unsigned)reject.op,
+	    (unsigned)reject.detail);
   assert(reject.reason == reason);
   if (reject.op != op)
     fprintf(stderr, "reject opcode mismatch: reason=%d wanted=%u got=%u detail=%u\n",
@@ -412,6 +519,191 @@ static void expect_numeric_postra_result(LJArm64PostRAView *view,
   assert(result == admitted);
   if (admitted)
     assert(semantic_nins == N_R_SEMANTIC_END);
+}
+
+static LJArm64PostRAView make_numhalf_postra_view(jit_State *J)
+{
+  LJArm64PostRAView view;
+  make_numhalf_trace(J);
+
+  /* Exact observed spill-free allocation. KNUM is rematerialized and keeps
+  ** the allocator's initial marker; the loop-carried value stays in d15. */
+  fx.ir[H_K_HALF].r = RID_INIT;
+  fx.ir[H_K_HALF].s = SPS_NONE;
+  fx.ir[H_R_X].r = RID_D2;
+  fx.ir[H_R_X_PRE].r = RID_D15;
+  fx.ir[H_R_LIMIT].r = RID_D0;
+  fx.ir[H_R_X_BODY].r = RID_D15;
+  fx.ir[H_R_X_PHI].r = RID_D15;
+  setir(H_R_NOP, IR_NOP, IRT_NIL, 0, 0);
+
+  view.ir = fx.ir;
+  view.snap = fx.snap;
+  view.snapmap = fx.snapmap;
+  view.proto_bc = proto_bc(numhalf_fixture_pt);
+  view.nins = H_R_POSTRA_END;
+  view.nk = fx.T.nk;
+  view.nsnap = fx.T.nsnap;
+  view.nsnapmap = fx.T.nsnapmap;
+  view.spadjust = 0;
+  view.proto_sizebc = numhalf_fixture_pt->sizebc;
+  view.root_topslot = 4;
+  view.startins = fx.T.startins;
+  view.base_delta = 0;
+  return view;
+}
+
+static void expect_numhalf_postra_result(LJArm64PostRAView *view,
+	int admitted)
+{
+  IRRef semantic_nins = 0;
+  int result = lj_asm_arm64_postra_admit(view, &semantic_nins);
+  assert(result == admitted);
+  if (admitted)
+    assert(semantic_nins == H_R_SEMANTIC_END);
+}
+
+static void expect_numhalf_reject(jit_State *J)
+{
+  LJArm64IRReject reject;
+  assert(!lj_asm_arm64_ir_admit(J, &fx.T, &reject));
+  assert(reject.reason != LJ_ARM64_IR_REJECT_NONE);
+}
+
+static void test_numhalf_postra_layout(jit_State *J)
+{
+  static const IRRef fprrefs[] = {
+    H_R_X, H_R_X_PRE, H_R_LIMIT, H_R_X_BODY, H_R_X_PHI
+  };
+  LJArm64PostRAView view;
+  MSize i;
+
+  view = make_numhalf_postra_view(J);
+  assert(fx.ir[H_K_HALF].o == IR_KNUM);
+  assert(fx.ir[H_K_HALF].r == RID_INIT);
+  assert(fx.ir[H_K_HALF].s == SPS_NONE);
+  assert(fx.ir[H_K_HALF_PAYLOAD].tv.u64 ==
+	 UINT64_C(0x3fe0000000000000));
+  assert(fx.ir[H_R_X].r == RID_D2);
+  assert(fx.ir[H_R_X_PRE].r == RID_D15);
+  assert(fx.ir[H_R_LIMIT].r == RID_D0);
+  assert(fx.ir[H_R_X_BODY].r == RID_D15);
+  assert(fx.ir[H_R_X_PHI].r == RID_D15);
+  assert(fx.ir[H_R_NOP].o == IR_NOP);
+  expect_numhalf_postra_result(&view, 1);
+
+  /* Invariants may use another allocatable FPR. The PHI family may move as
+  ** a unit, but a partial move is not a realizable asm_phi() result. */
+  view = make_numhalf_postra_view(J);
+  fx.ir[H_R_X].r = RID_D3;
+  fx.ir[H_R_LIMIT].r = RID_D4;
+  expect_numhalf_postra_result(&view, 1);
+  view = make_numhalf_postra_view(J);
+  fx.ir[H_R_X_PRE].r = RID_D14;
+  fx.ir[H_R_X_BODY].r = RID_D14;
+  fx.ir[H_R_X_PHI].r = RID_D14;
+  expect_numhalf_postra_result(&view, 1);
+  view = make_numhalf_postra_view(J);
+  fx.ir[H_R_X_PRE].r = RID_D14;
+  expect_numhalf_postra_result(&view, 0);
+  view = make_numhalf_postra_view(J);
+  fx.ir[H_R_X_BODY].r = RID_D14;
+  expect_numhalf_postra_result(&view, 0);
+  view = make_numhalf_postra_view(J);
+  fx.ir[H_R_X_PHI].r = RID_D14;
+  expect_numhalf_postra_result(&view, 0);
+
+  for (i = 0; i < sizeof(fprrefs)/sizeof(fprrefs[0]); i++) {
+    view = make_numhalf_postra_view(J);
+    fx.ir[fprrefs[i]].r = RID_X0;
+    expect_numhalf_postra_result(&view, 0);
+    view = make_numhalf_postra_view(J);
+    fx.ir[fprrefs[i]].r = RID_MAX_FPR;
+    expect_numhalf_postra_result(&view, 0);
+    view = make_numhalf_postra_view(J);
+    fx.ir[fprrefs[i]].s = 2;
+    view.spadjust = 16;
+    expect_numhalf_postra_result(&view, 0);
+  }
+  view = make_numhalf_postra_view(J);
+  view.spadjust = 16;
+  expect_numhalf_postra_result(&view, 0);
+
+  /* KNUM is a two-slot constant and is rematerialized, never allocated. */
+  view = make_numhalf_postra_view(J);
+  fx.ir[H_K_HALF].r = RID_D0;
+  expect_numhalf_postra_result(&view, 0);
+  view = make_numhalf_postra_view(J);
+  fx.ir[H_K_HALF].s = 2;
+  view.spadjust = 16;
+  expect_numhalf_postra_result(&view, 0);
+  view = make_numhalf_postra_view(J);
+  fx.ir[H_K_HALF].op12 = 1;
+  expect_numhalf_postra_result(&view, 0);
+  view = make_numhalf_postra_view(J);
+  fx.ir[H_K_HALF].o = IR_KINT64;
+  expect_numhalf_postra_result(&view, 0);
+  view = make_numhalf_postra_view(J);
+  fx.ir[H_K_HALF_PAYLOAD].tv.u64 ^= UINT64_C(1);
+  expect_numhalf_postra_result(&view, 0);
+  view = make_numhalf_postra_view(J);
+  view.nk = H_K_HALF_PAYLOAD;
+  expect_numhalf_postra_result(&view, 0);
+
+  /* The pure-NUM profile has exactly one trailing NOP and no RENAME suffix. */
+  view = make_numhalf_postra_view(J);
+  fx.ir[H_R_NOP].t.irt = IRT_PGC;
+  expect_numhalf_postra_result(&view, 0);
+  view = make_numhalf_postra_view(J);
+  fx.ir[H_R_NOP].op1 = 1;
+  expect_numhalf_postra_result(&view, 0);
+  view = make_numhalf_postra_view(J);
+  fx.ir[H_R_NOP].prev = 1;
+  expect_numhalf_postra_result(&view, 0);
+  view = make_numhalf_postra_view(J);
+  setir(H_R_NOP, IR_RENAME, IRT_NIL, H_R_X_PRE, 3);
+  fx.ir[H_R_NOP].r = RID_D14;
+  expect_numhalf_postra_result(&view, 0);
+  view = make_numhalf_postra_view(J);
+  view.nins = H_R_SEMANTIC_END;
+  expect_numhalf_postra_result(&view, 0);
+  view = make_numhalf_postra_view(J);
+  setir(H_R_POSTRA_END, IR_NOP, IRT_NIL, 0, 0);
+  view.nins++;
+  expect_numhalf_postra_result(&view, 0);
+
+  /* Post-RA validation independently rechecks the exact semantic and
+  ** snapshot certificate instead of trusting the recorder pass. */
+  view = make_numhalf_postra_view(J);
+  fx.ir[H_R_PRE_GUARD].o = IR_GE;
+  expect_numhalf_postra_result(&view, 0);
+  view = make_numhalf_postra_view(J);
+  fx.ir[H_R_BODY_GUARD].o = IR_LE;
+  expect_numhalf_postra_result(&view, 0);
+  view = make_numhalf_postra_view(J);
+  fx.ir[H_R_X_BODY].op2 = H_R_LIMIT;
+  expect_numhalf_postra_result(&view, 0);
+  view = make_numhalf_postra_view(J);
+  fx.snap[1].nent = 1;
+  expect_numhalf_postra_result(&view, 0);
+  view = make_numhalf_postra_view(J);
+  fx.snapmap[12] = SNAP(3, 0, H_R_X_PRE);
+  expect_numhalf_postra_result(&view, 0);
+  view = make_numhalf_postra_view(J);
+  set_snapshot_payload(3, proto_bc(numhalf_fixture_pt)+8, 0);
+  expect_numhalf_postra_result(&view, 0);
+  view = make_numhalf_postra_view(J);
+  view.nsnapmap = 14;
+  expect_numhalf_postra_result(&view, 0);
+  view = make_numhalf_postra_view(J);
+  view.proto_sizebc = 12;
+  expect_numhalf_postra_result(&view, 0);
+  view = make_numhalf_postra_view(J);
+  view.root_topslot = 5;
+  expect_numhalf_postra_result(&view, 0);
+  view = make_numhalf_postra_view(J);
+  view.startins = loadbc(fixture_forl_pc);
+  expect_numhalf_postra_result(&view, 0);
 }
 
 static void test_postra_spill_layout(jit_State *J)
@@ -970,7 +1262,9 @@ static void test_numeric_positive_and_negative(jit_State *J)
   make_numeric_trace(J);
   setir(N_R_PRE_GUARD, IR_GT, IRT_NUM|IRT_GUARD,
 	N_R_X_PRE, N_R_X);
-  expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_GT);
+  /* Ordered NUM guards now reach the exact per-root shape discriminator;
+  ** this mixed-root mutation must still fail, but rejection order is not API. */
+  expect_numhalf_reject(J);
 
 #define REJECT_NUMERIC_ADJACENT(op, type, left, right) \
   do { \
@@ -1003,6 +1297,246 @@ static void test_numeric_positive_and_negative(jit_State *J)
   J->startpc = fixture_forl_pc;
   assert(!lj_asm_arm64_ir_admit(J, &fx.T, &reject));
   assert(reject.reason != LJ_ARM64_IR_REJECT_NONE);
+}
+
+static void test_numhalf_positive_and_negative(jit_State *J)
+{
+  static const IROp wrong_pre_guards[] = {
+    IR_LT, IR_GE, IR_LE, IR_EQ, IR_NE
+  };
+  static const IROp wrong_body_guards[] = {
+    IR_GT, IR_GE, IR_LE, IR_EQ, IR_NE
+  };
+  static const MSize wrong_pcpos[5] = { 8, 4, 10, 8, 10 };
+  LJArm64IRReject reject;
+  MSize i;
+
+  make_numhalf_trace(J);
+  if (!lj_asm_arm64_ir_admit(J, &fx.T, &reject))
+    fprintf(stderr, "NUM half admission failed: reason=%d ref=%u op=%u "
+	    "detail=%u\n", (int)reject.reason, (unsigned)reject.ref,
+	    (unsigned)reject.op, (unsigned)reject.detail);
+  assert(reject.reason == LJ_ARM64_IR_REJECT_NONE);
+
+  /* The only admitted FP constant is the canonical two-slot +0.5 KNUM. */
+  make_numhalf_trace(J);
+  fx.ir[H_K_HALF].o = IR_KINT64;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_K_HALF].t.irt = IRT_I64;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_K_HALF].op12 = 1;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_K_HALF_PAYLOAD].tv.u64 ^= UINT64_C(1);
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_K_HALF_PAYLOAD].tv.u64 = UINT64_C(0xbfe0000000000000);
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_K_HALF_PAYLOAD].tv.u64 = UINT64_C(0x7ff0000000000000);
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_K_HALF_PAYLOAD].tv.u64 = UINT64_C(0x7ff8000000000000);
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_K_HALF_PAYLOAD].o = IR_KNUM;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.T.nk = H_K_HALF_PAYLOAD;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.T.nk = H_K_HALF-1u;
+  setir(H_K_HALF-1u, IR_KINT, IRT_INT, 7, 0);
+  expect_numhalf_reject(J);
+
+  /* Slots, modes, operand order and PHI marks are frozen to the observed
+  ** recorder output; the constant payload slot is never a usable IR ref. */
+  make_numhalf_trace(J);
+  fx.ir[H_R_X].op1 = 2;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_R_X].op2 = IRSLOAD_READONLY;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_R_X].t.irt = IRT_NUM;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_R_LIMIT].op1 = 3;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_R_LIMIT].t.irt = IRT_INT|IRT_GUARD;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_R_X_PRE].op1 = H_R_LIMIT;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_R_X_PRE].op1 = H_K_HALF;
+  fx.ir[H_R_X_PRE].op2 = H_R_X;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_R_X_PRE].op2 = H_K_HALF_PAYLOAD;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_R_X_PRE].t.irt = IRT_NUM;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_R_X_BODY].op1 = H_R_X;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_R_X_BODY].op1 = H_K_HALF;
+  fx.ir[H_R_X_BODY].op2 = H_R_X_PRE;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_R_X_BODY].op2 = H_R_LIMIT;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_R_X_BODY].t.irt = IRT_NUM;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_R_X_PHI].op1 = H_R_X;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_R_X_PHI].op2 = H_R_X_PRE;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_R_X_PHI].t.irt = IRT_NUM|IRT_ISPHI;
+  expect_numhalf_reject(J);
+
+  for (i = 0;
+	 i < sizeof(wrong_pre_guards)/sizeof(wrong_pre_guards[0]); i++) {
+    make_numhalf_trace(J);
+    fx.ir[H_R_PRE_GUARD].o = (IROp1)wrong_pre_guards[i];
+    expect_numhalf_reject(J);
+  }
+  for (i = 0;
+	 i < sizeof(wrong_body_guards)/sizeof(wrong_body_guards[0]); i++) {
+    make_numhalf_trace(J);
+    fx.ir[H_R_BODY_GUARD].o = (IROp1)wrong_body_guards[i];
+    expect_numhalf_reject(J);
+  }
+  make_numhalf_trace(J);
+  fx.ir[H_R_PRE_GUARD].op1 = H_R_X_PRE;
+  fx.ir[H_R_PRE_GUARD].op2 = H_R_LIMIT;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_R_BODY_GUARD].op1 = H_R_LIMIT;
+  fx.ir[H_R_BODY_GUARD].op2 = H_R_X_BODY;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_R_PRE_GUARD].t.irt = IRT_INT|IRT_GUARD;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_R_PRE_GUARD].t.irt = IRT_NUM|IRT_GUARD|IRT_ISPHI;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_R_BODY_GUARD].t.irt = IRT_NUM;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_R_LOOP].t.irt = IRT_NIL;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.ir[H_R_XPOLL].op1 = 0;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  J->loopref = H_R_LOOP-1u;
+  expect_numhalf_reject(J);
+
+#define REJECT_NUMHALF_ADJACENT(op, type, left, right) \
+  do { \
+    make_numhalf_trace(J); \
+    setir(H_R_X_PRE, (op), (type), (left), (right)); \
+    expect_numhalf_reject(J); \
+  } while (0)
+  REJECT_NUMHALF_ADJACENT(IR_CONV, IRT_NUM|IRT_ISPHI,
+	H_R_X, IRCONV_NUM_INT);
+  REJECT_NUMHALF_ADJACENT(IR_SUB, IRT_NUM|IRT_ISPHI,
+	H_R_X, H_K_HALF);
+  REJECT_NUMHALF_ADJACENT(IR_MUL, IRT_NUM|IRT_ISPHI,
+	H_R_X, H_K_HALF);
+  REJECT_NUMHALF_ADJACENT(IR_DIV, IRT_NUM|IRT_ISPHI,
+	H_R_X, H_K_HALF);
+#undef REJECT_NUMHALF_ADJACENT
+  make_numhalf_trace(J);
+  setir(H_R_X_PRE, IR_CALLN, IRT_NUM, H_R_X, IRCALL_lj_vm_modi);
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  setir(H_R_X_PRE, IR_TNEW, IRT_TAB, 0, 0);
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  setir(H_R_SEMANTIC_END, IR_NOP, IRT_NIL, 0, 0);
+  fx.T.nins++;
+  expect_numhalf_reject(J);
+
+  /* Every snapshot field and footer position is part of this root's proof. */
+  for (i = 0; i < 5; i++) {
+    make_numhalf_trace(J);
+    fx.snap[i].ref++;
+    expect_numhalf_reject(J);
+    make_numhalf_trace(J);
+    fx.snap[i].mapofs++;
+    expect_numhalf_reject(J);
+    make_numhalf_trace(J);
+    fx.snap[i].nent++;
+    expect_numhalf_reject(J);
+    make_numhalf_trace(J);
+    fx.snap[i].nslots++;
+    expect_numhalf_reject(J);
+    make_numhalf_trace(J);
+    fx.snap[i].topslot = 3;
+    expect_numhalf_reject(J);
+    make_numhalf_trace(J);
+    set_snapshot_payload((SnapNo)i,
+	proto_bc(numhalf_fixture_pt)+wrong_pcpos[i], 0);
+    expect_numhalf_reject(J);
+  }
+  make_numhalf_trace(J);
+  fx.snapmap[2] = SNAP(2, 0, H_R_X_PRE);
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.snapmap[3] = SNAP(4, 0, H_R_X);
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.snapmap[6] = SNAP(3, 0, H_R_X);
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.snapmap[6] = SNAP(3, 0, H_K_HALF);
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.snapmap[9] = SNAP(3, SNAP_NORESTORE, H_R_X_PRE);
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.snapmap[12] = SNAP(3, 0, H_R_X_PRE);
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.T.nsnap = 4;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.T.nsnap = 6;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.T.nsnapmap = 14;
+  expect_numhalf_reject(J);
+  make_numhalf_trace(J);
+  fx.T.nsnapmap = 16;
+  expect_numhalf_reject(J);
+
+  /* Prototype geometry is part of the exact profile, too. */
+  make_numhalf_trace(J);
+  numhalf_fixture_pt->framesize = 5;
+  expect_numhalf_reject(J);
+  numhalf_fixture_pt->framesize = 4;
+  make_numhalf_trace(J);
+  numhalf_fixture_pt->sizebc = 12;
+  expect_numhalf_reject(J);
+  numhalf_fixture_pt->sizebc = 13;
+
+  make_numhalf_trace(J);
+  fx.T.startins = loadbc(fixture_forl_pc);
+  setmref(fx.T.startpc, fixture_forl_pc);
+  J->startpc = fixture_forl_pc;
+  expect_numhalf_reject(J);
 }
 
 static void test_positive_and_negative(lua_State *L)
@@ -1150,6 +1684,18 @@ static void test_positive_and_negative(lua_State *L)
 
   make_trace(J);
   setir(K_STOP, IR_KNUM, IRT_NUM, 0, 0);
+  expect_reject(J, LJ_ARM64_IR_REJECT_CONSTANT, IR_KNUM);
+
+  /* An otherwise integer-only root cannot smuggle in the exact admitted
+  ** half-KNUM profile as an unused constant family. Keep its operands
+  ** dynamic so this reaches the scalar/profile discriminator itself. */
+  make_trace(J);
+  fx.T.nk = H_K_HALF;
+  setir(H_K_HALF, IR_KNUM, IRT_NUM, 0, 0);
+  fx.ir[H_K_HALF_PAYLOAD].tv.u64 = UINT64_C(0x3fe0000000000000);
+  fx.ir[R_PRECOND].op2 = R_A;
+  fx.ir[R_BODY2].op2 = R_C;
+  fx.ir[R_LOOPCOND].op2 = R_A;
   expect_reject(J, LJ_ARM64_IR_REJECT_CONSTANT, IR_KNUM);
 
   make_trace(J);
@@ -1371,6 +1917,25 @@ int main(void)
   assert(numeric_fixture_snapshot_pc <
 	 proto_bc(numeric_fixture_pt)+numeric_fixture_pt->sizebc);
   assert(bc_op(loadbc(numeric_fixture_snapshot_pc)) == BC_JMP);
+
+  assert(luaL_loadstring(L,
+	"return function(limit) local x=0.5 "
+	"while x<limit do x=x+0.5 end return x end") == 0);
+  assert(lua_pcall(L, 0, 1, 0) == 0);
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  numhalf_fixture_pt = funcproto(funcV(L->top-1));
+  assert(numhalf_fixture_pt->framesize == 4);
+  assert(numhalf_fixture_pt->sizebc == 13);
+  assert(numhalf_fixture_pt->numparams == 1);
+  for (i = 0; i < numhalf_fixture_pt->sizebc; i++) {
+    const BCIns *pc = &proto_bc(numhalf_fixture_pt)[i];
+    if (bc_op(loadbc(pc)) == BC_LOOP && numhalf_fixture_loop_pc == NULL)
+      numhalf_fixture_loop_pc = pc;
+  }
+  assert(numhalf_fixture_loop_pc == proto_bc(numhalf_fixture_pt)+6);
+  assert(bc_j(loadbc(numhalf_fixture_loop_pc)) > 0);
+  assert(bc_op(loadbc(numhalf_fixture_loop_pc+
+	bc_j(loadbc(numhalf_fixture_loop_pc)))) == BC_JMP);
   J = L2J(L);
   savedL = J->L;
   savedparent = J->parent;
@@ -1386,6 +1951,8 @@ int main(void)
   test_postra_spill_layout(J);
   test_numeric_positive_and_negative(J);
   test_numeric_postra_layout(J);
+  test_numhalf_positive_and_negative(J);
+  test_numhalf_postra_layout(J);
   J->L = savedL;
   J->parent = savedparent;
   J->exitno = savedexit;
@@ -1395,9 +1962,9 @@ int main(void)
   J->framedepth = savedframedepth;
   J->retdepth = savedretdepth;
   J->startpc = savedstartpc;
-  L->top -= 2;
+  L->top -= 3;
   lua_close(L);
-  puts("arm64_jit_ir_admission OK: integer and mixed NUM LOOP/FORL policy verified");
+  puts("arm64_jit_ir_admission OK: integer, mixed NUM and pure NUM LOOP/FORL policy verified");
   return 0;
 }
 
