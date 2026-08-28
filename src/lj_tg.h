@@ -411,6 +411,11 @@ struct TGState {
   uint64_t hotcount_reset_word;
   uint64_t hotcount_applied_generation;
 #endif
+  /* Tail-only one-shot arbitration between a pending-root flusher and the
+  ** sealed JIT trace-body publisher. Zero is idle; neither contender waits or
+  ** spins after losing its single CAS. Keeping this after every published
+  ** VM/JIT field preserves all established TG offsets. */
+  uint32_t gcroot_pending_owner;
 };
 
 LJ_STATIC_ASSERT(sizeof(((GC2SSBNode *)0)->slot) == TG_GC2_SSB_BYTES);
@@ -527,13 +532,13 @@ LJ_STATIC_ASSERT(offsetof(TGState, vmevent_regkey) +
 		 sizeof(((TGState *)0)->vmevent_regkey) <= sizeof(TGState));
 #if LJ_HASJIT
 LJ_STATIC_ASSERT(sizeof(TGState) -
-		 (offsetof(TGState, hotcount_applied_generation) +
-		  sizeof(((TGState *)0)->hotcount_applied_generation)) <
+		 (offsetof(TGState, gcroot_pending_owner) +
+		  sizeof(((TGState *)0)->gcroot_pending_owner)) <
 		 __alignof__(TGState));
 #else
 LJ_STATIC_ASSERT(sizeof(TGState) -
-		 (offsetof(TGState, vmevent_regkey) +
-		  sizeof(((TGState *)0)->vmevent_regkey)) <
+		 (offsetof(TGState, gcroot_pending_owner) +
+		  sizeof(((TGState *)0)->gcroot_pending_owner)) <
 		 __alignof__(TGState));
 #endif
 
@@ -1083,6 +1088,41 @@ static LJ_AINLINE void lj_tg_fnew_cert_publish_rel(TGState *tg,
 static LJ_AINLINE GCobj *lj_tg_gcroot_pending_acq(const TGState *tg)
 {
   return (GCobj *)la_loadptr_acq((void *const *)&tg->gcroot_pending);
+}
+
+typedef enum LJTGRootPendingOwner {
+  LJ_TG_ROOT_PENDING_IDLE = 0,
+  LJ_TG_ROOT_PENDING_FLUSH = 1,
+  LJ_TG_ROOT_PENDING_SEALED_TRACE = 2
+} LJTGRootPendingOwner;
+
+static LJ_AINLINE uint32_t lj_tg_gcroot_pending_owner_acq(
+	const TGState *tg)
+{
+  return tg ? la_load32_acq(&tg->gcroot_pending_owner) :
+	 (uint32_t)LJ_TG_ROOT_PENDING_FLUSH;
+}
+
+/* One-shot admission only. A flusher skips this TG and a sealed publisher
+** aborts before its irreversible state transition when the exact zero->owner
+** CAS loses. Neither path waits for the competing owner. */
+static LJ_AINLINE int lj_tg_gcroot_pending_owner_try(TGState *tg,
+	uint32_t owner)
+{
+  uint32_t expect = (uint32_t)LJ_TG_ROOT_PENDING_IDLE;
+  return tg != NULL && owner != (uint32_t)LJ_TG_ROOT_PENDING_IDLE &&
+	 owner <= (uint32_t)LJ_TG_ROOT_PENDING_SEALED_TRACE &&
+	 la_cas32(&tg->gcroot_pending_owner, &expect, owner,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE int lj_tg_gcroot_pending_owner_release(TGState *tg,
+	uint32_t owner)
+{
+  uint32_t expect = owner;
+  return tg != NULL && owner != (uint32_t)LJ_TG_ROOT_PENDING_IDLE &&
+	 la_cas32(&tg->gcroot_pending_owner, &expect,
+		  (uint32_t)LJ_TG_ROOT_PENDING_IDLE, LA_REL, LA_ACQ);
 }
 
 static LJ_AINLINE void lj_tg_gcroot_pending_hint(TGState *tg, GCobj *head)

@@ -5173,14 +5173,33 @@ static uint32_t gc_root_prepend_chain_after(global_State *g, GCobj *anchor,
 
 static uint32_t gc_flush_root_pending_tg(global_State *g, TGState *tg)
 {
-  GCobj *head;
+  GCobj *head, *after_main;
   uint32_t n;
   if (!g || !tg || tg->gl != g)
     return 0;
+  /* Serialize only the two head exchanges against the future sealed trace
+  ** publisher. Losing this one-shot admission skips the TG; the conservative
+  ** hint makes a later flush retry. Ordinary publishers retain their existing
+  ** CAS stack protocol and never wait on this state. */
+  if (!lj_tg_gcroot_pending_owner_try(
+	tg, (uint32_t)LJ_TG_ROOT_PENDING_FLUSH)) {
+    if (lj_tg_gcroot_pending_owner_acq(tg) !=
+	(uint32_t)LJ_TG_ROOT_PENDING_IDLE ||
+	lj_tg_gcroot_pending_acq(tg) != NULL ||
+	lj_tg_gcroot_pending_after_main_acq(tg) != NULL)
+      lj_gcroot_pending_hint_rel(g, 1);
+    return 0;
+  }
   head = lj_tg_gcroot_pending_xchg_acqrel(tg, NULL);
+  after_main = lj_tg_gcroot_pending_after_main_xchg_acqrel(tg, NULL);
+  if (LJ_UNLIKELY(!lj_tg_gcroot_pending_owner_release(
+	tg, (uint32_t)LJ_TG_ROOT_PENDING_FLUSH))) {
+    lj_assertG(0, "pending-root flusher lost exact owner");
+    abort();
+  }
   n = gc_root_prepend_chain(g, head);
-  head = lj_tg_gcroot_pending_after_main_xchg_acqrel(tg, NULL);
-  n += gc_root_prepend_chain_after(g, obj2gco(mainthread_acq(g)), head);
+  n += gc_root_prepend_chain_after(
+	g, obj2gco(mainthread_acq(g)), after_main);
   return n;
 }
 
@@ -5203,7 +5222,9 @@ static void gc_pending_root_stats(global_State *g, uint32_t n)
 static int gc_root_pending_tg_nonempty(TGState *tg)
 {
   return tg &&
-    (lj_tg_gcroot_pending_acq(tg) != NULL ||
+    (lj_tg_gcroot_pending_owner_acq(tg) !=
+	(uint32_t)LJ_TG_ROOT_PENDING_IDLE ||
+     lj_tg_gcroot_pending_acq(tg) != NULL ||
      lj_tg_gcroot_pending_after_main_acq(tg) != NULL);
 }
 
@@ -5344,6 +5365,119 @@ int lj_gc_linkobj_new(global_State *g, GCobj *o)
 {
   return gc_linkobj_new_pending_at(g, o, o);
 }
+
+#if LJ_HASJIT
+#define LJ_GC_NEW_ROOT_PLAN_ARMED UINT32_C(0x4a495452)  /* "JITR". */
+
+static void gc_new_root_publish_plan_clear(LJGCNewRootPublishPlan *plan)
+{
+  memset(plan, 0, sizeof(*plan));
+}
+
+int lj_gc_linkobj_new_sealed_prepare(global_State *g, GCobj *o,
+	LJGCNewRootPublishPlan *plan)
+{
+  TGState *tg;
+  GCRootStateRef rootstate;
+  int held = 0;
+  if (plan == NULL)
+    return 0;
+  gc_new_root_publish_plan_clear(plan);
+  tg = lj_thr_get_tg();
+  if (g == NULL || o == NULL || tg == NULL || tg->gl != g ||
+      lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+      !lj_tg_gcroot_pending_owner_try(
+	tg, (uint32_t)LJ_TG_ROOT_PENDING_SEALED_TRACE))
+    return 0;
+  held = 1;
+  /* Header publication and allocator-incarnation resolution are deliberately
+  ** pre-seal. The caller has already initialized every byte a root scan may
+  ** decode; a failed prepare can still abandon the private constructor. Keep
+  ** the sealed path small-arena-only: HugeTab root completion has a legitimate
+  ** CAS retry loop and therefore remains outside this finite suffix. */
+  if (!gc_publishobj_header_at(g, o, o) ||
+      gc_root_construct_claimed_at(g, o, o, &rootstate) !=
+	LJ_GC_ROOT_LINKED ||
+      rootstate.kind != GC_ROOT_STATE_SMALL || rootstate.a == NULL ||
+      lj_thr_get_tg() != tg || tg->gl != g ||
+      lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+      lj_tg_gcroot_pending_owner_acq(tg) !=
+	(uint32_t)LJ_TG_ROOT_PENDING_SEALED_TRACE)
+    goto fail;
+  plan->g = g;
+  plan->tg = tg;
+  plan->object = o;
+  plan->pending_head = lj_tg_gcroot_pending_acq(tg);
+  plan->arena = rootstate.a;
+  plan->cell = rootstate.cell;
+  plan->armed = LJ_GC_NEW_ROOT_PLAN_ARMED;
+  return 1;
+
+fail:
+  if (held && LJ_UNLIKELY(!lj_tg_gcroot_pending_owner_release(
+	tg, (uint32_t)LJ_TG_ROOT_PENDING_SEALED_TRACE))) {
+    lj_assertG(0, "sealed root prepare lost exact pending owner");
+    abort();
+  }
+  return 0;
+}
+
+void lj_gc_linkobj_new_sealed_publish(LJGCNewRootPublishPlan *plan)
+{
+  GCRootStateRef rootstate;
+  GCobj *expect;
+  global_State *g;
+  TGState *tg;
+  GCobj *o;
+  if (LJ_UNLIKELY(plan == NULL ||
+	plan->armed != LJ_GC_NEW_ROOT_PLAN_ARMED ||
+	(g = plan->g) == NULL || (tg = plan->tg) == NULL ||
+	(o = plan->object) == NULL || tg->gl != g ||
+	lj_thr_get_tg() != tg || lj_tg_flags_test_acq(tg, TGF_DEAD) ||
+	lj_tg_gcroot_pending_owner_acq(tg) !=
+	  (uint32_t)LJ_TG_ROOT_PENDING_SEALED_TRACE ||
+	lj_tg_gcroot_pending_acq(tg) != plan->pending_head ||
+	gc_root_construct_claimed_at(g, o, o, &rootstate) !=
+	  LJ_GC_ROOT_LINKED || rootstate.kind != GC_ROOT_STATE_SMALL ||
+	rootstate.a != plan->arena || rootstate.cell != plan->cell)) {
+    lj_assertG(0, "invalid sealed root publication plan");
+    abort();
+  }
+  gc_root_set_next_rel(o, plan->pending_head);
+  expect = plan->pending_head;
+  if (LJ_UNLIKELY(!lj_tg_gcroot_pending_cas(tg, &expect, o) ||
+	!lj_arena_root_construct_commit(rootstate.a, rootstate.cell) ||
+	!lj_tg_gcroot_pending_owner_release(
+	  tg, (uint32_t)LJ_TG_ROOT_PENDING_SEALED_TRACE))) {
+    /* Any failure follows the first possible visibility edge. The constructor
+    ** lane and pending owner remain fail-closed; continuing could expose a
+    ** body whose allocation membership is not durable. */
+    lj_assertG(0, "sealed root publication lost exact commit");
+    abort();
+  }
+  gc_new_root_publish_plan_clear(plan);
+}
+
+void lj_gc_linkobj_new_sealed_abort(LJGCNewRootPublishPlan *plan)
+{
+  global_State *g;
+  TGState *tg;
+  if (plan == NULL || plan->armed == 0)
+    return;
+  g = plan->g;
+  tg = plan->tg;
+  if (LJ_UNLIKELY(plan->armed != LJ_GC_NEW_ROOT_PLAN_ARMED || g == NULL ||
+	tg == NULL || tg->gl != g ||
+	lj_tg_gcroot_pending_owner_acq(tg) !=
+	  (uint32_t)LJ_TG_ROOT_PENDING_SEALED_TRACE ||
+	!lj_tg_gcroot_pending_owner_release(
+	  tg, (uint32_t)LJ_TG_ROOT_PENDING_SEALED_TRACE))) {
+    lj_assertG(0, "sealed root abort lost exact pending owner");
+    abort();
+  }
+  gc_new_root_publish_plan_clear(plan);
+}
+#endif
 
 int lj_gc_linkobj_new_at(global_State *g, GCobj *o, void *base)
 {

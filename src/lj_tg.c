@@ -345,6 +345,8 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   lj_tg_root_anchor_top_rel(tg, 0);
   lj_tg_gcroot_pending_store_rlx(tg, NULL);
   lj_tg_gcroot_pending_after_main_store_rlx(tg, NULL);
+  la_store32_rlx(&tg->gcroot_pending_owner,
+		 (uint32_t)LJ_TG_ROOT_PENDING_IDLE);
   tg_init_ssb(tg);
   la_storeptr_rlx((void **)&tg->fnew_cert_pt, NULL);
   la_storeptr_rlx((void **)&tg->fnew_cert_env, NULL);
@@ -1052,7 +1054,9 @@ static int tg_terminal_pending_roots_empty(global_State *g)
   if (lj_gcroot_pending_hint_acq(g) != 0)
     return 0;
   for (tg = gc2_tg_list_acq(g); tg != NULL; tg = lj_tg_next_acq(tg))
-    if (lj_tg_gcroot_pending_acq(tg) != NULL ||
+    if (lj_tg_gcroot_pending_owner_acq(tg) !=
+	  (uint32_t)LJ_TG_ROOT_PENDING_IDLE ||
+	lj_tg_gcroot_pending_acq(tg) != NULL ||
 	lj_tg_gcroot_pending_after_main_acq(tg) != NULL)
       return 0;
   return 1;

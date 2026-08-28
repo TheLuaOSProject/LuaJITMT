@@ -135,6 +135,27 @@ LJ_FUNC int lj_gc_linkobj(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc_linkobj_at(global_State *g, GCobj *o, void *base);
 LJ_FUNC int lj_gc_linkobj_pending(global_State *g, GCobj *o);
 LJ_FUNC int lj_gc_linkobj_new(global_State *g, GCobj *o);
+#if LJ_HASJIT
+/* Private small-arena fresh-object root publication for a sealed JIT
+** transaction. Prepare rejects huge objects, performs every fallible
+** validation and wins a one-shot TG-local arbitration against pending-root
+** flush. Publish then performs one finite root-stack store and constructor
+** commit; abort is valid only before publication. */
+typedef struct LJGCNewRootPublishPlan {
+  global_State *g;
+  TGState *tg;
+  GCobj *object;
+  GCobj *pending_head;
+  GCArena *arena;
+  uint32_t cell;
+  uint32_t armed;
+} LJGCNewRootPublishPlan;
+LJ_FUNC int lj_gc_linkobj_new_sealed_prepare(global_State *g, GCobj *o,
+	LJGCNewRootPublishPlan *plan);
+LJ_FUNC void lj_gc_linkobj_new_sealed_publish(
+	LJGCNewRootPublishPlan *plan);
+LJ_FUNC void lj_gc_linkobj_new_sealed_abort(LJGCNewRootPublishPlan *plan);
+#endif
 /* Fresh publication with allocation-base identity retained by the constructor.
 ** This is required for interior cdata and avoids re-deriving fixed cdata shape
 ** from concurrently published CType metadata. */
