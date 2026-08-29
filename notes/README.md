@@ -9,7 +9,7 @@ current claims.
 
 Development branch: `codex/aarch64-macos-port`.
 
-Last complete JIT fail-closed-gate checkpoint: `a7056fe5` (2026-08-29).
+Last complete JIT fail-closed-gate checkpoint: `4ef37827` (2026-08-29).
 Latest focused exact-`CALLXS` checkpoint: `e2c8778d` (2026-08-29).
 The admitted boundary comprises two signatures in one exact Darwin ARM64
 `CALLXS` root: cached direct CDECL function cdata with either
@@ -178,7 +178,7 @@ semantic and post-register-allocation gates merely to reduce the diff.
 
 ## Verification
 
-- `tools/ci/arm64_jit_fail_closed_gate.sh`: passed in full at `a7056fe5`,
+- `tools/ci/arm64_jit_fail_closed_gate.sh`: passed in full at `4ef37827`,
   including the exact variable-step integer `FORL`, its overflow and direction
   exits, the 3,072-case `BC_LOOP` compiler proof, 222 runtime profile
   executions, ARM64/arm64e publication, entry, exit, retirement, flush/reuse,
