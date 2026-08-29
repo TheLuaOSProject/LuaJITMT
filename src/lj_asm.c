@@ -78,10 +78,10 @@ int lj_asm_arm64_b26_encode(uintptr_t source, uintptr_t target, MCode *insp)
 ** accumulator shapes: one dynamic mixed INT/NUM root, one pure NUM root with
 ** a canonical +0.5 constant, one fixed-initializer root with a dynamic NUM
 ** step, and one all-parameter pure-NUM root with an exact ADD_LT, ADD_LE,
-** ADD_GT, ADD_GE, SUB_GT, SUB_GE, MUL_LT, MUL_LE, DIV_LT or DIV_LE recurrence
-** grammar. Only the exact MUL_LT and MUL_LE profiles admit FMUL, and only the
-** exact DIV_LT and DIV_LE profiles admit FDIV; this list admits no IR CALL
-** helper ID and no heap operation.
+** ADD_GT, ADD_GE, SUB_GT, SUB_GE, MUL_LT, MUL_LE, DIV_LT, DIV_LE, DIV_GT or
+** DIV_GE recurrence grammar. Only the exact MUL_LT and MUL_LE profiles admit
+** FMUL, and only the exact DIV_LT, DIV_LE, DIV_GT and DIV_GE profiles admit
+** FDIV; this list admits no IR CALL helper ID and no heap operation.
 */
 
 static int arm64_ir_reject(LJArm64IRReject *reject,
@@ -257,7 +257,9 @@ enum {
   ARM64_NUMDYN_MUL_LT = 7u,
   ARM64_NUMDYN_MUL_LE = 8u,
   ARM64_NUMDYN_DIV_LT = 9u,
-  ARM64_NUMDYN_DIV_LE = 10u
+  ARM64_NUMDYN_DIV_LE = 10u,
+  ARM64_NUMDYN_DIV_GT = 11u,
+  ARM64_NUMDYN_DIV_GE = 12u
 };
 
 static int arm64_numdynamic_is_sub(unsigned grammar_profile)
@@ -275,7 +277,9 @@ static int arm64_numdynamic_is_mul(unsigned grammar_profile)
 static int arm64_numdynamic_is_div(unsigned grammar_profile)
 {
   return grammar_profile == ARM64_NUMDYN_DIV_LT ||
-	 grammar_profile == ARM64_NUMDYN_DIV_LE;
+	 grammar_profile == ARM64_NUMDYN_DIV_LE ||
+	 grammar_profile == ARM64_NUMDYN_DIV_GT ||
+	 grammar_profile == ARM64_NUMDYN_DIV_GE;
 }
 
 enum {
@@ -830,6 +834,18 @@ static int arm64_postra_numdynamic_kernel(const LJArm64PostRAView *view,
     first_right = ARM64_NUMSTEP_R_STEP;
     preop = IR_GE;
     bodyop = IR_LE;
+  } else if (grammar_profile == ARM64_NUMDYN_DIV_GT) {
+    recurrence_op = IR_DIV;
+    first_left = ARM64_NUMSTEP_R_X;
+    first_right = ARM64_NUMSTEP_R_STEP;
+    preop = IR_LT;
+    bodyop = IR_GT;
+  } else if (grammar_profile == ARM64_NUMDYN_DIV_GE) {
+    recurrence_op = IR_DIV;
+    first_left = ARM64_NUMSTEP_R_X;
+    first_right = ARM64_NUMSTEP_R_STEP;
+    preop = IR_LE;
+    bodyop = IR_GE;
   } else {
     return 0;
   }
@@ -937,6 +953,12 @@ static unsigned arm64_numacc_grammar_profile(const BCIns *proto_bc,
     if (bc_op(compare) == BC_ISGT && bc_a(compare) == 3 &&
 	bc_d(compare) == 4)
       return ARM64_NUMDYN_DIV_LE;
+    if (bc_op(compare) == BC_ISGE && bc_a(compare) == 4 &&
+	bc_d(compare) == 3)
+      return ARM64_NUMDYN_DIV_GT;
+    if (bc_op(compare) == BC_ISGT && bc_a(compare) == 4 &&
+	bc_d(compare) == 3)
+      return ARM64_NUMDYN_DIV_GE;
   }
   return 0;
 }
@@ -2146,6 +2168,18 @@ static int arm64_ir_numdynamic_kernel(const GCtrace *T, IRRef xslot,
     first_right = ARM64_NUMSTEP_R_STEP;
     preop = IR_GE;
     bodyop = IR_LE;
+  } else if (grammar_profile == ARM64_NUMDYN_DIV_GT) {
+    recurrence_op = IR_DIV;
+    first_left = ARM64_NUMSTEP_R_X;
+    first_right = ARM64_NUMSTEP_R_STEP;
+    preop = IR_LT;
+    bodyop = IR_GT;
+  } else if (grammar_profile == ARM64_NUMDYN_DIV_GE) {
+    recurrence_op = IR_DIV;
+    first_left = ARM64_NUMSTEP_R_X;
+    first_right = ARM64_NUMSTEP_R_STEP;
+    preop = IR_LE;
+    bodyop = IR_GE;
   } else {
     return 0;
   }
