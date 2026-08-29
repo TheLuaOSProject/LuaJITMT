@@ -49,6 +49,10 @@ review boundary for both x86-64 and Apple ARM64 work.
   fixtures and must not share one acceptance result.
 - Opening one exact ABI certificate does not authorize adjacent ARM64 CALLXS
   signatures, indirect callees, or call-site/root geometries.
+- When exact CALLXS signatures share a root grammar, the CType-selected ABI
+  profile must still match the complete semantic extent, conversions,
+  snapshots, and post-RA layout; one matching conversion is not generic ABI
+  admission.
 
 ## Native calls, callbacks, and signals
 
