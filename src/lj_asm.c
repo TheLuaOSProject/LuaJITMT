@@ -78,8 +78,9 @@ int lj_asm_arm64_b26_encode(uintptr_t source, uintptr_t target, MCode *insp)
 ** accumulator shapes: one dynamic mixed INT/NUM root, one pure NUM root with
 ** a canonical +0.5 constant, one fixed-initializer root with a dynamic NUM
 ** step, and one all-parameter pure-NUM root with an exact ADD_LT, ADD_LE,
-** ADD_GT, ADD_GE, SUB_GT or SUB_GE recurrence grammar. In particular, this
-** list admits no IR CALL helper ID and no heap operation.
+** ADD_GT, ADD_GE, SUB_GT, SUB_GE or MUL_LT recurrence grammar. Only the exact
+** MUL_LT profile admits FMUL; this list admits no IR CALL helper ID and no
+** heap operation.
 */
 
 static int arm64_ir_reject(LJArm64IRReject *reject,
