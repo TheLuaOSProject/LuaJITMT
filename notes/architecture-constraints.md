@@ -15,6 +15,9 @@ review boundary for both x86-64 and Apple ARM64 work.
 - Keep dispatch, hotcounts, VM state, native-frame state, temporary state,
   recorder ownership, and safepoint requests TG-local unless a protocol
   explicitly publishes shared immutable state.
+- Generated `IR_TMPREF` storage belongs to the executing TG. `IN1`/`OUT1`
+  address `tmptv`; `IN2`/`OUT2` address `tmptv2`. Never alias the two slots or
+  regress generated code to universe-global scratch storage.
 
 ## Publication and weak ordering
 
@@ -44,11 +47,17 @@ review boundary for both x86-64 and Apple ARM64 work.
 - Physical co-location in a target-local header is fine, but semantic and
   post-RA admission must remain separate passes with independent negative
   fixtures and must not share one acceptance result.
+- Opening one exact ABI certificate does not authorize adjacent ARM64 CALLXS
+  signatures, indirect callees, or call-site/root geometries.
 
 ## Native calls, callbacks, and signals
 
 - Publish exact native call/callback frames and all stack/result roots. Preserve
   nested callback, auto-attach/detach, error, unwind, and post-call cleanup.
+- The cdata base metatable and its `__call` entry are mutable. Sample and execute
+  through rooted helpers, guard both the current base-metatable root and exact
+  function identity, and never retain a raw table slot across concurrent
+  mutation or resize.
 - Darwin AAPCS64 register classes, indirect aggregate results, variadics,
   errno, PAC, BTI, and unwind metadata require positive target evidence.
 - Restore `errno` or `LastError` at the final target landing after context

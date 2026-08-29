@@ -9,17 +9,19 @@ current claims.
 
 Development branch: `codex/aarch64-macos-port`.
 
-Last complete JIT fail-closed-gate checkpoint: `0ce4313b` (2026-08-29).
-It adds the target-local Darwin ARM64 `XSAVE` restore/staging backend without
-opening production `CALLXS` admission. Snapshot restoration uses the allocated
-`REF_BASE` owner rather than assuming interpreter `x19`; the root, frame offset,
-and extent then stage through release stores on the fixed x25 TG carrier. The
-exact emitted `STLR` words passed the ARM64 emitter contract, the complete
-ARM64/arm64e fail-closed umbrella passed, and the unchanged x86_64 production
-scalar `CALLXS` fixture passed under Rosetta. The immediately preceding JIT
-checkpoint is `19e94934`, which admitted the exact variable-stop/variable-step
-integer `FORL` grammar. The native and x86_64 vendored suites last passed with
-509 tests each at `4d1b6126`.
+Last complete JIT fail-closed-gate checkpoint: `5b6d9e0d` (2026-08-29).
+It admits one exact Darwin ARM64 `CALLXS` root: a cached direct CDECL function
+cdata with signature `int32_t(int32_t)` in the certified 16-bytecode integer
+`FORL` root. Mutable cdata `__call` lookup now samples through enumerated TG
+roots, guards the current base-metatable root and exact function identity, and
+uses TG-local `tmptv`/`tmptv2` storage in generated code. Semantic IR,
+snapshots, bytecode, signature, trace ownership, and post-register-allocation
+state are independently certified. The complete ARM64/arm64e fail-closed
+umbrella, focused ARM64 and arm64e/BTI CALLXS lifecycle, and x86_64/Rosetta
+production plus threaded remote-flush paths passed. The preceding `0ce4313b`
+checkpoint introduced the target-local ARM64 `XSAVE` staging backend; the
+native and x86_64 vendored suites last passed with 509 tests each at
+`4d1b6126`.
 
 ARM64 remains explicitly opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`. Native JIT
 work additionally requires `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`. These flags are
@@ -42,13 +44,16 @@ Implemented and exercised on Apple Silicon macOS:
   integer and mixed numeric `LOOP` roots, fixed-half and dynamic-step numeric
   roots, literal-true `FUNCF`, and the exact `ADD_LT`, `ADD_LE`, `ADD_GT`,
   `ADD_GE`, `SUB_GT`, `SUB_GE`, `MUL_LT`, `MUL_LE`, `DIV_LT`, `DIV_LE`,
-  `DIV_GT`, and `DIV_GE` all-parameter loop profiles; and
+  `DIV_GT`, and `DIV_GE` all-parameter loop profiles;
+- one exact scalar Darwin ARM64 FFI call root with native-frame entry/leave,
+  remote GC/flush retirement, mutable cdata `__call` replacement races, and
+  arm64e/BTI execution; and
 - callback-result lifetime across post-detach TG reclamation.
 
-The ARM64 `XSAVE` backend is preparatory, not an admitted generic FFI trace.
-The common `LJ_HASJIT_FFI_CALLXS` capability remains x64-only until a separate
-ARM64 semantic, post-register-allocation, snapshot, exact-trace-identity, and
-runtime lifecycle certificate lands.
+The ARM64 `XSAVE` backend is now live only for that exact scalar certificate.
+`LJ_HASJIT_FFI_CALLXS` includes experimental Darwin ARM64, but the recorder and
+assembler still reject every other ARM64 signature and call-site geometry.
+This is not generic ARM64 FFI lowering.
 
 ## Exact numeric JIT boundary
 
@@ -115,13 +120,12 @@ stale local names. ARM64's five-slot side certificate and FORI/FORL tuple
 check no longer leak into x86_64 behavior.
 
 Relative to local and remote `v2.1` at `a649f737`, the target-local extraction
-keeps shared `src/lj_asm.c` divergence at 563 insertions and 5 deletions instead
-of 3,806 and 5. Its moved body was byte-for-byte compared with the
-pre-extraction source, and source certificates inspect
-`src/lj_asm_arm64_admit.h` while retaining independent semantic and
-post-register-allocation passes. The dynamic integer `FORL` tranche also stays
-in that target-local header and changes neither the recorder nor
-`vm_arm64.dasc`.
+keeps the large ARM64 policy body out of shared `src/lj_asm.c`. Its moved body
+was byte-for-byte compared with the pre-extraction source, and source
+certificates inspect `src/lj_asm_arm64_admit.h` while retaining independent
+semantic and post-register-allocation passes. New numeric and CALLXS
+certificates stay in that target-local header; shared recorder and trace edits
+are limited to the runtime mechanisms they require.
 
 The unwind fix keeps the historical exception prefix and x64 path unchanged.
 Its ARM64 tail uses one exception-owned `x28` carrier and a target-local VM
@@ -136,17 +140,28 @@ semantic and post-register-allocation gates merely to reduce the diff.
 
 ## Verification
 
-- `tools/ci/arm64_jit_fail_closed_gate.sh`: passed in full at `0ce4313b`,
+- `tools/ci/arm64_jit_fail_closed_gate.sh`: passed in full at `5b6d9e0d`,
   including the exact variable-step integer `FORL`, its overflow and direction
   exits, the 3,072-case `BC_LOOP` compiler proof, 222 runtime profile
   executions, ARM64/arm64e publication, entry, exit, retirement, flush/reuse,
   GDB-JIT, callback, first-side, and safepoint contracts.
-- `tools/ci/arm64_jit_emitter_contract.sh`: passed at `0ce4313b`; the emitted
+- `tools/ci/arm64_jit_emitter_contract.sh`: passed at `5b6d9e0d`; the emitted
   owner-private `ffi_xsave_baseslot` and `ffi_xsave_nslots` publications are
   naturally sized `STLR w6` stores through x25, and `ffi_xsave_root` uses the
   existing pointer-sized release helper.
-- Disposable x86_64/Rosetta build: `t-ffi-callxs-production.lua` passed at
-  `0ce4313b`, preserving the established scalar `XSAVE`/`CALLXS` path.
+- `m7_ffi_callxs_arm64_scalar`: passed at `5b6d9e0d`; the authentic trace and
+  semantic/post-RA mutation fixture passed with exactly two `XSAVE` and two
+  `CALLXS` nodes. Stable and concurrently raced cdata `__call` replacement,
+  remote full GC, and remote `jit.flush()` completed without replay or stall.
+- Manual arm64e/BTI build: the same semantic/post-RA fixture, production call,
+  and threaded lifecycle passed at `5b6d9e0d` in thin ARM64e executables.
+- Disposable x86_64/Rosetta build: production and threaded scalar, pointer,
+  boolean, and sret remote-flush paths passed at `5b6d9e0d`. The test now
+  caches FFI-library symbols before recording, leaving shared mutable
+  `__index` intentionally closed while exercising rooted cdata `__call`.
+- Disposable experimental ARM64 `LUAJIT_DISABLE_FFI` build: a native JIT loop
+  published and executed while `require("ffi")` remained unavailable at
+  `5b6d9e0d`.
 - Native ARM64 experimental build vendored suite: `509 passed` at
   `4d1b6126`.
 - Disposable thin x86_64 build: platform smoke, real Rosetta loop trace, and
@@ -167,7 +182,8 @@ semantic and post-register-allocation gates merely to reduce the diff.
 - `tools/ci/arm64_jit_root_entry_contract.sh`,
   `arm64_jit_funcf_record_contract.sh`, and
   `arm64e_jit_trace_pauth_contract.sh` all passed after the alias-boundary
-  cleanup.
+  cleanup. The root-entry source-order probe was updated for the owner-aware
+  admission signature and now runs without empty-counter arithmetic warnings.
 
 The recurring unused `ccall_rawchild_wait` warning remains pre-existing.
 Diagnostic GDB-JIT and x86_64 builds also emit the known unused `topofs`
@@ -186,8 +202,10 @@ the expected non-GC64 rejection before the configured GC64 target succeeds.
   variable-STOP/variable-STEP shape, and general root geometries.
 - General side traces, side-of-side traces, and stitches. Only explicitly
   certified first-side shapes are open.
-- Uncertified conversions, calls, allocations, heap effects, table/upvalue JIT
-  fast paths, and traced generic FFI calls.
+- Uncertified conversions, allocations, heap effects, table/upvalue JIT fast
+  paths, and every ARM64 FFI call except the exact direct
+  `int32_t(int32_t)` CDECL root. Other signatures and call-site geometries
+  remain closed.
 - Production JIT side-exit unwind resolution on ARM64/arm64e. Current JIT
   unwind evidence uses a synthetic arm64e carrier and landing.
 - Full parity with every x86_64 lockless VM, JIT, FFI, profiler, unwind, and
@@ -198,18 +216,19 @@ the expected non-GC64 rejection before the configured GC64 target succeeds.
 Do not describe this branch as a completed ARM64 port yet. A passing stock
 suite proves an important compatibility boundary, not general JIT coverage.
 
-The next high-value production tranche is exact scalar Darwin ARM64 generic
-FFI `CALLXS` admission. Its first heap-free shape must certify every duplicated
-`XSAVE`/enter/foreign-call/leave bracket, exact patched trace identity,
-snapshots, and callee-saved post-RA owners before running callback, STOPREQ,
-errno, remote-flush, and arm64e/BTI proofs. Before admitting table/helper
-traces, ARM64 `lj_vm_next` also needs the forwarding-safe traversal already
-used by the x86_64 path.
+Before widening CALLXS, add exact errno, nested-callback, forced-exit, and
+STOPREQ evidence to the admitted scalar lifecycle. Then certify signatures one
+at a time: pointer, 64-bit integer, FP, boolean, aggregate/sret, and variadic;
+indirect function pointers and general call-site/root layouts remain separate
+boundaries. Before admitting general table/helper traces, ARM64 `lj_vm_next`
+also needs the forwarding-safe traversal already used by the x86_64 path.
 
 ## Primary checks
 
 ```sh
 env MACOSX_DEPLOYMENT_TARGET=13.0 tools/ci/arm64_jit_fail_closed_gate.sh
+env MACOSX_DEPLOYMENT_TARGET=13.0 LUA_PATH='tests/lib/?.lua;src/?.lua;src/jit/?.lua;;' \
+  src/luajit tools/test.lua m7_ffi_callxs_arm64_scalar
 env LUA=src/luajit tools/ci/lua_test.sh run_stock_tests -- --quiet
 ```
 
