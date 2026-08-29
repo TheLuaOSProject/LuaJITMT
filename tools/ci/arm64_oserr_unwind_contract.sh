@@ -215,4 +215,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
     XCFLAGS="$restore_flags"
 restore_needed=0
 
-echo "arm64_oserr_unwind_contract OK: arm64, arm64e/BTI and x86_64 preserved final-landing errno"
+echo "arm64_oserr_unwind_contract OK: arm64, arm64e/BTI and x86_64 preserved C/fast-function landing errno"
