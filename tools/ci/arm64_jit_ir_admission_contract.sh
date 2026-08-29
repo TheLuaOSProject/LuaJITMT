@@ -44,7 +44,10 @@ semantic_subge_region=$tmpdir/semantic-subge-region.txt
 selector_sub_region=$tmpdir/selector-sub-region.txt
 postra_mullt_region=$tmpdir/postra-mullt-region.txt
 semantic_mullt_region=$tmpdir/semantic-mullt-region.txt
+postra_mulle_region=$tmpdir/postra-mulle-region.txt
+semantic_mulle_region=$tmpdir/semantic-mulle-region.txt
 selector_mul_region=$tmpdir/selector-mul-region.txt
+numacc_mulle_fixture_region=$tmpdir/numacc-mulle-fixture-region.txt
 pauth_macros=$tmpdir/macros-arm64e.txt
 audit_object=$tmpdir/lj_asm-arm64e.o
 xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_USE_ASSERT'
@@ -420,9 +423,10 @@ for required in \
 done
 
 # The dynamic-accumulator pure-NUM fixture is one exact geometry with ADD_LT,
-# ADD_LE, ADD_GT, ADD_GE, SUB_GT, SUB_GE and MUL_LT full-shape profiles. All
-# three scalars are parameters, so both trace and prototype constant sets are
-# empty; exact comparison operands and recurrence bytecode select the tuple.
+# ADD_LE, ADD_GT, ADD_GE, SUB_GT, SUB_GE, MUL_LT and MUL_LE full-shape
+# profiles. All three scalars are parameters, so both trace and prototype
+# constant sets are empty; exact comparison operands and recurrence bytecode
+# select the tuple.
 awk '/^static unsigned numacc_fixture_full_shape\(/ { copying = 1 }
      copying { print }
      copying && /^static LJArm64IRReject expect_reject\(/ { exit }' \
@@ -445,12 +449,14 @@ for required in \
   'ARM64_NUMDYN_SUB_GE = 4u,' \
   'ARM64_NUMDYN_ADD_GT = 5u,' \
   'ARM64_NUMDYN_ADD_GE = 6u,' \
-  'ARM64_NUMDYN_MUL_LT = 7u' \
+  'ARM64_NUMDYN_MUL_LT = 7u,' \
+  'ARM64_NUMDYN_MUL_LE = 8u' \
   'static int arm64_numdynamic_is_sub(unsigned grammar_profile)' \
   'return grammar_profile == ARM64_NUMDYN_SUB_GT ||' \
   'grammar_profile == ARM64_NUMDYN_SUB_GE;' \
   'static int arm64_numdynamic_is_mul(unsigned grammar_profile)' \
-  'return grammar_profile == ARM64_NUMDYN_MUL_LT;' \
+  'return grammar_profile == ARM64_NUMDYN_MUL_LT ||' \
+  'grammar_profile == ARM64_NUMDYN_MUL_LE;' \
   'ARM64_NUMACC_R_X = ARM64_NUMSTEP_R_X,' \
   'ARM64_NUMACC_R_STEP = ARM64_NUMSTEP_R_STEP,' \
   'ARM64_NUMACC_SEMANTIC_NINS = ARM64_NUMSTEP_SEMANTIC_NINS' \
@@ -471,6 +477,7 @@ for required in \
   '} else if (grammar_profile == ARM64_NUMDYN_SUB_GT) {' \
   '} else if (grammar_profile == ARM64_NUMDYN_SUB_GE) {' \
   '} else if (grammar_profile == ARM64_NUMDYN_MUL_LT) {' \
+  '} else if (grammar_profile == ARM64_NUMDYN_MUL_LE) {' \
   'recurrence_op = IR_SUB;' \
   'first_left = ARM64_NUMSTEP_R_X;' \
   'first_right = ARM64_NUMSTEP_R_STEP;' \
@@ -496,6 +503,7 @@ for required in \
   'return ARM64_NUMDYN_SUB_GE;' \
   'bc_op(recurrence) == BC_MULVV && bc_a(recurrence) == 3' \
   'return ARM64_NUMDYN_MUL_LT;' \
+  'return ARM64_NUMDYN_MUL_LE;' \
   'unsigned grammar_profile = arm64_numacc_grammar_profile(' \
   'view->root_topslot != 5 || view->proto_sizebc != 13 ||' \
   'grammar_profile == 0 ||' \
@@ -563,10 +571,12 @@ test "$(grep -Fc '} else if (grammar_profile == ARM64_NUMDYN_ADD_GE) {' \
   "$classifier")" -eq 2
 test "$(grep -Fc '} else if (grammar_profile == ARM64_NUMDYN_MUL_LT) {' \
   "$classifier")" -eq 2
+test "$(grep -Fc '} else if (grammar_profile == ARM64_NUMDYN_MUL_LE) {' \
+  "$classifier")" -eq 2
 
 # ADD_GT and ADD_GE reuse the existing ADD path. Keep the dedicated SUB
 # authorization helper exactly limited to the two subtraction profiles, and
-# keep the independent MUL authorization exactly limited to MUL_LT.
+# keep the independent MUL authorization exactly limited to MUL_LT/MUL_LE.
 awk '
   /^static int arm64_numdynamic_is_sub/ { copying = 1 }
   copying { print }
@@ -579,7 +589,7 @@ grep -F 'grammar_profile == ARM64_NUMDYN_SUB_GT ||' \
   "$numdynamic_sub_helper" >/dev/null
 grep -F 'grammar_profile == ARM64_NUMDYN_SUB_GE;' \
   "$numdynamic_sub_helper" >/dev/null
-for non_sub_profile in ADD_GT ADD_GE MUL_LT; do
+for non_sub_profile in ADD_GT ADD_GE MUL_LT MUL_LE; do
   if grep -F "ARM64_NUMDYN_$non_sub_profile" \
        "$numdynamic_sub_helper" >/dev/null; then
     echo "ARM64 $non_sub_profile entered the NUM SUB authorization helper" >&2
@@ -592,10 +602,12 @@ awk '
   copying { print }
   copying && /^}/ { exit }
 ' "$root/src/lj_asm.c" >"$numdynamic_mul_helper"
-test "$(wc -l <"$numdynamic_mul_helper" | tr -d ' ')" -eq 4
+test "$(wc -l <"$numdynamic_mul_helper" | tr -d ' ')" -eq 5
 test "$(grep -Fc 'grammar_profile == ARM64_NUMDYN_' \
-  "$numdynamic_mul_helper")" -eq 1
-grep -F 'return grammar_profile == ARM64_NUMDYN_MUL_LT;' \
+  "$numdynamic_mul_helper")" -eq 2
+grep -F 'return grammar_profile == ARM64_NUMDYN_MUL_LT ||' \
+  "$numdynamic_mul_helper" >/dev/null
+grep -F 'grammar_profile == ARM64_NUMDYN_MUL_LE;' \
   "$numdynamic_mul_helper" >/dev/null
 for non_mul_profile in ADD_LT ADD_LE ADD_GT ADD_GE SUB_GT SUB_GE; do
   if grep -F "ARM64_NUMDYN_$non_mul_profile" \
@@ -823,8 +835,8 @@ for required in \
 done
 test "$(grep -Fc 'bc_d(compare) == 3)' "$selector_sub_region")" -eq 2
 
-# MUL_LT has its own recurrence authorization and must remain one exact source,
-# semantic and post-RA tuple rather than entering the general ADD/SUB paths.
+# MUL_LT and MUL_LE share only the dedicated recurrence authorization. Keep
+# each semantic and post-RA tuple independently scoped and adjacent.
 awk '
   /^static int arm64_postra_numdynamic_kernel/ { in_kernel = 1 }
   in_kernel &&
@@ -832,7 +844,10 @@ awk '
       copying = 1
     }
   copying { print }
-  copying && $0 == "  } else {" { exit }
+  copying &&
+    index($0, "} else if (grammar_profile == ARM64_NUMDYN_MUL_LE) {") {
+      exit
+    }
 ' "$root/src/lj_asm.c" >"$postra_mullt_region"
 
 awk '
@@ -842,7 +857,10 @@ awk '
       copying = 1
     }
   copying { print }
-  copying && $0 == "  } else {" { exit }
+  copying &&
+    index($0, "} else if (grammar_profile == ARM64_NUMDYN_MUL_LE) {") {
+      exit
+    }
 ' "$root/src/lj_asm.c" >"$semantic_mullt_region"
 
 for region in "$postra_mullt_region" "$semantic_mullt_region"; do
@@ -854,9 +872,46 @@ for region in "$postra_mullt_region" "$semantic_mullt_region"; do
     'first_right = ARM64_NUMSTEP_R_X;' \
     'preop = IR_GT;' \
     'bodyop = IR_LT;' \
-    '} else {'; do
+    '} else if (grammar_profile == ARM64_NUMDYN_MUL_LE) {'; do
     grep -F "$required" "$region" >/dev/null || {
       echo "ARM64 MUL_LT kernel tuple changed: $required" >&2
+      exit 1
+    }
+  done
+done
+
+awk '
+  /^static int arm64_postra_numdynamic_kernel/ { in_kernel = 1 }
+  in_kernel &&
+    index($0, "} else if (grammar_profile == ARM64_NUMDYN_MUL_LE) {") {
+      copying = 1
+    }
+  copying { print }
+  copying && $0 == "  } else {" { exit }
+' "$root/src/lj_asm.c" >"$postra_mulle_region"
+
+awk '
+  /^static int arm64_ir_numdynamic_kernel/ { in_kernel = 1 }
+  in_kernel &&
+    index($0, "} else if (grammar_profile == ARM64_NUMDYN_MUL_LE) {") {
+      copying = 1
+    }
+  copying { print }
+  copying && $0 == "  } else {" { exit }
+' "$root/src/lj_asm.c" >"$semantic_mulle_region"
+
+for region in "$postra_mulle_region" "$semantic_mulle_region"; do
+  test "$(wc -l <"$region" | tr -d ' ')" -eq 7
+  for required in \
+    '} else if (grammar_profile == ARM64_NUMDYN_MUL_LE) {' \
+    'recurrence_op = IR_MUL;' \
+    'first_left = ARM64_NUMSTEP_R_STEP;' \
+    'first_right = ARM64_NUMSTEP_R_X;' \
+    'preop = IR_GE;' \
+    'bodyop = IR_LE;' \
+    '} else {'; do
+    grep -F "$required" "$region" >/dev/null || {
+      echo "ARM64 MUL_LE kernel tuple changed: $required" >&2
       exit 1
     }
   done
@@ -871,20 +926,35 @@ awk '
   copying { print }
   copying && $0 == "  }" { exit }
 ' "$root/src/lj_asm.c" >"$selector_mul_region"
-test "$(wc -l <"$selector_mul_region" | tr -d ' ')" -eq 6
+test "$(wc -l <"$selector_mul_region" | tr -d ' ')" -eq 9
 for required in \
   '} else if (bc_op(recurrence) == BC_MULVV && bc_a(recurrence) == 3 &&' \
   'bc_b(recurrence) == 3 && bc_c(recurrence) == 4) {' \
   'if (bc_op(compare) == BC_ISGE && bc_a(compare) == 3 &&' \
   'bc_d(compare) == 4)' \
   'return ARM64_NUMDYN_MUL_LT;' \
+  'if (bc_op(compare) == BC_ISGT && bc_a(compare) == 3 &&' \
+  'return ARM64_NUMDYN_MUL_LE;' \
   '}'; do
   grep -F "$required" "$selector_mul_region" >/dev/null || {
-    echo "ARM64 MUL_LT selector tuple changed: $required" >&2
+    echo "ARM64 MUL selector tuple changed: $required" >&2
     exit 1
   }
 done
-test "$(grep -Fc 'return ARM64_NUMDYN_' "$selector_mul_region")" -eq 1
+test "$(grep -Fc 'bc_d(compare) == 4)' "$selector_mul_region")" -eq 2
+test "$(grep -Fc 'return ARM64_NUMDYN_' "$selector_mul_region")" -eq 2
+selector_mul_sequence=$(tr '\n\t' '  ' <"$selector_mul_region" | tr -s ' ')
+for required in \
+  'if (bc_op(compare) == BC_ISGE && bc_a(compare) == 3 && bc_d(compare) == 4) return ARM64_NUMDYN_MUL_LT;' \
+  'if (bc_op(compare) == BC_ISGT && bc_a(compare) == 3 && bc_d(compare) == 4) return ARM64_NUMDYN_MUL_LE;'; do
+  case "$selector_mul_sequence" in
+    *"$required"*) ;;
+    *)
+      echo "ARM64 MUL selector adjacency changed: $required" >&2
+      exit 1
+      ;;
+  esac
+done
 
 for required in \
   'NUMACC_FIXTURE_ADD_LT = 1u,' \
@@ -893,7 +963,8 @@ for required in \
   'NUMACC_FIXTURE_SUB_GE = 4u,' \
   'NUMACC_FIXTURE_ADD_GT = 5u,' \
   'NUMACC_FIXTURE_ADD_GE = 6u,' \
-  'NUMACC_FIXTURE_MUL_LT = 7u' \
+  'NUMACC_FIXTURE_MUL_LT = 7u,' \
+  'NUMACC_FIXTURE_MUL_LE = 8u' \
   'typedef struct NumaccFixtureProfile {' \
   'BCOp comparison_bc;' \
   'BCOp recurrence_bc;' \
@@ -905,10 +976,12 @@ for required in \
   '{ NUMACC_FIXTURE_ADD_GT, BC_ISGE, 4, 3, BC_ADDVV, IR_ADD,' \
   '{ NUMACC_FIXTURE_ADD_GE, BC_ISGT, 4, 3, BC_ADDVV, IR_ADD,' \
   '{ NUMACC_FIXTURE_MUL_LT, BC_ISGE, 3, 4, BC_MULVV, IR_MUL,' \
+  '{ NUMACC_FIXTURE_MUL_LE, BC_ISGT, 3, 4, BC_MULVV, IR_MUL,' \
   'static void select_numacc_fixture(unsigned profile_id)' \
   '} else if (profile_id == NUMACC_FIXTURE_ADD_GT) {' \
   '} else if (profile_id == NUMACC_FIXTURE_ADD_GE) {' \
   '} else if (profile_id == NUMACC_FIXTURE_MUL_LT) {' \
+  '} else if (profile_id == NUMACC_FIXTURE_MUL_LE) {' \
   'static unsigned numacc_fixture_full_shape(void)' \
   'bc_op(arithmetic) == profile->recurrence_bc' \
   'static const NumaccFixtureProfile *numacc_active_profile(void)' \
@@ -946,6 +1019,12 @@ for required in \
   'fx.ir[A_R_X].op1 = 4;' \
   'fx.ir[D_R_X].op1 = 2;' \
   'IR_ULT, IR_UGE, IR_ULE, IR_UGT' \
+  'fx.ir[A_R_X_PRE].op1 = profile->pre_right;' \
+  'fx.ir[A_R_X_PRE].op2 = profile->pre_left;' \
+  'fx.ir[A_R_X_PRE].op1 = (IRRef1)profile->pre_right;' \
+  'fx.ir[A_R_X_PRE].op2 = (IRRef1)profile->pre_left;' \
+  'fx.ir[A_R_X_BODY].op1 = A_R_STEP;' \
+  'fx.ir[A_R_X_BODY].op2 = A_R_X_PRE;' \
   'fx.ir[A_R_PRE_GUARD].op1 = A_R_X_PRE;' \
   'fx.ir[A_R_PRE_GUARD].op2 = A_R_LIMIT;' \
   'fx.ir[A_R_BODY_GUARD].op1 = A_R_LIMIT;' \
@@ -988,6 +1067,7 @@ for required in \
   'numacc_add_gt_fixture_pt = funcproto(funcV(L->top-1));' \
   'numacc_add_ge_fixture_pt = funcproto(funcV(L->top-1));' \
   'numacc_mul_lt_fixture_pt = funcproto(funcV(L->top-1));' \
+  'numacc_mul_le_fixture_pt = funcproto(funcV(L->top-1));' \
   'assert(numacc_add_gt_fixture_pt->framesize == 5);' \
   'assert(numacc_add_gt_fixture_pt->sizebc == 13);' \
   'assert(numacc_add_gt_fixture_pt->numparams == 3);' \
@@ -1016,6 +1096,15 @@ for required in \
   'assert(numacc_mul_lt_fixture_pt->flags2 == PROTO2_CELLOPS);' \
   'BCIns comparison = loadbc(proto_bc(numacc_mul_lt_fixture_pt)+3);' \
   'BCIns arithmetic = loadbc(proto_bc(numacc_mul_lt_fixture_pt)+8);' \
+  'assert(numacc_mul_le_fixture_pt->framesize == 5);' \
+  'assert(numacc_mul_le_fixture_pt->sizebc == 13);' \
+  'assert(numacc_mul_le_fixture_pt->numparams == 3);' \
+  'assert(numacc_mul_le_fixture_pt->sizeuv == 0);' \
+  'assert(numacc_mul_le_fixture_pt->sizekn == 0);' \
+  'assert(numacc_mul_le_fixture_pt->sizekgc == 0);' \
+  'assert(numacc_mul_le_fixture_pt->flags2 == PROTO2_CELLOPS);' \
+  'BCIns comparison = loadbc(proto_bc(numacc_mul_le_fixture_pt)+3);' \
+  'BCIns arithmetic = loadbc(proto_bc(numacc_mul_le_fixture_pt)+8);' \
   'assert(bc_op(arithmetic) == BC_MULVV && bc_a(arithmetic) == 3);' \
   'bc_op(loadbc(proto_bc(numacc_fixture_pt)+3)) == BC_ISGE' \
   'bc_op(loadbc(proto_bc(numacc_inclusive_fixture_pt)+3)) == BC_ISGT' \
@@ -1031,9 +1120,9 @@ for required in \
   'body_arithmetic == profile->recurrence_op &&' \
   'preops[pre] == profile->precondition_op &&' \
   'bodyops[body] == profile->body_op;' \
-  'assert(combinations == 7u*2u*2u*4u*4u);' \
-  'assert(combinations == 448);' \
-  'assert(semantic_admissions == 7 && postra_admissions == 7);' \
+  'assert(combinations == 8u*2u*2u*4u*4u);' \
+  'assert(combinations == 512);' \
+  'assert(semantic_admissions == 8 && postra_admissions == 8);' \
   'expect_numacc_semantic_result(J, admitted);' \
   'expect_numacc_postra_result(&view, admitted);' \
   'bc_op(saved_compare) == BC_ISGE ? BC_ISGT : BC_ISGE,' \
@@ -1044,8 +1133,9 @@ for required in \
   'select_numacc_fixture(NUMACC_FIXTURE_ADD_GT);' \
   'select_numacc_fixture(NUMACC_FIXTURE_ADD_GE);' \
   'select_numacc_fixture(NUMACC_FIXTURE_MUL_LT);' \
+  'select_numacc_fixture(NUMACC_FIXTURE_MUL_LE);' \
   'test_numacc_shape_cross_product(J);' \
-  'L->top -= 11;' \
+  'L->top -= 12;' \
   'test_numacc_positive_and_negative(J);' \
   'test_numacc_postra_layout(J);'; do
   grep -F "$required" "$root/tests/t-arm64-jit-ir-admission.c" >/dev/null || {
@@ -1071,6 +1161,8 @@ test "$(grep -Fc 'numacc_add_ge_fixture_pt = funcproto(funcV(L->top-1));' \
   "$root/tests/t-arm64-jit-ir-admission.c")" -eq 1
 test "$(grep -Fc '{ NUMACC_FIXTURE_MUL_LT, BC_ISGE, 3, 4, BC_MULVV, IR_MUL,' \
   "$root/tests/t-arm64-jit-ir-admission.c")" -eq 1
+test "$(grep -Fc '{ NUMACC_FIXTURE_MUL_LE, BC_ISGT, 3, 4, BC_MULVV, IR_MUL,' \
+  "$root/tests/t-arm64-jit-ir-admission.c")" -eq 1
 numacc_profiles_sequence=$(awk '
   /^static const NumaccFixtureProfile numacc_fixture_profiles\[\]/ {
     copying = 1
@@ -1085,10 +1177,51 @@ case "$numacc_profiles_sequence" in
     exit 1
     ;;
 esac
+case "$numacc_profiles_sequence" in
+  *'{ NUMACC_FIXTURE_MUL_LE, BC_ISGT, 3, 4, BC_MULVV, IR_MUL, A_R_STEP, A_R_X, IR_GE, IR_LE }'*) ;;
+  *)
+    echo "ARM64 MUL_LE synthetic profile tuple changed" >&2
+    exit 1
+    ;;
+esac
 test "$(grep -Fc 'while x<limit do x=x*factor end return x end' \
   "$root/tests/t-arm64-jit-ir-admission.c")" -eq 1
 test "$(grep -Fc 'numacc_mul_lt_fixture_pt = funcproto(funcV(L->top-1));' \
   "$root/tests/t-arm64-jit-ir-admission.c")" -eq 1
+test "$(grep -Fc 'while x<=limit do x=x*factor end return x end' \
+  "$root/tests/t-arm64-jit-ir-admission.c")" -eq 1
+test "$(grep -Fc 'numacc_mul_le_fixture_pt = funcproto(funcV(L->top-1));' \
+  "$root/tests/t-arm64-jit-ir-admission.c")" -eq 1
+awk '
+  index($0, "while x<=limit do x=x*factor end return x end") {
+    copying = 1
+  }
+  copying { print }
+  copying && /^  J = L2J\(L\);/ { exit }
+' "$root/tests/t-arm64-jit-ir-admission.c" >"$numacc_mulle_fixture_region"
+test -s "$numacc_mulle_fixture_region"
+for required in \
+  'while x<=limit do x=x*factor end return x end' \
+  'numacc_mul_le_fixture_pt = funcproto(funcV(L->top-1));' \
+  'assert(numacc_mul_le_fixture_loop_pc ==' \
+  'proto_bc(numacc_mul_le_fixture_pt)+5);' \
+  'assert(bc_op(comparison) == BC_ISGT);' \
+  'assert(bc_a(comparison) == 3 && bc_d(comparison) == 4);' \
+  'assert(bc_op(arithmetic) == BC_MULVV && bc_a(arithmetic) == 3);' \
+  'assert(bc_b(arithmetic) == 3 && bc_c(arithmetic) == 4);'; do
+  grep -F "$required" "$numacc_mulle_fixture_region" >/dev/null || {
+    echo "ARM64 MUL_LE synthetic source certificate changed: $required" >&2
+    exit 1
+  }
+done
+test "$(grep -Fc 'BC_ISGT' "$numacc_mulle_fixture_region")" -eq 1
+test "$(grep -Fc 'BC_MULVV' "$numacc_mulle_fixture_region")" -eq 1
+for adjacent in BC_ISGE BC_ADDVV BC_SUBVV BC_DIVVV; do
+  if grep -F "$adjacent" "$numacc_mulle_fixture_region" >/dev/null; then
+    echo "ARM64 MUL_LE synthetic source admitted adjacent $adjacent" >&2
+    exit 1
+  fi
+done
 if grep -F 'pre == p' "$root/tests/t-arm64-jit-ir-admission.c" >/dev/null ||
    grep -F 'body == p' "$root/tests/t-arm64-jit-ir-admission.c" >/dev/null ||
    grep -F 'expected_arithmetic' "$root/tests/t-arm64-jit-ir-admission.c" >/dev/null; then
@@ -1096,9 +1229,9 @@ if grep -F 'pre == p' "$root/tests/t-arm64-jit-ir-admission.c" >/dev/null ||
   exit 1
 fi
 test "$(grep -Fc 'test_numacc_positive_and_negative(J);' \
-  "$root/tests/t-arm64-jit-ir-admission.c")" -eq 7
+  "$root/tests/t-arm64-jit-ir-admission.c")" -eq 8
 test "$(grep -Fc 'test_numacc_postra_layout(J);' \
-  "$root/tests/t-arm64-jit-ir-admission.c")" -eq 7
+  "$root/tests/t-arm64-jit-ir-admission.c")" -eq 8
 
 # Bind each profile selection to both exhaustive suites inside main. Bare
 # selector tokens and global call counts must not let one profile run twice
@@ -1112,7 +1245,7 @@ awk '
 ' "$root/tests/t-arm64-jit-ir-admission.c" >"$numacc_main_region"
 test -s "$numacc_main_region"
 numacc_main_sequence=$(tr '\n\t' '  ' <"$numacc_main_region" | tr -s ' ')
-for profile in ADD_LT ADD_LE SUB_GT SUB_GE ADD_GT ADD_GE MUL_LT; do
+for profile in ADD_LT ADD_LE SUB_GT SUB_GE ADD_GT ADD_GE MUL_LT MUL_LE; do
   required="select_numacc_fixture(NUMACC_FIXTURE_$profile); test_numacc_positive_and_negative(J); test_numacc_postra_layout(J);"
   case "$numacc_main_sequence" in
     *"$required"*) ;;
@@ -1476,4 +1609,4 @@ done
   -o "$fixture"
 "$fixture"
 
-echo "arm64_jit_ir_admission_contract OK: exact integer, mixed-NUM, fixed-half, dynamic-step and ADD_LT/ADD_LE/ADD_GT/ADD_GE/SUB_GT/SUB_GE/MUL_LT dynamic-accumulator pure-NUM LOOP/FORL grammars, bounded integer spills, and FPR-only NUM layouts verified"
+echo "arm64_jit_ir_admission_contract OK: exact integer, mixed-NUM, fixed-half, dynamic-step and ADD_LT/ADD_LE/ADD_GT/ADD_GE/SUB_GT/SUB_GE/MUL_LT/MUL_LE dynamic-accumulator pure-NUM LOOP/FORL grammars, bounded integer spills, and FPR-only NUM layouts verified"
