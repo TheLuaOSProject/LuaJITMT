@@ -114,6 +114,10 @@ for required in \
   'while x < limit do x = x / divisor end return x end' \
   'function __arm64_pure_numeric_args_div_inclusive(x,limit,divisor)' \
   'while x <= limit do x = x / divisor end return x end' \
+  'function __arm64_pure_numeric_args_div_descending' \
+  '(x,limit,divisor) while x > limit do x = x / divisor end ' \
+  'function __arm64_pure_numeric_args_div_descending_inclusive' \
+  '(x,limit,divisor) while x >= limit do x = x / divisor end ' \
   'function __arm64_pure_numeric_args_add_descending(x,limit,step)' \
   'while x>limit do x=x+step end return x end' \
   'function __arm64_pure_numeric_args_add_descending_inclusive' \
@@ -134,6 +138,10 @@ for required in \
   'IR_GT, IR_LT, A64I_FDIVd, 0, CC_HS, CC_LO,' \
   'NUMERIC_ARGS_INCLUSIVE, BC_ISGT, 3, 4, BC_DIVVV, IR_DIV,' \
   'IR_GE, IR_LE, A64I_FDIVd, 0, CC_HI, CC_LS,' \
+  'NUMERIC_ARGS_STRICT, BC_ISGE, 4, 3, BC_DIVVV, IR_DIV,' \
+  'IR_LT, IR_GT, A64I_FDIVd, 1, CC_HS, CC_LO,' \
+  'NUMERIC_ARGS_INCLUSIVE, BC_ISGT, 4, 3, BC_DIVVV, IR_DIV,' \
+  'IR_LE, IR_GE, A64I_FDIVd, 1, CC_HI, CC_LS,' \
   'NUMERIC_ARGS_STRICT, BC_ISGE, 4, 3, BC_ADDVV, IR_ADD,' \
   'IR_LT, IR_GT, A64I_FADDd, 1, CC_HS, CC_LO,' \
   'NUMERIC_ARGS_INCLUSIVE, BC_ISGT, 4, 3, BC_ADDVV, IR_ADD,' \
@@ -234,6 +242,10 @@ for required in \
   'ExitNo expected_exit)' \
   'expect_single_exit(expected_exit);' \
   'MUTATION_NINF' \
+  'MUTATION_ZERO' \
+  'MUTATION_NEGZERO' \
+  'assert(result == 0.0 && !signbit(result));' \
+  'assert(result == 0.0 && signbit(result));' \
   'MUTATION_FINITE, 0.75' \
   'MUTATION_FINITE, 19.75' \
   '{ 20.5, 0.25, -0.5, 0.0 },' \
@@ -313,8 +325,6 @@ for required in \
   'expect_no_trace(L, "__arm64_args_extra_add_gt");' \
   'function __arm64_args_add_gt_mul(x,limit,step)' \
   'expect_no_trace(L, "__arm64_args_add_gt_mul");' \
-  'function __arm64_args_add_gt_div(x,limit,step)' \
-  'expect_no_trace(L, "__arm64_args_add_gt_div");' \
   'function __arm64_args_reversed_add_ge_compare(x,limit,step)' \
   'while limit<=x do x=x+step end return x end' \
   'expect_no_trace(L, "__arm64_args_reversed_add_ge_compare");' \
@@ -326,8 +336,6 @@ for required in \
   'expect_no_trace(L, "__arm64_args_extra_add_ge");' \
   'function __arm64_args_add_ge_mul(x,limit,step)' \
   'expect_no_trace(L, "__arm64_args_add_ge_mul");' \
-  'function __arm64_args_add_ge_div(x,limit,step)' \
-  'expect_no_trace(L, "__arm64_args_add_ge_div");' \
   'function __arm64_args_sub_le(x,limit,step)' \
   'while x<=limit do x=x-step end return x end' \
   'expect_no_trace(L, "__arm64_args_sub_le");' \
@@ -336,11 +344,6 @@ for required in \
   'function __arm64_args_descending_inclusive_mul(x,limit,step)' \
   'while x>=limit do x=x*step end return x end' \
   'expect_no_trace(L, "__arm64_args_descending_inclusive_mul");' \
-  'function __arm64_args_descending_div(x,limit,step)' \
-  'while x>limit do x=x/step end return x end' \
-  'function __arm64_args_descending_inclusive_div(x,limit,step)' \
-  'while x>=limit do x=x/step end return x end' \
-  'expect_no_trace(L, "__arm64_args_descending_inclusive_div");' \
   'function __arm64_args_reversed_descending_compare(x,limit,step)' \
   'while limit<x do x=x-step end return x end' \
   'function __arm64_args_reversed_descending_inclusive_compare' \
@@ -362,6 +365,8 @@ for required in \
   'test_positive_and_guard_exits(&mul_inclusive_profile);' \
   'test_positive_and_guard_exits(&div_profile);' \
   'test_positive_and_guard_exits(&div_inclusive_profile);' \
+  'test_positive_and_guard_exits(&div_descending_profile);' \
+  'test_positive_and_guard_exits(&div_descending_inclusive_profile);' \
   'test_positive_and_guard_exits(&add_descending_profile);' \
   'test_positive_and_guard_exits(&add_descending_inclusive_profile);' \
   'test_positive_and_guard_exits(&descending_profile);' \
@@ -392,10 +397,10 @@ done
 require_fixture_sequence \
   'static int numeric_args_is_descending' \
   'static const NumericArgsProfile strict_profile' \
-  'return profile->evolution == NUMERIC_ARGS_ADD_DESCENDING || profile->evolution == NUMERIC_ARGS_SUB_DESCENDING;'
+  'return profile->evolution == NUMERIC_ARGS_ADD_DESCENDING || profile->evolution == NUMERIC_ARGS_SUB_DESCENDING || profile->evolution == NUMERIC_ARGS_DIV_DESCENDING;'
 
 for required in \
-  'if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING || profile->evolution == NUMERIC_ARGS_DIV_ASCENDING) { expect_ir(ir, R_X_PRE, profile->recurrence_ir, IRT_NUM|IRT_ISPHI, R_X, R_STEP);' \
+  'if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING || profile->evolution == NUMERIC_ARGS_DIV_ASCENDING || profile->evolution == NUMERIC_ARGS_DIV_DESCENDING) { expect_ir(ir, R_X_PRE, profile->recurrence_ir, IRT_NUM|IRT_ISPHI, R_X, R_STEP);' \
   '} else { expect_ir(ir, R_X_PRE, profile->recurrence_ir, IRT_NUM|IRT_ISPHI, R_STEP, R_X);'; do
   require_fixture_sequence \
     'static void expect_ir_shape' \
@@ -403,7 +408,7 @@ for required in \
 done
 
 for required in \
-  'if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING || profile->evolution == NUMERIC_ARGS_DIV_ASCENDING) { assert(right == stepreg);' \
+  'if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING || profile->evolution == NUMERIC_ARGS_DIV_ASCENDING || profile->evolution == NUMERIC_ARGS_DIV_DESCENDING) { assert(right == stepreg);' \
   '} else if (profile->evolution == NUMERIC_ARGS_MUL_ASCENDING) { if (left == stepreg && right == xreg) { nfirstarith++; } else { assert(left == phireg && right == stepreg); nbodyarith++; }' \
   '} else { unsigned other; assert((left == stepreg) != (right == stepreg)); other = left == stepreg ? right : left;'; do
   require_fixture_sequence \
@@ -452,6 +457,34 @@ for required in \
     'static void expect_only_args_root' "$required"
 done
 
+for required in \
+  '} else if (profile->evolution == NUMERIC_ARGS_DIV_DESCENDING && profile->comparison == NUMERIC_ARGS_INCLUSIVE) { MSize shift = LJ_ABI_BRANCH_TRACK ? 1u : 0u;' \
+  'assert(mcode[shift+12u] == UINT32_C(0x1e61184f));' \
+  'assert(mcode[shift+17u] == UINT32_C(0x1e6f2000));' \
+  'assert(mcode[shift+18u] == UINT32_C(0x54000488));' \
+  'assert(mcode[shift+30u] == UINT32_C(0x1e6119ef));' \
+  'assert(mcode[shift+31u] == UINT32_C(0x1e6f2000));' \
+  'assert(mcode[shift+32u] == UINT32_C(0x54fffe69));' \
+  'assert(mcode[shift+33u] == UINT32_C(0x14000025));'; do
+  require_fixture_sequence \
+    'static void expect_dynamic_fp_mcode' \
+    'static void expect_only_args_root' "$required"
+done
+
+for required in \
+  '} else if (profile->evolution == NUMERIC_ARGS_DIV_DESCENDING) { MSize shift = LJ_ABI_BRANCH_TRACK ? 1u : 0u;' \
+  'assert(mcode[shift+12u] == UINT32_C(0x1e61184f));' \
+  'assert(mcode[shift+17u] == UINT32_C(0x1e6f2000));' \
+  'assert(mcode[shift+18u] == UINT32_C(0x54000482));' \
+  'assert(mcode[shift+30u] == UINT32_C(0x1e6119ef));' \
+  'assert(mcode[shift+31u] == UINT32_C(0x1e6f2000));' \
+  'assert(mcode[shift+32u] == UINT32_C(0x54fffe63));' \
+  'assert(mcode[shift+33u] == UINT32_C(0x14000025));'; do
+  require_fixture_sequence \
+    'static void expect_dynamic_fp_mcode' \
+    'static void expect_only_args_root' "$required"
+done
+
 # Keep every newly admitted profile's exact bytecode/IR/machine-code
 # certificate and all value-sensitive rows together. Global token checks would
 # allow fields from unrelated profiles to satisfy this proof accidentally.
@@ -491,6 +524,26 @@ for required in \
   '{ 0.5, 20.25, 0.5, 32.0 }, { 0.625, 4.5, 0.25, 10.0 }, { 0.5, 20.25, 0.5, 32.0 }, { 0.5, 20.25, 0.5, 0.0 }, { 1.0, 20.25, 0.5, 32.0 }, { 0.5, 20.25, 0.0, INFINITY }, { 0.5, 20.0, 0.5, 32.0 }, { 15.0, 20.25, 0.5, 30.0 }'; do
   require_fixture_sequence \
     'static const NumericArgsProfile div_inclusive_profile = {' \
+    'static const NumericArgsProfile div_descending_profile = {' \
+    "$required"
+done
+
+for required in \
+  '"__arm64_pure_numeric_args_div_descending", NUMERIC_ARGS_DIV_DESCENDING,' \
+  'NUMERIC_ARGS_STRICT, BC_ISGE, 4, 3, BC_DIVVV, IR_DIV, IR_LT, IR_GT, A64I_FDIVd, 1, CC_HS, CC_LO,' \
+  '{ 20.5, 0.25, 2.0, 0.16015625 }, { 18.5, 0.75, 4.0, 0.2890625 }, { 20.5, 0.25, 2.0, 0.16015625 }, { 20.5, 0.25, 2.0, 0.0 }, { 20.0, 0.25, 2.0, 0.15625 }, { 20.5, 0.25, 2.0, 0.16015625 }, { 20.5, 1.0, 2.0, 0.640625 }, { 0.75, 0.5, 2.0, 0.375 }'; do
+  require_fixture_sequence \
+    'static const NumericArgsProfile div_descending_profile = {' \
+    'static const NumericArgsProfile div_descending_inclusive_profile = {' \
+    "$required"
+done
+
+for required in \
+  '"__arm64_pure_numeric_args_div_descending_inclusive", NUMERIC_ARGS_DIV_DESCENDING,' \
+  'NUMERIC_ARGS_INCLUSIVE, BC_ISGT, 4, 3, BC_DIVVV, IR_DIV, IR_LE, IR_GE, A64I_FDIVd, 1, CC_HI, CC_LS,' \
+  '{ 20.5, 0.25, 2.0, 0.16015625 }, { 18.5, 0.75, 4.0, 0.2890625 }, { 20.5, 0.25, 2.0, 0.16015625 }, { 20.5, 0.25, 2.0, 0.0 }, { 20.0, 0.25, 2.0, 0.15625 }, { 20.5, 0.25, 2.0, 0.16015625 }, { 20.5, 1.0, 2.0, 0.640625 }, { 0.75, 0.5, 2.0, 0.375 }'; do
+  require_fixture_sequence \
+    'static const NumericArgsProfile div_descending_inclusive_profile = {' \
     'static const NumericArgsProfile add_descending_profile = {' \
     "$required"
 done
@@ -515,6 +568,10 @@ for required in \
 done
 
 for required in \
+  'if (profile->evolution == NUMERIC_ARGS_DIV_DESCENDING && profile->comparison == NUMERIC_ARGS_INCLUSIVE) { run_lua(L,' \
+  '"function __arm64_pure_numeric_args_div_descending_inclusive" "(x,limit,divisor) while x >= limit do x = x / divisor end " "return x end");' \
+  '} else if (profile->evolution == NUMERIC_ARGS_DIV_DESCENDING) { run_lua(L,' \
+  '"function __arm64_pure_numeric_args_div_descending" "(x,limit,divisor) while x > limit do x = x / divisor end " "return x end");' \
   'if (profile->evolution == NUMERIC_ARGS_DIV_ASCENDING && profile->comparison == NUMERIC_ARGS_INCLUSIVE) { run_lua(L,' \
   '"function __arm64_pure_numeric_args_div_inclusive(x,limit,divisor) " "while x <= limit do x = x / divisor end return x end");' \
   '} else if (profile->evolution == NUMERIC_ARGS_DIV_ASCENDING) { run_lua(L,' \
@@ -534,7 +591,11 @@ done
 
 for required in \
   'assert(call_triple(L, profile->name, profile->reuse.x, profile->reuse.limit, profile->reuse.step, 0, 0, 0) == profile->reuse.result); expect_single_exit(FINAL_EXIT);' \
-  'if (profile->evolution == NUMERIC_ARGS_DIV_ASCENDING) {' \
+  'if (profile->evolution == NUMERIC_ARGS_DIV_DESCENDING) {' \
+  'assert(call_triple(L, profile->name, profile->record.x, profile->reuse.limit, profile->reuse.step, 0, 0, 0) == 0.3203125); expect_single_exit(FINAL_EXIT);' \
+  'assert(call_triple(L, profile->name, profile->reuse.x, profile->record.limit, profile->reuse.step, 0, 0, 0) == 0.072265625); expect_single_exit(FINAL_EXIT);' \
+  'assert(call_triple(L, profile->name, profile->reuse.x, profile->reuse.limit, profile->record.step, 0, 0, 0) == 0.578125); expect_single_exit(FINAL_EXIT);' \
+  '} else if (profile->evolution == NUMERIC_ARGS_DIV_ASCENDING) {' \
   'assert(call_triple(L, profile->name, profile->record.x, profile->reuse.limit, profile->reuse.step, 0, 0, 0) == 8.0); expect_single_exit(FINAL_EXIT);' \
   'assert(call_triple(L, profile->name, profile->reuse.x, profile->record.limit, profile->reuse.step, 0, 0, 0) == 40.0); expect_single_exit(FINAL_EXIT);' \
   'assert(call_triple(L, profile->name, profile->reuse.x, profile->reuse.limit, profile->record.step, 0, 0, 0) == 5.0); expect_single_exit(FINAL_EXIT);' \
@@ -556,7 +617,25 @@ for required in \
 done
 
 for required in \
-  'if (profile->evolution == NUMERIC_ARGS_DIV_ASCENDING) { test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_QNAN_X, profile->mutation.x, MUTATION_QNAN, 0.0);' \
+  'if (profile->evolution == NUMERIC_ARGS_DIV_DESCENDING) { test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_QNAN_X, profile->mutation.x, MUTATION_QNAN, 0.0);' \
+  'test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile, POSTADMISSION_PINF_X, profile->mutation.x);' \
+  'test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_NINF_X, profile->mutation.x, MUTATION_NINF, 0.0);' \
+  'test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_ZERO_X, profile->mutation.x, MUTATION_ZERO, 0.0);' \
+  'test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_NEGZERO_X, profile->mutation.x, MUTATION_NEGZERO, 0.0);' \
+  'test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_QNAN_LIMIT, profile->mutation.limit, MUTATION_FINITE, 10.25);' \
+  'test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_PINF_LIMIT, profile->mutation.limit, MUTATION_FINITE, 10.25);' \
+  'test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile, POSTADMISSION_NINF_LIMIT, profile->mutation.limit);' \
+  'if (profile->comparison == NUMERIC_ARGS_INCLUSIVE) { test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile, POSTADMISSION_ZERO_LIMIT, profile->mutation.limit); test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile, POSTADMISSION_NEGZERO_LIMIT, profile->mutation.limit); } else {' \
+  'test_terminating_mutation_at_exit(L, pt, idle_vmstate, profile, POSTADMISSION_ZERO_LIMIT, profile->mutation.limit, MUTATION_ZERO, 0.0, FINAL_EXIT);' \
+  'test_terminating_mutation_at_exit(L, pt, idle_vmstate, profile, POSTADMISSION_NEGZERO_LIMIT, profile->mutation.limit, MUTATION_ZERO, 0.0, FINAL_EXIT);' \
+  'test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_QNAN_STEP, profile->mutation.step, MUTATION_QNAN, 0.0);' \
+  'test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_PINF_STEP, profile->mutation.step, MUTATION_ZERO, 0.0);' \
+  'test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_NINF_STEP, profile->mutation.step, MUTATION_NEGZERO, 0.0);' \
+  'test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile, POSTADMISSION_ZERO_STEP, profile->mutation.step);' \
+  'test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_NEGZERO_STEP, profile->mutation.step, MUTATION_NINF, 0.0);' \
+  'test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile, POSTADMISSION_ONE_STEP, profile->mutation.step);' \
+  'test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_NEGONE_STEP, profile->mutation.step, MUTATION_FINITE, -20.5);' \
+  '} else if (profile->evolution == NUMERIC_ARGS_DIV_ASCENDING) { test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_QNAN_X, profile->mutation.x, MUTATION_QNAN, 0.0);' \
   'test_terminating_mutation(L, pt, idle_vmstate, profile, POSTADMISSION_PINF_X, profile->mutation.x, MUTATION_PINF, 0.0);' \
   'test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile, POSTADMISSION_NINF_X, profile->mutation.x);' \
   'test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile, POSTADMISSION_ZERO_X, profile->mutation.x);' \
@@ -604,7 +683,15 @@ for required in \
 done
 
 for required in \
-  'if (profile->evolution == NUMERIC_ARGS_DIV_ASCENDING && profile->comparison == NUMERIC_ARGS_INCLUSIVE) {' \
+  'if (profile->evolution == NUMERIC_ARGS_DIV_DESCENDING && profile->comparison == NUMERIC_ARGS_INCLUSIVE) {' \
+  'assert(call_triple(L, profile->name, 2.0, 0.5, 2.0, 0, 0, 0) == 0.25); expect_single_exit(FINAL_EXIT);' \
+  'assert(call_triple(L, profile->name, 1.0, 0.5, 2.0, 0, 0, 0) == 0.25); expect_single_exit(FINAL_EXIT);' \
+  'assert(call_triple(L, profile->name, 0.5, 0.5, 2.0, 0, 0, 0) == 0.25); expect_single_exit(PRECOND_EXIT);' \
+  '} else if (profile->evolution == NUMERIC_ARGS_DIV_DESCENDING) {' \
+  'assert(call_triple(L, profile->name, 2.0, 0.5, 2.0, 0, 0, 0) == 0.5); expect_single_exit(FINAL_EXIT);' \
+  'assert(call_triple(L, profile->name, 1.0, 0.5, 2.0, 0, 0, 0) == 0.5); expect_single_exit(PRECOND_EXIT);' \
+  'assert(call_triple(L, profile->name, 0.5, 0.5, 2.0, 0, 0, 0) == 0.5); assert(lj_trace_test_root_entry_publishes() == 0); assert(lj_trace_test_exit_calls() == 0);' \
+  '} else if (profile->evolution == NUMERIC_ARGS_DIV_ASCENDING && profile->comparison == NUMERIC_ARGS_INCLUSIVE) {' \
   'assert(call_triple(L, profile->name, 0.5, 2.0, 0.5, 0, 0, 0) == 4.0); expect_single_exit(FINAL_EXIT);' \
   'assert(call_triple(L, profile->name, 0.5, 1.0, 0.5, 0, 0, 0) == 2.0); expect_single_exit(FINAL_EXIT);' \
   'assert(call_triple(L, profile->name, 1.0, 1.0, 0.5, 0, 0, 0) == 2.0); expect_single_exit(PRECOND_EXIT);' \
@@ -684,6 +771,16 @@ for required in \
 done
 
 for required in \
+  '"function __arm64_fixed_initializer_div_descending(limit,divisor) " "local x=16.0 while x>limit do x=x/divisor end return x end " "assert(__arm64_fixed_initializer_div_descending(1.0,2.0)==1.0)"); expect_no_trace(L, "__arm64_fixed_initializer_div_descending");' \
+  '"function __arm64_fixed_divisor_div_descending(x,limit) " "while x>limit do x=x/2.0 end return x end " "assert(__arm64_fixed_divisor_div_descending(16.0,1.0)==1.0)"); pt = global_proto(L, "__arm64_fixed_divisor_div_descending"); expect_no_trace(L, "__arm64_fixed_divisor_div_descending");' \
+  '"function __arm64_fixed_initializer_div_descending_inclusive" "(limit,divisor) local x=16.0 while x>=limit do x=x/divisor end " "return x end " "assert(__arm64_fixed_initializer_div_descending_inclusive" "(1.0,2.0)==0.5)"); expect_no_trace(L, "__arm64_fixed_initializer_div_descending_inclusive");' \
+  '"function __arm64_fixed_divisor_div_descending_inclusive(x,limit) " "while x>=limit do x=x/2.0 end return x end " "assert(__arm64_fixed_divisor_div_descending_inclusive" "(16.0,1.0)==0.5)"); pt = global_proto(L, "__arm64_fixed_divisor_div_descending_inclusive"); expect_no_trace(L, "__arm64_fixed_divisor_div_descending_inclusive");'; do
+  require_fixture_sequence \
+    'static void test_fixed_initializers_remain_separate' \
+    'static void test_sub_lt_rejected' "$required"
+done
+
+for required in \
   '"function __arm64_args_div_reversed_compare(x,limit,divisor) " "while limit>x do x=x/divisor end return x end");' \
   'expect_no_trace(L, "__arm64_args_div_reversed_compare");' \
   '"function __arm64_args_div_inclusive_reversed_compare" "(x,limit,divisor) while limit>=x do x=x/divisor end return x end");' \
@@ -699,12 +796,18 @@ for required in \
   '"function __arm64_args_div_inclusive_extra(x,limit,divisor) " "while x<=limit do x=x/divisor/divisor end return x end");' \
   'assert(call_triple(L, "__arm64_args_div_inclusive_extra", 0.5, 20.25, 0.5, 0, 0, 0) == 32.0);' \
   'expect_no_trace(L, "__arm64_args_div_inclusive_extra");' \
-  '"function __arm64_args_div_descending(x,limit,divisor) " "while x>limit do x=x/divisor end return x end");' \
-  'assert(call_triple(L, "__arm64_args_div_descending", 20.5, 0.5, 2.0, 0, 0, 0) == 0.3203125);' \
-  'expect_no_trace(L, "__arm64_args_div_descending");' \
-  '"function __arm64_args_div_descending_inclusive(x,limit,divisor) " "while x>=limit do x=x/divisor end return x end");' \
-  'assert(call_triple(L, "__arm64_args_div_descending_inclusive", 20.5, 0.5, 2.0, 0, 0, 0) == 0.3203125);' \
-  'expect_no_trace(L, "__arm64_args_div_descending_inclusive");'; do
+  '"function __arm64_args_div_descending_reversed_compare" "(x,limit,divisor) while limit<x do x=x/divisor end return x end");' \
+  'expect_no_trace(L, "__arm64_args_div_descending_reversed_compare");' \
+  '"function __arm64_args_div_descending_inclusive_reversed_compare" "(x,limit,divisor) while limit<=x do x=x/divisor end return x end");' \
+  'expect_no_trace(L, "__arm64_args_div_descending_inclusive_reversed_compare");' \
+  '"function __arm64_args_div_descending_reversed(x,limit,divisor) " "while x>limit do x=divisor/x end return x end");' \
+  'expect_no_trace(L, "__arm64_args_div_descending_reversed");' \
+  '"function __arm64_args_div_descending_inclusive_reversed" "(x,limit,divisor) while x>=limit do x=divisor/x end return x end");' \
+  'expect_no_trace(L, "__arm64_args_div_descending_inclusive_reversed");' \
+  '"function __arm64_args_div_descending_extra(x,limit,divisor) " "while x>limit do x=x/divisor/divisor end return x end");' \
+  'expect_no_trace(L, "__arm64_args_div_descending_extra");' \
+  '"function __arm64_args_div_descending_inclusive_extra" "(x,limit,divisor) while x>=limit do x=x/divisor/divisor end " "return x end");' \
+  'expect_no_trace(L, "__arm64_args_div_descending_inclusive_extra");'; do
   require_fixture_sequence \
     'static void test_div_adjacent_rejected' \
     'static void test_adjacent_comparisons_rejected' "$required"
@@ -727,24 +830,23 @@ for required in \
   '"function __arm64_args_reversed_add_gt(x,limit,step) " "while x>limit do x=step+x end return x end");' \
   '"function __arm64_args_extra_add_gt(x,limit,step) " "while x>limit do x=x+step+step end return x end");' \
   '"function __arm64_args_add_gt_mul(x,limit,step) " "while x>limit do x=x*step end return x end");' \
-  '"function __arm64_args_add_gt_div(x,limit,step) " "while x>limit do x=x/step end return x end");' \
   '"function __arm64_args_reversed_add_ge_compare(x,limit,step) " "while limit<=x do x=x+step end return x end");' \
   '"function __arm64_args_reversed_add_ge(x,limit,step) " "while x>=limit do x=step+x end return x end");' \
   '"function __arm64_args_extra_add_ge(x,limit,step) " "while x>=limit do x=x+step+step end return x end");' \
-  '"function __arm64_args_add_ge_mul(x,limit,step) " "while x>=limit do x=x*step end return x end");' \
-  '"function __arm64_args_add_ge_div(x,limit,step) " "while x>=limit do x=x/step end return x end");'; do
+  '"function __arm64_args_add_ge_mul(x,limit,step) " "while x>=limit do x=x*step end return x end");'; do
   require_fixture_sequence \
     'static void test_add_descending_adjacent_rejected' \
     'static void test_extra_add_rejected' "$required"
 done
 
 test "$(grep -Fc 'test_positive_and_guard_exits(&' \
-  "$fixture_source")" -eq 10 || {
+  "$fixture_source")" -eq 12 || {
   echo "ARM64 dynamic-args NUM fixture lost a positive profile" >&2
   exit 1
 }
 for profile in strict_profile inclusive_profile mul_profile \
   mul_inclusive_profile div_profile div_inclusive_profile \
+  div_descending_profile div_descending_inclusive_profile \
   add_descending_profile \
   add_descending_inclusive_profile \
   descending_profile \
@@ -767,12 +869,13 @@ main_region=$(
 )
 test -n "$main_region"
 test "$(printf '%s\n' "$main_region" | \
-  grep -Fc 'test_positive_and_guard_exits(&')" -eq 10 || {
+  grep -Fc 'test_positive_and_guard_exits(&')" -eq 12 || {
   echo "ARM64 dynamic-args NUM main lost a positive profile" >&2
   exit 1
 }
 for profile in strict_profile inclusive_profile mul_profile \
   mul_inclusive_profile div_profile div_inclusive_profile \
+  div_descending_profile div_descending_inclusive_profile \
   add_descending_profile \
   add_descending_inclusive_profile descending_profile \
   descending_inclusive_profile; do
@@ -806,18 +909,20 @@ for name in \
   __arm64_fixed_divisor_div \
   __arm64_fixed_initializer_div_inclusive \
   __arm64_fixed_divisor_div_inclusive \
+  __arm64_fixed_initializer_div_descending \
+  __arm64_fixed_divisor_div_descending \
+  __arm64_fixed_initializer_div_descending_inclusive \
+  __arm64_fixed_divisor_div_descending_inclusive \
   __arm64_fixed_initializer_add_descending_inclusive \
   __arm64_fixed_half_add_descending_inclusive \
   __arm64_args_reversed_add_gt_compare \
   __arm64_args_reversed_add_gt \
   __arm64_args_extra_add_gt \
   __arm64_args_add_gt_mul \
-  __arm64_args_add_gt_div \
   __arm64_args_reversed_add_ge_compare \
   __arm64_args_reversed_add_ge \
   __arm64_args_extra_add_ge \
   __arm64_args_add_ge_mul \
-  __arm64_args_add_ge_div \
   __arm64_args_mul_inclusive_reversed_compare \
   __arm64_args_mul_inclusive_reversed \
   __arm64_args_mul_inclusive_extra \
@@ -827,8 +932,11 @@ for name in \
   __arm64_args_div_inclusive_reversed \
   __arm64_args_div_extra \
   __arm64_args_div_inclusive_extra \
-  __arm64_args_div_descending \
-  __arm64_args_div_descending_inclusive \
+  __arm64_args_div_descending_reversed_compare \
+  __arm64_args_div_descending_reversed \
+  __arm64_args_div_descending_inclusive_reversed \
+  __arm64_args_div_descending_extra \
+  __arm64_args_div_descending_inclusive_extra \
   __arm64_args_sub_lt \
   __arm64_args_sub_le; do
   test "$(grep -Fc "expect_no_trace(L, \"$name\");" \
@@ -897,6 +1005,20 @@ if grep -F '__arm64_args_mul_inclusive_div' \
   echo "ARM64 dynamic-args NUM fixture retained stale DIV_LE-shaped MUL negative" >&2
   exit 1
 fi
+for obsolete in \
+  __arm64_args_div_descending \
+  __arm64_args_div_descending_inclusive \
+  __arm64_args_add_gt_div \
+  __arm64_args_add_ge_div \
+  __arm64_args_descending_div \
+  __arm64_args_descending_inclusive_div; do
+  if grep -F "\"function $obsolete(" "$fixture_source" >/dev/null ||
+     grep -F "expect_no_trace(L, \"$obsolete\");" \
+       "$fixture_source" >/dev/null; then
+    echo "ARM64 dynamic-args NUM fixture retained obsolete DIV_GT/DIV_GE alias: $obsolete" >&2
+    exit 1
+  fi
+done
 
 test "$(grep -Fc 'void *saved_cframe = L->cframe;' \
   "$fixture_source")" -eq 3 || {
@@ -1049,4 +1171,4 @@ while test "$run" -le "$pauth_runs"; do
   run=$((run+1))
 done
 
-echo "arm64_jit_pure_numeric_args_contract OK: ADD_LT/ADD_LE/MUL_LT/MUL_LE/DIV_LT/DIV_LE/ADD_GT/ADD_GE/SUB_GT/SUB_GE dynamic-accumulator NUM roots and lifecycle proved on ARM64/arm64e"
+echo "arm64_jit_pure_numeric_args_contract OK: ADD_LT/ADD_LE/MUL_LT/MUL_LE/DIV_LT/DIV_LE/DIV_GT/DIV_GE/ADD_GT/ADD_GE/SUB_GT/SUB_GE dynamic-accumulator NUM roots and lifecycle proved on ARM64/arm64e"
