@@ -152,11 +152,17 @@ return function(add)
         "-DLUAJIT_MT_ARM64_BOOTSTRAP",
         "-DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL",
         "-DLUA_USE_ASSERT",
-        "-DLJ_TRACE_TEST_HELPERS"
+        "-DLJ_TRACE_TEST_HELPERS",
+        "-DLJ_XSAVE_TEST_HELPERS",
+        "-DLJ_GC2_TEST_HELPERS",
+        "-DLJ_TAB_TEST_HELPERS"
       }, " ")
       local callxs_flush_so = build_shared_library(t,
         t:tmp("lj_t-ffi-callxs-arm64-remote-flush.so"),
         "t-ffi-callxs-remote-flush-lib.c")
+      local callxs_lifecycle_so = build_shared_library(t,
+        t:tmp("lj_t-arm64-jit-callxs-lifecycle.so"),
+        "t-arm64-jit-callxs-lifecycle-lib.c")
       with_arm64_bootstrap_restore(t, function()
         clean_build(t, { quiet = true, xcflags = flags })
         build_and_run_c(t, t:tmp("lj_t-arm64-jit-callxs-admission"),
@@ -173,6 +179,15 @@ return function(add)
           env = {
             LJ_M7_FFI_CALLXS_ARM64_SCALAR = "1",
             LJ_M7_FFI_CALLXS_FLUSH_SO = callxs_flush_so
+          },
+          timeout = "30s"
+        })
+        build_and_run_c(t, t:tmp("lj_t-arm64-jit-callxs-lifecycle"),
+                        "t-arm64-jit-callxs-lifecycle.c", {
+          build = false,
+          cflags = flags,
+          env = {
+            LJ_M7_FFI_CALLXS_LIFECYCLE_SO = callxs_lifecycle_so
           },
           timeout = "30s"
         })

@@ -14,6 +14,7 @@
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_err.h"
+#include "lj_oserr.h"
 #include "lj_state.h"
 #include "lj_arena.h"
 #include "lj_safepoint.h"
@@ -79,6 +80,11 @@ void lj_tab_test_forjit_initial_miss_once(void)
   la_store32_rel(&tab_test_forjit_initial_miss, 1);
 }
 
+void lj_tab_test_forjit_initial_miss_after(uint32_t nth)
+{
+  la_store32_rel(&tab_test_forjit_initial_miss, nth);
+}
+
 void lj_tab_test_forjit_result_pause(void)
 {
   la_store32_rel(&tab_test_forjit_result_release, 0);
@@ -98,7 +104,14 @@ void lj_tab_test_forjit_result_release(void)
 
 static int tab_forjit_test_take_initial_miss(void)
 {
-  return la_xchg32_acqrel(&tab_test_forjit_initial_miss, 0) != 0;
+  uint32_t current = la_load32_acq(&tab_test_forjit_initial_miss);
+  while (current != 0) {
+    uint32_t next = current - 1u;
+    if (la_cas32(&tab_test_forjit_initial_miss, &current, next,
+		 LA_ACQ_REL, LA_ACQ))
+      return next == 0;
+  }
+  return 0;
 }
 
 static void tab_forjit_test_pause_after_leases(void)
@@ -178,6 +191,7 @@ static LJ_AINLINE int tab_key_islocked(cTValue *key)
 
 #ifdef LJ_TAB_TEST_HELPERS
 static LJTabConstructorPrepublishHook tab_test_constructor_prepublish_hook;
+static LJTabWaitLAfterYieldHook tab_test_wait_l_after_yield_hook;
 
 void lj_tab_test_set_constructor_prepublish_hook(
   LJTabConstructorPrepublishHook hook)
@@ -185,10 +199,24 @@ void lj_tab_test_set_constructor_prepublish_hook(
   tab_test_constructor_prepublish_hook = hook;
 }
 
+void lj_tab_test_set_wait_l_after_yield_hook(
+  LJTabWaitLAfterYieldHook hook)
+{
+  tab_test_wait_l_after_yield_hook = hook;
+}
+
 static LJ_AINLINE void tab_test_constructor_prepublish(lua_State *L, GCtab *t)
 {
   if (tab_test_constructor_prepublish_hook)
     tab_test_constructor_prepublish_hook(L, t);
+}
+
+static LJ_AINLINE void tab_test_wait_l_after_yield(lua_State *L)
+{
+  LJTabWaitLAfterYieldHook hook = tab_test_wait_l_after_yield_hook;
+  tab_test_wait_l_after_yield_hook = NULL;
+  if (hook)
+    hook(L);
 }
 
 #define TAB_TEST_COUNTER(name, hitfn) \
@@ -216,6 +244,7 @@ TAB_TEST_COUNTER(len_rooted_try_calls, len_rooted_try_call)
 #define tab_test_store_wait_l_call()	((void)0)
 #define tab_test_len_rooted_try_call()	((void)0)
 #define tab_test_constructor_prepublish(L, t)	((void)0)
+#define tab_test_wait_l_after_yield(L)	((void)(L))
 #endif
 
 LJ_FUNCA void lj_tab_wait_no_l(void)
@@ -226,8 +255,12 @@ LJ_FUNCA void lj_tab_wait_no_l(void)
 
 LJ_FUNCA void lj_tab_wait_l(lua_State *L)
 {
-  int had_stopreq = lj_safepoint_had_stopreq(L);
+  LJOSerrState oserr;
+  int had_stopreq;
+  int stop;
   uint32_t actions;
+  lj_oserr_save(&oserr);
+  had_stopreq = lj_safepoint_had_stopreq(L);
   tab_test_wait_l_call();
   /*
   ** L-aware table retry waits make C/API callers native and safepoint-visible
@@ -235,7 +268,12 @@ LJ_FUNCA void lj_tab_wait_l(lua_State *L)
   ** TLS ownership is known.
   */
   actions = lj_thr_retry_yield(L);
-  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+  tab_test_wait_l_after_yield(L);
+  stop = lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
+  lj_oserr_restore(&oserr);
+  if (stop)
+    lj_safepoint_checkstop(L, actions | LJ_GC2_HS_STOPREQ);
+  lj_oserr_restore(&oserr);
 }
 
 static LJ_AINLINE void tab_read_enter_owner(TGState *tg)
@@ -4912,12 +4950,18 @@ static TValue *tab_gettv_rooted_impl(lua_State *L, cTValue *tabroot,
 				     GCtab *trusted_t, cTValue *key,
 				     TValue *outroot)
 {
-  int tabstack = tabroot && tab_key_on_stack(L, tabroot);
-  int keystack = key && tab_key_on_stack(L, key);
-  int outstack = outroot && tab_key_on_stack(L, outroot);
-  ptrdiff_t tabofs = tabstack ? savestack(L, tabroot) : 0;
-  ptrdiff_t keyofs = keystack ? savestack(L, key) : 0;
-  ptrdiff_t outofs = outstack ? savestack(L, outroot) : 0;
+  LJOSerrState oserr;
+  int tabstack, keystack, outstack;
+  ptrdiff_t tabofs, keyofs, outofs;
+
+  /* Rooted point reads are transparent to the complete OS error pair. */
+  lj_oserr_save(&oserr);
+  tabstack = tabroot && tab_key_on_stack(L, tabroot);
+  keystack = key && tab_key_on_stack(L, key);
+  outstack = outroot && tab_key_on_stack(L, outroot);
+  tabofs = tabstack ? savestack(L, tabroot) : 0;
+  keyofs = keystack ? savestack(L, key) : 0;
+  outofs = outstack ? savestack(L, outroot) : 0;
 
   for (;;) {
     LJGC2Lease table_lease, key_lease, result_lease;
@@ -4933,6 +4977,7 @@ static TValue *tab_gettv_rooted_impl(lua_State *L, cTValue *tabroot,
     ** same-address successor after a concurrent root replacement/reclaim. The
     ** same interval then protects the paired table-vector snapshot below. */
     if (LJ_UNLIKELY(!lj_gc2_smr_read_try(G(L)))) {
+      lj_oserr_restore(&oserr);
       lj_tab_wait_l(L);
       continue;
     }
@@ -4950,6 +4995,7 @@ static TValue *tab_gettv_rooted_impl(lua_State *L, cTValue *tabroot,
 	setnilV(&result);
 	lj_gc2_smr_read_leave(G(L));
 	copyTVrel(L, curout, &result);
+	lj_oserr_restore(&oserr);
 	return curout;
       }
     } else {
@@ -4962,11 +5008,13 @@ static TValue *tab_gettv_rooted_impl(lua_State *L, cTValue *tabroot,
     if (LJ_UNLIKELY(table_status != LJ_GC2_TV_EDGE_VALID)) {
       lj_gc2_smr_read_leave(G(L));
       if (table_status == LJ_GC2_TV_EDGE_RETRY) {
+	lj_oserr_restore(&oserr);
 	lj_tab_wait_l(L);
 	continue;
       }
       setnilV(&result);
       copyTVrel(L, curout, &result);
+      lj_oserr_restore(&oserr);
       return curout;
     }
     t = tabV(&tablev);
@@ -4979,12 +5027,14 @@ static TValue *tab_gettv_rooted_impl(lua_State *L, cTValue *tabroot,
       lj_gc2_smr_read_leave(G(L));
       lj_gc2_lease_release(&table_lease);
       if (key_status == LJ_GC2_TV_EDGE_RETRY) {
+	lj_oserr_restore(&oserr);
 	lj_tab_wait_l(L);
 	continue;
       }
       setnilV(&result);
       curout = outstack ? restorestack(L, outofs) : outroot;
       copyTVrel(L, curout, &result);
+      lj_oserr_restore(&oserr);
       return curout;
     }
 
@@ -4997,6 +5047,7 @@ static TValue *tab_gettv_rooted_impl(lua_State *L, cTValue *tabroot,
       lj_gc2_smr_read_leave(G(L));
       lj_gc2_lease_release(&key_lease);
       lj_gc2_lease_release(&table_lease);
+      lj_oserr_restore(&oserr);
       lj_tab_wait_l(L);
       continue;
     }
@@ -5015,8 +5066,11 @@ static TValue *tab_gettv_rooted_impl(lua_State *L, cTValue *tabroot,
       lj_gc2_smr_read_leave(G(L));
       lj_gc2_lease_release(&key_lease);
       lj_gc2_lease_release(&table_lease);
-      if (result_status == LJ_GC2_TV_EDGE_STALE)
+      if (result_status == LJ_GC2_TV_EDGE_STALE) {
+	lj_oserr_restore(&oserr);
 	return curout;
+      }
+      lj_oserr_restore(&oserr);
       lj_tab_wait_l(L);
       continue;
     }
@@ -5030,6 +5084,7 @@ static TValue *tab_gettv_rooted_impl(lua_State *L, cTValue *tabroot,
       lj_gc2_lease_release(&result_lease);
       lj_gc2_lease_release(&key_lease);
       lj_gc2_lease_release(&table_lease);
+      lj_oserr_restore(&oserr);
       lj_tab_wait_l(L);
       continue;
     }
@@ -5057,6 +5112,7 @@ static TValue *tab_gettv_rooted_impl(lua_State *L, cTValue *tabroot,
     lj_gc2_lease_release(&result_lease);
     lj_gc2_lease_release(&key_lease);
     lj_gc2_lease_release(&table_lease);
+    lj_oserr_restore(&oserr);
     return outstack ? restorestack(L, outofs) : outroot;
   }
 }

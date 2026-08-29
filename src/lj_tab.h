@@ -448,6 +448,7 @@ LJ_FUNC void lj_tab_test_forjit_snapshot_pause(void);
 LJ_FUNC uint32_t lj_tab_test_forjit_snapshot_paused(void);
 LJ_FUNC void lj_tab_test_forjit_snapshot_release(void);
 LJ_FUNC void lj_tab_test_forjit_initial_miss_once(void);
+LJ_FUNC void lj_tab_test_forjit_initial_miss_after(uint32_t nth);
 LJ_FUNC void lj_tab_test_forjit_result_pause(void);
 LJ_FUNC uint32_t lj_tab_test_forjit_result_paused(void);
 LJ_FUNC void lj_tab_test_forjit_result_release(void);
@@ -481,6 +482,7 @@ typedef void (*LJTabResizeArrayHook)(lua_State *L, GCtab *t,
 				     TValue *oldarray, MSize oldasize);
 typedef void (*LJTabNextAfterKeyindexHook)(GCtab *t, uint32_t idx);
 typedef void (*LJTabConstructorPrepublishHook)(lua_State *L, GCtab *t);
+typedef void (*LJTabWaitLAfterYieldHook)(lua_State *L);
 typedef void (*LJTabStorePostCasHook)(lua_State *L, GCtab *t, TValue *dst,
 				      cTValue *key, cTValue *value);
 typedef void (*LJTabRootedReaderRetryHook)(lua_State *L, GCtab *t,
@@ -522,6 +524,8 @@ LJ_FUNC void lj_tab_test_set_next_after_keyindex_hook(
   LJTabNextAfterKeyindexHook hook);
 LJ_FUNC void lj_tab_test_set_constructor_prepublish_hook(
   LJTabConstructorPrepublishHook hook);
+LJ_FUNC void lj_tab_test_set_wait_l_after_yield_hook(
+  LJTabWaitLAfterYieldHook hook);
 LJ_FUNC void lj_tab_test_set_store_post_cas_hook(LJTabStorePostCasHook hook);
 LJ_FUNC void lj_tab_test_keyed_cas_changed_stack_grow_once(void);
 LJ_FUNC uint32_t lj_tab_test_keyed_cas_changed_stack_grow_hits(void);
