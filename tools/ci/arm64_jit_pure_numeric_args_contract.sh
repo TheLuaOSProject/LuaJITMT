@@ -351,7 +351,8 @@ for required in \
   '{ 20.5, 0.25, -0.5, 0.0 }, { 0.5, -0.625, -0.375, -0.625 }, { 20.5, 0.25, -0.5, 0.0 }, { 20.25, 0.25, -0.5, 0.25 }, { 20.0, 0.25, -0.5, 0.0 }, { 20.5, 0.25, -1.0, -0.5 }, { 20.5, 1.0, -0.5, 1.0 }, { 0.75, 0.5, -0.5, 0.25 }'; do
   require_fixture_sequence \
     'static const NumericArgsProfile add_descending_profile = {' \
-    'static const NumericArgsProfile descending_profile = {' "$required"
+    'static const NumericArgsProfile add_descending_inclusive_profile = {' \
+    "$required"
 done
 
 for required in \
