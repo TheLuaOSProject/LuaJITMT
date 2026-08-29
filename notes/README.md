@@ -9,9 +9,9 @@ without looking like current claims.
 
 Development branch: `codex/aarch64-macos-port`.
 
-Last fully verified source checkpoint: `a6d7fd50` (2026-08-28). It contains
-the documentation archive and reviewed minimal-divergence cleanup. It does not
-widen the ARM64 JIT grammar beyond the `2fd6fb49` `DIV_LT` checkpoint.
+Last fully verified source checkpoint: `364449e6` (2026-08-28). It adds the
+exact inclusive ascending `DIV_LE` root to the reviewed minimal-divergence
+checkpoint without opening adjacent division shapes.
 
 ARM64 remains explicitly opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`. Native JIT
 work additionally requires `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`. These flags are
@@ -28,23 +28,29 @@ Implemented and exercised on Apple Silicon macOS:
 - constant-step integer `FORL`, bounded integer and mixed numeric `LOOP`
   roots, fixed-half and dynamic-step numeric roots, literal-true `FUNCF`, and
   exact all-parameter `ADD_LT`, `ADD_LE`, `ADD_GT`, `ADD_GE`, `SUB_GT`,
-  `SUB_GE`, `MUL_LT`, `MUL_LE`, and `DIV_LT` loop profiles; and
+  `SUB_GE`, `MUL_LT`, `MUL_LE`, `DIV_LT`, and `DIV_LE` loop profiles; and
 - callback-result lifetime across post-detach TG reclamation.
 
-The newest `DIV_LT` profile is deliberately narrow:
+The two ascending division profiles are deliberately narrow:
 
 ```lua
 while x < limit do
   x = x / divisor
 end
+
+while x <= limit do
+  x = x / divisor
+end
 ```
 
-It requires the exact all-parameter bytecode and spill-free IR/register shape.
-Its compiler proof exhausts 576 profile/arithmetic/guard combinations at each
-of the semantic and post-register-allocation gates and admits exactly nine
-total profiles. Its runtime proof checks noncommutative FDIV operands, exact
-ARM64/arm64e instruction words, type exits, equality boundaries, NaN,
-infinities, signed zero, STOPREQ cleanup/reuse, and adjacent no-trace shapes.
+They require the exact all-parameter bytecode and spill-free IR/register shape.
+The compiler proof exhausts 640 profile/arithmetic/guard combinations at each
+of the semantic and post-register-allocation gates and admits exactly ten total
+profiles. The runtime proof checks noncommutative FDIV operands, exact
+ARM64/arm64e instruction words, strict and inclusive equality boundaries,
+type exits, NaN, infinities, signed zero, STOPREQ cleanup/reuse, and adjacent
+no-trace shapes. In particular, an inclusive `+Inf` limit is proved
+nonterminating and interruptible while the strict profile exits.
 
 ## Minimal-divergence cleanup
 
@@ -62,20 +68,20 @@ moving them into target-local modules is a later structural migration because
 the source-certificate scripts parse their current boundaries. Independent
 semantic and post-register-allocation gates were deliberately not deduplicated.
 
-## Verification at `a6d7fd50`
+## Verification at `364449e6`
 
 - `tools/ci/arm64_jit_fail_closed_gate.sh`: passed in full.
 - Native ARM64 vendored LuaJIT suite: `509 passed`.
 - Focused all-parameter numeric contract: direct plus two randomized runs on
-  ordinary ARM64 and arm64e/BTI; all six executions passed.
+  ordinary ARM64 and arm64e/BTI; all six executions passed, exercising ten
+  profiles per process.
 - Disposable thin x86_64 build: platform smoke passed under Rosetta with
   `jit.os=OSX`, `jit.arch=x64`; its vendored suite also reported `509 passed`.
-- Four fresh x86_64 runs published a real first side from a parent with 17
-  stack slots: trace 1 linked to its loop and trace 2 linked to parent 1 from
-  exit 3. Four additional runs published a live `JFORL` root.
-- Isolated `src/luajit`, `libluajit.a`, `lj_vm.o`, and `lj_asm.o` artifacts
-  were thin ARM64, and the archive's `lj_asm.o` was byte-identical to the
-  standalone object.
+- The x86_64 canary published real first-level side traces and a live `JFORL`
+  root, confirming that the ARM64-only widening did not alter x64 admission.
+- Native `src/luajit`, `libluajit.a`, `lj_vm.o`, and `lj_asm.o` artifacts were
+  thin ARM64, and the archive's `lj_asm.o` was byte-identical to the standalone
+  object.
 
 The earlier `2fd6fb49` functional checkpoint also ran twelve independent native
 processes which published exactly trace 1 with `link=1` and `linktype=loop`,
@@ -90,6 +96,8 @@ expected non-GC64 rejection before the configured GC64 build succeeds.
 
 - General ARM64 IR admission, arbitrary Lua programs, and unrestricted spills
   or register layouts.
+- Descending `DIV_GT`/`DIV_GE`, reversed or fixed division operands, and extra
+  division recurrences. The descending pair is the next coherent DIV tranche.
 - General side traces, side-of-side traces, and stitches. Only explicitly
   certified first-side shapes are open.
 - Uncertified conversions, calls, allocations, heap effects, table/upvalue
