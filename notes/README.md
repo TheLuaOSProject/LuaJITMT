@@ -9,19 +9,22 @@ current claims.
 
 Development branch: `codex/aarch64-macos-port`.
 
-Last complete JIT fail-closed-gate checkpoint: `5b6d9e0d` (2026-08-29).
-It admits one exact Darwin ARM64 `CALLXS` root: a cached direct CDECL function
+Last complete JIT fail-closed-gate checkpoint: `a7056fe5` (2026-08-29).
+The admitted boundary remains the one exact Darwin ARM64 `CALLXS` root opened
+at `5b6d9e0d`: a cached direct CDECL function
 cdata with signature `int32_t(int32_t)` in the certified 16-bytecode integer
 `FORL` root. Mutable cdata `__call` lookup now samples through enumerated TG
 roots, guards the current base-metatable root and exact function identity, and
 uses TG-local `tmptv`/`tmptv2` storage in generated code. Semantic IR,
 snapshots, bytecode, signature, trace ownership, and post-register-allocation
-state are independently certified. The complete ARM64/arm64e fail-closed
-umbrella, focused ARM64 and arm64e/BTI CALLXS lifecycle, and x86_64/Rosetta
-production plus threaded remote-flush paths passed. The preceding `0ce4313b`
-checkpoint introduced the target-local ARM64 `XSAVE` staging backend; the
-native and x86_64 vendored suites last passed with 509 tests each at
-`4d1b6126`.
+state are independently certified. Checkpoint `23f2f870` added exact errno,
+forced-exit, callback, STOPREQ, cleanup, and reuse evidence for that scalar
+root. Checkpoint `a7056fe5` then narrowed six shared source files back to their
+actual ARM64 or `CALLXS` capability boundaries without widening admission. The
+complete ARM64/arm64e fail-closed umbrella passed at that cleanup checkpoint.
+The preceding `0ce4313b` checkpoint introduced the target-local ARM64 `XSAVE`
+staging backend; the native and x86_64 vendored suites last passed with 509
+tests each at `4d1b6126`.
 
 ARM64 remains explicitly opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`. Native JIT
 work additionally requires `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`. These flags are
@@ -38,7 +41,9 @@ Implemented and exercised on Apple Silicon macOS:
 - lockless ARM64 and arm64e OS-error restoration plumbing for C,
   fast-function, and JIT side-exit landings; injected-clobber runtime proof
   covers the final C and fast-function landings on ARM64, arm64e/BTI, and
-  x86_64/Rosetta, while the ARM64e JIT landing remains synthetic;
+  x86_64/Rosetta. The standalone arbitrary ARM64e JIT-frame contract remains
+  synthetic, while the exact scalar `CALLXS` STOPREQ path now reaches the real
+  trace unwind and landing on ARM64 and arm64e/BTI;
 - constant-step integer `FORL` plus one exact spill-free
   variable-stop/variable-step integer shape in both directions, bounded
   integer and mixed numeric `LOOP` roots, fixed-half and dynamic-step numeric
@@ -46,8 +51,11 @@ Implemented and exercised on Apple Silicon macOS:
   `ADD_GE`, `SUB_GT`, `SUB_GE`, `MUL_LT`, `MUL_LE`, `DIV_LT`, `DIV_LE`,
   `DIV_GT`, and `DIV_GE` all-parameter loop profiles;
 - one exact scalar Darwin ARM64 FFI call root with native-frame entry/leave,
-  remote GC/flush retirement, mutable cdata `__call` replacement races, and
-  arm64e/BTI execution; and
+  rooted pre-call errno preservation under a deliberately clobbering wait,
+  callee errno through normal return, result-guard exit, forced epoch exit,
+  callback, and post-call STOPREQ unwind, exact no-replay effects, cleanup and
+  reuse, remote GC/flush retirement, mutable cdata `__call` replacement races,
+  and arm64e/BTI execution; and
 - callback-result lifetime across post-detach TG reclamation.
 
 The ARM64 `XSAVE` backend is now live only for that exact scalar certificate.
@@ -133,6 +141,14 @@ landing, preserves the allocatable GPR/FPR state plus `NZCV`, `FPCR`, and
 `FPSR`, and returns through the original target, return-signed on arm64e. The
 landing is omitted from Windows and `LUAJIT_NO_UNWIND` ARM64 builds.
 
+The `a7056fe5` source pass compared each touched shared file with upstream
+`v2.1` at `a649f737`. It confines the external-unwind carrier to Darwin ARM64
+external-unwind builds, confines `XSAVE` bodies and emitter helpers to the
+`CALLXS` capability (or their explicit test helper), collapses a redundant
+ARM64 recorder predicate, and restores the stock non-ARM trace-function
+selection. These are preprocessor and target-boundary reductions; they do not
+add another ABI, IR shape, signature, or runtime policy.
+
 Large ARM64 lifecycle blocks still remain in common files, particularly
 `src/lj_trace.c`. Move those only as separate structural changes with exact
 source-boundary and runtime proof; do not combine or weaken the independent
@@ -140,28 +156,38 @@ semantic and post-register-allocation gates merely to reduce the diff.
 
 ## Verification
 
-- `tools/ci/arm64_jit_fail_closed_gate.sh`: passed in full at `5b6d9e0d`,
+- `tools/ci/arm64_jit_fail_closed_gate.sh`: passed in full at `a7056fe5`,
   including the exact variable-step integer `FORL`, its overflow and direction
   exits, the 3,072-case `BC_LOOP` compiler proof, 222 runtime profile
   executions, ARM64/arm64e publication, entry, exit, retirement, flush/reuse,
   GDB-JIT, callback, first-side, and safepoint contracts.
-- `tools/ci/arm64_jit_emitter_contract.sh`: passed at `5b6d9e0d`; the emitted
+- `tools/ci/arm64_jit_emitter_contract.sh`: passed at `a7056fe5`; the emitted
   owner-private `ffi_xsave_baseslot` and `ffi_xsave_nslots` publications are
   naturally sized `STLR w6` stores through x25, and `ffi_xsave_root` uses the
   existing pointer-sized release helper.
-- `m7_ffi_callxs_arm64_scalar`: passed at `5b6d9e0d`; the authentic trace and
+- `m7_ffi_callxs_arm64_scalar`: passed at `23f2f870`; the authentic trace and
   semantic/post-RA mutation fixture passed with exactly two `XSAVE` and two
   `CALLXS` nodes. Stable and concurrently raced cdata `__call` replacement,
   remote full GC, and remote `jit.flush()` completed without replay or stall.
+  Its exact 16-bytecode lifecycle fixture also passed rooted-retry errno,
+  result-guard and epoch exits, callback, real STOPREQ unwind, cleanup, reuse,
+  and exact foreign-effect/no-replay oracles.
 - Manual arm64e/BTI build: the same semantic/post-RA fixture, production call,
-  and threaded lifecycle passed at `5b6d9e0d` in thin ARM64e executables.
-- Disposable x86_64/Rosetta build: production and threaded scalar, pointer,
-  boolean, and sret remote-flush paths passed at `5b6d9e0d`. The test now
-  caches FFI-library symbols before recording, leaving shared mutable
-  `__index` intentionally closed while exercising rooted cdata `__call`.
+  exact lifecycle, and threaded lifecycle passed through `a7056fe5` in thin
+  ARM64e executables.
+- Disposable x86_64/Rosetta builds: focused authentic direct-call, callback,
+  and threaded scalar, pointer, boolean, and sret remote-flush paths passed
+  through `a7056fe5`. The full `m7_ffi_callxs_authentic` fixture nevertheless
+  has a pre-existing generated `CALLT`/`CALLMT` re-entry failure: its outer
+  loop trace repeatedly exits at the inlined tail-callee identity guard before
+  reaching `XSAVE`. The strict epoch-finish assertion fails identically at
+  `5b6d9e0d` and `a7056fe5`; it remains enabled and must not be weakened into
+  an interpreter-fallback pass.
 - Disposable experimental ARM64 `LUAJIT_DISABLE_FFI` build: a native JIT loop
   published and executed while `require("ffi")` remained unavailable at
-  `5b6d9e0d`.
+  `a7056fe5`.
+- `tools/ci/arm64_jit_first_side_production_contract.sh`: passed at
+  `a7056fe5` after the capability-boundary cleanup.
 - Native ARM64 experimental build vendored suite: `509 passed` at
   `4d1b6126`.
 - Disposable thin x86_64 build: platform smoke, real Rosetta loop trace, and
@@ -206,8 +232,15 @@ the expected non-GC64 rejection before the configured GC64 target succeeds.
   paths, and every ARM64 FFI call except the exact direct
   `int32_t(int32_t)` CDECL root. Other signatures and call-site geometries
   remain closed.
-- Production JIT side-exit unwind resolution on ARM64/arm64e. Current JIT
-  unwind evidence uses a synthetic arm64e carrier and landing.
+- General production JIT side-exit unwind resolution on ARM64/arm64e. The
+  exact scalar `CALLXS` STOPREQ trace unwind is real; the standalone arbitrary
+  arm64e JIT-frame carrier/landing evidence remains synthetic.
+- Nested FFI callbacks and callback-error unwind inside the admitted scalar
+  `CALLXS` root.
+- Generated x86_64 `CALLT`/`CALLMT` re-entry for the strict `CALLXS` lifecycle
+  fixture; the live root exits at its inlined callee-identity guard before
+  `XSAVE`, although ordinary `CALL`, callback, and threaded remote-flush paths
+  pass.
 - Full parity with every x86_64 lockless VM, JIT, FFI, profiler, unwind, and
   stress path.
 - The complete sanitizer, weak-memory, sustained-concurrency, and performance
@@ -216,12 +249,13 @@ the expected non-GC64 rejection before the configured GC64 target succeeds.
 Do not describe this branch as a completed ARM64 port yet. A passing stock
 suite proves an important compatibility boundary, not general JIT coverage.
 
-Before widening CALLXS, add exact errno, nested-callback, forced-exit, and
-STOPREQ evidence to the admitted scalar lifecycle. Then certify signatures one
-at a time: pointer, 64-bit integer, FP, boolean, aggregate/sret, and variadic;
-indirect function pointers and general call-site/root layouts remain separate
-boundaries. Before admitting general table/helper traces, ARM64 `lj_vm_next`
-also needs the forwarding-safe traversal already used by the x86_64 path.
+Before widening `CALLXS`, add nested-callback and callback-error unwind evidence
+to the admitted scalar lifecycle. Then certify `double(double)` as the next
+exact signature and continue one signature at a time: pointer, 64-bit integer,
+boolean, aggregate/sret, and variadic. Indirect function pointers and general
+call-site/root layouts remain separate boundaries. Before admitting general
+table/helper traces, ARM64 `lj_vm_next` also needs the forwarding-safe
+traversal already used by the x86_64 path.
 
 ## Primary checks
 
