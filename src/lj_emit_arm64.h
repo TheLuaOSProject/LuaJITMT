@@ -414,6 +414,7 @@ static void emit_settg_(ASMState *as, Reg r, int32_t ofs)
   emit_tgaddr(as, ofs);
 }
 
+#if LJ_HASJIT_FFI_CALLXS || defined(LJ_ARM64_EMIT_TEST_HELPERS)
 static void emit_settg32_(ASMState *as, Reg r, int32_t ofs)
 {
   lj_assertA(r < RID_MAX_GPR && r != RID_TMP,
@@ -422,6 +423,7 @@ static void emit_settg32_(ASMState *as, Reg r, int32_t ofs)
   emit_dn(as, A64I_STLRw, r, RID_TMP);
   emit_tgaddr(as, ofs);
 }
+#endif
 
 #define emit_gettg(as, r, field) \
   emit_gettg_((as), (r), DISPATCH_TG(field))
@@ -429,8 +431,10 @@ static void emit_settg32_(ASMState *as, Reg r, int32_t ofs)
   emit_gettg32_((as), (r), DISPATCH_TG(field))
 #define emit_settg(as, r, field) \
   emit_settg_((as), (r), DISPATCH_TG(field))
+#if LJ_HASJIT_FFI_CALLXS || defined(LJ_ARM64_EMIT_TEST_HELPERS)
 #define emit_settg32(as, r, field) \
   emit_settg32_((as), (r), DISPATCH_TG(field))
+#endif
 
 /* A direct release store needs two registers for the address and immediate.
 ** Keep x25 invariant and x30 as the only scratch by using the equivalent

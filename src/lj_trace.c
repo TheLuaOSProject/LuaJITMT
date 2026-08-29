@@ -21,7 +21,7 @@
 #include "lj_err.h"
 #include "lj_oserr.h"
 #include "lj_debug.h"
-#if LJ_HASJIT_FFI_CALLXS
+#if LJ_TARGET_ARM64 && LJ_HASJIT_FFI_CALLXS
 #include "lj_ff.h"
 #endif
 #include "lj_str.h"
@@ -10571,8 +10571,12 @@ void lj_trace_ins(jit_State *J, const BCIns *pc)
   trace_arm64_abort_exact_owner(J, owner);
   return;
 #else
+#if LJ_TARGET_ARM64
   lua_State *L;
   GCfunc *recordfn = NULL;
+#else
+  lua_State *L = J->L;
+#endif
   int errcode;
 #if LJ_TARGET_ARM64
 #if defined(LJ_TRACE_TEST_HELPERS) && \
@@ -10603,12 +10607,14 @@ void lj_trace_ins(jit_State *J, const BCIns *pc)
     trace_arm64_abort_exact_owner(J, L);
     return;
   }
-#else
-  L = J->L;
 #endif
   /* Note: J->L must already be set. pc is the true bytecode PC here. */
   J->pc = pc;
+#if LJ_TARGET_ARM64
   J->fn = recordfn != NULL ? recordfn : curr_func(L);
+#else
+  J->fn = curr_func(L);
+#endif
   J->pt = isluafunc(J->fn) ? funcproto(J->fn) : NULL;
   while ((errcode = lj_vm_cpcall(L, NULL, (void *)J,
 				 trace_state)) != 0) {

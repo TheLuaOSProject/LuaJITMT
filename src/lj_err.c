@@ -722,7 +722,7 @@ typedef struct LJErrUEx {
   ErrOSState os;
 #if LJ_TARGET_X64
   LJErrX64Carrier landing;
-#elif LJ_TARGET_ARM64
+#elif LJ_TARGET_ARM64 && LJ_UNWIND_EXT && !LJ_ABI_WIN
   LJErrARM64Carrier landing;
 #endif
 } LJErrUEx;
@@ -733,7 +733,8 @@ LJ_STATIC_ASSERT(offsetof(LJErrUEx, ex) == 0u);
 LJ_STATIC_ASSERT(offsetof(LJErrUEx, g) == sizeof(UNWIND_EXCEPTION_TYPE));
 LJ_STATIC_ASSERT(offsetof(LJErrUEx, os) ==
 		 sizeof(UNWIND_EXCEPTION_TYPE) + sizeof(global_State *));
-#if LJ_TARGET_X64 || LJ_TARGET_ARM64
+#if LJ_TARGET_X64 || \
+    (LJ_TARGET_ARM64 && LJ_UNWIND_EXT && !LJ_ABI_WIN)
 LJ_STATIC_ASSERT(offsetof(LJErrUEx, landing) ==
 		 offsetof(LJErrUEx, os) + sizeof(ErrOSState));
 #endif
@@ -800,7 +801,7 @@ static LJ_AINLINE uintptr_t err_unwind_sign_ip(_Unwind_Context *ctx,
 #define err_unwind_sign_ip(ctx, ip) ((uintptr_t)(ip))
 #endif
 
-#if LJ_TARGET_ARM64
+#if LJ_TARGET_ARM64 && LJ_UNWIND_EXT && !LJ_ABI_WIN
 /* X28 is DWARF register 28. It is an ordinary callee-saved value register on
 ** AAPCS64, unlike Apple's reserved X18 or the return-address register X30. */
 #define LJ_ERR_ARM64_CARRIER_REG	28
@@ -911,7 +912,7 @@ LJ_FUNCA int lj_err_unwind_dwarf(int version, int actions,
       ip = cframe_unwind_ff(cf) ? lj_vm_unwind_ff_eh : lj_vm_unwind_c_eh;
 #if LJ_TARGET_X64
       err_uex_install_x64(ctx, uexclass, uex, &err, ip);
-#elif LJ_TARGET_ARM64
+#elif LJ_TARGET_ARM64 && LJ_UNWIND_EXT && !LJ_ABI_WIN
       err_uex_install_arm64(ctx, uexclass, uex, &err,
 	(uintptr_t)lj_ptr_strip(ip));
 #else
@@ -1075,7 +1076,7 @@ static int err_unwind_jit(int version, int actions,
 #elif LJ_TARGET_X64
       err_uex_install_x64(ctx, uexclass, uex, &err,
 			  (ASMFunction)(uintptr_t)stub);
-#elif LJ_TARGET_ARM64
+#elif LJ_TARGET_ARM64 && LJ_UNWIND_EXT && !LJ_ABI_WIN
       err_uex_install_arm64(ctx, uexclass, uex, &err, stub);
 #else
       _Unwind_SetIP(ctx, err_unwind_sign_ip(ctx, stub));

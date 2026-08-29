@@ -1571,8 +1571,7 @@ int lj_record_mm_lookup(jit_State *J, RecordIndex *ix, MMS mm)
     /* Resolve mutable cdata __call through the rooted shared-table path. */
     if (LJ_HASFFI && tref_iscdata(ix->tab)) {
 #if LJ_HASJIT_FFI_CALLXS
-#if LJ_TARGET_ARM64 && LJ_TARGET_OSX && \
-    defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+#if LJ_TARGET_ARM64
 	if (mm == MM_call)
 	  return rec_mm_cdata_call_shared(J, ix, mt);
 #else

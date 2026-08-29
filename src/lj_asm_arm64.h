@@ -1912,7 +1912,7 @@ static void asm_stack_restore(ASMState *as, SnapShot *snap)
   asm_stack_restore_reg(as, snap, RID_BASE);
 }
 
-#if LJ_TARGET_OSX
+#if LJ_HASJIT_FFI_CALLXS
 /* Emit a complete XSAVE materialization followed by owner-private staging.
 ** Code emission runs backwards, so runtime order is stack restore, root BASE,
 ** current-frame offset and stack extent. The native-enter helper consumes the

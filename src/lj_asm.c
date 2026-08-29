@@ -19,7 +19,7 @@
 #if LJ_HASFFI
 #include "lj_ctype.h"
 #endif
-#if LJ_HASJIT_FFI_CALLXS
+#if LJ_TARGET_ARM64 && LJ_HASJIT_FFI_CALLXS
 #include "lj_ff.h"
 #endif
 #include "lj_ir.h"
@@ -2581,7 +2581,7 @@ static BCReg asm_baseslot(ASMState *as, SnapShot *snap, int *gotframe)
 */
 static void asm_xsave(ASMState *as)
 {
-#if LJ_HASJIT_FFI_CALLXS || (LJ_TARGET_ARM64 && LJ_TARGET_OSX)
+#if LJ_HASJIT_FFI_CALLXS
   SnapShot *snap;
   BCReg baseslot;
   int gotframe = 0;
