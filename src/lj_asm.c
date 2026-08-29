@@ -80,10 +80,11 @@ int lj_asm_arm64_b26_encode(uintptr_t source, uintptr_t target, MCode *insp)
 ** step, and one all-parameter NUM root with an exact ADD_LT, ADD_LE, ADD_GT,
 ** ADD_GE, SUB_GT, SUB_GE, MUL_LT, MUL_LE, DIV_LT, DIV_LE, DIV_GT or DIV_GE
 ** recurrence grammar. The last root admits either a NUM step or one invariant
-** INT step widened by one exact INT-to-NUM conversion. Only the exact MUL_LT
+** INT step widened by one exact INT-to-NUM conversion. ADD_LT alone also
+** admits one invariant INT limit widened once to NUM. Only the exact MUL_LT
 ** and MUL_LE profiles admit FMUL, and only the exact DIV_LT, DIV_LE, DIV_GT
-** and DIV_GE profiles admit FDIV; this list admits no IR CALL helper ID and no
-** heap operation.
+** and DIV_GE profiles admit FDIV; this list admits no IR CALL helper ID and
+** no heap operation.
 */
 
 static int arm64_ir_reject(LJArm64IRReject *reject,
@@ -265,8 +266,9 @@ enum {
 };
 
 enum {
-  ARM64_NUMDYN_STEP_NUM = 1u,
-  ARM64_NUMDYN_STEP_INT_TO_NUM = 2u
+  ARM64_NUMDYN_ARGS_NUM = 1u,
+  ARM64_NUMDYN_ARGS_INT_STEP = 2u,
+  ARM64_NUMDYN_ARGS_INT_LIMIT = 3u
 };
 
 static int arm64_numdynamic_is_sub(unsigned grammar_profile)
@@ -369,6 +371,24 @@ enum {
   ARM64_NUMACC_INTSTEP_R_BODY_GUARD,
   ARM64_NUMACC_INTSTEP_R_X_PHI,
   ARM64_NUMACC_INTSTEP_SEMANTIC_NINS
+};
+
+/* The exact INT-limit geometry widens the invariant comparison bound after
+** recording the first recurrence. It is intentionally distinct from the
+** otherwise equal-sized INT-step layout. */
+enum {
+  ARM64_NUMACC_INTLIMIT_R_X = REF_FIRST,
+  ARM64_NUMACC_INTLIMIT_R_STEP,
+  ARM64_NUMACC_INTLIMIT_R_X_PRE,
+  ARM64_NUMACC_INTLIMIT_R_LIMIT_INT,
+  ARM64_NUMACC_INTLIMIT_R_LIMIT_NUM,
+  ARM64_NUMACC_INTLIMIT_R_PRE_GUARD,
+  ARM64_NUMACC_INTLIMIT_R_LOOP,
+  ARM64_NUMACC_INTLIMIT_R_XPOLL,
+  ARM64_NUMACC_INTLIMIT_R_X_BODY,
+  ARM64_NUMACC_INTLIMIT_R_BODY_GUARD,
+  ARM64_NUMACC_INTLIMIT_R_X_PHI,
+  ARM64_NUMACC_INTLIMIT_SEMANTIC_NINS
 };
 
 #define ARM64_NUMHALF_BITS UINT64_C(0x3fe0000000000000)
@@ -501,21 +521,24 @@ static int arm64_numstep_snapshots(const SnapShot *snap,
 static int arm64_numacc_snapshots(const SnapShot *snap,
 	const SnapEntry *snapmap, MSize nsnap, MSize nsnapmap,
 	const BCIns *proto_bc, MSize proto_sizebc, uint8_t base_delta,
-	unsigned step_kind)
+	unsigned args_kind)
 {
-  static const IRRef refs[2][5] = {
+  static const IRRef refs[3][5] = {
     { ARM64_NUMACC_R_X, ARM64_NUMACC_R_LIMIT,
       ARM64_NUMACC_R_PRE_GUARD, ARM64_NUMACC_R_LOOP,
       ARM64_NUMACC_R_BODY_GUARD },
     { ARM64_NUMACC_INTSTEP_R_X, ARM64_NUMACC_INTSTEP_R_LIMIT,
       ARM64_NUMACC_INTSTEP_R_PRE_GUARD, ARM64_NUMACC_INTSTEP_R_LOOP,
-      ARM64_NUMACC_INTSTEP_R_BODY_GUARD }
+      ARM64_NUMACC_INTSTEP_R_BODY_GUARD },
+    { ARM64_NUMACC_INTLIMIT_R_X, ARM64_NUMACC_INTLIMIT_R_LIMIT_INT,
+      ARM64_NUMACC_INTLIMIT_R_PRE_GUARD, ARM64_NUMACC_INTLIMIT_R_LOOP,
+      ARM64_NUMACC_INTLIMIT_R_BODY_GUARD }
   };
   static const uint16_t mapofs[5] = { 0, 2, 6, 9, 12 };
   static const uint8_t nent[5] = { 0, 2, 1, 1, 1 };
   static const uint8_t nslots[5] = { 5, 6, 5, 5, 5 };
   static const uint8_t pcpos[5] = { 6, 2, 11, 6, 11 };
-  static const SnapEntry entries[2][5] = {
+  static const SnapEntry entries[3][5] = {
     { SNAP(2, 0, ARM64_NUMACC_R_X_PRE),
       SNAP(5, 0, ARM64_NUMACC_R_X_PRE),
       SNAP(2, 0, ARM64_NUMACC_R_X_PRE),
@@ -525,16 +548,22 @@ static int arm64_numacc_snapshots(const SnapShot *snap,
       SNAP(5, 0, ARM64_NUMACC_INTSTEP_R_X_PRE),
       SNAP(2, 0, ARM64_NUMACC_INTSTEP_R_X_PRE),
       SNAP(2, 0, ARM64_NUMACC_INTSTEP_R_X_PRE),
-      SNAP(2, 0, ARM64_NUMACC_INTSTEP_R_X_BODY) }
+      SNAP(2, 0, ARM64_NUMACC_INTSTEP_R_X_BODY) },
+    { SNAP(2, 0, ARM64_NUMACC_INTLIMIT_R_X_PRE),
+      SNAP(5, 0, ARM64_NUMACC_INTLIMIT_R_X_PRE),
+      SNAP(2, 0, ARM64_NUMACC_INTLIMIT_R_X_PRE),
+      SNAP(2, 0, ARM64_NUMACC_INTLIMIT_R_X_PRE),
+      SNAP(2, 0, ARM64_NUMACC_INTLIMIT_R_X_BODY) }
   };
   MSize kindidx;
   MSize snapno, entry = 0;
   if (snap == NULL || snapmap == NULL || proto_bc == NULL ||
 	nsnap != 5 || nsnapmap != 15 || proto_sizebc != 13 ||
-	(step_kind != ARM64_NUMDYN_STEP_NUM &&
-	 step_kind != ARM64_NUMDYN_STEP_INT_TO_NUM))
+	(args_kind != ARM64_NUMDYN_ARGS_NUM &&
+	 args_kind != ARM64_NUMDYN_ARGS_INT_STEP &&
+	 args_kind != ARM64_NUMDYN_ARGS_INT_LIMIT))
     return 0;
-  kindidx = (MSize)(step_kind-ARM64_NUMDYN_STEP_NUM);
+  kindidx = (MSize)(args_kind-ARM64_NUMDYN_ARGS_NUM);
   for (snapno = 0; snapno < 5; snapno++) {
     const SnapShot *s = &snap[snapno];
     SnapEntry pcraw[1+LJ_FR2];
@@ -808,18 +837,20 @@ static int arm64_postra_numhalf_shape(const LJArm64PostRAView *view,
 
 static int arm64_postra_numdynamic_kernel(const LJArm64PostRAView *view,
 	IRRef xslot, IRRef stepslot, IRRef limitslot,
-	unsigned grammar_profile, unsigned step_kind)
+	unsigned grammar_profile, unsigned args_kind)
 {
-  IRIns x, step_int, step, xpre, limit, xbody, xphi;
-  IRRef xref, stepintref, stepref, xpreref, limitref, preguardref;
+  IRIns x, step_int, step, xpre, limit_int, limit, xbody, xphi;
+  IRRef xref, stepintref, stepref, xpreref;
+  IRRef limitintref, limitref, preguardref;
   IRRef loopref, xpollref, xbodyref, bodyguardref, xphiref;
   IRRef first_left, first_right;
   IROp recurrence_op, preop, bodyop;
-  if (step_kind == ARM64_NUMDYN_STEP_NUM) {
+  if (args_kind == ARM64_NUMDYN_ARGS_NUM) {
     xref = ARM64_NUMSTEP_R_X;
     stepintref = 0;
     stepref = ARM64_NUMSTEP_R_STEP;
     xpreref = ARM64_NUMSTEP_R_X_PRE;
+    limitintref = 0;
     limitref = ARM64_NUMSTEP_R_LIMIT;
     preguardref = ARM64_NUMSTEP_R_PRE_GUARD;
     loopref = ARM64_NUMSTEP_R_LOOP;
@@ -827,11 +858,12 @@ static int arm64_postra_numdynamic_kernel(const LJArm64PostRAView *view,
     xbodyref = ARM64_NUMSTEP_R_X_BODY;
     bodyguardref = ARM64_NUMSTEP_R_BODY_GUARD;
     xphiref = ARM64_NUMSTEP_R_X_PHI;
-  } else if (step_kind == ARM64_NUMDYN_STEP_INT_TO_NUM) {
+  } else if (args_kind == ARM64_NUMDYN_ARGS_INT_STEP) {
     xref = ARM64_NUMACC_INTSTEP_R_X;
     stepintref = ARM64_NUMACC_INTSTEP_R_STEP_INT;
     stepref = ARM64_NUMACC_INTSTEP_R_STEP_NUM;
     xpreref = ARM64_NUMACC_INTSTEP_R_X_PRE;
+    limitintref = 0;
     limitref = ARM64_NUMACC_INTSTEP_R_LIMIT;
     preguardref = ARM64_NUMACC_INTSTEP_R_PRE_GUARD;
     loopref = ARM64_NUMACC_INTSTEP_R_LOOP;
@@ -839,6 +871,20 @@ static int arm64_postra_numdynamic_kernel(const LJArm64PostRAView *view,
     xbodyref = ARM64_NUMACC_INTSTEP_R_X_BODY;
     bodyguardref = ARM64_NUMACC_INTSTEP_R_BODY_GUARD;
     xphiref = ARM64_NUMACC_INTSTEP_R_X_PHI;
+  } else if (args_kind == ARM64_NUMDYN_ARGS_INT_LIMIT &&
+	grammar_profile == ARM64_NUMDYN_ADD_LT) {
+    xref = ARM64_NUMACC_INTLIMIT_R_X;
+    stepintref = 0;
+    stepref = ARM64_NUMACC_INTLIMIT_R_STEP;
+    xpreref = ARM64_NUMACC_INTLIMIT_R_X_PRE;
+    limitintref = ARM64_NUMACC_INTLIMIT_R_LIMIT_INT;
+    limitref = ARM64_NUMACC_INTLIMIT_R_LIMIT_NUM;
+    preguardref = ARM64_NUMACC_INTLIMIT_R_PRE_GUARD;
+    loopref = ARM64_NUMACC_INTLIMIT_R_LOOP;
+    xpollref = ARM64_NUMACC_INTLIMIT_R_XPOLL;
+    xbodyref = ARM64_NUMACC_INTLIMIT_R_X_BODY;
+    bodyguardref = ARM64_NUMACC_INTLIMIT_R_BODY_GUARD;
+    xphiref = ARM64_NUMACC_INTLIMIT_R_X_PHI;
   } else {
     return 0;
   }
@@ -924,7 +970,7 @@ static int arm64_postra_numdynamic_kernel(const LJArm64PostRAView *view,
    ir_load_acq(&view->ir[(ref)]).op2 == (right))
   if (!ARM64_NUMSTEP_POSTRA_INS(xref, IR_SLOAD,
 	IRT_NUM|IRT_GUARD, xslot, IRSLOAD_TYPECHECK) ||
-      (step_kind == ARM64_NUMDYN_STEP_NUM ?
+      (args_kind != ARM64_NUMDYN_ARGS_INT_STEP ?
        !ARM64_NUMSTEP_POSTRA_INS(stepref, IR_SLOAD,
 	 IRT_NUM|IRT_GUARD, stepslot, IRSLOAD_TYPECHECK) :
        (!ARM64_NUMSTEP_POSTRA_INS(stepintref, IR_SLOAD,
@@ -933,8 +979,13 @@ static int arm64_postra_numdynamic_kernel(const LJArm64PostRAView *view,
 	  IRT_NUM, stepintref, IRCONV_NUM_INT))) ||
       !ARM64_NUMSTEP_POSTRA_INS(xpreref, recurrence_op,
 	IRT_NUM|IRT_ISPHI, first_left, first_right) ||
-      !ARM64_NUMSTEP_POSTRA_INS(limitref, IR_SLOAD,
-	IRT_NUM|IRT_GUARD, limitslot, IRSLOAD_TYPECHECK) ||
+      (args_kind != ARM64_NUMDYN_ARGS_INT_LIMIT ?
+       !ARM64_NUMSTEP_POSTRA_INS(limitref, IR_SLOAD,
+	 IRT_NUM|IRT_GUARD, limitslot, IRSLOAD_TYPECHECK) :
+       (!ARM64_NUMSTEP_POSTRA_INS(limitintref, IR_SLOAD,
+	  IRT_INT|IRT_GUARD, limitslot, IRSLOAD_TYPECHECK) ||
+	!ARM64_NUMSTEP_POSTRA_INS(limitref, IR_CONV,
+	  IRT_NUM, limitintref, IRCONV_NUM_INT))) ||
       !ARM64_NUMSTEP_POSTRA_INS(preguardref, preop,
 	IRT_NUM|IRT_GUARD, limitref, xpreref) ||
       !ARM64_NUMSTEP_POSTRA_INS(loopref, IR_LOOP,
@@ -955,12 +1006,20 @@ static int arm64_postra_numdynamic_kernel(const LJArm64PostRAView *view,
   limit = ir_load_acq(&view->ir[limitref]);
   xbody = ir_load_acq(&view->ir[xbodyref]);
   xphi = ir_load_acq(&view->ir[xphiref]);
-  if (step_kind == ARM64_NUMDYN_STEP_INT_TO_NUM) {
+  if (args_kind == ARM64_NUMDYN_ARGS_INT_STEP) {
     step_int = ir_load_acq(&view->ir[stepintref]);
     if (step_int.s != SPS_NONE || step_int.r >= RID_MAX_GPR ||
 	!rset_test(RSET_GPR, step_int.r) || step.s != SPS_NONE ||
 	step.r < RID_MIN_FPR || step.r >= RID_MAX_FPR ||
 	!rset_test(RSET_FPR, step.r))
+      return 0;
+  }
+  if (args_kind == ARM64_NUMDYN_ARGS_INT_LIMIT) {
+    limit_int = ir_load_acq(&view->ir[limitintref]);
+    if (limit_int.s != SPS_NONE || limit_int.r >= RID_MAX_GPR ||
+	!rset_test(RSET_GPR, limit_int.r) || limit.s != SPS_NONE ||
+	limit.r < RID_MIN_FPR || limit.r >= RID_MAX_FPR ||
+	!rset_test(RSET_FPR, limit.r))
       return 0;
   }
   /* STEP and LIMIT remain live across the loop and cannot alias each other or
@@ -984,7 +1043,7 @@ static int arm64_postra_numstep_shape(const LJArm64PostRAView *view,
 	  view->proto_sizebc, view->base_delta))
     return 0;
   return arm64_postra_numdynamic_kernel(view, 4, 3, 2,
-	ARM64_NUMDYN_ADD_LT, ARM64_NUMDYN_STEP_NUM);
+	ARM64_NUMDYN_ADD_LT, ARM64_NUMDYN_ARGS_NUM);
 }
 
 static unsigned arm64_numacc_grammar_profile(const BCIns *proto_bc,
@@ -1044,25 +1103,30 @@ static unsigned arm64_numacc_grammar_profile(const BCIns *proto_bc,
 }
 
 static int arm64_postra_numacc_shape(const LJArm64PostRAView *view,
-	IRRef semantic_nins, unsigned step_kind)
+	IRRef semantic_nins, unsigned args_kind)
 {
   unsigned grammar_profile = arm64_numacc_grammar_profile(
 	view->proto_bc, view->proto_sizebc);
-  if ((step_kind != ARM64_NUMDYN_STEP_NUM &&
-	step_kind != ARM64_NUMDYN_STEP_INT_TO_NUM) ||
+  if ((args_kind != ARM64_NUMDYN_ARGS_NUM &&
+	args_kind != ARM64_NUMDYN_ARGS_INT_STEP &&
+	args_kind != ARM64_NUMDYN_ARGS_INT_LIMIT) ||
+	(args_kind == ARM64_NUMDYN_ARGS_INT_LIMIT &&
+	 grammar_profile != ARM64_NUMDYN_ADD_LT) ||
 	bc_op(view->startins) != BC_LOOP || bc_a(view->startins) != 3 ||
 	view->root_topslot != 5 || view->proto_sizebc != 13 ||
 	view->nk != REF_TRUE ||
 	grammar_profile == 0 ||
-	semantic_nins != (step_kind == ARM64_NUMDYN_STEP_NUM ?
+	semantic_nins != (args_kind == ARM64_NUMDYN_ARGS_NUM ?
 	  ARM64_NUMACC_SEMANTIC_NINS :
-	  ARM64_NUMACC_INTSTEP_SEMANTIC_NINS) ||
+	  args_kind == ARM64_NUMDYN_ARGS_INT_STEP ?
+	  ARM64_NUMACC_INTSTEP_SEMANTIC_NINS :
+	  ARM64_NUMACC_INTLIMIT_SEMANTIC_NINS) ||
 	!arm64_numacc_snapshots(view->snap, view->snapmap,
 	  view->nsnap, view->nsnapmap, view->proto_bc,
-	  view->proto_sizebc, view->base_delta, step_kind))
+	  view->proto_sizebc, view->base_delta, args_kind))
     return 0;
   return arm64_postra_numdynamic_kernel(view, 2, 4, 3,
-	grammar_profile, step_kind);
+	grammar_profile, args_kind);
 }
 
 static int arm64_ir_funcf_snapshots(const SnapShot *snap,
@@ -1135,7 +1199,7 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
   BCOp rootop;
   unsigned nintadd = 0, scalar_mode = 0, constant_profile = 0;
   unsigned numdynamic_profile = 0;
-  unsigned numdynamic_step_kind = ARM64_NUMDYN_STEP_NUM;
+  unsigned numdynamic_args_kind = ARM64_NUMDYN_ARGS_NUM;
   int suffix_is_nop = 0, allow_num_sub = 0, allow_num_mul = 0;
   int allow_num_div = 0;
 
@@ -1241,15 +1305,23 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
       break;
     case IR_CONV:
       if (numdynamic_profile == 0 ||
-	  ref != ARM64_NUMACC_INTSTEP_R_STEP_NUM ||
-	  ins.t.irt != IRT_NUM ||
-	  ins.op1 != ARM64_NUMACC_INTSTEP_R_STEP_INT ||
-	  ins.op2 != IRCONV_NUM_INT || slot != SPS_NONE ||
+	  numdynamic_args_kind != ARM64_NUMDYN_ARGS_NUM ||
+	  ins.t.irt != IRT_NUM || ins.op2 != IRCONV_NUM_INT ||
+	  slot != SPS_NONE ||
 	  ins.r < RID_MIN_FPR || ins.r >= RID_MAX_FPR ||
 	  !rset_test(RSET_FPR, ins.r))
 	return 0;
+      if (ref == ARM64_NUMACC_INTSTEP_R_STEP_NUM &&
+	  ins.op1 == ARM64_NUMACC_INTSTEP_R_STEP_INT) {
+	numdynamic_args_kind = ARM64_NUMDYN_ARGS_INT_STEP;
+      } else if (numdynamic_profile == ARM64_NUMDYN_ADD_LT &&
+	  ref == ARM64_NUMACC_INTLIMIT_R_LIMIT_NUM &&
+	  ins.op1 == ARM64_NUMACC_INTLIMIT_R_LIMIT_INT) {
+	numdynamic_args_kind = ARM64_NUMDYN_ARGS_INT_LIMIT;
+      } else {
+	return 0;
+      }
       scalar_mode |= ARM64_IR_SCALAR_NUM;
-      numdynamic_step_kind = ARM64_NUMDYN_STEP_INT_TO_NUM;
       break;
     case IR_ADDOV: case IR_SUBOV: case IR_MULOV:
       if (!arm64_postra_int_value(ins, rootop, forl_idxslot, maxslots))
@@ -1359,11 +1431,11 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
 
   if ((scalar_mode & ARM64_IR_SCALAR_NUM) != 0) {
     if (scalar_mode == (ARM64_IR_SCALAR_INT|ARM64_IR_SCALAR_NUM)) {
-      if (numdynamic_step_kind == ARM64_NUMDYN_STEP_INT_TO_NUM) {
+      if (numdynamic_args_kind != ARM64_NUMDYN_ARGS_NUM) {
 	if (constant_profile != ARM64_IR_KPROFILE_INT || !suffix_is_nop ||
 	    nrename != 0 || spadjust != 0 || highest_end != 0 ||
 	    !arm64_postra_numacc_shape(view, semantic_nins,
-	      numdynamic_step_kind))
+	      numdynamic_args_kind))
 	  return 0;
       } else if (constant_profile != ARM64_IR_KPROFILE_INT ||
 	  suffix_is_nop || nrename != 1u || spadjust != 0 ||
@@ -1387,7 +1459,7 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
 	    return 0;
 	} else if (view->proto_sizebc == 13) {
 	  if (!arm64_postra_numacc_shape(view, semantic_nins,
-		ARM64_NUMDYN_STEP_NUM))
+		ARM64_NUMDYN_ARGS_NUM))
 	    return 0;
 	} else {
 	  return 0;
@@ -1573,15 +1645,25 @@ static int arm64_ir_num_ref(const GCtrace *T, IRRef ref, IRRef before,
   ir = &T->ir[ref];
   if (ir->o == IR_CONV) {
     const IRIns *source;
-    if (ref != ARM64_NUMACC_INTSTEP_R_STEP_NUM ||
-	ir->t.irt != IRT_NUM ||
-	ir->op1 != ARM64_NUMACC_INTSTEP_R_STEP_INT ||
+    IRRef sourceref;
+    IRRef sourceslot;
+    if (ref == ARM64_NUMACC_INTSTEP_R_STEP_NUM) {
+      sourceref = ARM64_NUMACC_INTSTEP_R_STEP_INT;
+      sourceslot = 4;
+    } else if (ref == ARM64_NUMACC_INTLIMIT_R_LIMIT_NUM) {
+      sourceref = ARM64_NUMACC_INTLIMIT_R_LIMIT_INT;
+      sourceslot = 3;
+    } else {
+      return 0;
+    }
+    if (ir->t.irt != IRT_NUM || ir->op1 != sourceref ||
 	ir->op2 != IRCONV_NUM_INT)
       return 0;
-    source = &T->ir[ARM64_NUMACC_INTSTEP_R_STEP_INT];
+    source = &T->ir[sourceref];
     return source->o == IR_SLOAD &&
 	   source->t.irt == (IRT_INT|IRT_GUARD) &&
-	   source->op1 == 4 && source->op2 == IRSLOAD_TYPECHECK;
+	   source->op1 == sourceslot &&
+	   source->op2 == IRSLOAD_TYPECHECK;
   }
   return irt_type(ir->t) == IRT_NUM &&
 	 arm64_ir_num_value_op((IROp)ir->o, allow_sub, allow_mul, allow_div);
@@ -2222,18 +2304,20 @@ static int arm64_ir_numacc_bytecode(const GCproto *pt,
 
 static int arm64_ir_numdynamic_kernel(const GCtrace *T, IRRef xslot,
 	IRRef stepslot, IRRef limitslot, unsigned grammar_profile,
-	unsigned step_kind)
+	unsigned args_kind)
 {
   const IRIns *ir = T->ir;
-  IRRef xref, stepintref, stepref, xpreref, limitref, preguardref;
+  IRRef xref, stepintref, stepref, xpreref;
+  IRRef limitintref, limitref, preguardref;
   IRRef loopref, xpollref, xbodyref, bodyguardref, xphiref;
   IRRef first_left, first_right;
   IROp recurrence_op, preop, bodyop;
-  if (step_kind == ARM64_NUMDYN_STEP_NUM) {
+  if (args_kind == ARM64_NUMDYN_ARGS_NUM) {
     xref = ARM64_NUMSTEP_R_X;
     stepintref = 0;
     stepref = ARM64_NUMSTEP_R_STEP;
     xpreref = ARM64_NUMSTEP_R_X_PRE;
+    limitintref = 0;
     limitref = ARM64_NUMSTEP_R_LIMIT;
     preguardref = ARM64_NUMSTEP_R_PRE_GUARD;
     loopref = ARM64_NUMSTEP_R_LOOP;
@@ -2241,11 +2325,12 @@ static int arm64_ir_numdynamic_kernel(const GCtrace *T, IRRef xslot,
     xbodyref = ARM64_NUMSTEP_R_X_BODY;
     bodyguardref = ARM64_NUMSTEP_R_BODY_GUARD;
     xphiref = ARM64_NUMSTEP_R_X_PHI;
-  } else if (step_kind == ARM64_NUMDYN_STEP_INT_TO_NUM) {
+  } else if (args_kind == ARM64_NUMDYN_ARGS_INT_STEP) {
     xref = ARM64_NUMACC_INTSTEP_R_X;
     stepintref = ARM64_NUMACC_INTSTEP_R_STEP_INT;
     stepref = ARM64_NUMACC_INTSTEP_R_STEP_NUM;
     xpreref = ARM64_NUMACC_INTSTEP_R_X_PRE;
+    limitintref = 0;
     limitref = ARM64_NUMACC_INTSTEP_R_LIMIT;
     preguardref = ARM64_NUMACC_INTSTEP_R_PRE_GUARD;
     loopref = ARM64_NUMACC_INTSTEP_R_LOOP;
@@ -2253,6 +2338,20 @@ static int arm64_ir_numdynamic_kernel(const GCtrace *T, IRRef xslot,
     xbodyref = ARM64_NUMACC_INTSTEP_R_X_BODY;
     bodyguardref = ARM64_NUMACC_INTSTEP_R_BODY_GUARD;
     xphiref = ARM64_NUMACC_INTSTEP_R_X_PHI;
+  } else if (args_kind == ARM64_NUMDYN_ARGS_INT_LIMIT &&
+	grammar_profile == ARM64_NUMDYN_ADD_LT) {
+    xref = ARM64_NUMACC_INTLIMIT_R_X;
+    stepintref = 0;
+    stepref = ARM64_NUMACC_INTLIMIT_R_STEP;
+    xpreref = ARM64_NUMACC_INTLIMIT_R_X_PRE;
+    limitintref = ARM64_NUMACC_INTLIMIT_R_LIMIT_INT;
+    limitref = ARM64_NUMACC_INTLIMIT_R_LIMIT_NUM;
+    preguardref = ARM64_NUMACC_INTLIMIT_R_PRE_GUARD;
+    loopref = ARM64_NUMACC_INTLIMIT_R_LOOP;
+    xpollref = ARM64_NUMACC_INTLIMIT_R_XPOLL;
+    xbodyref = ARM64_NUMACC_INTLIMIT_R_X_BODY;
+    bodyguardref = ARM64_NUMACC_INTLIMIT_R_BODY_GUARD;
+    xphiref = ARM64_NUMACC_INTLIMIT_R_X_PHI;
   } else {
     return 0;
   }
@@ -2336,7 +2435,7 @@ static int arm64_ir_numdynamic_kernel(const GCtrace *T, IRRef xslot,
    ir[(ref)].op1 == (left) && ir[(ref)].op2 == (right))
   if (!ARM64_NUMSTEP_INS(xref, IR_SLOAD,
 	IRT_NUM|IRT_GUARD, xslot, IRSLOAD_TYPECHECK) ||
-      (step_kind == ARM64_NUMDYN_STEP_NUM ?
+      (args_kind != ARM64_NUMDYN_ARGS_INT_STEP ?
        !ARM64_NUMSTEP_INS(stepref, IR_SLOAD,
 	 IRT_NUM|IRT_GUARD, stepslot, IRSLOAD_TYPECHECK) :
        (!ARM64_NUMSTEP_INS(stepintref, IR_SLOAD,
@@ -2345,8 +2444,13 @@ static int arm64_ir_numdynamic_kernel(const GCtrace *T, IRRef xslot,
 	  IRT_NUM, stepintref, IRCONV_NUM_INT))) ||
       !ARM64_NUMSTEP_INS(xpreref, recurrence_op,
 	IRT_NUM|IRT_ISPHI, first_left, first_right) ||
-      !ARM64_NUMSTEP_INS(limitref, IR_SLOAD,
-	IRT_NUM|IRT_GUARD, limitslot, IRSLOAD_TYPECHECK) ||
+      (args_kind != ARM64_NUMDYN_ARGS_INT_LIMIT ?
+       !ARM64_NUMSTEP_INS(limitref, IR_SLOAD,
+	 IRT_NUM|IRT_GUARD, limitslot, IRSLOAD_TYPECHECK) :
+       (!ARM64_NUMSTEP_INS(limitintref, IR_SLOAD,
+	  IRT_INT|IRT_GUARD, limitslot, IRSLOAD_TYPECHECK) ||
+	!ARM64_NUMSTEP_INS(limitref, IR_CONV,
+	  IRT_NUM, limitintref, IRCONV_NUM_INT))) ||
       !ARM64_NUMSTEP_INS(preguardref, preop,
 	IRT_NUM|IRT_GUARD, limitref, xpreref) ||
       !ARM64_NUMSTEP_INS(loopref, IR_LOOP,
@@ -2377,41 +2481,51 @@ static int arm64_ir_numstep_shape(const jit_State *J, const GCtrace *T,
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE,
 	ARM64_NUMSTEP_R_X, IR_ADD, 5);
   if (!arm64_ir_numdynamic_kernel(T, 4, 3, 2, ARM64_NUMDYN_ADD_LT,
-	ARM64_NUMDYN_STEP_NUM))
+	ARM64_NUMDYN_ARGS_NUM))
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
 	ARM64_NUMSTEP_R_X, IR_ADD, 6);
   return 1;
 }
 
-/* Exact all-parameter NUM accumulator canary for both admitted step kinds. */
+/* Exact all-parameter NUM accumulator canary for admitted argument kinds. */
 static int arm64_ir_numacc_shape(const jit_State *J, const GCtrace *T,
-	const GCproto *pt, IRRef firstphi, unsigned step_kind,
+	const GCproto *pt, IRRef firstphi, unsigned args_kind,
 	LJArm64IRReject *reject)
 {
   unsigned grammar_profile = arm64_numacc_grammar_profile(
 	proto_bc(pt), pt->sizebc);
-  IRRef semantic_nins = step_kind == ARM64_NUMDYN_STEP_NUM ?
-	ARM64_NUMACC_SEMANTIC_NINS : ARM64_NUMACC_INTSTEP_SEMANTIC_NINS;
-  IRRef xref = step_kind == ARM64_NUMDYN_STEP_NUM ?
-	ARM64_NUMACC_R_X : ARM64_NUMACC_INTSTEP_R_X;
-  IRRef xphiref = step_kind == ARM64_NUMDYN_STEP_NUM ?
-	ARM64_NUMACC_R_X_PHI : ARM64_NUMACC_INTSTEP_R_X_PHI;
+  IRRef semantic_nins = args_kind == ARM64_NUMDYN_ARGS_NUM ?
+	ARM64_NUMACC_SEMANTIC_NINS :
+	args_kind == ARM64_NUMDYN_ARGS_INT_STEP ?
+	ARM64_NUMACC_INTSTEP_SEMANTIC_NINS :
+	ARM64_NUMACC_INTLIMIT_SEMANTIC_NINS;
+  IRRef xref = args_kind == ARM64_NUMDYN_ARGS_NUM ?
+	ARM64_NUMACC_R_X :
+	args_kind == ARM64_NUMDYN_ARGS_INT_STEP ?
+	ARM64_NUMACC_INTSTEP_R_X : ARM64_NUMACC_INTLIMIT_R_X;
+  IRRef xphiref = args_kind == ARM64_NUMDYN_ARGS_NUM ?
+	ARM64_NUMACC_R_X_PHI :
+	args_kind == ARM64_NUMDYN_ARGS_INT_STEP ?
+	ARM64_NUMACC_INTSTEP_R_X_PHI : ARM64_NUMACC_INTLIMIT_R_X_PHI;
   IROp recurrence_op = arm64_numdynamic_is_sub(grammar_profile) ? IR_SUB :
 	arm64_numdynamic_is_mul(grammar_profile) ? IR_MUL :
 	arm64_numdynamic_is_div(grammar_profile) ? IR_DIV : IR_ADD;
-  if ((step_kind != ARM64_NUMDYN_STEP_NUM &&
-	step_kind != ARM64_NUMDYN_STEP_INT_TO_NUM) ||
+  if ((args_kind != ARM64_NUMDYN_ARGS_NUM &&
+	args_kind != ARM64_NUMDYN_ARGS_INT_STEP &&
+	args_kind != ARM64_NUMDYN_ARGS_INT_LIMIT) ||
+	(args_kind == ARM64_NUMDYN_ARGS_INT_LIMIT &&
+	 grammar_profile != ARM64_NUMDYN_ADD_LT) ||
 	T->nk != REF_TRUE || T->nins != semantic_nins ||
 	firstphi != xphiref ||
 	!arm64_ir_numacc_bytecode(pt, trace_startpc_acq((GCtrace *)T),
 	  &grammar_profile) ||
 	!arm64_numacc_snapshots(T->snap, T->snapmap, T->nsnap,
 	  T->nsnapmap, proto_bc(pt), pt->sizebc,
-	  (uint8_t)(J->baseslot-2u), step_kind))
+	  (uint8_t)(J->baseslot-2u), args_kind))
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE,
 	xref, recurrence_op, 7);
   if (!arm64_ir_numdynamic_kernel(T, 2, 4, 3, grammar_profile,
-	step_kind))
+	args_kind))
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
 	xref, recurrence_op, 8);
   return 1;
@@ -2700,7 +2814,7 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
   unsigned nloop = 0, nxpoll = 0, nphi = 0;
   unsigned scalar_mode = 0, constant_profile = 0;
   unsigned numdynamic_profile = 0;
-  unsigned numdynamic_step_kind = ARM64_NUMDYN_STEP_NUM;
+  unsigned numdynamic_args_kind = ARM64_NUMDYN_ARGS_NUM;
   int allow_num_sub = 0, allow_num_mul = 0, allow_num_div = 0;
   BCOp startop;
   if (reject) {
@@ -2804,14 +2918,22 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
       break;
     case IR_CONV:
       if (numdynamic_profile == 0 ||
-	  ref != ARM64_NUMACC_INTSTEP_R_STEP_NUM ||
-	  ir->t.irt != IRT_NUM ||
-	  ir->op1 != ARM64_NUMACC_INTSTEP_R_STEP_INT ||
-	  ir->op2 != IRCONV_NUM_INT)
+	  numdynamic_args_kind != ARM64_NUMDYN_ARGS_NUM ||
+	  ir->t.irt != IRT_NUM || ir->op2 != IRCONV_NUM_INT)
 	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE, ref,
 			       IR_CONV, ir->op2);
+      if (ref == ARM64_NUMACC_INTSTEP_R_STEP_NUM &&
+	  ir->op1 == ARM64_NUMACC_INTSTEP_R_STEP_INT) {
+	numdynamic_args_kind = ARM64_NUMDYN_ARGS_INT_STEP;
+      } else if (numdynamic_profile == ARM64_NUMDYN_ADD_LT &&
+	  ref == ARM64_NUMACC_INTLIMIT_R_LIMIT_NUM &&
+	  ir->op1 == ARM64_NUMACC_INTLIMIT_R_LIMIT_INT) {
+	numdynamic_args_kind = ARM64_NUMDYN_ARGS_INT_LIMIT;
+      } else {
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE, ref,
+			       IR_CONV, ir->op2);
+      }
       scalar_mode |= ARM64_IR_SCALAR_NUM;
-      numdynamic_step_kind = ARM64_NUMDYN_STEP_INT_TO_NUM;
       break;
     case IR_LT: case IR_GE: case IR_LE: case IR_GT:
       if (irt_type(ir->t) == IRT_INT) {
@@ -2959,9 +3081,9 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
     return 0;
   if ((scalar_mode & ARM64_IR_SCALAR_NUM) != 0) {
     if (scalar_mode == (ARM64_IR_SCALAR_INT|ARM64_IR_SCALAR_NUM)) {
-      if (numdynamic_step_kind == ARM64_NUMDYN_STEP_INT_TO_NUM) {
+      if (numdynamic_args_kind != ARM64_NUMDYN_ARGS_NUM) {
 	if (!arm64_ir_numacc_shape(J, T, pt, firstphi,
-	      numdynamic_step_kind, reject))
+	      numdynamic_args_kind, reject))
 	  return 0;
       } else if (constant_profile != ARM64_IR_KPROFILE_INT ||
 	  startop != BC_LOOP ||
@@ -2982,7 +3104,7 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
 	    return 0;
 	} else if (pt->sizebc == 13) {
 	  if (!arm64_ir_numacc_shape(J, T, pt, firstphi,
-		ARM64_NUMDYN_STEP_NUM, reject))
+		ARM64_NUMDYN_ARGS_NUM, reject))
 	    return 0;
 	} else {
 	  return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TRACE,
