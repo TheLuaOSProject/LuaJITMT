@@ -129,7 +129,8 @@ awk '/^_lj_BC_JLOOP:/ { copy=1 }
      copy && /^_lj_BC_JMP:/ { exit }' "$vm_disasm" >"$jloop_region"
 awk '/^_lj_BC_JFUNCF:/ { copy=1 }
      copy { print }
-     copy && /^_lj_BC_FUNCV:/ { exit }' "$vm_disasm" >"$jfuncf_region"
+     copy && /^_lj_BC_(FUNCV|IFUNCV):/ { exit }' \
+  "$vm_disasm" >"$jfuncf_region"
 awk '/^_lj_BC_JFUNCV:/ { copy=1 }
      copy { print }
      copy && /^_lj_BC_FUNCC:/ { exit }' "$vm_disasm" >"$jfuncv_region"

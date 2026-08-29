@@ -454,7 +454,7 @@ grep 'BR26.*_lj_trace_enter_root$' "$vm_reloc" >/dev/null
 otool -tvV "$vm_object" >"$vm_disasm"
 awk '/^_lj_BC_JFUNCF:/ { copy=1 }
      copy { print }
-     copy && /^_lj_BC_FUNCV:/ { exit }' \
+     copy && /^_lj_BC_(FUNCV|IFUNCV):/ { exit }' \
   "$vm_disasm" >"$jfuncf_disasm"
 test -s "$jfuncf_disasm"
 grep -E 'sub[[:space:]]+sp, sp, #0x10' "$jfuncf_disasm" >/dev/null
@@ -510,7 +510,7 @@ grep '^_main:' "$pauth_disasm" >/dev/null
 otool -tvV "$vm_object" >"$pauth_vm_disasm"
 awk '/^_lj_BC_JFUNCF:/ { copy=1 }
      copy { print }
-     copy && /^_lj_BC_FUNCV:/ { exit }' \
+     copy && /^_lj_BC_(FUNCV|IFUNCV):/ { exit }' \
   "$pauth_vm_disasm" >"$pauth_jfuncf_disasm"
 test -s "$pauth_jfuncf_disasm"
 grep -E 'bti[[:space:]]+j' "$pauth_jfuncf_disasm" >/dev/null

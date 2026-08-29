@@ -173,7 +173,7 @@ grep -E 'sub[[:space:]]+sp, sp, #0x10' "$jforl_disasm" >/dev/null
 grep -E 'braa[[:space:]]+x1, x0' "$jforl_disasm" >/dev/null
 awk '/^_lj_BC_JFUNCF:/ { copy=1 }
      copy { print }
-     copy && /^_lj_BC_FUNCV:/ { exit }' \
+     copy && /^_lj_BC_(FUNCV|IFUNCV):/ { exit }' \
   "$vm_disasm" >"$jfuncf_disasm"
 test -s "$jfuncf_disasm"
 grep -E 'bti[[:space:]]+j' "$jfuncf_disasm" >/dev/null
