@@ -568,9 +568,9 @@ for required in \
   'SNAP(5, 0, ARM64_NUMACC_INTLIMIT_R_X_PRE),' \
   'SNAP(2, 0, ARM64_NUMACC_INTLIMIT_R_X_BODY)' \
   'nsnap != 5 || nsnapmap != 15 || proto_sizebc != 13' \
-  'args_kind != ARM64_NUMDYN_ARGS_INT_STEP &&' \
-  'args_kind != ARM64_NUMDYN_ARGS_INT_LIMIT))' \
-  'kindidx = (MSize)(args_kind-ARM64_NUMDYN_ARGS_NUM);' \
+  'case ARM64_NUMDYN_ARGS_NUM: kindidx = 0; break;' \
+  'case ARM64_NUMDYN_ARGS_INT_STEP: kindidx = 1; break;' \
+  'case ARM64_NUMDYN_ARGS_INT_LIMIT: kindidx = 2; break;' \
   'static int arm64_postra_numdynamic_kernel(const LJArm64PostRAView *view,' \
   'IRRef xslot, IRRef stepslot, IRRef limitslot,' \
   'unsigned grammar_profile, unsigned args_kind)' \
@@ -597,17 +597,17 @@ for required in \
   'bodyop = IR_LE;' \
   'preop = IR_LT;' \
   'bodyop = IR_GT;' \
-  'ARM64_NUMSTEP_POSTRA_INS(stepintref, IR_SLOAD,' \
+  'ARM64_NUMDYN_POSTRA_INS(stepintref, IR_SLOAD,' \
   'IRT_INT|IRT_GUARD, stepslot, IRSLOAD_TYPECHECK)' \
-  'ARM64_NUMSTEP_POSTRA_INS(stepref, IR_CONV,' \
+  'ARM64_NUMDYN_POSTRA_INS(stepref, IR_CONV,' \
   'IRT_NUM, stepintref, IRCONV_NUM_INT)' \
-  'ARM64_NUMSTEP_POSTRA_INS(limitintref, IR_SLOAD,' \
+  'ARM64_NUMDYN_POSTRA_INS(limitintref, IR_SLOAD,' \
   'IRT_INT|IRT_GUARD, limitslot, IRSLOAD_TYPECHECK)' \
-  'ARM64_NUMSTEP_POSTRA_INS(limitref, IR_CONV,' \
+  'ARM64_NUMDYN_POSTRA_INS(limitref, IR_CONV,' \
   'IRT_NUM, limitintref, IRCONV_NUM_INT)' \
-  'ARM64_NUMSTEP_POSTRA_INS(xpreref, recurrence_op,' \
+  'ARM64_NUMDYN_POSTRA_INS(xpreref, recurrence_op,' \
   'IRT_NUM|IRT_ISPHI, first_left, first_right)' \
-  'ARM64_NUMSTEP_POSTRA_INS(xbodyref, recurrence_op,' \
+  'ARM64_NUMDYN_POSTRA_INS(xbodyref, recurrence_op,' \
   'step_int.s != SPS_NONE || step_int.r >= RID_MAX_GPR ||' \
   '!rset_test(RSET_GPR, step_int.r) || step.s != SPS_NONE ||' \
   'step.r < RID_MIN_FPR || step.r >= RID_MAX_FPR ||' \
@@ -669,11 +669,11 @@ for required in \
   'static int arm64_ir_numdynamic_kernel(const GCtrace *T, IRRef xslot,' \
   'IRRef stepslot, IRRef limitslot, unsigned grammar_profile,' \
   'unsigned args_kind)' \
-  'ARM64_NUMSTEP_INS(stepintref, IR_SLOAD,' \
-  'ARM64_NUMSTEP_INS(stepref, IR_CONV,' \
+  'ARM64_NUMDYN_INS(stepintref, IR_SLOAD,' \
+  'ARM64_NUMDYN_INS(stepref, IR_CONV,' \
   'IRT_NUM, stepintref, IRCONV_NUM_INT)' \
-  'ARM64_NUMSTEP_INS(xpreref, recurrence_op,' \
-  'ARM64_NUMSTEP_INS(xbodyref, recurrence_op,' \
+  'ARM64_NUMDYN_INS(xpreref, recurrence_op,' \
+  'ARM64_NUMDYN_INS(xbodyref, recurrence_op,' \
   'bc_b(ins) != 3 || bc_c(ins) != 4)' \
   'static int arm64_ir_numacc_shape(const jit_State *J, const GCtrace *T,' \
   'IRRef semantic_nins = args_kind == ARM64_NUMDYN_ARGS_NUM ?' \
