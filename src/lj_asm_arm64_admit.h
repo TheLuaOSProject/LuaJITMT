@@ -219,7 +219,7 @@ enum {
 };
 
 #if LJ_HASJIT_FFI_CALLXS
-/* First Darwin ARM64 native-call root. Keep the complete reference geometry
+/* Exact Darwin ARM64 native-call roots. Keep the complete reference geometry
 ** explicit: LOOP substitution duplicates the rooted metatable lookup and both
 ** native lifecycles, while the exact function identity remains shared. */
 typedef enum LJArm64CallXSProfile {

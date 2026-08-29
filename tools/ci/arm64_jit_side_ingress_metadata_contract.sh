@@ -104,7 +104,6 @@ grep -E '^#define LJ_ARM64_JIT_EXIT_TARGET_SLOTS[[:space:]]+1$' \
   "$macros" >/dev/null
 
 for symbol in _lj_trace_arm64_first_side_loop_valid \
-  _lj_trace_test_arm64_first_side_loop_valid \
   _lj_trace_arm64_side_parent_clear \
   _lj_trace_arm64_side_parent_capture \
   _lj_trace_arm64_side_parent_revalidate; do
@@ -350,7 +349,7 @@ require_order "$preflight_region" \
 # token-owned per-instruction preflight, and the separately guarded one-shot
 # test seam. Unsupported first sides and side-of-side must still fail closed.
 test "$(grep -Fc 'lj_trace_arm64_first_side_loop_valid(' \
-  "$root/src/lj_trace.c")" = 7
+  "$root/src/lj_trace.c")" = 6
 sed -n '/^static TraceStartResult trace_start(jit_State \*J)/,/^}/p' \
   "$root/src/lj_trace.c" >"$production_regions"
 sed -n '/^static int trace_arm64_first_side_recorder_preflight(/,/^}/p' \
@@ -536,13 +535,13 @@ for required in \
   }
 done
 test "$(grep -Fc \
-  'assert(!lj_trace_test_arm64_first_side_loop_valid(' \
+  'assert(!lj_trace_arm64_first_side_loop_valid(' \
   "$third_descriptor_region")" = 4 || {
   echo "ARM64 third side descriptor lost its four coupled rejections" >&2
   exit 1
 }
 test "$(grep -Fc \
-  'assert(lj_trace_test_arm64_first_side_loop_valid(' \
+  'assert(lj_trace_arm64_first_side_loop_valid(' \
   "$third_descriptor_region")" = 4 || {
   echo "ARM64 third side descriptor lost its four context admissions" >&2
   exit 1

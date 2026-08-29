@@ -295,7 +295,7 @@ static int side_meta_check_at(lua_State *L, SideMetaFixture *f,
                               uint32_t context)
 {
   uint8_t before = f->snap[SIDE_META_EXIT].count;
-  int ok = lj_trace_test_arm64_first_side_loop_valid(
+  int ok = lj_trace_arm64_first_side_loop_valid(
     L2J(L), context == LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA ? NULL : L,
     SIDE_META_PARENT, SIDE_META_EXIT, continuation, pc, context);
   assert(f->snap[SIDE_META_EXIT].count == before);
@@ -327,29 +327,29 @@ static void test_second_descriptor(lua_State *L, SideMetaFixture *f)
   side_meta_pack_pc(&f->snapmap[footer], continuation, 0);
   /* Exit 6 is not a free-standing alternative: its parent snapshot count and
   ** continuation offset belong to the same exact descriptor. */
-  assert(!lj_trace_test_arm64_first_side_loop_valid(
+  assert(!lj_trace_arm64_first_side_loop_valid(
     J, NULL, SIDE_META_PARENT, SIDE_META_SECOND_EXIT, continuation, NULL,
     LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA));
   T->nsnap = SIDE_META_SECOND_NSNAP;
   T->nsnapmap = SIDE_META_CAP_NSNAPMAP;
-  assert(!lj_trace_test_arm64_first_side_loop_valid(
+  assert(!lj_trace_arm64_first_side_loop_valid(
     J, NULL, SIDE_META_PARENT, SIDE_META_EXIT,
     &proto_bc(f->pt)[SIDE_META_PC_POS], NULL,
     LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA));
-  assert(!lj_trace_test_arm64_first_side_loop_valid(
+  assert(!lj_trace_arm64_first_side_loop_valid(
     J, NULL, SIDE_META_PARENT, SIDE_META_SECOND_EXIT,
     &proto_bc(f->pt)[SIDE_META_PC_POS], NULL,
     LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA));
-  assert(lj_trace_test_arm64_first_side_loop_valid(
+  assert(lj_trace_arm64_first_side_loop_valid(
     J, NULL, SIDE_META_PARENT, SIDE_META_SECOND_EXIT, continuation, NULL,
     LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA));
-  assert(lj_trace_test_arm64_first_side_loop_valid(
+  assert(lj_trace_arm64_first_side_loop_valid(
     J, L, SIDE_META_PARENT, SIDE_META_SECOND_EXIT,
     continuation, continuation,
     LJ_TRACE_ARM64_SIDE_CONTEXT_IDLE));
 
   assert(lj_jit_token_try_l(L, J));
-  assert(lj_trace_test_arm64_first_side_loop_valid(
+  assert(lj_trace_arm64_first_side_loop_valid(
     J, L, SIDE_META_PARENT, SIDE_META_SECOND_EXIT,
     continuation, continuation,
     LJ_TRACE_ARM64_SIDE_CONTEXT_CLAIM));
@@ -357,7 +357,7 @@ static void test_second_descriptor(lua_State *L, SideMetaFixture *f)
   J->parent = SIDE_META_PARENT;
   J->exitno = SIDE_META_SECOND_EXIT;
   lj_trace_state_store(J, LJ_TRACE_START);
-  assert(lj_trace_test_arm64_first_side_loop_valid(
+  assert(lj_trace_arm64_first_side_loop_valid(
     J, L, SIDE_META_PARENT, SIDE_META_SECOND_EXIT,
     continuation, continuation,
     LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER));
@@ -395,39 +395,39 @@ static void test_third_descriptor(lua_State *L, SideMetaFixture *f)
   /* Exit 7 couples the first descriptor's continuation geometry with a
   ** separately observed eleven-snapshot parent. Neither half is admitted on
   ** its own, and the other known exits remain tied to their own parent shape. */
-  assert(!lj_trace_test_arm64_first_side_loop_valid(
+  assert(!lj_trace_arm64_first_side_loop_valid(
     J, NULL, SIDE_META_PARENT, SIDE_META_THIRD_EXIT, continuation, NULL,
     LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA));
   T->nsnap = SIDE_META_THIRD_NSNAP;
   T->nsnapmap = SIDE_META_CAP_NSNAPMAP;
-  assert(!lj_trace_test_arm64_first_side_loop_valid(
+  assert(!lj_trace_arm64_first_side_loop_valid(
     J, NULL, SIDE_META_PARENT, SIDE_META_EXIT,
     &proto_bc(f->pt)[SIDE_META_PC_POS], NULL,
     LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA));
-  assert(!lj_trace_test_arm64_first_side_loop_valid(
+  assert(!lj_trace_arm64_first_side_loop_valid(
     J, NULL, SIDE_META_PARENT, SIDE_META_SECOND_EXIT,
     &proto_bc(f->pt)[SIDE_META_SECOND_PC_POS], NULL,
     LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA));
-  assert(!lj_trace_test_arm64_first_side_loop_valid(
+  assert(!lj_trace_arm64_first_side_loop_valid(
     J, NULL, SIDE_META_PARENT, SIDE_META_THIRD_EXIT,
     &proto_bc(f->pt)[SIDE_META_SECOND_PC_POS], NULL,
     LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA));
-  assert(lj_trace_test_arm64_first_side_loop_valid(
+  assert(lj_trace_arm64_first_side_loop_valid(
     J, NULL, SIDE_META_PARENT, SIDE_META_THIRD_EXIT, continuation, NULL,
     LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA));
-  assert(lj_trace_test_arm64_first_side_loop_valid(
+  assert(lj_trace_arm64_first_side_loop_valid(
     J, L, SIDE_META_PARENT, SIDE_META_THIRD_EXIT,
     continuation, continuation, LJ_TRACE_ARM64_SIDE_CONTEXT_IDLE));
 
   assert(lj_jit_token_try_l(L, J));
-  assert(lj_trace_test_arm64_first_side_loop_valid(
+  assert(lj_trace_arm64_first_side_loop_valid(
     J, L, SIDE_META_PARENT, SIDE_META_THIRD_EXIT,
     continuation, continuation, LJ_TRACE_ARM64_SIDE_CONTEXT_CLAIM));
   jit_owner_l_rel(J, L);
   J->parent = SIDE_META_PARENT;
   J->exitno = SIDE_META_THIRD_EXIT;
   lj_trace_state_store(J, LJ_TRACE_START);
-  assert(lj_trace_test_arm64_first_side_loop_valid(
+  assert(lj_trace_arm64_first_side_loop_valid(
     J, L, SIDE_META_PARENT, SIDE_META_THIRD_EXIT,
     continuation, continuation, LJ_TRACE_ARM64_SIDE_CONTEXT_OWNER));
   lj_trace_state_store(J, LJ_TRACE_IDLE);
@@ -472,10 +472,10 @@ static void test_metadata_mutations(lua_State *L, SideMetaFixture *f)
 
   assert(side_meta_check(L, f, &bc[SIDE_META_PC_POS],
                          LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA));
-  assert(!lj_trace_test_arm64_first_side_loop_valid(
+  assert(!lj_trace_arm64_first_side_loop_valid(
     J, NULL, 0, SIDE_META_EXIT, &bc[SIDE_META_PC_POS], NULL,
     LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA));
-  assert(!lj_trace_test_arm64_first_side_loop_valid(
+  assert(!lj_trace_arm64_first_side_loop_valid(
     J, NULL, SIDE_META_PARENT, SIDE_META_NSNAP, &bc[SIDE_META_PC_POS], NULL,
     LJ_TRACE_ARM64_SIDE_CONTEXT_METADATA));
 

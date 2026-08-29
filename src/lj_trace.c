@@ -5489,16 +5489,6 @@ uint32_t lj_trace_test_arm64_side_publish_raw_negative(void)
 }
 #endif
 
-#ifdef LJ_TRACE_TEST_HELPERS
-int lj_trace_test_arm64_first_side_loop_valid(jit_State *J, lua_State *L,
-    TraceNo parent, ExitNo exitno, const BCIns *continuation,
-    const BCIns *pc, uint32_t context)
-{
-  return lj_trace_arm64_first_side_loop_valid(
-    J, L, parent, exitno, continuation, pc, context);
-}
-#endif
-
 typedef struct TraceArm64FirstChildEntryView {
   TraceVec *tracev;
   GCtrace *body;
@@ -6543,13 +6533,13 @@ static int trace_mcode_area_refs(global_State *g, GCtrace *T, uintptr_t rxlo,
   if (trace_exittab_ismcode(T))
     return trace_ptr_in_mcode_area(exittab, rxlo, rxhi, rwlo, rwhi);
   nexits = (MSize)nsnap;
-#if LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS
+#if LJ_ARM64_JIT_EXIT_TARGET_SLOTS
   if (trace_root_acq(T) != 0)
     nexits++;
 #endif
   for (i = 0; i < nexits; i++)
     if (trace_ptr_in_mcode_area(
-#if LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS
+#if LJ_ARM64_JIT_EXIT_TARGET_SLOTS
 		trace_exittarget_arm64_acq(T, (ExitNo)i),
 #else
 		la_loadptr_acq((void *const *)&exittab[i]),
@@ -7184,7 +7174,7 @@ static int trace_arm64_first_side_publish_enabled(jit_State *J)
 #endif
 }
 
-/* Publish the one certified first child. All refusal points precede the
+/* Publish a certified first child. All refusal points precede the
 ** ASM->PUBLISH CAS. The suffix after it has one finite operation per shared
 ** destination and aborts the process on any impossible generation mismatch. */
 static int trace_stop_arm64_first_side(jit_State *J)
@@ -10397,7 +10387,7 @@ static void trace_arm64_abort_exact_owner(jit_State *J, lua_State *owner)
     lj_trace_abort_owner(owner);
 }
 
-/* Prove that a VM recorder dispatch still belongs to the one admitted root.
+/* Prove that a VM recorder dispatch still belongs to an admitted exact root.
 ** No unproved J->L value is passed to destructive recorder cleanup. */
 #if !LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED
 static int trace_arm64_root_recorder_preflight(jit_State *J,
@@ -10456,8 +10446,8 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
       if (bc_op(ins) != BC_FUNCC)
 	return 0;
       if (J->postproc == LJ_POST_NONE) {
-        /* The one admitted scalar call enters its recorder fast function
-        ** before producing CALLXS and the pending caller return. */
+        /* An admitted exact call enters its recorder fast function before
+        ** producing CALLXS and the pending caller return. */
         if (J->fn == NULL || !isluafunc(J->fn) ||
 	    funcproto(J->fn) != rootpt || J->pt != rootpt)
 	  return 0;

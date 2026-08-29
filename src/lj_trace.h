@@ -185,9 +185,6 @@ LJ_FUNC uint32_t lj_trace_test_root_entry_publishes(void);
 LJ_FUNC uint32_t lj_trace_test_root_entry_cleanups(void);
 LJ_FUNC void lj_trace_test_root_entry_retry_restore(BCIns *pc, BCIns ins);
 LJ_FUNC uint32_t lj_trace_test_root_entry_startins_calls(void);
-LJ_FUNC int lj_trace_test_arm64_first_side_loop_valid(
-  jit_State *J, lua_State *L, TraceNo parent, ExitNo exitno,
-  const BCIns *continuation, const BCIns *pc, uint32_t context);
 #endif
 
 typedef struct LJJitEventFrozenViewSpec {

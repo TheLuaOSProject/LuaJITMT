@@ -61,7 +61,7 @@ typedef struct LJArm64PostRAView {
   uint8_t base_delta;
 } LJArm64PostRAView;
 
-/* Pure immutable view for the first bounded ARM64 side-trace grammar. This is
+/* Pure immutable view for the bounded ARM64 side-trace grammars. This is
 ** intentionally separate from GCtrace/jit_State so the policy can be tested
 ** before any recorder or publication path is opened. */
 typedef struct LJArm64SideIRView {
@@ -89,7 +89,7 @@ typedef struct LJArm64SideIRView {
 
 enum { LJ_ARM64_SIDE_CHILD_NSNAP = 5 };
 
-/* Exact root/child bytecode geometry for one admitted first-side shape. */
+/* Exact root/child bytecode geometry for an admitted first-side shape. */
 typedef struct LJArm64SideShape {
   ExitNo exitno;
   MSize parent_nsnap;

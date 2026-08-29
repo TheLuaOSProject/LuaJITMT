@@ -569,11 +569,11 @@
 #error "LUAJIT_MT_ARM64_JIT_EXPERIMENTAL cannot be combined with LUAJIT_DISABLE_JIT"
 #endif
 /* Exact bounded integer and separately certified numeric BC_LOOP roots, plus
-** constant-step integer BC_FORL roots, are executable. JFORL enters only from
-** the taken integer edge after the interpreter has updated both IDX and EXT;
-** the FP edge remains on branch-only recovery. Exact literal-true
-** fixed-function roots may publish and enter through their independent exact
-** certificate. */
+** separately certified constant-step and exact variable-stop/variable-step
+** integer BC_FORL roots, are executable. JFORL enters only from the taken
+** integer edge after the interpreter has updated both IDX and EXT; the FP edge
+** remains on branch-only recovery. Exact literal-true fixed-function roots may
+** publish and enter through their independent exact certificate. */
 #define LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED		0
 #define LJ_ARM64_JIT_FORL_RECORDER_FAIL_CLOSED		0
 #define LJ_ARM64_JIT_FUNCF_RECORDER_FAIL_CLOSED		0
@@ -585,8 +585,8 @@
     defined(LUAJIT_USE_PERFTOOLS)
 #define LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED	1
 #else
-/* Production canary: only the exact certified first child is admitted. The
-** broad side gate stays closed for every other first side and side-of-side.
+/* Production canary: only the exact certified first-child shapes are admitted.
+** The broad side gate stays closed for every other first side and side-of-side.
 ** Optional GDBJIT metadata has its own bounded publication transaction. */
 #define LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED	0
 #endif

@@ -1,5 +1,5 @@
 /*
-** Pure contract for the first bounded ARM64 side-trace grammar and the exact
+** Pure contract for the bounded ARM64 first-side grammars and the exact
 ** allocator layout captured by an abort-before-publication native probe.
 ** Production assembly consumes this certificate for the exact first-side
 ** canary. Broader side grammars remain closed and no generated code runs in
