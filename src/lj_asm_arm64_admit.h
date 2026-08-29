@@ -222,6 +222,12 @@ enum {
 /* First Darwin ARM64 native-call root. Keep the complete reference geometry
 ** explicit: LOOP substitution duplicates the rooted metatable lookup and both
 ** native lifecycles, while the exact function identity remains shared. */
+typedef enum LJArm64CallXSProfile {
+  ARM64_CALLXS_PROFILE_NONE,
+  ARM64_CALLXS_PROFILE_I32,
+  ARM64_CALLXS_PROFILE_DOUBLE
+} LJArm64CallXSProfile;
+
 enum {
   ARM64_CALLXS_K_ZERO = REF_TRUE-15u,
   ARM64_CALLXS_K_ROOT = REF_TRUE-14u,
@@ -283,6 +289,19 @@ enum {
   ARM64_CALLXS_R_BOUND_GUARD_BODY,
   ARM64_CALLXS_R_INDEX_PHI,
   ARM64_CALLXS_SEMANTIC_NINS
+};
+
+/* double(double) adds one conversion immediately before each XSAVE. */
+enum {
+  ARM64_CALLXS_D_R_ARG_PRE = ARM64_CALLXS_R_XSAVE_PRE,
+  ARM64_CALLXS_D_R_XSAVE_PRE = ARM64_CALLXS_R_XSAVE_PRE+1u,
+  ARM64_CALLXS_D_R_INDEX_PRE = ARM64_CALLXS_R_INDEX_PRE+1u,
+  ARM64_CALLXS_D_R_XPOLL = ARM64_CALLXS_R_XPOLL+1u,
+  ARM64_CALLXS_D_R_MT_BODY = ARM64_CALLXS_R_MT_BODY+1u,
+  ARM64_CALLXS_D_R_ARG_BODY = ARM64_CALLXS_R_XSAVE_BODY+1u,
+  ARM64_CALLXS_D_R_XSAVE_BODY = ARM64_CALLXS_R_XSAVE_BODY+2u,
+  ARM64_CALLXS_D_R_INDEX_PHI = ARM64_CALLXS_R_INDEX_PHI+2u,
+  ARM64_CALLXS_D_SEMANTIC_NINS = ARM64_CALLXS_SEMANTIC_NINS+2u
 };
 #endif
 
@@ -1555,33 +1574,40 @@ static int arm64_callxs_constant_shape(const IRIns *ir, IRRef nk,
   return k.o == IR_KINT && k.t.irt == IRT_INT && k.i == 1;
 }
 
-static int arm64_callxs_i32_signature(const jit_State *J, const IRIns *ir)
+static LJArm64CallXSProfile arm64_callxs_signature(const jit_State *J,
+	const IRIns *ir)
 {
   CTState *cts;
   CType ctf, field;
   CTInfo info, finfo;
-  CTypeID id, fid;
+  CTypeID id, fid, result;
   IRIns k;
   if (J == NULL || ir == NULL)
-    return 0;
+    return ARM64_CALLXS_PROFILE_NONE;
   k = ir_load_acq(&ir[ARM64_CALLXS_K_CTYPE]);
   if (k.o != IR_KINT || k.i <= 0)
-    return 0;
+    return ARM64_CALLXS_PROFILE_NONE;
   id = (CTypeID)k.i;
   cts = ctype_ctsG(J2G(J));
   if (lj_ctype_snapshot(cts, id, &ctf) <= 0)
-    return 0;
+    return ARM64_CALLXS_PROFILE_NONE;
   info = ctype_info_acq(&ctf);
   if (!ctype_isfunc(info) || ctype_size_acq(&ctf) != 1 ||
 	(info & CTF_VARARG) != 0 ||
-	ctype_cconv(info) != CTCC_CDECL || ctype_cid(info) != CTID_INT32)
-    return 0;
+	ctype_cconv(info) != CTCC_CDECL)
+    return ARM64_CALLXS_PROFILE_NONE;
+  result = ctype_cid(info);
+  if (result != CTID_INT32 && result != CTID_DOUBLE)
+    return ARM64_CALLXS_PROFILE_NONE;
   fid = ctype_sib_acq(&ctf);
   if (fid == 0 || lj_ctype_snapshot(cts, fid, &field) <= 0)
-    return 0;
+    return ARM64_CALLXS_PROFILE_NONE;
   finfo = ctype_info_acq(&field);
-  return ctype_isfield(finfo) && ctype_cid(finfo) == CTID_INT32 &&
-	 ctype_sib_acq(&field) == 0;
+  if (!ctype_isfield(finfo) || ctype_cid(finfo) != result ||
+	ctype_sib_acq(&field) != 0)
+    return ARM64_CALLXS_PROFILE_NONE;
+  return result == CTID_INT32 ? ARM64_CALLXS_PROFILE_I32 :
+	 ARM64_CALLXS_PROFILE_DOUBLE;
 }
 
 static int arm64_callxs_bytecode(const BCIns *bc, MSize sizebc,
@@ -1643,125 +1669,190 @@ static int arm64_callxs_bytecode(const BCIns *bc, MSize sizebc,
 	 bc_d(ins[15]) == 2;
 }
 
-static int arm64_callxs_ir_shape(const IRIns *ir)
+static IRRef arm64_callxs_profile_ref(LJArm64CallXSProfile profile, IRRef ref)
+{
+  if (profile == ARM64_CALLXS_PROFILE_DOUBLE) {
+    if (ref >= ARM64_CALLXS_R_XSAVE_BODY)
+      return ref+2u;
+    if (ref >= ARM64_CALLXS_R_XSAVE_PRE)
+      return ref+1u;
+  }
+  return ref;
+}
+
+static int arm64_callxs_ir_shape(const IRIns *ir,
+	LJArm64CallXSProfile profile)
 {
 #define ARM64_CALLXS_INS(ref, op, type, left, right) \
   arm64_callxs_ins(ir, (ref), (op), (type), (left), (right))
+#define ARM64_CALLXS_REF(ref) arm64_callxs_profile_ref(profile, (ref))
+  IRRef argpre, argbody;
+  IRType calltype;
+  if (profile != ARM64_CALLXS_PROFILE_I32 &&
+	profile != ARM64_CALLXS_PROFILE_DOUBLE)
+    return 0;
+  argpre = profile == ARM64_CALLXS_PROFILE_DOUBLE ?
+	ARM64_CALLXS_D_R_ARG_PRE : ARM64_CALLXS_R_INDEX;
+  argbody = profile == ARM64_CALLXS_PROFILE_DOUBLE ?
+	ARM64_CALLXS_D_R_ARG_BODY : ARM64_CALLXS_R_INDEX_PRE;
+  calltype = profile == ARM64_CALLXS_PROFILE_DOUBLE ? IRT_NUM : IRT_INT;
   return ARM64_CALLXS_INS(REF_BASE, IR_BASE, IRT_PGC, 0, 0) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_LIMIT, IR_SLOAD, IRT_INT,
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_LIMIT),
+	IR_SLOAD, IRT_INT,
 	5, IRSLOAD_READONLY|IRSLOAD_INHERIT) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_LIMIT_GUARD, IR_LE,
-	IRT_INT|IRT_GUARD, ARM64_CALLXS_R_LIMIT,
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_LIMIT_GUARD),
+	IR_LE, IRT_INT|IRT_GUARD, ARM64_CALLXS_REF(ARM64_CALLXS_R_LIMIT),
 	ARM64_CALLXS_K_LIMITMAX) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_INDEX, IR_SLOAD,
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_INDEX), IR_SLOAD,
 	IRT_INT|IRT_GUARD, 4, IRSLOAD_TYPECHECK|IRSLOAD_INHERIT) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_FUNC, IR_SLOAD,
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_FUNC), IR_SLOAD,
 	IRT_CDATA|IRT_GUARD, 2, IRSLOAD_TYPECHECK) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_MT, IR_FLOAD, IRT_TAB,
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_MT), IR_FLOAD, IRT_TAB,
 	REF_NIL, GG_OFS(g.gcroot[GCROOT_BASEMT+(~LJ_TCDATA)]) >> 2) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_MT_GUARD, IR_EQ,
-	IRT_TAB|IRT_GUARD, ARM64_CALLXS_R_MT, ARM64_CALLXS_K_TABLE) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_TABLE_ROOT, IR_TMPREF, IRT_PGC,
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_MT_GUARD), IR_EQ,
+	IRT_TAB|IRT_GUARD, ARM64_CALLXS_REF(ARM64_CALLXS_R_MT),
+	ARM64_CALLXS_K_TABLE) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_TABLE_ROOT),
+	IR_TMPREF, IRT_PGC,
 	ARM64_CALLXS_K_TABLE, IRTMPREF_IN1|IRTMPREF_OUT1) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_KEY_ROOT, IR_TMPREF, IRT_PGC,
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_KEY_ROOT),
+	IR_TMPREF, IRT_PGC,
 	ARM64_CALLXS_K_KEY, IRTMPREF_IN2) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_LOOKUP_ARGS, IR_CARG, IRT_NIL,
-	ARM64_CALLXS_R_TABLE_ROOT, ARM64_CALLXS_R_KEY_ROOT) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_LOOKUP_OUT, IR_CARG, IRT_NIL,
-	ARM64_CALLXS_R_LOOKUP_ARGS, ARM64_CALLXS_R_TABLE_ROOT) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_LOOKUP, IR_CALLS,
-	IRT_P64|IRT_GUARD, ARM64_CALLXS_R_LOOKUP_OUT,
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_LOOKUP_ARGS),
+	IR_CARG, IRT_NIL, ARM64_CALLXS_REF(ARM64_CALLXS_R_TABLE_ROOT),
+	ARM64_CALLXS_REF(ARM64_CALLXS_R_KEY_ROOT)) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_LOOKUP_OUT),
+	IR_CARG, IRT_NIL, ARM64_CALLXS_REF(ARM64_CALLXS_R_LOOKUP_ARGS),
+	ARM64_CALLXS_REF(ARM64_CALLXS_R_TABLE_ROOT)) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_LOOKUP), IR_CALLS,
+	IRT_P64|IRT_GUARD, ARM64_CALLXS_REF(ARM64_CALLXS_R_LOOKUP_OUT),
 	IRCALL_lj_tab_gettv_rooted) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_MOBJ, IR_VLOAD,
-	IRT_FUNC|IRT_GUARD, ARM64_CALLXS_R_LOOKUP, 0) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_MOBJ_GUARD, IR_EQ,
-	IRT_FUNC|IRT_GUARD, ARM64_CALLXS_R_MOBJ, ARM64_CALLXS_K_META) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_CTYPE, IR_FLOAD, IRT_U16,
-	ARM64_CALLXS_R_FUNC, IRFL_CDATA_CTYPEID) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_CTYPE_GUARD, IR_EQ,
-	IRT_INT|IRT_GUARD, ARM64_CALLXS_R_CTYPE,
-	ARM64_CALLXS_K_CTYPE) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_FUNCPTR, IR_FLOAD, IRT_P64,
-	ARM64_CALLXS_R_FUNC, IRFL_CDATA_PTR) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_XSAVE_PRE, IR_XSAVE, IRT_NIL, 0, 0) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_ENTER_ARGS, IR_CARG, IRT_NIL,
-	ARM64_CALLXS_K_TRACE, ARM64_CALLXS_R_FUNCPTR) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_ENTER_ROOT, IR_CARG, IRT_NIL,
-	ARM64_CALLXS_R_ENTER_ARGS, ARM64_CALLXS_K_ROOT) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_ENTER_PRE, IR_CALLS, IRT_INT,
-	ARM64_CALLXS_R_ENTER_ROOT, IRCALL_lj_ffi_native_trace_enter) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_ENTER_GUARD_PRE, IR_NE,
-	IRT_INT|IRT_GUARD, ARM64_CALLXS_R_ENTER_PRE,
-	ARM64_CALLXS_K_ZERO) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_CALL_PRE, IR_CALLXS, IRT_INT,
-	ARM64_CALLXS_R_INDEX, ARM64_CALLXS_R_FUNCPTR) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_LEAVE_PRE, IR_CALLS,
-	IRT_INT|IRT_GUARD, REF_NIL, IRCALL_lj_ffi_native_trace_leave) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_LEAVE_GUARD_PRE, IR_EQ,
-	IRT_INT|IRT_GUARD, ARM64_CALLXS_R_LEAVE_PRE,
-	ARM64_CALLXS_K_ZERO) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_RESULT_GUARD_PRE, IR_EQ,
-	IRT_INT|IRT_GUARD, ARM64_CALLXS_R_CALL_PRE,
-	ARM64_CALLXS_R_INDEX) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_INDEX_PRE, IR_ADD,
-	IRT_INT|IRT_ISPHI, ARM64_CALLXS_R_INDEX, ARM64_CALLXS_K_ONE) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_BOUND_GUARD_PRE, IR_LE,
-	IRT_INT|IRT_GUARD, ARM64_CALLXS_R_INDEX_PRE,
-	ARM64_CALLXS_R_LIMIT) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_LOOP, IR_LOOP,
-	IRT_NIL|IRT_GUARD, 0, 0) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_XPOLL, IR_XPOLL,
-	IRT_NIL|IRT_GUARD, 1, 0) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_MT_BODY, IR_FLOAD, IRT_TAB,
-	REF_NIL, GG_OFS(g.gcroot[GCROOT_BASEMT+(~LJ_TCDATA)]) >> 2) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_MT_GUARD_BODY, IR_EQ,
-	IRT_TAB|IRT_GUARD, ARM64_CALLXS_R_MT_BODY, ARM64_CALLXS_K_TABLE) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_TABLE_ROOT_BODY, IR_TMPREF, IRT_PGC,
-	ARM64_CALLXS_K_TABLE, IRTMPREF_IN1|IRTMPREF_OUT1) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_KEY_ROOT_BODY, IR_TMPREF, IRT_PGC,
-	ARM64_CALLXS_K_KEY, IRTMPREF_IN2) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_LOOKUP_ARGS_BODY, IR_CARG, IRT_NIL,
-	ARM64_CALLXS_R_TABLE_ROOT_BODY, ARM64_CALLXS_R_KEY_ROOT_BODY) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_LOOKUP_OUT_BODY, IR_CARG, IRT_NIL,
-	ARM64_CALLXS_R_LOOKUP_ARGS_BODY, ARM64_CALLXS_R_TABLE_ROOT_BODY) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_LOOKUP_BODY, IR_CALLS,
-	IRT_P64|IRT_GUARD, ARM64_CALLXS_R_LOOKUP_OUT_BODY,
-	IRCALL_lj_tab_gettv_rooted) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_MOBJ_BODY, IR_VLOAD,
-	IRT_FUNC|IRT_GUARD, ARM64_CALLXS_R_LOOKUP_BODY, 0) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_MOBJ_GUARD_BODY, IR_EQ,
-	IRT_FUNC|IRT_GUARD, ARM64_CALLXS_R_MOBJ_BODY,
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_MOBJ), IR_VLOAD,
+	IRT_FUNC|IRT_GUARD, ARM64_CALLXS_REF(ARM64_CALLXS_R_LOOKUP), 0) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_MOBJ_GUARD), IR_EQ,
+	IRT_FUNC|IRT_GUARD, ARM64_CALLXS_REF(ARM64_CALLXS_R_MOBJ),
 	ARM64_CALLXS_K_META) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_XSAVE_BODY, IR_XSAVE, IRT_NIL, 0, 0) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_ENTER_BODY, IR_CALLS, IRT_INT,
-	ARM64_CALLXS_R_ENTER_ROOT, IRCALL_lj_ffi_native_trace_enter) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_ENTER_GUARD_BODY, IR_NE,
-	IRT_INT|IRT_GUARD, ARM64_CALLXS_R_ENTER_BODY,
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_CTYPE), IR_FLOAD,
+	IRT_U16, ARM64_CALLXS_REF(ARM64_CALLXS_R_FUNC),
+	IRFL_CDATA_CTYPEID) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_CTYPE_GUARD), IR_EQ,
+	IRT_INT|IRT_GUARD, ARM64_CALLXS_REF(ARM64_CALLXS_R_CTYPE),
+	ARM64_CALLXS_K_CTYPE) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_FUNCPTR), IR_FLOAD,
+	IRT_P64, ARM64_CALLXS_REF(ARM64_CALLXS_R_FUNC), IRFL_CDATA_PTR) &&
+    (profile != ARM64_CALLXS_PROFILE_DOUBLE ||
+      ARM64_CALLXS_INS(ARM64_CALLXS_D_R_ARG_PRE, IR_CONV, IRT_NUM,
+	ARM64_CALLXS_R_INDEX, IRCONV_NUM_INT)) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_XSAVE_PRE),
+	IR_XSAVE, IRT_NIL, 0, 0) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_ENTER_ARGS),
+	IR_CARG, IRT_NIL, ARM64_CALLXS_K_TRACE,
+	ARM64_CALLXS_REF(ARM64_CALLXS_R_FUNCPTR)) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_ENTER_ROOT),
+	IR_CARG, IRT_NIL, ARM64_CALLXS_REF(ARM64_CALLXS_R_ENTER_ARGS),
+	ARM64_CALLXS_K_ROOT) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_ENTER_PRE),
+	IR_CALLS, IRT_INT, ARM64_CALLXS_REF(ARM64_CALLXS_R_ENTER_ROOT),
+	IRCALL_lj_ffi_native_trace_enter) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_ENTER_GUARD_PRE),
+	IR_NE, IRT_INT|IRT_GUARD,
+	ARM64_CALLXS_REF(ARM64_CALLXS_R_ENTER_PRE),
 	ARM64_CALLXS_K_ZERO) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_CALL_BODY, IR_CALLXS, IRT_INT,
-	ARM64_CALLXS_R_INDEX_PRE, ARM64_CALLXS_R_FUNCPTR) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_LEAVE_BODY, IR_CALLS,
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_CALL_PRE), IR_CALLXS,
+	calltype, argpre, ARM64_CALLXS_REF(ARM64_CALLXS_R_FUNCPTR)) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_LEAVE_PRE), IR_CALLS,
 	IRT_INT|IRT_GUARD, REF_NIL, IRCALL_lj_ffi_native_trace_leave) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_LEAVE_GUARD_BODY, IR_EQ,
-	IRT_INT|IRT_GUARD, ARM64_CALLXS_R_LEAVE_BODY,
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_LEAVE_GUARD_PRE),
+	IR_EQ, IRT_INT|IRT_GUARD,
+	ARM64_CALLXS_REF(ARM64_CALLXS_R_LEAVE_PRE),
 	ARM64_CALLXS_K_ZERO) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_RESULT_GUARD_BODY, IR_EQ,
-	IRT_INT|IRT_GUARD, ARM64_CALLXS_R_CALL_BODY,
-	ARM64_CALLXS_R_INDEX_PRE) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_INDEX_BODY, IR_ADD,
-	IRT_INT|IRT_ISPHI, ARM64_CALLXS_R_INDEX_PRE,
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_RESULT_GUARD_PRE),
+	IR_EQ, calltype|IRT_GUARD,
+	ARM64_CALLXS_REF(ARM64_CALLXS_R_CALL_PRE), argpre) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_INDEX_PRE), IR_ADD,
+	IRT_INT|IRT_ISPHI, ARM64_CALLXS_REF(ARM64_CALLXS_R_INDEX),
 	ARM64_CALLXS_K_ONE) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_BOUND_GUARD_BODY, IR_LE,
-	IRT_INT|IRT_GUARD, ARM64_CALLXS_R_INDEX_BODY,
-	ARM64_CALLXS_R_LIMIT) &&
-    ARM64_CALLXS_INS(ARM64_CALLXS_R_INDEX_PHI, IR_PHI, IRT_INT,
-	ARM64_CALLXS_R_INDEX_PRE, ARM64_CALLXS_R_INDEX_BODY);
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_BOUND_GUARD_PRE),
+	IR_LE, IRT_INT|IRT_GUARD,
+	ARM64_CALLXS_REF(ARM64_CALLXS_R_INDEX_PRE),
+	ARM64_CALLXS_REF(ARM64_CALLXS_R_LIMIT)) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_LOOP), IR_LOOP,
+	IRT_NIL|IRT_GUARD, 0, 0) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_XPOLL), IR_XPOLL,
+	IRT_NIL|IRT_GUARD, 1, 0) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_MT_BODY), IR_FLOAD,
+	IRT_TAB,
+	REF_NIL, GG_OFS(g.gcroot[GCROOT_BASEMT+(~LJ_TCDATA)]) >> 2) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_MT_GUARD_BODY),
+	IR_EQ, IRT_TAB|IRT_GUARD,
+	ARM64_CALLXS_REF(ARM64_CALLXS_R_MT_BODY), ARM64_CALLXS_K_TABLE) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_TABLE_ROOT_BODY),
+	IR_TMPREF, IRT_PGC,
+	ARM64_CALLXS_K_TABLE, IRTMPREF_IN1|IRTMPREF_OUT1) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_KEY_ROOT_BODY),
+	IR_TMPREF, IRT_PGC,
+	ARM64_CALLXS_K_KEY, IRTMPREF_IN2) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_LOOKUP_ARGS_BODY),
+	IR_CARG, IRT_NIL,
+	ARM64_CALLXS_REF(ARM64_CALLXS_R_TABLE_ROOT_BODY),
+	ARM64_CALLXS_REF(ARM64_CALLXS_R_KEY_ROOT_BODY)) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_LOOKUP_OUT_BODY),
+	IR_CARG, IRT_NIL,
+	ARM64_CALLXS_REF(ARM64_CALLXS_R_LOOKUP_ARGS_BODY),
+	ARM64_CALLXS_REF(ARM64_CALLXS_R_TABLE_ROOT_BODY)) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_LOOKUP_BODY),
+	IR_CALLS, IRT_P64|IRT_GUARD,
+	ARM64_CALLXS_REF(ARM64_CALLXS_R_LOOKUP_OUT_BODY),
+	IRCALL_lj_tab_gettv_rooted) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_MOBJ_BODY),
+	IR_VLOAD, IRT_FUNC|IRT_GUARD,
+	ARM64_CALLXS_REF(ARM64_CALLXS_R_LOOKUP_BODY), 0) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_MOBJ_GUARD_BODY),
+	IR_EQ, IRT_FUNC|IRT_GUARD,
+	ARM64_CALLXS_REF(ARM64_CALLXS_R_MOBJ_BODY),
+	ARM64_CALLXS_K_META) &&
+    (profile != ARM64_CALLXS_PROFILE_DOUBLE ||
+      ARM64_CALLXS_INS(ARM64_CALLXS_D_R_ARG_BODY, IR_CONV, IRT_NUM,
+	ARM64_CALLXS_D_R_INDEX_PRE, IRCONV_NUM_INT)) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_XSAVE_BODY),
+	IR_XSAVE, IRT_NIL, 0, 0) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_ENTER_BODY),
+	IR_CALLS, IRT_INT,
+	ARM64_CALLXS_REF(ARM64_CALLXS_R_ENTER_ROOT),
+	IRCALL_lj_ffi_native_trace_enter) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_ENTER_GUARD_BODY),
+	IR_NE, IRT_INT|IRT_GUARD,
+	ARM64_CALLXS_REF(ARM64_CALLXS_R_ENTER_BODY),
+	ARM64_CALLXS_K_ZERO) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_CALL_BODY), IR_CALLXS,
+	calltype, argbody, ARM64_CALLXS_REF(ARM64_CALLXS_R_FUNCPTR)) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_LEAVE_BODY), IR_CALLS,
+	IRT_INT|IRT_GUARD, REF_NIL, IRCALL_lj_ffi_native_trace_leave) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_LEAVE_GUARD_BODY),
+	IR_EQ, IRT_INT|IRT_GUARD,
+	ARM64_CALLXS_REF(ARM64_CALLXS_R_LEAVE_BODY),
+	ARM64_CALLXS_K_ZERO) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_RESULT_GUARD_BODY),
+	IR_EQ, calltype|IRT_GUARD,
+	ARM64_CALLXS_REF(ARM64_CALLXS_R_CALL_BODY), argbody) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_INDEX_BODY), IR_ADD,
+	IRT_INT|IRT_ISPHI, ARM64_CALLXS_REF(ARM64_CALLXS_R_INDEX_PRE),
+	ARM64_CALLXS_K_ONE) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_BOUND_GUARD_BODY),
+	IR_LE, IRT_INT|IRT_GUARD,
+	ARM64_CALLXS_REF(ARM64_CALLXS_R_INDEX_BODY),
+	ARM64_CALLXS_REF(ARM64_CALLXS_R_LIMIT)) &&
+    ARM64_CALLXS_INS(ARM64_CALLXS_REF(ARM64_CALLXS_R_INDEX_PHI),
+	IR_PHI, IRT_INT, ARM64_CALLXS_REF(ARM64_CALLXS_R_INDEX_PRE),
+	ARM64_CALLXS_REF(ARM64_CALLXS_R_INDEX_BODY));
+#undef ARM64_CALLXS_REF
 #undef ARM64_CALLXS_INS
 }
 
 static int arm64_callxs_snapshots(const IRIns *ir, const SnapShot *snap,
 	const SnapEntry *snapmap, MSize nsnap, MSize nsnapmap,
-	const BCIns *proto_bc, MSize proto_sizebc)
+	const BCIns *proto_bc, MSize proto_sizebc,
+	LJArm64CallXSProfile profile)
 {
   static const IRRef refs[15] = {
     ARM64_CALLXS_R_LIMIT, ARM64_CALLXS_R_MT, ARM64_CALLXS_R_MOBJ,
@@ -1870,7 +1961,9 @@ static int arm64_callxs_snapshots(const IRIns *ir, const SnapShot *snap,
   uintptr_t proto, expected;
   MSize snapno, n;
   if (ir == NULL || snap == NULL || snapmap == NULL || proto_bc == NULL ||
-	nsnap != 15 || nsnapmap != 97 || proto_sizebc != 16)
+	nsnap != 15 || nsnapmap != 97 || proto_sizebc != 16 ||
+	(profile != ARM64_CALLXS_PROFILE_I32 &&
+	 profile != ARM64_CALLXS_PROFILE_DOUBLE))
     return 0;
   kmeta = ir_load_acq(&ir[ARM64_CALLXS_K_META]);
   meta = ir_kgc_load_acq(&ir[ARM64_CALLXS_K_META]);
@@ -1890,7 +1983,7 @@ static int arm64_callxs_snapshots(const IRIns *ir, const SnapShot *snap,
     MSize nextofs = snapno+1u < nsnap ?
 	snap_mapofs_acq(&snap[snapno+1u]) : nsnapmap;
     uint64_t pcbase;
-    if (snap_ref_acq(s) != refs[snapno] ||
+    if (snap_ref_acq(s) != arm64_callxs_profile_ref(profile, refs[snapno]) ||
 	snap_mapofs_acq(s) != mapofs[snapno] ||
 	snap_nent_acq(s) != nent[snapno] ||
 	snap_nslots_acq(s) != nslots[snapno] ||
@@ -1898,9 +1991,15 @@ static int arm64_callxs_snapshots(const IRIns *ir, const SnapShot *snap,
 	snap_count_acq(s) != counts[snapno] ||
 	nextofs != mapofs[snapno]+nent[snapno]+1u+LJ_FR2)
       return 0;
-    for (n = 0; n < nent[snapno]; n++)
-      if (snapentry_acq(&snapmap[mapofs[snapno]+n]) != entries[snapno][n])
+    for (n = 0; n < nent[snapno]; n++) {
+      SnapEntry entry = entries[snapno][n];
+      IRRef ref = snap_ref(entry);
+      if (ref >= REF_FIRST)
+	entry = (entry & 0xffff0000u) |
+		arm64_callxs_profile_ref(profile, ref);
+      if (snapentry_acq(&snapmap[mapofs[snapno]+n]) != entry)
 	return 0;
+    }
     for (n = 0; n < 1u+LJ_FR2; n++)
       pcraw[n] = snapentry_acq(
 	&snapmap[mapofs[snapno]+nent[snapno]+n]);
@@ -1929,21 +2028,17 @@ static int arm64_ir_callxs_shape(const jit_State *J, const GCtrace *T,
 	const GCproto *pt, LJArm64IRReject *reject)
 {
   const GCtrace *owner = J->curfinal;
+  LJArm64CallXSProfile profile;
+  IRRef callpre, loopref, semantic_nins, xsavepre;
   if (bc_op(T->startins) != BC_FORL)
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL,
 	ARM64_CALLXS_R_CALL_PRE, IR_CALLXS, 1);
-  if (T->nins != ARM64_CALLXS_SEMANTIC_NINS)
-    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL,
-	ARM64_CALLXS_R_CALL_PRE, IR_CALLXS, 2);
   if (T->nk != ARM64_CALLXS_K_ZERO)
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL,
 	ARM64_CALLXS_K_ZERO, IR_KINT, 3);
   if (J->ktrace != ARM64_CALLXS_K_TRACE)
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL,
 	ARM64_CALLXS_K_TRACE, IR_KGC, 4);
-  if (J->loopref != ARM64_CALLXS_R_LOOP)
-    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL,
-	ARM64_CALLXS_R_LOOP, IR_LOOP, 5);
   if (!arm64_callxs_bytecode(proto_bc(pt), pt->sizebc, pt->framesize,
 	pt->numparams, T->startins, NULL))
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL,
@@ -1955,16 +2050,28 @@ static int arm64_ir_callxs_shape(const jit_State *J, const GCtrace *T,
 	pt->sizebc))
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL,
 	ARM64_CALLXS_K_TRACE, IR_KGC, 7);
-  if (!arm64_callxs_i32_signature(J, T->ir))
+  profile = arm64_callxs_signature(J, T->ir);
+  if (profile == ARM64_CALLXS_PROFILE_NONE)
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL,
 	ARM64_CALLXS_K_CTYPE, IR_KINT, 8);
-  if (!arm64_callxs_ir_shape(T->ir))
+  semantic_nins = profile == ARM64_CALLXS_PROFILE_DOUBLE ?
+	ARM64_CALLXS_D_SEMANTIC_NINS : ARM64_CALLXS_SEMANTIC_NINS;
+  callpre = arm64_callxs_profile_ref(profile, ARM64_CALLXS_R_CALL_PRE);
+  loopref = arm64_callxs_profile_ref(profile, ARM64_CALLXS_R_LOOP);
+  xsavepre = arm64_callxs_profile_ref(profile, ARM64_CALLXS_R_XSAVE_PRE);
+  if (T->nins != semantic_nins)
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL,
-	ARM64_CALLXS_R_CALL_PRE, IR_CALLXS, 10);
+	callpre, IR_CALLXS, 2);
+  if (J->loopref != loopref)
+    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL,
+	loopref, IR_LOOP, 5);
+  if (!arm64_callxs_ir_shape(T->ir, profile))
+    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL,
+	callpre, IR_CALLXS, 10);
   if (!arm64_callxs_snapshots(T->ir, T->snap, T->snapmap, T->nsnap,
-	T->nsnapmap, proto_bc(pt), pt->sizebc))
+	T->nsnapmap, proto_bc(pt), pt->sizebc, profile))
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
-	ARM64_CALLXS_R_XSAVE_PRE, IR_XSAVE, 11);
+	xsavepre, IR_XSAVE, 11);
   return 1;
 }
 
@@ -2015,10 +2122,58 @@ static int arm64_postra_callxs_layout(const IRIns *ir)
   return 1;
 }
 
+static int arm64_postra_callxs_double_layout(const IRIns *ir)
+{
+  static const uint8_t regs[ARM64_CALLXS_D_SEMANTIC_NINS-REF_BASE] = {
+    RID_X23, RID_X19, RID_INIT, RID_X28, RID_X21, RID_X1,
+    RID_INIT, RID_X1, RID_X2, RID_INIT, RID_INIT, RID_X0,
+    RID_X5, RID_INIT, RID_X5, RID_INIT, RID_X20, RID_D9,
+    RID_INIT, RID_INIT, RID_INIT, RID_X0, RID_NONE, RID_D0,
+    RID_X0, RID_NONE, RID_INIT, RID_X28, RID_INIT, RID_INIT,
+    RID_INIT, RID_X27, RID_INIT, RID_X1, RID_X2, RID_INIT,
+    RID_INIT, RID_X0, RID_X27, RID_INIT, RID_D15, RID_INIT,
+    RID_X0, RID_NONE, RID_D0, RID_X0, RID_NONE, RID_INIT,
+    RID_X28, RID_INIT, RID_X28
+  };
+  static const uint8_t spills[ARM64_CALLXS_D_SEMANTIC_NINS-REF_BASE] = {
+    SPS_NONE, SPS_NONE, SPS_NONE, SPS_NONE, SPS_NONE, SPS_NONE,
+    SPS_NONE, SPS_NONE, SPS_NONE, SPS_NONE, SPS_NONE, SPS_NONE,
+    SPS_NONE, SPS_NONE, SPS_NONE, SPS_NONE, SPS_NONE, SPS_NONE,
+    SPS_NONE, SPS_NONE, SPS_NONE, SPS_NONE, SPS_NONE, 4,
+    SPS_NONE, SPS_NONE, SPS_NONE, SPS_NONE, SPS_NONE, SPS_NONE,
+    SPS_NONE, SPS_NONE, SPS_NONE, SPS_NONE, SPS_NONE, SPS_NONE,
+    SPS_NONE, SPS_NONE, SPS_NONE, SPS_NONE, SPS_NONE, SPS_NONE,
+    SPS_NONE, SPS_NONE, 2, SPS_NONE, SPS_NONE, SPS_NONE,
+    SPS_NONE, SPS_NONE, SPS_NONE
+  };
+  static const IRRef krefs[] = {
+    ARM64_CALLXS_K_ZERO, ARM64_CALLXS_K_ROOT, ARM64_CALLXS_K_TRACE,
+    ARM64_CALLXS_K_CTYPE, ARM64_CALLXS_K_FTSZ, ARM64_CALLXS_K_META,
+    ARM64_CALLXS_K_KEY, ARM64_CALLXS_K_TABLE,
+    ARM64_CALLXS_K_LIMITMAX, ARM64_CALLXS_K_ONE,
+    REF_TRUE, REF_FALSE, REF_NIL
+  };
+  IRRef ref;
+  MSize n;
+  for (ref = REF_BASE; ref < ARM64_CALLXS_D_SEMANTIC_NINS; ref++) {
+    IRIns ins = ir_load_acq(&ir[ref]);
+    MSize idx = (MSize)(ref-REF_BASE);
+    if (ins.r != regs[idx] || ins.s != spills[idx])
+      return 0;
+  }
+  for (n = 0; n < sizeof(krefs)/sizeof(krefs[0]); n++) {
+    IRIns ins = ir_load_acq(&ir[krefs[n]]);
+    if (ins.r != RID_INIT || ins.s != SPS_NONE)
+      return 0;
+  }
+  return 1;
+}
+
 static int arm64_postra_callxs_admit(const LJArm64PostRAView *view,
 	IRRef *semantic_ninsp)
 {
-  IRRef semantic_nins = ARM64_CALLXS_SEMANTIC_NINS;
+  IRRef semantic_nins;
+  LJArm64CallXSProfile profile;
   IRIns last;
   if (view->owner == NULL || view->ir == NULL || view->snap == NULL ||
 	view->snapmap == NULL || view->proto_bc == NULL ||
@@ -2026,9 +2181,19 @@ static int arm64_postra_callxs_admit(const LJArm64PostRAView *view,
 	view->nsnapmap != 97 || view->root_topslot != 9 ||
 	view->proto_sizebc != 16 || view->proto_numparams != 2 ||
 	view->base_delta != 0 ||
-	bc_op(view->startins) != BC_FORL ||
-	view->nins != ARM64_CALLXS_SEMANTIC_NINS+1u || view->spadjust != 0)
+	bc_op(view->startins) != BC_FORL)
     return 0;
+  if (view->nins == ARM64_CALLXS_SEMANTIC_NINS+1u &&
+	view->spadjust == 0) {
+    profile = ARM64_CALLXS_PROFILE_I32;
+    semantic_nins = ARM64_CALLXS_SEMANTIC_NINS;
+  } else if (view->nins == ARM64_CALLXS_D_SEMANTIC_NINS+1u &&
+	view->spadjust == 16) {
+    profile = ARM64_CALLXS_PROFILE_DOUBLE;
+    semantic_nins = ARM64_CALLXS_D_SEMANTIC_NINS;
+  } else {
+    return 0;
+  }
   last = ir_load_acq(&view->ir[semantic_nins]);
   if (last.o != IR_NOP || last.t.irt != IRT_NIL ||
       last.op1 != 0 || last.op2 != 0 || last.prev != 0 ||
@@ -2037,10 +2202,12 @@ static int arm64_postra_callxs_admit(const LJArm64PostRAView *view,
 	  view->owner) ||
 	!arm64_callxs_constant_shape(view->ir, view->nk, view->owner,
 	  view->proto_bc, view->proto_sizebc) ||
-	!arm64_callxs_ir_shape(view->ir) ||
+	!arm64_callxs_ir_shape(view->ir, profile) ||
 	!arm64_callxs_snapshots(view->ir, view->snap, view->snapmap, view->nsnap,
-	  view->nsnapmap, view->proto_bc, view->proto_sizebc) ||
-	!arm64_postra_callxs_layout(view->ir))
+	  view->nsnapmap, view->proto_bc, view->proto_sizebc, profile) ||
+	(profile == ARM64_CALLXS_PROFILE_I32 ?
+	 !arm64_postra_callxs_layout(view->ir) :
+	 !arm64_postra_callxs_double_layout(view->ir)))
     return 0;
   if (semantic_ninsp)
     *semantic_ninsp = semantic_nins;

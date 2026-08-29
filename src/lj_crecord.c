@@ -2481,24 +2481,28 @@ static int crec_call_indirect_struct_result(CTInfo info, CTSize size)
 }
 
 #if LJ_HASJIT_FFI_CALLXS && LJ_TARGET_ARM64
-/* Keep the first Darwin ARM64 CALLXS certificate at the recorder boundary:
-** one direct CDECL function cdata with exactly int32_t(int32_t). */
-static int crec_call_arm64_i32_admit(jit_State *J, CTState *cts,
-				      const GCcdata *cd, const CType *ct,
-				      CTypeID id, CTInfo info)
+/* Keep the first Darwin ARM64 CALLXS certificates at the recorder boundary:
+** one direct CDECL function cdata with exactly one matching scalar argument. */
+static int crec_call_arm64_scalar_admit(jit_State *J, CTState *cts,
+					 const GCcdata *cd, const CType *ct,
+					 CTypeID id, CTInfo info)
 {
   CType field;
   CTypeID fid;
+  CTypeID result;
   CTInfo finfo;
   if (J->maxslot != 2 || id != cd->ctypeid || !ctype_isfunc(info) ||
       ctype_size_acq(ct) != 1 || (info & CTF_VARARG) != 0 ||
-      ctype_cconv(info) != CTCC_CDECL || ctype_cid(info) != CTID_INT32)
+	  ctype_cconv(info) != CTCC_CDECL)
+    return 0;
+  result = ctype_cid(info);
+  if (result != CTID_INT32 && result != CTID_DOUBLE)
     return 0;
   fid = ctype_sib_acq(ct);
   if (fid == 0)
     return 0;
   finfo = ctype_info_acq(crec_ctype_snapshot(J, cts, fid, &field));
-  return ctype_isfield(finfo) && ctype_cid(finfo) == CTID_INT32 &&
+  return ctype_isfield(finfo) && ctype_cid(finfo) == result &&
 	 ctype_sib_acq(&field) == 0;
 }
 #endif
@@ -2566,7 +2570,7 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     }
 
 #if LJ_HASJIT_FFI_CALLXS && LJ_TARGET_ARM64
-    if (!crec_call_arm64_i32_admit(J, cts, cd, ct, id, info))
+    if (!crec_call_arm64_scalar_admit(J, cts, cd, ct, id, info))
       lj_trace_err(J, LJ_TRERR_NYICALL);
 #endif
 
