@@ -7,6 +7,7 @@
 */
 
 #include <assert.h>
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -68,6 +69,7 @@ static const uint32_t probe_words[] = {
 
 static LJ_NOINLINE void throw_from_mcode(lua_State *L)
 {
+  errno = EDOM;
   lj_err_throw(L, LUA_ERRRUN);
 }
 
@@ -79,7 +81,7 @@ int main(void)
   uint8_t *code;
   uintptr_t landing;
   ProbeFn probe;
-  int result;
+  int result, observed;
 
   pagesz = (size_t)sysconf(_SC_PAGESIZE);
   assert(pagesz >= 4096u);
@@ -112,13 +114,16 @@ int main(void)
 
   lj_err_test_arm64e_unwind_arm((uintptr_t)code,
 	(uintptr_t)(code + sizeof(probe_words)), landing);
+  errno = 0;
   result = probe(throw_from_mcode, L);
+  observed = errno;
   assert(result == PROBE_RESULT);
+  assert(observed == EDOM);
   assert(lj_err_test_arm64e_unwind_disarm() == PROBE_COUNTS);
   lua_close(L);
 
   lj_err_deregister_mcode(area, pagesz, area);
   assert(munmap(area, pagesz) == 0);
-  puts("t-arm64e-jit-unwind OK: registered personality handled and landed");
+  puts("t-arm64e-jit-unwind OK: personality landed with errno intact");
   return 0;
 }

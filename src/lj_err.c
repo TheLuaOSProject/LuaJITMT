@@ -89,6 +89,32 @@ static LJ_AINLINE void err_x64_carrier_set(LJErrX64Carrier *carrier,
 }
 #endif
 
+/* Carrier for the ARM64 external-unwind trampoline. X28 temporarily points
+** here; its original trace value is restored before the real landing target.
+** X30 is the backend's fixed scratch register and carries the final return. */
+#if LJ_TARGET_ARM64 && LJ_UNWIND_EXT && !LJ_ABI_WIN
+typedef struct LJErrARM64Carrier {
+  uint64_t os;
+  uintptr_t target;
+  uintptr_t x28;
+} LJErrARM64Carrier;
+
+LJ_STATIC_ASSERT(sizeof(LJErrARM64Carrier) == 24u);
+LJ_STATIC_ASSERT(offsetof(LJErrARM64Carrier, os) == 0u);
+LJ_STATIC_ASSERT(offsetof(LJErrARM64Carrier, target) == 8u);
+LJ_STATIC_ASSERT(offsetof(LJErrARM64Carrier, x28) == 16u);
+
+static LJ_AINLINE void err_arm64_carrier_set(LJErrARM64Carrier *carrier,
+					      uintptr_t target,
+					      uintptr_t x28,
+					      const ErrOSState *err)
+{
+  carrier->os = lj_oserr_pack(err);
+  carrier->target = target;
+  carrier->x28 = x28;
+}
+#endif
+
 #if LJ_TARGET_WINDOWS
 #if defined(_MSC_VER)
 #define LJ_ERR_TLS __declspec(thread)
@@ -696,6 +722,8 @@ typedef struct LJErrUEx {
   ErrOSState os;
 #if LJ_TARGET_X64
   LJErrX64Carrier landing;
+#elif LJ_TARGET_ARM64
+  LJErrARM64Carrier landing;
 #endif
 } LJErrUEx;
 
@@ -705,7 +733,7 @@ LJ_STATIC_ASSERT(offsetof(LJErrUEx, ex) == 0u);
 LJ_STATIC_ASSERT(offsetof(LJErrUEx, g) == sizeof(UNWIND_EXCEPTION_TYPE));
 LJ_STATIC_ASSERT(offsetof(LJErrUEx, os) ==
 		 sizeof(UNWIND_EXCEPTION_TYPE) + sizeof(global_State *));
-#if LJ_TARGET_X64
+#if LJ_TARGET_X64 || LJ_TARGET_ARM64
 LJ_STATIC_ASSERT(offsetof(LJErrUEx, landing) ==
 		 offsetof(LJErrUEx, os) + sizeof(ErrOSState));
 #endif
@@ -770,6 +798,31 @@ static LJ_AINLINE uintptr_t err_unwind_sign_ip(_Unwind_Context *ctx,
 }
 #else
 #define err_unwind_sign_ip(ctx, ip) ((uintptr_t)(ip))
+#endif
+
+#if LJ_TARGET_ARM64
+/* X28 is DWARF register 28. It is an ordinary callee-saved value register on
+** AAPCS64, unlike Apple's reserved X18 or the return-address register X30. */
+#define LJ_ERR_ARM64_CARRIER_REG	28
+static LJ_AINLINE void err_uex_install_arm64(_Unwind_Context *ctx,
+					      uint64_t uexclass,
+					      UNWIND_EXCEPTION_TYPE *uex,
+					      const ErrOSState *err,
+					      uintptr_t target)
+{
+  LJErrUEx *ex;
+  if (!err_uex_has_os(uexclass, uex)) {
+    _Unwind_SetIP(ctx, err_unwind_sign_ip(ctx, target));
+    return;
+  }
+  ex = (LJErrUEx *)(void *)uex;
+  err_arm64_carrier_set(&ex->landing, err_unwind_sign_ip(ctx, target),
+	_Unwind_GetGR(ctx, LJ_ERR_ARM64_CARRIER_REG), err);
+  _Unwind_SetGR(ctx, LJ_ERR_ARM64_CARRIER_REG,
+		(uintptr_t)&ex->landing);
+  _Unwind_SetIP(ctx, err_unwind_sign_ip(ctx,
+	(uintptr_t)lj_ptr_strip((ASMFunction)lj_vm_unwind_os_eh)));
+}
 #endif
 
 #define _UA_SEARCH_PHASE	1
@@ -858,6 +911,9 @@ LJ_FUNCA int lj_err_unwind_dwarf(int version, int actions,
       ip = cframe_unwind_ff(cf) ? lj_vm_unwind_ff_eh : lj_vm_unwind_c_eh;
 #if LJ_TARGET_X64
       err_uex_install_x64(ctx, uexclass, uex, &err, ip);
+#elif LJ_TARGET_ARM64
+      err_uex_install_arm64(ctx, uexclass, uex, &err,
+	(uintptr_t)lj_ptr_strip(ip));
 #else
       _Unwind_SetIP(ctx,
 	err_unwind_sign_ip(ctx, (uintptr_t)lj_ptr_strip(ip)));
@@ -989,7 +1045,7 @@ static int err_unwind_jit(int version, int actions,
       if ((actions & _UA_CLEANUP_PHASE)) {
 	t->cleanups++;
 	_Unwind_SetGR(ctx, 0, 0x4a17u);
-	_Unwind_SetIP(ctx, err_unwind_sign_ip(ctx, t->landing));
+	err_uex_install_arm64(ctx, uexclass, uex, &err, t->landing);
 	t->installs++;
 	return err_uex_os_leave(uexclass, uex, &err,
 				_URC_INSTALL_CONTEXT);
@@ -1019,6 +1075,8 @@ static int err_unwind_jit(int version, int actions,
 #elif LJ_TARGET_X64
       err_uex_install_x64(ctx, uexclass, uex, &err,
 			  (ASMFunction)(uintptr_t)stub);
+#elif LJ_TARGET_ARM64
+      err_uex_install_arm64(ctx, uexclass, uex, &err, stub);
 #else
       _Unwind_SetIP(ctx, err_unwind_sign_ip(ctx, stub));
 #endif

@@ -42,7 +42,7 @@ static LJ_AINLINE void lj_oserr_restore(const LJOSerrState *err)
 #endif
 }
 
-/* A single x64 context register/stack slot can carry the complete pair. */
+/* A single 64-bit context register or stack slot carries the complete pair. */
 static LJ_AINLINE uint64_t lj_oserr_pack(const LJOSerrState *err)
 {
   return (uint64_t)(uint32_t)err->errnum |

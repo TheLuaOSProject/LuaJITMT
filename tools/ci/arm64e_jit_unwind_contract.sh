@@ -67,7 +67,7 @@ acquire_lock
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lj-arm64e-jit-unwind.XXXXXX")
 
 cc=${CC:-clang}
-test_xcflags="$base_xcflags -DLJ_ERR_UNWIND_TEST_HELPERS"
+test_xcflags="$base_xcflags -DLJ_ERR_UNWIND_TEST_HELPERS -DLJ_OSERR_TEST_UNWIND_CLOBBER"
 target_flags='-arch arm64e -mbranch-protection=bti'
 archive=$root/src/libluajit.a
 err_object=$root/src/lj_err.o
@@ -93,7 +93,8 @@ for setting in \
   'LJ_TARGET_ARM64 1' \
   'LJ_UNWIND_EXT 1' \
   'LJ_UNWIND_JIT 1' \
-  'LJ_ERR_UNWIND_TEST_HELPERS 1'; do
+  'LJ_ERR_UNWIND_TEST_HELPERS 1' \
+  'LJ_OSERR_TEST_UNWIND_CLOBBER 1'; do
   grep -E "^#define ${setting% *}[[:space:]]+${setting#* }$" \
     "$macros" >/dev/null || {
     echo "arm64e JIT unwind macro mismatch: $setting" >&2
@@ -127,8 +128,11 @@ grep -F '#if !(LJ_TARGET_OSX && LJ_TARGET_ARM64 && LJ_ABI_PAUTH)' \
   "$err_source" >/dev/null
 grep -F 'ptrauth_key_return_address' "$err_source" >/dev/null
 grep -F '_Unwind_GetGR(ctx, LJ_ERR_UNWIND_SP_REG)' "$err_source" >/dev/null
-grep -F '_Unwind_SetIP(ctx, err_unwind_sign_ip(ctx, stub))' \
+grep -F 'err_uex_install_arm64(ctx, uexclass, uex, &err, t->landing);' \
   "$err_source" >/dev/null
+grep -F 'err_uex_install_arm64(ctx, uexclass, uex, &err, stub);' \
+  "$err_source" >/dev/null
+grep -F 'err_os_test_unwind_clobber();' "$err_source" >/dev/null
 grep -F 'blraaz x16' "$fixture_source" >/dev/null
 grep -F 'PROBE_COUNTS = 0x010101' "$fixture_source" >/dev/null
 grep -F "error('arm64e interpreter unwind')" "$fixture_source" >/dev/null
@@ -142,4 +146,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" \
     XCFLAGS="$base_xcflags"
 restore_needed=0
 
-echo "arm64e_jit_unwind_contract OK: interpreter and registered JIT personalities installed authenticated landings"
+echo "arm64e_jit_unwind_contract OK: authenticated JIT landing preserved errno"
