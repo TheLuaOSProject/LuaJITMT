@@ -1,11 +1,12 @@
 /*
-** Native macOS ARM64 contract for exact ascending/descending ADD and
-** descending SUB dynamic-accumulator pure-NUM roots.
+** Native macOS ARM64 contract for exact ascending/descending ADD,
+** ascending MUL, and descending SUB dynamic-accumulator pure-NUM roots.
 **
-** This certifies six intentionally narrow evolution profiles over one loop
-** geometry: strict/inclusive ascending ADD, strict/inclusive descending ADD,
-** and strict/inclusive descending SUB, each with three live NUM parameters
-** (initial accumulator, limit, and step).
+** This certifies seven intentionally narrow evolution profiles over one loop
+** geometry: strict/inclusive ascending ADD, strict ascending MUL,
+** strict/inclusive descending ADD, and strict/inclusive descending SUB, each
+** with three live NUM parameters (initial accumulator, limit, and step or
+** factor).
 ** Adjacent arithmetic, direction, and bytecode families remain fail-closed,
 ** while the already-admitted fixed-initializer roots stay distinct.
 */
@@ -83,6 +84,7 @@ typedef enum NumericArgsComparison {
 
 typedef enum NumericArgsEvolution {
   NUMERIC_ARGS_ADD_ASCENDING,
+  NUMERIC_ARGS_MUL_ASCENDING,
   NUMERIC_ARGS_ADD_DESCENDING,
   NUMERIC_ARGS_SUB_DESCENDING
 } NumericArgsEvolution;
@@ -151,6 +153,25 @@ static const NumericArgsProfile inclusive_profile = {
   { 0.5, 20.25, 1.0, 20.5 },
   { 0.5, 20.0, 0.5, 20.5 },
   { 0.5, 0.75, 0.5, 1.0 }
+};
+
+/* The MUL reuse tuple is made entirely of exact binary fractions. Replacing
+** only x, limit, or factor with its recording value produces 13.5, 50.625,
+** or 10 respectively instead of 5.625. These rows reach Lua through
+** lua_pushnumber: a Lua source literal such as 2.0 may be INT-tagged and
+** correctly exercise the separate IR_CONV/type-exit boundary instead. */
+static const NumericArgsProfile mul_profile = {
+  "__arm64_pure_numeric_args_mul", NUMERIC_ARGS_MUL_ASCENDING,
+  NUMERIC_ARGS_STRICT, BC_ISGE, 3, 4, BC_MULVV, IR_MUL,
+  IR_GT, IR_LT, A64I_FMULd, 0, CC_HS, CC_LO,
+  { 0.5, 20.25, 2.0, 32.0 },
+  { 0.625, 5.5, 3.0, 5.625 },
+  { 0.5, 20.25, 2.0, 32.0 },
+  { 0.5, 20.25, 2.0, 0.0 },
+  { 1.0, 20.25, 2.0, 32.0 },
+  { 0.5, 20.25, 2.0, 32.0 },
+  { 0.5, 20.0, 2.0, 32.0 },
+  { 15.0, 20.25, 2.0, 30.0 }
 };
 
 /* The descending-ADD reuse tuple is made entirely of exact binary fractions.
@@ -224,6 +245,8 @@ static const NumericArgsProfile descending_inclusive_profile = {
 #define QNAN_BITS UINT64_C(0x7ff8000000000000)
 #define PINF_BITS UINT64_C(0x7ff0000000000000)
 #define NINF_BITS UINT64_C(0xfff0000000000000)
+#define ZERO_BITS UINT64_C(0x0000000000000000)
+#define ONE_BITS UINT64_C(0x3ff0000000000000)
 
 static const IRRef expected_snaprefs[] = {
   R_X, R_LIMIT, R_PRECOND, R_LOOP, R_COND
@@ -305,7 +328,9 @@ typedef enum PostAdmissionRequest {
   POSTADMISSION_NINF_LIMIT,
   POSTADMISSION_QNAN_STEP,
   POSTADMISSION_PINF_STEP,
-  POSTADMISSION_NINF_STEP
+  POSTADMISSION_NINF_STEP,
+  POSTADMISSION_ZERO_STEP,
+  POSTADMISSION_ONE_STEP
 } PostAdmissionRequest;
 
 typedef struct PostAdmissionPublisher {
@@ -376,7 +401,7 @@ static void *publish_postadmission_request(void *arg)
     uint64_t replacement;
     int stop_after_mutation;
     /* Admission has finished and the owner has published this frame, but
-    ** native SLOAD/FADD/FSUB have not run. Arguments occupy base[0..2]. */
+    ** native SLOAD/FADD/FSUB/FMUL have not run. Arguments occupy base[0..2]. */
     if (publisher->request == POSTADMISSION_QNAN_X ||
 	publisher->request == POSTADMISSION_PINF_X ||
 	publisher->request == POSTADMISSION_NINF_X) {
@@ -399,6 +424,10 @@ static void *publish_postadmission_request(void *arg)
 	publisher->request == POSTADMISSION_NINF_LIMIT ||
 	publisher->request == POSTADMISSION_NINF_STEP) {
       replacement = NINF_BITS;
+    } else if (publisher->request == POSTADMISSION_ZERO_STEP) {
+      replacement = ZERO_BITS;
+    } else if (publisher->request == POSTADMISSION_ONE_STEP) {
+      replacement = ONE_BITS;
     } else {
       replacement = PINF_BITS;
     }
@@ -410,6 +439,10 @@ static void *publish_postadmission_request(void *arg)
       assert(tvisnan(&live));
     else if (replacement == PINF_BITS)
       assert(isinf(numV(&live)) && numV(&live) > 0);
+    else if (replacement == ZERO_BITS)
+      assert(numV(&live) == 0.0 && !signbit(numV(&live)));
+    else if (replacement == ONE_BITS)
+      assert(numV(&live) == 1.0);
     else
       assert(isinf(numV(&live)) && numV(&live) < 0);
     la_store32_rel(&publisher->mutated, 1);
@@ -690,8 +723,10 @@ static void expect_dynamic_fp_mcode(const GCtrace *T,
       }
       nfarith++;
     }
-    if ((ins & farith_mask) ==
-	(profile->recurrence_mcode == A64I_FADDd ? A64I_FSUBd : A64I_FADDd))
+    if (((ins & farith_mask) == A64I_FADDd ||
+	 (ins & farith_mask) == A64I_FSUBd ||
+	 (ins & farith_mask) == A64I_FMULd) &&
+	(ins & farith_mask) != profile->recurrence_mcode)
       nopposite++;
     if ((ins & fcmp_mask) == A64I_FCMPd) {
       uint32_t branch;
@@ -956,10 +991,11 @@ typedef enum MutationResult {
   MUTATION_NINF
 } MutationResult;
 
-static void test_terminating_mutation(lua_State *L, GCproto *pt,
+static void test_terminating_mutation_at_exit(lua_State *L, GCproto *pt,
 	int32_t idle_vmstate, const NumericArgsProfile *profile,
 	PostAdmissionRequest request, lua_Number expected_live,
-	MutationResult result_kind, lua_Number expected_result)
+	MutationResult result_kind, lua_Number expected_result,
+	ExitNo expected_exit)
 {
   global_State *g = G(L);
   TGState *tg = L2TG(L);
@@ -991,7 +1027,7 @@ static void test_terminating_mutation(lua_State *L, GCproto *pt,
     assert(isinf(result) && result < 0);
   else
     assert(result == expected_result);
-  expect_single_exit(PRECOND_EXIT);
+  expect_single_exit(expected_exit);
   assert(gc2_hs_epoch_acq(g) == epoch);
   assert(lj_tg_hs_epoch_ack_acq(tg) == epoch);
   assert(gc2_hs_pending_acq(g) == 0);
@@ -1009,6 +1045,15 @@ static void test_terminating_mutation(lua_State *L, GCproto *pt,
   expect_single_exit(FINAL_EXIT);
   assert_native_idle(L, idle_vmstate);
   expect_only_args_root(L, pt, profile);
+}
+
+static void test_terminating_mutation(lua_State *L, GCproto *pt,
+	int32_t idle_vmstate, const NumericArgsProfile *profile,
+	PostAdmissionRequest request, lua_Number expected_live,
+	MutationResult result_kind, lua_Number expected_result)
+{
+  test_terminating_mutation_at_exit(L, pt, idle_vmstate, profile, request,
+	expected_live, result_kind, expected_result, PRECOND_EXIT);
 }
 
 static void test_nonterminating_mutation_stop(lua_State *L, GCproto *pt,
@@ -1102,7 +1147,13 @@ static void test_positive_and_guard_exits(const NumericArgsProfile *profile)
   luaL_openlibs(L);
   tg = L2TG(L);
   idle_vmstate = lj_tg_vmstate_load_acq(tg);
-  if (profile->evolution == NUMERIC_ARGS_ADD_DESCENDING &&
+  if (profile->evolution == NUMERIC_ARGS_MUL_ASCENDING) {
+    run_lua(L,
+      "jit.flush(); jit.on(); "
+      "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
+      "function __arm64_pure_numeric_args_mul(x,limit,factor) "
+	"while x < limit do x = x * factor end return x end");
+  } else if (profile->evolution == NUMERIC_ARGS_ADD_DESCENDING &&
       profile->comparison == NUMERIC_ARGS_INCLUSIVE) {
     run_lua(L,
       "jit.flush(); jit.on(); "
@@ -1159,7 +1210,33 @@ static void test_positive_and_guard_exits(const NumericArgsProfile *profile)
   expect_single_exit(FINAL_EXIT);
   expect_only_args_root(L, pt, profile);
 
-  if (profile->evolution == NUMERIC_ARGS_ADD_DESCENDING &&
+  if (profile->evolution == NUMERIC_ARGS_MUL_ASCENDING) {
+    /* Each call retains one recording-time value. All three distinguish the
+    ** live argument from a constant specialized into the MUL root. */
+    lj_trace_test_root_entry_reset();
+    lj_trace_test_reset_exit_stats();
+    assert(call_triple(L, profile->name,
+	profile->record.x, profile->reuse.limit, profile->reuse.step,
+	0, 0, 0) == 13.5);
+    expect_single_exit(FINAL_EXIT);
+    expect_only_args_root(L, pt, profile);
+
+    lj_trace_test_root_entry_reset();
+    lj_trace_test_reset_exit_stats();
+    assert(call_triple(L, profile->name,
+	profile->reuse.x, profile->record.limit, profile->reuse.step,
+	0, 0, 0) == 50.625);
+    expect_single_exit(FINAL_EXIT);
+    expect_only_args_root(L, pt, profile);
+
+    lj_trace_test_root_entry_reset();
+    lj_trace_test_reset_exit_stats();
+    assert(call_triple(L, profile->name,
+	profile->reuse.x, profile->reuse.limit, profile->record.step,
+	0, 0, 0) == 10.0);
+    expect_single_exit(FINAL_EXIT);
+    expect_only_args_root(L, pt, profile);
+  } else if (profile->evolution == NUMERIC_ARGS_ADD_DESCENDING &&
       profile->comparison == NUMERIC_ARGS_INCLUSIVE) {
     /* Each call retains one recording-time value. All three distinguish the
     ** live argument from a constant specialized into the inclusive root. */
@@ -1214,7 +1291,32 @@ static void test_positive_and_guard_exits(const NumericArgsProfile *profile)
     expect_only_args_root(L, pt, profile);
   }
 
-  if (numeric_args_is_descending(profile) &&
+  if (profile->evolution == NUMERIC_ARGS_MUL_ASCENDING) {
+    /* Exact equality at the body guard exits through the final snapshot. */
+    lj_trace_test_root_entry_reset();
+    lj_trace_test_reset_exit_stats();
+    assert(call_triple(L, profile->name,
+	0.5, 2.0, 2.0, 0, 0, 0) == 2.0);
+    expect_single_exit(FINAL_EXIT);
+    expect_only_args_root(L, pt, profile);
+
+    /* Equality after the first recurrence fails the strict precondition. */
+    lj_trace_test_root_entry_reset();
+    lj_trace_test_reset_exit_stats();
+    assert(call_triple(L, profile->name,
+	0.5, 1.0, 2.0, 0, 0, 0) == 1.0);
+    expect_single_exit(PRECOND_EXIT);
+    expect_only_args_root(L, pt, profile);
+
+    /* Initial equality fails interpreted < and never enters JLOOP. */
+    lj_trace_test_root_entry_reset();
+    lj_trace_test_reset_exit_stats();
+    assert(call_triple(L, profile->name,
+	1.0, 1.0, 2.0, 0, 0, 0) == 1.0);
+    assert(lj_trace_test_root_entry_publishes() == 0);
+    assert(lj_trace_test_exit_calls() == 0);
+    expect_only_args_root(L, pt, profile);
+  } else if (numeric_args_is_descending(profile) &&
       profile->comparison == NUMERIC_ARGS_INCLUSIVE) {
     const lua_Number equality_body_step =
       profile->evolution == NUMERIC_ARGS_SUB_DESCENDING ? 0.375 : -0.375;
@@ -1309,7 +1411,36 @@ static void test_positive_and_guard_exits(const NumericArgsProfile *profile)
   }
 
   test_xpoll_lifecycle(L, pt, idle_vmstate, profile);
-  if (numeric_args_is_descending(profile)) {
+  if (profile->evolution == NUMERIC_ARGS_MUL_ASCENDING) {
+    test_terminating_mutation(L, pt, idle_vmstate, profile,
+      POSTADMISSION_QNAN_X, profile->mutation.x, MUTATION_QNAN, 0.0);
+    test_terminating_mutation(L, pt, idle_vmstate, profile,
+      POSTADMISSION_PINF_X, profile->mutation.x, MUTATION_PINF, 0.0);
+    test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile,
+      POSTADMISSION_NINF_X, profile->mutation.x);
+    test_terminating_mutation(L, pt, idle_vmstate, profile,
+      POSTADMISSION_QNAN_LIMIT, profile->mutation.limit,
+      MUTATION_FINITE, 1.0);
+    test_terminating_mutation_at_exit(L, pt, idle_vmstate, profile,
+      POSTADMISSION_PINF_LIMIT, profile->mutation.limit,
+      MUTATION_PINF, 0.0, FINAL_EXIT);
+    test_terminating_mutation(L, pt, idle_vmstate, profile,
+      POSTADMISSION_NINF_LIMIT, profile->mutation.limit,
+      MUTATION_FINITE, 1.0);
+    test_terminating_mutation(L, pt, idle_vmstate, profile,
+      POSTADMISSION_QNAN_STEP, profile->mutation.step,
+      MUTATION_QNAN, 0.0);
+    test_terminating_mutation(L, pt, idle_vmstate, profile,
+      POSTADMISSION_PINF_STEP, profile->mutation.step,
+      MUTATION_PINF, 0.0);
+    test_terminating_mutation_at_exit(L, pt, idle_vmstate, profile,
+      POSTADMISSION_NINF_STEP, profile->mutation.step,
+      MUTATION_PINF, 0.0, FINAL_EXIT);
+    test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile,
+      POSTADMISSION_ZERO_STEP, profile->mutation.step);
+    test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile,
+      POSTADMISSION_ONE_STEP, profile->mutation.step);
+  } else if (numeric_args_is_descending(profile)) {
     test_terminating_mutation(L, pt, idle_vmstate, profile,
       POSTADMISSION_QNAN_X, profile->mutation.x, MUTATION_QNAN, 0.0);
     test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile,
@@ -1560,22 +1691,6 @@ static void test_sub_lt_rejected(void)
   assert(call_triple(L, "__arm64_args_sub_lt",
 	0.5, 20.25, -0.5, 0, 0, 0) == 20.5);
   expect_no_trace(L, "__arm64_args_sub_lt");
-  lua_close(L);
-}
-
-static void test_mul_rejected(void)
-{
-  lua_State *L = luaL_newstate();
-  assert(L != NULL);
-  luaL_openlibs(L);
-  run_lua(L,
-    "jit.flush(); jit.on(); "
-    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
-    "function __arm64_args_negative(x,limit,step) "
-      "while x<limit do x=x*step end return x end");
-  assert(call_triple(L, "__arm64_args_negative",
-	0.5, 20.25, 2.0, 0, 0, 0) == 32.0);
-  expect_no_trace(L, "__arm64_args_negative");
   lua_close(L);
 }
 
@@ -1840,13 +1955,13 @@ int main(int argc, char **argv)
 	   strcmp(argv[1], "randomized") == 0);
   test_positive_and_guard_exits(&strict_profile);
   test_positive_and_guard_exits(&inclusive_profile);
+  test_positive_and_guard_exits(&mul_profile);
   test_positive_and_guard_exits(&add_descending_profile);
   test_positive_and_guard_exits(&add_descending_inclusive_profile);
   test_positive_and_guard_exits(&descending_profile);
   test_positive_and_guard_exits(&descending_inclusive_profile);
   test_fixed_initializers_remain_separate();
   test_sub_lt_rejected();
-  test_mul_rejected();
   test_div_rejected();
   test_adjacent_comparisons_rejected();
   test_extra_add_rejected();
