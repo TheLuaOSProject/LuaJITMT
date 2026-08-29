@@ -119,13 +119,19 @@ fi
 pure_numeric_args_contract=$root/tools/ci/arm64_jit_pure_numeric_args_contract.sh
 if test -f "$pure_numeric_args_contract"; then
   for required in \
-    'NUMERIC_ARGS_STEP_NUM, NUMERIC_ARGS_STEP_INT, NUMERIC_ARGS_LIMIT_INT' \
+    'NUMERIC_ARGS_STEP_NUM, NUMERIC_ARGS_STEP_INT, NUMERIC_ARGS_LIMIT_INT, NUMERIC_ARGS_X_INT' \
     'R_STEP, IRCONV_NUM_INT' \
     'limit_source_ref, IRCONV_NUM_INT' \
-    'assert(nscvtf == (step_kind == NUMERIC_ARGS_STEP_NUM ? 0u : 1u));' \
+    'R_X, IRCONV_NUM_INT' \
+    'IRCONV_INT_NUM|IRCONV_CHECK' \
+    'assert(nscvtf == (step_kind == NUMERIC_ARGS_X_INT ? 2u :' \
+    'assert(nfcvtzs == (step_kind == NUMERIC_ARGS_X_INT ? 1u : 0u));' \
+    'assert(ncheck == (step_kind == NUMERIC_ARGS_X_INT ? 1u : 0u));' \
     'assert(mcode[shift+17u] == UINT32_C(0x1e620000));' \
+    'assert(mcode[shift+31u] == UINT32_C(0x1e7801fc));' \
+    'test "$int_x_modes" -eq 12' \
     'test_int_limit_positive_and_guard_exits();' \
-    '25 modes/process, 150 default executions'; do
+    '37 modes/process, 222 default executions'; do
     grep -F "$required" "$pure_numeric_args_contract" >/dev/null || {
       echo "ARM64 umbrella lost NUM/INT widening proof: $required" >&2
       exit 1
