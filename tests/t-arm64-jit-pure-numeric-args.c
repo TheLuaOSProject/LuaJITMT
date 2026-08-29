@@ -8,7 +8,9 @@
 ** strict/inclusive descending ADD, and strict/inclusive descending SUB, each
 ** with live NUM accumulator/limit parameters and either a NUM or INT
 ** invariant step, factor, or divisor. INT invariants are converted to NUM
-** exactly once before either recurrence.
+** exactly once before either recurrence. One separately named strict ADD_LT
+** mode admits a live INT limit widened once after the first recurrence and
+** before either comparison.
 ** Adjacent arithmetic, direction, and bytecode families remain fail-closed,
 ** while the already-admitted fixed-initializer roots stay distinct.
 */
@@ -86,7 +88,8 @@ typedef enum NumericArgsComparison {
 
 typedef enum NumericArgsStepKind {
   NUMERIC_ARGS_STEP_NUM,
-  NUMERIC_ARGS_STEP_INT
+  NUMERIC_ARGS_STEP_INT,
+  NUMERIC_ARGS_LIMIT_INT
 } NumericArgsStepKind;
 
 typedef enum NumericArgsEvolution {
@@ -141,7 +144,8 @@ static int numeric_args_is_descending(const NumericArgsProfile *profile)
 static IRRef numeric_args_ref(NumericArgsStepKind step_kind, IRRef num_ref)
 {
   return (IRRef)(num_ref+
-	(step_kind == NUMERIC_ARGS_STEP_INT && num_ref >= R_X_PRE));
+	((step_kind == NUMERIC_ARGS_STEP_INT && num_ref >= R_X_PRE) ||
+	 (step_kind == NUMERIC_ARGS_LIMIT_INT && num_ref >= R_LIMIT)));
 }
 
 static IRRef numeric_args_step_value_ref(NumericArgsStepKind step_kind)
@@ -152,6 +156,14 @@ static IRRef numeric_args_step_value_ref(NumericArgsStepKind step_kind)
 static IRRef numeric_args_end_ref(NumericArgsStepKind step_kind)
 {
   return numeric_args_ref(step_kind, R_END);
+}
+
+static IRRef numeric_args_snapshot_ref(NumericArgsStepKind step_kind,
+	IRRef num_ref)
+{
+  if (step_kind == NUMERIC_ARGS_LIMIT_INT && num_ref == R_LIMIT)
+    return R_LIMIT;
+  return numeric_args_ref(step_kind, num_ref);
 }
 
 static const NumericArgsProfile strict_profile = {
@@ -367,6 +379,22 @@ typedef struct NumericArgsIntModeData {
   NumericArgsCall precondition;
 } NumericArgsIntModeData;
 
+typedef struct NumericArgsIntLimitModeData {
+  NumericArgsCall record;
+  NumericArgsCall reuse;
+  NumericArgsCall lifecycle;
+  lua_Number substitute_x_result;
+  lua_Number substitute_limit_result;
+  lua_Number substitute_step_result;
+  NumericArgsCall equality_body;
+  NumericArgsCall equality_first;
+  NumericArgsCall equality_initial;
+  NumericArgsCall precondition;
+  NumericArgsCall integer_x;
+  NumericArgsCall numeric_limit;
+  NumericArgsCall integer_step;
+} NumericArgsIntLimitModeData;
+
 /* Comparison pairs share one INT-invariant dataset per recurrence family.
 ** None of these ordinary rows lands exactly on its comparison boundary. */
 static const NumericArgsIntModeData int_mode_data[
@@ -419,6 +447,22 @@ static const NumericArgsIntModeData int_mode_data[
     { 20.5, 1.0, 2.0, 0.5 },
     { 1.5, 1.0, 2.0, -0.5 }
   }
+};
+
+/* This is the sole INT-limit mode. All values are exact binary fractions, and
+** each substitution keeps two recording-time operands live. */
+static const NumericArgsIntLimitModeData int_limit_mode_data = {
+  { 0.5, 20.0, 0.5, 20.0 },
+  { 0.25, 2.0, 0.375, 2.125 },
+  { 0.25, 20.0, 0.25, 20.0 },
+  2.0, 20.125, 2.25,
+  { 0.5, 2.0, 0.5, 2.0 },
+  { 0.5, 1.0, 0.5, 1.0 },
+  { 1.0, 1.0, 0.5, 1.0 },
+  { 0.75, 1.0, 0.5, 1.25 },
+  { 0.0, 4.0, 0.5, 4.0 },
+  { 0.5, 4.0, 0.5, 4.0 },
+  { 0.5, 4.0, 1.0, 4.5 }
 };
 
 static const NumericArgsIntModeData *numeric_args_int_data(
@@ -777,6 +821,8 @@ static void expect_ir_shape(const GCtrace *T,
   IRRef step_value = numeric_args_step_value_ref(step_kind);
   IRRef xpre_ref = numeric_args_ref(step_kind, R_X_PRE);
   IRRef limit_ref = numeric_args_ref(step_kind, R_LIMIT);
+  IRRef limit_source_ref = step_kind == NUMERIC_ARGS_LIMIT_INT ?
+	R_LIMIT : limit_ref;
   IRRef precond_ref = numeric_args_ref(step_kind, R_PRECOND);
   IRRef loop_ref = numeric_args_ref(step_kind, R_LOOP);
   IRRef xpoll_ref = numeric_args_ref(step_kind, R_XPOLL);
@@ -816,8 +862,12 @@ static void expect_ir_shape(const GCtrace *T,
     expect_ir(ir, xpre_ref, profile->recurrence_ir,
 	IRT_NUM|IRT_ISPHI, step_value, R_X);
   }
-  expect_ir(ir, limit_ref, IR_SLOAD, IRT_NUM|IRT_GUARD,
-	    3, IRSLOAD_TYPECHECK);
+  expect_ir(ir, limit_source_ref, IR_SLOAD,
+	(uint8_t)((step_kind == NUMERIC_ARGS_LIMIT_INT ? IRT_INT : IRT_NUM)|
+	IRT_GUARD), 3, IRSLOAD_TYPECHECK);
+  if (step_kind == NUMERIC_ARGS_LIMIT_INT)
+    expect_ir(ir, limit_ref, IR_CONV, IRT_NUM,
+	      limit_source_ref, IRCONV_NUM_INT);
   expect_ir(ir, precond_ref, profile->precondition_op,
 	IRT_NUM|IRT_GUARD, limit_ref, xpre_ref);
   expect_ir(ir, loop_ref, IR_LOOP, IRT_NIL|IRT_GUARD, 0, 0);
@@ -851,6 +901,8 @@ static void expect_ir_shape(const GCtrace *T,
   assert(x != step);
   if (step_kind == NUMERIC_ARGS_STEP_INT)
     assert(expect_gpr(ir, R_STEP) == RID_X1);
+  if (step_kind == NUMERIC_ARGS_LIMIT_INT)
+    assert(expect_gpr(ir, limit_source_ref) == RID_X0);
 }
 
 static void expect_snapshot_shape(const GCtrace *T, const GCproto *pt,
@@ -869,7 +921,8 @@ static void expect_snapshot_shape(const GCtrace *T, const GCproto *pt,
   for (snapno = 0; snapno < 5; snapno++) {
     MSize n;
     assert(snap_ref_acq(&snap[snapno]) ==
-	   numeric_args_ref(step_kind, expected_snaprefs[snapno]));
+	   numeric_args_snapshot_ref(step_kind,
+	     expected_snaprefs[snapno]));
     assert(snap_mapofs_acq(&snap[snapno]) == expected_mapofs[snapno]);
     assert(snap_nent_acq(&snap[snapno]) == expected_nent[snapno]);
     assert(snap_nslots_acq(&snap[snapno]) == expected_nslots[snapno]);
@@ -953,6 +1006,10 @@ static void expect_dynamic_fp_mcode(const GCtrace *T,
   unsigned stepreg = fpr_index(expect_fpr(ir, step_value));
   unsigned stepintreg = step_kind == NUMERIC_ARGS_STEP_INT ?
     (unsigned)(expect_gpr(ir, R_STEP)-RID_MIN_GPR) : 0;
+  IRRef limit_source_ref = step_kind == NUMERIC_ARGS_LIMIT_INT ?
+	R_LIMIT : numeric_args_ref(step_kind, R_LIMIT);
+  unsigned limitintreg = step_kind == NUMERIC_ARGS_LIMIT_INT ?
+    (unsigned)(expect_gpr(ir, limit_source_ref)-RID_MIN_GPR) : 0;
   unsigned phireg = fpr_index(expect_fpr(ir,
 	numeric_args_ref(step_kind, R_X_PHI)));
   unsigned limitreg = fpr_index(expect_fpr(ir,
@@ -974,10 +1031,16 @@ static void expect_dynamic_fp_mcode(const GCtrace *T,
   for (i = 0; i < nword; i++) {
     uint32_t ins = mcode[i];
     if ((ins & fcvt_mask) == A64I_FCVT_F64_S32) {
-      assert(step_kind == NUMERIC_ARGS_STEP_INT);
-      assert((ins & 31u) == stepreg);
-      assert(((ins >> 5) & 31u) == stepintreg);
-      assert(ins == UINT32_C(0x1e620021));
+      if (step_kind == NUMERIC_ARGS_STEP_INT) {
+	assert((ins & 31u) == stepreg);
+	assert(((ins >> 5) & 31u) == stepintreg);
+	assert(ins == UINT32_C(0x1e620021));
+      } else {
+	assert(step_kind == NUMERIC_ARGS_LIMIT_INT);
+	assert((ins & 31u) == limitreg);
+	assert(((ins >> 5) & 31u) == limitintreg);
+	assert(ins == UINT32_C(0x1e620000));
+      }
       assert(i < trace_mcloop_acq(T)/sizeof(MCode));
       nscvtf++;
     }
@@ -1066,7 +1129,25 @@ static void expect_dynamic_fp_mcode(const GCtrace *T,
       nfcmp++;
     }
   }
-  if (step_kind == NUMERIC_ARGS_STEP_INT) {
+  if (step_kind == NUMERIC_ARGS_LIMIT_INT) {
+    MSize shift = LJ_ABI_BRANCH_TRACK ? 1u : 0u;
+    assert(profile == &strict_profile);
+    assert(nword > shift+34u);
+    assert((shift+17u)*sizeof(MCode) ==
+	(LJ_ABI_BRANCH_TRACK ? 72u : 68u));
+    assert(mcode[shift+12u] == UINT32_C(0x1e62282f));
+    assert(mcode[shift+13u] == UINT32_C(0xf9400660));
+    assert(mcode[shift+14u] == UINT32_C(0xeb40803f));
+    assert(mcode[shift+15u] == UINT32_C(0x54000401));
+    assert(mcode[shift+16u] == UINT32_C(0x2a0003e0));
+    assert(mcode[shift+17u] == UINT32_C(0x1e620000));
+    assert(mcode[shift+18u] == UINT32_C(0x1e6021e0));
+    assert(mcode[shift+19u] == UINT32_C(0x54000482));
+    assert(mcode[shift+31u] == UINT32_C(0x1e6129ef));
+    assert(mcode[shift+32u] == UINT32_C(0x1e6021e0));
+    assert(mcode[shift+33u] == UINT32_C(0x54fffe63));
+    assert(mcode[shift+34u] == UINT32_C(0x14000025));
+  } else if (step_kind == NUMERIC_ARGS_STEP_INT) {
     MSize shift = LJ_ABI_BRANCH_TRACK ? 1u : 0u;
     uint32_t fcmp = profile->fcmp_limit_first ?
 	UINT32_C(0x1e6f2000) : UINT32_C(0x1e6021e0);
@@ -1142,7 +1223,7 @@ static void expect_dynamic_fp_mcode(const GCtrace *T,
     assert(mcode[shift+33u] == UINT32_C(0x14000025));
   }
   assert(nfarith == 2 && nopposite == 0);
-  assert(nscvtf == (step_kind == NUMERIC_ARGS_STEP_INT ? 1u : 0u));
+  assert(nscvtf == (step_kind == NUMERIC_ARGS_STEP_NUM ? 0u : 1u));
   if (xreg != phireg)
     assert(nfirstarith == 1 && nbodyarith == 1);
   assert(nfcmp == 2 && npre == 1 && nbody == 1);
@@ -1158,6 +1239,9 @@ static void expect_only_args_root_kind(lua_State *L, GCproto *pt,
   TraceNo traceno;
   uint8_t admission;
 
+  assert(step_kind == NUMERIC_ARGS_STEP_NUM ||
+	 step_kind == NUMERIC_ARGS_STEP_INT ||
+	 step_kind == NUMERIC_ARGS_LIMIT_INT);
   expect_proto_shape(pt, profile);
   assert(trace_runnable_acq(T, 1));
   assert(trace_traceno_acq(T) == 1 && trace_root_acq(T) == 0);
@@ -1306,7 +1390,8 @@ static void test_xpoll_lifecycle(lua_State *L, GCproto *pt,
   assert(pthread_create(&worker, NULL, publish_postadmission_request,
 	&publisher) == 0);
   assert(call_triple(L, profile->name,
-	call->x, call->limit, call->step, 0, 0,
+	call->x, call->limit, call->step, 0,
+	step_kind == NUMERIC_ARGS_LIMIT_INT,
 	step_kind == NUMERIC_ARGS_STEP_INT) == call->result);
   assert(pthread_join(worker, NULL) == 0);
   assert_publisher_done(&publisher);
@@ -1336,7 +1421,10 @@ static void test_xpoll_lifecycle(lua_State *L, GCproto *pt,
   lua_getglobal(L, profile->name);
   assert(lua_isfunction(L, -1));
   lua_pushnumber(L, call->x);
-  lua_pushnumber(L, call->limit);
+  if (step_kind == NUMERIC_ARGS_LIMIT_INT)
+    lua_pushinteger(L, (lua_Integer)call->limit);
+  else
+    lua_pushnumber(L, call->limit);
   if (step_kind == NUMERIC_ARGS_STEP_INT)
     lua_pushinteger(L, (lua_Integer)call->step);
   else
@@ -1370,7 +1458,8 @@ static void test_xpoll_lifecycle(lua_State *L, GCproto *pt,
   lj_trace_test_root_entry_reset();
   lj_trace_test_reset_exit_stats();
   assert(call_triple(L, profile->name,
-	call->x, call->limit, call->step, 0, 0,
+	call->x, call->limit, call->step, 0,
+	step_kind == NUMERIC_ARGS_LIMIT_INT,
 	step_kind == NUMERIC_ARGS_STEP_INT) == call->result);
   expect_single_exit(FINAL_EXIT);
   assert_native_idle(L, idle_vmstate);
@@ -2283,7 +2372,7 @@ static void test_positive_and_guard_exits(const NumericArgsProfile *profile)
   lua_close(L);
 }
 
-static void load_int_step_function(lua_State *L,
+static void load_numeric_args_function(lua_State *L,
 	const NumericArgsProfile *profile)
 {
   char chunk[512];
@@ -2561,7 +2650,7 @@ static void test_int_step_positive_and_guard_exits(
   luaL_openlibs(L);
   tg = L2TG(L);
   idle_vmstate = lj_tg_vmstate_load_acq(tg);
-  load_int_step_function(L, profile);
+  load_numeric_args_function(L, profile);
 
   /* X and LIMIT are genuine NUMs while the invariant arrives as an INT. */
   assert(call_triple(L, profile->name, data->record.x, data->record.limit,
@@ -2675,20 +2764,208 @@ static void test_int_step_positive_and_guard_exits(
 
   /* Converting an invariant INT is the sole new boundary. An INT X or LIMIT
   ** at recording time must not admit a root with another conversion. */
-  load_int_step_function(L, profile);
+  load_numeric_args_function(L, profile);
   call = numeric_args_int_x_negative(profile);
   for (i = 0; i < 4; i++)
     assert(call_triple(L, profile->name, call.x, call.limit, call.step,
 	  1, 0, 1) == call.result);
   expect_no_trace(L, profile->name);
 
-  load_int_step_function(L, profile);
+  load_numeric_args_function(L, profile);
   for (i = 0; i < 4; i++)
     assert(call_triple(L, profile->name,
 	  data->integer_limit.x, data->integer_limit.limit,
 	  data->integer_limit.step, 0, 1, 1) ==
 	data->integer_limit.result);
   expect_no_trace(L, profile->name);
+  assert_native_idle(L, idle_vmstate);
+  lua_close(L);
+}
+
+static void expect_int_limit_call(lua_State *L, GCproto *pt,
+	const NumericArgsCall *call, ExitNo exitno)
+{
+  lua_Number result;
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  result = call_triple(L, strict_profile.name,
+	call->x, call->limit, call->step, 0, 1, 0);
+  if (result != call->result)
+    fprintf(stderr, "INT-limit call %.17g %.17g %.17g got %.17g, "
+	"wanted %.17g\n", call->x, call->limit, call->step,
+	result, call->result);
+  assert(result == call->result);
+  expect_single_exit(exitno);
+  expect_only_args_root_kind(L, pt, &strict_profile,
+	NUMERIC_ARGS_LIMIT_INT);
+}
+
+static void expect_int_limit_recording_rejected(lua_State *L,
+	const NumericArgsProfile *profile, const NumericArgsCall *call,
+	int integer_x, int integer_step)
+{
+  int i;
+  load_numeric_args_function(L, profile);
+  for (i = 0; i < 4; i++)
+    assert(call_triple(L, profile->name,
+	call->x, call->limit, call->step,
+	integer_x, 1, integer_step) == call->result);
+  expect_no_trace(L, profile->name);
+}
+
+static void test_int_limit_positive_and_guard_exits(void)
+{
+  static const NumericArgsProfile *const rejected_profiles[] = {
+    &inclusive_profile,
+    &mul_profile,
+    &mul_inclusive_profile,
+    &div_profile,
+    &div_inclusive_profile,
+    &div_descending_profile,
+    &div_descending_inclusive_profile,
+    &add_descending_profile,
+    &add_descending_inclusive_profile,
+    &descending_profile,
+    &descending_inclusive_profile
+  };
+  const NumericArgsIntLimitModeData *data = &int_limit_mode_data;
+  NumericArgsCall call;
+  lua_State *L = luaL_newstate();
+  TGState *tg;
+  GCproto *pt;
+  GCtrace *T;
+  const BCIns *startpc;
+  BCIns startins;
+  int32_t idle_vmstate;
+  size_t profile_index;
+  int i;
+
+  assert(L != NULL);
+  luaL_openlibs(L);
+  tg = L2TG(L);
+  idle_vmstate = lj_tg_vmstate_load_acq(tg);
+  load_numeric_args_function(L, &strict_profile);
+
+  /* X and STEP are genuine NUMs while LIMIT arrives as an INT. */
+  assert(call_triple(L, strict_profile.name,
+	data->record.x, data->record.limit, data->record.step,
+	0, 1, 0) == data->record.result);
+  pt = global_proto(L, strict_profile.name);
+  expect_only_args_root_kind(L, pt, &strict_profile,
+	NUMERIC_ARGS_LIMIT_INT);
+  assert_native_idle(L, idle_vmstate);
+
+  /* One root must consume new values for all three arguments. Keeping one
+  ** recording-time value in each call rules out constant specialization. */
+  expect_int_limit_call(L, pt, &data->reuse, FINAL_EXIT);
+  call = (NumericArgsCall){
+    data->record.x, data->reuse.limit, data->reuse.step,
+    data->substitute_x_result
+  };
+  expect_int_limit_call(L, pt, &call, FINAL_EXIT);
+  call = (NumericArgsCall){
+    data->reuse.x, data->record.limit, data->reuse.step,
+    data->substitute_limit_result
+  };
+  expect_int_limit_call(L, pt, &call, FINAL_EXIT);
+  call = (NumericArgsCall){
+    data->reuse.x, data->reuse.limit, data->record.step,
+    data->substitute_step_result
+  };
+  expect_int_limit_call(L, pt, &call, FINAL_EXIT);
+
+  /* Distinguish equality at the body guard, equality/non-equality at the
+  ** first native precondition, and the interpreted condition before JLOOP. */
+  expect_int_limit_call(L, pt, &data->equality_body, FINAL_EXIT);
+  expect_int_limit_call(L, pt, &data->equality_first, PRECOND_EXIT);
+  expect_int_limit_call(L, pt, &data->precondition, PRECOND_EXIT);
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  assert(call_triple(L, strict_profile.name,
+	data->equality_initial.x, data->equality_initial.limit,
+	data->equality_initial.step, 0, 1, 0) ==
+	data->equality_initial.result);
+  assert(lj_trace_test_root_entry_publishes() == 0);
+  assert(lj_trace_test_root_entry_cleanups() == 0);
+  assert(lj_trace_test_exit_calls() == 0);
+  expect_only_args_root_kind(L, pt, &strict_profile,
+	NUMERIC_ARGS_LIMIT_INT);
+
+  test_xpoll_lifecycle(L, pt, idle_vmstate, &strict_profile,
+	NUMERIC_ARGS_LIMIT_INT, &data->lifecycle);
+
+  /* Repeated type exits must not start a side trace. INT X becomes NUM after
+  ** the interpreter resumes, while a NUM limit or INT step stays mismatched. */
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  for (i = 0; i < 4; i++)
+    assert(call_triple(L, strict_profile.name,
+	data->integer_x.x, data->integer_x.limit,
+	data->integer_x.step, 1, 1, 0) == data->integer_x.result);
+  expect_native_exit(X_OR_STEP_TYPE_EXIT, FINAL_EXIT);
+  expect_only_args_root_kind(L, pt, &strict_profile,
+	NUMERIC_ARGS_LIMIT_INT);
+
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  for (i = 0; i < 4; i++)
+    assert(call_triple(L, strict_profile.name,
+	data->numeric_limit.x, data->numeric_limit.limit,
+	data->numeric_limit.step, 0, 0, 0) == data->numeric_limit.result);
+  expect_native_exit(LIMIT_TYPE_EXIT, LIMIT_TYPE_EXIT);
+  expect_only_args_root_kind(L, pt, &strict_profile,
+	NUMERIC_ARGS_LIMIT_INT);
+
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  for (i = 0; i < 4; i++)
+    assert(call_triple(L, strict_profile.name,
+	data->integer_step.x, data->integer_step.limit,
+	data->integer_step.step, 0, 1, 1) == data->integer_step.result);
+  expect_native_exit(X_OR_STEP_TYPE_EXIT, X_OR_STEP_TYPE_EXIT);
+  expect_only_args_root_kind(L, pt, &strict_profile,
+	NUMERIC_ARGS_LIMIT_INT);
+  T = traceref_safe(L2J(L), 1);
+  assert(trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0);
+  assert_native_idle(L, idle_vmstate);
+
+  /* Flush must restore LOOP, and the exact root must remain recordable. */
+  startpc = trace_startpc_acq(T);
+  startins = trace_startins_acq(T);
+  run_lua(L, "jit.flush()");
+  assert((BCIns)la_load32_acq((const uint32_t *)startpc) == startins);
+  assert(bc_op(startins) == BC_LOOP);
+  assert(proto_trace_acq(pt) == 0);
+  T = traceref_safe(L2J(L), 1);
+  assert(T == NULL || !trace_runnable_acq(T, 1));
+  assert_native_idle(L, idle_vmstate);
+
+  load_numeric_args_function(L, &strict_profile);
+  assert(call_triple(L, strict_profile.name,
+	data->record.x, data->record.limit, data->record.step,
+	0, 1, 0) == data->record.result);
+  pt = global_proto(L, strict_profile.name);
+  expect_only_args_root_kind(L, pt, &strict_profile,
+	NUMERIC_ARGS_LIMIT_INT);
+  expect_int_limit_call(L, pt, &data->reuse, FINAL_EXIT);
+  assert_native_idle(L, idle_vmstate);
+
+  /* A second widening and an INT accumulator remain closed at recording. */
+  expect_int_limit_recording_rejected(L, &strict_profile,
+	&data->integer_step, 0, 1);
+  expect_int_limit_recording_rejected(L, &strict_profile,
+	&data->integer_x, 1, 0);
+
+  /* The INT-limit exception is exact ADD_LT only. Every other admitted NUM
+  ** grammar profile must remain fail-closed with the same operand types. */
+  assert(sizeof(rejected_profiles)/sizeof(rejected_profiles[0]) == 11);
+  for (profile_index = 0;
+       profile_index < sizeof(rejected_profiles)/sizeof(rejected_profiles[0]);
+       profile_index++) {
+    const NumericArgsProfile *profile = rejected_profiles[profile_index];
+    expect_int_limit_recording_rejected(L, profile,
+	&profile->integer_limit, 0, 0);
+  }
   assert_native_idle(L, idle_vmstate);
   lua_close(L);
 }
@@ -3287,6 +3564,7 @@ int main(int argc, char **argv)
 	&add_descending_inclusive_profile);
   test_int_step_positive_and_guard_exits(&descending_profile);
   test_int_step_positive_and_guard_exits(&descending_inclusive_profile);
+  test_int_limit_positive_and_guard_exits();
   test_fixed_initializers_remain_separate();
   test_sub_lt_rejected();
   test_div_adjacent_rejected();

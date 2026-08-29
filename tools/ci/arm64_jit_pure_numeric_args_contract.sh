@@ -177,7 +177,7 @@ for required in \
   'expect_ir(ir, xpre_ref, profile->recurrence_ir,' \
   'IRT_NUM|IRT_ISPHI, R_X, step_value);' \
   'IRT_NUM|IRT_ISPHI, step_value, R_X);' \
-  'expect_ir(ir, limit_ref, IR_SLOAD, IRT_NUM|IRT_GUARD,' \
+  'expect_ir(ir, limit_source_ref, IR_SLOAD,' \
   'expect_ir(ir, precond_ref, profile->precondition_op,' \
   'expect_ir(ir, loop_ref, IR_LOOP, IRT_NIL|IRT_GUARD, 0, 0);' \
   'expect_ir(ir, xpoll_ref, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0);' \
@@ -203,7 +203,7 @@ for required in \
   'assert(left == limitreg && right == phireg);' \
   'assert(left == phireg && right == limitreg);' \
   'assert(nfarith == 2 && nopposite == 0);' \
-  'assert(nscvtf == (step_kind == NUMERIC_ARGS_STEP_INT ? 1u : 0u));' \
+  'assert(nscvtf == (step_kind == NUMERIC_ARGS_STEP_NUM ? 0u : 1u));' \
   'assert(nfcmp == 2 && npre == 1 && nbody == 1);' \
   'trace_szmcode_acq(T) == 140 && trace_mcloop_acq(T) == 80' \
   'trace_szmcode_acq(T) == 144 && trace_mcloop_acq(T) == 84' \
@@ -410,6 +410,7 @@ for required in \
   'IRRef step_value = numeric_args_step_value_ref(step_kind);' \
   'IRRef xpre_ref = numeric_args_ref(step_kind, R_X_PRE);' \
   'IRRef limit_ref = numeric_args_ref(step_kind, R_LIMIT);' \
+  'IRRef limit_source_ref = step_kind == NUMERIC_ARGS_LIMIT_INT ? R_LIMIT : limit_ref;' \
   'IRRef loop_ref = numeric_args_ref(step_kind, R_LOOP);' \
   'IRRef xpoll_ref = numeric_args_ref(step_kind, R_XPOLL);' \
   'IRRef end_ref = numeric_args_end_ref(step_kind);' \
@@ -417,10 +418,13 @@ for required in \
   'if (step_kind == NUMERIC_ARGS_STEP_INT) expect_ir(ir, step_value, IR_CONV, IRT_NUM, R_STEP, IRCONV_NUM_INT);' \
   'if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING || profile->evolution == NUMERIC_ARGS_DIV_ASCENDING || profile->evolution == NUMERIC_ARGS_DIV_DESCENDING) { expect_ir(ir, xpre_ref, profile->recurrence_ir, IRT_NUM|IRT_ISPHI, R_X, step_value);' \
   '} else { expect_ir(ir, xpre_ref, profile->recurrence_ir, IRT_NUM|IRT_ISPHI, step_value, R_X);' \
+  'expect_ir(ir, limit_source_ref, IR_SLOAD, (uint8_t)((step_kind == NUMERIC_ARGS_LIMIT_INT ? IRT_INT : IRT_NUM)| IRT_GUARD), 3, IRSLOAD_TYPECHECK);' \
+  'if (step_kind == NUMERIC_ARGS_LIMIT_INT) expect_ir(ir, limit_ref, IR_CONV, IRT_NUM, limit_source_ref, IRCONV_NUM_INT);' \
   'expect_ir(ir, loop_ref, IR_LOOP, IRT_NIL|IRT_GUARD, 0, 0); expect_ir(ir, xpoll_ref, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0);' \
   'step = expect_fpr(ir, step_value);' \
   'assert(fpr_index(step) == 1);' \
-  'if (step_kind == NUMERIC_ARGS_STEP_INT) assert(expect_gpr(ir, R_STEP) == RID_X1);'; do
+  'if (step_kind == NUMERIC_ARGS_STEP_INT) assert(expect_gpr(ir, R_STEP) == RID_X1);' \
+  'if (step_kind == NUMERIC_ARGS_LIMIT_INT) assert(expect_gpr(ir, limit_source_ref) == RID_X0);'; do
   require_fixture_sequence \
     'static void expect_ir_shape' \
     'static void expect_snapshot_shape' "$required"
@@ -504,14 +508,16 @@ for required in \
     'static void expect_only_args_root' "$required"
 done
 
-# The INT-invariant mode shifts only refs at/after X_PRE. NUM mode remains the
-# unshifted default selected by the compatibility wrapper.
+# The two INT-invariant modes insert one widening at their exact recorder
+# positions. NUM mode remains the unshifted compatibility default.
 for required in \
-  'NUMERIC_ARGS_STEP_NUM, NUMERIC_ARGS_STEP_INT' \
+  'NUMERIC_ARGS_STEP_NUM, NUMERIC_ARGS_STEP_INT, NUMERIC_ARGS_LIMIT_INT' \
   'NUMERIC_ARGS_SUB_DESCENDING, NUMERIC_ARGS_EVOLUTION_MAX' \
-  'return (IRRef)(num_ref+ (step_kind == NUMERIC_ARGS_STEP_INT && num_ref >= R_X_PRE));' \
+  'step_kind == NUMERIC_ARGS_STEP_INT && num_ref >= R_X_PRE' \
+  'step_kind == NUMERIC_ARGS_LIMIT_INT && num_ref >= R_LIMIT' \
   'return step_kind == NUMERIC_ARGS_STEP_INT ? R_STEP+1u : R_STEP;' \
-  'return numeric_args_ref(step_kind, R_END);'; do
+  'return numeric_args_ref(step_kind, R_END);' \
+  'if (step_kind == NUMERIC_ARGS_LIMIT_INT && num_ref == R_LIMIT) return R_LIMIT;'; do
   require_fixture_sequence \
     'typedef enum NumericArgsStepKind' \
     'static const NumericArgsProfile strict_profile' "$required"
@@ -533,13 +539,17 @@ done
 for required in \
   'IRRef step_value = numeric_args_step_value_ref(step_kind);' \
   'unsigned stepintreg = step_kind == NUMERIC_ARGS_STEP_INT ? (unsigned)(expect_gpr(ir, R_STEP)-RID_MIN_GPR) : 0;' \
+  'unsigned limitintreg = step_kind == NUMERIC_ARGS_LIMIT_INT ? (unsigned)(expect_gpr(ir, limit_source_ref)-RID_MIN_GPR) : 0;' \
   'if ((ins & fcvt_mask) == A64I_FCVT_F64_S32) {' \
   'assert((ins & 31u) == stepreg);' \
   'assert(((ins >> 5) & 31u) == stepintreg);' \
   'assert(ins == UINT32_C(0x1e620021));' \
+  'assert((ins & 31u) == limitreg);' \
+  'assert(((ins >> 5) & 31u) == limitintreg);' \
+  'assert(ins == UINT32_C(0x1e620000));' \
   'assert(i < trace_mcloop_acq(T)/sizeof(MCode));' \
   'nscvtf++;' \
-  'assert(nscvtf == (step_kind == NUMERIC_ARGS_STEP_INT ? 1u : 0u));'; do
+  'assert(nscvtf == (step_kind == NUMERIC_ARGS_STEP_NUM ? 0u : 1u));'; do
   require_fixture_sequence \
     'static void expect_dynamic_fp_mcode' \
     'static void expect_only_args_root_kind' "$required"
@@ -565,6 +575,27 @@ for required in \
 done
 
 for required in \
+  'if (step_kind == NUMERIC_ARGS_LIMIT_INT) { MSize shift = LJ_ABI_BRANCH_TRACK ? 1u : 0u;' \
+  'assert(profile == &strict_profile);' \
+  'assert((shift+17u)*sizeof(MCode) == (LJ_ABI_BRANCH_TRACK ? 72u : 68u));' \
+  'assert(mcode[shift+12u] == UINT32_C(0x1e62282f));' \
+  'assert(mcode[shift+13u] == UINT32_C(0xf9400660));' \
+  'assert(mcode[shift+14u] == UINT32_C(0xeb40803f));' \
+  'assert(mcode[shift+15u] == UINT32_C(0x54000401));' \
+  'assert(mcode[shift+16u] == UINT32_C(0x2a0003e0));' \
+  'assert(mcode[shift+17u] == UINT32_C(0x1e620000));' \
+  'assert(mcode[shift+18u] == UINT32_C(0x1e6021e0));' \
+  'assert(mcode[shift+19u] == UINT32_C(0x54000482));' \
+  'assert(mcode[shift+31u] == UINT32_C(0x1e6129ef));' \
+  'assert(mcode[shift+32u] == UINT32_C(0x1e6021e0));' \
+  'assert(mcode[shift+33u] == UINT32_C(0x54fffe63));' \
+  'assert(mcode[shift+34u] == UINT32_C(0x14000025));'; do
+  require_fixture_sequence \
+    'static void expect_dynamic_fp_mcode' \
+    'static void expect_only_args_root_kind' "$required"
+done
+
+for required in \
   'if (step_kind == NUMERIC_ARGS_STEP_INT) { MSize shift = LJ_ABI_BRANCH_TRACK ? 1u : 0u;' \
   'UINT32_C(0x1e6f2000) : UINT32_C(0x1e6021e0);' \
   'UINT32_C(0x54000488) : UINT32_C(0x54000482);' \
@@ -583,6 +614,7 @@ for required in \
 done
 
 for required in \
+  'assert(step_kind == NUMERIC_ARGS_STEP_NUM || step_kind == NUMERIC_ARGS_STEP_INT || step_kind == NUMERIC_ARGS_LIMIT_INT);' \
   'if (step_kind == NUMERIC_ARGS_STEP_NUM) { assert(trace_szmcode_acq(T) == 140 && trace_mcloop_acq(T) == 80); } else { assert(trace_szmcode_acq(T) == 144 && trace_mcloop_acq(T) == 84); }' \
   'if (step_kind == NUMERIC_ARGS_STEP_NUM) { assert(trace_szmcode_acq(T) == 136 && trace_mcloop_acq(T) == 76); } else { assert(trace_szmcode_acq(T) == 140 && trace_mcloop_acq(T) == 80); }'; do
   require_fixture_sequence \
@@ -591,7 +623,7 @@ for required in \
 done
 
 for required in \
-  'numeric_args_ref(step_kind, expected_snaprefs[snapno])' \
+  'numeric_args_snapshot_ref(step_kind, expected_snaprefs[snapno])' \
   'numeric_args_ref(step_kind, expected_map_refs[tuple])' \
   'numeric_args_ref(step_kind, R_X_PHI)' \
   'value.t.irt == (IRT_NUM|IRT_ISPHI)'; do
@@ -615,6 +647,32 @@ for required in \
   require_fixture_sequence \
     'typedef struct NumericArgsIntModeData' \
     '#define QNAN_BITS' "$required"
+done
+
+# The exact ADD_LT INT-limit mode is a separate dataset. Its binary-fraction
+# rows prove reuse, three one-at-a-time substitutions, equality, precondition,
+# type exits and the lifecycle without changing the 24 existing modes.
+for required in \
+  'typedef struct NumericArgsIntLimitModeData {' \
+  'NumericArgsCall equality_body;' \
+  'NumericArgsCall equality_first;' \
+  'NumericArgsCall equality_initial;' \
+  'NumericArgsCall numeric_limit;' \
+  'static const NumericArgsIntLimitModeData int_limit_mode_data = {' \
+  '{ 0.5, 20.0, 0.5, 20.0 },' \
+  '{ 0.25, 2.0, 0.375, 2.125 },' \
+  '{ 0.25, 20.0, 0.25, 20.0 },' \
+  '2.0, 20.125, 2.25,' \
+  '{ 0.5, 2.0, 0.5, 2.0 },' \
+  '{ 0.5, 1.0, 0.5, 1.0 },' \
+  '{ 1.0, 1.0, 0.5, 1.0 },' \
+  '{ 0.75, 1.0, 0.5, 1.25 },' \
+  '{ 0.0, 4.0, 0.5, 4.0 },' \
+  '{ 0.5, 4.0, 0.5, 4.0 },' \
+  '{ 0.5, 4.0, 1.0, 4.5 }'; do
+  require_fixture_sequence \
+    'typedef struct NumericArgsIntLimitModeData' \
+    'static const NumericArgsIntModeData *numeric_args_int_data' "$required"
 done
 
 # Keep every newly admitted profile's exact bytecode/IR/machine-code
@@ -974,7 +1032,9 @@ done
 for required in \
   'numeric_args_ref(step_kind, R_LOOP)' \
   'numeric_args_ref(step_kind, R_COND)' \
+  'step_kind == NUMERIC_ARGS_LIMIT_INT,' \
   'step_kind == NUMERIC_ARGS_STEP_INT) == call->result' \
+  'if (step_kind == NUMERIC_ARGS_LIMIT_INT) lua_pushinteger(L, (lua_Integer)call->limit); else lua_pushnumber(L, call->limit);' \
   'if (step_kind == NUMERIC_ARGS_STEP_INT) lua_pushinteger(L, (lua_Integer)call->step); else lua_pushnumber(L, call->step);' \
   'expect_only_args_root_kind(L, pt, profile, step_kind);' \
   'expect_profile_exit_and_reentry();' \
@@ -996,7 +1056,7 @@ for required in \
   '"function %s(x,limit,step) while x%s limit do x=x%cstep end " "return x end"' \
   'assert(n > 0 && (size_t)n < sizeof(chunk));'; do
   require_fixture_sequence \
-    'static void load_int_step_function' \
+    'static void load_numeric_args_function' \
     'static void numeric_args_int_equality' "$required"
 done
 
@@ -1096,6 +1156,66 @@ for required in \
     'static void test_fixed_initializers_remain_separate' "$required"
 done
 
+for required in \
+  'result = call_triple(L, strict_profile.name, call->x, call->limit, call->step, 0, 1, 0);' \
+  'expect_single_exit(exitno);' \
+  'expect_only_args_root_kind(L, pt, &strict_profile, NUMERIC_ARGS_LIMIT_INT);'; do
+  require_fixture_sequence \
+    'static void expect_int_limit_call' \
+    'static void expect_int_limit_recording_rejected' "$required"
+done
+
+for required in \
+  'load_numeric_args_function(L, profile);' \
+  'integer_x, 1, integer_step) == call->result' \
+  'expect_no_trace(L, profile->name);'; do
+  require_fixture_sequence \
+    'static void expect_int_limit_recording_rejected' \
+    'static void test_int_limit_positive_and_guard_exits' "$required"
+done
+
+for required in \
+  'const NumericArgsIntLimitModeData *data = &int_limit_mode_data;' \
+  'data->record.x, data->record.limit, data->record.step, 0, 1, 0) == data->record.result' \
+  'expect_int_limit_call(L, pt, &data->reuse, FINAL_EXIT);' \
+  'data->substitute_x_result' \
+  'data->substitute_limit_result' \
+  'data->substitute_step_result' \
+  'expect_int_limit_call(L, pt, &data->equality_body, FINAL_EXIT);' \
+  'expect_int_limit_call(L, pt, &data->equality_first, PRECOND_EXIT);' \
+  'expect_int_limit_call(L, pt, &data->precondition, PRECOND_EXIT);' \
+  'data->equality_initial.step, 0, 1, 0) == data->equality_initial.result' \
+  'assert(lj_trace_test_root_entry_publishes() == 0);' \
+  'test_xpoll_lifecycle(L, pt, idle_vmstate, &strict_profile, NUMERIC_ARGS_LIMIT_INT, &data->lifecycle);' \
+  'data->integer_x.step, 1, 1, 0) == data->integer_x.result' \
+  'expect_native_exit(X_OR_STEP_TYPE_EXIT, FINAL_EXIT);' \
+  'data->numeric_limit.step, 0, 0, 0) == data->numeric_limit.result' \
+  'expect_native_exit(LIMIT_TYPE_EXIT, LIMIT_TYPE_EXIT);' \
+  'data->integer_step.step, 0, 1, 1) == data->integer_step.result' \
+  'expect_native_exit(X_OR_STEP_TYPE_EXIT, X_OR_STEP_TYPE_EXIT);' \
+  'assert(trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0);' \
+  'assert((BCIns)la_load32_acq((const uint32_t *)startpc) == startins);' \
+  'assert(proto_trace_acq(pt) == 0);' \
+  'load_numeric_args_function(L, &strict_profile);' \
+  'expect_int_limit_recording_rejected(L, &strict_profile, &data->integer_step, 0, 1);' \
+  'expect_int_limit_recording_rejected(L, &strict_profile, &data->integer_x, 1, 0);' \
+  'assert(sizeof(rejected_profiles)/sizeof(rejected_profiles[0]) == 11);' \
+  'expect_int_limit_recording_rejected(L, profile, &profile->integer_limit, 0, 0);'; do
+  require_fixture_sequence \
+    'static void test_int_limit_positive_and_guard_exits' \
+    'static void test_fixed_initializers_remain_separate' "$required"
+done
+
+for profile in inclusive_profile mul_profile mul_inclusive_profile \
+  div_profile div_inclusive_profile div_descending_profile \
+  div_descending_inclusive_profile add_descending_profile \
+  add_descending_inclusive_profile descending_profile \
+  descending_inclusive_profile; do
+  require_fixture_sequence \
+    'static void test_int_limit_positive_and_guard_exits' \
+    'const NumericArgsIntLimitModeData *data' "&$profile"
+done
+
 test "$(grep -Fc 'test_positive_and_guard_exits(&' \
   "$fixture_source")" -eq 12 || {
   echo "ARM64 dynamic-args NUM fixture lost a positive profile" >&2
@@ -1161,11 +1281,18 @@ for profile in strict_profile inclusive_profile mul_profile \
   int_modes=$((int_modes+1))
 done
 test "$num_modes" -eq 12 && test "$int_modes" -eq 12
-modes_per_process=$((num_modes+int_modes))
+test $((num_modes+int_modes)) -eq 24
+test "$(printf '%s\n' "$main_region" | \
+  grep -Fc 'test_int_limit_positive_and_guard_exits();')" -eq 1 || {
+  echo "ARM64 INT-limit main lost its exact invocation" >&2
+  exit 1
+}
+int_limit_modes=1
+modes_per_process=$((num_modes+int_modes+int_limit_modes))
 default_processes=$((2*(1+2)))
 default_mode_executions=$((modes_per_process*default_processes))
-test "$modes_per_process" -eq 24
-test "$default_mode_executions" -eq 144
+test "$modes_per_process" -eq 25
+test "$default_mode_executions" -eq 150
 for suite in \
   test_fixed_initializers_remain_separate \
   test_sub_lt_rejected \
@@ -1454,4 +1581,4 @@ done
 
 actual_processes=$((2+ordinary_runs+pauth_runs))
 actual_mode_executions=$((modes_per_process*actual_processes))
-echo "arm64_jit_pure_numeric_args_contract OK: ADD_LT/ADD_LE/MUL_LT/MUL_LE/DIV_LT/DIV_LE/DIV_GT/DIV_GE/ADD_GT/ADD_GE/SUB_GT/SUB_GE dynamic-accumulator NUM/INT-step roots and lifecycle proved on ARM64/arm64e; 24 modes/process, 144 default executions ($actual_mode_executions this run)"
+echo "arm64_jit_pure_numeric_args_contract OK: ADD_LT/ADD_LE/MUL_LT/MUL_LE/DIV_LT/DIV_LE/DIV_GT/DIV_GE/ADD_GT/ADD_GE/SUB_GT/SUB_GE dynamic-accumulator NUM/INT-step roots plus exact ADD_LT INT-limit lifecycle proved on ARM64/arm64e; 25 modes/process, 150 default executions ($actual_mode_executions this run)"
