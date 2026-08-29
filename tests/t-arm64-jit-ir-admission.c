@@ -1464,6 +1464,13 @@ static LJArm64PostRAView make_numacc_intx_postra_view(jit_State *J)
   fx.ir[AX_R_X_CHECK].r = RID_X28;
   fx.ir[AX_R_X_BODY].r = RID_D15;
   fx.ir[AX_R_X_PHI].r = RID_D15;
+  /* Resultless guards carry no allocator value, but the completed ARM64 pass
+  ** canonically marks their register byte RID_INIT. Keep the synthetic view
+  ** byte-faithful without making dead register bytes an admission condition. */
+  fx.ir[AX_R_PRE_GUARD].r = RID_INIT;
+  fx.ir[AX_R_LOOP].r = RID_INIT;
+  fx.ir[AX_R_XPOLL].r = RID_INIT;
+  fx.ir[AX_R_BODY_GUARD].r = RID_INIT;
   setir(AX_R_NOP, IR_NOP, IRT_NIL, 0, 0);
 
   view.ir = fx.ir;
@@ -4906,8 +4913,8 @@ static void test_numacc_shape_cross_product(jit_State *J)
   MSize combinations = 0, semantic_admissions = 0, postra_admissions = 0;
 
   /* Exercise the complete 12x4x2x2x4x4 source-profile, argument-kind,
-  ** pre-arithmetic, body-arithmetic, pre-guard and body-guard product. The NUM
-  ** INT-step and INT-X shapes admit one tuple per profile; INT-limit admits
+  ** pre-arithmetic, body-arithmetic, pre-guard and body-guard product. The NUM,
+  ** INT-step, and INT-X shapes admit one tuple per profile; INT-limit admits
   ** ADD_LT alone, for exactly 37 admissions at each independent gate. */
   for (p = 0; p < 12; p++) {
     const NumaccFixtureProfile *profile;

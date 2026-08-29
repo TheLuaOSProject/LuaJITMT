@@ -1929,6 +1929,10 @@ for required in \
   'fx.ir[AX_R_X_CHECK].r = RID_X28;' \
   'fx.ir[AX_R_X_BODY].r = RID_D15;' \
   'fx.ir[AX_R_X_PHI].r = RID_D15;' \
+  'fx.ir[AX_R_PRE_GUARD].r = RID_INIT;' \
+  'fx.ir[AX_R_LOOP].r = RID_INIT;' \
+  'fx.ir[AX_R_XPOLL].r = RID_INIT;' \
+  'fx.ir[AX_R_BODY_GUARD].r = RID_INIT;' \
   'fx.ir[AX_R_X_INT].r = RID_D2;' \
   'fx.ir[AX_R_X_CHECK].r = RID_D2;' \
   'fx.ir[AX_R_X_CHECK].r = RID_NONE;' \

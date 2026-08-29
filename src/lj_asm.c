@@ -83,10 +83,9 @@ int lj_asm_arm64_b26_encode(uintptr_t source, uintptr_t target, MCode *insp)
 ** invariant INT step widened by one exact INT-to-NUM conversion, or one INT
 ** accumulator widened once and repaired by one exact checked NUM-to-INT
 ** conversion. ADD_LT alone also admits one invariant INT limit widened once
-** to NUM. Only the exact MUL_LT
-** and MUL_LE profiles admit FMUL, and only the exact DIV_LT, DIV_LE, DIV_GT
-** and DIV_GE profiles admit FDIV; this list admits no IR CALL helper ID and
-** no heap operation.
+** to NUM. Only the exact MUL_LT and MUL_LE profiles admit FMUL, and only the
+** exact DIV_LT, DIV_LE, DIV_GT and DIV_GE profiles admit FDIV; this list
+** admits no IR CALL helper ID and no heap operation.
 */
 
 static int arm64_ir_reject(LJArm64IRReject *reject,
