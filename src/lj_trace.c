@@ -634,13 +634,12 @@ static LJ_AINLINE void trace_test_note_findfree_grow(TraceNo traceno)
 }
 #else
 #define trace_test_admission_inject(L, J, pc, stage) \
-  ((void)(L), (void)(J), (void)(pc), (void)(stage))
+  ((void)(L), (void)(J), (void)(pc))
 #define trace_test_side_admission_inject(L, J, parent, exitno, stage) \
-  ((void)(L), (void)(J), (void)(parent), (void)(exitno), (void)(stage))
+  ((void)(L), (void)(J), (void)(parent), (void)(exitno))
 #define trace_test_side_admission_inject_held(L, J, parent, exitno, snap, \
 	stage) \
-  ((void)(L), (void)(J), (void)(parent), (void)(exitno), (void)(snap), \
-   (void)(stage))
+  ((void)(L), (void)(J), (void)(parent), (void)(exitno), (void)(snap))
 #define trace_test_admission_note_clean_release(L, J) \
   ((void)(L), (void)(J))
 #define trace_test_admission_note_protected_poll() ((void)0)

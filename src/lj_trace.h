@@ -447,6 +447,7 @@ LJ_FUNC ExitNo lj_trace_test_last_exitno(void);
 LJ_FUNC void lj_trace_test_force_event_handoff_failure(uint32_t count);
 #endif
 
+#ifdef LJ_TRACE_TEST_HELPERS
 #define LJ_TRACE_TEST_ADMISSION_ENTRY		1u
 #define LJ_TRACE_TEST_ADMISSION_AFTER_TOKEN	2u
 #define LJ_TRACE_TEST_ADMISSION_TRACE_STATE	3u
@@ -455,7 +456,6 @@ LJ_FUNC void lj_trace_test_force_event_handoff_failure(uint32_t count);
 #define LJ_TRACE_TEST_REQUEST_COUNTED		1u
 #define LJ_TRACE_TEST_REQUEST_PROFILE		2u
 #define LJ_TRACE_TEST_REQUEST_OBSERVE		3u
-#ifdef LJ_TRACE_TEST_HELPERS
 LJ_FUNC void lj_trace_test_admission_reset(void);
 LJ_FUNC void lj_trace_test_admission_arm(uint32_t stage, uint32_t request,
 					 uint32_t actions);
