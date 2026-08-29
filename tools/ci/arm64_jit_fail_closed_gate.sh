@@ -65,6 +65,9 @@ if grep -n 'GL_J(trace)' "$root/src/vm_arm64.dasc" >/dev/null; then
   exit 1
 fi
 
+LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
+LJ_ARM64_GC2_RESTORE_XCFLAGS="$xcflags" \
+  sh "$root/tools/ci/arm64_gc2_interp_hard_check_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/arm64_jit_emitter_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/jit_hotcount_generation_contract.sh"
 LJ_TEST_ROOT="$root" sh "$root/tools/ci/jit_recorder_safepoint_contract.sh"

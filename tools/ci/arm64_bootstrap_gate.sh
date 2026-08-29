@@ -146,4 +146,8 @@ LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
 LJ_OSERR_RESTORE_XCFLAGS="$xcflags" \
   sh "$root/tools/ci/arm64_oserr_unwind_contract.sh"
 
-echo "arm64_bootstrap_gate OK: assert interpreter, stock, TG hooks, coroutine/dead-resume and FFI callbacks"
+LJ_TEST_ROOT="$root" LJ_TEST_RUN_LOCK_HELD=1 \
+LJ_ARM64_GC2_RESTORE_XCFLAGS="$xcflags" \
+  sh "$root/tools/ci/arm64_gc2_interp_hard_check_contract.sh"
+
+echo "arm64_bootstrap_gate OK: assert interpreter, GC2 hard assist, stock, TG hooks, coroutine/dead-resume and FFI callbacks"
