@@ -30,6 +30,8 @@ call_region=$tmpdir/call-region.txt
 value_region=$tmpdir/value-region.txt
 postra_region=$tmpdir/postra-region.txt
 positive_region=$tmpdir/positive-region.txt
+dynamic_forl_region=$tmpdir/dynamic-forl-region.txt
+dynamic_forl_tests=$tmpdir/dynamic-forl-tests.txt
 numhalf_region=$tmpdir/numhalf-region.txt
 numstep_region=$tmpdir/numstep-region.txt
 numacc_region=$tmpdir/numacc-region.txt
@@ -156,6 +158,61 @@ if grep -E 'IR_(KNUM|NUM|CONV|ADD,|SUB,|MUL,|DIV|USE)' \
   echo "removed numeric family entered the integer positive fixture" >&2
   exit 1
 fi
+
+# The variable-stop/variable-step FORL fixture pins the recorder's exact
+# direction and overflow proof, including the sole scoped IR_USE.
+awk '/^static void make_dynamic_forl_trace/ { copying = 1 }
+     copying { print }
+     copying && /^static void make_numeric_trace/ { exit }' \
+  "$root/tests/t-arm64-jit-ir-admission.c" >"$dynamic_forl_region"
+for required in \
+  'V_R_STOP, IR_SLOAD, IRT_INT, idxslot+FORL_STOP' \
+  'V_R_STEP, IR_SLOAD, IRT_INT, idxslot+FORL_STEP' \
+  'V_R_DIRECTION, direction, IRT_INT|IRT_GUARD' \
+  'V_R_OVERFLOW, IR_ADDOV, IRT_INT|IRT_GUARD' \
+  'V_R_USE, IR_USE, IRT_INT, V_R_OVERFLOW, 0' \
+  'V_R_IDX_PRE, IR_ADD, IRT_INT|IRT_ISPHI' \
+  'V_R_IDX_BODY, IR_ADD, IRT_INT|IRT_ISPHI' \
+  'SNAP(8, SNAP_NORESTORE, V_R_STEP)' \
+  'fx.T.nsnapmap = 32;' \
+  'fx.T.nins = V_R_SEMANTIC_END;'; do
+  grep -F "$required" "$dynamic_forl_region" >/dev/null || {
+    echo "ARM64 dynamic FORL fixture changed: $required" >&2
+    exit 1
+  }
+done
+test "$(grep -c 'IR_USE' "$dynamic_forl_region")" -eq 1
+
+awk '/^static void test_dynamic_forl_positive_and_negative/ { copying = 1 }
+     copying { print }
+     copying && /^static void test_postra_spill_layout/ { exit }' \
+  "$root/tests/t-arm64-jit-ir-admission.c" >"$dynamic_forl_tests"
+for required in \
+  'fx.ir[V_R_STEP].op2 = IRSLOAD_TYPECHECK|IRSLOAD_INHERIT;' \
+  'fx.ir[V_R_DIRECTION].o = IR_GT;' \
+  'fx.ir[V_R_OVERFLOW].op1 = V_R_STOP;' \
+  'fx.ir[V_R_USE].op1 = V_R_STOP;' \
+  'fx.ir[V_R_USE].s = SPS_FIRST;' \
+  'fx.ir[V_R_OVERFLOW].r = RID_INIT;' \
+  'fx.ir[V_R_STEP].r = RID_D0;' \
+  'fx.ir[V_R_STEP].r = fx.ir[V_R_STOP].r;' \
+  'fx.ir[V_R_IDX].r = fx.ir[V_R_STEP].r;' \
+  'fx.ir[V_R_SUM].r = fx.ir[V_R_IDX].r;' \
+  'fx.ir[V_R_OVERFLOW].r = fx.ir[V_R_STEP].r;' \
+  'fx.ir[V_R_IDX_BODY].r = RID_X26;' \
+  'fx.ir[V_R_SUM_BODY].r = RID_X26;' \
+  'fx.ir[V_R_SUM_PHI].r = fx.ir[V_R_IDX_PHI].r;' \
+  'fx.snapmap[4] = SNAP(8, SNAP_NORESTORE, V_R_STOP);'; do
+  grep -F "$required" "$dynamic_forl_tests" >/dev/null || {
+    echo "ARM64 dynamic FORL mutation coverage changed: $required" >&2
+    exit 1
+  }
+done
+for required in \
+  'test_dynamic_forl_positive_and_negative(J);' \
+  'test_dynamic_forl_postra_layout(J);'; do
+  grep -F "$required" "$root/tests/t-arm64-jit-ir-admission.c" >/dev/null
+done
 
 # Keep the production check ahead of IR scratch growth, compact-trace
 # allocation and mcode reservation/publication.
@@ -1844,7 +1901,7 @@ for required in \
   'select_numacc_fixture(NUMACC_FIXTURE_DIV_GT);' \
   'select_numacc_fixture(NUMACC_FIXTURE_DIV_GE);' \
   'test_numacc_shape_cross_product(J);' \
-  'L->top -= 16;' \
+  'L->top -= 17;' \
   'test_numacc_positive_and_negative(J);' \
   'test_numacc_postra_layout(J);' \
   'test_numacc_intstep_positive_and_negative(J);' \
@@ -2398,6 +2455,7 @@ for cases in \
   'case IR_PHI:' \
   'case IR_LOOP:' \
   'case IR_XPOLL:' \
+  'case IR_USE:' \
   'case IR_CALLN: case IR_CALLA: case IR_CALLL: case IR_CALLS:' \
   'case IR_CALLXS:'; do
   grep -F "$cases" "$semantic_region" >/dev/null || {
@@ -2407,8 +2465,8 @@ for cases in \
 done
 
 awk '/case IR_CALLN:/ { copying = 1 }
-     copying { print }
-     copying && /default:/ { exit }' "$semantic_region" >"$call_region"
+     copying && /case IR_USE:/ { exit }
+     copying { print }' "$semantic_region" >"$call_region"
 test "$(grep -c 'LJ_ARM64_IR_REJECT_CALL' "$call_region")" -eq 2
 if grep -E 'break;|return 1|IRCALL_[A-Za-z0-9_]+[[:space:]]*:' \
      "$call_region" >/dev/null; then
@@ -2418,7 +2476,7 @@ fi
 
 for forbidden in IR_KGC IR_KPTR IR_KKPTR IR_KNULL IR_KINT64 IR_KSLOT \
   IR_NOP IR_ULT IR_UGE IR_ULE IR_UGT \
-  IR_USE IR_NEG IR_MOD IR_POW \
+  IR_NEG IR_MOD IR_POW \
   IR_ABS IR_LDEXP \
   IR_MIN IR_MAX IR_FPMATH \
   IR_AREF IR_HREF IR_UREFO IR_FLOAD IR_XLOAD IR_ASTORE IR_HSTORE \
@@ -2635,4 +2693,4 @@ done
   -o "$fixture"
 "$fixture"
 
-echo "arm64_jit_ir_admission_contract OK: exact integer, mixed-NUM, fixed-half, dynamic-step and ADD_LT/ADD_LE/ADD_GT/ADD_GE/SUB_GT/SUB_GE/MUL_LT/MUL_LE/DIV_LT/DIV_LE/DIV_GT/DIV_GE dynamic-accumulator NUM/INT-step/INT-X plus ADD_LT INT-limit LOOP/FORL grammars, 3072 combinations with 37 semantic/post-RA admissions, bounded integer spills, and exact GPR/FPR layouts verified"
+echo "arm64_jit_ir_admission_contract OK: exact variable-step INT FORL plus integer, mixed-NUM, fixed-half, dynamic-step and ADD_LT/ADD_LE/ADD_GT/ADD_GE/SUB_GT/SUB_GE/MUL_LT/MUL_LE/DIV_LT/DIV_LE/DIV_GT/DIV_GE dynamic-accumulator NUM/INT-step/INT-X plus ADD_LT INT-limit LOOP grammars, 3072 LOOP combinations with 37 semantic/post-RA admissions, bounded integer spills, and exact GPR/FPR layouts verified"

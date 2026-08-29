@@ -38,8 +38,9 @@ int lj_asm_arm64_b26_encode(uintptr_t source, uintptr_t target, MCode *insp)
 /*
 ** The stock ARM64 backend can encode a much larger IR surface than the
 ** lockless runtime has proved safe. Keep native publication to optimized,
-** self-linked scalar BC_LOOP roots, separately certified constant-step
-** integer BC_FORL roots, and the exact literal-true fixed-function root.
+** self-linked scalar BC_LOOP roots, separately certified constant-step and
+** exact variable-stop/variable-step integer BC_FORL roots, and the exact
+** literal-true fixed-function root.
 ** Numeric LOOP admission is presently limited to four exact spill-free
 ** accumulator families: one dynamic mixed INT/NUM root, one pure NUM root with
 ** a canonical +0.5 constant, one fixed-initializer root with a dynamic NUM
@@ -641,8 +642,10 @@ static int arm64_ir_sload_layout(IRIns ir, BCOp rootop, MSize forl_idxslot,
     if (ir.op1 == forl_idxslot+FORL_STOP)
       return ir.t.irt == IRT_INT &&
 		     ir.op2 == (IRSLOAD_READONLY|IRSLOAD_INHERIT);
-    if (ir.op1 == forl_idxslot+FORL_STEP ||
-	ir.op1 == forl_idxslot+FORL_EXT)
+    if (ir.op1 == forl_idxslot+FORL_STEP)
+      return ir.t.irt == IRT_INT &&
+		     ir.op2 == (IRSLOAD_READONLY|IRSLOAD_INHERIT);
+    if (ir.op1 == forl_idxslot+FORL_EXT)
       return 0;
   }
   return arm64_ir_type_flags(ir.t, IRT_INT, IRT_GUARD,
@@ -1226,6 +1229,185 @@ static int arm64_postra_funcf_admit(const LJArm64PostRAView *view,
   return 1;
 }
 
+/* Validate the exact spill-free variable-stop/variable-step FORL proof after
+** register allocation. Constant-step roots have neither a STEP load nor
+** IR_USE and retain the existing allocator certificate. */
+static int arm64_postra_forl_dynamic_shape(const LJArm64PostRAView *view,
+	IRRef semantic_nins, int *dynamic_stepp)
+{
+  const IRIns *ir = view->ir;
+  MSize idxslot = (MSize)(1u+LJ_FR2+bc_a(view->startins));
+  MSize stopslot = idxslot+FORL_STOP;
+  MSize stepslot = idxslot+FORL_STEP;
+  IRRef ref, stepref = 0, useref = 0, loopref = 0, xpollref = 0;
+  IRRef firstphi = 0, preadd = 0, postadd = 0;
+  IRRef indexphi = 0, accumphi = 0;
+  unsigned nstep = 0, nuse = 0, nloop = 0, nxpoll = 0, nadd = 0;
+  unsigned nphi = 0;
+  IRIns stop, step, direction, overflow, use, idx;
+  IRIns sum, accpre, accpost, pre, post, precmp, postcmp, zero;
+  IROp cmpop;
+
+  *dynamic_stepp = 0;
+  for (ref = REF_FIRST; ref < semantic_nins; ref++) {
+    IRIns ins = ir_load_acq(&ir[ref]);
+    if (ins.o == IR_SLOAD && ins.op1 == stepslot) {
+      nstep++;
+      stepref = ref;
+    } else if (ins.o == IR_USE) {
+      nuse++;
+      useref = ref;
+    } else if (ins.o == IR_LOOP) {
+      nloop++;
+      loopref = ref;
+    } else if (ins.o == IR_XPOLL) {
+      nxpoll++;
+      xpollref = ref;
+    } else if (ins.o == IR_PHI && firstphi == 0) {
+      firstphi = ref;
+    }
+  }
+  if (nstep == 0 && nuse == 0)
+    return 1;
+  if (nstep != 1u || nuse != 1u || nloop != 1u || nxpoll != 1u ||
+      xpollref != loopref+1u || firstphi == 0)
+    return 0;
+
+  for (ref = REF_FIRST; ref < firstphi; ref++) {
+    IRIns ins = ir_load_acq(&ir[ref]);
+    if (ins.o != IR_ADD)
+      continue;
+    nadd++;
+    if (ref < loopref) {
+      if (preadd != 0)
+	return 0;
+      preadd = ref;
+    } else if (ref > xpollref) {
+      if (postadd != 0)
+	return 0;
+      postadd = ref;
+    } else {
+      return 0;
+    }
+  }
+  if (nadd != 2u || preadd <= REF_FIRST || postadd <= xpollref+1u ||
+      preadd+1u >= loopref || postadd+1u >= firstphi)
+    return 0;
+
+  accpre = ir_load_acq(&ir[preadd-1u]);
+  accpost = ir_load_acq(&ir[postadd-1u]);
+  pre = ir_load_acq(&ir[preadd]);
+  post = ir_load_acq(&ir[postadd]);
+  precmp = ir_load_acq(&ir[preadd+1u]);
+  postcmp = ir_load_acq(&ir[postadd+1u]);
+  if (pre.op1 < REF_FIRST || pre.op1 >= preadd ||
+      precmp.op2 < REF_FIRST || precmp.op2 >= stepref ||
+      pre.op2 != stepref || post.op1 != preadd || post.op2 != stepref ||
+      pre.t.irt != (IRT_INT|IRT_ISPHI) ||
+      post.t.irt != (IRT_INT|IRT_ISPHI) ||
+      precmp.op2+1u != stepref || stepref+4u != pre.op1)
+    return 0;
+
+  if (accpre.o != IR_ADDOV ||
+      accpre.t.irt != (IRT_INT|IRT_GUARD|IRT_ISPHI) ||
+      accpre.op1 < REF_FIRST || accpre.op1 >= preadd-1u ||
+      accpre.op2 != pre.op1 || accpost.o != IR_ADDOV ||
+      accpost.t.irt != (IRT_INT|IRT_GUARD|IRT_ISPHI) ||
+      accpost.op1 != preadd || accpost.op2 != preadd-1u)
+    return 0;
+
+  stop = ir_load_acq(&ir[precmp.op2]);
+  step = ir_load_acq(&ir[stepref]);
+  direction = ir_load_acq(&ir[stepref+1u]);
+  overflow = ir_load_acq(&ir[stepref+2u]);
+  use = ir_load_acq(&ir[stepref+3u]);
+  idx = ir_load_acq(&ir[pre.op1]);
+  sum = ir_load_acq(&ir[accpre.op1]);
+  if (stop.o != IR_SLOAD || stop.op1 != stopslot ||
+      stop.op2 != (IRSLOAD_READONLY|IRSLOAD_INHERIT) ||
+      stop.t.irt != IRT_INT || stop.s != SPS_NONE ||
+      stop.r >= RID_MAX_GPR || !rset_test(RSET_GPR, stop.r) ||
+      step.o != IR_SLOAD || step.op1 != stepslot ||
+      step.op2 != (IRSLOAD_READONLY|IRSLOAD_INHERIT) ||
+      step.t.irt != IRT_INT || step.s != SPS_NONE ||
+      step.r >= RID_MAX_GPR || !rset_test(RSET_GPR, step.r) ||
+      idx.o != IR_SLOAD || idx.op1 != idxslot ||
+      idx.op2 != (IRSLOAD_TYPECHECK|IRSLOAD_INHERIT) ||
+      idx.t.irt != (IRT_INT|IRT_GUARD) || idx.s != SPS_NONE ||
+      idx.r >= RID_MAX_GPR || !rset_test(RSET_GPR, idx.r) ||
+      sum.o != IR_SLOAD || sum.op1 != idxslot-1u ||
+      sum.op2 != IRSLOAD_TYPECHECK ||
+      sum.t.irt != (IRT_INT|IRT_GUARD) || sum.s != SPS_NONE ||
+      sum.r >= RID_MAX_GPR || !rset_test(RSET_GPR, sum.r) ||
+      accpre.s != SPS_NONE || accpre.r >= RID_MAX_GPR ||
+      !rset_test(RSET_GPR, accpre.r) ||
+      accpost.s != SPS_NONE || accpost.r >= RID_MAX_GPR ||
+      !rset_test(RSET_GPR, accpost.r) ||
+      pre.s != SPS_NONE || pre.r >= RID_MAX_GPR ||
+      !rset_test(RSET_GPR, pre.r) ||
+      post.s != SPS_NONE || post.r >= RID_MAX_GPR ||
+      !rset_test(RSET_GPR, post.r))
+    return 0;
+  if ((direction.o != IR_GE && direction.o != IR_LT) ||
+      direction.op1 != stepref || direction.t.irt != (IRT_INT|IRT_GUARD) ||
+      !arm64_postra_scalar_kref(view, direction.op2, IRT_INT))
+    return 0;
+  zero = ir_load_acq(&ir[direction.op2]);
+  if (zero.i != 0)
+    return 0;
+  cmpop = direction.o == IR_GE ? IR_LE : IR_GE;
+  if (overflow.o != IR_ADDOV || overflow.op1 != stepref ||
+      overflow.op2 != precmp.op2 ||
+      overflow.t.irt != (IRT_INT|IRT_GUARD) ||
+      overflow.s != SPS_NONE || overflow.r >= RID_MAX_GPR ||
+      !rset_test(RSET_GPR, overflow.r) ||
+      useref != stepref+3u || use.o != IR_USE || use.t.irt != IRT_INT ||
+      use.op1 != stepref+2u || use.op2 != 0 || use.s != SPS_NONE ||
+      precmp.o != cmpop || precmp.op1 != preadd ||
+      precmp.t.irt != (IRT_INT|IRT_GUARD) ||
+      postcmp.o != cmpop || postcmp.op1 != postadd ||
+      postcmp.op2 != precmp.op2 ||
+      postcmp.t.irt != (IRT_INT|IRT_GUARD))
+    return 0;
+  for (ref = firstphi; ref < semantic_nins; ref++) {
+    IRIns phi = ir_load_acq(&ir[ref]);
+    nphi++;
+    if (phi.o != IR_PHI || phi.t.irt != IRT_INT ||
+	phi.s != SPS_NONE || phi.r >= RID_MAX_GPR ||
+	!rset_test(RSET_GPR, phi.r))
+      return 0;
+    if (phi.op1 == preadd && phi.op2 == postadd) {
+      if (indexphi != 0)
+	return 0;
+      indexphi = ref;
+    } else if (phi.op1 == preadd-1u && phi.op2 == postadd-1u) {
+      if (accumphi != 0)
+	return 0;
+      accumphi = ref;
+    } else {
+      return 0;
+    }
+  }
+  if (nphi != 2u || indexphi == 0 || accumphi == 0)
+    return 0;
+  {
+    IRIns iphi = ir_load_acq(&ir[indexphi]);
+    IRIns aphi = ir_load_acq(&ir[accumphi]);
+    Reg ri = iphi.r;
+    Reg ra = aphi.r;
+    if (ri != pre.r || ri != post.r ||
+	ra != accpre.r || ra != accpost.r ||
+	stop.r == step.r || stop.r == ri || stop.r == ra ||
+	step.r == ri || step.r == ra || ri == ra ||
+	idx.r == stop.r || idx.r == step.r || idx.r == ra ||
+	sum.r == stop.r || sum.r == step.r || sum.r == idx.r ||
+	overflow.r == stop.r || overflow.r == step.r)
+      return 0;
+  }
+  *dynamic_stepp = 1;
+  return 1;
+}
+
 /* Validate the immutable allocator layout used by native execution and exit
 ** restoration. This is deliberately independent of recorder state: the same
 ** bounded scan runs while assembling and after root entry publishes jit_base
@@ -1245,7 +1427,7 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
   unsigned numdynamic_profile = 0;
   unsigned numdynamic_args_kind = ARM64_NUMDYN_ARGS_NUM;
   int suffix_is_nop = 0, allow_num_sub = 0, allow_num_mul = 0;
-  int allow_num_div = 0;
+  int allow_num_div = 0, forl_dynamic_step = 0;
 
   LJ_STATIC_ASSERT(SPS_FIRST == 2);
   LJ_STATIC_ASSERT(SPS_FIXED == 4);
@@ -1321,6 +1503,10 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
     }
   }
   if (semantic_nins <= REF_FIRST)
+    return 0;
+  if (rootop == BC_FORL &&
+      !arm64_postra_forl_dynamic_shape(view, semantic_nins,
+	&forl_dynamic_step))
     return 0;
 
   for (ref = REF_BASE; ref < semantic_nins; ref++) {
@@ -1454,6 +1640,11 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
       break;
     case IR_LOOP: case IR_XPOLL:
       if (!arm64_ir_type_flags(ins.t, IRT_NIL, IRT_GUARD, IRT_GUARD) ||
+	  slot != SPS_NONE)
+	return 0;
+      break;
+    case IR_USE:
+      if (rootop != BC_FORL || ins.t.irt != IRT_INT || ins.op2 != 0 ||
 	  slot != SPS_NONE)
 	return 0;
       break;
@@ -1623,7 +1814,9 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
 	    (flags == SNAP_NORESTORE &&
 	     (source.o != IR_SLOAD || source.op1 != slot ||
 	      rootop != BC_FORL ||
-	      (slot != forl_idxslot && slot != forl_idxslot+FORL_STOP))))
+	      (slot != forl_idxslot && slot != forl_idxslot+FORL_STOP &&
+	       (!forl_dynamic_step ||
+		slot != forl_idxslot+FORL_STEP)))))
 	  return 0;
 	rs = source.prev;
 	for (renref = view->nins; renref-- > semantic_nins; ) {
@@ -2641,25 +2834,35 @@ static int arm64_ir_kint_value(const GCtrace *T, IRRef ref, int32_t *value)
   return 1;
 }
 
-/* Prove the exact narrowed constant-step scalar evolution emitted for an
-** integer FORL root. The two unchecked ADDs are safe only because the loop
-** limit plus the non-zero constant step is proved to remain in int32 range. */
+/* Prove the exact narrowed scalar evolution emitted for an integer FORL
+** root. Constant steps use a range guard for a dynamic stop. A dynamic step
+** and stop use the recorder's direction guard plus a live ADDOV proof. */
 static int arm64_ir_forl_shape(const jit_State *J, const GCtrace *T,
-	IRRef loopref, IRRef xpollref, IRRef firstphi,
+	IRRef loopref, IRRef xpollref, IRRef firstphi, int *dynamic_stepp,
 	LJArm64IRReject *reject)
 {
   MSize idxslot = (MSize)(1u+LJ_FR2+bc_a(T->startins));
   MSize stopslot = idxslot+FORL_STOP;
+  MSize stepslot = idxslot+FORL_STEP;
   IRRef ref, preadd = 0, postadd = 0, indexphi = 0;
-  IRRef idxload, stepref, stopref;
+  IRRef idxload, stepref, stopref, stepload = 0, useref = 0;
   IRIns pre, post, precmp, postcmp, idx, stop;
   IROp cmpop;
-  int32_t step, stopvalue;
-  unsigned nadd = 0;
+  int32_t step = 0, stopvalue;
+  unsigned nadd = 0, nstepload = 0, nuse = 0;
 
   UNUSED(J);
+  *dynamic_stepp = 0;
   for (ref = REF_FIRST; ref < T->nins; ref++) {
-    if (T->ir[ref].o != IR_ADD)
+    const IRIns *ir = &T->ir[ref];
+    if (ir->o == IR_SLOAD && ir->op1 == stepslot) {
+      nstepload++;
+      stepload = ref;
+    } else if (ir->o == IR_USE) {
+      nuse++;
+      useref = ref;
+    }
+    if (ir->o != IR_ADD)
       continue;
     nadd++;
     if (ref < loopref) {
@@ -2688,8 +2891,10 @@ static int arm64_ir_forl_shape(const jit_State *J, const GCtrace *T,
   postcmp = T->ir[postadd+1u];
   idxload = pre.op1;
   stepref = pre.op2;
+  stopref = precmp.op2;
   if (idxload < REF_FIRST || idxload >= preadd ||
-      !arm64_ir_kint_value(T, stepref, &step) || step == 0 ||
+      (!irref_isk(stepref) &&
+       (stepref < REF_FIRST || stepref >= preadd)) ||
       post.op1 != preadd || post.op2 != stepref ||
       pre.t.irt != (IRT_INT|IRT_ISPHI) ||
       post.t.irt != (IRT_INT|IRT_ISPHI))
@@ -2702,56 +2907,102 @@ static int arm64_ir_forl_shape(const jit_State *J, const GCtrace *T,
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
 			   idxload, IR_SLOAD, idx.op2);
 
-  cmpop = step > 0 ? IR_LE : IR_GE;
-  stopref = precmp.op2;
-  if (precmp.o != cmpop || postcmp.o != cmpop ||
-      precmp.op1 != preadd || postcmp.op1 != postadd ||
-      postcmp.op2 != stopref ||
-      precmp.t.irt != (IRT_INT|IRT_GUARD) ||
-      postcmp.t.irt != (IRT_INT|IRT_GUARD))
-    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
-			   preadd+1u, cmpop, 5);
-
-  if (irref_isk(stopref)) {
-    int64_t sum;
-    if (!arm64_ir_kint_value(T, stopref, &stopvalue))
-      return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CONSTANT,
-			     stopref, IR_KINT, 0);
-    sum = (int64_t)stopvalue + (int64_t)step;
-    if (sum < INT32_MIN || sum > INT32_MAX)
+  if (irref_isk(stepref)) {
+    if (nstepload != 0 || nuse != 0 ||
+	!arm64_ir_kint_value(T, stepref, &step) || step == 0)
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
-			     stopref, IR_ADD, 6);
+			     stepref, IR_ADD, 5);
+    cmpop = step > 0 ? IR_LE : IR_GE;
   } else {
-    IRRef guardref;
-    IRIns boundguard;
-    int32_t boundvalue, expected;
-    int64_t expected64;
-    if (stopref < REF_FIRST || stopref >= preadd)
+    IRIns direction, overflow, use;
+    int32_t zero;
+    if (nstepload != 1u || stepload != stepref || nuse != 1u ||
+	stopref < REF_FIRST || stopref+1u != stepref ||
+	stepref+4u != idxload)
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
-			     stopref, IR_SLOAD, 7);
+			     stepref, IR_SLOAD, (uint16_t)nstepload);
     stop = T->ir[stopref];
     if (stop.o != IR_SLOAD || stop.op1 != stopslot ||
 	stop.op2 != (IRSLOAD_READONLY|IRSLOAD_INHERIT) ||
 	stop.t.irt != IRT_INT)
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
 			     stopref, IR_SLOAD, stop.op2);
-    guardref = stopref+1u;
-    if (guardref >= preadd)
+    if (T->ir[stepref].o != IR_SLOAD ||
+	T->ir[stepref].op1 != stepslot ||
+	T->ir[stepref].op2 != (IRSLOAD_READONLY|IRSLOAD_INHERIT) ||
+	T->ir[stepref].t.irt != IRT_INT)
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
-			     guardref, cmpop, 8);
-    boundguard = T->ir[guardref];
-    expected64 = step > 0 ? (int64_t)INT32_MAX-(int64_t)step :
-				 (int64_t)INT32_MIN-(int64_t)step;
-    if (expected64 < INT32_MIN || expected64 > INT32_MAX)
+			     stepref, IR_SLOAD, T->ir[stepref].op2);
+    direction = T->ir[stepref+1u];
+    if ((direction.o != IR_GE && direction.o != IR_LT) ||
+	direction.op1 != stepref ||
+	!arm64_ir_kint_value(T, direction.op2, &zero) || zero != 0 ||
+	direction.t.irt != (IRT_INT|IRT_GUARD))
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
-			     guardref, cmpop, 9);
-    expected = (int32_t)expected64;
-    if (boundguard.o != cmpop || boundguard.op1 != stopref ||
-	!arm64_ir_kint_value(T, boundguard.op2, &boundvalue) ||
-	boundvalue != expected ||
-	boundguard.t.irt != (IRT_INT|IRT_GUARD))
+			     stepref+1u, (IROp)direction.o, 6);
+    cmpop = direction.o == IR_GE ? IR_LE : IR_GE;
+    overflow = T->ir[stepref+2u];
+    use = T->ir[stepref+3u];
+    if (overflow.o != IR_ADDOV || overflow.op1 != stepref ||
+	overflow.op2 != stopref ||
+	overflow.t.irt != (IRT_INT|IRT_GUARD) ||
+	useref != stepref+3u || use.o != IR_USE ||
+	use.t.irt != IRT_INT || use.op1 != stepref+2u || use.op2 != 0)
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
-			     guardref, cmpop, 10);
+			     stepref+2u, IR_ADDOV, 7);
+    *dynamic_stepp = 1;
+  }
+
+  if (precmp.o != cmpop || postcmp.o != cmpop ||
+      precmp.op1 != preadd || postcmp.op1 != postadd ||
+      postcmp.op2 != stopref ||
+      precmp.t.irt != (IRT_INT|IRT_GUARD) ||
+      postcmp.t.irt != (IRT_INT|IRT_GUARD))
+    return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
+			   preadd+1u, cmpop, 8);
+
+  if (!*dynamic_stepp) {
+    if (irref_isk(stopref)) {
+      int64_t sum;
+      if (!arm64_ir_kint_value(T, stopref, &stopvalue))
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CONSTANT,
+			       stopref, IR_KINT, 0);
+      sum = (int64_t)stopvalue + (int64_t)step;
+      if (sum < INT32_MIN || sum > INT32_MAX)
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
+			       stopref, IR_ADD, 9);
+    } else {
+      IRRef guardref;
+      IRIns boundguard;
+      int32_t boundvalue, expected;
+      int64_t expected64;
+      if (stopref < REF_FIRST || stopref >= preadd)
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
+			       stopref, IR_SLOAD, 10);
+      stop = T->ir[stopref];
+      if (stop.o != IR_SLOAD || stop.op1 != stopslot ||
+	  stop.op2 != (IRSLOAD_READONLY|IRSLOAD_INHERIT) ||
+	  stop.t.irt != IRT_INT)
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
+			       stopref, IR_SLOAD, stop.op2);
+      guardref = stopref+1u;
+      if (guardref >= preadd)
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
+			       guardref, cmpop, 11);
+      boundguard = T->ir[guardref];
+      expected64 = step > 0 ? (int64_t)INT32_MAX-(int64_t)step :
+				   (int64_t)INT32_MIN-(int64_t)step;
+      if (expected64 < INT32_MIN || expected64 > INT32_MAX)
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
+			       guardref, cmpop, 12);
+      expected = (int32_t)expected64;
+      if (boundguard.o != cmpop || boundguard.op1 != stopref ||
+	  !arm64_ir_kint_value(T, boundguard.op2, &boundvalue) ||
+	  boundvalue != expected ||
+	  boundguard.t.irt != (IRT_INT|IRT_GUARD))
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND,
+			       guardref, cmpop, 13);
+    }
   }
 
   for (ref = firstphi; ref && ref < T->nins; ref++) {
@@ -2759,13 +3010,13 @@ static int arm64_ir_forl_shape(const jit_State *J, const GCtrace *T,
     if (phi->op1 == preadd && phi->op2 == postadd) {
       if (indexphi != 0)
 	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE,
-			       ref, IR_PHI, 11);
+			       ref, IR_PHI, 14);
       indexphi = ref;
     }
   }
   if (indexphi == 0)
     return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE,
-			   preadd, IR_PHI, 12);
+			   preadd, IR_PHI, 15);
   return 1;
 }
 
@@ -2773,7 +3024,7 @@ static int arm64_ir_snapshots(const GCtrace *T, IRRef loopref,
 	IRRef xpollref, MSize root_topslot, const jit_State *J,
 	uintptr_t proto_lo, uintptr_t proto_hi, BCOp rootop,
 	unsigned scalar_mode, int allow_num_sub, int allow_num_mul,
-	int allow_num_div,
+	int allow_num_div, int allow_forl_step,
 	LJArm64IRReject *reject)
 {
   SnapNo snapno;
@@ -2837,7 +3088,8 @@ static int arm64_ir_snapshots(const GCtrace *T, IRRef loopref,
 	MSize idxslot = (MSize)(1u+LJ_FR2+bc_a(T->startins));
 	if (rootop != BC_FORL || irref_isk(ref) ||
 	    ref < REF_FIRST || ref >= snapref ||
-	    (slot != idxslot && slot != idxslot+FORL_STOP))
+	    (slot != idxslot && slot != idxslot+FORL_STOP &&
+	     (!allow_forl_step || slot != idxslot+FORL_STEP)))
 	  return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_SNAPSHOT,
 				 ref, IR_SLOAD, (uint16_t)snapno);
 	source = &T->ir[ref];
@@ -2918,6 +3170,7 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
   unsigned numdynamic_profile = 0;
   unsigned numdynamic_args_kind = ARM64_NUMDYN_ARGS_NUM;
   int allow_num_sub = 0, allow_num_mul = 0, allow_num_div = 0;
+  int forl_dynamic_step = 0;
   BCOp startop;
   if (reject) {
     reject->reason = LJ_ARM64_IR_REJECT_NONE;
@@ -3181,6 +3434,17 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
     case IR_CALLXS:
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_CALL, ref,
 			     IR_CALLXS, LJ_ARM64_IR_CALL_NONE);
+    case IR_USE:
+      if (startop != BC_FORL)
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPCODE, ref,
+			       IR_USE, 0);
+      if (ir->t.irt != IRT_INT || ir->op2 != 0 ||
+	  ir->op1 < REF_FIRST || ir->op1 >= ref ||
+	  T->ir[ir->op1].o != IR_ADDOV ||
+	  T->ir[ir->op1].t.irt != (IRT_INT|IRT_GUARD))
+	return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPERAND, ref,
+			       IR_USE, ir->op2);
+      break;
     default:
       return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_OPCODE, ref,
 			     (IROp)ir->o, 0);
@@ -3238,12 +3502,13 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
 	T->nk, IR_KNUM, (uint16_t)constant_profile);
   }
   if (startop == BC_FORL &&
-      !arm64_ir_forl_shape(J, T, loopref, xpollref, firstphi, reject))
+      !arm64_ir_forl_shape(J, T, loopref, xpollref, firstphi,
+	&forl_dynamic_step, reject))
     return 0;
   if (!arm64_ir_snapshots(T, loopref, xpollref, root_topslot, J,
 				  proto_lo, proto_hi, startop,
 				  scalar_mode, allow_num_sub, allow_num_mul,
-				  allow_num_div,
+				  allow_num_div, forl_dynamic_step,
 				  reject))
     return 0;
   if (!arm64_ir_guard_snapshots(T, reject))

@@ -59,6 +59,32 @@ enum {
   ADMISSION_IR_CAP = REF_BASE + 256
 };
 
+/* Exact variable-stop/variable-step narrowed INT BC_FORL root. */
+enum {
+  V_K_ZERO = REF_TRUE - 1,
+
+  V_R_STOP = REF_FIRST,
+  V_R_STEP,
+  V_R_DIRECTION,
+  V_R_OVERFLOW,
+  V_R_USE,
+  V_R_IDX,
+  V_R_SUM,
+  V_R_SUM_PRE,
+  V_R_IDX_PRE,
+  V_R_PRECOND,
+  V_R_LOOP,
+  V_R_XPOLL,
+  V_R_SUM_BODY,
+  V_R_IDX_BODY,
+  V_R_COND,
+  V_R_IDX_PHI,
+  V_R_SUM_PHI,
+  V_R_SEMANTIC_END,
+  V_R_RENAME = V_R_SEMANTIC_END,
+  V_R_POSTRA_END
+};
+
 /* Exact recorder order for the first admitted mixed INT/NUM BC_LOOP root.
 ** Keep these names distinct from the older all-integer policy fixture above:
 ** the two fixtures deliberately exercise separate admission grammars. */
@@ -277,6 +303,8 @@ static GCproto *fixture_pt;
 static const BCIns *fixture_forl_pc;
 static const BCIns *fixture_loop_pc;
 static const BCIns *fixture_snapshot_pc;
+static GCproto *dynamic_forl_fixture_pt;
+static const BCIns *dynamic_forl_fixture_pc;
 static GCproto *numeric_fixture_pt;
 static const BCIns *numeric_fixture_loop_pc;
 static const BCIns *numeric_fixture_snapshot_pc;
@@ -503,6 +531,119 @@ static void make_forl_trace(jit_State *J)
   fx.ir[R_B].op2 = IRSLOAD_TYPECHECK|IRSLOAD_INHERIT;
   fx.ir[R_C].t.irt = IRT_INT;
   fx.ir[R_C].op2 = IRSLOAD_READONLY|IRSLOAD_INHERIT;
+}
+
+static void make_dynamic_forl_trace(jit_State *J, int negative)
+{
+  static const IRRef snaprefs[6] = {
+    V_R_STOP, V_R_SUM_PRE, V_R_PRECOND,
+    V_R_LOOP, V_R_SUM_BODY, V_R_COND
+  };
+  static const uint8_t mapofs[6] = { 0, 2, 10, 13, 20, 29 };
+  static const uint8_t nent[6] = { 0, 6, 1, 5, 7, 1 };
+  static const uint8_t nslots[6] = { 2, 12, 6, 10, 12, 6 };
+  MSize idxslot;
+  SnapNo snapno;
+  IROp direction = negative ? IR_LT : IR_GE;
+  IROp compare = negative ? IR_GE : IR_LE;
+
+  assert(dynamic_forl_fixture_pt != NULL &&
+	 dynamic_forl_fixture_pc != NULL);
+  assert(dynamic_forl_fixture_pt->framesize == 10);
+  memset(&fx, 0, sizeof(fx));
+  idxslot = (MSize)(1u+LJ_FR2+
+	bc_a(loadbc(dynamic_forl_fixture_pc)));
+
+  setir(V_K_ZERO, IR_KINT, IRT_INT, 0, 0);
+  setir(REF_TRUE, IR_KPRI, IRT_TRUE, 0, 0);
+  setir(REF_FALSE, IR_KPRI, IRT_FALSE, 0, 0);
+  setir(REF_NIL, IR_KPRI, IRT_NIL, 0, 0);
+
+  setir(REF_BASE, IR_BASE, IRT_PGC, 0, 0);
+  setir(V_R_STOP, IR_SLOAD, IRT_INT, idxslot+FORL_STOP,
+	IRSLOAD_READONLY|IRSLOAD_INHERIT);
+  setir(V_R_STEP, IR_SLOAD, IRT_INT, idxslot+FORL_STEP,
+	IRSLOAD_READONLY|IRSLOAD_INHERIT);
+  setir(V_R_DIRECTION, direction, IRT_INT|IRT_GUARD,
+	V_R_STEP, V_K_ZERO);
+  setir(V_R_OVERFLOW, IR_ADDOV, IRT_INT|IRT_GUARD,
+	V_R_STEP, V_R_STOP);
+  setir(V_R_USE, IR_USE, IRT_INT, V_R_OVERFLOW, 0);
+  setir(V_R_IDX, IR_SLOAD, IRT_INT|IRT_GUARD, idxslot,
+	IRSLOAD_TYPECHECK|IRSLOAD_INHERIT);
+  setir(V_R_SUM, IR_SLOAD, IRT_INT|IRT_GUARD, idxslot-1u,
+	IRSLOAD_TYPECHECK);
+  setir(V_R_SUM_PRE, IR_ADDOV, IRT_INT|IRT_GUARD|IRT_ISPHI,
+	V_R_SUM, V_R_IDX);
+  setir(V_R_IDX_PRE, IR_ADD, IRT_INT|IRT_ISPHI,
+	V_R_IDX, V_R_STEP);
+  setir(V_R_PRECOND, compare, IRT_INT|IRT_GUARD,
+	V_R_IDX_PRE, V_R_STOP);
+  setir(V_R_LOOP, IR_LOOP, IRT_NIL|IRT_GUARD, 0, 0);
+  setir(V_R_XPOLL, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0);
+  setir(V_R_SUM_BODY, IR_ADDOV, IRT_INT|IRT_GUARD|IRT_ISPHI,
+	V_R_IDX_PRE, V_R_SUM_PRE);
+  setir(V_R_IDX_BODY, IR_ADD, IRT_INT|IRT_ISPHI,
+	V_R_IDX_PRE, V_R_STEP);
+  setir(V_R_COND, compare, IRT_INT|IRT_GUARD,
+	V_R_IDX_BODY, V_R_STOP);
+  setir(V_R_IDX_PHI, IR_PHI, IRT_INT, V_R_IDX_PRE, V_R_IDX_BODY);
+  setir(V_R_SUM_PHI, IR_PHI, IRT_INT, V_R_SUM_PRE, V_R_SUM_BODY);
+
+  for (snapno = 0; snapno < 6; snapno++) {
+    fx.snap[snapno].ref = snaprefs[snapno];
+    fx.snap[snapno].mapofs = mapofs[snapno];
+    fx.snap[snapno].nent = nent[snapno];
+    fx.snap[snapno].nslots = nslots[snapno];
+    fx.snap[snapno].topslot = 10;
+  }
+  fx.snapmap[2] = SNAP(6, SNAP_NORESTORE, V_R_IDX);
+  fx.snapmap[3] = SNAP(7, SNAP_NORESTORE, V_R_STOP);
+  fx.snapmap[4] = SNAP(8, SNAP_NORESTORE, V_R_STEP);
+  fx.snapmap[5] = SNAP(9, 0, V_R_IDX);
+  fx.snapmap[6] = SNAP(10, 0, V_R_SUM);
+  fx.snapmap[7] = SNAP(11, 0, V_R_IDX);
+  fx.snapmap[10] = SNAP(5, 0, V_R_SUM_PRE);
+  fx.snapmap[13] = SNAP(5, 0, V_R_SUM_PRE);
+  fx.snapmap[14] = SNAP(6, 0, V_R_IDX_PRE);
+  fx.snapmap[15] = SNAP(7, SNAP_NORESTORE, V_R_STOP);
+  fx.snapmap[16] = SNAP(8, SNAP_NORESTORE, V_R_STEP);
+  fx.snapmap[17] = SNAP(9, 0, V_R_IDX_PRE);
+  fx.snapmap[20] = SNAP(5, 0, V_R_SUM_PRE);
+  fx.snapmap[21] = SNAP(6, 0, V_R_IDX_PRE);
+  fx.snapmap[22] = SNAP(7, 0, V_R_STOP);
+  fx.snapmap[23] = SNAP(8, 0, V_R_STEP);
+  fx.snapmap[24] = SNAP(9, 0, V_R_IDX_PRE);
+  fx.snapmap[25] = SNAP(10, 0, V_R_SUM_PRE);
+  fx.snapmap[26] = SNAP(11, 0, V_R_IDX_PRE);
+  fx.snapmap[29] = SNAP(5, 0, V_R_SUM_BODY);
+
+  fx.T.nk = V_K_ZERO;
+  fx.T.nins = V_R_SEMANTIC_END;
+  fx.T.ir = fx.ir;
+  fx.T.nsnap = 6;
+  fx.T.snap = fx.snap;
+  fx.T.nsnapmap = 32;
+  fx.T.snapmap = fx.snapmap;
+  fx.T.traceno = 1;
+  fx.T.link = 1;
+  fx.T.root = 0;
+  fx.T.linktype = LJ_TRLINK_LOOP;
+  fx.T.sinktags = 0;
+  fx.T.startins = loadbc(dynamic_forl_fixture_pc);
+  trace_startpt_rel(&fx.T, dynamic_forl_fixture_pt);
+  setmref(fx.T.startpc, dynamic_forl_fixture_pc);
+  for (snapno = 0; snapno < 6; snapno++)
+    set_snapshot_payload(snapno, dynamic_forl_fixture_pc, 0);
+
+  J->parent = 0;
+  J->exitno = 0;
+  J->pt = dynamic_forl_fixture_pt;
+  J->baseslot = 1 + LJ_FR2;
+  J->framedepth = 0;
+  J->retdepth = 0;
+  J->loopref = V_R_LOOP;
+  J->startpc = dynamic_forl_fixture_pc;
 }
 
 static void make_numeric_trace(jit_State *J)
@@ -1190,6 +1331,63 @@ static void expect_postra_result(LJArm64PostRAView *view, int admitted)
   assert(result == admitted);
   if (admitted)
     assert(semantic_nins == R_END);
+}
+
+static LJArm64PostRAView make_dynamic_forl_postra_view(jit_State *J,
+	int negative)
+{
+  LJArm64PostRAView view;
+  make_dynamic_forl_trace(J, negative);
+
+  fx.ir[V_K_ZERO].r = RID_INIT;
+  fx.ir[REF_TRUE].r = RID_INIT;
+  fx.ir[REF_FALSE].r = RID_INIT;
+  fx.ir[REF_NIL].r = RID_INIT;
+  fx.ir[REF_BASE].r = RID_BASE;
+  fx.ir[V_R_STOP].r = RID_X0;
+  fx.ir[V_R_STEP].r = RID_X1;
+  fx.ir[V_R_DIRECTION].r = RID_INIT;
+  fx.ir[V_R_OVERFLOW].r = RID_X4;
+  fx.ir[V_R_USE].r = RID_INIT;
+  fx.ir[V_R_IDX].r = RID_X27;
+  fx.ir[V_R_SUM].r = RID_X2;
+  fx.ir[V_R_SUM_PRE].r = RID_X28;
+  fx.ir[V_R_IDX_PRE].r = RID_X27;
+  fx.ir[V_R_PRECOND].r = RID_INIT;
+  fx.ir[V_R_LOOP].r = RID_INIT;
+  fx.ir[V_R_XPOLL].r = RID_INIT;
+  fx.ir[V_R_SUM_BODY].r = RID_X28;
+  fx.ir[V_R_IDX_BODY].r = RID_X27;
+  fx.ir[V_R_COND].r = RID_INIT;
+  fx.ir[V_R_IDX_PHI].r = RID_X27;
+  fx.ir[V_R_SUM_PHI].r = RID_X28;
+  setir(V_R_RENAME, IR_RENAME, IRT_NIL, V_R_SUM_PRE, 3);
+  fx.ir[V_R_RENAME].r = RID_X26;
+
+  view.ir = fx.ir;
+  view.snap = fx.snap;
+  view.snapmap = fx.snapmap;
+  view.proto_bc = proto_bc(dynamic_forl_fixture_pt);
+  view.nins = V_R_POSTRA_END;
+  view.nk = fx.T.nk;
+  view.nsnap = fx.T.nsnap;
+  view.nsnapmap = fx.T.nsnapmap;
+  view.spadjust = 0;
+  view.proto_sizebc = dynamic_forl_fixture_pt->sizebc;
+  view.root_topslot = dynamic_forl_fixture_pt->framesize;
+  view.startins = fx.T.startins;
+  view.base_delta = 0;
+  return view;
+}
+
+static void expect_dynamic_forl_postra_result(LJArm64PostRAView *view,
+	int admitted)
+{
+  IRRef semantic_nins = 0;
+  int result = lj_asm_arm64_postra_admit(view, &semantic_nins);
+  assert(result == admitted);
+  if (admitted)
+    assert(semantic_nins == V_R_SEMANTIC_END);
 }
 
 static LJArm64PostRAView make_numeric_postra_view(jit_State *J)
@@ -2915,6 +3113,133 @@ static void test_numacc_intx_postra_layout(jit_State *J)
   view = make_numacc_intx_postra_view(J);
   view.nsnapmap = 14;
   expect_numacc_intx_postra_result(&view, 0);
+}
+
+static void expect_dynamic_forl_ir_reject(jit_State *J)
+{
+  LJArm64IRReject reject;
+  assert(!lj_asm_arm64_ir_admit(J, &fx.T, &reject));
+  assert(reject.reason != LJ_ARM64_IR_REJECT_NONE);
+}
+
+static void test_dynamic_forl_positive_and_negative(jit_State *J)
+{
+  LJArm64IRReject reject;
+  int negative;
+  for (negative = 0; negative <= 1; negative++) {
+    make_dynamic_forl_trace(J, negative);
+    assert(lj_asm_arm64_ir_admit(J, &fx.T, &reject));
+    assert(reject.reason == LJ_ARM64_IR_REJECT_NONE);
+  }
+
+  make_dynamic_forl_trace(J, 0);
+  fx.ir[V_R_STEP].op2 = IRSLOAD_TYPECHECK|IRSLOAD_INHERIT;
+  expect_dynamic_forl_ir_reject(J);
+  make_dynamic_forl_trace(J, 0);
+  fx.ir[V_R_STEP].t.irt = IRT_INT|IRT_GUARD;
+  expect_dynamic_forl_ir_reject(J);
+  make_dynamic_forl_trace(J, 0);
+  fx.ir[V_R_DIRECTION].o = IR_GT;
+  expect_dynamic_forl_ir_reject(J);
+  make_dynamic_forl_trace(J, 0);
+  fx.ir[V_K_ZERO].i = 1;
+  expect_dynamic_forl_ir_reject(J);
+  make_dynamic_forl_trace(J, 0);
+  fx.ir[V_R_OVERFLOW].op1 = V_R_STOP;
+  fx.ir[V_R_OVERFLOW].op2 = V_R_STEP;
+  expect_dynamic_forl_ir_reject(J);
+  make_dynamic_forl_trace(J, 0);
+  fx.ir[V_R_OVERFLOW].t.irt = IRT_INT;
+  expect_dynamic_forl_ir_reject(J);
+  make_dynamic_forl_trace(J, 0);
+  fx.ir[V_R_USE].t.irt = IRT_NIL;
+  expect_dynamic_forl_ir_reject(J);
+  make_dynamic_forl_trace(J, 0);
+  fx.ir[V_R_USE].op1 = V_R_STOP;
+  expect_dynamic_forl_ir_reject(J);
+  make_dynamic_forl_trace(J, 0);
+  fx.ir[V_R_USE].op2 = 1;
+  expect_dynamic_forl_ir_reject(J);
+  make_dynamic_forl_trace(J, 0);
+  fx.ir[V_R_IDX_BODY].op2 = V_R_STOP;
+  expect_dynamic_forl_ir_reject(J);
+  make_dynamic_forl_trace(J, 0);
+  fx.ir[V_R_PRECOND].o = IR_GE;
+  expect_dynamic_forl_ir_reject(J);
+  make_dynamic_forl_trace(J, 0);
+  fx.ir[V_R_SUM].op1 = fx.ir[V_R_STEP].op1;
+  fx.ir[V_R_SUM].op2 = fx.ir[V_R_STEP].op2;
+  fx.ir[V_R_SUM].t.irt = IRT_INT;
+  expect_dynamic_forl_ir_reject(J);
+  make_dynamic_forl_trace(J, 0);
+  fx.snapmap[4] = SNAP(8, SNAP_NORESTORE, V_R_STOP);
+  expect_dynamic_forl_ir_reject(J);
+}
+
+static void test_dynamic_forl_postra_layout(jit_State *J)
+{
+  LJArm64PostRAView view;
+  int negative;
+  for (negative = 0; negative <= 1; negative++) {
+    view = make_dynamic_forl_postra_view(J, negative);
+    expect_dynamic_forl_postra_result(&view, 1);
+  }
+
+  view = make_dynamic_forl_postra_view(J, 0);
+  fx.ir[V_R_USE].s = SPS_FIRST;
+  view.spadjust = 16;
+  expect_dynamic_forl_postra_result(&view, 0);
+  view = make_dynamic_forl_postra_view(J, 0);
+  fx.ir[V_R_USE].op1 = V_R_STOP;
+  expect_dynamic_forl_postra_result(&view, 0);
+  view = make_dynamic_forl_postra_view(J, 0);
+  fx.ir[V_R_OVERFLOW].r = RID_INIT;
+  expect_dynamic_forl_postra_result(&view, 0);
+  view = make_dynamic_forl_postra_view(J, 0);
+  fx.ir[V_R_OVERFLOW].s = SPS_FIRST;
+  view.spadjust = 16;
+  expect_dynamic_forl_postra_result(&view, 0);
+  view = make_dynamic_forl_postra_view(J, 0);
+  fx.ir[V_R_STEP].r = RID_D0;
+  expect_dynamic_forl_postra_result(&view, 0);
+  view = make_dynamic_forl_postra_view(J, 0);
+  fx.ir[V_R_STEP].s = SPS_FIRST;
+  view.spadjust = 16;
+  expect_dynamic_forl_postra_result(&view, 0);
+  view = make_dynamic_forl_postra_view(J, 0);
+  fx.ir[V_R_STEP].r = fx.ir[V_R_STOP].r;
+  expect_dynamic_forl_postra_result(&view, 0);
+  view = make_dynamic_forl_postra_view(J, 0);
+  fx.ir[V_R_IDX].r = fx.ir[V_R_STEP].r;
+  expect_dynamic_forl_postra_result(&view, 0);
+  view = make_dynamic_forl_postra_view(J, 0);
+  fx.ir[V_R_SUM].r = fx.ir[V_R_IDX].r;
+  expect_dynamic_forl_postra_result(&view, 0);
+  view = make_dynamic_forl_postra_view(J, 0);
+  fx.ir[V_R_OVERFLOW].r = fx.ir[V_R_STEP].r;
+  expect_dynamic_forl_postra_result(&view, 0);
+  view = make_dynamic_forl_postra_view(J, 0);
+  fx.ir[V_R_IDX_BODY].r = RID_X26;
+  expect_dynamic_forl_postra_result(&view, 0);
+  view = make_dynamic_forl_postra_view(J, 0);
+  fx.ir[V_R_SUM_BODY].r = RID_X26;
+  expect_dynamic_forl_postra_result(&view, 0);
+  view = make_dynamic_forl_postra_view(J, 0);
+  fx.ir[V_R_SUM_PHI].r = fx.ir[V_R_IDX_PHI].r;
+  expect_dynamic_forl_postra_result(&view, 0);
+  view = make_dynamic_forl_postra_view(J, 0);
+  fx.ir[V_R_IDX_BODY].op2 = V_R_STOP;
+  expect_dynamic_forl_postra_result(&view, 0);
+  view = make_dynamic_forl_postra_view(J, 0);
+  fx.snapmap[4] = SNAP(8, SNAP_NORESTORE, V_R_STOP);
+  expect_dynamic_forl_postra_result(&view, 0);
+  view = make_dynamic_forl_postra_view(J, 0);
+  setir(V_R_USE, IR_NOP, IRT_NIL, 0, 0);
+  fx.ir[V_R_USE].r = RID_INIT;
+  expect_dynamic_forl_postra_result(&view, 0);
+  view = make_dynamic_forl_postra_view(J, 0);
+  fx.ir[V_R_RENAME].o = IR_NOP;
+  expect_dynamic_forl_postra_result(&view, 0);
 }
 
 static void test_postra_spill_layout(jit_State *J)
@@ -5543,6 +5868,22 @@ int main(void)
   assert(bc_op(loadbc(fixture_loop_pc+bc_j(loadbc(fixture_loop_pc)))) == BC_JMP);
 
   assert(luaL_loadstring(L,
+	"return function(a,b,step) local s=0 "
+	"for i=a,b,step do s=s+i end return s end") == 0);
+  assert(lua_pcall(L, 0, 1, 0) == 0);
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  dynamic_forl_fixture_pt = funcproto(funcV(L->top-1));
+  assert(dynamic_forl_fixture_pt->framesize == 10);
+  assert(dynamic_forl_fixture_pt->numparams == 3);
+  for (i = 0; i < dynamic_forl_fixture_pt->sizebc; i++) {
+    const BCIns *pc = &proto_bc(dynamic_forl_fixture_pt)[i];
+    if (bc_op(loadbc(pc)) == BC_FORL && dynamic_forl_fixture_pc == NULL)
+      dynamic_forl_fixture_pc = pc;
+  }
+  assert(dynamic_forl_fixture_pc != NULL);
+  assert(bc_j(loadbc(dynamic_forl_fixture_pc)) < 0);
+
+  assert(luaL_loadstring(L,
 	"return function(n,x,step) local i=0 "
 	"while i<n do i=i+1; x=x+step end return x end") == 0);
   assert(lua_pcall(L, 0, 1, 0) == 0);
@@ -5999,6 +6340,8 @@ int main(void)
   J->L = L;
   test_positive_and_negative(L);
   test_postra_spill_layout(J);
+  test_dynamic_forl_positive_and_negative(J);
+  test_dynamic_forl_postra_layout(J);
   test_numeric_positive_and_negative(J);
   test_numeric_postra_layout(J);
   test_numhalf_positive_and_negative(J);
@@ -6126,9 +6469,9 @@ int main(void)
   J->framedepth = savedframedepth;
   J->retdepth = savedretdepth;
   J->startpc = savedstartpc;
-  L->top -= 16;
+  L->top -= 17;
   lua_close(L);
-  puts("arm64_jit_ir_admission OK: integer, mixed NUM, fixed-half, dynamic-step and ADD_LT/ADD_LE/ADD_GT/ADD_GE/SUB_GT/SUB_GE/MUL_LT/MUL_LE/DIV_LT/DIV_LE/DIV_GT/DIV_GE dynamic-accumulator NUM/INT-step/INT-X plus ADD_LT INT-limit LOOP/FORL policy verified");
+  puts("arm64_jit_ir_admission OK: exact variable-step INT FORL plus integer, mixed NUM, fixed-half, dynamic-step and ADD_LT/ADD_LE/ADD_GT/ADD_GE/SUB_GT/SUB_GE/MUL_LT/MUL_LE/DIV_LT/DIV_LE/DIV_GT/DIV_GE dynamic-accumulator NUM/INT-step/INT-X plus ADD_LT INT-limit LOOP policy verified");
   return 0;
 }
 

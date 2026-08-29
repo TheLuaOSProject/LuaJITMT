@@ -97,6 +97,7 @@ macros=$tmpdir/macros.txt
 pauth_macros=$tmpdir/macros-arm64e.txt
 tuple_region=$tmpdir/tuple-region.txt
 forl_shape=$tmpdir/forl-shape.txt
+postra_dynamic=$tmpdir/postra-dynamic.txt
 postra_region=$tmpdir/postra-region.txt
 trace_stop=$tmpdir/trace-stop.txt
 forl_vm=$tmpdir/forl-vm.txt
@@ -116,6 +117,13 @@ for required in \
   'memcpy(&pcbase, &map[positive_mapofs[sn]+positive_nent[sn]],' \
   'SNAP_NORESTORE, R_IDX' \
   'SNAP_NORESTORE, R_STOP' \
+  'SNAP_NORESTORE, D_STEP' \
+  'expect_ir(ir, D_USE, IR_USE, IRT_INT, D_OVERFLOW, 0);' \
+  'assert(ir[D_USE].r == RID_INIT && !ra_hasspill(ir[D_USE].s));' \
+  'static void run_dynamic(int negative)' \
+  'run_dynamic(0);' \
+  'run_dynamic(1);' \
+  'negative ? (lua_Integer)INT32_MIN : (lua_Integer)INT32_MAX' \
   'static void expect_native_entry(void)' \
   'static void expect_branch_only(void)' \
   'lj_trace_test_exit_calls() ==' \
@@ -127,6 +135,8 @@ for required in \
   'assert(trace_startpc_acq(T) == forlpc);' \
   'function __arm64_forl_negative_stop(n, stop)' \
   'bound = find_kint(T, INT32_MIN+3);' \
+  'function __arm64_forl_constant_stop(a, step)' \
+  'call2(L, "__arm64_forl_constant_stop", 1, 2) == 400' \
   'function __arm64_forl_zero(_)' \
   'assert(call1(L, "__arm64_forl_zero", 0) == 10);' \
   'assert(!trace_runnable_acq(traceref_safe(J, 1), 1));'; do
@@ -165,16 +175,41 @@ awk '/^static int arm64_ir_forl_shape/ { copy=1 }
      copy && /^}/ { exit }' "$admit_source" >"$forl_shape"
 for required in \
   'nadd != 2u' \
+  'nstepload != 1u || stepload != stepref || nuse != 1u' \
   'step == 0' \
   'post.op1 != preadd || post.op2 != stepref' \
   'IRSLOAD_TYPECHECK|IRSLOAD_INHERIT' \
   'cmpop = step > 0 ? IR_LE : IR_GE;' \
   'IRSLOAD_READONLY|IRSLOAD_INHERIT' \
+  'direction.o != IR_GE && direction.o != IR_LT' \
+  'overflow.o != IR_ADDOV || overflow.op1 != stepref' \
+  'use.t.irt != IRT_INT || use.op1 != stepref+2u || use.op2 != 0' \
   '(int64_t)INT32_MAX-(int64_t)step' \
   '(int64_t)INT32_MIN-(int64_t)step' \
   'indexphi == 0'; do
   grep -F "$required" "$forl_shape" >/dev/null || {
     echo "ARM64 FORL semantic proof changed: $required" >&2
+    exit 1
+  }
+done
+awk '/^static int arm64_postra_forl_dynamic_shape/ { copy=1 }
+     copy { print }
+     copy && /^}/ { exit }' "$admit_source" >"$postra_dynamic"
+for required in \
+  'nstep == 0 && nuse == 0' \
+  'nstep != 1u || nuse != 1u' \
+  'stepref+4u != pre.op1' \
+  'direction.o != IR_GE && direction.o != IR_LT' \
+  'overflow.o != IR_ADDOV || overflow.op1 != stepref' \
+  'useref != stepref+3u || use.o != IR_USE || use.t.irt != IRT_INT' \
+  'overflow.s != SPS_NONE || overflow.r >= RID_MAX_GPR' \
+  'ri != pre.r || ri != post.r' \
+  'ra != accpre.r || ra != accpost.r' \
+  'stop.r == step.r || stop.r == ri || stop.r == ra' \
+  'overflow.r == stop.r || overflow.r == step.r' \
+  '*dynamic_stepp = 1;'; do
+  grep -F "$required" "$postra_dynamic" >/dev/null || {
+    echo "ARM64 dynamic FORL post-RA proof changed: $required" >&2
     exit 1
   }
 done
@@ -190,7 +225,9 @@ for required in \
   'rootop == BC_LOOP && nintadd != 0u' \
   'flags != 0 && flags != SNAP_NORESTORE' \
   'source.o != IR_SLOAD || source.op1 != slot' \
-  'slot != forl_idxslot && slot != forl_idxslot+FORL_STOP'; do
+  'slot != forl_idxslot && slot != forl_idxslot+FORL_STOP' \
+  '!forl_dynamic_step ||' \
+  'slot != forl_idxslot+FORL_STEP'; do
   grep -F "$required" "$postra_region" >/dev/null || {
     echo "ARM64 FORL post-RA proof changed: $required" >&2
     exit 1

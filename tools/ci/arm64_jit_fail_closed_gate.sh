@@ -164,18 +164,18 @@ assert(jit.status() == true, "experimental build did not admit JIT APIs")
 local util = require("jit.util")
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
-local function unsupported_dynamic_forl(a, b, step)
+local function supported_dynamic_forl(a, b, step)
   local sum = 0
   for i = a, b, step do sum = sum + i end
   return sum
 end
 local expected = 2048 * 2048
 for round = 1, 128 do
-  assert(unsupported_dynamic_forl(1, 4096, 2) == expected)
+  assert(supported_dynamic_forl(1, 4096, 2) == expected)
   collectgarbage("step", 64)
 end
-assert(util.traceinfo(1) == nil,
-       "dynamic-step FORL unexpectedly published trace 1")
+assert(util.traceinfo(1) ~= nil,
+       "dynamic-step FORL did not publish trace 1")
 '
 
 LJ_ARM64_SAFEPOINT_SOURCE_ONLY=1 \
@@ -186,4 +186,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" LUA_PATH="$lua_path" \
   "$luajit" "$root/tools/test.lua" \
     m5_arm64_jit_fail_closed_safepoint_runtime
 
-echo "arm64_jit_fail_closed_gate OK: dynamic-step FORL stayed interpreted; constrained integer, mixed-NUM, fixed-half, dynamic-step and ADD_LT/ADD_LE/ADD_GT/ADD_GE/SUB_GT/SUB_GE plus exact MUL_LT/MUL_LE FMUL and DIV_LT/DIV_LE/DIV_GT/DIV_GE FDIV all-parameter dynamic-accumulator NUM/INT-step-widened LOOP, exact ADD_LT INT-limit-widened LOOP, pure-NUM FORL and literal-true JFUNCF entry contracts sound"
+echo "arm64_jit_fail_closed_gate OK: exact variable-stop integer dynamic-step FORL plus constrained integer, mixed-NUM, fixed-half, dynamic-step and ADD_LT/ADD_LE/ADD_GT/ADD_GE/SUB_GT/SUB_GE plus exact MUL_LT/MUL_LE FMUL and DIV_LT/DIV_LE/DIV_GT/DIV_GE FDIV all-parameter dynamic-accumulator NUM/INT-step-widened LOOP, exact ADD_LT INT-limit-widened LOOP, pure-NUM FORL and literal-true JFUNCF entry contracts sound"
