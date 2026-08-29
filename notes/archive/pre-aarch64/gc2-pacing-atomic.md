@@ -1,0 +1,47 @@
+# GC2 Pacing Atomic Helpers
+
+GC2 allocation pacing uses four shared byte counters and one public pause
+control:
+
+- `gc2.alloc_since_trigger`
+- `gc2.cycle_alloc_bytes`
+- `gc2.trigger_bytes`
+- `gc2.hard_bytes`
+- `gc2.gcpause_pct`
+
+Mutators update `alloc_since_trigger` when per-TG allocation counters flush,
+while interpreter, trace, stats, and cycle-start paths read the pacing snapshot.
+Those accesses now go through `lj_gc2_*` helpers in `lj_gc.h`.
+The pause percentage is the `lua_gc(LUA_GCSETPAUSE)` control that feeds
+`lj_gc2_update_pacing()`; its init, publication, and acquire read now go
+through `gc2_gcpause_pct_*` helpers in `lj_obj.h`.
+
+`alloc_since_trigger` increments use relaxed fetch-add because this is
+counter-only accounting; cycle and assist decisions acquire-load snapshots.
+Cycle-start reset uses `lj_gc2_alloc_since_xchg()` so the snapshot and zeroing
+cannot lose a concurrent flushed allocation. Pacing publication stores use
+release ordering so helper-side acquire readers see complete threshold updates.
+
+The x86-64 VM now mirrors the GC2 hard-limit check in its VM-local allocation
+predicate, as documented in `x64-gc-predicate-inline.md`, avoiding a
+no-work C call while keeping the observable pacing decision matched to
+`lj_gc_should_step()`.
+
+Coverage: `m5_gc2_pacing_atomic` owns the observable pacing behavior. Raw
+C-side access to the GC2 pacing fields outside helper definitions in
+`lj_gc.h`/`lj_obj.h` must stay behind the documented helper surface; x64 VM
+GC2 hard-check memory operands and load macros are documented here instead of
+being enforced by the named fixtures.
+
+Test-design note: an earlier Lua smoke used four workers doing 2000
+`string.format()` allocations each while reading stats. That crashes on
+baseline commit `c5be3f1b` too, so it is a pre-existing concurrency bug rather
+than fallout from this helper layer. The committed smoke keeps this guard
+focused on the pacing counters and uses the same table/string allocation shape
+as the existing GC total smoke.
+
+Validation:
+- `tools/ci/lua_test.sh m5_gc2_pacing_atomic` passed.
+- `tools/ci/lua_test.sh m6_jit_alloc_account` passed.
+- `tools/ci/lua_test.sh m9_gc_stats` passed.
+- `git diff --check` passed before staging.

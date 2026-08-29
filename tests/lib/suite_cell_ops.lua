@@ -109,9 +109,10 @@ end
 
 function M.run_jit_closed_upvalue_store_behavior_checks(t)
   -- The helper-vs-direct lowering choice is an implementation invariant and is
-  -- documented in notes/x64-upvalue-store-all-tvalue.md. This test owns only
-  -- the observable contract: traced closed-upvalue stores publish complete
-  -- TValue slots and preserve Lua-visible values for primitive and GC payloads.
+  -- documented in notes/archive/pre-aarch64/x64-upvalue-store-all-tvalue.md.
+  -- This test owns only the observable contract: traced closed-upvalue stores
+  -- publish complete TValue slots and preserve Lua-visible values for primitive
+  -- and GC payloads.
   luajit_code(t, [=[
 local util = require"jit.util"
 

@@ -1,0 +1,33 @@
+# FFI aggregate conversion/init snapshots
+
+The interpreter aggregate conversion helpers in `lj_cconv.c` now snapshot or
+wait on ctype metadata before walking array children, struct field chains, and
+subtype field nodes.
+
+This covers table-to-array, table-to-struct, multi-value array initialization,
+multi-value struct initialization, and string-to-array initialization. The
+helpers use exact ctype snapshots for field-chain nodes so `CTA_SUBTYPE`
+attributes are not skipped by accident, use raw child snapshots where a
+destination field, array element, or string array element is needed, and refetch
+live `CType *` pointers by stable IDs after recursive `lj_cconv_ct_tv_l()`
+calls that may wait on enum constants or intern pointer ctypes.
+
+Predefined scalar initialization keeps a no-wait fast path for immutable
+predefined IDs, avoiding a parser-token wait for normal `ffi.new(int_ct, v)`
+style conversions.
+
+Coverage lives in `tests/t-ffi-cconv-init-snapshot.c`, wired into
+`m7_ffi_typeinfo_snapshot`. The fixture holds the parser token across
+parser-created enum array/struct initializers from both table and multi-value
+forms, and separately verifies predefined scalar initialization plus direct
+string-to-array conversion from raw destination snapshots do not wait when the
+array element resolves to predefined `char`.
+
+Recorder aggregate initialization is covered separately in
+`crec-alloc-helper-loads.md`: `crec_alloc()` snapshots aggregate fields,
+children, exact-copy source types, and VLA/VLS size walks through recorder-local
+helpers, aborting with `CTBUSY` if parser publication overlaps recording.
+
+Validation:
+
+- `tools/ci/lua_test.sh m7_ffi_typeinfo_snapshot`

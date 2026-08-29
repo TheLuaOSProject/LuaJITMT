@@ -246,7 +246,8 @@ the current legacy VM threshold check branches there, with
 `GC2State.interp_hard_checks` telemetry. `lj_gc_step_fixtop()` now also splits
 GC2-hard and legacy-threshold work. x64 `BC_TNEW`/`BC_TDUP` and the
 fast-function `ffgccheck` path use the VM-local predicate documented in
-`notes/x64-gc-predicate-inline.md`, mirroring the C-side `lj_gc_should_step()`
+`notes/archive/pre-aarch64/x64-gc-predicate-inline.md`, mirroring the C-side
+`lj_gc_should_step()`
 decision without a no-work C call.
 `lj_tab_new()` now constructs `GCtab` bodies from unlinked raw GC storage,
 initializes the empty/colocated table shape, nil-clears new array slots, then

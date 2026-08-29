@@ -10100,7 +10100,8 @@ int lj_gc2_mark_proto_for_pc(global_State *g, const BCIns *pc)
     return 1;
   /* Custom lua_Alloc storage is temporarily outside GC2 reclamation. Treat a
   ** well-formed pointer as retained without probing arena-aligned metadata;
-  ** notes/lua-alloc-temporarily-disabled-2026-07-10.md documents this boundary.
+  ** notes/archive/pre-aarch64/lua-alloc-temporarily-disabled-2026-07-10.md
+  ** documents this boundary.
   */
   if (la_load32_acq(&g->allocf_arena) == 0)
     return 1;
@@ -17262,7 +17263,8 @@ static int gc2_retain_candidate_status(global_State *g, GCobj *o,
   if (la_load32_acq(&g->allocf_arena) == 0) {
     /* Custom lua_Alloc is intentionally outside the current GC2 retention
     ** tranche. Preserve the temporary compatibility behavior documented in
-    ** notes/lua-alloc-temporarily-disabled-2026-07-10.md. */
+    ** notes/archive/pre-aarch64/lua-alloc-temporarily-disabled-2026-07-10.md.
+    */
     base = o;
     gct = (uint32_t)la_load8_acq(&o->gch.gct);
 #if LJ_HASFFI
