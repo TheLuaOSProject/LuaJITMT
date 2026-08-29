@@ -58,6 +58,18 @@ return function(add)
   })
 
   add({
+    name = "m5_arm64_vm_next_contract",
+    description = "ARM64 JIT lj_vm_next forwarding and PAC contract",
+    run = function(t)
+      t:run({ "sh", t:path("tools", "ci",
+                           "arm64_jit_vm_next_contract.sh") }, {
+        env = { LJ_TEST_RUN_LOCK_HELD = "1" },
+        timeout = "180s"
+      })
+    end
+  })
+
+  add({
     name = "m5_arm64_tmpbuf_runtime",
     description = "ARM64 concurrent reverse/lower/upper TG tmpbuf regression",
     deps = { "m5_arm64_tmpbuf_contract" },
