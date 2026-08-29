@@ -9,8 +9,9 @@ current claims.
 
 Development branch: `codex/aarch64-macos-port`.
 
-Last complete JIT fail-closed-gate checkpoint: `00919589` (2026-08-29).
+Last complete JIT fail-closed-gate checkpoint: `dd065750` (2026-08-29).
 Latest focused exact-`CALLXS` checkpoint: `00919589` (2026-08-29).
+Latest focused ARM64 VM traversal checkpoint: `dd065750` (2026-08-29).
 The admitted boundary comprises three signatures in two exact Darwin ARM64
 `CALLXS` roots. Cached direct CDECL function cdata with either
 `int32_t(int32_t)` or `double(double)` use the certified 16-bytecode integer
@@ -37,10 +38,18 @@ exact double profile without changing the generic ARM64 call emitter or
 native-frame lifecycle. Checkpoints `308a635b` and `00919589` added the
 separate boxed-pointer certificate, ported x86's publish-safe fixed-size cdata
 allocation to ARM64, and proved its native result-root lifecycle. The complete
-ARM64/arm64e fail-closed umbrella passed at `00919589`. The preceding
+ARM64/arm64e fail-closed umbrella now passes at `dd065750`. The preceding
 `0ce4313b` checkpoint introduced the target-local ARM64 `XSAVE` staging
 backend; the native and x86_64 vendored suites last passed with 509 tests each
 at `4d1b6126`.
+
+Checkpoints `e89508b9` and `dd065750` ported x64's forwarding-safe
+`lj_vm_next` traversal to ARM64 and proved it in the complete fail-closed
+umbrella. Array and hash fast paths use acquire snapshots; active mutation,
+`FORWARD`, `RETIRING`, and hidden-key cases resolve through caller-owned
+result storage instead of exposing retired table slots. The runtime fixture
+uses a test-only retry handshake so both RETIRING cases are observed rather
+than inferred from timing.
 
 ARM64 remains explicitly opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`. Native JIT
 work additionally requires `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`. These flags are
@@ -54,6 +63,10 @@ Implemented and exercised on Apple Silicon macOS:
   interpreter FFI/callback lifecycle;
 - ARM64 and arm64e/BTI trace publication, authenticated exits, retirement,
   flush/reuse, GDB JIT preparation, and bounded root/first-side entry paths;
+- forwarding-safe ARM64 and arm64e/BTI `lj_vm_next` array/hash traversal,
+  including active-mutation fallback, separated arrays, generation forwarding,
+  deterministic retirement retries, hidden-key filtering, and caller-owned
+  result snapshots;
 - lockless ARM64 and arm64e OS-error restoration plumbing for C,
   fast-function, and JIT side-exit landings; injected-clobber runtime proof
   covers the final C and fast-function landings on ARM64, arm64e/BTI, and
@@ -190,6 +203,12 @@ generated header stores. This completes arena publication before generated
 code can expose the cdata while leaving the generic ARM64 call emitter and
 the VLA/aligned `lj_cdata_newv` path unchanged.
 
+Checkpoint `e89508b9` changes only the target-local ARM64 VM source for
+`lj_vm_next`. It follows the existing x64 forwarding protocol, leaves normal
+fast paths as leaf returns, and allocates a private non-leaf frame only for the
+C fallback. The companion fixture and object contract live entirely under
+`tests/` and `tools/ci/`.
+
 Large ARM64 lifecycle blocks still remain in common files, particularly
 `src/lj_trace.c`. Move those only as separate structural changes with exact
 source-boundary and runtime proof; do not combine or weaken the independent
@@ -197,11 +216,17 @@ semantic and post-register-allocation gates merely to reduce the diff.
 
 ## Verification
 
-- `tools/ci/arm64_jit_fail_closed_gate.sh`: passed in full at `00919589`,
+- `tools/ci/arm64_jit_fail_closed_gate.sh`: passed in full at `dd065750`,
   including the exact variable-step integer `FORL`, its overflow and direction
   exits, the 3,072-case `BC_LOOP` compiler proof, 222 runtime profile
   executions, ARM64/arm64e publication, entry, exit, retirement, flush/reuse,
-  GDB-JIT, callback, first-side, and safepoint contracts.
+  GDB-JIT, callback, first-side, safepoint, and forwarding-safe `lj_vm_next`
+  contracts.
+- `tools/ci/arm64_jit_vm_next_contract.sh`: passed at `dd065750` for ordinary
+  ARM64 and arm64e/BTI. It checked acquire-load lowering, helper relocation,
+  PAC/BTI framing, fast and forwarded array/hash results, deterministic
+  RETIRING retries, zero-asize recovery, and KEYLOCK suppression, then restored
+  the requested build profile.
 - `tools/ci/arm64_jit_emitter_contract.sh`: passed at `a7056fe5`; the emitted
   owner-private `ffi_xsave_baseslot` and `ffi_xsave_nslots` publications are
   naturally sized `STLR w6` stores through x25, and `ffi_xsave_root` uses the
@@ -258,8 +283,9 @@ semantic and post-register-allocation gates merely to reduce the diff.
 - `tools/ci/arm64_bootstrap_gate.sh`: passed at `c8cd7858`, including 387
   vendored tests, TG/root/safepoint/protected-call contracts, threading and
   coroutine tests, and 320 FFI callback rounds across four threads.
-- Safe ARM64 no-JIT stock suite: `387 passed` at `e2c8778d`; the final working
-  build was restored to thin ARM64 with `jit.status() == false`.
+- Safe ARM64 no-JIT stock suite: `387 passed` at `e2c8778d`. After the
+  `dd065750` gate, the working build was again restored to thin ARM64 with
+  `jit.status() == false`.
 - `tools/ci/arm64_oserr_unwind_contract.sh`: passed at `f06e79d5` for ordinary
   ARM64, arm64e/BTI, and the x86_64/Rosetta oracle. Both direct C and repeated
   fast-function final landings preserved `EDOM` (33) across an injected
@@ -318,9 +344,9 @@ evidence, and the pointer profile has boxed-result/root/GC evidence. Continue
 one signature at a time: 64-bit integer, boolean, aggregate/sret, and
 variadic. Arbitrary non-integral generated double arguments, other pointer
 types, indirect function pointers, and general call-site/root layouts remain
-separate boundaries. Before admitting general table/helper traces, ARM64
-`lj_vm_next` also needs the forwarding-safe traversal already used by the
-x86_64 path.
+separate boundaries. The forwarding-safe ARM64 `lj_vm_next` prerequisite is
+now satisfied; other table and upvalue JIT fast paths remain separate closed
+boundaries.
 
 ## Primary checks
 

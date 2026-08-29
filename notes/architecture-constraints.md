@@ -28,6 +28,11 @@ review boundary for both x86-64 and Apple ARM64 work.
   argument is never sufficient evidence for Apple Silicon.
 - Publish complete `TValue` objects without tearing. Shared table readers and
   writers must validate forwarding, generation, ownership, and retirement.
+- VM/JIT table iteration must acquire a coherent array or node generation and
+  copy visible key/value pairs into caller-owned `TValue` storage. Never return
+  a raw node pointer across retirement; `FORWARD`, `RETIRING`, mutation, and
+  hidden-key observations must retry or use the forwarding-aware helper without
+  exposing internal sentinels.
 - Fixed-size generated `CNEW` must call a runtime helper that completes arena
   publication before the cdata becomes visible. A raw allocation followed by
   generated header stores can leave the allocation in `CONSTRUCT`; payload
