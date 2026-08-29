@@ -119,12 +119,15 @@ fi
 pure_numeric_args_contract=$root/tools/ci/arm64_jit_pure_numeric_args_contract.sh
 if test -f "$pure_numeric_args_contract"; then
   for required in \
-    'NUMERIC_ARGS_STEP_NUM, NUMERIC_ARGS_STEP_INT' \
+    'NUMERIC_ARGS_STEP_NUM, NUMERIC_ARGS_STEP_INT, NUMERIC_ARGS_LIMIT_INT' \
     'R_STEP, IRCONV_NUM_INT' \
-    'assert(nscvtf == (step_kind == NUMERIC_ARGS_STEP_INT ? 1u : 0u));' \
-    '24 modes/process, 144 default executions'; do
+    'limit_source_ref, IRCONV_NUM_INT' \
+    'assert(nscvtf == (step_kind == NUMERIC_ARGS_STEP_NUM ? 0u : 1u));' \
+    'assert(mcode[shift+17u] == UINT32_C(0x1e620000));' \
+    'test_int_limit_positive_and_guard_exits();' \
+    '25 modes/process, 150 default executions'; do
     grep -F "$required" "$pure_numeric_args_contract" >/dev/null || {
-      echo "ARM64 umbrella lost NUM/INT-step widening proof: $required" >&2
+      echo "ARM64 umbrella lost NUM/INT widening proof: $required" >&2
       exit 1
     }
   done
@@ -177,4 +180,4 @@ env MACOSX_DEPLOYMENT_TARGET="$minver" LUA_PATH="$lua_path" \
   "$luajit" "$root/tools/test.lua" \
     m5_arm64_jit_fail_closed_safepoint_runtime
 
-echo "arm64_jit_fail_closed_gate OK: dynamic-step FORL stayed interpreted; constrained integer, mixed-NUM, fixed-half, dynamic-step and ADD_LT/ADD_LE/ADD_GT/ADD_GE/SUB_GT/SUB_GE plus exact MUL_LT/MUL_LE FMUL and DIV_LT/DIV_LE/DIV_GT/DIV_GE FDIV all-parameter dynamic-accumulator NUM/INT-step-widened LOOP and pure-NUM FORL plus literal-true JFUNCF entry contracts sound"
+echo "arm64_jit_fail_closed_gate OK: dynamic-step FORL stayed interpreted; constrained integer, mixed-NUM, fixed-half, dynamic-step and ADD_LT/ADD_LE/ADD_GT/ADD_GE/SUB_GT/SUB_GE plus exact MUL_LT/MUL_LE FMUL and DIV_LT/DIV_LE/DIV_GT/DIV_GE FDIV all-parameter dynamic-accumulator NUM/INT-step-widened LOOP, exact ADD_LT INT-limit-widened LOOP, pure-NUM FORL and literal-true JFUNCF entry contracts sound"
