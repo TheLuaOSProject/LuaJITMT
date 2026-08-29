@@ -685,7 +685,7 @@ static void LJ_FASTCALL recff_next(jit_State *J, RecordFFData *rd)
 */
 void lj_ffrecord_xsave(jit_State *J)
 {
-#if LJ_TARGET_X64
+#if LJ_HASJIT_FFI_CALLXS
   IRRef ref;
   lj_snap_add(J);
   lj_ir_set(J, IRT(IR_XSAVE, IRT_NIL), 0, 0);

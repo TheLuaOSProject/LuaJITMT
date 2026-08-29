@@ -303,10 +303,10 @@ struct TGState {
   lua_State *cur_L;
   struct LexState *lexstate;  /* Owner-published parser raw-root descriptor. */
   TValue *jit_base;
-  /* Owner-private trace-root state materialized by IR_XSAVE. The future
-  ** generic native-enter helper consumes these fields before it release-
-  ** publishes a remotely readable native frame. They are deliberately not a
-  ** remote publication by themselves.
+  /* Owner-private trace-root state materialized by IR_XSAVE. The generic
+  ** native-enter helper consumes these fields before it release-publishes a
+  ** remotely readable native frame. They are deliberately not a remote
+  ** publication by themselves.
   */
   TValue *ffi_xsave_root;
   uint32_t ffi_xsave_baseslot;

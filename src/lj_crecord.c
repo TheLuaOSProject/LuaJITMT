@@ -2523,9 +2523,9 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     IRType t;
     int boxed_result, direct_aggregate_result, indirect_result, rooted_result;
 
-#if !LJ_TARGET_X64
-    /* Only the x64 CALLXS/native-frame lowering has the production lifecycle
-    ** certificate. Other architectures retain the exact interpreter path. */
+#if !LJ_HASJIT_FFI_CALLXS
+    /* Other targets retain the exact interpreter path until their native-frame
+    ** lifecycle and ABI lowering have an architecture-specific certificate. */
     lj_trace_err(J, LJ_TRERR_NYICALL);
 #endif
 

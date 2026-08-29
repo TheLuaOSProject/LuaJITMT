@@ -42,6 +42,8 @@
   (0x88dffc00u | ((uint32_t)(rn) << 5) | (uint32_t)(rt))
 #define ENC_STLRx(rt, rn) \
   (0xc89ffc00u | ((uint32_t)(rn) << 5) | (uint32_t)(rt))
+#define ENC_STLRw(rt, rn) \
+  (0x889ffc00u | ((uint32_t)(rn) << 5) | (uint32_t)(rt))
 #define ENC_MOVZw(rd, imm) \
   (0x52800000u | ((uint32_t)(imm) << 5) | (uint32_t)(rd))
 #define ENC_MOVNw(rd, imm) \
@@ -111,6 +113,16 @@ int main(int argc, char **argv)
     ENC_ADDx_IMM(RID_TMP, RID_DISPATCH, DISPATCH_TG(profile_request)),
     ENC_LDARw(RID_X4, RID_TMP)
   };
+  const MCode set_xsave_baseslot[] = {
+    ENC_MOVZw(RID_X6, positive),
+    ENC_ADDx_IMM(RID_TMP, RID_DISPATCH, DISPATCH_TG(ffi_xsave_baseslot)),
+    ENC_STLRw(RID_X6, RID_TMP)
+  };
+  const MCode set_xsave_nslots[] = {
+    ENC_MOVZw(RID_X6, positive),
+    ENC_ADDx_IMM(RID_TMP, RID_DISPATCH, DISPATCH_TG(ffi_xsave_nslots)),
+    ENC_STLRw(RID_X6, RID_TMP)
+  };
   MCode get_jit_gate[3];
   MSize n_get_jit_gate = 0;
   uint32_t gate_ofs = (uint32_t)offsetof(global_State, gc2.jit_phase_gate);
@@ -162,6 +174,10 @@ int main(int argc, char **argv)
 	     get_profile_request, 2, all, &nall);
   check_emit(L2J(L), LJ_ARM64_EMIT_TEST_GET_JIT_GATE, 0,
 	     get_jit_gate, n_get_jit_gate, all, &nall);
+  check_emit(L2J(L), LJ_ARM64_EMIT_TEST_SET_XSAVE_BASESLOT, positive,
+	     set_xsave_baseslot, 3, all, &nall);
+  check_emit(L2J(L), LJ_ARM64_EMIT_TEST_SET_XSAVE_NSLOTS, positive,
+	     set_xsave_nslots, 3, all, &nall);
   lua_close(L);
 
   fp = fopen(argv[1], "wb");

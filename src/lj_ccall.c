@@ -1822,10 +1822,10 @@ static void ccall_jit_xsave_clear(TGState *tg)
   (LJ_FFI_NATIVE_FRAME_F_ACTIVE | LJ_FFI_NATIVE_FRAME_F_SUSPENDED | \
    LJ_FFI_NATIVE_FRAME_F_POSTCALL)
 
-/* Generated x64 code publishes its trace number in the carrier-local
-** vmstate. Win64 additionally maintains the legacy global mirror because its
-** trace code does the same; SysV x64 deliberately leaves that shared mirror
-** out of the trace fast path. */
+/* Generated code publishes its trace number in the carrier-local vmstate.
+** Win64 additionally maintains the legacy global mirror because its trace
+** code does the same; other targets leave that shared mirror out of the trace
+** fast path. */
 static void ffi_native_trace_vmstate_store(global_State *g, TGState *tg,
 					   int32_t vmstate)
 {
@@ -2241,9 +2241,9 @@ int lj_ffi_native_trace_enter(lua_State *L, GCtrace *T, void *func,
   g = G(L);
   if (!g)
     goto out;
-  /* IR_XSAVE writes through RID_DISPATCH, which the x64 VM loads directly
-  ** from L->tg_hint. Require that staged/dispatch carrier to be the current
-  ** TLS carrier before reading or clearing any owner-private word. */
+  /* IR_XSAVE writes through RID_DISPATCH, which the VM loads directly from
+  ** L->tg_hint. Require that staged/dispatch carrier to be the current TLS
+  ** carrier before reading or clearing any owner-private word. */
   tg = L->tg_hint;
   current = G2TG(g);
   if (!tg || tg != current || lj_tg_load_cur_L(tg) != L)

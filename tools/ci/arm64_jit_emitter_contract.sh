@@ -62,7 +62,7 @@ awk '
   /-- End TG-local JIT state / { exit }
 ' "$root/src/lj_emit_arm64.h" >"$region"
 test -s "$region"
-for required in RID_DISPATCH A64I_LDARw A64I_LDARx A64I_STLRx \
+for required in RID_DISPATCH A64I_LDARw A64I_LDARx A64I_STLRw A64I_STLRx \
   A64I_DMB_ISH A64I_STRw; do
   grep "$required" "$region" >/dev/null || {
     echo "ARM64 TG emitter is missing $required" >&2
@@ -91,7 +91,7 @@ if grep -En 'emit_(get|set)gl\([^;]*(cur_L|jit_base|vmstate)' \
   exit 1
 fi
 if test "$(grep -Ec '^[[:space:]]*emit_(get|set)tg\(' \
-     "$root/src/lj_asm_arm64.h")" -ne 5 ||
+     "$root/src/lj_asm_arm64.h")" -ne 6 ||
    test "$(grep -Fc 'emit_gettg(as, RID_TMP, cur_L);' \
      "$root/src/lj_asm_arm64.h")" -ne 2; then
   echo "ARM64 assembler TG callsite inventory changed" >&2
@@ -99,6 +99,7 @@ if test "$(grep -Ec '^[[:space:]]*emit_(get|set)tg\(' \
 fi
 for required in \
   'emit_settg(as, base, jit_base);' \
+  'emit_settg(as, base, ffi_xsave_root);' \
   'emit_gettg(as, (pbase & 31), jit_base);' \
   'emit_gettg(as, r, jit_base);'; do
   grep -F "$required" "$root/src/lj_asm_arm64.h" >/dev/null || {
@@ -161,7 +162,8 @@ grep -F '#if LJ_TARGET_X86ORX64 || LJ_TARGET_ARM64' \
   -c "$root/src/lj_asm.c" -o "$audit_object"
 otool -rv "$audit_object" >"$audit_relocs"
 if test "$(grep -Ec '_emit_gettg_$' "$audit_relocs")" -ne 8 ||
-   test "$(grep -Ec '_emit_settg_$' "$audit_relocs")" -ne 3; then
+   test "$(grep -Ec '_emit_settg_$' "$audit_relocs")" -ne 4 ||
+   test "$(grep -Ec '_emit_settg32_$' "$audit_relocs")" -ne 4; then
   echo "ARM64 assembler artifact has the wrong TG helper call inventory" >&2
   exit 1
 fi
@@ -187,6 +189,7 @@ for required in \
   'ldar[[:space:]]+x0, \[x30\]' \
   'ldar[[:space:]]+x1, \[x30\]' \
   'stlr[[:space:]]+x2, \[x30\]' \
+  'stlr[[:space:]]+w6, \[x30\]' \
   'ldar[[:space:]]+w3, \[x30\]' \
   'ldar[[:space:]]+w4, \[x30\]' \
   'ldar[[:space:]]+w5, \[x30\]' \
@@ -203,5 +206,5 @@ if test "$(grep -Ec 'add[[:space:]]+x30, x22' "$disasm")" -ne 1 ||
   exit 1
 fi
 
-grep -E '[[:space:]](add[[:space:]]+x30, x(22|25)|ldar[[:space:]]+[xw][0-5], \[x30\]|stlr[[:space:]]+x2, \[x30\]|dmb[[:space:]]+ish|str[[:space:]]+w30, \[x25)' "$disasm"
+grep -E '[[:space:]](add[[:space:]]+x30, x(22|25)|ldar[[:space:]]+[xw][0-5], \[x30\]|stlr[[:space:]]+(x2|w6), \[x30\]|dmb[[:space:]]+ish|str[[:space:]]+w30, \[x25)' "$disasm"
 echo "arm64_jit_emitter_contract OK: constrained recorder config, TG state and XPOLL verified"

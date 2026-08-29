@@ -219,9 +219,9 @@ LJ_FUNC uint32_t lj_ffi_native_frame_depth_acq(const TGState *tg);
 ** allocation-free and nonwaiting; every attempt consumes XSAVE staging and
 ** zero requests a pre-call interpreter exit. Ordinary leave removes the frame.
 ** A forced leave converts it to POSTCALL and retains its exact pin until the
-** non-side-linkable caller-state trace exit invokes cleanup. Production x64
-** recording admits the nonallocating scalar result classes whose complete
-** lifecycle includes callback suspension and nested generated calls.
+** non-side-linkable caller-state trace exit invokes cleanup. Certified target
+** recording admits result classes whose complete lifecycle includes callback
+** suspension and nested generated calls.
 */
 #define LJ_FFI_NATIVE_LEAVE_FORCE_EXIT	0x80000000u
 LJ_FUNC int lj_ffi_native_trace_enter(lua_State *L, struct GCtrace *T,

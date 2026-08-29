@@ -355,6 +355,9 @@ LJ_STATIC_ASSERT(sizeof(((TGState *)0)->jit_base) == sizeof(void *));
 LJ_STATIC_ASSERT(sizeof(((TGState *)0)->vmstate) == sizeof(uint32_t));
 LJ_STATIC_ASSERT(sizeof(((TGState *)0)->poll) == sizeof(uint32_t));
 LJ_STATIC_ASSERT(sizeof(((TGState *)0)->profile_request) == sizeof(uint32_t));
+LJ_STATIC_ASSERT(sizeof(((TGState *)0)->ffi_xsave_root) == sizeof(void *));
+LJ_STATIC_ASSERT(sizeof(((TGState *)0)->ffi_xsave_baseslot) == sizeof(uint32_t));
+LJ_STATIC_ASSERT(sizeof(((TGState *)0)->ffi_xsave_nslots) == sizeof(uint32_t));
 LJ_STATIC_ASSERT(DISPATCH_TG(cur_L) >= 0 && DISPATCH_TG(cur_L) <= 4095);
 LJ_STATIC_ASSERT(DISPATCH_TG(jit_base) >= 0 &&
 		 DISPATCH_TG(jit_base) <= 4095);
@@ -363,11 +366,20 @@ LJ_STATIC_ASSERT(DISPATCH_TG(vmstate) >= 0 &&
 LJ_STATIC_ASSERT(DISPATCH_TG(poll) >= 0 && DISPATCH_TG(poll) <= 4095);
 LJ_STATIC_ASSERT(DISPATCH_TG(profile_request) >= 0 &&
 		 DISPATCH_TG(profile_request) <= 4095);
+LJ_STATIC_ASSERT(DISPATCH_TG(ffi_xsave_root) >= 0 &&
+		 DISPATCH_TG(ffi_xsave_root) <= 4095);
+LJ_STATIC_ASSERT(DISPATCH_TG(ffi_xsave_baseslot) >= 0 &&
+		 DISPATCH_TG(ffi_xsave_baseslot) <= 4095);
+LJ_STATIC_ASSERT(DISPATCH_TG(ffi_xsave_nslots) >= 0 &&
+		 DISPATCH_TG(ffi_xsave_nslots) <= 4095);
 LJ_STATIC_ASSERT((DISPATCH_TG(cur_L) & 7) == 0);
 LJ_STATIC_ASSERT((DISPATCH_TG(jit_base) & 7) == 0);
 LJ_STATIC_ASSERT((DISPATCH_TG(vmstate) & 3) == 0);
 LJ_STATIC_ASSERT((DISPATCH_TG(poll) & 3) == 0);
 LJ_STATIC_ASSERT((DISPATCH_TG(profile_request) & 3) == 0);
+LJ_STATIC_ASSERT((DISPATCH_TG(ffi_xsave_root) & 7) == 0);
+LJ_STATIC_ASSERT((DISPATCH_TG(ffi_xsave_baseslot) & 3) == 0);
+LJ_STATIC_ASSERT((DISPATCH_TG(ffi_xsave_nslots) & 3) == 0);
 
 static void emit_tgaddr(ASMState *as, int32_t ofs)
 {
@@ -402,12 +414,23 @@ static void emit_settg_(ASMState *as, Reg r, int32_t ofs)
   emit_tgaddr(as, ofs);
 }
 
+static void emit_settg32_(ASMState *as, Reg r, int32_t ofs)
+{
+  lj_assertA(r < RID_MAX_GPR && r != RID_TMP,
+	     "bad TG 32 bit store register %d", r);
+  lj_assertA((ofs & 3) == 0, "unaligned TG 32 bit store offset %d", ofs);
+  emit_dn(as, A64I_STLRw, r, RID_TMP);
+  emit_tgaddr(as, ofs);
+}
+
 #define emit_gettg(as, r, field) \
   emit_gettg_((as), (r), DISPATCH_TG(field))
 #define emit_gettg32(as, r, field) \
   emit_gettg32_((as), (r), DISPATCH_TG(field))
 #define emit_settg(as, r, field) \
   emit_settg_((as), (r), DISPATCH_TG(field))
+#define emit_settg32(as, r, field) \
+  emit_settg32_((as), (r), DISPATCH_TG(field))
 
 /* A direct release store needs two registers for the address and immediate.
 ** Keep x25 invariant and x30 as the only scratch by using the equivalent

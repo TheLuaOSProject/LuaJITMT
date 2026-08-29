@@ -1859,8 +1859,8 @@ static void asm_stack_check(ASMState *as, BCReg topslot,
   emit_gettg(as, RID_TMP, cur_L);
 }
 
-/* Restore Lua stack from on-trace state. */
-static void asm_stack_restore(ASMState *as, SnapShot *snap)
+/* Restore Lua stack from on-trace state through its allocated BASE owner. */
+static void asm_stack_restore_reg(ASMState *as, SnapShot *snap, Reg base)
 {
   SnapEntry *map = &as->T->snapmap[snap->mapofs];
 #ifdef LUA_USE_ASSERT
@@ -1877,22 +1877,48 @@ static void asm_stack_restore(ASMState *as, SnapShot *snap)
     if ((sn & SNAP_NORESTORE))
       continue;
     if ((sn & SNAP_KEYINDEX)) {
-      RegSet allow = rset_exclude(RSET_GPR, RID_BASE);
+      RegSet allow = rset_exclude(RSET_GPR, base);
       Reg r = irref_isk(ref) ? ra_allock(as, ir->i, allow) :
 			       ra_alloc1(as, ref, allow);
       rset_clear(allow, r);
-      emit_lso(as, A64I_STRw, r, RID_BASE, ofs);
-      emit_lso(as, A64I_STRw, ra_allock(as, LJ_KEYINDEX, allow), RID_BASE, ofs+4);
+      emit_lso(as, A64I_STRw, r, base, ofs);
+      emit_lso(as, A64I_STRw, ra_allock(as, LJ_KEYINDEX, allow), base, ofs+4);
     } else if (irt_isnum(ir->t)) {
       Reg src = ra_alloc1(as, ref, RSET_FPR);
-      emit_lso(as, A64I_STRd, (src & 31), RID_BASE, ofs);
+      emit_lso(as, A64I_STRd, (src & 31), base, ofs);
     } else {
-      asm_tvstore64(as, RID_BASE, ofs, ref);
+      asm_tvstore64(as, base, ofs, ref);
     }
     checkmclim(as);
   }
   lj_assertA(map + nent == flinks, "inconsistent frames in snapshot");
 }
+
+/* Ordinary trace tails use the fixed interpreter BASE register. */
+static void asm_stack_restore(ASMState *as, SnapShot *snap)
+{
+  asm_stack_restore_reg(as, snap, RID_BASE);
+}
+
+#if LJ_TARGET_OSX
+/* Emit a complete XSAVE materialization followed by owner-private staging.
+** Code emission runs backwards, so runtime order is stack restore, root BASE,
+** current-frame offset and stack extent. The native-enter helper consumes the
+** three staged values before any remotely observable native publication.
+*/
+static void asm_xsave_restore_publish(ASMState *as, SnapShot *snap,
+			       BCReg baseslot)
+{
+  Reg base = ra_alloc1(as, REF_BASE, RSET_GPR);
+  Reg stage = ra_scratch(as, rset_exclude(RSET_GPR, base));
+  emit_settg32(as, stage, ffi_xsave_nslots);
+  emit_loadi(as, stage, (int32_t)snap->nslots);
+  emit_settg32(as, stage, ffi_xsave_baseslot);
+  emit_loadi(as, stage, (int32_t)baseslot);
+  emit_settg(as, base, ffi_xsave_root);
+  asm_stack_restore_reg(as, snap, base);
+}
+#endif
 
 /* -- GC handling --------------------------------------------------------- */
 

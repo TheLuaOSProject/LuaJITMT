@@ -2578,7 +2578,7 @@ static BCReg asm_baseslot(ASMState *as, SnapShot *snap, int *gotframe)
 */
 static void asm_xsave(ASMState *as)
 {
-#if LJ_TARGET_X64
+#if LJ_HASJIT_FFI_CALLXS || (LJ_TARGET_ARM64 && LJ_TARGET_OSX)
   SnapShot *snap;
   BCReg baseslot;
   int gotframe = 0;
@@ -3399,6 +3399,14 @@ MSize lj_asm_arm64_emit_test(jit_State *J, MCode *buf, MSize cap,
     break;
   case LJ_ARM64_EMIT_TEST_GET_JIT_GATE:
     emit_getgl32acq(as, RID_X5, gc2.jit_phase_gate);
+    break;
+  case LJ_ARM64_EMIT_TEST_SET_XSAVE_BASESLOT:
+    emit_settg32(as, RID_X6, ffi_xsave_baseslot);
+    emit_loadi(as, RID_X6, state);
+    break;
+  case LJ_ARM64_EMIT_TEST_SET_XSAVE_NSLOTS:
+    emit_settg32(as, RID_X6, ffi_xsave_nslots);
+    emit_loadi(as, RID_X6, state);
     break;
   default:
     return 0;
