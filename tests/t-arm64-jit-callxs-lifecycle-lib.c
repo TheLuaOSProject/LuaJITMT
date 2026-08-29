@@ -15,7 +15,8 @@ static int32_t lifecycle_second_errno;
 static int32_t lifecycle_third_errno;
 static int32_t lifecycle_last_errno;
 static int32_t lifecycle_mismatch = INT32_MIN;
-static int32_t lifecycle_use_callback;
+static int32_t lifecycle_callback_first;
+static int32_t lifecycle_callback_second;
 static LJCallXSArm64LifecycleCallback lifecycle_callback;
 
 static int32_t lifecycle_load(const int32_t *value)
@@ -29,7 +30,7 @@ static void lifecycle_store(int32_t *target, int32_t value)
 }
 
 void lj_callxs_arm64_lifecycle_configure(int32_t mismatch,
-	int32_t use_callback)
+	int32_t callback_first, int32_t callback_second)
 {
   lifecycle_store(&lifecycle_calls, 0);
   lifecycle_store(&lifecycle_callback_calls, 0);
@@ -39,7 +40,8 @@ void lj_callxs_arm64_lifecycle_configure(int32_t mismatch,
   lifecycle_store(&lifecycle_third_errno, 0);
   lifecycle_store(&lifecycle_last_errno, 0);
   lifecycle_store(&lifecycle_mismatch, mismatch);
-  lifecycle_store(&lifecycle_use_callback, use_callback != 0);
+  lifecycle_store(&lifecycle_callback_first, callback_first);
+  lifecycle_store(&lifecycle_callback_second, callback_second);
 }
 
 void lj_callxs_arm64_lifecycle_set_callback(
@@ -86,6 +88,7 @@ int32_t lj_callxs_arm64_lifecycle_last_errno_value(void)
 int32_t lj_callxs_arm64_lifecycle(int32_t value)
 {
   int32_t incoming_errno = errno;
+  int32_t callback_first, callback_second;
   int32_t callno;
   int32_t result = value;
   callno = __atomic_add_fetch(&lifecycle_calls, 1, __ATOMIC_ACQ_REL);
@@ -96,7 +99,10 @@ int32_t lj_callxs_arm64_lifecycle(int32_t value)
   if (callno == 3)
     lifecycle_store(&lifecycle_third_errno, incoming_errno);
   lifecycle_store(&lifecycle_last_errno, incoming_errno);
-  if (lifecycle_load(&lifecycle_use_callback)) {
+  callback_first = lifecycle_load(&lifecycle_callback_first);
+  callback_second = lifecycle_load(&lifecycle_callback_second);
+  if (callback_first < 0 || callno == callback_first ||
+      callno == callback_second) {
     LJCallXSArm64LifecycleCallback callback = lifecycle_callback;
     if (callback != NULL) {
       (void)__atomic_add_fetch(&lifecycle_callback_calls, 1,

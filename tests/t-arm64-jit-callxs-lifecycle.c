@@ -37,8 +37,18 @@
 #error "t-arm64-jit-callxs-lifecycle requires ARM64 CALLXS admission"
 #endif
 
+#define NATIVE_FRAME_STATE \
+  (LJ_FFI_NATIVE_FRAME_F_ACTIVE | LJ_FFI_NATIVE_FRAME_F_SUSPENDED | \
+   LJ_FFI_NATIVE_FRAME_F_POSTCALL)
+
+static TGState *test_tg;
+static GCtrace *test_trace;
 static uint32_t finish_calls;
 static uint32_t leave_hook_calls;
+static uint32_t callback_depth_one_observations;
+static uint32_t callback_depth_two_observations;
+static uint32_t nested_finish_calls;
+static uint32_t nested_callback_finish_calls;
 static uint64_t finish_old_epoch;
 
 static void force_epoch_each(TGState *tg)
@@ -57,6 +67,33 @@ static void observe_finish(TGState *tg)
 {
   assert((lj_ffi_native_frame_sequence_acq(tg) & 1u) != 0);
   finish_calls++;
+}
+
+static void observe_nested_finish(TGState *tg)
+{
+  const LJFFINativeFrame *outer, *top;
+  uint32_t depth, outer_flags, top_flags;
+  assert(tg == test_tg && test_trace != NULL);
+  assert((lj_ffi_native_frame_sequence_acq(tg) & 1u) != 0);
+  depth = lj_ffi_native_frame_depth_acq(tg);
+  assert(depth == 1u || depth == 2u);
+  outer = &tg->ffi_native_frame[0];
+  top = &tg->ffi_native_frame[depth - 1u];
+  outer_flags = lj_ffi_native_frame_flags_acq(outer);
+  top_flags = lj_ffi_native_frame_flags_acq(top);
+  assert(lj_ffi_native_frame_trace_acq(outer) == test_trace);
+  assert(lj_ffi_native_frame_trace_acq(top) == test_trace);
+  assert((top_flags & NATIVE_FRAME_STATE) ==
+	 LJ_FFI_NATIVE_FRAME_F_ACTIVE);
+  finish_calls++;
+  if (depth == 2u) {
+    assert((outer_flags & NATIVE_FRAME_STATE) ==
+	   LJ_FFI_NATIVE_FRAME_F_SUSPENDED);
+    assert((outer_flags & LJ_FFI_NATIVE_FRAME_F_CALLBACK_SEEN) != 0);
+    nested_finish_calls++;
+    if ((top_flags & LJ_FFI_NATIVE_FRAME_F_CALLBACK_SEEN) != 0)
+      nested_callback_finish_calls++;
+  }
 }
 
 static void force_fresh_stopreq_after_native_leave(TGState *tg)
@@ -103,6 +140,44 @@ static int call_wait_with_caller_errno(lua_State *L)
   return 0;
 }
 
+static int callback_probe(lua_State *L)
+{
+  LJFFINativeFrameSnapshot snapshot;
+  TGState *tg = L2TG(L);
+  MSize callback_depth;
+  uint32_t i;
+  assert(tg == test_tg && test_trace != NULL);
+  callback_depth = ccallback_depth_acq(&tg->cb);
+  assert(callback_depth == 1u || callback_depth == 2u);
+  assert(lj_ffi_native_frame_snapshot(tg, &snapshot) ==
+	 LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE);
+  assert(snapshot.depth == callback_depth);
+  for (i = 0; i < snapshot.depth; i++) {
+    const LJFFINativeFrame *frame = &snapshot.frame[i];
+    uint32_t flags = lj_ffi_native_frame_flags_acq(frame);
+    assert((flags & NATIVE_FRAME_STATE) ==
+	   LJ_FFI_NATIVE_FRAME_F_SUSPENDED);
+    assert((flags & (LJ_FFI_NATIVE_FRAME_F_SYNCHRONIZED |
+		     LJ_FFI_NATIVE_FRAME_F_CALLBACK_SEEN)) ==
+	   (LJ_FFI_NATIVE_FRAME_F_SYNCHRONIZED |
+	    LJ_FFI_NATIVE_FRAME_F_CALLBACK_SEEN));
+    assert(lj_ffi_native_frame_trace_acq(frame) == test_trace);
+    assert(lj_ffi_native_frame_L_acq(frame) == L);
+    assert(lj_ffi_native_frame_result_root_acq(frame) == NULL);
+    assert(tg->cb.frame[i].native_frame_depth == i + 1u);
+  }
+  assert(lj_tg_in_native_acq(tg) == 0);
+  assert(lj_tg_load_jit_base(tg) == NULL);
+  assert(lj_tg_vmstate_load_acq(tg) == (int32_t)~LJ_VMST_C);
+  assert(trace_native_pins_acq(test_trace) >= snapshot.depth);
+  if (callback_depth == 1u)
+    callback_depth_one_observations++;
+  else
+    callback_depth_two_observations++;
+  lua_pushinteger(L, (lua_Integer)callback_depth);
+  return 1;
+}
+
 static GCproto *global_lua_proto(lua_State *L, const char *name)
 {
   GCproto *pt;
@@ -139,12 +214,15 @@ static GCtrace *find_callxs_trace(jit_State *J, GCproto *pt)
   return NULL;
 }
 
-static void call_configure(lua_State *L, int32_t mismatch, int callback)
+static void call_configure(lua_State *L, int32_t mismatch,
+	int32_t callback_first, int32_t callback_second, int callback_mode)
 {
   lua_getglobal(L, "__callxs_lifecycle_configure");
   lua_pushinteger(L, mismatch);
-  lua_pushboolean(L, callback);
-  assert(lua_pcall(L, 2, 0, 0) == 0);
+  lua_pushinteger(L, callback_first);
+  lua_pushinteger(L, callback_second);
+  lua_pushinteger(L, callback_mode);
+  assert(lua_pcall(L, 4, 0, 0) == 0);
 }
 
 static lua_Integer call_integer_getter(lua_State *L, const char *name)
@@ -174,6 +252,31 @@ static int start_retry_run(lua_State *L, lua_Integer n)
   return lua_pcall(L, 2, 1, 0);
 }
 
+static void assert_empty_frame_storage(TGState *tg)
+{
+  uint32_t i;
+  for (i = 0; i < LJ_FFI_NATIVE_FRAME_MAX; i++) {
+    const LJFFINativeFrame *frame = &tg->ffi_native_frame[i];
+    assert(lj_ffi_native_frame_trace_acq(frame) == NULL);
+    assert(lj_ffi_native_frame_L_acq(frame) == NULL);
+    assert(lj_ffi_native_frame_func_acq(frame) == NULL);
+    assert(lj_ffi_native_frame_result_root_acq(frame) == NULL);
+    assert(lj_ffi_native_frame_old_func_acq(frame) == NULL);
+    assert(lj_ffi_native_frame_flags_acq(frame) == 0);
+    assert(lj_ffi_native_frame_trace_no_acq(frame) == 0);
+  }
+  for (i = 0; i < CCALLBACK_MAX_NEST; i++) {
+    assert(tg->cb.frame[i].L == NULL);
+    assert(tg->cb.frame[i].cont == 0);
+    assert(tg->cb.frame[i].native_depth == 0);
+    assert(tg->cb.frame[i].native_frame_depth == 0);
+    assert(tg->cb.frame[i].auto_detach == 0);
+    assert(tg->cb.frame[i].errphase == CCALLBACK_ERR_SETUP);
+    assert(tg->cb.frame[i].errnum == 0);
+    assert(tg->cb.frame[i].winerr == 0);
+  }
+}
+
 static void assert_clean_native_state(TGState *tg, GCtrace *T,
 	MSize callback_slot, void *ffi_func, uint8_t callback_stopreq)
 {
@@ -183,12 +286,15 @@ static void assert_clean_native_state(TGState *tg, GCtrace *T,
   assert(ccallback_depth_acq(&tg->cb) == 0);
   assert(ccallback_slot_acq(&tg->cb) == callback_slot);
   assert(ccallback_native_had_stopreq_acq(&tg->cb) == callback_stopreq);
+  assert(ccallback_auto_detach_acq(&tg->cb) == 0);
+  assert(ccallback_L_acq(&tg->cb) == NULL);
   assert(lj_tg_ffi_call_func_acq(tg) == ffi_func);
   assert(lj_tg_load_jit_base(tg) == NULL);
   assert(tg->ffi_xsave_root == NULL);
   assert(tg->ffi_xsave_baseslot == 0);
   assert(tg->ffi_xsave_nslots == 0);
   assert(trace_native_pins_acq(T) == 0);
+  assert_empty_frame_storage(tg);
 }
 
 int main(void)
@@ -204,8 +310,10 @@ int main(void)
   uint8_t old_callback_stopreq =
     ccallback_native_had_stopreq_acq(&tg->cb);
   uint8_t old_flags;
+  uint32_t callback_one0, callback_two0;
   int observed_errno, status;
 
+  test_tg = tg;
   lua_pushinteger(L, EAGAIN);
   lua_setglobal(L, "__callxs_lifecycle_eagain");
   lua_pushinteger(L, ERANGE);
@@ -214,12 +322,15 @@ int main(void)
   lua_setglobal(L, "__callxs_lifecycle_arm_retry");
   lua_pushcfunction(L, set_caller_errno);
   lua_setglobal(L, "__callxs_lifecycle_set_caller_errno");
+  lua_pushcfunction(L, callback_probe);
+  lua_setglobal(L, "__callxs_lifecycle_callback_probe");
 
   ljt_lua_dostring(L,
     "local ffi = require('ffi')\n"
     "ffi.cdef[[\n"
     "typedef int32_t (*lj_callxs_arm64_lifecycle_cb_t)(int32_t);\n"
-    "void lj_callxs_arm64_lifecycle_configure(int32_t, int32_t);\n"
+    "void lj_callxs_arm64_lifecycle_configure(\n"
+    "  int32_t, int32_t, int32_t);\n"
     "void lj_callxs_arm64_lifecycle_set_callback(\n"
     "  lj_callxs_arm64_lifecycle_cb_t);\n"
     "int32_t lj_callxs_arm64_lifecycle_count(void);\n"
@@ -236,21 +347,36 @@ int main(void)
     "local call = lib.lj_callxs_arm64_lifecycle\n"
     "local arm_retry = __callxs_lifecycle_arm_retry\n"
     "local set_caller_errno = __callxs_lifecycle_set_caller_errno\n"
+    "local lifecycle_run\n"
+    "local callback_mode = 0\n"
     "local function callback_body(value)\n"
     "  assert(ffi.errno() == __callxs_lifecycle_eagain, ffi.errno())\n"
+    "  local depth\n"
+    "  if callback_mode ~= 0 then\n"
+    "    depth = __callxs_lifecycle_callback_probe()\n"
+    "  end\n"
+    "  if callback_mode == 1 and depth == 1 then\n"
+    "    assert(lifecycle_run(call, 6))\n"
+    "    assert(__callxs_lifecycle_callback_probe() == 1)\n"
+    "  elseif callback_mode == 2 then\n"
+    "    ffi.errno(__callxs_lifecycle_erange)\n"
+    "    error('ARM64 generated callback error')\n"
+    "  end\n"
     "  collectgarbage('step', 8)\n"
     "  ffi.errno(__callxs_lifecycle_erange)\n"
     "  return value\n"
     "end\n"
-    "jit.off(callback_body, true)\n"
+    "jit.off(callback_body)\n"
     "local callback = ffi.cast(\n"
     "  'lj_callxs_arm64_lifecycle_cb_t', callback_body)\n"
     "lib.lj_callxs_arm64_lifecycle_set_callback(callback)\n"
     "_G.__callxs_lifecycle_callback = callback\n"
     "_G.__callxs_lifecycle_call = call\n"
-    "function _G.__callxs_lifecycle_configure(mismatch, use_callback)\n"
+    "function _G.__callxs_lifecycle_configure(\n"
+    "    mismatch, callback_first, callback_second, mode)\n"
+    "  callback_mode = mode\n"
     "  lib.lj_callxs_arm64_lifecycle_configure(\n"
-    "    mismatch, use_callback and 1 or 0)\n"
+    "    mismatch, callback_first, callback_second)\n"
     "end\n"
     "function _G.__callxs_lifecycle_count()\n"
     "  return lib.lj_callxs_arm64_lifecycle_count()\n"
@@ -273,7 +399,7 @@ int main(void)
     "function _G.__callxs_lifecycle_last_errno()\n"
     "  return lib.lj_callxs_arm64_lifecycle_last_errno_value()\n"
     "end\n"
-    "local function lifecycle_run(fn, n)\n"
+    "lifecycle_run = function(fn, n)\n"
     "  for i = 1, n do\n"
     "    if fn(i) ~= i then return false end\n"
     "  end\n"
@@ -294,7 +420,7 @@ int main(void)
     "jit.flush()\n"
     "jit.opt.start('hotloop=1', 'hotexit=1')\n");
 
-  call_configure(L, INT32_MIN, 0);
+  call_configure(L, INT32_MIN, 0, 0, 0);
   errno = 0;
   status = start_run(L, 400);
   observed_errno = errno;
@@ -307,6 +433,7 @@ int main(void)
   if (T == NULL)
     fprintf(stderr, "exact lifecycle CALLXS trace was not published\n");
   assert(T != NULL);
+  test_trace = T;
   assert_clean_native_state(tg, T, old_callback_slot, old_ffi_func,
 	old_callback_stopreq);
   assert(call_integer_getter(L, "__callxs_lifecycle_count") == 400);
@@ -319,7 +446,7 @@ int main(void)
 
   /* The first interpreted call arms one retry for the generated lookup. A
   ** deterministic wait-side clobber must not reach either generated call. */
-  call_configure(L, INT32_MIN, 0);
+  call_configure(L, INT32_MIN, 0, 0, 0);
   lj_tab_test_reset_wait_l_calls();
   lj_tab_test_set_wait_l_after_yield_hook(clobber_wait_errno);
   finish_calls = 0;
@@ -368,7 +495,7 @@ int main(void)
 
   /* The result guard exits after the eighth completed foreign call. The
   ** restored post-call snapshot must not invoke that call a second time. */
-  call_configure(L, 8, 0);
+  call_configure(L, 8, 0, 0, 0);
   lj_trace_test_reset_exit_stats();
   errno = 0;
   status = start_run(L, 20);
@@ -387,7 +514,7 @@ int main(void)
 
   /* A changed handshake epoch forces POSTCALL exit/cleanup after a completed
   ** call. Every loop effect must still occur exactly once. */
-  call_configure(L, INT32_MIN, 0);
+  call_configure(L, INT32_MIN, 0, 0, 0);
   finish_calls = 0;
   lj_trace_test_reset_exit_stats();
   lj_ffi_native_trace_test_set_finish_hook(force_epoch_each);
@@ -412,7 +539,7 @@ int main(void)
   /* Callback entry suspends the generated ACTIVE frame. Callback return must
   ** resume it, preserve the callback's error state for the callee, then force
   ** one post-call exit without replay. */
-  call_configure(L, INT32_MIN, 1);
+  call_configure(L, INT32_MIN, -1, 0, 0);
   finish_calls = 0;
   lj_trace_test_reset_exit_stats();
   lj_ffi_native_trace_test_set_finish_hook(observe_finish);
@@ -437,10 +564,94 @@ int main(void)
   assert(call_integer_getter(L,
 	"__callxs_lifecycle_callback_errno") == ERANGE);
 
+  /* Foreign call two is the first generated outer call and enters Lua. That
+  ** callback recursively enters the same admitted root; its first generated
+  ** inner call performs a second callback while both native frames are
+  ** suspended. Both callback returns must unwind in LIFO order and force
+  ** exactly their completed calls through POSTCALL without replaying either
+  ** foreign effect. */
+  call_configure(L, INT32_MIN, 2, 4, 1);
+  callback_one0 = callback_depth_one_observations;
+  callback_two0 = callback_depth_two_observations;
+  finish_calls = 0;
+  nested_finish_calls = 0;
+  nested_callback_finish_calls = 0;
+  lj_trace_test_reset_exit_stats();
+  lj_ffi_native_trace_test_set_finish_hook(observe_nested_finish);
+  errno = 0;
+  status = start_run(L, 20);
+  observed_errno = errno;
+  lj_ffi_native_trace_test_set_finish_hook(NULL);
+  assert(status == 0 && lua_toboolean(L, -1));
+  lua_pop(L, 1);
+  assert(finish_calls != 0);
+  assert(nested_finish_calls != 0);
+  assert(nested_callback_finish_calls == 1);
+  assert(observed_errno == EDOM);
+  assert_clean_native_state(tg, T, old_callback_slot, old_ffi_func,
+	old_callback_stopreq);
+  assert(lj_trace_test_exit_calls() == 4);
+  assert(lj_trace_test_first_exit_parent() == trace_traceno_acq(T));
+  assert(lj_trace_test_first_exitno() == 5);
+  assert(lj_trace_test_last_exit_parent() == trace_traceno_acq(T));
+  assert(lj_trace_test_last_exitno() == 14);
+  assert(callback_depth_one_observations - callback_one0 == 2);
+  assert(callback_depth_two_observations - callback_two0 == 1);
+  assert(call_integer_getter(L, "__callxs_lifecycle_count") == 26);
+  assert(call_integer_getter(L,
+	"__callxs_lifecycle_callback_count") == 2);
+  assert(call_integer_getter(L,
+	"__callxs_lifecycle_callback_errno") == ERANGE);
+  assert(call_integer_getter(L,
+	"__callxs_lifecycle_third_errno") == EAGAIN);
+
+  /* A body-owned error keeps the explicit errno written by Lua while the
+  ** callback unwinder transfers the suspended generated frame to ordinary
+  ** trace-exit cleanup. No native frame, callback frame, pin or XSAVE root may
+  ** survive, and the completed foreign call must not be replayed. */
+  call_configure(L, INT32_MIN, 2, 0, 2);
+  callback_one0 = callback_depth_one_observations;
+  callback_two0 = callback_depth_two_observations;
+  errno = 0;
+  status = start_run(L, 20);
+  observed_errno = errno;
+  assert(status != 0);
+  assert(lua_tostring(L, -1) != NULL);
+  assert(strstr(lua_tostring(L, -1),
+	"ARM64 generated callback error") != NULL);
+  lua_pop(L, 1);
+  assert(observed_errno == ERANGE);
+  assert_clean_native_state(tg, T, old_callback_slot, old_ffi_func,
+	old_callback_stopreq);
+  assert(trace_runnable_acq(T, trace_traceno_acq(T)));
+  assert(callback_depth_one_observations - callback_one0 == 1);
+  assert(callback_depth_two_observations == callback_two0);
+  assert(call_integer_getter(L, "__callxs_lifecycle_count") == 2);
+  assert(call_integer_getter(L,
+	"__callxs_lifecycle_callback_count") == 1);
+  assert(call_integer_getter(L,
+	"__callxs_lifecycle_callback_errno") == 0);
+
+  /* Callback-error cleanup must leave the same root immediately reusable. */
+  call_configure(L, INT32_MIN, 0, 0, 0);
+  finish_calls = 0;
+  lj_ffi_native_trace_test_set_finish_hook(observe_finish);
+  errno = 0;
+  status = start_run(L, 20);
+  observed_errno = errno;
+  lj_ffi_native_trace_test_set_finish_hook(NULL);
+  assert(status == 0 && lua_toboolean(L, -1));
+  lua_pop(L, 1);
+  assert(finish_calls != 0);
+  assert(observed_errno == EDOM);
+  assert_clean_native_state(tg, T, old_callback_slot, old_ffi_func,
+	old_callback_stopreq);
+  assert(call_integer_getter(L, "__callxs_lifecycle_count") == 20);
+
   /* The root starts after one interpreted iteration. A fresh STOPREQ throws
   ** after the next, first generated foreign effect. Native frame cleanup and
   ** the final unwind landing must preserve its errno without replay. */
-  call_configure(L, INT32_MIN, 0);
+  call_configure(L, INT32_MIN, 0, 0, 0);
   old_flags = lj_tg_flags_acq(tg);
   leave_hook_calls = 0;
   lj_ffi_native_trace_test_set_leave_hook(
@@ -462,7 +673,7 @@ int main(void)
   assert(call_integer_getter(L, "__callxs_lifecycle_count") == 2);
 
   /* The throwing unwind must leave the same root runnable. */
-  call_configure(L, INT32_MIN, 0);
+  call_configure(L, INT32_MIN, 0, 0, 0);
   finish_calls = 0;
   lj_ffi_native_trace_test_set_finish_hook(observe_finish);
   errno = 0;
@@ -478,8 +689,8 @@ int main(void)
   assert(call_integer_getter(L, "__callxs_lifecycle_count") == 20);
 
   lua_close(L);
-  puts("t-arm64-jit-callxs-lifecycle OK: errno, result/POSTCALL exits, "
-       "callback and STOPREQ preserved exact effects");
+  puts("t-arm64-jit-callxs-lifecycle OK: errno, nested/error callback, "
+       "result/POSTCALL and STOPREQ preserved exact effects");
   return 0;
 }
 
