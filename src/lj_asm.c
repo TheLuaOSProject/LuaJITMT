@@ -2961,9 +2961,7 @@ int lj_asm_arm64_ir_admit(const jit_State *J, const GCtrace *T,
   if ((scalar_mode & ARM64_IR_SCALAR_NUM) != 0) {
     if (scalar_mode == (ARM64_IR_SCALAR_INT|ARM64_IR_SCALAR_NUM)) {
       if (numdynamic_step_kind == ARM64_NUMDYN_STEP_INT_TO_NUM) {
-	if (constant_profile != ARM64_IR_KPROFILE_INT ||
-	    startop != BC_LOOP || T->nk != REF_TRUE || pt->sizebc != 13 ||
-	    !arm64_ir_numacc_shape(J, T, pt, firstphi,
+	if (!arm64_ir_numacc_shape(J, T, pt, firstphi,
 	      numdynamic_step_kind, reject))
 	  return 0;
       } else if (constant_profile != ARM64_IR_KPROFILE_INT ||
