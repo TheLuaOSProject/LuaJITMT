@@ -175,14 +175,17 @@ semantic and post-register-allocation gates merely to reduce the diff.
 - Manual arm64e/BTI build: the same semantic/post-RA fixture, production call,
   exact lifecycle, and threaded lifecycle passed through `a7056fe5` in thin
   ARM64e executables.
-- Disposable x86_64/Rosetta builds: focused authentic direct-call, callback,
-  and threaded scalar, pointer, boolean, and sret remote-flush paths passed
-  through `a7056fe5`. The full `m7_ffi_callxs_authentic` fixture nevertheless
-  has a pre-existing generated `CALLT`/`CALLMT` re-entry failure: its outer
-  loop trace repeatedly exits at the inlined tail-callee identity guard before
-  reaching `XSAVE`. The strict epoch-finish assertion fails identically at
-  `5b6d9e0d` and `a7056fe5`; it remains enabled and must not be weakened into
-  an interpreter-fallback pass.
+- Disposable x86_64/Rosetta builds: the complete
+  `m7_ffi_callxs_authentic` suite passed at `c05a7cd8`, including strict
+  generated `CALLT`, `CALLMT`, `CALLM`, callback, forced-exit, STOPREQ, and
+  threaded scalar, pointer, boolean, and sret remote-flush paths. Its three
+  nested topology helpers deliberately resolve the identical published global
+  library instead of a constant callee's captured upvalue. This preserves the
+  intended bytecodes, frames, snapshots, calls, and effects while preventing
+  an unrelated pre-`XSAVE` x64 upvalue guard from turning the lifecycle oracle
+  into interpreter fallback. Trace selection also requires the exact runnable
+  root and starting prototype rather than accepting the first retained
+  `CALLXS` body.
 - Disposable experimental ARM64 `LUAJIT_DISABLE_FFI` build: a native JIT loop
   published and executed while `require("ffi")` remained unavailable at
   `a7056fe5`.
@@ -237,10 +240,10 @@ the expected non-GC64 rejection before the configured GC64 target succeeds.
   arm64e JIT-frame carrier/landing evidence remains synthetic.
 - Nested FFI callbacks and callback-error unwind inside the admitted scalar
   `CALLXS` root.
-- Generated x86_64 `CALLT`/`CALLMT` re-entry for the strict `CALLXS` lifecycle
-  fixture; the live root exits at its inlined callee-identity guard before
-  `XSAVE`, although ordinary `CALL`, callback, and threaded remote-flush paths
-  pass.
+- General x86_64 re-entry through a constant-inlined closure's captured-upvalue
+  guard. The strict `CALLXS` lifecycle fixture isolates this unrelated path by
+  resolving its already-published library global; its generated `CALLT`,
+  `CALLMT`, and `CALLM` paths now pass.
 - Full parity with every x86_64 lockless VM, JIT, FFI, profiler, unwind, and
   stress path.
 - The complete sanitizer, weak-memory, sustained-concurrency, and performance
