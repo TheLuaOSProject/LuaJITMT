@@ -571,6 +571,7 @@ for required in \
   'case ARM64_NUMDYN_ARGS_NUM: kindidx = 0; break;' \
   'case ARM64_NUMDYN_ARGS_INT_STEP: kindidx = 1; break;' \
   'case ARM64_NUMDYN_ARGS_INT_LIMIT: kindidx = 2; break;' \
+  'default: return 0;' \
   'static int arm64_postra_numdynamic_kernel(const LJArm64PostRAView *view,' \
   'IRRef xslot, IRRef stepslot, IRRef limitslot,' \
   'unsigned grammar_profile, unsigned args_kind)' \
