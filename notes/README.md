@@ -9,15 +9,17 @@ current claims.
 
 Development branch: `codex/aarch64-macos-port`.
 
-Last complete JIT fail-closed-gate checkpoint: `19e94934` (2026-08-29).
-It admits one exact variable-stop/variable-step integer `FORL` grammar without
-changing the recorder or VM. The immediately preceding cleanup checkpoints
-are `e1eb3de1`, which moved the unchanged ARM64 semantic and post-RA policy out
-of the shared assembler, and `f06e79d5`, which completed direct C and
-fast-function unwind-landing proof. The native and x86_64 vendored suites last
-passed with 509 tests each at `4d1b6126`; the temporary x86_64 build reported
-`jit.os == "OSX"`, `jit.arch == "x64"`, enabled JIT, and a real loop trace
-before it was removed.
+Last complete JIT fail-closed-gate checkpoint: `0ce4313b` (2026-08-29).
+It adds the target-local Darwin ARM64 `XSAVE` restore/staging backend without
+opening production `CALLXS` admission. Snapshot restoration uses the allocated
+`REF_BASE` owner rather than assuming interpreter `x19`; the root, frame offset,
+and extent then stage through release stores on the fixed x25 TG carrier. The
+exact emitted `STLR` words passed the ARM64 emitter contract, the complete
+ARM64/arm64e fail-closed umbrella passed, and the unchanged x86_64 production
+scalar `CALLXS` fixture passed under Rosetta. The immediately preceding JIT
+checkpoint is `19e94934`, which admitted the exact variable-stop/variable-step
+integer `FORL` grammar. The native and x86_64 vendored suites last passed with
+509 tests each at `4d1b6126`.
 
 ARM64 remains explicitly opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`. Native JIT
 work additionally requires `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`. These flags are
@@ -42,6 +44,11 @@ Implemented and exercised on Apple Silicon macOS:
   `ADD_GE`, `SUB_GT`, `SUB_GE`, `MUL_LT`, `MUL_LE`, `DIV_LT`, `DIV_LE`,
   `DIV_GT`, and `DIV_GE` all-parameter loop profiles; and
 - callback-result lifetime across post-detach TG reclamation.
+
+The ARM64 `XSAVE` backend is preparatory, not an admitted generic FFI trace.
+The common `LJ_HASJIT_FFI_CALLXS` capability remains x64-only until a separate
+ARM64 semantic, post-register-allocation, snapshot, exact-trace-identity, and
+runtime lifecycle certificate lands.
 
 ## Exact numeric JIT boundary
 
@@ -129,11 +136,17 @@ semantic and post-register-allocation gates merely to reduce the diff.
 
 ## Verification
 
-- `tools/ci/arm64_jit_fail_closed_gate.sh`: passed in full at `19e94934`,
+- `tools/ci/arm64_jit_fail_closed_gate.sh`: passed in full at `0ce4313b`,
   including the exact variable-step integer `FORL`, its overflow and direction
   exits, the 3,072-case `BC_LOOP` compiler proof, 222 runtime profile
   executions, ARM64/arm64e publication, entry, exit, retirement, flush/reuse,
   GDB-JIT, callback, first-side, and safepoint contracts.
+- `tools/ci/arm64_jit_emitter_contract.sh`: passed at `0ce4313b`; the emitted
+  owner-private `ffi_xsave_baseslot` and `ffi_xsave_nslots` publications are
+  naturally sized `STLR w6` stores through x25, and `ffi_xsave_root` uses the
+  existing pointer-sized release helper.
+- Disposable x86_64/Rosetta build: `t-ffi-callxs-production.lua` passed at
+  `0ce4313b`, preserving the established scalar `XSAVE`/`CALLXS` path.
 - Native ARM64 experimental build vendored suite: `509 passed` at
   `4d1b6126`.
 - Disposable thin x86_64 build: platform smoke, real Rosetta loop trace, and
@@ -186,9 +199,12 @@ Do not describe this branch as a completed ARM64 port yet. A passing stock
 suite proves an important compatibility boundary, not general JIT coverage.
 
 The next high-value production tranche is exact scalar Darwin ARM64 generic
-FFI `CALLXS`/`XSAVE` lifecycle support. Before admitting table/helper traces,
-ARM64 `lj_vm_next` also needs the forwarding-safe traversal already used by
-the x86_64 path.
+FFI `CALLXS` admission. Its first heap-free shape must certify every duplicated
+`XSAVE`/enter/foreign-call/leave bracket, exact patched trace identity,
+snapshots, and callee-saved post-RA owners before running callback, STOPREQ,
+errno, remote-flush, and arm64e/BTI proofs. Before admitting table/helper
+traces, ARM64 `lj_vm_next` also needs the forwarding-safe traversal already
+used by the x86_64 path.
 
 ## Primary checks
 
