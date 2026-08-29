@@ -451,7 +451,7 @@ static void trace_test_admission_maybe_clobber_cleanup_oserr(void)
     lj_oserr_restore(&oserr);
   }
 }
-#if LJ_TARGET_ARM64 && LJ_HASJIT
+#if LJ_TARGET_ARM64
 static uint32_t trace_test_root_entry_pause_stage;
 static uint32_t trace_test_root_entry_pause_waiting;
 static uint32_t trace_test_root_entry_pause_release;
@@ -634,7 +634,8 @@ static LJ_AINLINE void trace_test_note_findfree_grow(TraceNo traceno)
   ((void)(L), (void)(J), (void)(pc), (void)(stage))
 #define trace_test_side_admission_inject(L, J, parent, exitno, stage) \
   ((void)(L), (void)(J), (void)(parent), (void)(exitno), (void)(stage))
-#define trace_test_side_admission_inject_held(L, J, parent, exitno, snap, stage) \
+#define trace_test_side_admission_inject_held(L, J, parent, exitno, snap, \
+	stage) \
   ((void)(L), (void)(J), (void)(parent), (void)(exitno), (void)(snap), \
    (void)(stage))
 #define trace_test_admission_note_clean_release(L, J) \
@@ -3809,14 +3810,14 @@ int lj_trace_test_proto_pc_candidate(global_State *g, GCobj *o,
   return valid;
 }
 #else
-#if LJ_TARGET_ARM64 && LJ_HASJIT
+#if LJ_TARGET_ARM64
 #define trace_test_root_entry_pause_at(stage) ((void)0)
 #define trace_test_root_entry_published() ((void)0)
 #define trace_test_root_entry_cleaned() ((void)0)
 #endif
 #endif
 
-#if LJ_TARGET_ARM64 && LJ_HASJIT
+#if LJ_TARGET_ARM64
 static LJ_AINLINE int trace_root_entry_source_valid(uint32_t sourceop)
 {
   return sourceop == (uint32_t)BC_JLOOP ||
@@ -4755,7 +4756,7 @@ lj_trace_arm64_side_parent_capture(jit_State *J)
   if (!trace_arm64_side_parent_asm_owner_base(J, NULL))
     return result;
   /* Failed authorized capture never leaves a partial or replayable
-  ** predecessor. Authenticate the private owner before performing this clear. */
+  ** predecessor. Authenticate the private owner before clearing it. */
   lj_trace_arm64_side_parent_clear(J);
   parent = J->parent;
   child = trace_traceno_acq(&J->cur);
@@ -4787,7 +4788,7 @@ lj_trace_arm64_side_parent_capture(jit_State *J)
   local.parent = parent;
   local.exitno = exitno;
   local.child = child;
-  /* This is the sole successful publication into token-private recorder state. */
+  /* Sole successful publication into token-private recorder state. */
   J->arm64_side_parent = local;
   result = LJ_TRACE_ARM64_SIDE_PARENT_OK;
 out:
@@ -5340,8 +5341,8 @@ static LJTraceArm64SideParentResult trace_arm64_side_publish_seal(
 }
 
 #if LJ_ABI_PAUTH
-/* Substitute the same stripped fallback address with a signature produced from
-** a deliberately different discriminator. The raw child-slot check must reject
+/* Substitute the stripped fallback address with a signature produced from a
+** deliberately different discriminator. The raw child-slot check must reject
 ** it before PUBLISH, release its reader, and leave every private owner intact. */
 static int trace_arm64_side_publish_raw_negative_test(jit_State *J, GCtrace *T)
 {
@@ -8592,11 +8593,11 @@ BCIns LJ_FASTCALL lj_trace_stale_startins(jit_State *J, const BCIns *pc,
   global_State *g = J2G(J);
   BCIns startins = 0;
   GCproto *owner = NULL;
-#if defined(LJ_TRACE_TEST_HELPERS) && LJ_TARGET_ARM64 && LJ_HASJIT
+#if defined(LJ_TRACE_TEST_HELPERS) && LJ_TARGET_ARM64
   trace_test_root_entry_startins_note();
 #endif
   if (trace_test_take_startins_retry()) {
-#if defined(LJ_TRACE_TEST_HELPERS) && LJ_TARGET_ARM64 && LJ_HASJIT
+#if defined(LJ_TRACE_TEST_HELPERS) && LJ_TARGET_ARM64
     trace_test_root_entry_retry_restore_now();
 #endif
     return LJ_TRACE_STARTINS_RETRY;
@@ -8923,12 +8924,14 @@ static void trace_flush_callback_newtoken(lua_State *L, jit_State *J)
       L, ctx.result.actions, ctx.result.had_stopreq);
 }
 
+#if LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS
 /* Preprocess admitted children while every parent slot/body is still live.
 ** This makes the exact inverse independent of trace-number allocation order;
-** the destructive pass below remains the sole owner of debug and slot teardown. */
-static void trace_flushall_arm64_first_side_prepass(jit_State *J, MSize sizetrace)
+** the destructive pass below remains the sole owner of debug and slot
+** teardown. */
+static void trace_flushall_arm64_first_side_prepass(jit_State *J,
+	MSize sizetrace)
 {
-#if LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS
   global_State *g = J2G(J);
   MSize i;
   for (i = 1; i < sizetrace; i++) {
@@ -8945,10 +8948,8 @@ static void trace_flushall_arm64_first_side_prepass(jit_State *J, MSize sizetrac
     trace_retire(g, T);
     trace_retire_disconnect(J, T);
   }
-#else
-  UNUSED(J); UNUSED(sizetrace);
-#endif
 }
+#endif
 
 static int trace_flushall_direct(lua_State *L, int allow_gc_hook,
 				 int send_event, int smr_held)
@@ -8956,7 +8957,9 @@ static int trace_flushall_direct(lua_State *L, int allow_gc_hook,
   jit_State *J = L2J(L);
   global_State *g = J2G(J);
   ptrdiff_t i;
+#if LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS
   MSize sizetrace;
+#endif
   int token;
   /* This raw path has no remote EXIT_TRACES handshake. Keep its conservative
   ** process-wide GC-hook veto; peer callers use trace_flushall_hs_impl(). */
@@ -8970,11 +8973,16 @@ static int trace_flushall_direct(lua_State *L, int allow_gc_hook,
     jit_owner_l_rel(J, L);
   if (!smr_held)
     lj_gc2_smr_read_enter(g);
+#if LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS
   sizetrace = trace_sizetrace_acq(J);
   trace_flushall_arm64_first_side_prepass(J, sizetrace);
   for (i = (ptrdiff_t)sizetrace-1; i > 0; i--) {
+#else
+  for (i = (ptrdiff_t)trace_sizetrace_acq(J)-1; i > 0; i--) {
+#endif
     GCtrace *T = traceref_safe(J, i);
     if (T && trace_traceno_acq(T) == (TraceNo)i) {
+#if LJ_TARGET_ARM64 && LJ_ARM64_JIT_EXIT_TARGET_SLOTS
       /* Generic bodies publish preservation before any edge is removed. The
       ** admitted child was already edge-detached, listed and disconnected by
       ** the parent-preserving prepass. */
@@ -8983,6 +8991,7 @@ static int trace_flushall_direct(lua_State *L, int allow_gc_hook,
 	lj_assertJ(trace_retired_link_listed_acq(T),
 	  "retired full-flush trace is not discoverable");
       else
+#endif
 	trace_retire(J2G(J), T);
       trace_exittab_reset(J, T);
       if (trace_root_acq(T) == 0) {
@@ -9501,6 +9510,7 @@ static int trace_root_itern_tuple(GCproto *pt, const BCIns *pc,
   return 1;
 }
 
+#if LJ_TARGET_ARM64
 /* Validate the paired FORI/FORL generation before rec_setup_root() follows
 ** the negative FORL displacement. FORI remains deliberately unpatched for
 ** lockless ARM64 publication, so both words can be rechecked exactly. */
@@ -9535,7 +9545,6 @@ static int trace_root_forl_tuple(GCproto *pt, const BCIns *pc,
          (BCIns)la_load32_acq((const uint32_t *)&bc[(BCPos)foripos]) == fori;
 }
 
-#if LJ_TARGET_ARM64
 /* Admit only the immutable three-word fixed-function seed used by the first
 ** ARM64 function-root tranche. It has no body effects: the sole instruction
 ** writes one primitive to the final frame slot and RET1 returns that slot. */
@@ -9621,10 +9630,10 @@ static TraceStartResult trace_start(jit_State *J)
       (BCIns)la_load32_acq((const uint32_t *)J->pc);
     if (!trace_root_startins_valid(root_startins, J->exitno))
       return TRACE_START_RESULT_IDLE;
+#if LJ_TARGET_ARM64
     if (bc_op(root_startins) == BC_FORL &&
 	!trace_root_forl_tuple(J->pt, J->pc, root_startins))
       return TRACE_START_RESULT_IDLE;
-#if LJ_TARGET_ARM64
     if (!trace_root_arm64_generation_valid(J->pt, J->pc, root_startins))
       return TRACE_START_RESULT_IDLE;
 #endif
@@ -10376,7 +10385,7 @@ void lj_trace_abort_owner_before_park(lua_State *L)
 
 /* -- Event handling ------------------------------------------------------ */
 
-#if LJ_TARGET_ARM64 && LJ_HASJIT
+#if LJ_TARGET_ARM64
 static void trace_arm64_abort_exact_owner(jit_State *J, lua_State *owner)
 {
   if (owner != NULL && jit_owner_l_acq(J) == owner &&
@@ -10743,8 +10752,8 @@ static void trace_hotside(jit_State *J, const BCIns *pc, lua_State *L,
     return;
   }
 #if LJ_TARGET_ARM64 && !LJ_ARM64_JIT_FIRST_SIDE_RECORDER_FAIL_CLOSED
-  /* Refuse unsupported first sides and every side-of-side before mutating the
-  ** selected snapshot count. IDLE proves that no recorder token is published. */
+  /* Refuse unsupported first sides and every side-of-side before mutating
+  ** the selected snapshot count. IDLE proves no recorder token is published. */
   if (!lj_trace_arm64_first_side_loop_valid(
 	J, L, parent, exitno, pc, pc, LJ_TRACE_ARM64_SIDE_CONTEXT_IDLE))
     goto out;

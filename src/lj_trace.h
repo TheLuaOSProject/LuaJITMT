@@ -24,7 +24,7 @@ LJ_FUNC_NORET void lj_trace_err(jit_State *J, TraceError e);
 LJ_FUNC_NORET void lj_trace_err_info(jit_State *J, TraceError e);
 
 /* Trace management. */
-#if LJ_TARGET_ARM64 && LJ_HASJIT
+#if LJ_TARGET_ARM64
 /* AAPCS64 returns this 16-byte non-HFA aggregate in x0/x1. The ARM64 VM keeps
 ** x0 as the exact trace identity (and PAUTH modifier) and branches through x1
 ** only after both members are non-NULL. */
@@ -106,14 +106,14 @@ LJ_FUNC int lj_trace_test_arm64_first_side_publish_asm_authorized(
 LJ_FUNC int lj_trace_test_arm64_side_compact_roundtrip(jit_State *J,
   GCtrace *T, uint32_t *geometry_reject, uint32_t *init_ok,
   uint32_t *reset_ok, uint32_t *pauth_ok);
-/* Test-only dry seal: proves and enters exact PUBLISH, exercises an asynchronous
-** abort against it, then restores ASM before the mandatory unpublished abort. */
+/* Test-only dry seal: proves and enters exact PUBLISH, exercises an
+** asynchronous abort against it, then restores ASM before the mandatory
+** unpublished abort. */
 LJ_FUNC int lj_trace_test_arm64_side_publish_seal(jit_State *J, GCtrace *T);
 LJ_FUNC uint32_t lj_trace_test_arm64_side_publish_seal_failure(void);
 LJ_FUNC uint32_t lj_trace_test_arm64_side_publish_raw_negative(void);
 #endif
-#if defined(LJ_TRACE_TEST_HELPERS) && LJ_TARGET_ARM64 && \
-    defined(LUAJIT_USE_GDBJIT)
+#if defined(LJ_TRACE_TEST_HELPERS) && defined(LUAJIT_USE_GDBJIT)
 /* Force one prepared exact side to roll back before semantic publication. */
 LJ_FUNC void lj_trace_test_arm64_gdbjit_force_post_prepare_rollback(void);
 LJ_FUNC void
@@ -172,7 +172,7 @@ LJ_FUNC int lj_jit_lifecycle_resume_l(lua_State *L, jit_State *J);
 LJ_FUNC int lj_jit_lifecycle_held_l(lua_State *L, jit_State *J);
 LJ_FUNC TGState *lj_jit_owner_tg_l(lua_State *L, jit_State *J);
 
-#if LJ_TARGET_ARM64 && LJ_HASJIT
+#if LJ_TARGET_ARM64
 #define LJ_TRACE_ROOT_ENTRY_PAUSE_PREPUBLISH 1u
 #define LJ_TRACE_ROOT_ENTRY_PAUSE_POSTPUBLISH 2u
 #define LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA 3u

@@ -690,10 +690,6 @@ static void api_checkstack1_gcroot_claimed(lua_State *L, lua_State *errL,
   }
 }
 
-static int api_getmetafield_key_claimed(lua_State *L, int idx,
-					cTValue *fieldroot,
-					int keep_receiver);
-
 #if defined(LJ_API_ROOT_TEST_HELPERS)
 typedef void (*LJApiRawMetatablePublishHook)(lua_State *L, TValue *result);
 static LJApiRawMetatablePublishHook api_test_raw_mt_publish_hook;

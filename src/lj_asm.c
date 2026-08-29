@@ -67,7 +67,7 @@ int lj_asm_arm64_b26_encode(uintptr_t source, uintptr_t target, MCode *insp)
   return 1;
 }
 
-/* -- Initial ARM64 IR admission ------------------------------------------ */
+/* -- Bounded ARM64 IR admission ------------------------------------------ */
 
 /*
 ** The stock ARM64 backend can encode a much larger IR surface than the
@@ -2857,7 +2857,9 @@ typedef struct ASMState {
   intptr_t krefk[RID_NUM_KREF];
 #endif
   IRRef1 phireg[RID_MAX];  /* PHI register references. */
+#if LJ_TARGET_ARM64
   MSize parentmap_n;  /* Number of entries copied from lj_snap_regspmap(). */
+#endif
   uint16_t parentmap[LJ_MAX_JSLOTS];  /* Parent instruction to RegSP map. */
 } ASMState;
 
@@ -4683,7 +4685,7 @@ static void asm_loop(ASMState *as)
 
 #if LJ_TARGET_ARM64 && defined(LJ_TRACE_TEST_HELPERS)
 static uint32_t asm_test_exitstub_mcode_retry_count;
-#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
+#ifdef LJ_ARM64_SIDE_ASM_TEST
 static uint32_t asm_test_side_probe_state;
 static LJArm64SideAsmProbe asm_test_side_probe;
 
@@ -4713,7 +4715,7 @@ static int asm_test_exitstub_mcode_retry_consume(void)
   return 0;
 }
 
-#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
+#ifdef LJ_ARM64_SIDE_ASM_TEST
 void lj_asm_arm64_test_side_probe_arm(TraceNo parent, ExitNo exitno)
 {
   la_store32_rel(&asm_test_side_probe_state, ASM_TEST_SIDE_PROBE_IDLE);
@@ -5086,9 +5088,15 @@ static void asm_head_side(ASMState *as)
   RegSet live = RSET_EMPTY;  /* Live parent registers. */
   RegSet pallow = RSET_GPR;  /* Registers needed by the parent stack check. */
   Reg pbase;
+#if LJ_TARGET_ARM64
   IRIns *irp;
   MSize parent_topslot;
   int32_t parent_spadjust;
+#else
+  IRIns *irp = &trace_ir_acq(as->parent)[REF_BASE];  /* Parent base. */
+  MSize parent_topslot = trace_topslot_acq(as->parent);
+  int32_t parent_spadjust = (int32_t)trace_spadjust_acq(as->parent);
+#endif
   int32_t spadj, spdelta;
   int pass2 = 0;
   int pass3 = 0;
@@ -5113,12 +5121,12 @@ static void asm_head_side(ASMState *as)
     asm_test_side_probe_note(LJ_ARM64_SIDE_ASM_PROBE_PREHEAD);
 #endif
   }
-#endif
   irp = &trace_ir_acq(as->parent)[REF_BASE];  /* Certified parent base. */
   parent_topslot = trace_topslot_acq(as->parent);
   parent_spadjust = (int32_t)trace_spadjust_acq(as->parent);
   if (LJ_UNLIKELY(parent_topslot != 5u || parent_spadjust != 0))
     lj_trace_err(as->J, LJ_TRERR_RETRY);
+#endif
   if (as->snapno && as->topslot > parent_topslot) {
     /* Force snap #0 alloc to prevent register overwrite in stack check. */
     asm_snap_alloc(as, 0);
@@ -5491,23 +5499,27 @@ static void asm_setup_regsp(ASMState *as)
   as->stopins = REF_BASE;
   as->orignins = nins;
   as->curins = nins;
+#if LJ_TARGET_ARM64
   as->parentmap_n = 0;
+#endif
 
   /* Setup register hints for parent link instructions. */
   ir = IR(REF_FIRST);
   if (as->parent) {
     uint16_t *p;
-    MSize parentmap_n;
 #if LJ_TARGET_ARM64
+    MSize parentmap_n;
     ExitNo parent_exitno = as->J->arm64_side_parent.exitno;
-#else
-    ExitNo parent_exitno = as->J->exitno;
-#endif
     lastir = lj_snap_regspmap(as->J, as->parent, parent_exitno, ir);
     parentmap_n = (MSize)(lastir-ir);
     if (parentmap_n > LJ_MAX_JSLOTS)
       lj_trace_err(as->J, LJ_TRERR_NYICOAL);
     as->parentmap_n = parentmap_n;
+#else
+    lastir = lj_snap_regspmap(as->J, as->parent, as->J->exitno, ir);
+    if (lastir - ir > LJ_MAX_JSLOTS)
+      lj_trace_err(as->J, LJ_TRERR_NYICOAL);
+#endif
     as->stopins = (IRRef)((lastir-1) - as->ir);
     for (p = as->parentmap; ir < lastir; ir++) {
       RegSP rs = ir->prev;
@@ -5788,9 +5800,9 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
       asm_test_side_probe_capture(J);
 #endif
     } else if (LJ_UNLIKELY(!lj_asm_arm64_ir_admit(J, T, &reject))) {
-      /* Use the established deterministic assembler error. The exact rejected
-      ** opcode remains available through errinfo; CALL helper IDs and shape
-      ** details are exposed by the pure admission result used by diagnostics. */
+      /* Use the established deterministic assembler error. The exact
+      ** rejected opcode remains available through errinfo; CALL helper IDs
+      ** and shape details are exposed by the pure admission result. */
       setintV(&J->errinfo, (int32_t)reject.op);
       lj_trace_err_info(J, LJ_TRERR_NYIIR);
     }
@@ -6028,8 +6040,8 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
   T->mcloop = as->mcloop ? (MSize)((char *)as->mcloop - (char *)as->mcp) : 0;
   if (as->loopref)
     asm_loop_tail_fixup(as);
-  else {
 #if LJ_TARGET_ARM64
+  else {
     MCode *certified_parent_mcode = NULL;
     MCode *tail_pc;
     if (J->parent != 0) {
@@ -6046,10 +6058,11 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
     if (J->parent != 0)
       asm_test_side_probe_tail(certified_parent_mcode, tail_pc);
 #endif
+  }
 #else
+  else
     asm_tail_fixup(as, T->link);  /* Note: this may change as->mctop! */
 #endif
-  }
   T->szmcode = (MSize)((char *)as->mctop - (char *)as->mcp);
   asm_snap_fixup_mcofs(as);
 #if LJ_TARGET_ARM64

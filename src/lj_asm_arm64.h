@@ -50,20 +50,21 @@ static Reg ra_alloc2(ASMState *as, IRIns *ir, RegSet allow)
 /* Write the fixed heap-target exit layout below the current mcode top.
 ** Published guards branch to immutable gates. Each gate records its exit
 ** number, acquire-loads one authenticated target slot and jumps either to the
-** shared fallback or, in a later milestone, a child trace. */
+** shared fallback or a certified child trace. */
 static void asm_exitstub_write(ASMState *as, ExitNo nexits)
 {
   GCtrace *T = as->T;
   MCode *top = as->mctop;
   MCode *fallback;
   MCode *gates;
+  intptr_t k64ofs;
+  ExitNo i;
   if (((uintptr_t)(void *)top & 7u) != 0)
     *--top = A64I_LE(A64I_NOP);
   fallback = top -
     (ARM64_EXIT_FALLBACK_WORDS + ARM64_EXIT_GATE_WORDS * nexits);
   gates = fallback + ARM64_EXIT_FALLBACK_WORDS;
-  intptr_t k64ofs = glofs(as, &as->J->k64[LJ_K64_VM_EXIT_HANDLER]);
-  ExitNo i;
+  k64ofs = glofs(as, &as->J->k64[LJ_K64_VM_EXIT_HANDLER]);
 
   LJ_STATIC_ASSERT(sizeof(void *) == 2 * sizeof(MCode));
   lj_assertA(nexits != 0, "ARM64 trace has no exit slots");
@@ -2018,7 +2019,7 @@ static Reg asm_head_side_base(ASMState *as, IRIns *irp)
 
 /* Fixup the tail code. */
 static MCode *asm_tail_fixup(ASMState *as, TraceNo lnk,
-	MCode *certified_parent_mcode)
+			     MCode *certified_parent_mcode)
 {
   MCode *mcp = as->mctail;
   MCode *branchpc;

@@ -836,91 +836,91 @@ static void build_subroutines(BuildCtx *ctx)
   |  b ->vm_call_tail
   |.endif
   |
-|->cont_cat:				// RA = resultptr, CARG4 = meta base
-|  bti_jump
-|  ldr INSw, [PC, #-4]
-|   sub CARG2, CARG4, #32
-|   ldr TMP0, [RA]
+  |->cont_cat:				// RA = resultptr, CARG4 = meta base
+  |  bti_jump
+  |  ldr INSw, [PC, #-4]
+  |   sub CARG2, CARG4, #32
+  |   ldr TMP0, [RA]
   |     str BASE, L->base
   |  decode_RB RB, INS
   |   decode_RA RA, INS
-|  add TMP1, BASE, RB, lsl #3
-|  subs TMP1, CARG2, TMP1
-|  beq >1
-|   str TMP0, [CARG2]
-|  mov RC, TMP1			// Preserve the stack-relative byte delta.
-|  mov CARG3, CARG2
-|  mov CARG2, L
-|  mov CARG1, L
-|  bl extern lj_state_stack_pubtv
-|  // The publication helper may clobber x0-x17. Rebuild CAT operands from PC.
-|  ldr BASE, L->base
-|  ldr INSw, [PC, #-4]
-|  decode_RB RB, INS
-|  add CARG2, BASE, RB, lsl #3
-|  add CARG2, CARG2, RC
-|  lsr CARG3, RC, #3
-|  b ->BC_CAT_Z
-|
-|1:
-|   str TMP0, [BASE, RA, lsl #3]
-|  add CARG3, BASE, RA, lsl #3
-|  mov CARG2, L
-|  mov CARG1, L
-|  bl extern lj_state_stack_pubtv
-|  ldr BASE, L->base
-|  b ->cont_nop
-|
-|//-- Table indexing metamethods -----------------------------------------
-|
-|->vmeta_ggets:
-|  // Capture the mutable environment from the authoritative frame function.
-|  movn TMP0, #~LJ_TSTR
-|  add TMP0, STR:RC, TMP0, lsl #47
-|  str TMP0, TMPD
-|  sub CARG2, BASE, #16			// Frame function TValue root.
-|  add CARG3, sp, TMPDofs		// Constant-key TValue root.
-|  add CARG4, BASE, RA, lsl #3		// Enumerated destination root.
-|  str BASE, L->base
-|  str PC, SAVE_PC
-|  mov CARG1, L
-|  bl extern lj_meta_tgetenv_rooted
-|  b ->vmeta_tget_done
-|
-|->vmeta_tgets1:
-|->vmeta_tgets:
-|  movn TMP0, #~LJ_TSTR
-|  add TMP0, STR:RC, TMP0, lsl #47
-|  str TMP0, TMPD
-|  add CARG2, BASE, RB, lsl #3
-|  add CARG3, sp, TMPDofs
-|  b >1
-|
-|->vmeta_tgetb:			// RB = table, RC = index
-|  add_TISNUM RC, RC
+  |  add TMP1, BASE, RB, lsl #3
+  |  subs TMP1, CARG2, TMP1
+  |  beq >1
+  |   str TMP0, [CARG2]
+  |  mov RC, TMP1			// Preserve the stack-relative byte delta.
+  |  mov CARG3, CARG2
+  |  mov CARG2, L
+  |  mov CARG1, L
+  |  bl extern lj_state_stack_pubtv
+  |  // The publication helper may clobber x0-x17. Rebuild CAT operands from PC.
+  |  ldr BASE, L->base
+  |  ldr INSw, [PC, #-4]
+  |  decode_RB RB, INS
+  |  add CARG2, BASE, RB, lsl #3
+  |  add CARG2, CARG2, RC
+  |  lsr CARG3, RC, #3
+  |  b ->BC_CAT_Z
+  |
+  |1:
+  |   str TMP0, [BASE, RA, lsl #3]
+  |  add CARG3, BASE, RA, lsl #3
+  |  mov CARG2, L
+  |  mov CARG1, L
+  |  bl extern lj_state_stack_pubtv
+  |  ldr BASE, L->base
+  |  b ->cont_nop
+  |
+  |//-- Table indexing metamethods -----------------------------------------
+  |
+  |->vmeta_ggets:
+  |  // Capture the mutable environment from the authoritative frame function.
+  |  movn TMP0, #~LJ_TSTR
+  |  add TMP0, STR:RC, TMP0, lsl #47
+  |  str TMP0, TMPD
+  |  sub CARG2, BASE, #16			// Frame function TValue root.
+  |  add CARG3, sp, TMPDofs		// Constant-key TValue root.
+  |  add CARG4, BASE, RA, lsl #3		// Enumerated destination root.
+  |  str BASE, L->base
+  |  str PC, SAVE_PC
+  |  mov CARG1, L
+  |  bl extern lj_meta_tgetenv_rooted
+  |  b ->vmeta_tget_done
+  |
+  |->vmeta_tgets1:
+  |->vmeta_tgets:
+  |  movn TMP0, #~LJ_TSTR
+  |  add TMP0, STR:RC, TMP0, lsl #47
+  |  str TMP0, TMPD
+  |  add CARG2, BASE, RB, lsl #3
+  |  add CARG3, sp, TMPDofs
+  |  b >1
+  |
+  |->vmeta_tgetb:			// RB = table, RC = index
+  |  add_TISNUM RC, RC
   |   add CARG2, BASE, RB, lsl #3
   |   add CARG3, sp, TMPDofs
   |  str RC, TMPD
   |  b >1
   |
-|->vmeta_tgetv:			// RB = table, RC = key
-|  add CARG2, BASE, RB, lsl #3
-|   add CARG3, BASE, RC, lsl #3
-|1:
-|  add CARG4, BASE, RA, lsl #3
-|   str BASE, L->base
-|  mov CARG1, L
-|   str PC, SAVE_PC
-|  bl extern lj_meta_tgettv_rooted
-|  // Returns the published output root (finished) or NULL (metamethod).
-|->vmeta_tget_done:
-|  ldr BASE, L->base			// Rooted helper may relocate the stack.
-|  cbz CRET1, >3
-|  arm64_vm_stack_dirty			// Mark the completed output overwrite.
-|  ins_next
-|
-|3:  // Call __index metamethod.
-|  // BASE = base, L->top = new base, stack = cont/func/t/k
+  |->vmeta_tgetv:			// RB = table, RC = key
+  |  add CARG2, BASE, RB, lsl #3
+  |   add CARG3, BASE, RC, lsl #3
+  |1:
+  |  add CARG4, BASE, RA, lsl #3
+  |   str BASE, L->base
+  |  mov CARG1, L
+  |   str PC, SAVE_PC
+  |  bl extern lj_meta_tgettv_rooted
+  |  // Returns the published output root (finished) or NULL (metamethod).
+  |->vmeta_tget_done:
+  |  ldr BASE, L->base			// Rooted helper may relocate the stack.
+  |  cbz CRET1, >3
+  |  arm64_vm_stack_dirty			// Mark the completed output overwrite.
+  |  ins_next
+  |
+  |3:  // Call __index metamethod.
+  |  // BASE = base, L->top = new base, stack = cont/func/t/k
   |   sub TMP1, BASE, #FRAME_CONT
   |  ldr BASE, L->top
   |    mov NARGS8:RC, #16		// 2 args for func(t, k).
@@ -928,90 +928,90 @@ static void build_subroutines(BuildCtx *ctx)
   |    str PC, [BASE, #-24]		// [cont|PC]
   |   sub PC, BASE, TMP1
   |  and LFUNC:CARG3, CARG3, #LJ_GCVMASK
-|  b ->vm_call_dispatch_f
-|
-|->vmeta_tgetr:
-|  // Raw library lookup still starts from authoritative table/key roots.
-|  add CARG2, BASE, RB, lsl #3
-|  add CARG3, BASE, RC, lsl #3
-|  add CARG4, BASE, RA, lsl #3
-|  str BASE, L->base
-|  str PC, SAVE_PC
-|  mov CARG1, L
-|  bl extern lj_tab_gettv_rooted
-|  ldr BASE, L->base
-|  arm64_vm_stack_dirty			// Mark the complete rooted overwrite.
-|  ins_next
-|
-|//-----------------------------------------------------------------------
-|
-|->vmeta_gsets:
-|  // Resolve and store through the frame function's current environment.
-|  movn TMP0, #~LJ_TSTR
-|  add TMP0, STR:RC, TMP0, lsl #47
-|  str TMP0, TMPD
-|  sub CARG2, BASE, #16			// Frame function TValue root.
-|  add CARG3, sp, TMPDofs		// Constant-key TValue root.
-|  add CARG4, BASE, RA, lsl #3		// Source value root.
-|  str BASE, L->base
-|  str PC, SAVE_PC
-|  mov CARG1, L
-|  bl extern lj_meta_tsetenvtv_pair
-|  b ->vmeta_tset_done
-|
-|->vmeta_tsets1:
-|->vmeta_tsets:
-|  movn TMP0, #~LJ_TSTR
-|  add TMP0, STR:RC, TMP0, lsl #47
-|  str TMP0, TMPD
-|  add CARG2, BASE, RB, lsl #3
-|  add CARG3, sp, TMPDofs
-|  b >1
-|
-|->vmeta_tsetb:			// RB = table, RC = index
+  |  b ->vm_call_dispatch_f
+  |
+  |->vmeta_tgetr:
+  |  // Raw library lookup still starts from authoritative table/key roots.
+  |  add CARG2, BASE, RB, lsl #3
+  |  add CARG3, BASE, RC, lsl #3
+  |  add CARG4, BASE, RA, lsl #3
+  |  str BASE, L->base
+  |  str PC, SAVE_PC
+  |  mov CARG1, L
+  |  bl extern lj_tab_gettv_rooted
+  |  ldr BASE, L->base
+  |  arm64_vm_stack_dirty			// Mark the complete rooted overwrite.
+  |  ins_next
+  |
+  |//-----------------------------------------------------------------------
+  |
+  |->vmeta_gsets:
+  |  // Resolve and store through the frame function's current environment.
+  |  movn TMP0, #~LJ_TSTR
+  |  add TMP0, STR:RC, TMP0, lsl #47
+  |  str TMP0, TMPD
+  |  sub CARG2, BASE, #16			// Frame function TValue root.
+  |  add CARG3, sp, TMPDofs		// Constant-key TValue root.
+  |  add CARG4, BASE, RA, lsl #3		// Source value root.
+  |  str BASE, L->base
+  |  str PC, SAVE_PC
+  |  mov CARG1, L
+  |  bl extern lj_meta_tsetenvtv_pair
+  |  b ->vmeta_tset_done
+  |
+  |->vmeta_tsets1:
+  |->vmeta_tsets:
+  |  movn TMP0, #~LJ_TSTR
+  |  add TMP0, STR:RC, TMP0, lsl #47
+  |  str TMP0, TMPD
+  |  add CARG2, BASE, RB, lsl #3
+  |  add CARG3, sp, TMPDofs
+  |  b >1
+  |
+  |->vmeta_tsetb:			// RB = table, RC = index
   |  add_TISNUM RC, RC
   |   add CARG2, BASE, RB, lsl #3
   |   add CARG3, sp, TMPDofs
   |  str RC, TMPD
   |  b >1
   |
-|->vmeta_tsetv:
-|  add CARG2, BASE, RB, lsl #3
-|   add CARG3, BASE, RC, lsl #3
-|1:
-|  add CARG4, BASE, RA, lsl #3
-|   str BASE, L->base
-|  mov CARG1, L
-|   str PC, SAVE_PC
-|  bl extern lj_meta_tsettv_pair
-|->vmeta_tset_done:
-|  // Returns TValue * (finished) or NULL (metamethod).
-|  ldr BASE, L->base			// Pair helper may relocate the stack.
-|  cbz CRET1, >3
-|  ins_next
-|
-|3:  // Call __newindex metamethod.
-|  // BASE = base, L->top = new base, stack = cont/func/t/k/(v)
-|  ldr INSw, [PC, #-4]
-|  decode_RA RA, INS			// Re-decode after the allocating helper.
-|  ldr TMP0, [BASE, RA, lsl #3]
-|   sub TMP1, BASE, #FRAME_CONT
-|  ldr BASE, L->top
-|    mov NARGS8:RC, #24		// 3 args for func(t, k, v).
-|   str TMP0, [BASE, #16]		// Copy value to third argument.
-|    str PC, [BASE, #-24]		// [cont|PC]
-|   sub PC, BASE, TMP1
-|  str BASE, L->base
-|  add CARG3, BASE, #16
-|  mov CARG2, L
-|  mov CARG1, L
-|  bl extern lj_state_stack_pubtv	// Publish the third argument root.
-|  ldr BASE, L->base
-|  ldr LFUNC:CARG3, [BASE, FRAME_FUNC]  // Guaranteed to be a function here.
-|  and LFUNC:CARG3, CARG3, #LJ_GCVMASK
-|  b ->vm_call_dispatch_f
+  |->vmeta_tsetv:
+  |  add CARG2, BASE, RB, lsl #3
+  |   add CARG3, BASE, RC, lsl #3
+  |1:
+  |  add CARG4, BASE, RA, lsl #3
+  |   str BASE, L->base
+  |  mov CARG1, L
+  |   str PC, SAVE_PC
+  |  bl extern lj_meta_tsettv_pair
+  |->vmeta_tset_done:
+  |  // Returns TValue * (finished) or NULL (metamethod).
+  |  ldr BASE, L->base			// Pair helper may relocate the stack.
+  |  cbz CRET1, >3
+  |  ins_next
   |
-|//-- Comparison metamethods ---------------------------------------------
+  |3:  // Call __newindex metamethod.
+  |  // BASE = base, L->top = new base, stack = cont/func/t/k/(v)
+  |  ldr INSw, [PC, #-4]
+  |  decode_RA RA, INS			// Re-decode after the allocating helper.
+  |  ldr TMP0, [BASE, RA, lsl #3]
+  |   sub TMP1, BASE, #FRAME_CONT
+  |  ldr BASE, L->top
+  |    mov NARGS8:RC, #24		// 3 args for func(t, k, v).
+  |   str TMP0, [BASE, #16]		// Copy value to third argument.
+  |    str PC, [BASE, #-24]		// [cont|PC]
+  |   sub PC, BASE, TMP1
+  |  str BASE, L->base
+  |  add CARG3, BASE, #16
+  |  mov CARG2, L
+  |  mov CARG1, L
+  |  bl extern lj_state_stack_pubtv	// Publish the third argument root.
+  |  ldr BASE, L->base
+  |  ldr LFUNC:CARG3, [BASE, FRAME_FUNC]  // Guaranteed to be a function here.
+  |  and LFUNC:CARG3, CARG3, #LJ_GCVMASK
+  |  b ->vm_call_dispatch_f
+  |
+  |//-- Comparison metamethods ---------------------------------------------
   |
   |->vmeta_comp:
   |  add CARG2, BASE, RA, lsl #3
@@ -1037,19 +1037,19 @@ static void build_subroutines(BuildCtx *ctx)
   |  bti_jump
   |  ins_next
   |
-|->cont_ra:				// RA = resultptr
-|  bti_jump
-|  ldr INSw, [PC, #-4]
-|   ldr TMP0, [RA]
-|  decode_RA TMP1, INS
-|  add CARG3, BASE, TMP1, lsl #3
-|   str TMP0, [CARG3]
-|  str BASE, L->base
-|  mov CARG2, L
-|  mov CARG1, L
-|  bl extern lj_state_stack_pubtv
-|  ldr BASE, L->base
-|  b ->cont_nop
+  |->cont_ra:				// RA = resultptr
+  |  bti_jump
+  |  ldr INSw, [PC, #-4]
+  |   ldr TMP0, [RA]
+  |  decode_RA TMP1, INS
+  |  add CARG3, BASE, TMP1, lsl #3
+  |   str TMP0, [CARG3]
+  |  str BASE, L->base
+  |  mov CARG2, L
+  |  mov CARG1, L
+  |  bl extern lj_state_stack_pubtv
+  |  ldr BASE, L->base
+  |  b ->cont_nop
   |
   |->cont_condt:			// RA = resultptr
   |  bti_jump
@@ -4327,7 +4327,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  cbz CRET1, >1
     |  cbz CARG2, >1
 #if LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED
-    |  // Successful native entry is deliberately unreachable in this tranche.
+    |  // Successful native entry is deliberately unreachable while closed.
     |  // Still clear a synthetic helper lease before taking the rejection path.
     |  clear_tg_jit_base
     |  b >1

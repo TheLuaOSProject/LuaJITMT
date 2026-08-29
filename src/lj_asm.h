@@ -18,7 +18,7 @@ LJ_FUNC void lj_asm_patchexit(jit_State *J, GCtrace *T, ExitNo exitno,
 LJ_FUNC int lj_asm_arm64_b26_encode(uintptr_t source, uintptr_t target,
 	MCode *insp);
 
-/* Fail-closed admission result for the first ARM64 native trace shape. */
+/* Fail-closed admission result for bounded ARM64 native trace grammars. */
 typedef enum {
   LJ_ARM64_IR_REJECT_NONE,
   LJ_ARM64_IR_REJECT_TRACE,
@@ -132,7 +132,7 @@ LJ_FUNC int lj_asm_arm64_side_postra_admit(
 	const LJArm64SidePostRAView *view, IRRef *semantic_ninsp);
 #ifdef LJ_TRACE_TEST_HELPERS
 LJ_FUNC void lj_asm_arm64_test_force_exitstub_mcode_retry(uint32_t count);
-#if defined(LJ_TRACE_TEST_HELPERS) && defined(LJ_ARM64_SIDE_ASM_TEST)
+#ifdef LJ_ARM64_SIDE_ASM_TEST
 enum {
   LJ_ARM64_SIDE_ASM_PROBE_CAPTURE = 0x01u,
   LJ_ARM64_SIDE_ASM_PROBE_PARENTMAP = 0x02u,

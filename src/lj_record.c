@@ -421,7 +421,7 @@ static void canonicalize_slots(jit_State *J)
 static LJ_AINLINE int rec_needs_xpoll(jit_State *J)
 {
 #if LJ_TARGET_ARM64
-  /* The initial ARM64 IR admission contract requires the full TG poll/profile
+  /* ARM64 admission requires the full TG poll/profile
   ** check on every trace. Do not rely on activation-time elision yet. */
   UNUSED(J);
   return 1;

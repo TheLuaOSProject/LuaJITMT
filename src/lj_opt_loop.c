@@ -306,7 +306,7 @@ typedef struct LoopState {
 static LJ_AINLINE int loop_needs_xpoll(jit_State *J)
 {
 #if LJ_TARGET_ARM64
-  /* Match the initial ARM64 admission policy: every loop executes the full
+  /* Match ARM64 admission: every loop executes the full
   ** TG poll/profile check as well as the global JIT phase-gate check. */
   UNUSED(J);
   return 1;
