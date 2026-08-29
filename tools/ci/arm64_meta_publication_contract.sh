@@ -212,6 +212,54 @@ reject_source_region() {
 dyn_call='^[[:space:]]*[|][[:space:]]+bl extern '
 publication='^[[:space:]]*[|][[:space:]]+(arm64_vm_stack_dirty|bl extern lj_state_stack_pubtv)'
 
+# Mutable 64-bit VM roots, edges, closure slots and callback words are all
+# release-published by their C-side accessors. Pin the target-local acquire
+# primitive and every VM family which consumes those publications. The Lua 5.2
+# iterator metatable checks need source proof because the default object omits
+# those conditional instructions.
+require_source_region_count "$vm_source" \
+  '[.]macro arm64_vm_u64_acq, dst, base, ofs' \
+  '[.]macro arm64_vm_tab_asize_acq' \
+  '^[[:space:]]*[|][[:space:]]+ldar dst, [[]ATMP[]]' 2 \
+  'constant/indexed 64-bit acquire-load primitive'
+require_source_region "$vm_source" '[.]ffunc_1 type' \
+  '//-- Base library: getters and setters' \
+  'arm64_vm_u64_acq CARG1, CFUNC:CARG3, TMP1, 3' \
+  'type() C-closure upvalue acquire'
+require_source_region "$vm_source" '[.]ffunc_1 tostring' \
+  '//-- Base library: iterators' \
+  'arm64_vm_u64_acq TMP1, GLREG, GL_OFS[(]gcroot[)][+]8[*]GCROOT_BASEMT_NUM' \
+  'tostring() numeric base-metatable root acquire'
+require_source_sequence3 "$vm_source" '[.]ffunc_1 pairs' \
+  '[.]ffunc_2 ipairs_aux' '^#if LJ_52$' \
+  'arm64_vm_u64_acq TAB:CARG2, TAB:TMP1, offsetof[(]GCtab, metatable[)]' \
+  '^#endif$' 'Lua 5.2 pairs() metatable acquire guard'
+require_source_region "$vm_source" '[.]ffunc_1 pairs' \
+  '[.]ffunc_2 ipairs_aux' \
+  'arm64_vm_u64_acq CFUNC:CARG4, CFUNC:CARG3, offsetof[(]GCfuncC, upvalue[)]' \
+  'pairs() C-closure upvalue acquire'
+require_source_sequence3 "$vm_source" '[.]ffunc_1 ipairs' \
+  '//-- Base library: catch errors' '^#if LJ_52$' \
+  'arm64_vm_u64_acq TAB:CARG2, TAB:TMP1, offsetof[(]GCtab, metatable[)]' \
+  '^#endif$' 'Lua 5.2 ipairs() metatable acquire guard'
+require_source_region "$vm_source" '[.]ffunc_1 ipairs' \
+  '//-- Base library: catch errors' \
+  'arm64_vm_u64_acq CFUNC:CARG4, CFUNC:CARG3, offsetof[(]GCfuncC, upvalue[)]' \
+  'ipairs() C-closure upvalue acquire'
+require_source_region "$vm_source" '[.]ffunc coroutine_wrap_aux' \
+  '[.]endif' \
+  'arm64_vm_u64_acq L:CARG1, CFUNC:CARG3, offsetof[(]GCfuncC, upvalue[)]' \
+  'coroutine.wrap() C-closure upvalue acquire'
+require_source_region_count "$vm_source" 'case BC_UGET:' 'case BC_UCLO:' \
+  'arm64_vm_u64_acq UPVAL:CARG[12], LFUNC:CARG2, (RC|RA), 3' 5 \
+  'all Lua-closure uvptr acquires'
+require_source_region "$vm_source" 'case BC_UCLO:' 'case BC_FNEW:' \
+  'arm64_vm_u64_acq CARG3, LREG, L_OFS[(]openupval[)]' \
+  'UCLO open-upvalue head acquire'
+require_source_region "$vm_source" 'case BC_FUNCC:' '^[[:space:]]+default:' \
+  'arm64_vm_u64_acq CARG4, GLREG, GL_OFS[(]wrapf[)]' \
+  'FUNCCW wrapper callback acquire'
+
 # Metamethod lookup/call boundaries used by comparisons, arithmetic, length,
 # callable values and concatenation.
 require_source_region "$vm_source" '[|]->vmeta_comp:' '[|]->cont_ra:' \
@@ -757,6 +805,48 @@ require_shared_compare_reload_object() {
     exit 1
   fi
 }
+
+# The default build omits only the LJ_52 iterator-metatable probes checked
+# above. Every unconditional mutable 64-bit consumer must lower to an address
+# calculation followed by an acquire load in its generated VM symbol.
+require_symbol_instruction_order lj_ff_type \
+  '[[:space:]]add[[:space:]]+x14, x2, x9, lsl #3' \
+  '[[:space:]]ldar[[:space:]]+x0, [[]x14[]]' \
+  'C-closure type upvalue acquire sequence'
+require_symbol_instruction_order lj_ff_tostring \
+  '[[:space:]]add[[:space:]]+x14, x22, #0x[[:xdigit:]]+' \
+  '[[:space:]]ldar[[:space:]]+x9, [[]x14[]]' \
+  'numeric base-metatable root acquire sequence'
+for symbol in lj_ff_pairs lj_ff_ipairs
+do
+  require_symbol_instruction_order "$symbol" \
+    '[[:space:]]add[[:space:]]+x14, x2, #0x[[:xdigit:]]+' \
+    '[[:space:]]ldar[[:space:]]+x3, [[]x14[]]' \
+    'iterator C-closure upvalue acquire sequence'
+done
+require_symbol_instruction_order lj_ff_coroutine_wrap_aux \
+  '[[:space:]]add[[:space:]]+x14, x2, #0x[[:xdigit:]]+' \
+  '[[:space:]]ldar[[:space:]]+x0, [[]x14[]]' \
+  'coroutine.wrap C-closure upvalue acquire sequence'
+require_symbol_instruction_order lj_BC_UGET \
+  '[[:space:]]add[[:space:]]+x14, x1, x28, lsl #3' \
+  '[[:space:]]ldar[[:space:]]+x1, [[]x14[]]' \
+  'UGET uvptr acquire sequence'
+for symbol in lj_BC_USETV lj_BC_USETS lj_BC_USETN lj_BC_USETP
+do
+  require_symbol_instruction_order "$symbol" \
+    '[[:space:]]add[[:space:]]+x14, x1, x27, lsl #3' \
+    '[[:space:]]ldar[[:space:]]+x0, [[]x14[]]' \
+    'USET uvptr acquire sequence'
+done
+require_symbol_instruction_order lj_BC_UCLO \
+  '[[:space:]]add[[:space:]]+x14, x23, #0x[[:xdigit:]]+' \
+  '[[:space:]]ldar[[:space:]]+x2, [[]x14[]]' \
+  'open-upvalue head acquire sequence'
+require_symbol_instruction_order lj_BC_FUNCCW \
+  '[[:space:]]add[[:space:]]+x14, x22, #0x[[:xdigit:]]+' \
+  '[[:space:]]ldar[[:space:]]+x3, [[]x14[]]' \
+  'wrapper callback acquire sequence'
 
 require_defined_text_symbol "$meta_nm_text" lj_meta_comp_rooted \
   'rooted comparison helper definition'

@@ -381,6 +381,11 @@ LJ_STATIC_ASSERT(offsetof(SBuf, L) <= 32760 &&
 		 (offsetof(SBuf, L) & 7) == 0);
 LJ_STATIC_ASSERT(GL_OFS(vmstate) >= 0 && GL_OFS(vmstate) <= 4095);
 LJ_STATIC_ASSERT(GL_OFS(hookmask) >= 0 && GL_OFS(hookmask) <= 4095);
+LJ_STATIC_ASSERT(GL_OFS(gcroot) + 8*GCROOT_BASEMT_NUM >= 0 &&
+		 GL_OFS(gcroot) + 8*GCROOT_BASEMT_NUM <= 4095);
+LJ_STATIC_ASSERT(((GL_OFS(gcroot) + 8*GCROOT_BASEMT_NUM) & 7) == 0);
+LJ_STATIC_ASSERT(GL_OFS(wrapf) >= 0 && GL_OFS(wrapf) <= 4095 &&
+		 (GL_OFS(wrapf) & 7) == 0);
 LJ_STATIC_ASSERT(GL_OFS(mt_active) >= 0 && GL_OFS(mt_active) <= 0xffffff &&
 		 (GL_OFS(mt_active) & 3) == 0);
 LJ_STATIC_ASSERT(GL_OFS(mt_entering) >= 0 && GL_OFS(mt_entering) <= 0xffffff &&
@@ -391,6 +396,12 @@ LJ_STATIC_ASSERT(offsetof(GCtab, array) <= 4095 &&
 		 (offsetof(GCtab, array) & 7) == 0);
 LJ_STATIC_ASSERT(offsetof(GCtab, node) <= 4095 &&
 		 (offsetof(GCtab, node) & 7) == 0);
+LJ_STATIC_ASSERT(offsetof(GCtab, metatable) <= 4095 &&
+		 (offsetof(GCtab, metatable) & 7) == 0);
+LJ_STATIC_ASSERT(offsetof(GCfuncC, upvalue) <= 4095 &&
+		 (offsetof(GCfuncC, upvalue) & 7) == 0);
+LJ_STATIC_ASSERT(L_OFS(openupval) >= 0 && L_OFS(openupval) <= 4095 &&
+		 (L_OFS(openupval) & 7) == 0);
 LJ_STATIC_ASSERT(TAB_COLO_SLOTS >= 0 && TAB_COLO_SLOTS <= 4095 &&
 		 (TAB_COLO_SLOTS & 7) == 0);
 LJ_STATIC_ASSERT(offsetof(Node, key) <= 4095 &&
@@ -454,6 +465,15 @@ LJ_STATIC_ASSERT(FRAME_TYPEP == 7);
 |.macro arm64_vm_gl_u32_acq, dst, g, field
 |  add ATMP, g, #(GL_OFS(field)&0xfff000)
 |  add ATMP, ATMP, #(GL_OFS(field)&0xfff)
+|  ldar dst, [ATMP]
+|.endmacro
+|// Mutable 64 bit roots, edges and TValue/function words are release-published.
+|.macro arm64_vm_u64_acq, dst, base, ofs
+|  add ATMP, base, #ofs
+|  ldar dst, [ATMP]
+|.endmacro
+|.macro arm64_vm_u64_acq, dst, base, index, shift
+|  add ATMP, base, index, lsl #shift
 |  ldar dst, [ATMP]
 |.endmacro
 |.macro arm64_vm_tab_asize_acq, dst, tab
@@ -1434,7 +1454,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  cmn ITYPE, #~LJ_TISNUM
   |  csinv TMP1, TMP0, ITYPE, lo
   |  add TMP1, TMP1, #offsetof(GCfuncC, upvalue)/8
-  |  ldr CARG1, [CFUNC:CARG3, TMP1, lsl #3]
+  |  arm64_vm_u64_acq CARG1, CFUNC:CARG3, TMP1, 3
   |  b ->fff_restv
   |
   |//-- Base library: getters and setters ---------------------------------
@@ -1489,7 +1509,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  // A __tostring method in the string base metatable is ignored.
   |  beq ->fff_restv
   |  // Handle numbers inline, unless a number base metatable is present.
-  |  ldr TMP1, GL->gcroot[GCROOT_BASEMT_NUM]
+  |  arm64_vm_u64_acq TMP1, GLREG, GL_OFS(gcroot)+8*GCROOT_BASEMT_NUM
   |   str BASE, L->base
   |  cmn ITYPE, #-LJ_TISNUM
   |  ccmp TMP1, #0, #0, ls
@@ -1544,9 +1564,9 @@ static void build_subroutines(BuildCtx *ctx)
   |.ffunc_1 pairs
   |  checktp TMP1, CARG1, LJ_TTAB, ->fff_fallback
 #if LJ_52
-  |  ldr TAB:CARG2, TAB:TMP1->metatable
+  |  arm64_vm_u64_acq TAB:CARG2, TAB:TMP1, offsetof(GCtab, metatable)
 #endif
-  |   ldr CFUNC:CARG4, CFUNC:CARG3->upvalue[0]
+  |   arm64_vm_u64_acq CFUNC:CARG4, CFUNC:CARG3, offsetof(GCfuncC, upvalue)
   |    ldr PC, [BASE, FRAME_PC]
 #if LJ_52
   |  cbnz TAB:CARG2, ->fff_fallback
@@ -1587,9 +1607,9 @@ static void build_subroutines(BuildCtx *ctx)
   |.ffunc_1 ipairs
   |  checktp TMP1, CARG1, LJ_TTAB, ->fff_fallback
 #if LJ_52
-  |  ldr TAB:CARG2, TAB:TMP1->metatable
+  |  arm64_vm_u64_acq TAB:CARG2, TAB:TMP1, offsetof(GCtab, metatable)
 #endif
-  |   ldr CFUNC:CARG4, CFUNC:CARG3->upvalue[0]
+  |   arm64_vm_u64_acq CFUNC:CARG4, CFUNC:CARG3, offsetof(GCfuncC, upvalue)
   |    ldr PC, [BASE, FRAME_PC]
 #if LJ_52
   |  cbnz TAB:CARG2, ->fff_fallback
@@ -1655,7 +1675,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  checktp CARG1, LJ_TTHREAD, ->fff_fallback
   |.else
   |.ffunc coroutine_wrap_aux
-  |  ldr L:CARG1, CFUNC:CARG3->upvalue[0].gcr
+  |  arm64_vm_u64_acq L:CARG1, CFUNC:CARG3, offsetof(GCfuncC, upvalue)
   |  and L:CARG1, CARG1, #LJ_GCVMASK
   |.endif
   |   ldr PC, [BASE, FRAME_PC]
@@ -3543,7 +3563,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ldr LFUNC:CARG2, [BASE, FRAME_FUNC]
     |   add RC, RC, #offsetof(GCfuncL, uvptr)/8
     |  and LFUNC:CARG2, CARG2, #LJ_GCVMASK
-    |  ldr UPVAL:CARG2, [LFUNC:CARG2, RC, lsl #3]
+    |  arm64_vm_u64_acq UPVAL:CARG2, LFUNC:CARG2, RC, 3
     |  ldr CARG2, UPVAL:CARG2->v
     |  ldar TMP0, [CARG2]
     |  add ATMP, BASE, RA, lsl #3
@@ -3625,7 +3645,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ldr LFUNC:CARG2, [BASE, FRAME_FUNC]
     |   add RA, RA, #offsetof(GCfuncL, uvptr)/8
     |  and LFUNC:CARG2, CARG2, #LJ_GCVMASK
-    |  ldr UPVAL:CARG1, [LFUNC:CARG2, RA, lsl #3]
+    |  arm64_vm_u64_acq UPVAL:CARG1, LFUNC:CARG2, RA, 3
     |    ldr CARG2, UPVAL:CARG1->v
     |  ldrb TMP0w, UPVAL:CARG1->closed
     |  cbz TMP0w, >1
@@ -3655,7 +3675,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |   add RA, RA, #offsetof(GCfuncL, uvptr)/8
     |    mvn RC, RC
     |  and LFUNC:CARG2, CARG2, #LJ_GCVMASK
-    |  ldr UPVAL:CARG1, [LFUNC:CARG2, RA, lsl #3]
+    |  arm64_vm_u64_acq UPVAL:CARG1, LFUNC:CARG2, RA, 3
     |   ldr STR:RA, [KBASE, RC, lsl #3]
     |    ldr CARG2, UPVAL:CARG1->v
     |  ldrb TMP0w, UPVAL:CARG1->closed
@@ -3686,7 +3706,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ldr LFUNC:CARG2, [BASE, FRAME_FUNC]
     |   add RA, RA, #offsetof(GCfuncL, uvptr)/8
     |  and LFUNC:CARG2, CARG2, #LJ_GCVMASK
-    |  ldr UPVAL:CARG1, [LFUNC:CARG2, RA, lsl #3]
+    |  arm64_vm_u64_acq UPVAL:CARG1, LFUNC:CARG2, RA, 3
     |  ldr CARG2, UPVAL:CARG1->v
     |  ldrb TMP0w, UPVAL:CARG1->closed
     |  cbz TMP0w, >1
@@ -3715,7 +3735,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |  ldr LFUNC:CARG2, [BASE, FRAME_FUNC]
     |   add RA, RA, #offsetof(GCfuncL, uvptr)/8
     |  and LFUNC:CARG2, CARG2, #LJ_GCVMASK
-    |  ldr UPVAL:CARG1, [LFUNC:CARG2, RA, lsl #3]
+    |  arm64_vm_u64_acq UPVAL:CARG1, LFUNC:CARG2, RA, 3
     |  ldr CARG2, UPVAL:CARG1->v
     |  ldrb TMP0w, UPVAL:CARG1->closed
     |  cbz TMP0w, >1
@@ -3742,7 +3762,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
 
   case BC_UCLO:
     |  // RA = level, RC = target
-    |  ldr CARG3, L->openupval
+    |  arm64_vm_u64_acq CARG3, LREG, L_OFS(openupval)
     |   add RC, PC, RC, lsl #2
     |    str BASE, L->base
     |   sub PC, RC, #0x20000
@@ -4798,7 +4818,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     if (op == BC_FUNCC) {
       |  ldr CARG4, CFUNC:CARG3->f
     } else {
-      |  ldr CARG4, GL->wrapf
+      |  arm64_vm_u64_acq CARG4, GLREG, GL_OFS(wrapf)
     }
     |   add CARG2, RA, NARGS8:RC
     |   ldr CARG1, L->maxstack
