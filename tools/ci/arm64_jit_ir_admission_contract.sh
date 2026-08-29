@@ -33,8 +33,11 @@ numstep_region=$tmpdir/numstep-region.txt
 numacc_region=$tmpdir/numacc-region.txt
 numacc_intstep_region=$tmpdir/numacc-intstep-region.txt
 numacc_intlimit_region=$tmpdir/numacc-intlimit-region.txt
+numacc_intx_region=$tmpdir/numacc-intx-region.txt
 numacc_intlimit_semantic_test_region=$tmpdir/numacc-intlimit-semantic-test.txt
 numacc_intlimit_postra_test_region=$tmpdir/numacc-intlimit-postra-test.txt
+numacc_intx_semantic_test_region=$tmpdir/numacc-intx-semantic-test.txt
+numacc_intx_postra_test_region=$tmpdir/numacc-intx-postra-test.txt
 postra_addgt_region=$tmpdir/postra-addgt-region.txt
 semantic_addgt_region=$tmpdir/semantic-addgt-region.txt
 postra_addge_region=$tmpdir/postra-addge-region.txt
@@ -444,9 +447,9 @@ for required in \
 done
 
 # The dynamic-accumulator fixture crosses twelve exact arithmetic/comparison
-# profiles with three argument kinds: all-NUM, invariant INT step widened once,
-# and the ADD_LT-only invariant INT limit widened once. Trace and prototype
-# constant sets remain empty.
+# profiles with four argument kinds: all-NUM, invariant INT step widened once,
+# INT accumulator widened plus checked once, and the ADD_LT-only invariant INT
+# limit widened once. Trace and prototype constant sets remain empty.
 awk '/^static unsigned numacc_fixture_full_shape\(/ { copying = 1 }
      copying { print }
      copying && /^static LJArm64IRReject expect_reject\(/ { exit }' \
@@ -454,14 +457,14 @@ awk '/^static unsigned numacc_fixture_full_shape\(/ { copying = 1 }
 test -s "$numacc_region"
 test "$(grep -c 'IR_KNUM' "$numacc_region" || true)" -eq 0
 test "$(grep -c 'IR_KINT' "$numacc_region" || true)" -eq 0
-test "$(grep -c 'IR_SLOAD' "$numacc_region")" -eq 9
-test "$(grep -c 'profile->recurrence_op' "$numacc_region")" -eq 6
-test "$(grep -c 'profile->precondition_op' "$numacc_region")" -eq 3
-test "$(grep -c 'profile->body_op' "$numacc_region")" -eq 3
-test "$(grep -c 'IR_LOOP' "$numacc_region")" -eq 3
-test "$(grep -c 'IR_XPOLL' "$numacc_region")" -eq 3
-test "$(grep -c 'IR_PHI' "$numacc_region")" -eq 3
-test "$(grep -c 'IR_CONV' "$numacc_region")" -eq 2
+test "$(grep -c 'IR_SLOAD' "$numacc_region")" -eq 12
+test "$(grep -c 'profile->recurrence_op' "$numacc_region")" -eq 8
+test "$(grep -c 'profile->precondition_op' "$numacc_region")" -eq 4
+test "$(grep -c 'profile->body_op' "$numacc_region")" -eq 4
+test "$(grep -c 'IR_LOOP' "$numacc_region")" -eq 4
+test "$(grep -c 'IR_XPOLL' "$numacc_region")" -eq 4
+test "$(grep -c 'IR_PHI' "$numacc_region")" -eq 4
+test "$(grep -c 'IR_CONV' "$numacc_region")" -eq 4
 
 awk '/^static void make_numacc_intstep_trace\(/ { copying = 1 }
      copying { print }
@@ -476,7 +479,7 @@ test "$(grep -c 'IR_PHI' "$numacc_intstep_region")" -eq 1
 
 awk '/^static void make_numacc_intlimit_trace\(/ { copying = 1 }
      copying { print }
-     copying && /^static LJArm64IRReject expect_reject\(/ { exit }' \
+     copying && /^static void make_numacc_intx_trace\(/ { exit }' \
   "$root/tests/t-arm64-jit-ir-admission.c" >"$numacc_intlimit_region"
 test -s "$numacc_intlimit_region"
 test "$(grep -c 'IR_SLOAD' "$numacc_intlimit_region")" -eq 3
@@ -485,21 +488,46 @@ test "$(grep -c 'IR_LOOP' "$numacc_intlimit_region")" -eq 1
 test "$(grep -c 'IR_XPOLL' "$numacc_intlimit_region")" -eq 1
 test "$(grep -c 'IR_PHI' "$numacc_intlimit_region")" -eq 1
 
+awk '/^static void make_numacc_intx_trace\(/ { copying = 1 }
+     copying { print }
+     copying && /^static LJArm64IRReject expect_reject\(/ { exit }' \
+  "$root/tests/t-arm64-jit-ir-admission.c" >"$numacc_intx_region"
+test -s "$numacc_intx_region"
+test "$(grep -c 'IR_SLOAD' "$numacc_intx_region")" -eq 3
+test "$(grep -c 'IR_CONV' "$numacc_intx_region")" -eq 2
+test "$(grep -c 'IR_LOOP' "$numacc_intx_region")" -eq 1
+test "$(grep -c 'IR_XPOLL' "$numacc_intx_region")" -eq 1
+test "$(grep -c 'IR_PHI' "$numacc_intx_region")" -eq 1
+
 awk '/^static void test_numacc_intlimit_positive_and_negative\(/ {
        copying = 1
      }
      copying { print }
-     copying && /^static void test_numacc_shape_cross_product\(/ { exit }' \
+     copying && /^static void test_numacc_intx_positive_and_negative\(/ { exit }' \
   "$root/tests/t-arm64-jit-ir-admission.c" \
   >"$numacc_intlimit_semantic_test_region"
 test -s "$numacc_intlimit_semantic_test_region"
 
 awk '/^static void test_numacc_intlimit_postra_layout\(/ { copying = 1 }
      copying { print }
-     copying && /^static void test_postra_spill_layout\(/ { exit }' \
+     copying && /^static void test_numacc_intx_postra_layout\(/ { exit }' \
   "$root/tests/t-arm64-jit-ir-admission.c" \
   >"$numacc_intlimit_postra_test_region"
 test -s "$numacc_intlimit_postra_test_region"
+
+awk '/^static void test_numacc_intx_positive_and_negative\(/ { copying = 1 }
+     copying { print }
+     copying && /^static void test_numacc_shape_cross_product\(/ { exit }' \
+  "$root/tests/t-arm64-jit-ir-admission.c" \
+  >"$numacc_intx_semantic_test_region"
+test -s "$numacc_intx_semantic_test_region"
+
+awk '/^static void test_numacc_intx_postra_layout\(/ { copying = 1 }
+     copying { print }
+     copying && /^static void test_postra_spill_layout\(/ { exit }' \
+  "$root/tests/t-arm64-jit-ir-admission.c" \
+  >"$numacc_intx_postra_test_region"
+test -s "$numacc_intx_postra_test_region"
 
 for required in \
   'ARM64_NUMDYN_ADD_LT = 1u,' \
@@ -516,7 +544,8 @@ for required in \
   'ARM64_NUMDYN_DIV_GE = 12u' \
   'ARM64_NUMDYN_ARGS_NUM = 1u,' \
   'ARM64_NUMDYN_ARGS_INT_STEP = 2u,' \
-  'ARM64_NUMDYN_ARGS_INT_LIMIT = 3u' \
+  'ARM64_NUMDYN_ARGS_INT_LIMIT = 3u,' \
+  'ARM64_NUMDYN_ARGS_INT_X = 4u' \
   'static int arm64_numdynamic_is_sub(unsigned grammar_profile)' \
   'return grammar_profile == ARM64_NUMDYN_SUB_GT ||' \
   'grammar_profile == ARM64_NUMDYN_SUB_GE;' \
@@ -555,6 +584,19 @@ for required in \
   'ARM64_NUMACC_INTLIMIT_R_BODY_GUARD,' \
   'ARM64_NUMACC_INTLIMIT_R_X_PHI,' \
   'ARM64_NUMACC_INTLIMIT_SEMANTIC_NINS' \
+  'ARM64_NUMACC_INTX_R_X_INT = REF_FIRST,' \
+  'ARM64_NUMACC_INTX_R_STEP,' \
+  'ARM64_NUMACC_INTX_R_X_NUM,' \
+  'ARM64_NUMACC_INTX_R_X_PRE,' \
+  'ARM64_NUMACC_INTX_R_LIMIT,' \
+  'ARM64_NUMACC_INTX_R_PRE_GUARD,' \
+  'ARM64_NUMACC_INTX_R_LOOP,' \
+  'ARM64_NUMACC_INTX_R_XPOLL,' \
+  'ARM64_NUMACC_INTX_R_X_CHECK,' \
+  'ARM64_NUMACC_INTX_R_X_BODY,' \
+  'ARM64_NUMACC_INTX_R_BODY_GUARD,' \
+  'ARM64_NUMACC_INTX_R_X_PHI,' \
+  'ARM64_NUMACC_INTX_SEMANTIC_NINS' \
   'static int arm64_numacc_snapshots(const SnapShot *snap,' \
   'static const uint8_t nslots[5] = { 5, 6, 5, 5, 5 };' \
   'static const uint8_t pcpos[5] = { 6, 2, 11, 6, 11 };' \
@@ -567,10 +609,14 @@ for required in \
   'SNAP(2, 0, ARM64_NUMACC_INTLIMIT_R_X_PRE),' \
   'SNAP(5, 0, ARM64_NUMACC_INTLIMIT_R_X_PRE),' \
   'SNAP(2, 0, ARM64_NUMACC_INTLIMIT_R_X_BODY)' \
+  'SNAP(2, 0, ARM64_NUMACC_INTX_R_X_PRE),' \
+  'SNAP(5, 0, ARM64_NUMACC_INTX_R_X_PRE),' \
+  'SNAP(2, 0, ARM64_NUMACC_INTX_R_X_BODY)' \
   'nsnap != 5 || nsnapmap != 15 || proto_sizebc != 13' \
   'case ARM64_NUMDYN_ARGS_NUM: kindidx = 0; break;' \
   'case ARM64_NUMDYN_ARGS_INT_STEP: kindidx = 1; break;' \
   'case ARM64_NUMDYN_ARGS_INT_LIMIT: kindidx = 2; break;' \
+  'case ARM64_NUMDYN_ARGS_INT_X: kindidx = 3; break;' \
   'default: return 0;' \
   'static int arm64_postra_numdynamic_kernel(const LJArm64PostRAView *view,' \
   'IRRef xslot, IRRef stepslot, IRRef limitslot,' \
@@ -579,6 +625,7 @@ for required in \
   '} else if (args_kind == ARM64_NUMDYN_ARGS_INT_STEP) {' \
   '} else if (args_kind == ARM64_NUMDYN_ARGS_INT_LIMIT &&' \
   'grammar_profile == ARM64_NUMDYN_ADD_LT) {' \
+  '} else if (args_kind == ARM64_NUMDYN_ARGS_INT_X) {' \
   'if (grammar_profile == ARM64_NUMDYN_ADD_LT) {' \
   '} else if (grammar_profile == ARM64_NUMDYN_ADD_LE) {' \
   '} else if (grammar_profile == ARM64_NUMDYN_ADD_GT) {' \
@@ -606,6 +653,12 @@ for required in \
   'IRT_INT|IRT_GUARD, limitslot, IRSLOAD_TYPECHECK)' \
   'ARM64_NUMDYN_POSTRA_INS(limitref, IR_CONV,' \
   'IRT_NUM, limitintref, IRCONV_NUM_INT)' \
+  'ARM64_NUMDYN_POSTRA_INS(xintref, IR_SLOAD,' \
+  'IRT_INT|IRT_GUARD, xslot, IRSLOAD_TYPECHECK)' \
+  'ARM64_NUMDYN_POSTRA_INS(xref, IR_CONV,' \
+  'IRT_NUM, xintref, IRCONV_NUM_INT)' \
+  'ARM64_NUMDYN_POSTRA_INS(xcheckref, IR_CONV,' \
+  'IRT_INT|IRT_GUARD, xpreref, IRCONV_INT_NUM|IRCONV_CHECK)' \
   'ARM64_NUMDYN_POSTRA_INS(xpreref, recurrence_op,' \
   'IRT_NUM|IRT_ISPHI, first_left, first_right)' \
   'ARM64_NUMDYN_POSTRA_INS(xbodyref, recurrence_op,' \
@@ -643,12 +696,15 @@ for required in \
   'grammar_profile == 0 ||' \
   'semantic_nins != (args_kind == ARM64_NUMDYN_ARGS_NUM ?' \
   'args_kind == ARM64_NUMDYN_ARGS_INT_STEP ?' \
-  'ARM64_NUMACC_INTLIMIT_SEMANTIC_NINS) ||' \
+  'args_kind == ARM64_NUMDYN_ARGS_INT_LIMIT ?' \
+  'ARM64_NUMACC_INTLIMIT_SEMANTIC_NINS :' \
+  'ARM64_NUMACC_INTX_SEMANTIC_NINS) ||' \
   '!arm64_numacc_snapshots(view->snap, view->snapmap,' \
   'else if (view->proto_sizebc == 13) {' \
   '!arm64_postra_numacc_shape(view, semantic_nins,' \
   'ARM64_NUMDYN_ARGS_NUM)' \
   'ARM64_NUMDYN_ARGS_INT_STEP)' \
+  'ARM64_NUMDYN_ARGS_INT_X)' \
   'static int arm64_ir_numacc_bytecode(const GCproto *pt,' \
   'const BCIns *startpc, unsigned *grammar_profile)' \
   'startpc == NULL || grammar_profile == NULL ||' \
@@ -673,13 +729,20 @@ for required in \
   'ARM64_NUMDYN_INS(stepintref, IR_SLOAD,' \
   'ARM64_NUMDYN_INS(stepref, IR_CONV,' \
   'IRT_NUM, stepintref, IRCONV_NUM_INT)' \
+  'ARM64_NUMDYN_INS(xintref, IR_SLOAD,' \
+  'ARM64_NUMDYN_INS(xref, IR_CONV,' \
+  'IRT_NUM, xintref, IRCONV_NUM_INT)' \
+  'ARM64_NUMDYN_INS(xcheckref, IR_CONV,' \
+  'IRT_INT|IRT_GUARD, xpreref, IRCONV_INT_NUM|IRCONV_CHECK)' \
   'ARM64_NUMDYN_INS(xpreref, recurrence_op,' \
   'ARM64_NUMDYN_INS(xbodyref, recurrence_op,' \
   'bc_b(ins) != 3 || bc_c(ins) != 4)' \
   'static int arm64_ir_numacc_shape(const jit_State *J, const GCtrace *T,' \
   'IRRef semantic_nins = args_kind == ARM64_NUMDYN_ARGS_NUM ?' \
   'args_kind == ARM64_NUMDYN_ARGS_INT_STEP ?' \
-  'ARM64_NUMACC_INTLIMIT_SEMANTIC_NINS;' \
+  'args_kind == ARM64_NUMDYN_ARGS_INT_LIMIT ?' \
+  'ARM64_NUMACC_INTLIMIT_SEMANTIC_NINS :' \
+  'ARM64_NUMACC_INTX_SEMANTIC_NINS;' \
   'T->nk != REF_TRUE || T->nins != semantic_nins' \
   '!arm64_ir_numacc_bytecode(pt, trace_startpc_acq((GCtrace *)T),' \
   '!arm64_numacc_snapshots(T->snap, T->snapmap, T->nsnap,' \
@@ -694,6 +757,7 @@ for required in \
   'case IR_CONV:' \
   'numdynamic_args_kind = ARM64_NUMDYN_ARGS_INT_STEP;' \
   'numdynamic_args_kind = ARM64_NUMDYN_ARGS_INT_LIMIT;' \
+  'numdynamic_args_kind = ARM64_NUMDYN_ARGS_INT_X;' \
   'if (!allow_num_sub || startop != BC_LOOP ||' \
   'if (!allow_num_sub || irt_type(ins.t) != IRT_NUM)' \
   'if (!allow_num_mul || startop != BC_LOOP ||' \
@@ -712,9 +776,10 @@ for required in \
   }
 done
 for required in \
-  'ins.t.irt != IRT_NUM ||' \
-  'ins.op2 != IRCONV_NUM_INT ||' \
-  'ins.r < RID_MIN_FPR || ins.r >= RID_MAX_FPR ||' \
+  'if (numdynamic_profile == 0 || slot != SPS_NONE)' \
+  'numdynamic_args_kind == ARM64_NUMDYN_ARGS_NUM &&' \
+  'ins.t.irt == IRT_NUM && ins.op2 == IRCONV_NUM_INT &&' \
+  'ins.r >= RID_MIN_FPR && ins.r < RID_MAX_FPR &&' \
   'ref == ARM64_NUMACC_INTSTEP_R_STEP_NUM &&' \
   'ins.op1 == ARM64_NUMACC_INTSTEP_R_STEP_INT) {' \
   'numdynamic_args_kind = ARM64_NUMDYN_ARGS_INT_STEP;' \
@@ -722,8 +787,15 @@ for required in \
   'ref == ARM64_NUMACC_INTLIMIT_R_LIMIT_NUM &&' \
   'ins.op1 == ARM64_NUMACC_INTLIMIT_R_LIMIT_INT) {' \
   'numdynamic_args_kind = ARM64_NUMDYN_ARGS_INT_LIMIT;' \
-  'ins.r < RID_MIN_FPR || ins.r >= RID_MAX_FPR ||' \
-  '!rset_test(RSET_FPR, ins.r)' \
+  'ref == ARM64_NUMACC_INTX_R_X_NUM &&' \
+  'ins.op1 == ARM64_NUMACC_INTX_R_X_INT) {' \
+  'numdynamic_args_kind = ARM64_NUMDYN_ARGS_INT_X;' \
+  'numdynamic_args_kind == ARM64_NUMDYN_ARGS_INT_X &&' \
+  'ref == ARM64_NUMACC_INTX_R_X_CHECK &&' \
+  'ins.t.irt == (IRT_INT|IRT_GUARD) &&' \
+  'ins.op1 == ARM64_NUMACC_INTX_R_X_PRE &&' \
+  'ins.op2 == (IRCONV_INT_NUM|IRCONV_CHECK) &&' \
+  'ins.r < RID_MAX_GPR && rset_test(RSET_GPR, ins.r)' \
   'if (numdynamic_args_kind != ARM64_NUMDYN_ARGS_NUM) {' \
   'constant_profile != ARM64_IR_KPROFILE_INT || !suffix_is_nop ||' \
   'nrename != 0 || spadjust != 0 || highest_end != 0 ||' \
@@ -735,7 +807,9 @@ for required in \
   }
 done
 for required in \
-  'ir->t.irt != IRT_NUM || ir->op2 != IRCONV_NUM_INT)' \
+  'if (numdynamic_profile == 0)' \
+  'numdynamic_args_kind == ARM64_NUMDYN_ARGS_NUM &&' \
+  'ir->t.irt == IRT_NUM && ir->op2 == IRCONV_NUM_INT)' \
   'ref == ARM64_NUMACC_INTSTEP_R_STEP_NUM &&' \
   'ir->op1 == ARM64_NUMACC_INTSTEP_R_STEP_INT) {' \
   'numdynamic_args_kind = ARM64_NUMDYN_ARGS_INT_STEP;' \
@@ -743,6 +817,14 @@ for required in \
   'ref == ARM64_NUMACC_INTLIMIT_R_LIMIT_NUM &&' \
   'ir->op1 == ARM64_NUMACC_INTLIMIT_R_LIMIT_INT) {' \
   'numdynamic_args_kind = ARM64_NUMDYN_ARGS_INT_LIMIT;' \
+  'ref == ARM64_NUMACC_INTX_R_X_NUM &&' \
+  'ir->op1 == ARM64_NUMACC_INTX_R_X_INT) {' \
+  'numdynamic_args_kind = ARM64_NUMDYN_ARGS_INT_X;' \
+  'numdynamic_args_kind == ARM64_NUMDYN_ARGS_INT_X &&' \
+  'ref == ARM64_NUMACC_INTX_R_X_CHECK &&' \
+  'ir->t.irt == (IRT_INT|IRT_GUARD) &&' \
+  'ir->op1 == ARM64_NUMACC_INTX_R_X_PRE &&' \
+  'ir->op2 == (IRCONV_INT_NUM|IRCONV_CHECK))' \
   'return arm64_ir_reject(reject, LJ_ARM64_IR_REJECT_TYPE, ref,' \
   'IR_CONV, ir->op2);' \
   'if (numdynamic_args_kind != ARM64_NUMDYN_ARGS_NUM) {' \
@@ -768,7 +850,9 @@ test "$(grep -Fc 'numdynamic_args_kind = ARM64_NUMDYN_ARGS_INT_STEP;' \
   "$classifier")" -eq 2
 test "$(grep -Fc 'numdynamic_args_kind = ARM64_NUMDYN_ARGS_INT_LIMIT;' \
   "$classifier")" -eq 2
-test "$(grep -Fc 'if (numdynamic_profile == 0 ||' "$classifier")" -eq 2
+test "$(grep -Fc 'numdynamic_args_kind = ARM64_NUMDYN_ARGS_INT_X;' \
+  "$classifier")" -eq 2
+test "$(grep -Fc 'if (numdynamic_profile == 0' "$classifier")" -eq 2
 test "$(grep -Fc 'if (!allow_num_mul ||' "$classifier")" -eq 2
 test "$(grep -Fc 'if (!allow_num_div ||' "$classifier")" -eq 2
 test "$(grep -Fc '(allow_mul && op == IR_MUL) || (allow_div && op == IR_DIV);' \
@@ -1723,9 +1807,9 @@ for required in \
   'bc_a(comparison) == 4 && bc_d(comparison) == 3' \
   'bc_op(arithmetic) == BC_SUBVV && bc_a(arithmetic) == 3' \
   'static void test_numacc_shape_cross_product(jit_State *J)' \
-  'static const unsigned args_kinds[3] = {' \
+  'static const unsigned args_kinds[4] = {' \
   'NUMACC_FIXTURE_ARGS_NUM, NUMACC_FIXTURE_ARGS_INT_STEP,' \
-  'NUMACC_FIXTURE_ARGS_INT_LIMIT' \
+  'NUMACC_FIXTURE_ARGS_INT_LIMIT, NUMACC_FIXTURE_ARGS_INT_X' \
   'IROp arithmetic_ops[2];' \
   'arithmetic_ops[0] = profile->recurrence_op;' \
   'arithmetic_ops[1] = profile->recurrence_op == IR_ADD ? IR_SUB : IR_ADD;' \
@@ -1738,9 +1822,9 @@ for required in \
   'preops[pre] == profile->precondition_op &&' \
   'bodyops[body] == profile->body_op &&' \
   '(!intlimit || profile->id == NUMACC_FIXTURE_ADD_LT);' \
-  'assert(combinations == 12u*3u*2u*2u*4u*4u);' \
-  'assert(combinations == 2304);' \
-  'assert(semantic_admissions == 25 && postra_admissions == 25);' \
+  'assert(combinations == 12u*4u*2u*2u*4u*4u);' \
+  'assert(combinations == 3072);' \
+  'assert(semantic_admissions == 37 && postra_admissions == 37);' \
   'expect_numacc_semantic_result(J, admitted);' \
   'expect_numacc_postra_result(&view, admitted);' \
   'bc_op(saved_compare) == BC_ISGE ? BC_ISGT : BC_ISGE,' \
@@ -1763,7 +1847,9 @@ for required in \
   'test_numacc_intstep_positive_and_negative(J);' \
   'test_numacc_intstep_postra_layout(J);' \
   'test_numacc_intlimit_positive_and_negative(J);' \
-  'test_numacc_intlimit_postra_layout(J);'; do
+  'test_numacc_intlimit_postra_layout(J);' \
+  'test_numacc_intx_positive_and_negative(J);' \
+  'test_numacc_intx_postra_layout(J);'; do
   grep -F "$required" "$root/tests/t-arm64-jit-ir-admission.c" >/dev/null || {
     echo "ARM64 dynamic-accumulator NUM mutation coverage changed: $required" >&2
     exit 1
@@ -1797,6 +1883,63 @@ grep -F 'duplicate_numacc_intlimit_conversion(J, 0);' \
   "$numacc_intlimit_semantic_test_region" >/dev/null
 grep -F 'duplicate_numacc_intlimit_conversion(J, 1);' \
   "$numacc_intlimit_postra_test_region" >/dev/null
+
+for required in \
+  'setir(AX_R_X_INT, IR_SLOAD, IRT_INT|IRT_GUARD,' \
+  'setir(AX_R_STEP, IR_SLOAD, IRT_NUM|IRT_GUARD,' \
+  'setir(AX_R_X_NUM, IR_CONV, IRT_NUM,' \
+  'AX_R_X_INT, IRCONV_NUM_INT);' \
+  'setir(AX_R_X_PRE, profile->recurrence_op, IRT_NUM|IRT_ISPHI,' \
+  'AX_R_X_NUM, AX_R_STEP);' \
+  'setir(AX_R_X_CHECK, IR_CONV, IRT_INT|IRT_GUARD,' \
+  'AX_R_X_PRE, IRCONV_INT_NUM|IRCONV_CHECK);' \
+  'setir(AX_R_X_BODY, profile->recurrence_op, IRT_NUM|IRT_ISPHI,' \
+  'setir(AX_R_X_PHI, IR_PHI, IRT_NUM, AX_R_X_PRE, AX_R_X_BODY);' \
+  'fx.snapmap[2] = SNAP(2, 0, AX_R_X_PRE);' \
+  'fx.snapmap[3] = SNAP(5, 0, AX_R_X_PRE);' \
+  'fx.snapmap[12] = SNAP(2, 0, AX_R_X_BODY);' \
+  'fx.T.nins = AX_R_SEMANTIC_END;' \
+  'J->loopref = AX_R_LOOP;'; do
+  grep -F "$required" "$numacc_intx_region" >/dev/null || {
+    echo "ARM64 INT-X recorder fixture changed: $required" >&2
+    exit 1
+  }
+done
+for required in \
+  'fx.ir[AX_R_X_NUM].op1 = AX_R_STEP;' \
+  'fx.ir[AX_R_X_NUM].op2 = IRCONV_INT_NUM;' \
+  'fx.ir[AX_R_X_NUM].t.irt = IRT_NUM|IRT_GUARD;' \
+  'fx.ir[AX_R_X_CHECK].op1 = AX_R_X_NUM;' \
+  'fx.ir[AX_R_X_CHECK].op2 = IRCONV_INT_NUM;' \
+  'fx.ir[AX_R_X_CHECK].op2 = IRCONV_NUM_INT|IRCONV_CHECK;' \
+  'fx.ir[AX_R_X_CHECK].t.irt = IRT_INT;' \
+  'fx.ir[AX_R_X_PRE].op1 = AX_R_X_INT;' \
+  'fx.ir[AX_R_X_BODY].op1 = AX_R_X_CHECK;'; do
+  grep -F "$required" "$numacc_intx_semantic_test_region" >/dev/null || {
+    echo "ARM64 semantic INT-X mutation coverage changed: $required" >&2
+    exit 1
+  }
+done
+for required in \
+  'fx.ir[AX_R_X_INT].r = RID_X1;' \
+  'fx.ir[AX_R_STEP].r = RID_D1;' \
+  'fx.ir[AX_R_X_NUM].r = RID_D2;' \
+  'fx.ir[AX_R_X_PRE].r = RID_D15;' \
+  'fx.ir[AX_R_LIMIT].r = RID_D0;' \
+  'fx.ir[AX_R_X_CHECK].r = RID_X28;' \
+  'fx.ir[AX_R_X_BODY].r = RID_D15;' \
+  'fx.ir[AX_R_X_PHI].r = RID_D15;' \
+  'fx.ir[AX_R_X_INT].r = RID_D2;' \
+  'fx.ir[AX_R_X_CHECK].r = RID_D2;' \
+  'fx.ir[AX_R_X_CHECK].r = RID_NONE;' \
+  'fx.ir[AX_R_LIMIT].r = RID_D1;' \
+  'fx.ir[AX_R_X_NUM].r = RID_D1;' \
+  'view.nins = AX_R_SEMANTIC_END;'; do
+  grep -F "$required" "$root/tests/t-arm64-jit-ir-admission.c" >/dev/null || {
+    echo "ARM64 post-RA INT-X register coverage changed: $required" >&2
+    exit 1
+  }
+done
 test "$(grep -Fc '{ NUMACC_FIXTURE_ADD_GT, BC_ISGE, 4, 3, BC_ADDVV, IR_ADD,' \
   "$root/tests/t-arm64-jit-ir-admission.c")" -eq 1
 test "$(grep -Fc 'A_R_STEP, A_R_X, IR_LT, IR_GT }' \
@@ -2069,8 +2212,12 @@ test "$(grep -Fc 'test_numacc_intlimit_positive_and_negative(J);' \
   "$root/tests/t-arm64-jit-ir-admission.c")" -eq 1
 test "$(grep -Fc 'test_numacc_intlimit_postra_layout(J);' \
   "$root/tests/t-arm64-jit-ir-admission.c")" -eq 1
+test "$(grep -Fc 'test_numacc_intx_positive_and_negative(J);' \
+  "$root/tests/t-arm64-jit-ir-admission.c")" -eq 12
+test "$(grep -Fc 'test_numacc_intx_postra_layout(J);' \
+  "$root/tests/t-arm64-jit-ir-admission.c")" -eq 12
 
-# Bind each profile selection to both exhaustive NUM and INT-step suites
+# Bind each profile selection to the exhaustive NUM, INT-step and INT-X suites
 # inside main. Bare selector tokens and global call counts must not let one
 # profile run twice while another profile's proof becomes dead.
 awk '
@@ -2099,8 +2246,16 @@ for profile in ADD_LT ADD_LE SUB_GT SUB_GE ADD_GT ADD_GE MUL_LT MUL_LE DIV_LT DI
       exit 1
       ;;
   esac
-  expected_selects=2
-  test "$profile" = ADD_LT && expected_selects=3
+  required="select_numacc_fixture(NUMACC_FIXTURE_$profile); test_numacc_intx_positive_and_negative(J); test_numacc_intx_postra_layout(J);"
+  case "$numacc_main_sequence" in
+    *"$required"*) ;;
+    *)
+      echo "ARM64 INT-X NUM fixture lost exact $profile suite sequence" >&2
+      exit 1
+      ;;
+  esac
+  expected_selects=3
+  test "$profile" = ADD_LT && expected_selects=4
   test "$(grep -Fc \
     "select_numacc_fixture(NUMACC_FIXTURE_$profile);" \
     "$numacc_main_region")" -eq "$expected_selects"
@@ -2473,4 +2628,4 @@ done
   -o "$fixture"
 "$fixture"
 
-echo "arm64_jit_ir_admission_contract OK: exact integer, mixed-NUM, fixed-half, dynamic-step and ADD_LT/ADD_LE/ADD_GT/ADD_GE/SUB_GT/SUB_GE/MUL_LT/MUL_LE/DIV_LT/DIV_LE/DIV_GT/DIV_GE dynamic-accumulator NUM/INT-step plus ADD_LT INT-limit LOOP/FORL grammars, 2304 combinations with 25 semantic/post-RA admissions, bounded integer spills, and exact GPR/FPR layouts verified"
+echo "arm64_jit_ir_admission_contract OK: exact integer, mixed-NUM, fixed-half, dynamic-step and ADD_LT/ADD_LE/ADD_GT/ADD_GE/SUB_GT/SUB_GE/MUL_LT/MUL_LE/DIV_LT/DIV_LE/DIV_GT/DIV_GE dynamic-accumulator NUM/INT-step/INT-X plus ADD_LT INT-limit LOOP/FORL grammars, 3072 combinations with 37 semantic/post-RA admissions, bounded integer spills, and exact GPR/FPR layouts verified"
