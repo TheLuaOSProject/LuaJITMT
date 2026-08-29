@@ -9,9 +9,11 @@ without looking like current claims.
 
 Development branch: `codex/aarch64-macos-port`.
 
-Last fully verified source checkpoint: `364449e6` (2026-08-28). It adds the
-exact inclusive ascending `DIV_LE` root to the reviewed minimal-divergence
-checkpoint without opening adjacent division shapes.
+Last fully verified checkpoint: `2b2868f7` (2026-08-28). Its production source
+was introduced at `6d94a92d`; the later commits add independent compiler and
+runtime certificates plus the umbrella-gate update. It completes the exact
+strict/inclusive ascending and descending division family without opening
+adjacent division shapes.
 
 ARM64 remains explicitly opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`. Native JIT
 work additionally requires `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`. These flags are
@@ -28,10 +30,11 @@ Implemented and exercised on Apple Silicon macOS:
 - constant-step integer `FORL`, bounded integer and mixed numeric `LOOP`
   roots, fixed-half and dynamic-step numeric roots, literal-true `FUNCF`, and
   exact all-parameter `ADD_LT`, `ADD_LE`, `ADD_GT`, `ADD_GE`, `SUB_GT`,
-  `SUB_GE`, `MUL_LT`, `MUL_LE`, `DIV_LT`, and `DIV_LE` loop profiles; and
+  `SUB_GE`, `MUL_LT`, `MUL_LE`, `DIV_LT`, `DIV_LE`, `DIV_GT`, and `DIV_GE`
+  loop profiles; and
 - callback-result lifetime across post-detach TG reclamation.
 
-The two ascending division profiles are deliberately narrow:
+The four division profiles are deliberately narrow:
 
 ```lua
 while x < limit do
@@ -41,16 +44,25 @@ end
 while x <= limit do
   x = x / divisor
 end
+
+while x > limit do
+  x = x / divisor
+end
+
+while x >= limit do
+  x = x / divisor
+end
 ```
 
 They require the exact all-parameter bytecode and spill-free IR/register shape.
-The compiler proof exhausts 640 profile/arithmetic/guard combinations at each
-of the semantic and post-register-allocation gates and admits exactly ten total
-profiles. The runtime proof checks noncommutative FDIV operands, exact
-ARM64/arm64e instruction words, strict and inclusive equality boundaries,
-type exits, NaN, infinities, signed zero, STOPREQ cleanup/reuse, and adjacent
-no-trace shapes. In particular, an inclusive `+Inf` limit is proved
-nonterminating and interruptible while the strict profile exits.
+The compiler proof exhausts 768 profile/arithmetic/guard combinations at each
+of the semantic and post-register-allocation gates and admits exactly twelve
+total profiles. The runtime proof checks noncommutative FDIV operands, both
+FCMP operand directions, exact ARM64/arm64e instruction words, strict and
+inclusive equality boundaries, type exits, NaN, infinities, signed zero,
+STOPREQ cleanup/reuse, and adjacent no-trace shapes. In particular, the proof
+distinguishes ascending inclusive `+Inf` limits from strict exit behavior and
+descending inclusive zero limits from strict underflow-to-zero behavior.
 
 ## Minimal-divergence cleanup
 
@@ -61,21 +73,24 @@ DynASM lines to LuaJIT's existing indentation. It also corrected two cross-targe
 leaks: ARM64's exact five-slot side certificate and FORI/FORL tuple check no
 longer run on x86-64.
 
-Relative to `v2.1`, the `src/` diff fell from 56 files with 13,891
-insertions and 1,815 deletions to 55 files with 13,820 insertions and 1,733
-deletions. Large ARM64 admission and lifecycle blocks remain in common files;
-moving them into target-local modules is a later structural migration because
-the source-certificate scripts parse their current boundaries. Independent
-semantic and post-register-allocation gates were deliberately not deduplicated.
+Relative to `v2.1`, the cleanup initially reduced the `src/` diff from 56 files
+with 13,891 insertions and 1,815 deletions to 55 files with 13,820 insertions
+and 1,733 deletions. The completed division family now leaves it at 55 files
+with 13,871 insertions and 1,733 deletions. Large ARM64 admission and lifecycle
+blocks remain in common files; moving them into target-local modules is a later
+structural migration because the source-certificate scripts parse their current
+boundaries. Independent semantic and post-register-allocation gates were
+deliberately not deduplicated.
 
-## Verification at `364449e6`
+## Verification at `2b2868f7`
 
 - `tools/ci/arm64_jit_fail_closed_gate.sh`: passed in full.
 - Native ARM64 vendored LuaJIT suite: `509 passed`.
 - Focused all-parameter numeric contract: direct plus two randomized runs on
-  ordinary ARM64 and arm64e/BTI; all six executions passed, exercising ten
-  profiles per process.
-- Disposable thin x86_64 build: platform smoke passed under Rosetta with
+  ordinary ARM64 and arm64e/BTI; all six executions passed, exercising twelve
+  profiles per process (72 profile executions total).
+- Disposable thin x86_64 build of the identical production source at
+  `6d94a92d`: platform smoke passed under Rosetta with
   `jit.os=OSX`, `jit.arch=x64`; its vendored suite also reported `509 passed`.
 - The x86_64 canary published real first-level side traces and a live `JFORL`
   root, confirming that the ARM64-only widening did not alter x64 admission.
@@ -83,9 +98,9 @@ semantic and post-register-allocation gates were deliberately not deduplicated.
   thin ARM64, and the archive's `lj_asm.o` was byte-identical to the standalone
   object.
 
-The earlier `2fd6fb49` functional checkpoint also ran twelve independent native
-processes which published exactly trace 1 with `link=1` and `linktype=loop`,
-including genuine-NUM `MUL_LT`, `MUL_LE`, and `DIV_LT` operands.
+The descending runtime certificate confirms exact limit-first FCMP emission,
+strict `HS`/`LO` and inclusive `HI`/`LS` branches, all six equality outcomes,
+and the terminating/nonterminating IEEE cases for both new profiles.
 
 The recurring unused `ccall_rawchild_wait` warning remains pre-existing. The
 diagnostic GDB-JIT and x86_64 builds also emit the known unused `topofs`
@@ -96,8 +111,8 @@ expected non-GC64 rejection before the configured GC64 build succeeds.
 
 - General ARM64 IR admission, arbitrary Lua programs, and unrestricted spills
   or register layouts.
-- Descending `DIV_GT`/`DIV_GE`, reversed or fixed division operands, and extra
-  division recurrences. The descending pair is the next coherent DIV tranche.
+- Reversed or fixed division operands, extra division recurrences, dynamic-step
+  numeric `FORL`, and general root geometries.
 - General side traces, side-of-side traces, and stitches. Only explicitly
   certified first-side shapes are open.
 - Uncertified conversions, calls, allocations, heap effects, table/upvalue
