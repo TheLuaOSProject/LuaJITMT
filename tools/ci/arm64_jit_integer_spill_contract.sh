@@ -15,6 +15,8 @@ xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_US
 pauth_xcflags="$xcflags -DLUAJIT_ENABLE_CET_BR"
 archive=$root/src/libluajit.a
 fixture_source=$root/tests/t-arm64-jit-integer-spills.c
+asm_source=$root/src/lj_asm.c
+admit_source=$root/src/lj_asm_arm64_admit.h
 lock_dir=$root/src/.lj-test-run.lock
 lock_held=0
 restore_needed=0
@@ -171,7 +173,8 @@ for required in \
   'postraview.base_delta = (uint8_t)(J->baseslot-2u);'; do
   case "$required" in
     '#define '*) file=$root/src/lj_target_arm64.h ;;
-    *) file=$root/src/lj_asm.c ;;
+    'postraview.'*) file=$asm_source ;;
+    *) file=$admit_source ;;
   esac
   grep -F "$required" "$file" >/dev/null || {
     echo "ARM64 integer-spill admission mismatch: $required" >&2

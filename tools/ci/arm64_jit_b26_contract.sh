@@ -16,6 +16,8 @@ fi
 cc=${CC:-$(xcrun --sdk macosx --find clang)}
 minver=${MACOSX_DEPLOYMENT_TARGET:-13.0}
 archive=$root/src/libluajit.a
+asm_object=$root/src/lj_asm.o
+admit_source=$root/src/lj_asm_arm64_admit.h
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lj-arm64-b26.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
@@ -29,6 +31,10 @@ xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_US
 
 test -f "$archive" || {
   echo "ARM64 B26 contract requires an existing experimental build" >&2
+  exit 1
+}
+test -f "$asm_object" && test "$asm_object" -nt "$admit_source" || {
+  echo "ARM64 B26 object is stale relative to its admission source" >&2
   exit 1
 }
 test "$(lipo -archs "$archive")" = arm64
@@ -46,7 +52,7 @@ grep -F 'sh "$root/tools/ci/arm64_jit_b26_contract.sh"' \
 
 awk '/^int lj_asm_arm64_b26_encode\(/ { copy=1 }
      copy { print }
-     copy && /^}/ { exit }' "$root/src/lj_asm.c" >"$encoder_region"
+     copy && /^}/ { exit }' "$admit_source" >"$encoder_region"
 test -s "$encoder_region"
 for required in \
   'source == 0 || target == 0 || insp == NULL' \

@@ -23,6 +23,7 @@ vm_object=$root/src/lj_vm.o
 fixture_source=$root/tests/t-arm64-jit-funcf-record.c
 trace_source=$root/src/lj_trace.c
 asm_source=$root/src/lj_asm.c
+admit_source=$root/src/lj_asm_arm64_admit.h
 arch_source=$root/src/lj_arch.h
 jit_header=$root/src/lj_jit.h
 vm_source=$root/src/vm_arm64.dasc
@@ -232,7 +233,7 @@ test "$(grep -Fc 'trace_root_funcf_shape(' "$trace_source")" -eq 2
 # spill-free allocator suffix.
 awk '/^static int arm64_ir_funcf_bytecode/ { copy=1 }
      copy { print }
-     copy && /^}/ { exit }' "$asm_source" >"$funcf_bytecode"
+     copy && /^}/ { exit }' "$admit_source" >"$funcf_bytecode"
 for required in \
   'sizebc != 3' \
   '(lo & (sizeof(BCIns)-1)) != 0' \
@@ -255,7 +256,7 @@ for required in \
 done
 awk '/^static int arm64_ir_funcf_shape/ { copy=1 }
      copy { print }
-     copy && /^}/ { exit }' "$asm_source" >"$funcf_shape"
+     copy && /^}/ { exit }' "$admit_source" >"$funcf_shape"
 for required in \
   'J->loopref != 0' \
   'T->nins != REF_BASE+3u' \
@@ -271,7 +272,7 @@ for required in \
 done
 awk '/^static int arm64_postra_funcf_admit/ { copy=1 }
      copy { print }
-     copy && /^}/ { exit }' "$asm_source" >"$funcf_postra"
+     copy && /^}/ { exit }' "$admit_source" >"$funcf_postra"
 for required in \
   '(ir = view->ir) == NULL' \
   'view->snap == NULL' \
@@ -299,7 +300,7 @@ for required in \
 done
 awk '/^int lj_asm_arm64_postra_funcf_entry_admit/ { copy=1 }
      copy { print }
-     copy && /^}/ { exit }' "$asm_source" >"$funcf_entry_postra"
+     copy && /^}/ { exit }' "$admit_source" >"$funcf_entry_postra"
 for required in \
   'bc_op(view->startins) != BC_FUNCF' \
   'bc_op(liveins) != BC_JFUNCF' \
@@ -316,7 +317,7 @@ for required in \
   'snapentry_acq(&snapmap[2]) != SNAP(result_slot, 0, REF_TRUE)' \
   'snappos != 1u' \
   'snappos == 2u'; do
-  grep -F "$required" "$asm_source" >/dev/null || {
+  grep -F "$required" "$admit_source" >/dev/null || {
     echo "ARM64 FUNCF snapshot proof changed: $required" >&2
     exit 1
   }

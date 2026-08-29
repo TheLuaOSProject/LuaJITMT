@@ -21,6 +21,7 @@ probe_xcflags="$ordinary_xcflags -DLJ_ARM64_SIDE_ASM_TEST"
 pauth_probe_xcflags="$probe_xcflags -DLUAJIT_ENABLE_CET_BR"
 archive=$root/src/libluajit.a
 fixture_source=$root/tests/t-arm64-jit-side-asm-consumption.c
+admit_source=$root/src/lj_asm_arm64_admit.h
 lock_dir=$root/src/.lj-test-run.lock
 lock_held=0
 restore_needed=0
@@ -171,12 +172,12 @@ for required in \
   'view->parentmap[0] != REGSP(shape->inherited_reg, SPS_NONE)' \
   'A64F_D(shape->sload_reg)' \
   'A64F_M(shape->inherited_reg)) ||'; do
-  grep -F "$required" "$root/src/lj_asm.c" >/dev/null || {
+  grep -F "$required" "$admit_source" >/dev/null || {
     echo "ARM64 resumed-CGET assembler shape changed: $required" >&2
     exit 1
   }
 done
-if grep -F 'ARM64_SIDE_R_VALUE' "$root/src/lj_asm.c" >/dev/null; then
+if grep -F 'ARM64_SIDE_R_VALUE' "$admit_source" >/dev/null; then
   echo "ARM64 side assembler regained the pre-CGET semantic value" >&2
   exit 1
 fi

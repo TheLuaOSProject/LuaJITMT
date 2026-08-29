@@ -22,6 +22,7 @@ archive=$root/src/libluajit.a
 fixture_source=$root/tests/t-arm64-jit-forl-record.c
 trace_source=$root/src/lj_trace.c
 asm_source=$root/src/lj_asm.c
+admit_source=$root/src/lj_asm_arm64_admit.h
 vm_source=$root/src/vm_arm64.dasc
 lock_dir=$root/src/.lj-test-run.lock
 lock_held=0
@@ -161,7 +162,7 @@ test "$(grep -Fc 'trace_root_forl_tuple(' "$trace_source")" -eq 3
 # Pin the narrow semantic grammar and its independent post-RA recheck.
 awk '/^static int arm64_ir_forl_shape/ { copy=1 }
      copy { print }
-     copy && /^}/ { exit }' "$asm_source" >"$forl_shape"
+     copy && /^}/ { exit }' "$admit_source" >"$forl_shape"
 for required in \
   'nadd != 2u' \
   'step == 0' \
@@ -180,7 +181,7 @@ done
 awk '/^int lj_asm_arm64_postra_admit/ { copy=1 }
      copy { print }
      copy && /^static int arm64_ir_int_ref/ { exit }' \
-  "$asm_source" >"$postra_region"
+  "$admit_source" >"$postra_region"
 for required in \
   'rootop = bc_op(view->startins);' \
   'rootop != BC_LOOP && rootop != BC_FORL && rootop != BC_FUNCF' \

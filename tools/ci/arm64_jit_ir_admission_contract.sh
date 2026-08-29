@@ -17,6 +17,8 @@ cc=${CC:-$(xcrun --sdk macosx --find clang)}
 minver=${MACOSX_DEPLOYMENT_TARGET:-13.0}
 archive=$root/src/libluajit.a
 asm_object=$root/src/lj_asm.o
+asm_source=$root/src/lj_asm.c
+admit_source=$root/src/lj_asm_arm64_admit.h
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lj-arm64-ir-admission.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
@@ -78,8 +80,9 @@ test -f "$archive" && test -f "$asm_object" || {
   echo "ARM64 IR admission contract requires an existing experimental build" >&2
   exit 1
 }
-test "$asm_object" -nt "$root/src/lj_asm.c" || {
-  echo "ARM64 IR admission object is stale relative to lj_asm.c" >&2
+test "$asm_object" -nt "$asm_source" &&
+test "$asm_object" -nt "$admit_source" || {
+  echo "ARM64 IR admission object is stale relative to its sources" >&2
   exit 1
 }
 ar -p "$archive" lj_asm.o | cmp - "$asm_object" || {
@@ -99,19 +102,19 @@ nm "$archive" | grep ' T _lj_asm_arm64_postra_admit$' >/dev/null || {
 awk '/^\/\* -- Initial ARM64 IR admission/ { copying = 1 }
      copying { print }
      copying && /^\/\* -- Assembler state and common macros/ { exit }' \
-  "$root/src/lj_asm.c" >"$classifier"
+  "$admit_source" >"$classifier"
 test -s "$classifier"
 
 awk '/^int lj_asm_arm64_ir_admit/ { copying = 1 }
      copying { print }
      copying && /^\/\* -- Assembler state and common macros/ { exit }' \
-  "$root/src/lj_asm.c" >"$semantic_region"
+  "$admit_source" >"$semantic_region"
 test -s "$semantic_region"
 
 awk '/^static int arm64_ir_int_value_op/ { copying = 1 }
      copying { print }
      copying && /^static int arm64_postra_int_value/ { exit }' \
-  "$root/src/lj_asm.c" >"$value_region"
+  "$admit_source" >"$value_region"
 grep -F 'case IR_SLOAD: case IR_ADDOV: case IR_SUBOV: case IR_MULOV:' \
   "$value_region" >/dev/null
 grep -F 'case IR_ADD:' "$value_region" >/dev/null
@@ -135,7 +138,7 @@ fi
 awk '/^static int arm64_postra_spill_slot/ { copying = 1 }
      copying { print }
      copying && /^static int arm64_ir_int_ref/ { exit }' \
-  "$root/src/lj_asm.c" >"$postra_region"
+  "$admit_source" >"$postra_region"
 test -s "$postra_region"
 
 awk '/^static void make_trace\(/ { copying = 1 }
@@ -160,7 +163,7 @@ awk '/^void lj_asm_trace\(/ { copying = 1 }
      copying { print }
      copying && /^#if LJ_TARGET_ARM64 && defined\(LJ_ARM64_EMIT_TEST_HELPERS\)/ {
        exit
-     }' "$root/src/lj_asm.c" >"$trace_asm"
+     }' "$asm_source" >"$trace_asm"
 admit_line=$(grep -n 'lj_asm_arm64_ir_admit(J, T, &reject)' "$trace_asm" | cut -d: -f1)
 nextins_line=$(grep -n 'as->orignins = lj_ir_nextins(J)' "$trace_asm" | cut -d: -f1)
 reserve_line=$(grep -n 'lj_mcode_reserve(J, &as->mcbot)' "$trace_asm" | cut -d: -f1)
@@ -884,7 +887,7 @@ awk '
   /^static int arm64_numdynamic_is_sub/ { copying = 1 }
   copying { print }
   copying && /^}/ { exit }
-' "$root/src/lj_asm.c" >"$numdynamic_sub_helper"
+' "$admit_source" >"$numdynamic_sub_helper"
 test "$(wc -l <"$numdynamic_sub_helper" | tr -d ' ')" -eq 5
 test "$(grep -Fc 'grammar_profile == ARM64_NUMDYN_' \
   "$numdynamic_sub_helper")" -eq 2
@@ -904,7 +907,7 @@ awk '
   /^static int arm64_numdynamic_is_mul/ { copying = 1 }
   copying { print }
   copying && /^}/ { exit }
-' "$root/src/lj_asm.c" >"$numdynamic_mul_helper"
+' "$admit_source" >"$numdynamic_mul_helper"
 test "$(wc -l <"$numdynamic_mul_helper" | tr -d ' ')" -eq 5
 test "$(grep -Fc 'grammar_profile == ARM64_NUMDYN_' \
   "$numdynamic_mul_helper")" -eq 2
@@ -924,7 +927,7 @@ awk '
   /^static int arm64_numdynamic_is_div/ { copying = 1 }
   copying { print }
   copying && /^}/ { exit }
-' "$root/src/lj_asm.c" >"$numdynamic_div_helper"
+' "$admit_source" >"$numdynamic_div_helper"
 test "$(wc -l <"$numdynamic_div_helper" | tr -d ' ')" -eq 7
 test "$(grep -Fc 'grammar_profile == ARM64_NUMDYN_' \
   "$numdynamic_div_helper")" -eq 4
@@ -957,7 +960,7 @@ awk '
     index($0, "} else if (grammar_profile == ARM64_NUMDYN_ADD_GE) {") {
       exit
     }
-' "$root/src/lj_asm.c" >"$postra_addgt_region"
+' "$admit_source" >"$postra_addgt_region"
 
 awk '
   /^static int arm64_ir_numdynamic_kernel/ { in_kernel = 1 }
@@ -970,7 +973,7 @@ awk '
     index($0, "} else if (grammar_profile == ARM64_NUMDYN_ADD_GE) {") {
       exit
     }
-' "$root/src/lj_asm.c" >"$semantic_addgt_region"
+' "$admit_source" >"$semantic_addgt_region"
 
 for region in "$postra_addgt_region" "$semantic_addgt_region"; do
   test "$(wc -l <"$region" | tr -d ' ')" -eq 7
@@ -1002,7 +1005,7 @@ awk '
     index($0, "} else if (grammar_profile == ARM64_NUMDYN_SUB_GT) {") {
       exit
     }
-' "$root/src/lj_asm.c" >"$postra_addge_region"
+' "$admit_source" >"$postra_addge_region"
 
 awk '
   /^static int arm64_ir_numdynamic_kernel/ { in_kernel = 1 }
@@ -1015,7 +1018,7 @@ awk '
     index($0, "} else if (grammar_profile == ARM64_NUMDYN_SUB_GT) {") {
       exit
     }
-' "$root/src/lj_asm.c" >"$semantic_addge_region"
+' "$admit_source" >"$semantic_addge_region"
 
 for region in "$postra_addge_region" "$semantic_addge_region"; do
   test "$(wc -l <"$region" | tr -d ' ')" -eq 7
@@ -1051,7 +1054,7 @@ awk '
     index($0, "bc_b(recurrence) == 3 && bc_c(recurrence) == 4) {") {
       exit
     }
-' "$root/src/lj_asm.c" >"$selector_add_region"
+' "$admit_source" >"$selector_add_region"
 test "$(wc -l <"$selector_add_region" | tr -d ' ')" -eq 16
 for required in \
   'if (bc_op(recurrence) == BC_ADDVV && bc_a(recurrence) == 3 &&' \
@@ -1100,7 +1103,7 @@ awk '
     index($0, "} else if (grammar_profile == ARM64_NUMDYN_MUL_LT) {") {
       exit
     }
-' "$root/src/lj_asm.c" >"$postra_subge_region"
+' "$admit_source" >"$postra_subge_region"
 
 awk '
   /^static int arm64_ir_numdynamic_kernel/ { in_kernel = 1 }
@@ -1113,7 +1116,7 @@ awk '
     index($0, "} else if (grammar_profile == ARM64_NUMDYN_MUL_LT) {") {
       exit
     }
-' "$root/src/lj_asm.c" >"$semantic_subge_region"
+' "$admit_source" >"$semantic_subge_region"
 
 for region in "$postra_subge_region" "$semantic_subge_region"; do
   test "$(wc -l <"$region" | tr -d ' ')" -eq 7
@@ -1145,7 +1148,7 @@ awk '
     index($0, "} else if (bc_op(recurrence) == BC_MULVV") {
       exit
     }
-' "$root/src/lj_asm.c" >"$selector_sub_region"
+' "$admit_source" >"$selector_sub_region"
 test "$(wc -l <"$selector_sub_region" | tr -d ' ')" -eq 9
 for required in \
   '} else if (bc_op(recurrence) == BC_SUBVV && bc_a(recurrence) == 3 &&' \
@@ -1175,7 +1178,7 @@ awk '
     index($0, "} else if (grammar_profile == ARM64_NUMDYN_MUL_LE) {") {
       exit
     }
-' "$root/src/lj_asm.c" >"$postra_mullt_region"
+' "$admit_source" >"$postra_mullt_region"
 
 awk '
   /^static int arm64_ir_numdynamic_kernel/ { in_kernel = 1 }
@@ -1188,7 +1191,7 @@ awk '
     index($0, "} else if (grammar_profile == ARM64_NUMDYN_MUL_LE) {") {
       exit
     }
-' "$root/src/lj_asm.c" >"$semantic_mullt_region"
+' "$admit_source" >"$semantic_mullt_region"
 
 for region in "$postra_mullt_region" "$semantic_mullt_region"; do
   test "$(wc -l <"$region" | tr -d ' ')" -eq 7
@@ -1218,7 +1221,7 @@ awk '
     index($0, "} else if (grammar_profile == ARM64_NUMDYN_DIV_LT) {") {
       exit
     }
-' "$root/src/lj_asm.c" >"$postra_mulle_region"
+' "$admit_source" >"$postra_mulle_region"
 
 awk '
   /^static int arm64_ir_numdynamic_kernel/ { in_kernel = 1 }
@@ -1231,7 +1234,7 @@ awk '
     index($0, "} else if (grammar_profile == ARM64_NUMDYN_DIV_LT) {") {
       exit
     }
-' "$root/src/lj_asm.c" >"$semantic_mulle_region"
+' "$admit_source" >"$semantic_mulle_region"
 
 for region in "$postra_mulle_region" "$semantic_mulle_region"; do
   test "$(wc -l <"$region" | tr -d ' ')" -eq 7
@@ -1261,7 +1264,7 @@ awk '
     index($0, "} else if (grammar_profile == ARM64_NUMDYN_DIV_LE) {") {
       exit
     }
-' "$root/src/lj_asm.c" >"$postra_divlt_region"
+' "$admit_source" >"$postra_divlt_region"
 
 awk '
   /^static int arm64_ir_numdynamic_kernel/ { in_kernel = 1 }
@@ -1274,7 +1277,7 @@ awk '
     index($0, "} else if (grammar_profile == ARM64_NUMDYN_DIV_LE) {") {
       exit
     }
-' "$root/src/lj_asm.c" >"$semantic_divlt_region"
+' "$admit_source" >"$semantic_divlt_region"
 
 for region in "$postra_divlt_region" "$semantic_divlt_region"; do
   test "$(wc -l <"$region" | tr -d ' ')" -eq 7
@@ -1304,7 +1307,7 @@ awk '
     index($0, "} else if (grammar_profile == ARM64_NUMDYN_DIV_GT) {") {
       exit
     }
-' "$root/src/lj_asm.c" >"$postra_divle_region"
+' "$admit_source" >"$postra_divle_region"
 
 awk '
   /^static int arm64_ir_numdynamic_kernel/ { in_kernel = 1 }
@@ -1317,7 +1320,7 @@ awk '
     index($0, "} else if (grammar_profile == ARM64_NUMDYN_DIV_GT) {") {
       exit
     }
-' "$root/src/lj_asm.c" >"$semantic_divle_region"
+' "$admit_source" >"$semantic_divle_region"
 
 for region in "$postra_divle_region" "$semantic_divle_region"; do
   test "$(wc -l <"$region" | tr -d ' ')" -eq 7
@@ -1347,7 +1350,7 @@ awk '
     index($0, "} else if (grammar_profile == ARM64_NUMDYN_DIV_GE) {") {
       exit
     }
-' "$root/src/lj_asm.c" >"$postra_divgt_region"
+' "$admit_source" >"$postra_divgt_region"
 
 awk '
   /^static int arm64_ir_numdynamic_kernel/ { in_kernel = 1 }
@@ -1360,7 +1363,7 @@ awk '
     index($0, "} else if (grammar_profile == ARM64_NUMDYN_DIV_GE) {") {
       exit
     }
-' "$root/src/lj_asm.c" >"$semantic_divgt_region"
+' "$admit_source" >"$semantic_divgt_region"
 
 for region in "$postra_divgt_region" "$semantic_divgt_region"; do
   test "$(wc -l <"$region" | tr -d ' ')" -eq 7
@@ -1387,7 +1390,7 @@ awk '
     }
   copying { print }
   copying && $0 == "  } else {" { exit }
-' "$root/src/lj_asm.c" >"$postra_divge_region"
+' "$admit_source" >"$postra_divge_region"
 
 awk '
   /^static int arm64_ir_numdynamic_kernel/ { in_kernel = 1 }
@@ -1397,7 +1400,7 @@ awk '
     }
   copying { print }
   copying && $0 == "  } else {" { exit }
-' "$root/src/lj_asm.c" >"$semantic_divge_region"
+' "$admit_source" >"$semantic_divge_region"
 
 for region in "$postra_divge_region" "$semantic_divge_region"; do
   test "$(wc -l <"$region" | tr -d ' ')" -eq 7
@@ -1425,7 +1428,7 @@ awk '
   copying { print }
   copying &&
     index($0, "} else if (bc_op(recurrence) == BC_DIVVV") { exit }
-' "$root/src/lj_asm.c" >"$selector_mul_region"
+' "$admit_source" >"$selector_mul_region"
 test "$(wc -l <"$selector_mul_region" | tr -d ' ')" -eq 9
 for required in \
   '} else if (bc_op(recurrence) == BC_MULVV && bc_a(recurrence) == 3 &&' \
@@ -1451,7 +1454,7 @@ awk '
     }
   copying { print }
   copying && $0 == "  return 0;" { exit }
-' "$root/src/lj_asm.c" >"$selector_div_region"
+' "$admit_source" >"$selector_div_region"
 test "$(wc -l <"$selector_div_region" | tr -d ' ')" -eq 16
 for required in \
   '} else if (bc_op(recurrence) == BC_DIVVV && bc_a(recurrence) == 3 &&' \
@@ -2623,7 +2626,7 @@ done
 "$cc" -std=gnu11 -O0 -Wall -Wextra -Werror -arch arm64e \
   -mbranch-protection=bti -mmacosx-version-min="$minver" \
   $pauth_xcflags -I"$root/src" \
-  -c "$root/src/lj_asm.c" -o "$audit_object"
+  -c "$asm_source" -o "$audit_object"
 
 # shellcheck disable=SC2086 # xcflags intentionally expands to arguments.
 "$cc" -std=gnu11 -O2 -Wall -Wextra -Werror -arch arm64 \

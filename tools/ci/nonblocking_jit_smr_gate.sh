@@ -15,6 +15,7 @@ for rel in \
   src/lj_debug.c \
   src/lj_record.c \
   src/lj_asm.c \
+  src/lj_asm_arm64_admit.h \
   src/lj_gdbjit.c
 do
   hits=$(rg -n 'lj_gc2_smr_read_enter[[:space:]]*\(' "$ROOT/$rel" || true)

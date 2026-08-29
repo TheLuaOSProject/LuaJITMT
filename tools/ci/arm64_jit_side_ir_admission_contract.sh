@@ -16,6 +16,8 @@ fi
 cc=${CC:-$(xcrun --sdk macosx --find clang)}
 minver=${MACOSX_DEPLOYMENT_TARGET:-13.0}
 archive=$root/src/libluajit.a
+asm_source=$root/src/lj_asm.c
+admit_source=$root/src/lj_asm_arm64_admit.h
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/lj-arm64-side-ir.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
@@ -101,7 +103,7 @@ grep -F 'sh "$root/tools/ci/arm64_jit_side_ir_admission_contract.sh"' \
   "$root/tools/ci/arm64_jit_fail_closed_gate.sh" >/dev/null
 if grep -F 'LUAJIT_MT_ARM64_SIDE_POSTRA_OBSERVE' \
      "$root/src/lj_arch.h" "$root/src/lj_trace.c" "$root/src/lj_trace.h" \
-     "$root/src/lj_asm.c" "$root/src/lj_asm.h" >/dev/null; then
+     "$asm_source" "$admit_source" "$root/src/lj_asm.h" >/dev/null; then
   echo "disposable ARM64 side observation overlay leaked into production sources" >&2
   exit 1
 fi
@@ -109,10 +111,10 @@ fi
 awk '/^\/\* -- Pure ARM64 first-side admission/ { copy=1 }
      copy { print }
      copy && /^static int arm64_ir_funcf_snapshots/ { exit }' \
-  "$root/src/lj_asm.c" >"$pure_region"
+  "$admit_source" >"$pure_region"
 test -s "$pure_region"
 sed -n '/^const LJArm64SideShape \*lj_asm_arm64_side_shape(/,/^}/p' \
-  "$root/src/lj_asm.c" >"$shape_region"
+  "$admit_source" >"$shape_region"
 test -s "$shape_region"
 for required in \
   'static const LJArm64SideShape shapes[] = {' \
@@ -245,16 +247,16 @@ awk '/^void lj_asm_trace\(/ { copy=1 }
      copy { print }
      copy && /^#if LJ_TARGET_ARM64 && defined\(LJ_ARM64_EMIT_TEST_HELPERS\)/ {
        exit
-     }' "$root/src/lj_asm.c" >"$trace_asm"
+     }' "$asm_source" >"$trace_asm"
 sed -n '/^static void asm_head_side(ASMState \*as)/,/^}/p' \
-  "$root/src/lj_asm.c" >"$head_side"
+  "$asm_source" >"$head_side"
 awk '/^  \/\* Set trace entry point before fixing up tail/ { copy=1 }
      copy { print }
      copy && /T->szmcode =/ { exit }' \
-  "$root/src/lj_asm.c" >"$tail_side"
+  "$asm_source" >"$tail_side"
 awk '/^  T->szmcode =/ { copy=1 }
      copy { print }
-     copy && /^}/ { exit }' "$root/src/lj_asm.c" >"$post_snap"
+     copy && /^}/ { exit }' "$asm_source" >"$post_snap"
 test -s "$trace_asm" && test -s "$head_side" && test -s "$tail_side" && \
   test -s "$post_snap"
 
@@ -299,10 +301,10 @@ require_order "$head_side" 'lj_asm_arm64_side_prehead_admit(' \
 require_order "$head_side" 'lj_asm_arm64_side_prehead_admit(' \
   'as->parentmap[i - REF_FIRST]' \
   'pre-head layout validation before parentmap indexing'
-grep -F 'view->parentmap = as->parentmap;' "$root/src/lj_asm.c" >/dev/null
-grep -F 'view->parentmap_n = as->parentmap_n;' "$root/src/lj_asm.c" >/dev/null
+grep -F 'view->parentmap = as->parentmap;' "$asm_source" >/dev/null
+grep -F 'view->parentmap_n = as->parentmap_n;' "$asm_source" >/dev/null
 grep -F 'view->nins = as->J->curfinal ? trace_nins_acq(as->J->curfinal) : 0;' \
-  "$root/src/lj_asm.c" >/dev/null
+  "$asm_source" >/dev/null
 
 require_order "$trace_asm" 'lj_asm_arm64_side_postra_admit(' \
   'asm_snap_fixup_mcofs(as);' \
@@ -530,8 +532,8 @@ test "$(grep -Fc 'set_footer(1, 14, 0);' \
 }
 
 grep -F 'MSize parentmap_n;  /* Number of entries copied from lj_snap_regspmap(). */' \
-  "$root/src/lj_asm.c" >/dev/null
-grep -F 'as->parentmap_n = parentmap_n;' "$root/src/lj_asm.c" >/dev/null
+  "$asm_source" >/dev/null
+grep -F 'as->parentmap_n = parentmap_n;' "$asm_source" >/dev/null
 
 # Build the pure helper directly with function sections so dead-strip can link
 # and execute the same fixture under the actual arm64e/BTI compile-time mode.
@@ -540,7 +542,7 @@ grep -F 'as->parentmap_n = parentmap_n;' "$root/src/lj_asm.c" >/dev/null
 "$cc" -std=gnu11 -O2 -ffunction-sections -fdata-sections \
   -Wall -Wextra -Werror -arch arm64e -mmacosx-version-min="$minver" \
   $arm64e_xcflags -I"$root/src" \
-  -c "$root/src/lj_asm.c" -o "$audit_object"
+  -c "$asm_source" -o "$audit_object"
 # shellcheck disable=SC2086 # arm64e_xcflags intentionally expands to arguments.
 "$cc" -std=gnu11 -O2 -ffunction-sections -fdata-sections \
   -Wall -Wextra -Werror -arch arm64e -mmacosx-version-min="$minver" \

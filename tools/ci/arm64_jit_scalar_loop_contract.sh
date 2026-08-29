@@ -15,6 +15,7 @@ xcflags='-DLUAJIT_MT_ARM64_BOOTSTRAP -DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL -DLUA_US
 pauth_xcflags="$xcflags -DLUAJIT_ENABLE_CET_BR"
 archive=$root/src/libluajit.a
 fixture_source=$root/tests/t-arm64-jit-scalar-loop.c
+admit_source=$root/src/lj_asm_arm64_admit.h
 lock_dir=$root/src/.lj-test-run.lock
 lock_held=0
 restore_needed=0
@@ -173,18 +174,18 @@ for required in \
   'case IR_LT: case IR_GE: case IR_LE: case IR_GT:' \
   'case IR_EQ: case IR_NE:' \
   'case IR_ADDOV: case IR_SUBOV: case IR_MULOV:'; do
-  grep -F "$required" "$root/src/lj_asm.c" >/dev/null || {
+  grep -F "$required" "$admit_source" >/dev/null || {
     echo "ARM64 scalar admission mismatch: $required" >&2
     exit 1
   }
 done
 grep -F 'regsp_reg(rs) >= RID_MAX_GPR ||' \
-  "$root/src/lj_asm.c" >/dev/null || {
+  "$admit_source" >/dev/null || {
   echo "ARM64 scalar post-RA snapshot register check is missing" >&2
   exit 1
 }
 grep -F 'ren.op2 >= nsnap || ren.r >= RID_MAX_GPR ||' \
-  "$root/src/lj_asm.c" >/dev/null || {
+  "$admit_source" >/dev/null || {
   echo "ARM64 scalar RENAME register range check is missing" >&2
   exit 1
 }
