@@ -12,6 +12,8 @@ end
 
 ffi.cdef [[
 int abs(int);
+double fabs(double);
+float fabsf(float);
 ]]
 
 local function trace_op_count(wanted)
@@ -41,7 +43,14 @@ local function run(n)
   return sum
 end
 
-local function run_arm64(fn, n)
+local function run_arm64_i32(fn, n)
+  for i = 1, n do
+    if fn(i) ~= i then return false end
+  end
+  return true
+end
+
+local function run_arm64_double(fn, n)
   for i = 1, n do
     if fn(i) ~= i then return false end
   end
@@ -51,23 +60,29 @@ end
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
 if arm64_scalar then
-  assert(run_arm64(ffi.C.abs, 400))
+  assert(ffi.C.fabs(-3.25) == 3.25)
+  assert(run_arm64_i32(ffi.C.abs, 400))
+  assert(run_arm64_double(ffi.C.fabs, 400))
 else
   assert(run(400) == 400 * 401 / 2)
 end
 local xsave = trace_op_count("XSAVE ")
 local callxs = trace_op_count("CALLXS")
 if arm64_scalar then
-  assert(xsave == 2 and callxs == 2,
-         ("wrong ARM64 scalar CALLXS lifecycle: %d/%d"):format(
+  assert(xsave == 4 and callxs == 4,
+         ("wrong ARM64 scalar CALLXS lifecycles: %d/%d"):format(
            xsave, callxs))
+  jit.flush()
+  assert(run_arm64_double(ffi.C.fabsf, 400))
+  assert(trace_op_count("CALLXS") == 0,
+         "unsupported float(float) CALLXS trace was published")
 else
   assert(xsave > 0, "production scalar FFI call omitted XSAVE")
   assert(callxs > 0, "production scalar FFI call omitted CALLXS")
 end
 
 if arm64_scalar then
-  print("t-ffi-callxs-production OK: scalar CALLXS executed")
+  print("t-ffi-callxs-production OK: int/double CALLXS executed")
 else
   print("t-ffi-callxs-production OK: default scalar CALLXS executed")
 end

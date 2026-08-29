@@ -142,7 +142,7 @@ end
 return function(add)
   add({
     name = "m7_ffi_callxs_arm64_scalar",
-    description = "experimental Darwin ARM64 scalar CALLXS lifecycle",
+    description = "experimental Darwin ARM64 int/double CALLXS lifecycle",
     run = function(t)
       if not native_darwin_arm64(t) then
         print("m7_ffi_callxs_arm64_scalar SKIP: requires native Darwin ARM64")
@@ -163,6 +163,9 @@ return function(add)
       local callxs_lifecycle_so = build_shared_library(t,
         t:tmp("lj_t-arm64-jit-callxs-lifecycle.so"),
         "t-arm64-jit-callxs-lifecycle-lib.c")
+      local callxs_double_lifecycle_so = build_shared_library(t,
+        t:tmp("lj_t-arm64-jit-callxs-double-lifecycle.so"),
+        "t-arm64-jit-callxs-double-lifecycle-lib.c")
       with_arm64_bootstrap_restore(t, function()
         clean_build(t, { quiet = true, xcflags = flags })
         build_and_run_c(t, t:tmp("lj_t-arm64-jit-callxs-admission"),
@@ -191,8 +194,19 @@ return function(add)
           },
           timeout = "30s"
         })
+        build_and_run_c(t,
+                        t:tmp("lj_t-arm64-jit-callxs-double-lifecycle"),
+                        "t-arm64-jit-callxs-double-lifecycle.c", {
+          build = false,
+          cflags = flags,
+          env = {
+            LJ_M7_FFI_CALLXS_DOUBLE_LIFECYCLE_SO =
+              callxs_double_lifecycle_so
+          },
+          timeout = "30s"
+        })
       end)
-      print("M7 experimental Darwin ARM64 scalar CALLXS lifecycle passed")
+      print("M7 experimental Darwin ARM64 int/double CALLXS lifecycle passed")
     end
   })
 

@@ -2482,18 +2482,18 @@ static int crec_call_indirect_struct_result(CTInfo info, CTSize size)
 
 #if LJ_HASJIT_FFI_CALLXS && LJ_TARGET_ARM64
 /* Keep the first Darwin ARM64 CALLXS certificates at the recorder boundary:
-** one direct CDECL function cdata with exactly one matching scalar argument. */
+** one direct CDECL function cdata with exactly int32_t(int32_t) or
+** double(double). */
 static int crec_call_arm64_scalar_admit(jit_State *J, CTState *cts,
 					 const GCcdata *cd, const CType *ct,
 					 CTypeID id, CTInfo info)
 {
   CType field;
-  CTypeID fid;
-  CTypeID result;
+  CTypeID fid, result;
   CTInfo finfo;
   if (J->maxslot != 2 || id != cd->ctypeid || !ctype_isfunc(info) ||
       ctype_size_acq(ct) != 1 || (info & CTF_VARARG) != 0 ||
-	  ctype_cconv(info) != CTCC_CDECL)
+      ctype_cconv(info) != CTCC_CDECL)
     return 0;
   result = ctype_cid(info);
   if (result != CTID_INT32 && result != CTID_DOUBLE)
