@@ -2480,6 +2480,29 @@ static int crec_call_indirect_struct_result(CTInfo info, CTSize size)
 #endif
 }
 
+#if LJ_HASJIT_FFI_CALLXS && LJ_TARGET_ARM64
+/* Keep the first Darwin ARM64 CALLXS certificate at the recorder boundary:
+** one direct CDECL function cdata with exactly int32_t(int32_t). */
+static int crec_call_arm64_i32_admit(jit_State *J, CTState *cts,
+				      const GCcdata *cd, const CType *ct,
+				      CTypeID id, CTInfo info)
+{
+  CType field;
+  CTypeID fid;
+  CTInfo finfo;
+  if (J->maxslot != 2 || id != cd->ctypeid || !ctype_isfunc(info) ||
+      ctype_size_acq(ct) != 1 || (info & CTF_VARARG) != 0 ||
+      ctype_cconv(info) != CTCC_CDECL || ctype_cid(info) != CTID_INT32)
+    return 0;
+  fid = ctype_sib_acq(ct);
+  if (fid == 0)
+    return 0;
+  finfo = ctype_info_acq(crec_ctype_snapshot(J, cts, fid, &field));
+  return ctype_isfield(finfo) && ctype_cid(finfo) == CTID_INT32 &&
+	 ctype_sib_acq(&field) == 0;
+}
+#endif
+
 /* Obtain the one exact-body placeholder patched to J->curfinal by every
 ** assembly attempt. A stitched trace may already own the same placeholder. */
 static TRef crec_call_trace(jit_State *J)
@@ -2541,6 +2564,11 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
       if (!(callop == BC_CALL || callop == BC_CALLM || callop == BC_ITERC))
 	lj_trace_err(J, LJ_TRERR_NYICALL);
     }
+
+#if LJ_HASJIT_FFI_CALLXS && LJ_TARGET_ARM64
+    if (!crec_call_arm64_i32_admit(J, cts, cd, ct, id, info))
+      lj_trace_err(J, LJ_TRERR_NYICALL);
+#endif
 
     func = emitir(IRT(IR_FLOAD, tp), J->base[0], IRFL_CDATA_PTR);
     /* Aggregates retain the declared return CType ID because the interpreter

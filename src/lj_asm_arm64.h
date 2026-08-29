@@ -252,6 +252,17 @@ static int32_t asm_fuseabase(ASMState *as, IRRef ref)
 
 #define FUSE_REG	0x40000000
 
+LJ_STATIC_ASSERT((DISPATCH_TG(tmptv) & (sizeof(TValue)-1)) == 0);
+LJ_STATIC_ASSERT((DISPATCH_TG(tmptv2) & (sizeof(TValue)-1)) == 0);
+LJ_STATIC_ASSERT(DISPATCH_TG(tmptv) >= 0 &&
+		 DISPATCH_TG(tmptv2) < (4096 << 3));
+
+static int32_t asm_tmpref_ofs(MSize mode)
+{
+  return (int32_t)((mode & (IRTMPREF_IN2|IRTMPREF_OUT2)) ?
+	DISPATCH_TG(tmptv2) : DISPATCH_TG(tmptv));
+}
+
 /* Fuse array/hash/upvalue reference into register+offset operand. */
 static Reg asm_fuseahuref(ASMState *as, IRRef ref, int32_t *ofsp, RegSet allow,
 			  A64Ins ins)
@@ -294,8 +305,8 @@ static Reg asm_fuseahuref(ASMState *as, IRRef ref, int32_t *ofsp, RegSet allow,
 	}
       }
     } else if (ir->o == IR_TMPREF) {
-      *ofsp = (int32_t)glofs(as, &J2G(as->J)->tmptv);
-      return RID_GL;
+      *ofsp = asm_tmpref_ofs(ir->op2);
+      return RID_DISPATCH;
     }
   }
   *ofsp = 0;
@@ -830,10 +841,10 @@ static void asm_tvstore64(ASMState *as, Reg base, int32_t ofs, IRRef ref)
 /* Get pointer to TValue. */
 static void asm_tvptr(ASMState *as, Reg dest, IRRef ref, MSize mode)
 {
-  if ((mode & IRTMPREF_IN1)) {
+  if ((mode & (IRTMPREF_IN1|IRTMPREF_IN2))) {
     IRIns *ir = IR(ref);
     if (irt_isnum(ir->t)) {
-      if (irref_isk(ref) && !(mode & IRTMPREF_OUT1)) {
+	if (irref_isk(ref) && !(mode & (IRTMPREF_OUT1|IRTMPREF_OUT2))) {
 	/* Use the number constant itself as a TValue. */
 	ra_allockreg(as, i64ptr(ir_knum(ir)), dest);
 	return;
@@ -843,8 +854,9 @@ static void asm_tvptr(ASMState *as, Reg dest, IRRef ref, MSize mode)
       asm_tvstore64(as, dest, 0, ref);
     }
   }
-  /* g->tmptv holds the TValue(s). */
-  emit_dn(as, A64I_ADDx^emit_isk12(glofs(as, &J2G(as->J)->tmptv)), dest, RID_GL);
+  /* The current TG owns both temporary TValue roots while mcode is active. */
+  emit_opk(as, A64I_ADDx, dest, RID_DISPATCH, asm_tmpref_ofs(mode),
+	   rset_exclude(RSET_GPR, dest));
 }
 
 static void asm_aref(ASMState *as, IRIns *ir)

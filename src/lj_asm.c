@@ -19,6 +19,9 @@
 #if LJ_HASFFI
 #include "lj_ctype.h"
 #endif
+#if LJ_HASJIT_FFI_CALLXS
+#include "lj_ff.h"
+#endif
 #include "lj_ir.h"
 #include "lj_jit.h"
 #include "lj_ircall.h"
@@ -3251,7 +3254,7 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
 #endif
     } else {
       GCtrace finalview = *T;
-      LJArm64PostRAView postraview;
+      LJArm64PostRAView postraview = { 0 };
       LJArm64IRReject reject;
 
       /* Re-run the complete semantic policy against the register-allocated
@@ -3265,6 +3268,7 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
       }
 
       postraview.ir = finalir;
+      postraview.owner = J->curfinal;
       postraview.snap = T->snap;
       postraview.snapmap = T->snapmap;
       postraview.proto_bc = proto_bc(J->pt);
@@ -3274,6 +3278,7 @@ void lj_asm_trace(jit_State *J, GCtrace *T)
       postraview.nsnapmap = T->nsnapmap;
       postraview.spadjust = T->spadjust;
       postraview.proto_sizebc = J->pt->sizebc;
+      postraview.proto_numparams = J->pt->numparams;
       postraview.root_topslot = T->topslot;
       postraview.startins = T->startins;
       postraview.base_delta = (uint8_t)(J->baseslot-2u);

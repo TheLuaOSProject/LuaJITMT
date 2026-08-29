@@ -104,6 +104,12 @@ int32_t lj_callxs_flush_maybe_block(int32_t value)
   return value + 9;
 }
 
+int32_t lj_callxs_flush_identity_maybe_block(int32_t value)
+{
+  lj_callxs_flush_wait(value);
+  return value;
+}
+
 int32_t *lj_callxs_flush_ptr_maybe_block(int32_t *ptr, int32_t value)
 {
   lj_callxs_flush_wait(value);

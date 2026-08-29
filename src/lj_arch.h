@@ -698,8 +698,11 @@
 #define LJ_HASFFI		1
 #endif
 
-/* Targets with a complete JIT FFI native-frame certificate. */
-#if LJ_HASJIT && LJ_HASFFI && LJ_TARGET_X64
+/* Targets with an admitted JIT FFI native-frame certificate. */
+#if LJ_HASJIT && LJ_HASFFI && \
+    (LJ_TARGET_X64 || \
+     (LJ_TARGET_ARM64 && LJ_TARGET_OSX && \
+      defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)))
 #define LJ_HASJIT_FFI_CALLXS	1
 #else
 #define LJ_HASJIT_FFI_CALLXS	0

@@ -21,6 +21,9 @@
 #include "lj_err.h"
 #include "lj_oserr.h"
 #include "lj_debug.h"
+#if LJ_HASJIT_FFI_CALLXS
+#include "lj_ff.h"
+#endif
 #include "lj_str.h"
 #include "lj_frame.h"
 #include "lj_state.h"
@@ -4080,11 +4083,12 @@ static int trace_root_entry_arm64_exit_layout_valid(
 }
 
 static int trace_root_entry_arm64_layout_valid(
-	const TraceArm64LoopView *v, BCIns sourceins)
+	const TraceArm64LoopView *v, const GCtrace *owner, BCIns sourceins)
 {
-  LJArm64PostRAView postra;
+  LJArm64PostRAView postra = { 0 };
   GCproto *pt = gco2pt(v->startpt);
   postra.ir = v->ir;
+  postra.owner = owner;
   postra.snap = v->snap;
   postra.snapmap = v->snapmap;
   postra.proto_bc = proto_bc(pt);
@@ -4094,6 +4098,7 @@ static int trace_root_entry_arm64_layout_valid(
   postra.nsnapmap = v->nsnapmap;
   postra.spadjust = v->spadjust;
   postra.proto_sizebc = pt->sizebc;
+  postra.proto_numparams = pt->numparams;
   postra.root_topslot = v->topslot;
   postra.startins = v->startins;
   postra.base_delta = 0;
@@ -5888,7 +5893,7 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
   if (!trace_runnable_acq(T, traceno) ||
       !trace_root_entry_start_valid(sourceop, trace_startins_acq(T)) ||
       !trace_root_entry_loop_view_acq(T, traceno, pc, pt, sourceop, &view) ||
-      !trace_root_entry_arm64_layout_valid(&view, sourceins) ||
+      !trace_root_entry_arm64_layout_valid(&view, T, sourceins) ||
       !trace_root_entry_first_child_view_acq(
 	J, T, traceno, sourceop, &view, &childview) ||
       !trace_root_entry_bytecode_valid(pc, pt, traceno, sourceop,
@@ -5918,7 +5923,7 @@ lj_trace_enter_root(jit_State *J, const BCIns *pc, TraceNo traceno,
   if (tv2 != tv || T2 != T || !trace_runnable_acq(T2, traceno) ||
       !trace_root_entry_loop_view_acq(T2, traceno, pc, pt, sourceop,
 				      &view2) ||
-      !trace_root_entry_arm64_layout_valid(&view2, sourceins) ||
+      !trace_root_entry_arm64_layout_valid(&view2, T2, sourceins) ||
       !trace_root_entry_loop_view_equal(&view, &view2) ||
       !trace_root_entry_first_child_view_acq(
 	J, T2, traceno, sourceop, &view2, &childview2) ||
@@ -10397,7 +10402,7 @@ static void trace_arm64_abort_exact_owner(jit_State *J, lua_State *owner)
 ** No unproved J->L value is passed to destructive recorder cleanup. */
 #if !LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED
 static int trace_arm64_root_recorder_preflight(jit_State *J,
-	const BCIns *pc, lua_State **ownerp)
+	const BCIns *pc, lua_State **ownerp, GCfunc **fnp)
 {
   lua_State *owner = jit_owner_l_acq(J);
   global_State *g;
@@ -10405,6 +10410,7 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
   GCproto *pt;
   TraceState state;
   *ownerp = owner;
+  *fnp = NULL;
   if (owner == NULL)
     return 0;
   g = G(owner);
@@ -10413,15 +10419,16 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
       (lj_tg_hookmask_combined_load(g, L2TG(owner)) &
 	(HOOK_GC|HOOK_VMEVENT)) != 0 || J->parent != 0 || J->exitno != 0)
     return 0;
-  fn = curr_func(owner);
-  if (!isluafunc(fn))
-    return 0;
-  pt = funcproto(fn);
-  if (!trace_pc_in_proto_range(pc, proto_bc(pt), pt->sizebc))
-    return 0;
   state = lj_trace_state_load(J);
   if (state == LJ_TRACE_START) {
-    BCIns ins = (BCIns)la_load32_acq((const uint32_t *)pc);
+    BCIns ins;
+    fn = curr_func(owner);
+    if (!isluafunc(fn))
+      return 0;
+    pt = funcproto(fn);
+    if (!trace_pc_in_proto_range(pc, proto_bc(pt), pt->sizebc))
+      return 0;
+    ins = (BCIns)la_load32_acq((const uint32_t *)pc);
     if (!trace_root_arm64_generation_valid(pt, pc, ins))
       return 0;
   } else if (state == LJ_TRACE_RECORD) {
@@ -10433,6 +10440,39 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
 	!checkptrGC(startpt) || startpt->gch.gct != (uint32_t)~LJ_TPROTO)
       return 0;
     rootpt = gco2pt(startpt);
+    fn = curr_func(owner);
+    if (isluafunc(fn)) {
+      pt = funcproto(fn);
+      if (pt != rootpt ||
+	  !trace_pc_in_proto_range(pc, proto_bc(pt), pt->sizebc))
+	return 0;
+    } else {
+#if LJ_HASJIT_FFI_CALLXS
+      const BCIns *fnpc = mref_acq(fn->c.pc, const BCIns);
+      BCIns ins;
+      if (lj_func_ffid_acq(fn) != FF_ffi_meta___call || fnpc == NULL ||
+	  pc != fnpc)
+	return 0;
+      ins = (BCIns)la_load32_acq((const uint32_t *)pc);
+      if (bc_op(ins) != BC_FUNCC)
+	return 0;
+      if (J->postproc == LJ_POST_NONE) {
+        /* The one admitted scalar call enters its recorder fast function
+        ** before producing CALLXS and the pending caller return. */
+        if (J->fn == NULL || !isluafunc(J->fn) ||
+	    funcproto(J->fn) != rootpt || J->pt != rootpt)
+	  return 0;
+      } else {
+        /* A recorded fast-function return has one transient C frame before
+        ** LJ_POST_FFRETRY restores the surrounding Lua recorder view. */
+        if (J->postproc != LJ_POST_FFRETRY || J->fn != fn || J->pt != NULL)
+	  return 0;
+      }
+      pt = NULL;
+#else
+      return 0;
+#endif
+    }
     if (!trace_root_arm64_generation_valid(rootpt, startpc, startins) ||
 	!trace_pc_in_proto_range(startpc, proto_bc(rootpt), rootpt->sizebc) ||
 	(BCIns)la_load32_acq((const uint32_t *)startpc) != startins)
@@ -10442,6 +10482,7 @@ static int trace_arm64_root_recorder_preflight(jit_State *J,
   }
   if (jit_owner_l_acq(J) != owner || !lj_jit_token_held_l(owner, J))
     return 0;
+  *fnp = fn;
   return 1;
 }
 #endif
@@ -10531,6 +10572,7 @@ void lj_trace_ins(jit_State *J, const BCIns *pc)
   return;
 #else
   lua_State *L;
+  GCfunc *recordfn = NULL;
   int errcode;
 #if LJ_TARGET_ARM64
 #if defined(LJ_TRACE_TEST_HELPERS) && \
@@ -10557,7 +10599,7 @@ void lj_trace_ins(jit_State *J, const BCIns *pc)
     }
   } else
 #endif
-  if (!trace_arm64_root_recorder_preflight(J, pc, &L)) {
+  if (!trace_arm64_root_recorder_preflight(J, pc, &L, &recordfn)) {
     trace_arm64_abort_exact_owner(J, L);
     return;
   }
@@ -10566,7 +10608,7 @@ void lj_trace_ins(jit_State *J, const BCIns *pc)
 #endif
   /* Note: J->L must already be set. pc is the true bytecode PC here. */
   J->pc = pc;
-  J->fn = curr_func(L);
+  J->fn = recordfn != NULL ? recordfn : curr_func(L);
   J->pt = isluafunc(J->fn) ? funcproto(J->fn) : NULL;
   while ((errcode = lj_vm_cpcall(L, NULL, (void *)J,
 				 trace_state)) != 0) {

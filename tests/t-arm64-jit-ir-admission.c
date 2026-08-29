@@ -1305,7 +1305,7 @@ static LJArm64IRReject expect_reject(jit_State *J,
 
 static LJArm64PostRAView make_postra_view(jit_State *J)
 {
-  LJArm64PostRAView view;
+  LJArm64PostRAView view = { 0 };
   make_trace(J);
   setir(R_END, IR_NOP, IRT_NIL, 0, 0);
   view.ir = fx.ir;
@@ -1336,7 +1336,7 @@ static void expect_postra_result(LJArm64PostRAView *view, int admitted)
 static LJArm64PostRAView make_dynamic_forl_postra_view(jit_State *J,
 	int negative)
 {
-  LJArm64PostRAView view;
+  LJArm64PostRAView view = { 0 };
   make_dynamic_forl_trace(J, negative);
 
   fx.ir[V_K_ZERO].r = RID_INIT;
@@ -1392,7 +1392,7 @@ static void expect_dynamic_forl_postra_result(LJArm64PostRAView *view,
 
 static LJArm64PostRAView make_numeric_postra_view(jit_State *J)
 {
-  LJArm64PostRAView view;
+  LJArm64PostRAView view = { 0 };
   make_numeric_trace(J);
 
   /* Exact post-RA allocation observed for the admitted trace. The PHIs match
@@ -1441,7 +1441,7 @@ static void expect_numeric_postra_result(LJArm64PostRAView *view,
 
 static LJArm64PostRAView make_numhalf_postra_view(jit_State *J)
 {
-  LJArm64PostRAView view;
+  LJArm64PostRAView view = { 0 };
   make_numhalf_trace(J);
 
   /* Exact observed spill-free allocation. KNUM is rematerialized and keeps
@@ -1483,7 +1483,7 @@ static void expect_numhalf_postra_result(LJArm64PostRAView *view,
 
 static LJArm64PostRAView make_numstep_postra_view(jit_State *J)
 {
-  LJArm64PostRAView view;
+  LJArm64PostRAView view = { 0 };
   make_numstep_trace(J);
 
   /* Exact observed spill-free allocation. STEP and LIMIT stay invariant in
@@ -1524,7 +1524,7 @@ static void expect_numstep_postra_result(LJArm64PostRAView *view,
 
 static LJArm64PostRAView make_numacc_postra_view(jit_State *J)
 {
-  LJArm64PostRAView view;
+  LJArm64PostRAView view = { 0 };
   make_numacc_trace(J);
 
   /* Exact observed spill-free allocation. STEP and LIMIT stay invariant in
@@ -1565,7 +1565,7 @@ static void expect_numacc_postra_result(LJArm64PostRAView *view,
 
 static LJArm64PostRAView make_numacc_intstep_postra_view(jit_State *J)
 {
-  LJArm64PostRAView view;
+  LJArm64PostRAView view = { 0 };
   make_numacc_intstep_trace(J);
 
   /* Exact observed spill-free allocation. The raw INT step occupies a GPR;
@@ -1607,7 +1607,7 @@ static void expect_numacc_intstep_postra_result(LJArm64PostRAView *view,
 
 static LJArm64PostRAView make_numacc_intlimit_postra_view(jit_State *J)
 {
-  LJArm64PostRAView view;
+  LJArm64PostRAView view = { 0 };
   make_numacc_intlimit_trace(J);
 
   /* Exact observed spill-free allocation. The raw INT limit occupies a GPR;
@@ -1649,7 +1649,7 @@ static void expect_numacc_intlimit_postra_result(LJArm64PostRAView *view,
 
 static LJArm64PostRAView make_numacc_intx_postra_view(jit_State *J)
 {
-  LJArm64PostRAView view;
+  LJArm64PostRAView view = { 0 };
   make_numacc_intx_trace(J);
 
   /* Exact observed spill-free allocation. The raw INT accumulator and the

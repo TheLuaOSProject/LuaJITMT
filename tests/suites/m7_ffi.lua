@@ -98,6 +98,7 @@ local m7_cases = {
   "m7_ffi_nested_state",
   "m7_ffi_callback_install",
   "m7_ffi_callback_runtime",
+  "m7_ffi_callxs_arm64_scalar",
   "m7_ffi_callxs_authentic",
   "m7_ffi_callxs_sysv_small_aggregate",
   "m7_ffi_ccall_native",
@@ -111,7 +112,75 @@ local function build_clib_ldscript_fixture(t)
   return write_ld_script(script, so)
 end
 
+local function native_darwin_arm64(t)
+  return jit and jit.os == "OSX" and jit.arch == "arm64" and
+         t.target_arch == "arm64"
+end
+
+local arm64_bootstrap_flags = table.concat({
+  "-DLUAJIT_MT_ARM64_BOOTSTRAP",
+  "-DLUAJIT_DISABLE_JIT",
+  "-DLUA_USE_ASSERT"
+}, " ")
+
+local function with_arm64_bootstrap_restore(t, fn)
+  local ok, err = xpcall(fn, debug.traceback)
+  local restore_ok, restore_err = xpcall(function()
+    t:build({ clean = true, quiet = true,
+              xcflags = arm64_bootstrap_flags })
+  end, debug.traceback)
+  if not ok then
+    if not restore_ok then
+      err = err .. "\n\n(ARM64 bootstrap restore also failed)\n" ..
+            restore_err
+    end
+    error(err, 0)
+  end
+  if not restore_ok then error(restore_err, 0) end
+end
+
 return function(add)
+  add({
+    name = "m7_ffi_callxs_arm64_scalar",
+    description = "experimental Darwin ARM64 scalar CALLXS lifecycle",
+    run = function(t)
+      if not native_darwin_arm64(t) then
+        print("m7_ffi_callxs_arm64_scalar SKIP: requires native Darwin ARM64")
+        return
+      end
+      local flags = table.concat({
+        "-DLUAJIT_MT_ARM64_BOOTSTRAP",
+        "-DLUAJIT_MT_ARM64_JIT_EXPERIMENTAL",
+        "-DLUA_USE_ASSERT",
+        "-DLJ_TRACE_TEST_HELPERS"
+      }, " ")
+      local callxs_flush_so = build_shared_library(t,
+        t:tmp("lj_t-ffi-callxs-arm64-remote-flush.so"),
+        "t-ffi-callxs-remote-flush-lib.c")
+      with_arm64_bootstrap_restore(t, function()
+        clean_build(t, { quiet = true, xcflags = flags })
+        build_and_run_c(t, t:tmp("lj_t-arm64-jit-callxs-admission"),
+                        "t-arm64-jit-callxs-admission.c", {
+          build = false,
+          cflags = flags,
+          timeout = "30s"
+        })
+        run_luajit_script(t, "t-ffi-callxs-production.lua", nil, {
+          env = { LJ_M7_FFI_CALLXS_ARM64_SCALAR = "1" },
+          timeout = "30s"
+        })
+        run_luajit_script(t, "t-ffi-callxs-remote-flush.lua", nil, {
+          env = {
+            LJ_M7_FFI_CALLXS_ARM64_SCALAR = "1",
+            LJ_M7_FFI_CALLXS_FLUSH_SO = callxs_flush_so
+          },
+          timeout = "30s"
+        })
+      end)
+      print("M7 experimental Darwin ARM64 scalar CALLXS lifecycle passed")
+    end
+  })
+
   add({
     name = "m7_ffi_callxs_authentic",
     description = "production generic CALLXS scalar/boxed/bool/sret lifecycle",

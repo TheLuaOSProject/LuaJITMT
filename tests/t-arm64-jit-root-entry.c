@@ -366,7 +366,7 @@ static void expect_reject(LJTraceRootEntry entry)
 
 static int root_entry_metadata_layout_valid(const GCtrace *T)
 {
-  LJArm64PostRAView view;
+  LJArm64PostRAView view = { 0 };
   GCproto *pt = trace_startpt_acq((GCtrace *)T);
   IRRef semantic_nins = 0;
   int ok;

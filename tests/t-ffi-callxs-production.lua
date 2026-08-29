@@ -3,8 +3,10 @@ local ffi = require "ffi"
 local util = require "jit.util"
 local vmdef = require "jit.vmdef"
 
-if jit.arch ~= "x64" then
-  print("t-ffi-callxs-production SKIP: x64-only lowering")
+local arm64_scalar = jit.arch == "arm64" and jit.os == "OSX" and
+                     os.getenv("LJ_M7_FFI_CALLXS_ARM64_SCALAR") == "1"
+if jit.arch ~= "x64" and not arm64_scalar then
+  print("t-ffi-callxs-production SKIP: unsupported lowering")
   return
 end
 
@@ -39,12 +41,33 @@ local function run(n)
   return sum
 end
 
+local function run_arm64(fn, n)
+  for i = 1, n do
+    if fn(i) ~= i then return false end
+  end
+  return true
+end
+
 jit.flush()
 jit.opt.start("hotloop=1", "hotexit=1")
-assert(run(400) == 400 * 401 / 2)
-assert(trace_op_count("XSAVE ") > 0,
-       "production scalar FFI call omitted XSAVE")
-assert(trace_op_count("CALLXS") > 0,
-       "production scalar FFI call omitted CALLXS")
+if arm64_scalar then
+  assert(run_arm64(ffi.C.abs, 400))
+else
+  assert(run(400) == 400 * 401 / 2)
+end
+local xsave = trace_op_count("XSAVE ")
+local callxs = trace_op_count("CALLXS")
+if arm64_scalar then
+  assert(xsave == 2 and callxs == 2,
+         ("wrong ARM64 scalar CALLXS lifecycle: %d/%d"):format(
+           xsave, callxs))
+else
+  assert(xsave > 0, "production scalar FFI call omitted XSAVE")
+  assert(callxs > 0, "production scalar FFI call omitted CALLXS")
+end
 
-print("t-ffi-callxs-production OK: default scalar CALLXS executed")
+if arm64_scalar then
+  print("t-ffi-callxs-production OK: scalar CALLXS executed")
+else
+  print("t-ffi-callxs-production OK: default scalar CALLXS executed")
+end

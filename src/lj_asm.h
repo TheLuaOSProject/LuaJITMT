@@ -45,6 +45,7 @@ typedef struct LJArm64IRReject {
 ** the ARM64 root-entry gate. */
 typedef struct LJArm64PostRAView {
   const IRIns *ir;
+  const GCtrace *owner;
   const SnapShot *snap;
   const SnapEntry *snapmap;
   const BCIns *proto_bc;
@@ -54,6 +55,7 @@ typedef struct LJArm64PostRAView {
   MSize nsnapmap;
   MSize spadjust;
   MSize proto_sizebc;
+  MSize proto_numparams;
   MSize root_topslot;
   BCIns startins;
   uint8_t base_delta;

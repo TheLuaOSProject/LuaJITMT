@@ -1497,7 +1497,12 @@ static BCReg rec_mm_prep(jit_State *J, ASMFunction cont)
 }
 
 static TRef rec_tmpref(jit_State *J, TRef tr);
+static IRType rec_idx_mt_shared_sample(jit_State *J, RecordIndex *ix,
+				       TValue *snap, TRef *constp);
 static TRef rec_idx_mt_shared_load(jit_State *J, RecordIndex *ix, IRType t);
+#if LJ_HASJIT_FFI_CALLXS
+static int rec_mm_cdata_call_shared(jit_State *J, RecordIndex *ix, GCtab *mt);
+#endif
 
 /* Record metamethod lookup. */
 int lj_record_mm_lookup(jit_State *J, RecordIndex *ix, MMS mm)
@@ -1510,9 +1515,16 @@ int lj_record_mm_lookup(jit_State *J, RecordIndex *ix, MMS mm)
   ** the corresponding FLOAD guard. In active MT, a peer may replace that edge
   ** and GC2 may reclaim the old target between those two operations. Keep the
   ** operation interpreted until the trace ABI has a rooted receiver-to-meta
-  ** lookup helper; an acquire-load alone is not lifetime authority.
+  ** lookup helper; an acquire-load alone is not lifetime authority. Cdata
+  ** __call alone takes a rooted table helper below and guards both its base
+  ** metatable and current function identity. The FFI and target gates still
+  ** bound the operation emitted after it.
   */
-  if (lj_record_mt_runtime_shared(J2G(J), J->L))
+  if (lj_record_mt_runtime_shared(J2G(J), J->L)
+#if LJ_HASJIT_FFI_CALLXS
+      && !(mm == MM_call && tref_iscdata(ix->tab))
+#endif
+     )
     lj_trace_err_info(J, LJ_TRERR_NYIBC);
   if (tref_istab(ix->tab)) {
     mt = lj_tab_metatable_acq(tabV(&ix->tabv));
@@ -1556,8 +1568,18 @@ int lj_record_mm_lookup(jit_State *J, RecordIndex *ix, MMS mm)
       ix->mt = TREF_NIL;
       return 0;  /* No metamethod. */
     }
-    /* The cdata metatable is treated as immutable. */
+    /* Resolve mutable cdata __call through the rooted shared-table path. */
     if (LJ_HASFFI && tref_iscdata(ix->tab)) {
+#if LJ_HASJIT_FFI_CALLXS
+#if LJ_TARGET_ARM64 && LJ_TARGET_OSX && \
+    defined(LUAJIT_MT_ARM64_JIT_EXPERIMENTAL)
+	if (mm == MM_call)
+	  return rec_mm_cdata_call_shared(J, ix, mt);
+#else
+	if (mm == MM_call && lj_record_mt_runtime_shared(J2G(J), J->L))
+	  return rec_mm_cdata_call_shared(J, ix, mt);
+#endif
+#endif
       mix.tab = TREF_NIL;
       goto immutable_mt;
     }
@@ -2007,7 +2029,7 @@ static TRef rec_tmpref_mode(jit_State *J, TRef tr, int mode);
 
 /* Sample one active-MT lookup through the same enumerated roots used by mcode. */
 static IRType rec_idx_mt_shared_sample(jit_State *J, RecordIndex *ix,
-				       TValue *snap)
+				       TValue *snap, TRef *constp)
 {
   /* Protected-call rollback checkpoints L2TG(J->L). Anchor the recorder
   ** inputs in that same authoritative owner TG instead of relying on the
@@ -2054,6 +2076,10 @@ static IRType rec_idx_mt_shared_sample(jit_State *J, RecordIndex *ix,
   */
   lj_tv_load_acq(snap, parentout);
   invalid = tvistabinternal(snap) || !lj_tv_gcref_type_match(snap);
+  if (constp != NULL) {
+    *constp = invalid ? 0 : lj_record_constify(J, parentout);
+    invalid |= *constp == 0;
+  }
   lj_tg_root_anchor_pop(tg, keyidx);
   lj_tg_root_anchor_pop(tg, parentidx);
   lj_assertJ(tg->tmptv.u64 == scratch1 && tg->tmptv2.u64 == scratch2,
@@ -2084,6 +2110,44 @@ static TRef rec_idx_mt_shared_load(jit_State *J, RecordIndex *ix, IRType t)
   J->mergesnap = 1;
   return lj_record_vload(J, res, 0, t);
 }
+
+/* Resolve the mutable cdata __call entry through enumerated roots. The base
+** metatable replacement path flushes traces; retain the sampled table as a
+** trace constant and guard its global root before the helper reads its slot. */
+#if LJ_HASJIT_FFI_CALLXS
+static int rec_mm_cdata_call_shared(jit_State *J, RecordIndex *ix, GCtab *mt)
+{
+  RecordIndex mix;
+  TValue snap;
+  GCstr *mmstr;
+  TRef kfunc, kmt, mtref, mobj;
+  IRType type;
+  if (mt == NULL)
+    return 0;
+  mmstr = mmname_str(J2G(J), MM_call);
+  kmt = lj_ir_ktab(J, mt);
+  mtref = lj_ir_ggfload(J, IRT_TAB,
+    GG_OFS(g.gcroot[GCROOT_BASEMT+itypemap(&ix->tabv)]));
+  emitir(IRTG(IR_EQ, IRT_TAB), mtref, kmt);
+  mix.tab = kmt;
+  settabV(J->L, &mix.tabv, mt);
+  mix.key = lj_ir_kstr(J, mmstr);
+  setstrV(J->L, &mix.keyv, mmstr);
+  mix.val = 0;
+  mix.idxchain = 0;
+  type = rec_idx_mt_shared_sample(J, &mix, &snap, &kfunc);
+  if (type != IRT_FUNC || !tvisfunc(&snap))
+    return 0;
+  mobj = rec_idx_mt_shared_load(J, &mix, IRT_FUNC);
+  lj_assertJ(tref_isfunc(kfunc), "missing rooted cdata __call function");
+  UNUSED(kfunc);
+  ix->mt = kmt;
+  ix->mtv = mt;
+  copyTV(J->L, &ix->mobjv, &snap);
+  ix->mobj = mobj;
+  return 1;
+}
+#endif
 
 #if LJ_HAS_X64_MT_JIT_HELPERS
 static int rec_idx_tab_array_has_hdr(const GCtab *t, const TValue *array)
@@ -2432,7 +2496,7 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
       return res;
     if (rec_idx_mt_shared_tabop(J, ix)) {
       TValue oldsnap;
-      IRType t = rec_idx_mt_shared_sample(J, ix, &oldsnap);
+      IRType t = rec_idx_mt_shared_sample(J, ix, &oldsnap, NULL);
       /*
       ** Sample through the same rooted protocol used by generated code. The
       ** recorder uses this copy only to choose the VLOAD guard type; it must
@@ -2449,7 +2513,7 @@ TRef lj_record_idx(jit_State *J, RecordIndex *ix)
       int keybarrier = tref_isgcv(ix->key) && !tref_isnil(ix->val);
       if (rec_idx_tab_unproven_alloc(J, ix->tab))
 	lj_trace_err_info(J, LJ_TRERR_NYIBC);
-      (void)rec_idx_mt_shared_sample(J, ix, &oldsnap);
+      (void)rec_idx_mt_shared_sample(J, ix, &oldsnap, NULL);
       /*
       ** Active-MT stores must not record raw HREF/AREF/NEWREF probes: a
       ** concurrent resize can retire that generation before generated code
