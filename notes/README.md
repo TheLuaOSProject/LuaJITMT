@@ -9,11 +9,12 @@ without looking like current claims.
 
 Development branch: `codex/aarch64-macos-port`.
 
-Last fully verified checkpoint: `2b2868f7` (2026-08-28). Its production source
-was introduced at `6d94a92d`; the later commits add independent compiler and
-runtime certificates plus the umbrella-gate update. It completes the exact
-strict/inclusive ascending and descending division family without opening
-adjacent division shapes.
+Last full functional-gate checkpoint: `950edf96` (2026-08-28). The exact
+integer-step widening was introduced at `fffaf32b`, its reject diagnostics were
+tightened at `a0b59cfe`, and independent compiler/runtime certificates plus the
+umbrella-gate update followed. A source-style cleanup at `16600373` removed one
+redundant ARM64-only condition and refreshed scope comments; the focused
+compiler and runtime contracts were rerun after that cleanup.
 
 ARM64 remains explicitly opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`. Native JIT
 work additionally requires `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`. These flags are
@@ -31,10 +32,12 @@ Implemented and exercised on Apple Silicon macOS:
   roots, fixed-half and dynamic-step numeric roots, literal-true `FUNCF`, and
   exact all-parameter `ADD_LT`, `ADD_LE`, `ADD_GT`, `ADD_GE`, `SUB_GT`,
   `SUB_GE`, `MUL_LT`, `MUL_LE`, `DIV_LT`, `DIV_LE`, `DIV_GT`, and `DIV_GE`
-  loop profiles; and
+  loop profiles, each with either a NUM step or one invariant INT step widened
+  once to NUM; and
 - callback-result lifetime across post-detach TG reclamation.
 
-The four division profiles are deliberately narrow:
+The all-parameter profiles are deliberately narrow. For example, the four
+division profiles are:
 
 ```lua
 while x < limit do
@@ -55,14 +58,21 @@ end
 ```
 
 They require the exact all-parameter bytecode and spill-free IR/register shape.
-The compiler proof exhausts 768 profile/arithmetic/guard combinations at each
-of the semantic and post-register-allocation gates and admits exactly twelve
-total profiles. The runtime proof checks noncommutative FDIV operands, both
-FCMP operand directions, exact ARM64/arm64e instruction words, strict and
-inclusive equality boundaries, type exits, NaN, infinities, signed zero,
-STOPREQ cleanup/reuse, and adjacent no-trace shapes. In particular, the proof
-distinguishes ascending inclusive `+Inf` limits from strict exit behavior and
-descending inclusive zero limits from strict underflow-to-zero behavior.
+For INT-step traces, the only accepted conversion is the invariant slot-4 INT
+step widened once by `CONV num.int` before the first recurrence and before the
+loop. The raw INT step must remain in an unspilled GPR, the converted step in an
+unspilled FPR, and the recurrence operands must use the converted value.
+
+The compiler proof exhausts 1,536 profile/arithmetic/guard/step combinations at
+each of the independent semantic and post-register-allocation gates and admits
+exactly 24: twelve profiles for each of the NUM-step and INT-step geometries.
+It rejects duplicate, relocated, unrelated, or extra conversions; raw-INT
+recurrences; snapshots, aliases, spills, renames, and reversed noncommutative
+operands. The runtime proof checks exact `SCVTF`, arithmetic, comparison, and
+branch instruction words on ARM64 and arm64e/BTI, strict and inclusive equality
+boundaries, live parameter substitution, type exits, NaN, infinities, signed
+zero, STOPREQ cleanup/reuse, and INT32 minimum, maximum, zero, `+1`, and `-1`
+step behavior.
 
 ## Minimal-divergence cleanup
 
@@ -73,24 +83,30 @@ DynASM lines to LuaJIT's existing indentation. It also corrected two cross-targe
 leaks: ARM64's exact five-slot side certificate and FORI/FORL tuple check no
 longer run on x86-64.
 
-Relative to `v2.1`, the cleanup initially reduced the `src/` diff from 56 files
-with 13,891 insertions and 1,815 deletions to 55 files with 13,820 insertions
-and 1,733 deletions. The completed division family now leaves it at 55 files
-with 13,871 insertions and 1,733 deletions. Large ARM64 admission and lifecycle
-blocks remain in common files; moving them into target-local modules is a later
-structural migration because the source-certificate scripts parse their current
-boundaries. Independent semantic and post-register-allocation gates were
-deliberately not deduplicated.
+Relative to local and remote `v2.1` at `a649f737`, the cleanup initially reduced
+the `src/` diff from 56 files with 13,891 insertions and 1,815 deletions to 55
+files with 13,820 insertions and 1,733 deletions. The current checkpoint is 55
+files with 14,055 insertions and 1,733 deletions (net 12,322). The latest
+INT-step capability did not change `lj_asm_arm64.h`, `lj_emit_arm64.h`, or
+`vm_arm64.dasc`; it reuses upstream's existing `asm_conv()`/`SCVTF` lowering.
 
-## Verification at `2b2868f7`
+Large ARM64 admission and lifecycle blocks remain in common files. Moving them
+into target-local modules is a later structural migration because current
+source-certificate scripts parse their exact boundaries. Independent semantic
+and post-register-allocation gates were deliberately not deduplicated: their
+separation prevents a common-mode acceptance bug.
 
-- `tools/ci/arm64_jit_fail_closed_gate.sh`: passed in full.
-- Native ARM64 vendored LuaJIT suite: `509 passed`.
-- Focused all-parameter numeric contract: direct plus two randomized runs on
-  ordinary ARM64 and arm64e/BTI; all six executions passed, exercising twelve
-  profiles per process (72 profile executions total).
-- Disposable thin x86_64 build of the identical production source at
-  `6d94a92d`: platform smoke passed under Rosetta with
+## Verification
+
+- `tools/ci/arm64_jit_fail_closed_gate.sh`: passed in full at `950edf96`.
+- Native ARM64 vendored LuaJIT suite at that checkpoint: `509 passed`.
+- The compiler certificate passed again after `16600373`: 1,536 candidates and
+  exactly 24 admissions at each gate.
+- The runtime certificate passed again after `16600373`: direct plus two
+  randomized runs on ordinary ARM64 and arm64e/BTI, six processes total, 24
+  profile/step modes per process, and 144 profile-mode executions.
+- Disposable thin x86_64 build at the exact runtime-proof checkpoint
+  `1bba77bc`: platform smoke passed under Rosetta with
   `jit.os=OSX`, `jit.arch=x64`; its vendored suite also reported `509 passed`.
 - The x86_64 canary published real first-level side traces and a live `JFORL`
   root, confirming that the ARM64-only widening did not alter x64 admission.
@@ -98,9 +114,11 @@ deliberately not deduplicated.
   thin ARM64, and the archive's `lj_asm.o` was byte-identical to the standalone
   object.
 
-The descending runtime certificate confirms exact limit-first FCMP emission,
-strict `HS`/`LO` and inclusive `HI`/`LS` branches, all six equality outcomes,
-and the terminating/nonterminating IEEE cases for both new profiles.
+The INT-step machine-code certificate confirms exactly one hoisted `SCVTF`,
+before both recurrences and the loop, while retaining the established
+limit-first FCMP direction and strict/inclusive branch polarity. The ordinary
+ARM64 traces are 140 bytes with an 80-byte loop offset; the arm64e/BTI traces
+are 144 bytes with an 84-byte loop offset.
 
 The recurring unused `ccall_rawchild_wait` warning remains pre-existing. The
 diagnostic GDB-JIT and x86_64 builds also emit the known unused `topofs`
@@ -111,6 +129,8 @@ expected non-GC64 rejection before the configured GC64 build succeeds.
 
 - General ARM64 IR admission, arbitrary Lua programs, and unrestricted spills
   or register layouts.
+- Recording-time INT accumulator or INT limit conversion. Those shapes remain
+  no-trace; only the invariant INT step has an exact widening certificate.
 - Reversed or fixed division operands, extra division recurrences, dynamic-step
   numeric `FORL`, and general root geometries.
 - General side traces, side-of-side traces, and stitches. Only explicitly
