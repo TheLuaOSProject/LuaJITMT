@@ -339,6 +339,13 @@
 #define GL_OFS(field)	((int)offsetof(global_State, field))
 #define L_OFS(field)	((int)offsetof(lua_State, field))
 #define TG_OFS_DISPATCH	((int)offsetof(TGState, dispatch))
+#define TAB_COLO_SLOTS		((int)sizeof(GCtab))
+#define TABARRAY_ASIZE_OFS	(-(int)sizeof(TabArrayHdr))
+#define TABARRAY_ACAP_OFS	\
+  (TABARRAY_ASIZE_OFS + (int)offsetof(TabArrayHdr, acap))
+#define TABNODE_HMASK_OFS	(-(int)sizeof(TabNodeHdr))
+#define TABNODE_FLAGS_OFS	\
+  (TABNODE_HMASK_OFS + (int)offsetof(TabNodeHdr, flags))
 
 #if LJ_HASJIT
 LJ_STATIC_ASSERT(GG_G2J_HI >= 0 && GG_G2J_HI <= 0xfff000 &&
@@ -374,6 +381,28 @@ LJ_STATIC_ASSERT(offsetof(SBuf, L) <= 32760 &&
 		 (offsetof(SBuf, L) & 7) == 0);
 LJ_STATIC_ASSERT(GL_OFS(vmstate) >= 0 && GL_OFS(vmstate) <= 4095);
 LJ_STATIC_ASSERT(GL_OFS(hookmask) >= 0 && GL_OFS(hookmask) <= 4095);
+LJ_STATIC_ASSERT(GL_OFS(mt_active) >= 0 && GL_OFS(mt_active) <= 0xffffff &&
+		 (GL_OFS(mt_active) & 3) == 0);
+LJ_STATIC_ASSERT(GL_OFS(mt_entering) >= 0 && GL_OFS(mt_entering) <= 0xffffff &&
+		 (GL_OFS(mt_entering) & 3) == 0);
+LJ_STATIC_ASSERT(offsetof(GCtab, asize) <= 4095 &&
+		 (offsetof(GCtab, asize) & 3) == 0);
+LJ_STATIC_ASSERT(offsetof(GCtab, array) <= 4095 &&
+		 (offsetof(GCtab, array) & 7) == 0);
+LJ_STATIC_ASSERT(offsetof(GCtab, node) <= 4095 &&
+		 (offsetof(GCtab, node) & 7) == 0);
+LJ_STATIC_ASSERT(TAB_COLO_SLOTS >= 0 && TAB_COLO_SLOTS <= 4095 &&
+		 (TAB_COLO_SLOTS & 7) == 0);
+LJ_STATIC_ASSERT(offsetof(Node, key) <= 4095 &&
+		 (offsetof(Node, key) & 7) == 0);
+LJ_STATIC_ASSERT(-TABARRAY_ASIZE_OFS <= 4095 &&
+		 (-TABARRAY_ASIZE_OFS & 3) == 0);
+LJ_STATIC_ASSERT(-TABARRAY_ACAP_OFS <= 4095 &&
+		 (-TABARRAY_ACAP_OFS & 3) == 0);
+LJ_STATIC_ASSERT(-TABNODE_HMASK_OFS <= 4095 &&
+		 (-TABNODE_HMASK_OFS & 3) == 0);
+LJ_STATIC_ASSERT(-TABNODE_FLAGS_OFS <= 4095 &&
+		 (-TABNODE_FLAGS_OFS & 3) == 0);
 LJ_STATIC_ASSERT(FRAME_TYPEP == 7);
 
 |// DISPATCH is relative to TGState.dispatch. Published owner identity and VM
@@ -421,6 +450,39 @@ LJ_STATIC_ASSERT(FRAME_TYPEP == 7);
 |  add ATMP, GL, #GL_OFS(hookmask)
 |  ldarb tmp, [ATMP]
 |  orr dst, dst, tmp
+|.endmacro
+|.macro arm64_vm_gl_u32_acq, dst, g, field
+|  add ATMP, g, #(GL_OFS(field)&0xfff000)
+|  add ATMP, ATMP, #(GL_OFS(field)&0xfff)
+|  ldar dst, [ATMP]
+|.endmacro
+|.macro arm64_vm_tab_asize_acq, dst, tab
+|  add ATMP, tab, #offsetof(GCtab, asize)
+|  ldar dst, [ATMP]
+|.endmacro
+|.macro arm64_vm_tab_array_acq, dst, tab
+|  add ATMP, tab, #offsetof(GCtab, array)
+|  ldar dst, [ATMP]
+|.endmacro
+|.macro arm64_vm_tab_node_acq, dst, tab
+|  add ATMP, tab, #offsetof(GCtab, node)
+|  ldar dst, [ATMP]
+|.endmacro
+|.macro arm64_vm_tab_array_asize_acq, dst, array
+|  sub ATMP, array, #(-TABARRAY_ASIZE_OFS)
+|  ldar dst, [ATMP]
+|.endmacro
+|.macro arm64_vm_tab_array_flags_acq, dst, array
+|  sub ATMP, array, #(-TABARRAY_ACAP_OFS)
+|  ldar dst, [ATMP]
+|.endmacro
+|.macro arm64_vm_tab_node_hmask_acq, dst, node
+|  sub ATMP, node, #(-TABNODE_HMASK_OFS)
+|  ldar dst, [ATMP]
+|.endmacro
+|.macro arm64_vm_tab_node_flags_acq, dst, node
+|  sub ATMP, node, #(-TABNODE_FLAGS_OFS)
+|  ldar dst, [ATMP]
 |.endmacro
 |// Pack the physical owner's lexical root-anchor checkpoint above a completed
 |// 32 bit fast-protected-call delta/type word. The split address construction
@@ -2617,11 +2679,14 @@ static void build_subroutines(BuildCtx *ctx)
   |.define NEXT_TAB,		TAB:CARG1
   |.define NEXT_RES,		CARG1
   |.define NEXT_IDX,		CARG2w
-  |.define NEXT_LIM,		CARG3w
+  |.define NEXT_ASIZE,		CARG4w
   |.define NEXT_TMP0,		TMP0
   |.define NEXT_TMP0w,		TMP0w
   |.define NEXT_TMP1,		TMP1
   |.define NEXT_TMP1w,		TMP1w
+  |.define NEXT_TMP2,		TMP2
+  |.define NEXT_TMP2w,		TMP2w
+  |.define NEXT_TMP3,		TMP3
   |.define NEXT_RES_PTR,	sp
   |.define NEXT_RES_VAL,	[sp]
   |.define NEXT_RES_KEY,	[sp, #8]
@@ -2631,12 +2696,33 @@ static void build_subroutines(BuildCtx *ctx)
   |->vm_next:
   |.if JIT
   |  bti_call
-  |  ldr NEXT_LIM, NEXT_TAB->asize
-  |   ldr NEXT_TMP1, NEXT_TAB->array
+  |  // Shared active-MT traversal must use the generation-following C path;
+  |  // the raw VM fast path below cannot validate racy GC tag snapshots.
+  |  load_G NEXT_TMP0
+  |  arm64_vm_gl_u32_acq NEXT_TMP1w, NEXT_TMP0, mt_active
+  |  cbnz NEXT_TMP1w, >8
+  |  arm64_vm_gl_u32_acq NEXT_TMP1w, NEXT_TMP0, mt_entering
+  |  cbnz NEXT_TMP1w, >8
+  |  arm64_vm_tab_asize_acq NEXT_ASIZE, CARG1
+  |  arm64_vm_tab_array_acq NEXT_TMP1, CARG1
+  |  cbz NEXT_TMP1, >1
+  |  add NEXT_TMP0, NEXT_TAB, #TAB_COLO_SLOTS
+  |  cmp NEXT_TMP1, NEXT_TMP0
+  |  beq >1
+  |  arm64_vm_tab_array_asize_acq NEXT_ASIZE, NEXT_TMP1
+  |  arm64_vm_tab_array_flags_acq NEXT_TMP0w, NEXT_TMP1
+  |  tst NEXT_TMP0w, #TABARRAY_FLAG_RETIRING
+  |  bne >8
   |1:  // Traverse array part.
-  |  subs NEXT_TMP0w, NEXT_IDX, NEXT_LIM
+  |  cmp NEXT_IDX, NEXT_ASIZE
   |  bhs >5				// Index points after array part?
-  |  ldr NEXT_TMP0, [NEXT_TMP1, NEXT_IDX, uxtw #3]
+  |  add ATMP, NEXT_TMP1, NEXT_IDX, uxtw #3
+  |  ldar NEXT_TMP0, [ATMP]
+  |  movz NEXT_TMP2, #LJ_TFORWARD_BITS&0xffff
+  |  movk NEXT_TMP2, #(LJ_TFORWARD_BITS>>32)&0xffff, lsl #32
+  |  movk NEXT_TMP2, #(LJ_TFORWARD_BITS>>48)&0xffff, lsl #48
+  |  cmp NEXT_TMP0, NEXT_TMP2
+  |  beq >8
   |  cmn NEXT_TMP0, #-LJ_TNIL
   |   cinc NEXT_IDX, NEXT_IDX, eq
   |  beq <1				// Skip holes in array part.
@@ -2648,24 +2734,62 @@ static void build_subroutines(BuildCtx *ctx)
   |4:
   |  ret
   |
+  |8:  // Resolve an active or forwarded snapshot in C.
+  |  sp_auth
+  |  stp fp, lr, [sp, #-16]!
+  |  mov fp, sp
+  |  add CARG3, sp, #16
+  |  bl extern lj_tab_vmnext_forward	// (GCtab *t, uint32_t idx, TValue *out)
+  |  mov CARG2w, CRET1w
+  |  add CARG1, sp, #16
+  |  ldp fp, lr, [sp], #16
+  |  ret_auth
+  |
   |5:  // Traverse hash part.
-  |  ldr NEXT_TMP1w, NEXT_TAB->hmask
-  |   ldr NODE:NEXT_RES, NEXT_TAB->node
-  |   add NEXT_TMP0w, NEXT_TMP0w, NEXT_TMP0w, lsl #1
-  |  add NEXT_LIM, NEXT_LIM, NEXT_TMP1w
-  |   add NODE:NEXT_RES, NODE:NEXT_RES, NEXT_TMP0w, uxtw #3
+  |  sub NEXT_IDX, NEXT_IDX, NEXT_ASIZE
   |6:
-  |  cmp NEXT_IDX, NEXT_LIM
+  |  arm64_vm_tab_node_acq NEXT_TMP1, CARG1
+  |  arm64_vm_tab_node_flags_acq NEXT_TMP0w, NEXT_TMP1
+  |  tst NEXT_TMP0w, #TABNODE_FLAG_RETIRING
+  |  bne >3
+  |  arm64_vm_tab_node_hmask_acq NEXT_TMP2w, NEXT_TMP1
+  |  cmp NEXT_IDX, NEXT_TMP2w
   |  bhi >9
-  |  ldr NEXT_TMP0, NODE:NEXT_RES->val
-  |  cmn NEXT_TMP0, #-LJ_TNIL
-  |   add NEXT_IDX, NEXT_IDX, #1
-  |  bne <4
+  |  add NEXT_TMP0w, NEXT_IDX, NEXT_IDX, lsl #1
+  |  add NEXT_TMP0, NEXT_TMP1, NEXT_TMP0w, uxtw #3
+  |  ldar NEXT_TMP2, [NEXT_TMP0]
+  |  movz NEXT_TMP3, #LJ_TFORWARD_BITS&0xffff
+  |  movk NEXT_TMP3, #(LJ_TFORWARD_BITS>>32)&0xffff, lsl #32
+  |  movk NEXT_TMP3, #(LJ_TFORWARD_BITS>>48)&0xffff, lsl #48
+  |  cmp NEXT_TMP2, NEXT_TMP3
+  |  beq >3
+  |  cmn NEXT_TMP2, #-LJ_TNIL
+  |  beq >7
+  |  add ATMP, NEXT_TMP0, #offsetof(Node, key)
+  |  ldar NEXT_TMP3, [ATMP]
+  |  cmn NEXT_TMP3, #-LJ_TNIL
+  |  beq >7
+  |  movz NEXT_TMP0, #LJ_TKEYLOCK_BITS&0xffff
+  |  movk NEXT_TMP0, #(LJ_TKEYLOCK_BITS>>32)&0xffff, lsl #32
+  |  movk NEXT_TMP0, #(LJ_TKEYLOCK_BITS>>48)&0xffff, lsl #48
+  |  cmp NEXT_TMP3, NEXT_TMP0
+  |  beq >3
+  |  stp NEXT_TMP2, NEXT_TMP3, [sp]
+  |  add NEXT_IDX, NEXT_IDX, NEXT_ASIZE
+  |  add NEXT_IDX, NEXT_IDX, #1
+  |  mov NEXT_RES, NEXT_RES_PTR
+  |  ret
   |  // Skip holes in hash part.
-  |  add NODE:NEXT_RES, NODE:NEXT_RES, #sizeof(Node)
+  |7:
+  |  add NEXT_IDX, NEXT_IDX, #1
   |  b <6
   |
+  |3:  // Resolve a forwarded hash slot in C.
+  |  add NEXT_IDX, NEXT_IDX, NEXT_ASIZE
+  |  b <8
+  |
   |9:  // End of iteration. Set the key to nil (not the value).
+  |  add NEXT_IDX, NEXT_IDX, NEXT_ASIZE
   |  movn NEXT_TMP0, #0
   |  str NEXT_TMP0, NEXT_RES_KEY
   |  mov NEXT_RES, NEXT_RES_PTR
