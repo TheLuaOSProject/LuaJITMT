@@ -41,6 +41,9 @@ review boundary for both x86-64 and Apple ARM64 work.
   lifecycle, and adjacent negative shapes are independently certified.
 - Do not centralize independent semantic and post-RA certificates merely to
   reduce line count; that would create a common-mode acceptance bug.
+- Physical co-location in a target-local header is fine, but semantic and
+  post-RA admission must remain separate passes with independent negative
+  fixtures and must not share one acceptance result.
 
 ## Native calls, callbacks, and signals
 
@@ -48,6 +51,9 @@ review boundary for both x86-64 and Apple ARM64 work.
   nested callback, auto-attach/detach, error, unwind, and post-call cleanup.
 - Darwin AAPCS64 register classes, indirect aggregate results, variadics,
   errno, PAC, BTI, and unwind metadata require positive target evidence.
+- Restore `errno` or `LastError` at the final target landing after context
+  installation; a personality return alone cannot protect it from unwinder
+  clobber.
 - Signal handlers must not allocate, enter the dynamic loader, perform unsafe
   TLV lookup, wait on the scheduler, or touch state without an async-signal-safe
   publication contract.

@@ -9,25 +9,15 @@ current claims.
 
 Development branch: `codex/aarch64-macos-port`.
 
-Last complete JIT fail-closed-gate checkpoint: `e1eb3de1` (2026-08-29).
-That structural checkpoint moved the ARM64 admission policy out of the shared
-assembler without changing it. The native and x86_64 vendored suites last
+Last complete JIT fail-closed-gate checkpoint: `19e94934` (2026-08-29).
+It admits one exact variable-stop/variable-step integer `FORL` grammar without
+changing the recorder or VM. The immediately preceding cleanup checkpoints
+are `e1eb3de1`, which moved the unchanged ARM64 semantic and post-RA policy out
+of the shared assembler, and `f06e79d5`, which completed direct C and
+fast-function unwind-landing proof. The native and x86_64 vendored suites last
 passed with 509 tests each at `4d1b6126`; the temporary x86_64 build reported
 `jit.os == "OSX"`, `jit.arch == "x64"`, enabled JIT, and a real loop trace
 before it was removed.
-
-The current cleanup and proof sequence is:
-
-- `c8cd7858` preserves `errno` across ARM64 and arm64e external unwind;
-- `218cafe2` admits one exact INT-accumulator widening grammar across the 12
-  existing all-parameter numeric profiles;
-- `3ad39871` completes the compiler certificate and adds the native runtime
-  certificate;
-- `28892903` binds the new proof into the umbrella gate; and
-- `4d1b6126` makes JFUNCF disassembly checks robust to the same-address
-  `FUNCV`/`IFUNCV` symbol aliases emitted by Apple's tools; and
-- `e1eb3de1` moves the unchanged 3,244-line ARM64 admission and post-RA
-  certificate into `src/lj_asm_arm64_admit.h`.
 
 ARM64 remains explicitly opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`. Native JIT
 work additionally requires `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`. These flags are
@@ -42,18 +32,28 @@ Implemented and exercised on Apple Silicon macOS:
 - ARM64 and arm64e/BTI trace publication, authenticated exits, retirement,
   flush/reuse, GDB JIT preparation, and bounded root/first-side entry paths;
 - lockless ARM64 and arm64e OS-error restoration plumbing for C,
-  fast-function, and JIT side-exit landings; direct runtime proof currently
-  covers the C landing on both targets and a synthetic arm64e JIT landing;
-- constant-step integer `FORL`, bounded integer and mixed numeric `LOOP`
-  roots, fixed-half and dynamic-step numeric roots, literal-true `FUNCF`, and
-  the exact `ADD_LT`, `ADD_LE`, `ADD_GT`, `ADD_GE`, `SUB_GT`, `SUB_GE`,
-  `MUL_LT`, `MUL_LE`, `DIV_LT`, `DIV_LE`, `DIV_GT`, and `DIV_GE`
-  all-parameter loop profiles; and
+  fast-function, and JIT side-exit landings; injected-clobber runtime proof
+  covers the final C and fast-function landings on ARM64, arm64e/BTI, and
+  x86_64/Rosetta, while the ARM64e JIT landing remains synthetic;
+- constant-step integer `FORL` plus one exact spill-free
+  variable-stop/variable-step integer shape in both directions, bounded
+  integer and mixed numeric `LOOP` roots, fixed-half and dynamic-step numeric
+  roots, literal-true `FUNCF`, and the exact `ADD_LT`, `ADD_LE`, `ADD_GT`,
+  `ADD_GE`, `SUB_GT`, `SUB_GE`, `MUL_LT`, `MUL_LE`, `DIV_LT`, `DIV_LE`,
+  `DIV_GT`, and `DIV_GE` all-parameter loop profiles; and
 - callback-result lifetime across post-detach TG reclamation.
 
 ## Exact numeric JIT boundary
 
-The 12 all-parameter profiles accept three accumulator/step layouts:
+The separate variable-step integer `FORL` shape requires a variable STOP and
+STEP, one hoisted direction guard, one guarded `ADDOV(STEP, STOP)` kept live by
+the sole scoped `IR_USE`, the existing two unchecked induction adds, exact
+snapshots, and a spill-free post-RA liveness certificate. Runtime proof covers
+positive and negative roots, same-sign STEP substitution, opposite-direction
+and stop-plus-step-overflow exits, flush, and re-record. Constant-STOP dynamic
+STEP and every NUM/FP dynamic-step `FORL` remain closed.
+
+The 12 all-parameter `BC_LOOP` profiles accept three accumulator/step layouts:
 
 - NUM accumulator and NUM step;
 - NUM accumulator with one invariant INT step widened once before the first
@@ -66,8 +66,8 @@ accumulator and NUM step with an invariant INT limit. The limit is widened
 after the first recurrence and before the loop comparison. This yields 36
 profile/layout modes plus the one INT-limit mode.
 
-Every admitted trace has exact IR and snapshots plus spill-free register
-classes and liveness relations; safe register remaps are allowed. For INT-step
+Every trace in this `BC_LOOP` family has exact IR and snapshots plus spill-free
+register classes and liveness relations; safe register remaps are allowed. For INT-step
 traces, the raw slot-4 value stays in an unspilled GPR and its converted value
 stays in an unspilled FPR. The natural allocation exercised by the
 INT-accumulator runtime certificate keeps raw slot 2 in `x1`, the widened
@@ -75,7 +75,7 @@ accumulator in `d2`, and the post-`XPOLL` checked conversion in `x28`, followed
 by `FCVTZS`, `SCVTF`, `FCMP`, and `BNE`. Fractional or out-of-INT32 values
 leave through the shared `XPOLL` snapshot before the body recurrence.
 
-The compiler certificate exhausts 3,072
+The all-parameter `BC_LOOP` compiler certificate exhausts 3,072
 profile/arithmetic/guard/argument-kind combinations at each independent
 semantic and post-register-allocation gate. It admits exactly 37: twelve
 NUM-step profiles, twelve INT-step profiles, twelve INT-accumulator profiles,
@@ -84,11 +84,11 @@ conversions; raw-INT recurrences or comparisons; snapshot mutations,
 prohibited live-range aliases, spills, invalid renames, and reversed
 noncommutative operands remain rejected.
 
-The runtime certificate runs direct plus two randomized executions on ordinary
-ARM64 and arm64e/BTI: six processes, 37 modes per process, and 222
-profile-mode executions. It checks exact instruction words and offsets, live
-parameter substitution, strict and inclusive equality, type exits, NaN,
-infinities, signed zero, checked-conversion failures, STOPREQ cleanup/reuse,
+The all-parameter `BC_LOOP` runtime certificate runs direct plus two randomized
+executions on ordinary ARM64 and arm64e/BTI: six processes, 37 modes per
+process, and 222 profile-mode executions. It checks exact instruction words
+and offsets, live parameter substitution, strict and inclusive equality, type
+exits, NaN, infinities, signed zero, checked-conversion failures, STOPREQ cleanup/reuse,
 flush/re-record, and the absence of side traces.
 
 The INT-step and INT-limit shapes contain one hoisted `SCVTF`. The
@@ -107,18 +107,14 @@ indentation, restored LuaJIT-style switch layout, and removed redundant or
 stale local names. ARM64's five-slot side certificate and FORI/FORL tuple
 check no longer leak into x86_64 behavior.
 
-Relative to local and remote `v2.1` at `a649f737`, the first cleanup reduced
-the `src/` diff from 56 files with 13,891 insertions and 1,815 deletions to 55
-files with 13,820 insertions and 1,733 deletions. The verified checkpoint is 58
-files with 14,494 insertions and 1,737 deletions (net 12,757). The exact INT
-widening tranches do not change `lj_asm_arm64.h`, `lj_emit_arm64.h`, or
-`vm_arm64.dasc`; they reuse upstream's existing `asm_conv()` lowering.
-
-The target-local extraction reduces the shared `src/lj_asm.c` divergence from
-3,806 insertions and 5 deletions to 563 insertions and 5 deletions. Its moved
-body was byte-for-byte compared with the pre-extraction source, and all source
-certificates now inspect `src/lj_asm_arm64_admit.h` while retaining their
-independent semantic and post-register-allocation boundaries.
+Relative to local and remote `v2.1` at `a649f737`, the target-local extraction
+keeps shared `src/lj_asm.c` divergence at 563 insertions and 5 deletions instead
+of 3,806 and 5. Its moved body was byte-for-byte compared with the
+pre-extraction source, and source certificates inspect
+`src/lj_asm_arm64_admit.h` while retaining independent semantic and
+post-register-allocation passes. The dynamic integer `FORL` tranche also stays
+in that target-local header and changes neither the recorder nor
+`vm_arm64.dasc`.
 
 The unwind fix keeps the historical exception prefix and x64 path unchanged.
 Its ARM64 tail uses one exception-owned `x28` carrier and a target-local VM
@@ -133,10 +129,11 @@ semantic and post-register-allocation gates merely to reduce the diff.
 
 ## Verification
 
-- `tools/ci/arm64_jit_fail_closed_gate.sh`: passed in full at `e1eb3de1`,
-  including the 3,072-case compiler proof, 222 runtime profile executions,
-  ARM64/arm64e publication, entry, exit, retirement, flush/reuse, GDB-JIT,
-  callback, first-side, and safepoint contracts.
+- `tools/ci/arm64_jit_fail_closed_gate.sh`: passed in full at `19e94934`,
+  including the exact variable-step integer `FORL`, its overflow and direction
+  exits, the 3,072-case `BC_LOOP` compiler proof, 222 runtime profile
+  executions, ARM64/arm64e publication, entry, exit, retirement, flush/reuse,
+  GDB-JIT, callback, first-side, and safepoint contracts.
 - Native ARM64 experimental build vendored suite: `509 passed` at
   `4d1b6126`.
 - Disposable thin x86_64 build: platform smoke, real Rosetta loop trace, and
@@ -144,10 +141,10 @@ semantic and post-register-allocation gates merely to reduce the diff.
 - `tools/ci/arm64_bootstrap_gate.sh`: passed at `c8cd7858`, including 387
   vendored tests, TG/root/safepoint/protected-call contracts, threading and
   coroutine tests, and 320 FFI callback rounds across four threads.
-- `tools/ci/arm64_oserr_unwind_contract.sh`: passed at `c8cd7858` for ordinary
-  ARM64, arm64e/BTI, and the x86_64/Rosetta oracle. The injected unwinder
-  clobber changed the unfixed ARM64 result from `EDOM` (33) to `EILSEQ` (92);
-  every fixed landing observed 33.
+- `tools/ci/arm64_oserr_unwind_contract.sh`: passed at `f06e79d5` for ordinary
+  ARM64, arm64e/BTI, and the x86_64/Rosetta oracle. Both direct C and repeated
+  fast-function final landings preserved `EDOM` (33) across an injected
+  unwinder clobber to `EILSEQ` (92).
 - `tools/ci/arm64e_jit_unwind_contract.sh`: passed a registered synthetic JIT
   frame through the production personality and authenticated synthetic
   carrier/landing while preserving `errno`; it does not prove real side-exit
@@ -171,15 +168,15 @@ the expected non-GC64 rejection before the configured GC64 target succeeds.
 - General recording-time INT accumulator and INT-limit conversion. Only the
   exact 12-profile INT-accumulator grammar and single `ADD_LT` INT-limit
   grammar are open.
-- Reversed or fixed division operands, extra division recurrences,
-  dynamic-step numeric `FORL`, and general root geometries.
+- Reversed or fixed division operands, extra division recurrences, NUM/FP
+  dynamic-step `FORL`, every integer dynamic-step geometry except the exact
+  variable-STOP/variable-STEP shape, and general root geometries.
 - General side traces, side-of-side traces, and stitches. Only explicitly
   certified first-side shapes are open.
 - Uncertified conversions, calls, allocations, heap effects, table/upvalue JIT
   fast paths, and traced generic FFI calls.
-- Direct OS-error-clobber proof for the fast-function landing and production
-  JIT side-exit resolution on ARM64/arm64e. Current JIT unwind evidence uses a
-  synthetic arm64e carrier and landing.
+- Production JIT side-exit unwind resolution on ARM64/arm64e. Current JIT
+  unwind evidence uses a synthetic arm64e carrier and landing.
 - Full parity with every x86_64 lockless VM, JIT, FFI, profiler, unwind, and
   stress path.
 - The complete sanitizer, weak-memory, sustained-concurrency, and performance
@@ -187,6 +184,11 @@ the expected non-GC64 rejection before the configured GC64 target succeeds.
 
 Do not describe this branch as a completed ARM64 port yet. A passing stock
 suite proves an important compatibility boundary, not general JIT coverage.
+
+The next high-value production tranche is exact scalar Darwin ARM64 generic
+FFI `CALLXS`/`XSAVE` lifecycle support. Before admitting table/helper traces,
+ARM64 `lj_vm_next` also needs the forwarding-safe traversal already used by
+the x86_64 path.
 
 ## Primary checks
 
