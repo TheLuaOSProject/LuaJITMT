@@ -10,6 +10,7 @@ current claims.
 Development branch: `codex/aarch64-macos-port`.
 
 Last complete JIT fail-closed-gate checkpoint: `a7056fe5` (2026-08-29).
+Latest focused minimal-divergence checkpoint: `4dbca2fc` (2026-08-29).
 The admitted boundary remains the one exact Darwin ARM64 `CALLXS` root opened
 at `5b6d9e0d`: a cached direct CDECL function
 cdata with signature `int32_t(int32_t)` in the certified 16-bytecode integer
@@ -153,6 +154,12 @@ ARM64 recorder predicate, and restores the stock non-ARM trace-function
 selection. These are preprocessor and target-boundary reductions; they do not
 add another ABI, IR shape, signature, or runtime policy.
 
+Checkpoints `3fcbff0e` and `4dbca2fc` moved all twelve root-entry and recorder
+admission stage/request constants behind `LJ_TRACE_TEST_HELPERS`. Ordinary
+builds now discard the corresponding no-op macro's test-stage argument instead
+of exporting test-only names through `lj_trace.h`; runtime control flow is
+unchanged.
+
 Large ARM64 lifecycle blocks still remain in common files, particularly
 `src/lj_trace.c`. Move those only as separate structural changes with exact
 source-boundary and runtime proof; do not combine or weaken the independent
@@ -198,6 +205,12 @@ semantic and post-register-allocation gates merely to reduce the diff.
   `a7056fe5`.
 - `tools/ci/arm64_jit_first_side_production_contract.sh`: passed at
   `a7056fe5` after the capability-boundary cleanup.
+- `tools/ci/arm64_jit_root_entry_contract.sh`: passed on ordinary ARM64 and
+  arm64e/BTI at `4dbca2fc`. Its source-order probe retains the owner-aware
+  admission signature; the normal no-helper ARM64 build also passed and was
+  restored with `jit.status() == false`.
+- `tools/ci/jit_recorder_safepoint_contract.sh`: passed at `4dbca2fc` after
+  the recorder test-stage names were removed from the normal header surface.
 - Native ARM64 experimental build vendored suite: `509 passed` at
   `4d1b6126`.
 - Disposable thin x86_64 build: platform smoke, real Rosetta loop trace, and
@@ -215,11 +228,9 @@ semantic and post-register-allocation gates merely to reduce the diff.
   resolution.
 - A separate `LUAJIT_NO_UNWIND` ARM64 build passed and contained no
   `lj_vm_unwind_os_eh` symbol.
-- `tools/ci/arm64_jit_root_entry_contract.sh`,
-  `arm64_jit_funcf_record_contract.sh`, and
+- `tools/ci/arm64_jit_funcf_record_contract.sh` and
   `arm64e_jit_trace_pauth_contract.sh` all passed after the alias-boundary
-  cleanup. The root-entry source-order probe was updated for the owner-aware
-  admission signature and now runs without empty-counter arithmetic warnings.
+  cleanup.
 
 The recurring unused `ccall_rawchild_wait` warning remains pre-existing.
 Diagnostic GDB-JIT and x86_64 builds also emit the known unused `topofs`
