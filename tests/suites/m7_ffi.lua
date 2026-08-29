@@ -142,7 +142,8 @@ end
 return function(add)
   add({
     name = "m7_ffi_callxs_arm64_scalar",
-    description = "experimental Darwin ARM64 int/double CALLXS lifecycle",
+    description =
+      "experimental Darwin ARM64 int/double/boxed-pointer CALLXS lifecycle",
     run = function(t)
       if not native_darwin_arm64(t) then
         print("m7_ffi_callxs_arm64_scalar SKIP: requires native Darwin ARM64")
@@ -166,10 +167,20 @@ return function(add)
       local callxs_double_lifecycle_so = build_shared_library(t,
         t:tmp("lj_t-arm64-jit-callxs-double-lifecycle.so"),
         "t-arm64-jit-callxs-double-lifecycle-lib.c")
+      local callxs_pointer_lifecycle_so = build_shared_library(t,
+        t:tmp("lj_t-arm64-jit-callxs-pointer-lifecycle.so"),
+        "t-arm64-jit-callxs-pointer-lifecycle-lib.c")
       with_arm64_bootstrap_restore(t, function()
         clean_build(t, { quiet = true, xcflags = flags })
         build_and_run_c(t, t:tmp("lj_t-arm64-jit-callxs-admission"),
                         "t-arm64-jit-callxs-admission.c", {
+          build = false,
+          cflags = flags,
+          timeout = "30s"
+        })
+        build_and_run_c(t,
+                        t:tmp("lj_t-arm64-jit-callxs-pointer-admission"),
+                        "t-arm64-jit-callxs-pointer-admission.c", {
           build = false,
           cflags = flags,
           timeout = "30s"
@@ -205,8 +216,20 @@ return function(add)
           },
           timeout = "30s"
         })
+        build_and_run_c(t,
+                        t:tmp("lj_t-arm64-jit-callxs-pointer-lifecycle"),
+                        "t-arm64-jit-callxs-pointer-lifecycle.c", {
+          build = false,
+          cflags = flags,
+          env = {
+            LJ_M7_FFI_CALLXS_POINTER_LIFECYCLE_SO =
+              callxs_pointer_lifecycle_so
+          },
+          timeout = "30s"
+        })
       end)
-      print("M7 experimental Darwin ARM64 int/double CALLXS lifecycle passed")
+      print("M7 experimental Darwin ARM64 int/double/boxed-pointer " ..
+            "CALLXS lifecycle passed")
     end
   })
 
