@@ -161,6 +161,25 @@ enum {
   AI_R_POSTRA_END
 };
 
+/* Exact shifted recorder order when the invariant limit is an INT parameter
+** widened once after the first NUM recurrence and before either guard. */
+enum {
+  AIL_R_X = REF_FIRST,
+  AIL_R_STEP,
+  AIL_R_X_PRE,
+  AIL_R_LIMIT_INT,
+  AIL_R_LIMIT_NUM,
+  AIL_R_PRE_GUARD,
+  AIL_R_LOOP,
+  AIL_R_XPOLL,
+  AIL_R_X_BODY,
+  AIL_R_BODY_GUARD,
+  AIL_R_X_PHI,
+  AIL_R_SEMANTIC_END,
+  AIL_R_NOP = AIL_R_SEMANTIC_END,
+  AIL_R_POSTRA_END
+};
+
 enum {
   NUMACC_FIXTURE_ADD_LT = 1u,
   NUMACC_FIXTURE_ADD_LE = 2u,
@@ -177,8 +196,9 @@ enum {
 };
 
 enum {
-  NUMACC_FIXTURE_STEP_NUM = 1u,
-  NUMACC_FIXTURE_STEP_INT_TO_NUM = 2u
+  NUMACC_FIXTURE_ARGS_NUM = 1u,
+  NUMACC_FIXTURE_ARGS_INT_STEP = 2u,
+  NUMACC_FIXTURE_ARGS_INT_LIMIT = 3u
 };
 
 typedef struct NumaccFixtureProfile {
@@ -925,6 +945,92 @@ static void make_numacc_intstep_trace(jit_State *J)
   J->startpc = numacc_fixture_loop_pc;
 }
 
+static void make_numacc_intlimit_trace(jit_State *J)
+{
+  static const IRRef snaprefs[5] = {
+    AIL_R_X, AIL_R_LIMIT_INT, AIL_R_PRE_GUARD, AIL_R_LOOP,
+    AIL_R_BODY_GUARD
+  };
+  static const uint16_t mapofs[5] = { 0, 2, 6, 9, 12 };
+  static const uint8_t nent[5] = { 0, 2, 1, 1, 1 };
+  static const uint8_t nslots[5] = { 5, 6, 5, 5, 5 };
+  static const MSize pcpos[5] = { 6, 2, 11, 6, 11 };
+  SnapNo snapno;
+  const NumaccFixtureProfile *profile;
+
+  assert(numacc_fixture_pt != NULL && numacc_fixture_loop_pc != NULL);
+  assert(numacc_fixture_pt->framesize == 5);
+  assert(numacc_fixture_pt->sizebc == 13);
+  assert(numacc_fixture_pt->numparams == 3);
+  profile = numacc_active_profile();
+  memset(&fx, 0, sizeof(fx));
+
+  setir(REF_TRUE, IR_KPRI, IRT_TRUE, 0, 0);
+  setir(REF_FALSE, IR_KPRI, IRT_FALSE, 0, 0);
+  setir(REF_NIL, IR_KPRI, IRT_NIL, 0, 0);
+
+  setir(REF_BASE, IR_BASE, IRT_PGC, 0, 0);
+  setir(AIL_R_X, IR_SLOAD, IRT_NUM|IRT_GUARD,
+	2, IRSLOAD_TYPECHECK);
+  setir(AIL_R_STEP, IR_SLOAD, IRT_NUM|IRT_GUARD,
+	4, IRSLOAD_TYPECHECK);
+  setir(AIL_R_X_PRE, profile->recurrence_op, IRT_NUM|IRT_ISPHI,
+	profile->pre_left, profile->pre_right);
+  setir(AIL_R_LIMIT_INT, IR_SLOAD, IRT_INT|IRT_GUARD,
+	3, IRSLOAD_TYPECHECK);
+  setir(AIL_R_LIMIT_NUM, IR_CONV, IRT_NUM,
+	AIL_R_LIMIT_INT, IRCONV_NUM_INT);
+  setir(AIL_R_PRE_GUARD, profile->precondition_op, IRT_NUM|IRT_GUARD,
+	AIL_R_LIMIT_NUM, AIL_R_X_PRE);
+  setir(AIL_R_LOOP, IR_LOOP, IRT_NIL|IRT_GUARD, 0, 0);
+  setir(AIL_R_XPOLL, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0);
+  setir(AIL_R_X_BODY, profile->recurrence_op, IRT_NUM|IRT_ISPHI,
+	AIL_R_X_PRE, AIL_R_STEP);
+  setir(AIL_R_BODY_GUARD, profile->body_op, IRT_NUM|IRT_GUARD,
+	AIL_R_X_BODY, AIL_R_LIMIT_NUM);
+  setir(AIL_R_X_PHI, IR_PHI, IRT_NUM, AIL_R_X_PRE, AIL_R_X_BODY);
+
+  for (snapno = 0; snapno < 5; snapno++) {
+    fx.snap[snapno].ref = snaprefs[snapno];
+    fx.snap[snapno].mapofs = mapofs[snapno];
+    fx.snap[snapno].nent = nent[snapno];
+    fx.snap[snapno].nslots = nslots[snapno];
+    fx.snap[snapno].topslot = 5;
+  }
+  fx.snapmap[2] = SNAP(2, 0, AIL_R_X_PRE);
+  fx.snapmap[3] = SNAP(5, 0, AIL_R_X_PRE);
+  fx.snapmap[6] = SNAP(2, 0, AIL_R_X_PRE);
+  fx.snapmap[9] = SNAP(2, 0, AIL_R_X_PRE);
+  fx.snapmap[12] = SNAP(2, 0, AIL_R_X_BODY);
+
+  fx.T.nk = REF_TRUE;
+  fx.T.nins = AIL_R_SEMANTIC_END;
+  fx.T.ir = fx.ir;
+  fx.T.nsnap = 5;
+  fx.T.snap = fx.snap;
+  fx.T.nsnapmap = 15;
+  fx.T.snapmap = fx.snapmap;
+  fx.T.traceno = 1;
+  fx.T.link = 1;
+  fx.T.root = 0;
+  fx.T.linktype = LJ_TRLINK_LOOP;
+  fx.T.sinktags = 0;
+  fx.T.startins = loadbc(numacc_fixture_loop_pc);
+  trace_startpt_rel(&fx.T, numacc_fixture_pt);
+  setmref(fx.T.startpc, numacc_fixture_loop_pc);
+  for (snapno = 0; snapno < 5; snapno++)
+    set_snapshot_payload(snapno, proto_bc(numacc_fixture_pt)+pcpos[snapno], 0);
+
+  J->parent = 0;
+  J->exitno = 0;
+  J->pt = numacc_fixture_pt;
+  J->baseslot = 1 + LJ_FR2;
+  J->framedepth = 0;
+  J->retdepth = 0;
+  J->loopref = AIL_R_LOOP;
+  J->startpc = numacc_fixture_loop_pc;
+}
+
 static LJArm64IRReject expect_reject(jit_State *J,
 		LJArm64IRRejectReason reason, IROp op)
 {
@@ -1192,6 +1298,48 @@ static void expect_numacc_intstep_postra_result(LJArm64PostRAView *view,
     assert(semantic_nins == AI_R_SEMANTIC_END);
 }
 
+static LJArm64PostRAView make_numacc_intlimit_postra_view(jit_State *J)
+{
+  LJArm64PostRAView view;
+  make_numacc_intlimit_trace(J);
+
+  /* Exact observed spill-free allocation. The raw INT limit occupies a GPR;
+  ** its one widened value remains invariant in a distinct FPR. */
+  fx.ir[AIL_R_X].r = RID_D2;
+  fx.ir[AIL_R_STEP].r = RID_D1;
+  fx.ir[AIL_R_X_PRE].r = RID_D15;
+  fx.ir[AIL_R_LIMIT_INT].r = RID_X0;
+  fx.ir[AIL_R_LIMIT_NUM].r = RID_D0;
+  fx.ir[AIL_R_X_BODY].r = RID_D15;
+  fx.ir[AIL_R_X_PHI].r = RID_D15;
+  setir(AIL_R_NOP, IR_NOP, IRT_NIL, 0, 0);
+
+  view.ir = fx.ir;
+  view.snap = fx.snap;
+  view.snapmap = fx.snapmap;
+  view.proto_bc = proto_bc(numacc_fixture_pt);
+  view.nins = AIL_R_POSTRA_END;
+  view.nk = fx.T.nk;
+  view.nsnap = fx.T.nsnap;
+  view.nsnapmap = fx.T.nsnapmap;
+  view.spadjust = 0;
+  view.proto_sizebc = numacc_fixture_pt->sizebc;
+  view.root_topslot = 5;
+  view.startins = fx.T.startins;
+  view.base_delta = 0;
+  return view;
+}
+
+static void expect_numacc_intlimit_postra_result(LJArm64PostRAView *view,
+	int admitted)
+{
+  IRRef semantic_nins = 0;
+  int result = lj_asm_arm64_postra_admit(view, &semantic_nins);
+  assert(result == admitted);
+  if (admitted)
+    assert(semantic_nins == AIL_R_SEMANTIC_END);
+}
+
 /* Keep every reference coherent while relocating the widening after LIMIT.
 ** The resulting trace is a valid dependency order, but not the admitted exact
 ** recorder order. */
@@ -1255,6 +1403,55 @@ static void duplicate_numacc_intstep_conversion(jit_State *J, int postra)
     setir(AI_R_NOP+1u, IR_NOP, IRT_NIL, 0, 0);
 }
 
+/* Keep the dependency order valid while moving the INT limit and its widening
+** before X_PRE. This is semantically equivalent, but not the recorded layout. */
+static void relocate_numacc_intlimit_conversion(void)
+{
+  IRIns xpre = fx.ir[AIL_R_X_PRE];
+  IRIns limitint = fx.ir[AIL_R_LIMIT_INT];
+  IRIns limitnum = fx.ir[AIL_R_LIMIT_NUM];
+
+  fx.ir[AIL_R_X_PRE] = limitint;
+  fx.ir[AIL_R_LIMIT_INT] = limitnum;
+  fx.ir[AIL_R_LIMIT_INT].op1 = AIL_R_X_PRE;
+  fx.ir[AIL_R_LIMIT_NUM] = xpre;
+  fx.ir[AIL_R_PRE_GUARD].op1 = AIL_R_LIMIT_INT;
+  fx.ir[AIL_R_PRE_GUARD].op2 = AIL_R_LIMIT_NUM;
+  fx.ir[AIL_R_X_BODY].op1 = AIL_R_LIMIT_NUM;
+  fx.ir[AIL_R_BODY_GUARD].op2 = AIL_R_LIMIT_INT;
+  fx.ir[AIL_R_X_PHI].op1 = AIL_R_LIMIT_NUM;
+  fx.snap[1].ref = AIL_R_X_PRE;
+  fx.snapmap[2] = SNAP(2, 0, AIL_R_LIMIT_NUM);
+  fx.snapmap[3] = SNAP(5, 0, AIL_R_LIMIT_NUM);
+  fx.snapmap[6] = SNAP(2, 0, AIL_R_LIMIT_NUM);
+  fx.snapmap[9] = SNAP(2, 0, AIL_R_LIMIT_NUM);
+}
+
+/* Insert a second exact widening immediately before PRE_GUARD and keep the
+** shifted suffix, snapshots and optional post-RA NOP internally coherent. */
+static void duplicate_numacc_intlimit_conversion(jit_State *J, int postra)
+{
+  IRRef ref;
+  for (ref = AIL_R_X_PHI; ref >= AIL_R_PRE_GUARD; ref--)
+    fx.ir[ref+1u] = fx.ir[ref];
+  fx.ir[AIL_R_PRE_GUARD] = fx.ir[AIL_R_LIMIT_NUM];
+  fx.ir[AIL_R_PRE_GUARD+1u].op1 = AIL_R_PRE_GUARD;
+  fx.ir[AIL_R_PRE_GUARD+1u].op2 = AIL_R_X_PRE;
+  fx.ir[AIL_R_X_BODY+1u].op1 = AIL_R_X_PRE;
+  fx.ir[AIL_R_X_BODY+1u].op2 = AIL_R_STEP;
+  fx.ir[AIL_R_BODY_GUARD+1u].op1 = AIL_R_X_BODY+1u;
+  fx.ir[AIL_R_BODY_GUARD+1u].op2 = AIL_R_PRE_GUARD;
+  fx.ir[AIL_R_X_PHI+1u].op1 = AIL_R_X_PRE;
+  fx.ir[AIL_R_X_PHI+1u].op2 = AIL_R_X_BODY+1u;
+  for (ref = 2; ref < 5; ref++)
+    fx.snap[ref].ref++;
+  fx.snapmap[12] = SNAP(2, 0, AIL_R_X_BODY+1u);
+  fx.T.nins++;
+  J->loopref++;
+  if (postra)
+    setir(AIL_R_NOP+1u, IR_NOP, IRT_NIL, 0, 0);
+}
+
 static void expect_numstep_reject(jit_State *J)
 {
   LJArm64IRReject reject;
@@ -1278,6 +1475,17 @@ static void expect_numacc_semantic_result(jit_State *J, int admitted)
     assert(reject.reason == LJ_ARM64_IR_REJECT_NONE);
   else
     assert(reject.reason != LJ_ARM64_IR_REJECT_NONE);
+}
+
+static void expect_numacc_reject_detail(jit_State *J,
+	LJArm64IRRejectReason reason, IRRef ref, IROp op, uint32_t detail)
+{
+  LJArm64IRReject reject;
+  assert(!lj_asm_arm64_ir_admit(J, &fx.T, &reject));
+  assert(reject.reason == reason);
+  assert(reject.ref == ref);
+  assert(reject.op == op);
+  assert(reject.detail == detail);
 }
 
 static void expect_numhalf_reject(jit_State *J)
@@ -2145,6 +2353,289 @@ static void test_numacc_intstep_postra_layout(jit_State *J)
   view.proto_sizebc = numstep_fixture_pt->sizebc;
   view.startins = loadbc(numstep_fixture_loop_pc);
   expect_numacc_intstep_postra_result(&view, 0);
+}
+
+static void test_numacc_intlimit_postra_layout(jit_State *J)
+{
+  static const IRRef fpr_refs[] = {
+    AIL_R_X, AIL_R_STEP, AIL_R_X_PRE, AIL_R_LIMIT_NUM,
+    AIL_R_X_BODY, AIL_R_X_PHI
+  };
+  static const IRRef semantic_refs[] = {
+    AIL_R_X, AIL_R_STEP, AIL_R_X_PRE, AIL_R_LIMIT_INT,
+    AIL_R_LIMIT_NUM, AIL_R_PRE_GUARD, AIL_R_LOOP, AIL_R_XPOLL,
+    AIL_R_X_BODY, AIL_R_BODY_GUARD, AIL_R_X_PHI
+  };
+  static const uint16_t entryofs[5] = { 2, 3, 6, 9, 12 };
+  static const IROp comparison_ops[] = {
+    IR_GT, IR_GE, IR_LT, IR_LE, IR_EQ, IR_NE,
+    IR_ULT, IR_UGE, IR_ULE, IR_UGT
+  };
+  LJArm64PostRAView view;
+  MSize i;
+
+  assert(numacc_active_profile()->id == NUMACC_FIXTURE_ADD_LT);
+  view = make_numacc_intlimit_postra_view(J);
+  assert(fx.ir[AIL_R_X].r == RID_D2);
+  assert(fx.ir[AIL_R_STEP].r == RID_D1);
+  assert(fx.ir[AIL_R_X_PRE].r == RID_D15);
+  assert(fx.ir[AIL_R_LIMIT_INT].r == RID_X0);
+  assert(fx.ir[AIL_R_LIMIT_NUM].r == RID_D0);
+  assert(fx.ir[AIL_R_X_BODY].r == RID_D15);
+  assert(fx.ir[AIL_R_X_PHI].r == RID_D15);
+  assert(fx.ir[AIL_R_NOP].o == IR_NOP);
+  expect_numacc_intlimit_postra_result(&view, 1);
+
+  /* Register numbers float, but the raw/widened limit classes, live invariant
+  ** separation and loop-carried family are exact. */
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_LIMIT_INT].r = RID_X2;
+  fx.ir[AIL_R_X].r = RID_D3;
+  fx.ir[AIL_R_STEP].r = RID_D4;
+  fx.ir[AIL_R_LIMIT_NUM].r = RID_D5;
+  expect_numacc_intlimit_postra_result(&view, 1);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_X_PRE].r = RID_D14;
+  fx.ir[AIL_R_X_BODY].r = RID_D14;
+  fx.ir[AIL_R_X_PHI].r = RID_D14;
+  expect_numacc_intlimit_postra_result(&view, 1);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_X].r = fx.ir[AIL_R_LIMIT_NUM].r;
+  expect_numacc_intlimit_postra_result(&view, 1);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_X].r = fx.ir[AIL_R_X_PHI].r;
+  expect_numacc_intlimit_postra_result(&view, 1);
+
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_STEP].r = fx.ir[AIL_R_X_PHI].r;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_LIMIT_NUM].r = fx.ir[AIL_R_X_PHI].r;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_STEP].r = fx.ir[AIL_R_LIMIT_NUM].r;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_X].r = fx.ir[AIL_R_STEP].r;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_X_PRE].r = RID_D14;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_X_BODY].r = RID_D14;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_X_PHI].r = RID_D14;
+  expect_numacc_intlimit_postra_result(&view, 0);
+
+  /* The raw limit is the sole GPR value and neither half may spill. */
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_LIMIT_INT].r = RID_D0;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_LIMIT_INT].r = RID_NONE;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_LIMIT_INT].r = RID_X18;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_LIMIT_INT].r = RID_MAX_GPR;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  for (i = 0; i < sizeof(fpr_refs)/sizeof(fpr_refs[0]); i++) {
+    view = make_numacc_intlimit_postra_view(J);
+    fx.ir[fpr_refs[i]].r = RID_X0;
+    expect_numacc_intlimit_postra_result(&view, 0);
+    view = make_numacc_intlimit_postra_view(J);
+    fx.ir[fpr_refs[i]].r = RID_NONE;
+    expect_numacc_intlimit_postra_result(&view, 0);
+    view = make_numacc_intlimit_postra_view(J);
+    fx.ir[fpr_refs[i]].r = RID_MAX_FPR;
+    expect_numacc_intlimit_postra_result(&view, 0);
+  }
+  for (i = 0; i < sizeof(semantic_refs)/sizeof(semantic_refs[0]); i++) {
+    view = make_numacc_intlimit_postra_view(J);
+    fx.ir[semantic_refs[i]].s = 2;
+    view.spadjust = 16;
+    expect_numacc_intlimit_postra_result(&view, 0);
+  }
+  view = make_numacc_intlimit_postra_view(J);
+  view.spadjust = 16;
+  expect_numacc_intlimit_postra_result(&view, 0);
+
+  /* Exactly one zero NOP follows the semantic root. */
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_NOP].t.irt = IRT_PGC;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_NOP].op1 = 1;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_NOP].op2 = 1;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_NOP].prev = 1;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  setir(AIL_R_NOP, IR_RENAME, IRT_NIL, AIL_R_X_PRE, 3);
+  fx.ir[AIL_R_NOP].r = RID_D14;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  view.nins = AIL_R_SEMANTIC_END;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  setir(AIL_R_POSTRA_END, IR_NOP, IRT_NIL, 0, 0);
+  view.nins++;
+  expect_numacc_intlimit_postra_result(&view, 0);
+
+  /* Post-RA independently rechecks all four fields of every semantic tuple. */
+  for (i = 0; i < sizeof(semantic_refs)/sizeof(semantic_refs[0]); i++) {
+    IRRef ref = semantic_refs[i];
+    view = make_numacc_intlimit_postra_view(J);
+    fx.ir[ref].o = IR_NOP;
+    expect_numacc_intlimit_postra_result(&view, 0);
+    view = make_numacc_intlimit_postra_view(J);
+    fx.ir[ref].t.irt ^= IRT_GUARD;
+    expect_numacc_intlimit_postra_result(&view, 0);
+    view = make_numacc_intlimit_postra_view(J);
+    fx.ir[ref].op1 ^= 1u;
+    expect_numacc_intlimit_postra_result(&view, 0);
+    view = make_numacc_intlimit_postra_view(J);
+    fx.ir[ref].op2 ^= 1u;
+    expect_numacc_intlimit_postra_result(&view, 0);
+  }
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[REF_BASE].o = IR_NOP;
+  expect_numacc_intlimit_postra_result(&view, 0);
+
+  /* Conversion source, reference, direction, mode, result type and flags are
+  ** independent. Missing, duplicate, relocated and unrelated conversions stay
+  ** closed at the second gate. */
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_LIMIT_NUM].op1 = AIL_R_X;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_LIMIT_NUM].op1 = REF_TRUE-1u;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_LIMIT_NUM].op2 = IRCONV_INT_NUM;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_LIMIT_NUM].op2 = IRCONV_NUM_INT|IRCONV_SEXT;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_LIMIT_NUM].op2 = IRCONV_NUM_INT|IRCONV_CHECK;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_LIMIT_NUM].t.irt = IRT_INT;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_LIMIT_NUM].t.irt = IRT_NUM|IRT_GUARD;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_LIMIT_NUM].t.irt = IRT_NUM|IRT_ISPHI;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  setir(AIL_R_LIMIT_NUM, IR_NOP, IRT_NIL, 0, 0);
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  duplicate_numacc_intlimit_conversion(J, 1);
+  view.nins++;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  relocate_numacc_intlimit_conversion();
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  setir(AIL_R_X_PRE, IR_CONV, IRT_NUM, AIL_R_X, IRCONV_NUM_INT);
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  setir(AIL_R_X_BODY, IR_CONV, IRT_NUM, AIL_R_X_PRE, IRCONV_NUM_INT);
+  expect_numacc_intlimit_postra_result(&view, 0);
+
+  /* Both guards must consume the widened limit and all ADD_LT operand
+  ** directions remain exact. */
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_X_PRE].op1 = AIL_R_X;
+  fx.ir[AIL_R_X_PRE].op2 = AIL_R_STEP;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_X_BODY].op1 = AIL_R_STEP;
+  fx.ir[AIL_R_X_BODY].op2 = AIL_R_X_PRE;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  for (i = 0; i < sizeof(comparison_ops)/sizeof(comparison_ops[0]); i++) {
+    if (comparison_ops[i] != IR_GT) {
+      view = make_numacc_intlimit_postra_view(J);
+      fx.ir[AIL_R_PRE_GUARD].o = (IROp1)comparison_ops[i];
+      expect_numacc_intlimit_postra_result(&view, 0);
+    }
+    if (comparison_ops[i] != IR_LT) {
+      view = make_numacc_intlimit_postra_view(J);
+      fx.ir[AIL_R_BODY_GUARD].o = (IROp1)comparison_ops[i];
+      expect_numacc_intlimit_postra_result(&view, 0);
+    }
+  }
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_PRE_GUARD].op1 = AIL_R_LIMIT_INT;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_BODY_GUARD].op2 = AIL_R_LIMIT_INT;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_PRE_GUARD].op1 = AIL_R_X_PRE;
+  fx.ir[AIL_R_PRE_GUARD].op2 = AIL_R_LIMIT_NUM;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  fx.ir[AIL_R_BODY_GUARD].op1 = AIL_R_LIMIT_NUM;
+  fx.ir[AIL_R_BODY_GUARD].op2 = AIL_R_X_BODY;
+  expect_numacc_intlimit_postra_result(&view, 0);
+
+  /* Snapshot headers, restored values and footer PCs use the INT-limit refs. */
+  for (i = 0; i < 5; i++) {
+    view = make_numacc_intlimit_postra_view(J);
+    fx.snap[i].ref++;
+    expect_numacc_intlimit_postra_result(&view, 0);
+    view = make_numacc_intlimit_postra_view(J);
+    fx.snap[i].mapofs++;
+    expect_numacc_intlimit_postra_result(&view, 0);
+    view = make_numacc_intlimit_postra_view(J);
+    fx.snap[i].nent++;
+    expect_numacc_intlimit_postra_result(&view, 0);
+    view = make_numacc_intlimit_postra_view(J);
+    fx.snap[i].nslots++;
+    expect_numacc_intlimit_postra_result(&view, 0);
+    view = make_numacc_intlimit_postra_view(J);
+    fx.snap[i].topslot = 4;
+    expect_numacc_intlimit_postra_result(&view, 0);
+    view = make_numacc_intlimit_postra_view(J);
+    set_snapshot_payload((SnapNo)i, proto_bc(numacc_fixture_pt)+1, 0);
+    expect_numacc_intlimit_postra_result(&view, 0);
+    view = make_numacc_intlimit_postra_view(J);
+    set_snapshot_payload((SnapNo)i, proto_bc(numacc_fixture_pt)+
+	(i == 2 || i == 4 ? 11 : 6), 1);
+    expect_numacc_intlimit_postra_result(&view, 0);
+  }
+  for (i = 0; i < sizeof(entryofs)/sizeof(entryofs[0]); i++) {
+    view = make_numacc_intlimit_postra_view(J);
+    fx.snapmap[entryofs[i]] ^= 1u;
+    expect_numacc_intlimit_postra_result(&view, 0);
+  }
+  view = make_numacc_intlimit_postra_view(J);
+  fx.snapmap[9] = SNAP(2, SNAP_NORESTORE, AIL_R_X_PRE);
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  view.nk = REF_TRUE-1u;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  view.nsnap = 4;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  view.nsnap = 6;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  view.nsnapmap = 14;
+  expect_numacc_intlimit_postra_result(&view, 0);
+  view = make_numacc_intlimit_postra_view(J);
+  view.nsnapmap = 16;
+  expect_numacc_intlimit_postra_result(&view, 0);
 }
 
 static void test_postra_spill_layout(jit_State *J)
@@ -3816,6 +4307,207 @@ static void test_numacc_intstep_positive_and_negative(jit_State *J)
   expect_numacc_reject(J);
 }
 
+static void test_numacc_intlimit_positive_and_negative(jit_State *J)
+{
+  static const IRRef semantic_refs[] = {
+    AIL_R_X, AIL_R_STEP, AIL_R_X_PRE, AIL_R_LIMIT_INT,
+    AIL_R_LIMIT_NUM, AIL_R_PRE_GUARD, AIL_R_LOOP, AIL_R_XPOLL,
+    AIL_R_X_BODY, AIL_R_BODY_GUARD, AIL_R_X_PHI
+  };
+  static const IROp comparison_ops[] = {
+    IR_GT, IR_GE, IR_LT, IR_LE, IR_EQ, IR_NE,
+    IR_ULT, IR_UGE, IR_ULE, IR_UGT
+  };
+  static const MSize wrong_pcpos[5] = { 7, 3, 10, 7, 10 };
+  static const uint16_t entryofs[5] = { 2, 3, 6, 9, 12 };
+  LJArm64IRReject reject;
+  MSize i;
+
+  assert(numacc_active_profile()->id == NUMACC_FIXTURE_ADD_LT);
+  make_numacc_intlimit_trace(J);
+  if (!lj_asm_arm64_ir_admit(J, &fx.T, &reject))
+    fprintf(stderr, "INT-limit ADD_LT NUM dynamic-accumulator admission "
+	"failed: reason=%d ref=%u op=%u detail=%u\n", (int)reject.reason,
+	(unsigned)reject.ref, (unsigned)reject.op, (unsigned)reject.detail);
+  assert(reject.reason == LJ_ARM64_IR_REJECT_NONE);
+
+  /* Widening the parameter introduces no trace or prototype constant. */
+  make_numacc_intlimit_trace(J);
+  fx.T.nk = REF_TRUE-1u;
+  setir(REF_TRUE-1u, IR_KINT, IRT_INT, 1, 0);
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  fx.T.nk = H_K_HALF;
+  setir(H_K_HALF, IR_KNUM, IRT_NUM, 0, 0);
+  fx.ir[H_K_HALF_PAYLOAD].tv.u64 = UINT64_C(0x3fe0000000000000);
+  expect_numacc_reject(J);
+
+  /* Every opcode, type/flag, left operand and right operand is independent. */
+  for (i = 0; i < sizeof(semantic_refs)/sizeof(semantic_refs[0]); i++) {
+    IRRef ref = semantic_refs[i];
+    make_numacc_intlimit_trace(J);
+    fx.ir[ref].o = IR_NOP;
+    expect_numacc_reject(J);
+    make_numacc_intlimit_trace(J);
+    fx.ir[ref].t.irt ^= IRT_GUARD;
+    expect_numacc_reject(J);
+    make_numacc_intlimit_trace(J);
+    fx.ir[ref].op1 ^= 1u;
+    expect_numacc_reject(J);
+    make_numacc_intlimit_trace(J);
+    fx.ir[ref].op2 ^= 1u;
+    expect_numacc_reject(J);
+  }
+  make_numacc_intlimit_trace(J);
+  fx.ir[REF_BASE].o = IR_NOP;
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  J->loopref = AIL_R_LOOP-1u;
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  fx.T.nins--;
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  setir(AIL_R_SEMANTIC_END, IR_NOP, IRT_NIL, 0, 0);
+  fx.T.nins++;
+  expect_numacc_reject(J);
+
+  /* The single LIMIT_INT -> LIMIT_NUM conversion has one exact reference,
+  ** source, mode, destination type and flag set. */
+  make_numacc_intlimit_trace(J);
+  fx.ir[AIL_R_LIMIT_NUM].op1 = AIL_R_X;
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  fx.ir[AIL_R_LIMIT_NUM].op1 = REF_TRUE-1u;
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  fx.ir[AIL_R_LIMIT_NUM].op2 = IRCONV_INT_NUM;
+  expect_numacc_reject_detail(J, LJ_ARM64_IR_REJECT_TYPE,
+	AIL_R_LIMIT_NUM, IR_CONV, IRCONV_INT_NUM);
+  make_numacc_intlimit_trace(J);
+  fx.ir[AIL_R_LIMIT_NUM].op2 = IRCONV_NUM_INT|IRCONV_SEXT;
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  fx.ir[AIL_R_LIMIT_NUM].op2 = IRCONV_NUM_INT|IRCONV_CHECK;
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  fx.ir[AIL_R_LIMIT_NUM].t.irt = IRT_INT;
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  fx.ir[AIL_R_LIMIT_NUM].t.irt = IRT_NUM|IRT_GUARD;
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  fx.ir[AIL_R_LIMIT_NUM].t.irt = IRT_NUM|IRT_ISPHI;
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  setir(AIL_R_LIMIT_NUM, IR_NOP, IRT_NIL, 0, 0);
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  duplicate_numacc_intlimit_conversion(J, 0);
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  relocate_numacc_intlimit_conversion();
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  setir(AIL_R_X_PRE, IR_CONV, IRT_NUM, AIL_R_X, IRCONV_NUM_INT);
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  setir(AIL_R_X_BODY, IR_CONV, IRT_NUM, AIL_R_X_PRE, IRCONV_NUM_INT);
+  expect_numacc_reject(J);
+
+  /* The raw INT limit is never a NUM operand; only its one widened value may
+  ** feed either comparison. */
+  make_numacc_intlimit_trace(J);
+  fx.ir[AIL_R_PRE_GUARD].op1 = AIL_R_LIMIT_INT;
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  fx.ir[AIL_R_BODY_GUARD].op2 = AIL_R_LIMIT_INT;
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  fx.ir[AIL_R_X_PRE].op1 = AIL_R_X;
+  fx.ir[AIL_R_X_PRE].op2 = AIL_R_STEP;
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  fx.ir[AIL_R_X_BODY].op1 = AIL_R_STEP;
+  fx.ir[AIL_R_X_BODY].op2 = AIL_R_X_PRE;
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  fx.ir[AIL_R_X_PHI].op1 = AIL_R_X;
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  fx.ir[AIL_R_X_PHI].op2 = AIL_R_X_PRE;
+  expect_numacc_reject(J);
+
+  for (i = 0; i < sizeof(comparison_ops)/sizeof(comparison_ops[0]); i++) {
+    if (comparison_ops[i] != IR_GT) {
+      make_numacc_intlimit_trace(J);
+      fx.ir[AIL_R_PRE_GUARD].o = (IROp1)comparison_ops[i];
+      expect_numacc_reject(J);
+    }
+    if (comparison_ops[i] != IR_LT) {
+      make_numacc_intlimit_trace(J);
+      fx.ir[AIL_R_BODY_GUARD].o = (IROp1)comparison_ops[i];
+      expect_numacc_reject(J);
+    }
+  }
+  make_numacc_intlimit_trace(J);
+  fx.ir[AIL_R_PRE_GUARD].op1 = AIL_R_X_PRE;
+  fx.ir[AIL_R_PRE_GUARD].op2 = AIL_R_LIMIT_NUM;
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  fx.ir[AIL_R_BODY_GUARD].op1 = AIL_R_LIMIT_NUM;
+  fx.ir[AIL_R_BODY_GUARD].op2 = AIL_R_X_BODY;
+  expect_numacc_reject(J);
+
+  /* Every snapshot header, restored entry and footer uses the shifted
+  ** INT-limit layout, including the raw limit at snapshot #1. */
+  for (i = 0; i < 5; i++) {
+    make_numacc_intlimit_trace(J);
+    fx.snap[i].ref++;
+    expect_numacc_reject(J);
+    make_numacc_intlimit_trace(J);
+    fx.snap[i].mapofs++;
+    expect_numacc_reject(J);
+    make_numacc_intlimit_trace(J);
+    fx.snap[i].nent++;
+    expect_numacc_reject(J);
+    make_numacc_intlimit_trace(J);
+    fx.snap[i].nslots++;
+    expect_numacc_reject(J);
+    make_numacc_intlimit_trace(J);
+    fx.snap[i].topslot = 4;
+    expect_numacc_reject(J);
+    make_numacc_intlimit_trace(J);
+    set_snapshot_payload((SnapNo)i,
+	proto_bc(numacc_fixture_pt)+wrong_pcpos[i], 0);
+    expect_numacc_reject(J);
+    make_numacc_intlimit_trace(J);
+    set_snapshot_payload((SnapNo)i,
+	proto_bc(numacc_fixture_pt)+wrong_pcpos[i], 1);
+    expect_numacc_reject(J);
+  }
+  for (i = 0; i < sizeof(entryofs)/sizeof(entryofs[0]); i++) {
+    make_numacc_intlimit_trace(J);
+    fx.snapmap[entryofs[i]] ^= 1u;
+    expect_numacc_reject(J);
+  }
+  make_numacc_intlimit_trace(J);
+  fx.snapmap[9] = SNAP(2, SNAP_NORESTORE, AIL_R_X_PRE);
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  fx.T.nsnap = 4;
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  fx.T.nsnap = 6;
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  fx.T.nsnapmap = 14;
+  expect_numacc_reject(J);
+  make_numacc_intlimit_trace(J);
+  fx.T.nsnapmap = 16;
+  expect_numacc_reject(J);
+}
+
 static void test_numacc_shape_cross_product(jit_State *J)
 {
   static const unsigned profiles[12] = {
@@ -3828,16 +4520,17 @@ static void test_numacc_shape_cross_product(jit_State *J)
   };
   static const IROp preops[4] = { IR_GT, IR_GE, IR_LT, IR_LE };
   static const IROp bodyops[4] = { IR_LT, IR_LE, IR_GT, IR_GE };
-  static const unsigned step_kinds[2] = {
-    NUMACC_FIXTURE_STEP_NUM, NUMACC_FIXTURE_STEP_INT_TO_NUM
+  static const unsigned args_kinds[3] = {
+    NUMACC_FIXTURE_ARGS_NUM, NUMACC_FIXTURE_ARGS_INT_STEP,
+    NUMACC_FIXTURE_ARGS_INT_LIMIT
   };
-  MSize p, stepkind, prearith, bodyarith, pre, body;
+  MSize p, argkind, prearith, bodyarith, pre, body;
   MSize combinations = 0, semantic_admissions = 0, postra_admissions = 0;
 
-  /* Exercise the complete 12x2x2x2x4x4 source-profile, step-kind,
-  ** pre-arithmetic, body-arithmetic, pre-guard and body-guard product. Exactly
-  ** one all-NUM and one exact INT-to-NUM widening shape are coherent for each
-  ** profile at both gates. */
+  /* Exercise the complete 12x3x2x2x4x4 source-profile, argument-kind,
+  ** pre-arithmetic, body-arithmetic, pre-guard and body-guard product. The NUM
+  ** and INT-step shapes admit one tuple per profile; INT-limit admits ADD_LT
+  ** alone, for exactly 25 admissions at each independent gate. */
   for (p = 0; p < 12; p++) {
     const NumaccFixtureProfile *profile;
     IROp arithmetic_ops[2];
@@ -3846,13 +4539,17 @@ static void test_numacc_shape_cross_product(jit_State *J)
     profile = numacc_active_profile();
     arithmetic_ops[0] = profile->recurrence_op;
     arithmetic_ops[1] = profile->recurrence_op == IR_ADD ? IR_SUB : IR_ADD;
-    for (stepkind = 0; stepkind < 2; stepkind++) {
-      int intstep = step_kinds[stepkind] ==
-	NUMACC_FIXTURE_STEP_INT_TO_NUM;
-      IRRef xpreref = intstep ? AI_R_X_PRE : A_R_X_PRE;
-      IRRef preguardref = intstep ? AI_R_PRE_GUARD : A_R_PRE_GUARD;
-      IRRef xbodyref = intstep ? AI_R_X_BODY : A_R_X_BODY;
-      IRRef bodyguardref = intstep ? AI_R_BODY_GUARD : A_R_BODY_GUARD;
+    for (argkind = 0; argkind < 3; argkind++) {
+      int intstep = args_kinds[argkind] == NUMACC_FIXTURE_ARGS_INT_STEP;
+      int intlimit = args_kinds[argkind] == NUMACC_FIXTURE_ARGS_INT_LIMIT;
+      IRRef xpreref = intstep ? AI_R_X_PRE :
+	intlimit ? AIL_R_X_PRE : A_R_X_PRE;
+      IRRef preguardref = intstep ? AI_R_PRE_GUARD :
+	intlimit ? AIL_R_PRE_GUARD : A_R_PRE_GUARD;
+      IRRef xbodyref = intstep ? AI_R_X_BODY :
+	intlimit ? AIL_R_X_BODY : A_R_X_BODY;
+      IRRef bodyguardref = intstep ? AI_R_BODY_GUARD :
+	intlimit ? AIL_R_BODY_GUARD : A_R_BODY_GUARD;
       for (prearith = 0; prearith < 2; prearith++) {
 	for (bodyarith = 0; bodyarith < 2; bodyarith++) {
 	  for (pre = 0; pre < 4; pre++) {
@@ -3868,13 +4565,16 @@ static void test_numacc_shape_cross_product(jit_State *J)
 	      int admitted = pre_arithmetic == profile->recurrence_op &&
 		body_arithmetic == profile->recurrence_op &&
 		preops[pre] == profile->precondition_op &&
-		bodyops[body] == profile->body_op;
+		bodyops[body] == profile->body_op &&
+		(!intlimit || profile->id == NUMACC_FIXTURE_ADD_LT);
 	      LJArm64PostRAView view;
 
 	      if (intstep) {
 		make_numacc_intstep_trace(J);
 		pre_left = numacc_intstep_ref(pre_left);
 		pre_right = numacc_intstep_ref(pre_right);
+	      } else if (intlimit) {
+		make_numacc_intlimit_trace(J);
 	      } else {
 		make_numacc_trace(J);
 	      }
@@ -3897,6 +4597,14 @@ static void test_numacc_shape_cross_product(jit_State *J)
 		  pre_arithmetic == profile->recurrence_op ?
 		    profile->pre_right :
 		    (pre_arithmetic == IR_SUB ? A_R_STEP : A_R_X));
+	      } else if (intlimit) {
+		view = make_numacc_intlimit_postra_view(J);
+		pre_left = pre_arithmetic == profile->recurrence_op ?
+		  profile->pre_left :
+		  (pre_arithmetic == IR_SUB ? A_R_X : A_R_STEP);
+		pre_right = pre_arithmetic == profile->recurrence_op ?
+		  profile->pre_right :
+		  (pre_arithmetic == IR_SUB ? A_R_STEP : A_R_X);
 	      } else {
 		view = make_numacc_postra_view(J);
 	      }
@@ -3908,6 +4616,8 @@ static void test_numacc_shape_cross_product(jit_State *J)
 	      fx.ir[bodyguardref].o = (IROp1)bodyops[body];
 	      if (intstep)
 		expect_numacc_intstep_postra_result(&view, admitted);
+	      else if (intlimit)
+		expect_numacc_intlimit_postra_result(&view, admitted);
 	      else
 		expect_numacc_postra_result(&view, admitted);
 	      postra_admissions += (MSize)admitted;
@@ -3918,9 +4628,9 @@ static void test_numacc_shape_cross_product(jit_State *J)
       }
     }
   }
-  assert(combinations == 12u*2u*2u*2u*4u*4u);
-  assert(combinations == 1536);
-  assert(semantic_admissions == 24 && postra_admissions == 24);
+  assert(combinations == 12u*3u*2u*2u*4u*4u);
+  assert(combinations == 2304);
+  assert(semantic_admissions == 25 && postra_admissions == 25);
 
   /* Semantic admission and post-RA independently re-read the exact compare
   ** operand direction and recurrence opcode from the live prototype. */
@@ -4959,6 +5669,9 @@ int main(void)
   select_numacc_fixture(NUMACC_FIXTURE_DIV_GE);
   test_numacc_intstep_positive_and_negative(J);
   test_numacc_intstep_postra_layout(J);
+  select_numacc_fixture(NUMACC_FIXTURE_ADD_LT);
+  test_numacc_intlimit_positive_and_negative(J);
+  test_numacc_intlimit_postra_layout(J);
   test_numacc_shape_cross_product(J);
   J->L = savedL;
   J->parent = savedparent;
@@ -4971,7 +5684,7 @@ int main(void)
   J->startpc = savedstartpc;
   L->top -= 16;
   lua_close(L);
-  puts("arm64_jit_ir_admission OK: integer, mixed NUM, fixed-half, dynamic-step and ADD_LT/ADD_LE/ADD_GT/ADD_GE/SUB_GT/SUB_GE/MUL_LT/MUL_LE/DIV_LT/DIV_LE/DIV_GT/DIV_GE dynamic-accumulator NUM/INT-step LOOP/FORL policy verified");
+  puts("arm64_jit_ir_admission OK: integer, mixed NUM, fixed-half, dynamic-step and ADD_LT/ADD_LE/ADD_GT/ADD_GE/SUB_GT/SUB_GE/MUL_LT/MUL_LE/DIV_LT/DIV_LE/DIV_GT/DIV_GE dynamic-accumulator NUM/INT-step plus ADD_LT INT-limit LOOP/FORL policy verified");
   return 0;
 }
 
