@@ -55,14 +55,16 @@ static void force_fresh_stopreq_after_native_leave(TGState *tg)
   lj_ffi_native_trace_test_set_leave_hook(NULL);
 }
 
-static GCtrace *find_callxs_trace(jit_State *J)
+static GCtrace *find_callxs_trace(jit_State *J, GCproto *startpt)
 {
   TraceNo traceno;
   for (traceno = 1; traceno < trace_sizetrace_acq(J); traceno++) {
     GCtrace *T = traceref(J, traceno);
     IRIns *ir;
     IRRef ref, nins;
-    if (!T || trace_traceno_acq(T) != traceno)
+    if (!T || trace_traceno_acq(T) != traceno ||
+	!trace_runnable_acq(T, traceno) || trace_root_acq(T) != 0 ||
+	trace_startpt_acq(T) != startpt)
       continue;
     ir = trace_ir_acq(T);
     nins = trace_nins_acq(T);
@@ -525,7 +527,7 @@ static GCtrace *exercise_forced_result(lua_State *L, jit_State *J,
 
   pt = global_lua_proto(L, run_name);
   assert(proto_has_bc(pt, BC_CALL));
-  T = find_callxs_trace(J);
+  T = find_callxs_trace(J, pt);
   if (T == NULL)
     fprintf(stderr, "%s did not produce a CALLXS trace\n", run_name);
   assert(T != NULL);
@@ -614,7 +616,7 @@ static GCtrace *exercise_generated_topology(lua_State *L, jit_State *J,
   opcode_pt = global_lua_proto(L, opcode_name);
   assert(proto_has_bc(opcode_pt, expected_callop));
   snapshot_pt = global_lua_proto(L, snapshot_name);
-  T = find_callxs_trace(J);
+  T = find_callxs_trace(J, snapshot_pt);
   if (T == NULL)
     fprintf(stderr, "%s did not produce a CALLXS trace\n", run_name);
   assert(T != NULL);
@@ -891,7 +893,7 @@ int main(void)
   runpt = funcproto(funcV(L->top-1));
   lua_pop(L, 1);
 
-  T = find_callxs_trace(J);
+  T = find_callxs_trace(J, runpt);
   assert(T != NULL);
   assert_exact_enter_constant(T);
   assert_postcall_snapshot_pc(T, runpt, BC_CALL);
@@ -1022,7 +1024,7 @@ int main(void)
   runpt = funcproto(funcV(L->top-1));
   lua_pop(L, 1);
 
-  T = find_callxs_trace(J);
+  T = find_callxs_trace(J, runpt);
   assert(T != NULL);
   assert_exact_enter_constant(T);
   assert_postcall_snapshot_pc(T, runpt, BC_CALL);
@@ -1091,7 +1093,7 @@ int main(void)
   runpt = funcproto(funcV(L->top-1));
   lua_pop(L, 1);
 
-  T = find_callxs_trace(J);
+  T = find_callxs_trace(J, runpt);
   assert(T != NULL);
   assert_exact_enter_constant(T);
   assert_postcall_snapshot_pc(T, runpt, BC_CALL);
@@ -1162,7 +1164,8 @@ int main(void)
   ljt_lua_dostring(L,
     "assert(__callxs_postcall_lib."
     "lj_callxs_auth_aggregate_aligned_count() == 200)\n");
-  T = find_callxs_trace(J);
+  runpt = global_lua_proto(L, "__callxs_postcall_aligned_value");
+  T = find_callxs_trace(J, runpt);
   assert(T != NULL);
   assert_sized_aggregate_root(T, 24);
   assert(trace_native_pins_acq(T) == 0);
@@ -1198,7 +1201,7 @@ int main(void)
   assert(auth_count(L) == 200);
   auth_reset(L);
   runpt = global_lua_proto(L, "__callxs_postcall_bool_dynamic_run");
-  T = find_callxs_trace(J);
+  T = find_callxs_trace(J, runpt);
   assert(T != NULL);
   assert_exact_enter_constant(T);
   assert_postcall_snapshot_pc(T, runpt, BC_CALL);
@@ -1224,7 +1227,7 @@ int main(void)
     "__callxs_postcall_bool_dynamic_state = 1\n");
   assert(run_entry_named(L, "__callxs_postcall_bool_dynamic_run", 200) == 200);
   auth_reset(L);
-  T = find_callxs_trace(J);
+  T = find_callxs_trace(J, runpt);
   assert(T != NULL);
   ljt_lua_dostring(L, "__callxs_postcall_bool_dynamic_state = 0\n");
   old_flags = lj_tg_flags_acq(tg);
