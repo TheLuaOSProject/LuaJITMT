@@ -176,14 +176,14 @@ semantic and post-register-allocation gates merely to reduce the diff.
   owner-private `ffi_xsave_baseslot` and `ffi_xsave_nslots` publications are
   naturally sized `STLR w6` stores through x25, and `ffi_xsave_root` uses the
   existing pointer-sized release helper.
-- `m7_ffi_callxs_arm64_scalar`: passed at `c56b7382`; the authentic trace and
-  semantic/post-RA mutation fixture passed with exactly two `XSAVE` and two
-  `CALLXS` nodes. Stable and concurrently raced cdata `__call` replacement,
-  remote full GC, and remote `jit.flush()` completed without replay or stall.
-  Its exact 16-bytecode lifecycle fixture also passed rooted-retry errno,
-  result-guard and epoch exits, depth-two generated callback re-entry,
-  callback-error and real STOPREQ unwind, cleanup, reuse, and exact
-  foreign-effect/no-replay oracles.
+- `m7_ffi_callxs_arm64_scalar`: passed through `5a0a4c33`; the authentic trace
+  and semantic/post-RA mutation fixture passed with exactly two `XSAVE` and
+  two `CALLXS` nodes. Stable and concurrently raced cdata `__call`
+  replacement, remote full GC, and remote `jit.flush()` completed without
+  replay or stall. Its exact 16-bytecode lifecycle fixture also passed
+  rooted-retry errno, result-guard and epoch exits, depth-two generated
+  callback re-entry, callback-error and real STOPREQ unwind, cleanup, reuse,
+  and exact foreign-effect/no-replay oracles.
 - Manual arm64e/BTI build: the same semantic/post-RA fixture, production call,
   exact lifecycle, and threaded lifecycle passed through `a7056fe5` in thin
   ARM64e executables. The focused `c56b7382` lifecycle fixture additionally
@@ -218,6 +218,7 @@ semantic and post-register-allocation gates merely to reduce the diff.
 - `tools/ci/arm64_bootstrap_gate.sh`: passed at `c8cd7858`, including 387
   vendored tests, TG/root/safepoint/protected-call contracts, threading and
   coroutine tests, and 320 FFI callback rounds across four threads.
+- Safe ARM64 no-JIT stock suite: `387 passed` at `5a0a4c33`.
 - `tools/ci/arm64_oserr_unwind_contract.sh`: passed at `f06e79d5` for ordinary
   ARM64, arm64e/BTI, and the x86_64/Rosetta oracle. Both direct C and repeated
   fast-function final landings preserved `EDOM` (33) across an injected
