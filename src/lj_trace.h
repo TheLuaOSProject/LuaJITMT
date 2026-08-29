@@ -172,12 +172,11 @@ LJ_FUNC int lj_jit_lifecycle_resume_l(lua_State *L, jit_State *J);
 LJ_FUNC int lj_jit_lifecycle_held_l(lua_State *L, jit_State *J);
 LJ_FUNC TGState *lj_jit_owner_tg_l(lua_State *L, jit_State *J);
 
-#if LJ_TARGET_ARM64
+#if LJ_TARGET_ARM64 && defined(LJ_TRACE_TEST_HELPERS)
 #define LJ_TRACE_ROOT_ENTRY_PAUSE_PREPUBLISH 1u
 #define LJ_TRACE_ROOT_ENTRY_PAUSE_POSTPUBLISH 2u
 #define LJ_TRACE_ROOT_ENTRY_PAUSE_POSTMETADATA 3u
 #define LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION 4u
-#ifdef LJ_TRACE_TEST_HELPERS
 LJ_FUNC void lj_trace_test_root_entry_reset(void);
 LJ_FUNC void lj_trace_test_root_entry_pause(uint32_t stage);
 LJ_FUNC uint32_t lj_trace_test_root_entry_paused(void);
@@ -189,7 +188,6 @@ LJ_FUNC uint32_t lj_trace_test_root_entry_startins_calls(void);
 LJ_FUNC int lj_trace_test_arm64_first_side_loop_valid(
   jit_State *J, lua_State *L, TraceNo parent, ExitNo exitno,
   const BCIns *continuation, const BCIns *pc, uint32_t context);
-#endif
 #endif
 
 typedef struct LJJitEventFrozenViewSpec {
