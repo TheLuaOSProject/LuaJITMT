@@ -67,7 +67,7 @@ int lj_asm_arm64_b26_encode(uintptr_t source, uintptr_t target, MCode *insp)
   return 1;
 }
 
-/* -- Bounded ARM64 IR admission ------------------------------------------ */
+/* -- Initial ARM64 IR admission ------------------------------------------ */
 
 /*
 ** The stock ARM64 backend can encode a much larger IR surface than the
@@ -5088,15 +5088,9 @@ static void asm_head_side(ASMState *as)
   RegSet live = RSET_EMPTY;  /* Live parent registers. */
   RegSet pallow = RSET_GPR;  /* Registers needed by the parent stack check. */
   Reg pbase;
-#if LJ_TARGET_ARM64
   IRIns *irp;
   MSize parent_topslot;
   int32_t parent_spadjust;
-#else
-  IRIns *irp = &trace_ir_acq(as->parent)[REF_BASE];  /* Parent base. */
-  MSize parent_topslot = trace_topslot_acq(as->parent);
-  int32_t parent_spadjust = (int32_t)trace_spadjust_acq(as->parent);
-#endif
   int32_t spadj, spdelta;
   int pass2 = 0;
   int pass3 = 0;
@@ -5121,9 +5115,11 @@ static void asm_head_side(ASMState *as)
     asm_test_side_probe_note(LJ_ARM64_SIDE_ASM_PROBE_PREHEAD);
 #endif
   }
+#endif
   irp = &trace_ir_acq(as->parent)[REF_BASE];  /* Certified parent base. */
   parent_topslot = trace_topslot_acq(as->parent);
   parent_spadjust = (int32_t)trace_spadjust_acq(as->parent);
+#if LJ_TARGET_ARM64
   if (LJ_UNLIKELY(parent_topslot != 5u || parent_spadjust != 0))
     lj_trace_err(as->J, LJ_TRERR_RETRY);
 #endif
