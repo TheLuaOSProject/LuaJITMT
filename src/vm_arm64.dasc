@@ -4229,6 +4229,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |  b <2
     }
     if (op == BC_JFORL) {
+      |.if JIT
       |9:  // Taken integer edge: IDX/EXT are authoritative before admission.
       |  mov RAw, INSw			// Preserve the consumed full JFORL word.
       |  str BASE, L->base
@@ -4253,6 +4254,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       |8:  // The already-executed edge must never redispatch as fresh bytecode.
       |  mov INSw, RAw
       |  b =>BC_JLOOP
+      |.endif
     }
     break;
 
