@@ -1,12 +1,12 @@
 /*
 ** Native macOS ARM64 contract for exact ascending/descending ADD,
-** ascending MUL, and descending SUB dynamic-accumulator pure-NUM roots.
+** ascending MUL/DIV, and descending SUB dynamic-accumulator pure-NUM roots.
 **
-** This certifies eight intentionally narrow evolution profiles over one loop
+** This certifies nine intentionally narrow evolution profiles over one loop
 ** geometry: strict/inclusive ascending ADD, strict/inclusive ascending MUL,
-** strict/inclusive descending ADD, and strict/inclusive descending SUB, each
-** with three live NUM parameters (initial accumulator, limit, and step or
-** factor).
+** strict ascending DIV, strict/inclusive descending ADD, and strict/inclusive
+** descending SUB, each with three live NUM parameters (initial accumulator,
+** limit, and step, factor, or divisor).
 ** Adjacent arithmetic, direction, and bytecode families remain fail-closed,
 ** while the already-admitted fixed-initializer roots stay distinct.
 */
@@ -85,6 +85,7 @@ typedef enum NumericArgsComparison {
 typedef enum NumericArgsEvolution {
   NUMERIC_ARGS_ADD_ASCENDING,
   NUMERIC_ARGS_MUL_ASCENDING,
+  NUMERIC_ARGS_DIV_ASCENDING,
   NUMERIC_ARGS_ADD_DESCENDING,
   NUMERIC_ARGS_SUB_DESCENDING
 } NumericArgsEvolution;
@@ -191,6 +192,23 @@ static const NumericArgsProfile mul_inclusive_profile = {
   { 15.0, 20.25, 2.0, 30.0 }
 };
 
+/* DIV is noncommutative: both IR and machine code retain X/DIVISOR operand
+** order. Replacing only x, limit, or divisor in the exact-binary reuse tuple
+** with its recording value produces 8, 40, or 5 respectively instead of 10. */
+static const NumericArgsProfile div_profile = {
+  "__arm64_pure_numeric_args_div", NUMERIC_ARGS_DIV_ASCENDING,
+  NUMERIC_ARGS_STRICT, BC_ISGE, 3, 4, BC_DIVVV, IR_DIV,
+  IR_GT, IR_LT, A64I_FDIVd, 0, CC_HS, CC_LO,
+  { 0.5, 20.25, 0.5, 32.0 },
+  { 0.625, 4.5, 0.25, 10.0 },
+  { 0.5, 20.25, 0.5, 32.0 },
+  { 0.5, 20.25, 0.5, 0.0 },
+  { 1.0, 20.25, 0.5, 32.0 },
+  { 0.5, 20.25, 0.0, INFINITY },
+  { 0.5, 20.0, 0.5, 32.0 },
+  { 15.0, 20.25, 0.5, 30.0 }
+};
+
 /* The descending-ADD reuse tuple is made entirely of exact binary fractions.
 ** Replacing only x, limit, or step with its recording value produces -0.875,
 ** 0.125, or -1.0 respectively instead of -0.625. */
@@ -263,6 +281,7 @@ static const NumericArgsProfile descending_inclusive_profile = {
 #define PINF_BITS UINT64_C(0x7ff0000000000000)
 #define NINF_BITS UINT64_C(0xfff0000000000000)
 #define ZERO_BITS UINT64_C(0x0000000000000000)
+#define NEGZERO_BITS UINT64_C(0x8000000000000000)
 #define ONE_BITS UINT64_C(0x3ff0000000000000)
 #define NEGONE_BITS UINT64_C(0xbff0000000000000)
 
@@ -342,13 +361,17 @@ typedef enum PostAdmissionRequest {
   POSTADMISSION_PINF_X,
   POSTADMISSION_NINF_X,
   POSTADMISSION_ZERO_X,
+  POSTADMISSION_NEGZERO_X,
   POSTADMISSION_QNAN_LIMIT,
   POSTADMISSION_PINF_LIMIT,
   POSTADMISSION_NINF_LIMIT,
+  POSTADMISSION_ZERO_LIMIT,
+  POSTADMISSION_NEGZERO_LIMIT,
   POSTADMISSION_QNAN_STEP,
   POSTADMISSION_PINF_STEP,
   POSTADMISSION_NINF_STEP,
   POSTADMISSION_ZERO_STEP,
+  POSTADMISSION_NEGZERO_STEP,
   POSTADMISSION_ONE_STEP,
   POSTADMISSION_NEGONE_STEP
 } PostAdmissionRequest;
@@ -421,15 +444,19 @@ static void *publish_postadmission_request(void *arg)
     uint64_t replacement;
     int stop_after_mutation;
     /* Admission has finished and the owner has published this frame, but
-    ** native SLOAD/FADD/FSUB/FMUL have not run. Arguments occupy base[0..2]. */
+    ** native SLOAD/FADD/FSUB/FMUL/FDIV have not run. Arguments occupy
+    ** base[0..2]. */
     if (publisher->request == POSTADMISSION_QNAN_X ||
 	publisher->request == POSTADMISSION_PINF_X ||
 	publisher->request == POSTADMISSION_NINF_X ||
-	publisher->request == POSTADMISSION_ZERO_X) {
+	publisher->request == POSTADMISSION_ZERO_X ||
+	publisher->request == POSTADMISSION_NEGZERO_X) {
       target = &base[0];
     } else if (publisher->request == POSTADMISSION_QNAN_LIMIT ||
 	publisher->request == POSTADMISSION_PINF_LIMIT ||
-	publisher->request == POSTADMISSION_NINF_LIMIT) {
+	publisher->request == POSTADMISSION_NINF_LIMIT ||
+	publisher->request == POSTADMISSION_ZERO_LIMIT ||
+	publisher->request == POSTADMISSION_NEGZERO_LIMIT) {
       target = &base[1];
     } else {
       target = &base[2];
@@ -445,7 +472,12 @@ static void *publish_postadmission_request(void *arg)
 	publisher->request == POSTADMISSION_NINF_LIMIT ||
 	publisher->request == POSTADMISSION_NINF_STEP) {
       replacement = NINF_BITS;
+    } else if (publisher->request == POSTADMISSION_NEGZERO_X ||
+	publisher->request == POSTADMISSION_NEGZERO_LIMIT ||
+	publisher->request == POSTADMISSION_NEGZERO_STEP) {
+      replacement = NEGZERO_BITS;
     } else if (publisher->request == POSTADMISSION_ZERO_STEP ||
+	publisher->request == POSTADMISSION_ZERO_LIMIT ||
 	publisher->request == POSTADMISSION_ZERO_X) {
       replacement = ZERO_BITS;
     } else if (publisher->request == POSTADMISSION_NEGONE_STEP) {
@@ -465,6 +497,8 @@ static void *publish_postadmission_request(void *arg)
       assert(isinf(numV(&live)) && numV(&live) > 0);
     else if (replacement == ZERO_BITS)
       assert(numV(&live) == 0.0 && !signbit(numV(&live)));
+    else if (replacement == NEGZERO_BITS)
+      assert(numV(&live) == 0.0 && signbit(numV(&live)));
     else if (replacement == ONE_BITS)
       assert(numV(&live) == 1.0);
     else if (replacement == NEGONE_BITS)
@@ -597,7 +631,8 @@ static void expect_ir_shape(const GCtrace *T,
 	    2, IRSLOAD_TYPECHECK);
   expect_ir(ir, R_STEP, IR_SLOAD, IRT_NUM|IRT_GUARD,
 	    4, IRSLOAD_TYPECHECK);
-  if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING) {
+  if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING ||
+      profile->evolution == NUMERIC_ARGS_DIV_ASCENDING) {
     expect_ir(ir, R_X_PRE, profile->recurrence_ir,
 	IRT_NUM|IRT_ISPHI, R_X, R_STEP);
   } else {
@@ -724,7 +759,8 @@ static void expect_dynamic_fp_mcode(const GCtrace *T,
       unsigned left = (ins >> 5) & 31u;
       unsigned right = (ins >> 16) & 31u;
       assert(dest == phireg);
-      if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING) {
+      if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING ||
+	  profile->evolution == NUMERIC_ARGS_DIV_ASCENDING) {
         assert(right == stepreg);
         if (xreg == phireg) {
           assert(left == phireg);
@@ -758,7 +794,8 @@ static void expect_dynamic_fp_mcode(const GCtrace *T,
     }
     if (((ins & farith_mask) == A64I_FADDd ||
 	 (ins & farith_mask) == A64I_FSUBd ||
-	 (ins & farith_mask) == A64I_FMULd) &&
+	 (ins & farith_mask) == A64I_FMULd ||
+	 (ins & farith_mask) == A64I_FDIVd) &&
 	(ins & farith_mask) != profile->recurrence_mcode)
       nopposite++;
     if ((ins & fcmp_mask) == A64I_FCMPd) {
@@ -810,6 +847,16 @@ static void expect_dynamic_fp_mcode(const GCtrace *T,
     assert(mcode[shift+30u] == UINT32_C(0x1e6109ef));
     assert(mcode[shift+31u] == UINT32_C(0x1e6021e0));
     assert(mcode[shift+32u] == UINT32_C(0x54fffe69));
+    assert(mcode[shift+33u] == UINT32_C(0x14000025));
+  } else if (profile->evolution == NUMERIC_ARGS_DIV_ASCENDING) {
+    MSize shift = LJ_ABI_BRANCH_TRACK ? 1u : 0u;
+    assert(nword > shift+33u);
+    assert(mcode[shift+12u] == UINT32_C(0x1e61184f));
+    assert(mcode[shift+17u] == UINT32_C(0x1e6021e0));
+    assert(mcode[shift+18u] == UINT32_C(0x54000482));
+    assert(mcode[shift+30u] == UINT32_C(0x1e6119ef));
+    assert(mcode[shift+31u] == UINT32_C(0x1e6021e0));
+    assert(mcode[shift+32u] == UINT32_C(0x54fffe63));
     assert(mcode[shift+33u] == UINT32_C(0x14000025));
   }
   assert(nfarith == 2 && nopposite == 0);
@@ -1191,7 +1238,13 @@ static void test_positive_and_guard_exits(const NumericArgsProfile *profile)
   luaL_openlibs(L);
   tg = L2TG(L);
   idle_vmstate = lj_tg_vmstate_load_acq(tg);
-  if (profile->evolution == NUMERIC_ARGS_MUL_ASCENDING &&
+  if (profile->evolution == NUMERIC_ARGS_DIV_ASCENDING) {
+    run_lua(L,
+      "jit.flush(); jit.on(); "
+      "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
+      "function __arm64_pure_numeric_args_div(x,limit,divisor) "
+	"while x < limit do x = x / divisor end return x end");
+  } else if (profile->evolution == NUMERIC_ARGS_MUL_ASCENDING &&
       profile->comparison == NUMERIC_ARGS_INCLUSIVE) {
     run_lua(L,
       "jit.flush(); jit.on(); "
@@ -1261,7 +1314,33 @@ static void test_positive_and_guard_exits(const NumericArgsProfile *profile)
   expect_single_exit(FINAL_EXIT);
   expect_only_args_root(L, pt, profile);
 
-  if (profile->evolution == NUMERIC_ARGS_MUL_ASCENDING) {
+  if (profile->evolution == NUMERIC_ARGS_DIV_ASCENDING) {
+    /* Retaining one recording-time value at a time distinguishes every live
+    ** argument from a constant and preserves noncommutative DIV ordering. */
+    lj_trace_test_root_entry_reset();
+    lj_trace_test_reset_exit_stats();
+    assert(call_triple(L, profile->name,
+	profile->record.x, profile->reuse.limit, profile->reuse.step,
+	0, 0, 0) == 8.0);
+    expect_single_exit(FINAL_EXIT);
+    expect_only_args_root(L, pt, profile);
+
+    lj_trace_test_root_entry_reset();
+    lj_trace_test_reset_exit_stats();
+    assert(call_triple(L, profile->name,
+	profile->reuse.x, profile->record.limit, profile->reuse.step,
+	0, 0, 0) == 40.0);
+    expect_single_exit(FINAL_EXIT);
+    expect_only_args_root(L, pt, profile);
+
+    lj_trace_test_root_entry_reset();
+    lj_trace_test_reset_exit_stats();
+    assert(call_triple(L, profile->name,
+	profile->reuse.x, profile->reuse.limit, profile->record.step,
+	0, 0, 0) == 5.0);
+    expect_single_exit(FINAL_EXIT);
+    expect_only_args_root(L, pt, profile);
+  } else if (profile->evolution == NUMERIC_ARGS_MUL_ASCENDING) {
     /* Each call retains one recording-time value. All three distinguish the
     ** live argument from a constant specialized into the MUL root. */
     lj_trace_test_root_entry_reset();
@@ -1342,7 +1421,32 @@ static void test_positive_and_guard_exits(const NumericArgsProfile *profile)
     expect_only_args_root(L, pt, profile);
   }
 
-  if (profile->evolution == NUMERIC_ARGS_MUL_ASCENDING &&
+  if (profile->evolution == NUMERIC_ARGS_DIV_ASCENDING) {
+    /* Equality at the body guard exits through the strict final snapshot. */
+    lj_trace_test_root_entry_reset();
+    lj_trace_test_reset_exit_stats();
+    assert(call_triple(L, profile->name,
+	0.5, 2.0, 0.5, 0, 0, 0) == 2.0);
+    expect_single_exit(FINAL_EXIT);
+    expect_only_args_root(L, pt, profile);
+
+    /* Equality after the first quotient fails the strict precondition. */
+    lj_trace_test_root_entry_reset();
+    lj_trace_test_reset_exit_stats();
+    assert(call_triple(L, profile->name,
+	0.5, 1.0, 0.5, 0, 0, 0) == 1.0);
+    expect_single_exit(PRECOND_EXIT);
+    expect_only_args_root(L, pt, profile);
+
+    /* Initial equality fails interpreted < and never enters JLOOP. */
+    lj_trace_test_root_entry_reset();
+    lj_trace_test_reset_exit_stats();
+    assert(call_triple(L, profile->name,
+	1.0, 1.0, 0.5, 0, 0, 0) == 1.0);
+    assert(lj_trace_test_root_entry_publishes() == 0);
+    assert(lj_trace_test_exit_calls() == 0);
+    expect_only_args_root(L, pt, profile);
+  } else if (profile->evolution == NUMERIC_ARGS_MUL_ASCENDING &&
       profile->comparison == NUMERIC_ARGS_INCLUSIVE) {
     /* Equality at the body guard takes the inclusive backedge once more. */
     lj_trace_test_root_entry_reset();
@@ -1487,7 +1591,50 @@ static void test_positive_and_guard_exits(const NumericArgsProfile *profile)
   }
 
   test_xpoll_lifecycle(L, pt, idle_vmstate, profile);
-  if (profile->evolution == NUMERIC_ARGS_MUL_ASCENDING) {
+  if (profile->evolution == NUMERIC_ARGS_DIV_ASCENDING) {
+    test_terminating_mutation(L, pt, idle_vmstate, profile,
+      POSTADMISSION_QNAN_X, profile->mutation.x, MUTATION_QNAN, 0.0);
+    test_terminating_mutation(L, pt, idle_vmstate, profile,
+      POSTADMISSION_PINF_X, profile->mutation.x, MUTATION_PINF, 0.0);
+    test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile,
+      POSTADMISSION_NINF_X, profile->mutation.x);
+    test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile,
+      POSTADMISSION_ZERO_X, profile->mutation.x);
+    test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile,
+      POSTADMISSION_NEGZERO_X, profile->mutation.x);
+    test_terminating_mutation(L, pt, idle_vmstate, profile,
+      POSTADMISSION_QNAN_LIMIT, profile->mutation.limit,
+      MUTATION_FINITE, 1.0);
+    test_terminating_mutation_at_exit(L, pt, idle_vmstate, profile,
+      POSTADMISSION_PINF_LIMIT, profile->mutation.limit,
+      MUTATION_PINF, 0.0, FINAL_EXIT);
+    test_terminating_mutation(L, pt, idle_vmstate, profile,
+      POSTADMISSION_NINF_LIMIT, profile->mutation.limit,
+      MUTATION_FINITE, 1.0);
+    test_terminating_mutation(L, pt, idle_vmstate, profile,
+      POSTADMISSION_ZERO_LIMIT, profile->mutation.limit,
+      MUTATION_FINITE, 1.0);
+    test_terminating_mutation(L, pt, idle_vmstate, profile,
+      POSTADMISSION_NEGZERO_LIMIT, profile->mutation.limit,
+      MUTATION_FINITE, 1.0);
+    test_terminating_mutation(L, pt, idle_vmstate, profile,
+      POSTADMISSION_QNAN_STEP, profile->mutation.step,
+      MUTATION_QNAN, 0.0);
+    test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile,
+      POSTADMISSION_PINF_STEP, profile->mutation.step);
+    test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile,
+      POSTADMISSION_NINF_STEP, profile->mutation.step);
+    test_terminating_mutation(L, pt, idle_vmstate, profile,
+      POSTADMISSION_ZERO_STEP, profile->mutation.step,
+      MUTATION_PINF, 0.0);
+    test_terminating_mutation_at_exit(L, pt, idle_vmstate, profile,
+      POSTADMISSION_NEGZERO_STEP, profile->mutation.step,
+      MUTATION_PINF, 0.0, FINAL_EXIT);
+    test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile,
+      POSTADMISSION_ONE_STEP, profile->mutation.step);
+    test_nonterminating_mutation_stop(L, pt, idle_vmstate, profile,
+      POSTADMISSION_NEGONE_STEP, profile->mutation.step);
+  } else if (profile->evolution == NUMERIC_ARGS_MUL_ASCENDING) {
     test_terminating_mutation(L, pt, idle_vmstate, profile,
       POSTADMISSION_QNAN_X, profile->mutation.x, MUTATION_QNAN, 0.0);
     test_terminating_mutation(L, pt, idle_vmstate, profile,
@@ -1716,6 +1863,21 @@ static void test_fixed_initializers_remain_separate(void)
 
   run_lua(L,
     "jit.flush(); "
+    "function __arm64_fixed_initializer_div(limit,divisor) "
+      "local x=0.5 while x<limit do x=x/divisor end return x end "
+    "assert(__arm64_fixed_initializer_div(20.25,0.5)==32)");
+  expect_no_trace(L, "__arm64_fixed_initializer_div");
+
+  run_lua(L,
+    "jit.flush(); "
+    "function __arm64_fixed_divisor_div(x,limit) "
+      "while x<limit do x=x/0.5 end return x end "
+    "assert(__arm64_fixed_divisor_div(0.5,20.25)==32)");
+  pt = global_proto(L, "__arm64_fixed_divisor_div");
+  expect_no_trace(L, "__arm64_fixed_divisor_div");
+
+  run_lua(L,
+    "jit.flush(); "
     "function __arm64_fixed_initializer_add_descending(limit,step) "
       "local x=20.5 while x>limit do x=x+step end return x end "
     "assert(__arm64_fixed_initializer_add_descending(0.25,-0.5)==0.0)");
@@ -1796,19 +1958,44 @@ static void test_sub_lt_rejected(void)
   lua_close(L);
 }
 
-static void test_div_rejected(void)
+static void test_div_adjacent_rejected(void)
 {
   lua_State *L = luaL_newstate();
   assert(L != NULL);
   luaL_openlibs(L);
+
   run_lua(L,
     "jit.flush(); jit.on(); "
     "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
-    "function __arm64_args_negative(x,limit,step) "
-      "while x<limit do x=x/step end return x end");
-  assert(call_triple(L, "__arm64_args_negative",
+    "function __arm64_args_div_reversed_compare(x,limit,divisor) "
+      "while limit>x do x=x/divisor end return x end");
+  assert(call_triple(L, "__arm64_args_div_reversed_compare",
 	0.5, 20.25, 0.5, 0, 0, 0) == 32.0);
-  expect_no_trace(L, "__arm64_args_negative");
+  expect_no_trace(L, "__arm64_args_div_reversed_compare");
+
+  run_lua(L,
+    "jit.flush(); "
+    "function __arm64_args_div_inclusive(x,limit,divisor) "
+      "while x<=limit do x=x/divisor end return x end");
+  assert(call_triple(L, "__arm64_args_div_inclusive",
+	0.5, 20.25, 0.5, 0, 0, 0) == 32.0);
+  expect_no_trace(L, "__arm64_args_div_inclusive");
+
+  run_lua(L,
+    "jit.flush(); "
+    "function __arm64_args_div_reversed(x,limit,divisor) "
+      "while x<limit do x=divisor/x end return x end");
+  assert(call_triple(L, "__arm64_args_div_reversed",
+	0.5, 0.75, 0.5, 0, 0, 0) == 1.0);
+  expect_no_trace(L, "__arm64_args_div_reversed");
+
+  run_lua(L,
+    "jit.flush(); "
+    "function __arm64_args_div_extra(x,limit,divisor) "
+      "while x<limit do x=x/divisor/divisor end return x end");
+  assert(call_triple(L, "__arm64_args_div_extra",
+	0.5, 20.25, 0.5, 0, 0, 0) == 32.0);
+  expect_no_trace(L, "__arm64_args_div_extra");
   lua_close(L);
 }
 
@@ -2100,13 +2287,14 @@ int main(int argc, char **argv)
   test_positive_and_guard_exits(&inclusive_profile);
   test_positive_and_guard_exits(&mul_profile);
   test_positive_and_guard_exits(&mul_inclusive_profile);
+  test_positive_and_guard_exits(&div_profile);
   test_positive_and_guard_exits(&add_descending_profile);
   test_positive_and_guard_exits(&add_descending_inclusive_profile);
   test_positive_and_guard_exits(&descending_profile);
   test_positive_and_guard_exits(&descending_inclusive_profile);
   test_fixed_initializers_remain_separate();
   test_sub_lt_rejected();
-  test_div_rejected();
+  test_div_adjacent_rejected();
   test_adjacent_comparisons_rejected();
   test_mul_inclusive_adjacent_rejected();
   test_extra_add_rejected();
