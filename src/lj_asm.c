@@ -75,7 +75,7 @@ int lj_asm_arm64_b26_encode(uintptr_t source, uintptr_t target, MCode *insp)
 ** self-linked scalar BC_LOOP roots, separately certified constant-step
 ** integer BC_FORL roots, and the exact literal-true fixed-function root.
 ** Numeric LOOP admission is presently limited to four exact spill-free
-** accumulator shapes: one dynamic mixed INT/NUM root, one pure NUM root with
+** accumulator families: one dynamic mixed INT/NUM root, one pure NUM root with
 ** a canonical +0.5 constant, one fixed-initializer root with a dynamic NUM
 ** step, and one all-parameter NUM root with an exact ADD_LT, ADD_LE, ADD_GT,
 ** ADD_GE, SUB_GT, SUB_GE, MUL_LT, MUL_LE, DIV_LT, DIV_LE, DIV_GT or DIV_GE
@@ -1362,7 +1362,6 @@ int lj_asm_arm64_postra_admit(const LJArm64PostRAView *view,
       if (numdynamic_step_kind == ARM64_NUMDYN_STEP_INT_TO_NUM) {
 	if (constant_profile != ARM64_IR_KPROFILE_INT || !suffix_is_nop ||
 	    nrename != 0 || spadjust != 0 || highest_end != 0 ||
-	    view->proto_sizebc != 13 ||
 	    !arm64_postra_numacc_shape(view, semantic_nins,
 	      numdynamic_step_kind))
 	  return 0;
