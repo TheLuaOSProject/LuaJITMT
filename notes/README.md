@@ -9,10 +9,12 @@ current claims.
 
 Development branch: `codex/aarch64-macos-port`.
 
-Last complete JIT fail-closed-gate checkpoint: `4d1b6126` (2026-08-29).
-That checkpoint also passed the native and x86_64 vendored suites with 509
-tests each. The temporary x86_64 build reported `jit.os == "OSX"`,
-`jit.arch == "x64"`, enabled JIT, and a real loop trace before it was removed.
+Last complete JIT fail-closed-gate checkpoint: `e1eb3de1` (2026-08-29).
+That structural checkpoint moved the ARM64 admission policy out of the shared
+assembler without changing it. The native and x86_64 vendored suites last
+passed with 509 tests each at `4d1b6126`; the temporary x86_64 build reported
+`jit.os == "OSX"`, `jit.arch == "x64"`, enabled JIT, and a real loop trace
+before it was removed.
 
 The current cleanup and proof sequence is:
 
@@ -23,7 +25,9 @@ The current cleanup and proof sequence is:
   certificate;
 - `28892903` binds the new proof into the umbrella gate; and
 - `4d1b6126` makes JFUNCF disassembly checks robust to the same-address
-  `FUNCV`/`IFUNCV` symbol aliases emitted by Apple's tools.
+  `FUNCV`/`IFUNCV` symbol aliases emitted by Apple's tools; and
+- `e1eb3de1` moves the unchanged 3,244-line ARM64 admission and post-RA
+  certificate into `src/lj_asm_arm64_admit.h`.
 
 ARM64 remains explicitly opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`. Native JIT
 work additionally requires `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`. These flags are
@@ -105,10 +109,16 @@ check no longer leak into x86_64 behavior.
 
 Relative to local and remote `v2.1` at `a649f737`, the first cleanup reduced
 the `src/` diff from 56 files with 13,891 insertions and 1,815 deletions to 55
-files with 13,820 insertions and 1,733 deletions. The verified checkpoint is 57
-files with 14,483 insertions and 1,737 deletions (net 12,746). The exact INT
+files with 13,820 insertions and 1,733 deletions. The verified checkpoint is 58
+files with 14,494 insertions and 1,737 deletions (net 12,757). The exact INT
 widening tranches do not change `lj_asm_arm64.h`, `lj_emit_arm64.h`, or
 `vm_arm64.dasc`; they reuse upstream's existing `asm_conv()` lowering.
+
+The target-local extraction reduces the shared `src/lj_asm.c` divergence from
+3,806 insertions and 5 deletions to 563 insertions and 5 deletions. Its moved
+body was byte-for-byte compared with the pre-extraction source, and all source
+certificates now inspect `src/lj_asm_arm64_admit.h` while retaining their
+independent semantic and post-register-allocation boundaries.
 
 The unwind fix keeps the historical exception prefix and x64 path unchanged.
 Its ARM64 tail uses one exception-owned `x28` carrier and a target-local VM
@@ -116,15 +126,14 @@ landing, preserves the allocatable GPR/FPR state plus `NZCV`, `FPCR`, and
 `FPSR`, and returns through the original target, return-signed on arm64e. The
 landing is omitted from Windows and `LUAJIT_NO_UNWIND` ARM64 builds.
 
-Large ARM64 admission and lifecycle blocks remain in common files. Moving them
-into target-local modules is a later structural migration because current
-source certificates parse their exact boundaries. The semantic and
-post-register-allocation gates intentionally remain independent to avoid a
-common-mode acceptance bug.
+Large ARM64 lifecycle blocks still remain in common files, particularly
+`src/lj_trace.c`. Move those only as separate structural changes with exact
+source-boundary and runtime proof; do not combine or weaken the independent
+semantic and post-register-allocation gates merely to reduce the diff.
 
 ## Verification
 
-- `tools/ci/arm64_jit_fail_closed_gate.sh`: passed in full at `4d1b6126`,
+- `tools/ci/arm64_jit_fail_closed_gate.sh`: passed in full at `e1eb3de1`,
   including the 3,072-case compiler proof, 222 runtime profile executions,
   ARM64/arm64e publication, entry, exit, retirement, flush/reuse, GDB-JIT,
   callback, first-side, and safepoint contracts.
