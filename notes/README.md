@@ -9,10 +9,9 @@ without looking like current claims.
 
 Development branch: `codex/aarch64-macos-port`.
 
-Last functionally verified source checkpoint: `2fd6fb49` (2026-08-28). The
-documentation archive cleanup does not change functional source. Any later
-minimal-divergence source cleanup must be independently reviewed and
-revalidated before this line is advanced.
+Last fully verified source checkpoint: `a6d7fd50` (2026-08-28). It contains
+the documentation archive and reviewed minimal-divergence cleanup. It does not
+widen the ARM64 JIT grammar beyond the `2fd6fb49` `DIV_LT` checkpoint.
 
 ARM64 remains explicitly opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`. Native JIT
 work additionally requires `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`. These flags are
@@ -47,25 +46,45 @@ total profiles. Its runtime proof checks noncommutative FDIV operands, exact
 ARM64/arm64e instruction words, type exits, equality boundaries, NaN,
 infinities, signed zero, STOPREQ cleanup/reuse, and adjacent no-trace shapes.
 
-## Verification at `2fd6fb49`
+## Minimal-divergence cleanup
+
+The cleanup restored the unchanged target options in `src/Makefile` exactly to
+the `v2.1` version, removed a duplicate API declaration, kept ARM64-only
+metadata and several lifecycle paths out of non-ARM builds, and normalized 167
+DynASM lines to LuaJIT's existing indentation. It also corrected two cross-target
+leaks: ARM64's exact five-slot side certificate and FORI/FORL tuple check no
+longer run on x86-64.
+
+Relative to `v2.1`, the `src/` diff fell from 56 files with 13,891
+insertions and 1,815 deletions to 55 files with 13,820 insertions and 1,733
+deletions. Large ARM64 admission and lifecycle blocks remain in common files;
+moving them into target-local modules is a later structural migration because
+the source-certificate scripts parse their current boundaries. Independent
+semantic and post-register-allocation gates were deliberately not deduplicated.
+
+## Verification at `a6d7fd50`
 
 - `tools/ci/arm64_jit_fail_closed_gate.sh`: passed in full.
 - Native ARM64 vendored LuaJIT suite: `509 passed`.
 - Focused all-parameter numeric contract: direct plus two randomized runs on
   ordinary ARM64 and arm64e/BTI; all six executions passed.
-- Twelve independent native processes published exactly trace 1 with
-  `link=1` and `linktype=loop`, including genuine-NUM `MUL_LT`, `MUL_LE`, and
-  `DIV_LT` operands.
 - Disposable thin x86_64 build: platform smoke passed under Rosetta with
-  `jit.os=OSX`, `jit.arch=x64`, `trace=1`, `link=1`, and `linktype=loop`; the
-  x86_64 vendored suite also reported `509 passed`.
-- The restored primary artifacts are thin ARM64, `src/lj_asm.o` is newer than
-  its source and byte-identical to the archive member, and the worktree was
-  clean and synchronized with `origin` before cleanup.
+  `jit.os=OSX`, `jit.arch=x64`; its vendored suite also reported `509 passed`.
+- Four fresh x86_64 runs published a real first side from a parent with 17
+  stack slots: trace 1 linked to its loop and trace 2 linked to parent 1 from
+  exit 3. Four additional runs published a live `JFORL` root.
+- Isolated `src/luajit`, `libluajit.a`, `lj_vm.o`, and `lj_asm.o` artifacts
+  were thin ARM64, and the archive's `lj_asm.o` was byte-identical to the
+  standalone object.
+
+The earlier `2fd6fb49` functional checkpoint also ran twelve independent native
+processes which published exactly trace 1 with `link=1` and `linktype=loop`,
+including genuine-NUM `MUL_LT`, `MUL_LE`, and `DIV_LT` operands.
 
 The recurring unused `ccall_rawchild_wait` warning remains pre-existing. The
-isolated x86_64 configuration also emits the known discarded non-GC64 probe
-diagnostic and unused `topofs` warning before its successful GC64 build.
+diagnostic GDB-JIT and x86_64 builds also emit the known unused `topofs`
+warning; the x86_64 build's default-architecture clean probe reports its
+expected non-GC64 rejection before the configured GC64 build succeeds.
 
 ## Still closed or incomplete
 
