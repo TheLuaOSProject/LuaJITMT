@@ -6,8 +6,9 @@
 ** geometry: strict/inclusive ascending ADD, strict/inclusive ascending MUL,
 ** strict/inclusive ascending DIV, strict/inclusive descending DIV,
 ** strict/inclusive descending ADD, and strict/inclusive descending SUB, each
-** with three live NUM parameters (initial accumulator, limit, and step,
-** factor, or divisor).
+** with live NUM accumulator/limit parameters and either a NUM or INT
+** invariant step, factor, or divisor. INT invariants are converted to NUM
+** exactly once before either recurrence.
 ** Adjacent arithmetic, direction, and bytecode families remain fail-closed,
 ** while the already-admitted fixed-initializer roots stay distinct.
 */
@@ -83,13 +84,19 @@ typedef enum NumericArgsComparison {
   NUMERIC_ARGS_INCLUSIVE
 } NumericArgsComparison;
 
+typedef enum NumericArgsStepKind {
+  NUMERIC_ARGS_STEP_NUM,
+  NUMERIC_ARGS_STEP_INT
+} NumericArgsStepKind;
+
 typedef enum NumericArgsEvolution {
   NUMERIC_ARGS_ADD_ASCENDING,
   NUMERIC_ARGS_MUL_ASCENDING,
   NUMERIC_ARGS_DIV_ASCENDING,
   NUMERIC_ARGS_DIV_DESCENDING,
   NUMERIC_ARGS_ADD_DESCENDING,
-  NUMERIC_ARGS_SUB_DESCENDING
+  NUMERIC_ARGS_SUB_DESCENDING,
+  NUMERIC_ARGS_EVOLUTION_MAX
 } NumericArgsEvolution;
 
 typedef struct NumericArgsCall {
@@ -129,6 +136,22 @@ static int numeric_args_is_descending(const NumericArgsProfile *profile)
   return profile->evolution == NUMERIC_ARGS_ADD_DESCENDING ||
 	 profile->evolution == NUMERIC_ARGS_SUB_DESCENDING ||
 	 profile->evolution == NUMERIC_ARGS_DIV_DESCENDING;
+}
+
+static IRRef numeric_args_ref(NumericArgsStepKind step_kind, IRRef num_ref)
+{
+  return (IRRef)(num_ref+
+	(step_kind == NUMERIC_ARGS_STEP_INT && num_ref >= R_X_PRE));
+}
+
+static IRRef numeric_args_step_value_ref(NumericArgsStepKind step_kind)
+{
+  return step_kind == NUMERIC_ARGS_STEP_INT ? R_STEP+1u : R_STEP;
+}
+
+static IRRef numeric_args_end_ref(NumericArgsStepKind step_kind)
+{
+  return numeric_args_ref(step_kind, R_END);
 }
 
 static const NumericArgsProfile strict_profile = {
@@ -332,6 +355,78 @@ static const NumericArgsProfile descending_inclusive_profile = {
   { 20.5, 1.0, 0.5, 0.5 },
   { 0.75, 0.5, 0.5, 0.25 }
 };
+
+typedef struct NumericArgsIntModeData {
+  NumericArgsCall record;
+  NumericArgsCall reuse;
+  lua_Number substitute_x_result;
+  lua_Number substitute_limit_result;
+  lua_Number substitute_step_result;
+  NumericArgsCall integer_x;
+  NumericArgsCall integer_limit;
+  NumericArgsCall precondition;
+} NumericArgsIntModeData;
+
+/* Comparison pairs share one INT-invariant dataset per recurrence family.
+** None of these ordinary rows lands exactly on its comparison boundary. */
+static const NumericArgsIntModeData int_mode_data[
+  NUMERIC_ARGS_EVOLUTION_MAX] = {
+  [NUMERIC_ARGS_ADD_ASCENDING] = {
+    { 0.5, 20.25, 2.0, 20.5 },
+    { 0.625, 5.5, 4.0, 8.625 },
+    8.5, 20.625, 6.625,
+    { 0.0, 20.25, 2.0, 22.0 },
+    { 0.5, 20.0, 2.0, 20.5 },
+    { 0.5, 1.0, 2.0, 2.5 }
+  },
+  [NUMERIC_ARGS_MUL_ASCENDING] = {
+    { 0.5, 20.25, 2.0, 32.0 },
+    { 0.625, 5.5, 3.0, 5.625 },
+    13.5, 50.625, 10.0,
+    { 1.0, 20.25, 2.0, 32.0 },
+    { 0.5, 20.0, 2.0, 32.0 },
+    { 0.75, 1.0, 2.0, 1.5 }
+  },
+  [NUMERIC_ARGS_DIV_ASCENDING] = {
+    { -20.5, -0.25, 2.0, -0.16015625 },
+    { -18.5, -0.75, 4.0, -0.2890625 },
+    -0.3203125, -0.072265625, -0.578125,
+    { -20.0, -0.25, 2.0, -0.15625 },
+    { -20.5, -1.0, 2.0, -0.640625 },
+    { -1.0, -0.75, 2.0, -0.5 }
+  },
+  [NUMERIC_ARGS_DIV_DESCENDING] = {
+    { 20.5, 0.25, 2.0, 0.16015625 },
+    { 18.5, 0.75, 4.0, 0.2890625 },
+    0.3203125, 0.072265625, 0.578125,
+    { 20.0, 0.25, 2.0, 0.15625 },
+    { 20.5, 1.0, 2.0, 0.640625 },
+    { 1.0, 0.75, 2.0, 0.5 }
+  },
+  [NUMERIC_ARGS_ADD_DESCENDING] = {
+    { 20.5, 0.25, -2.0, -1.5 },
+    { 5.5, -2.25, -6.0, -6.5 },
+    -3.5, -0.5, -2.5,
+    { 20.0, 0.25, -2.0, 0.0 },
+    { 20.5, 1.0, -2.0, 0.5 },
+    { 1.5, 1.0, -2.0, -0.5 }
+  },
+  [NUMERIC_ARGS_SUB_DESCENDING] = {
+    { 20.5, 0.25, 2.0, -1.5 },
+    { 5.5, -2.25, 6.0, -6.5 },
+    -3.5, -0.5, -2.5,
+    { 20.0, 0.25, 2.0, 0.0 },
+    { 20.5, 1.0, 2.0, 0.5 },
+    { 1.5, 1.0, 2.0, -0.5 }
+  }
+};
+
+static const NumericArgsIntModeData *numeric_args_int_data(
+	const NumericArgsProfile *profile)
+{
+  assert((unsigned)profile->evolution < NUMERIC_ARGS_EVOLUTION_MAX);
+  return &int_mode_data[profile->evolution];
+}
 
 #define QNAN_BITS UINT64_C(0x7ff8000000000000)
 #define PINF_BITS UINT64_C(0x7ff0000000000000)
@@ -640,19 +735,29 @@ static Reg expect_fpr(const IRIns *ir, IRRef ref)
   return ins.r;
 }
 
+static Reg expect_gpr(const IRIns *ir, IRRef ref)
+{
+  IRIns ins = ir_load_acq(&ir[ref]);
+  assert(ins.r >= RID_MIN_GPR && ins.r < RID_MAX_GPR);
+  assert(rset_test(RSET_GPR, ins.r));
+  assert(!ra_hasspill(ins.s));
+  return ins.r;
+}
+
 static unsigned fpr_index(Reg reg)
 {
   assert(reg >= RID_MIN_FPR && reg < RID_MAX_FPR);
   return (unsigned)(reg-RID_MIN_FPR);
 }
 
-static void dump_unexpected_postra(const GCtrace *T)
+static void dump_unexpected_postra(const GCtrace *T,
+	NumericArgsStepKind step_kind)
 {
   const IRIns *ir = trace_ir_acq(T);
   IRRef ref;
   fprintf(stderr, "dynamic args NUM post-RA nk=%u nins=%u, expected %u/%u\n",
 	  (unsigned)trace_nk_acq(T), (unsigned)trace_nins_acq(T),
-	  (unsigned)REF_TRUE, (unsigned)R_END);
+	  (unsigned)REF_TRUE, (unsigned)numeric_args_end_ref(step_kind));
   for (ref = REF_TRUE; ref < trace_nins_acq(T); ref++) {
     IRIns ins = ir_load_acq(&ir[ref]);
     fprintf(stderr, "post-RA ref=%u op=%u type=%u op1=%u op2=%u "
@@ -665,17 +770,28 @@ static void dump_unexpected_postra(const GCtrace *T)
 }
 
 static void expect_ir_shape(const GCtrace *T,
-	const NumericArgsProfile *profile)
+	const NumericArgsProfile *profile, NumericArgsStepKind step_kind)
 {
   const IRIns *ir = trace_ir_acq(T);
   IRIns suffix;
+  IRRef step_value = numeric_args_step_value_ref(step_kind);
+  IRRef xpre_ref = numeric_args_ref(step_kind, R_X_PRE);
+  IRRef limit_ref = numeric_args_ref(step_kind, R_LIMIT);
+  IRRef precond_ref = numeric_args_ref(step_kind, R_PRECOND);
+  IRRef loop_ref = numeric_args_ref(step_kind, R_LOOP);
+  IRRef xpoll_ref = numeric_args_ref(step_kind, R_XPOLL);
+  IRRef xbody_ref = numeric_args_ref(step_kind, R_X_BODY);
+  IRRef cond_ref = numeric_args_ref(step_kind, R_COND);
+  IRRef xphi_ref = numeric_args_ref(step_kind, R_X_PHI);
+  IRRef nop_ref = numeric_args_ref(step_kind, R_NOP);
+  IRRef end_ref = numeric_args_end_ref(step_kind);
   Reg x, step, xpre, limit, xbody, xphi;
   IRRef ref;
 
-  if (trace_nk_acq(T) != REF_TRUE || trace_nins_acq(T) != R_END)
-    dump_unexpected_postra(T);
+  if (trace_nk_acq(T) != REF_TRUE || trace_nins_acq(T) != end_ref)
+    dump_unexpected_postra(T, step_kind);
   assert(trace_nk_acq(T) == REF_TRUE);
-  assert(trace_nins_acq(T) == R_END);
+  assert(trace_nins_acq(T) == end_ref);
   for (ref = REF_TRUE; ref <= REF_NIL; ref++) {
     IRIns pri = ir_load_acq(&ir[ref]);
     assert(pri.o == IR_KPRI);
@@ -685,43 +801,47 @@ static void expect_ir_shape(const GCtrace *T,
   expect_ir(ir, REF_BASE, IR_BASE, IRT_PGC, 0, 0);
   expect_ir(ir, R_X, IR_SLOAD, IRT_NUM|IRT_GUARD,
 	    2, IRSLOAD_TYPECHECK);
-  expect_ir(ir, R_STEP, IR_SLOAD, IRT_NUM|IRT_GUARD,
-	    4, IRSLOAD_TYPECHECK);
+  expect_ir(ir, R_STEP, IR_SLOAD,
+	    (uint8_t)((step_kind == NUMERIC_ARGS_STEP_INT ? IRT_INT : IRT_NUM)|
+	    IRT_GUARD), 4, IRSLOAD_TYPECHECK);
+  if (step_kind == NUMERIC_ARGS_STEP_INT)
+    expect_ir(ir, step_value, IR_CONV, IRT_NUM,
+	      R_STEP, IRCONV_NUM_INT);
   if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING ||
       profile->evolution == NUMERIC_ARGS_DIV_ASCENDING ||
       profile->evolution == NUMERIC_ARGS_DIV_DESCENDING) {
-    expect_ir(ir, R_X_PRE, profile->recurrence_ir,
-	IRT_NUM|IRT_ISPHI, R_X, R_STEP);
+    expect_ir(ir, xpre_ref, profile->recurrence_ir,
+	IRT_NUM|IRT_ISPHI, R_X, step_value);
   } else {
-    expect_ir(ir, R_X_PRE, profile->recurrence_ir,
-	IRT_NUM|IRT_ISPHI, R_STEP, R_X);
+    expect_ir(ir, xpre_ref, profile->recurrence_ir,
+	IRT_NUM|IRT_ISPHI, step_value, R_X);
   }
-  expect_ir(ir, R_LIMIT, IR_SLOAD, IRT_NUM|IRT_GUARD,
+  expect_ir(ir, limit_ref, IR_SLOAD, IRT_NUM|IRT_GUARD,
 	    3, IRSLOAD_TYPECHECK);
-  expect_ir(ir, R_PRECOND, profile->precondition_op,
-	IRT_NUM|IRT_GUARD, R_LIMIT, R_X_PRE);
-  expect_ir(ir, R_LOOP, IR_LOOP, IRT_NIL|IRT_GUARD, 0, 0);
-  expect_ir(ir, R_XPOLL, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0);
-  expect_ir(ir, R_X_BODY, profile->recurrence_ir, IRT_NUM|IRT_ISPHI,
-	    R_X_PRE, R_STEP);
-  expect_ir(ir, R_COND, profile->body_op,
-	IRT_NUM|IRT_GUARD, R_X_BODY, R_LIMIT);
-  expect_ir(ir, R_X_PHI, IR_PHI, IRT_NUM, R_X_PRE, R_X_BODY);
-  suffix = ir_load_acq(&ir[R_NOP]);
+  expect_ir(ir, precond_ref, profile->precondition_op,
+	IRT_NUM|IRT_GUARD, limit_ref, xpre_ref);
+  expect_ir(ir, loop_ref, IR_LOOP, IRT_NIL|IRT_GUARD, 0, 0);
+  expect_ir(ir, xpoll_ref, IR_XPOLL, IRT_NIL|IRT_GUARD, 1, 0);
+  expect_ir(ir, xbody_ref, profile->recurrence_ir, IRT_NUM|IRT_ISPHI,
+	    xpre_ref, step_value);
+  expect_ir(ir, cond_ref, profile->body_op,
+	IRT_NUM|IRT_GUARD, xbody_ref, limit_ref);
+  expect_ir(ir, xphi_ref, IR_PHI, IRT_NUM, xpre_ref, xbody_ref);
+  suffix = ir_load_acq(&ir[nop_ref]);
   assert(suffix.o == IR_NOP && suffix.t.irt == IRT_NIL);
   assert(suffix.op1 == 0 && suffix.op2 == 0 && suffix.prev == 0);
-  for (ref = REF_BASE; ref <= R_X_PHI; ref++) {
+  for (ref = REF_BASE; ref <= xphi_ref; ref++) {
     IRIns ins = ir_load_acq(&ir[ref]);
     assert(!ra_hasspill(ins.s));
     assert(ins.o != IR_RENAME);
   }
 
   x = expect_fpr(ir, R_X);
-  step = expect_fpr(ir, R_STEP);
-  xpre = expect_fpr(ir, R_X_PRE);
-  limit = expect_fpr(ir, R_LIMIT);
-  xbody = expect_fpr(ir, R_X_BODY);
-  xphi = expect_fpr(ir, R_X_PHI);
+  step = expect_fpr(ir, step_value);
+  xpre = expect_fpr(ir, xpre_ref);
+  limit = expect_fpr(ir, limit_ref);
+  xbody = expect_fpr(ir, xbody_ref);
+  xphi = expect_fpr(ir, xphi_ref);
   assert(fpr_index(x) == 2);
   assert(fpr_index(step) == 1);
   assert(fpr_index(xpre) == 15);
@@ -729,14 +849,18 @@ static void expect_ir_shape(const GCtrace *T,
   assert(xpre == xbody && xpre == xphi);
   assert(step != xphi && limit != xphi && step != limit);
   assert(x != step);
+  if (step_kind == NUMERIC_ARGS_STEP_INT)
+    assert(expect_gpr(ir, R_STEP) == RID_X1);
 }
 
-static void expect_snapshot_shape(const GCtrace *T, const GCproto *pt)
+static void expect_snapshot_shape(const GCtrace *T, const GCproto *pt,
+	NumericArgsStepKind step_kind)
 {
   const IRIns *ir = trace_ir_acq(T);
   const SnapShot *snap = trace_snap_acq(T);
   SnapEntry *snapmap = trace_snapmap_acq(T);
-  Reg phireg = expect_fpr(ir, R_X_PHI);
+  Reg phireg = expect_fpr(ir,
+	numeric_args_ref(step_kind, R_X_PHI));
   MSize tuple = 0;
   SnapNo snapno;
 
@@ -744,7 +868,8 @@ static void expect_snapshot_shape(const GCtrace *T, const GCproto *pt)
   assert(trace_nsnapmap_acq(T) == 15);
   for (snapno = 0; snapno < 5; snapno++) {
     MSize n;
-    assert(snap_ref_acq(&snap[snapno]) == expected_snaprefs[snapno]);
+    assert(snap_ref_acq(&snap[snapno]) ==
+	   numeric_args_ref(step_kind, expected_snaprefs[snapno]));
     assert(snap_mapofs_acq(&snap[snapno]) == expected_mapofs[snapno]);
     assert(snap_nent_acq(&snap[snapno]) == expected_nent[snapno]);
     assert(snap_nslots_acq(&snap[snapno]) == expected_nslots[snapno]);
@@ -755,7 +880,8 @@ static void expect_snapshot_shape(const GCtrace *T, const GCproto *pt)
       IRIns value;
       assert(tuple < sizeof(expected_map_refs)/sizeof(expected_map_refs[0]));
       assert(sn == SNAP(expected_map_slots[tuple], 0,
-		       expected_map_refs[tuple]));
+		       numeric_args_ref(step_kind,
+			 expected_map_refs[tuple])));
       value = ir_load_acq(&ir[snap_ref(sn)]);
       assert(value.t.irt == (IRT_NUM|IRT_ISPHI));
       assert(value.r == phireg && !ra_hasspill(value.s));
@@ -784,8 +910,34 @@ static int32_t sign_extend_branch(uint32_t value, unsigned bits)
   return (int32_t)(value << (32u-bits)) >> (32u-bits);
 }
 
-static void expect_dynamic_fp_mcode(const GCtrace *T,
+static uint32_t numeric_args_int_first_word(
 	const NumericArgsProfile *profile)
+{
+  if (profile->evolution == NUMERIC_ARGS_MUL_ASCENDING)
+    return UINT32_C(0x1e62082f);
+  if (profile->evolution == NUMERIC_ARGS_DIV_ASCENDING ||
+      profile->evolution == NUMERIC_ARGS_DIV_DESCENDING)
+    return UINT32_C(0x1e61184f);
+  if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING)
+    return UINT32_C(0x1e61384f);
+  return UINT32_C(0x1e62282f);
+}
+
+static uint32_t numeric_args_int_body_word(
+	const NumericArgsProfile *profile)
+{
+  if (profile->evolution == NUMERIC_ARGS_MUL_ASCENDING)
+    return UINT32_C(0x1e6109ef);
+  if (profile->evolution == NUMERIC_ARGS_DIV_ASCENDING ||
+      profile->evolution == NUMERIC_ARGS_DIV_DESCENDING)
+    return UINT32_C(0x1e6119ef);
+  if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING)
+    return UINT32_C(0x1e6139ef);
+  return UINT32_C(0x1e6129ef);
+}
+
+static void expect_dynamic_fp_mcode(const GCtrace *T,
+	const NumericArgsProfile *profile, NumericArgsStepKind step_kind)
 {
   const IRIns *ir = trace_ir_acq(T);
   const MCode *mcode = trace_mcode_acq(T);
@@ -795,22 +947,40 @@ static void expect_dynamic_fp_mcode(const GCtrace *T,
   unsigned nfarith = 0, nfirstarith = 0, nbodyarith = 0;
   unsigned nopposite = 0;
   unsigned nfcmp = 0, npre = 0, nbody = 0;
+  unsigned nscvtf = 0;
   unsigned xreg = fpr_index(expect_fpr(ir, R_X));
-  unsigned stepreg = fpr_index(expect_fpr(ir, R_STEP));
-  unsigned phireg = fpr_index(expect_fpr(ir, R_X_PHI));
-  unsigned limitreg = fpr_index(expect_fpr(ir, R_LIMIT));
+  IRRef step_value = numeric_args_step_value_ref(step_kind);
+  unsigned stepreg = fpr_index(expect_fpr(ir, step_value));
+  unsigned stepintreg = step_kind == NUMERIC_ARGS_STEP_INT ?
+    (unsigned)(expect_gpr(ir, R_STEP)-RID_MIN_GPR) : 0;
+  unsigned phireg = fpr_index(expect_fpr(ir,
+	numeric_args_ref(step_kind, R_X_PHI)));
+  unsigned limitreg = fpr_index(expect_fpr(ir,
+	numeric_args_ref(step_kind, R_LIMIT)));
   const uint32_t farith_mask =
     ~(uint32_t)(A64F_D(31u)|A64F_N(31u)|A64F_M(31u));
   const uint32_t fcmp_mask =
     ~(uint32_t)(A64F_N(31u)|A64F_M(31u));
+  const uint32_t fcvt_mask =
+    ~(uint32_t)(A64F_D(31u)|A64F_N(31u));
 
-  assert(fpr_index(expect_fpr(ir, R_X_PRE)) == phireg);
-  assert(fpr_index(expect_fpr(ir, R_X_BODY)) == phireg);
+  assert(fpr_index(expect_fpr(ir,
+	numeric_args_ref(step_kind, R_X_PRE))) == phireg);
+  assert(fpr_index(expect_fpr(ir,
+	numeric_args_ref(step_kind, R_X_BODY))) == phireg);
   assert(stepreg != phireg && limitreg != phireg && stepreg != limitreg);
   assert(xreg != stepreg);
   assert((trace_szmcode_acq(T) & (sizeof(MCode)-1u)) == 0);
   for (i = 0; i < nword; i++) {
     uint32_t ins = mcode[i];
+    if ((ins & fcvt_mask) == A64I_FCVT_F64_S32) {
+      assert(step_kind == NUMERIC_ARGS_STEP_INT);
+      assert((ins & 31u) == stepreg);
+      assert(((ins >> 5) & 31u) == stepintreg);
+      assert(ins == UINT32_C(0x1e620021));
+      assert(i < trace_mcloop_acq(T)/sizeof(MCode));
+      nscvtf++;
+    }
     if ((ins & farith_mask) == profile->recurrence_mcode) {
       unsigned dest = ins & 31u;
       unsigned left = (ins >> 5) & 31u;
@@ -896,7 +1066,25 @@ static void expect_dynamic_fp_mcode(const GCtrace *T,
       nfcmp++;
     }
   }
-  if (profile->evolution == NUMERIC_ARGS_MUL_ASCENDING &&
+  if (step_kind == NUMERIC_ARGS_STEP_INT) {
+    MSize shift = LJ_ABI_BRANCH_TRACK ? 1u : 0u;
+    uint32_t fcmp = profile->fcmp_limit_first ?
+	UINT32_C(0x1e6f2000) : UINT32_C(0x1e6021e0);
+    uint32_t prebranch = profile->comparison == NUMERIC_ARGS_INCLUSIVE ?
+	UINT32_C(0x54000488) : UINT32_C(0x54000482);
+    uint32_t bodybranch = profile->comparison == NUMERIC_ARGS_INCLUSIVE ?
+	UINT32_C(0x54fffe69) : UINT32_C(0x54fffe63);
+    assert(nword > shift+34u);
+    assert(mcode[shift+12u] == UINT32_C(0x1e620021));
+    assert(mcode[shift+13u] == numeric_args_int_first_word(profile));
+    assert(mcode[shift+18u] == fcmp);
+    assert(mcode[shift+19u] == prebranch);
+    assert(mcode[shift+31u] == numeric_args_int_body_word(profile));
+    assert(mcode[shift+32u] == fcmp);
+    assert(mcode[shift+33u] == bodybranch);
+    assert(mcode[shift+34u] == UINT32_C(0x14000025));
+  } else if (step_kind == NUMERIC_ARGS_STEP_NUM &&
+      profile->evolution == NUMERIC_ARGS_MUL_ASCENDING &&
       profile->comparison == NUMERIC_ARGS_INCLUSIVE) {
     MSize shift = LJ_ABI_BRANCH_TRACK ? 1u : 0u;
     assert(nword > shift+33u);
@@ -906,7 +1094,8 @@ static void expect_dynamic_fp_mcode(const GCtrace *T,
     assert(mcode[shift+31u] == UINT32_C(0x1e6021e0));
     assert(mcode[shift+32u] == UINT32_C(0x54fffe69));
     assert(mcode[shift+33u] == UINT32_C(0x14000025));
-  } else if (profile->evolution == NUMERIC_ARGS_DIV_ASCENDING &&
+  } else if (step_kind == NUMERIC_ARGS_STEP_NUM &&
+      profile->evolution == NUMERIC_ARGS_DIV_ASCENDING &&
       profile->comparison == NUMERIC_ARGS_INCLUSIVE) {
     MSize shift = LJ_ABI_BRANCH_TRACK ? 1u : 0u;
     assert(nword > shift+33u);
@@ -917,7 +1106,8 @@ static void expect_dynamic_fp_mcode(const GCtrace *T,
     assert(mcode[shift+31u] == UINT32_C(0x1e6021e0));
     assert(mcode[shift+32u] == UINT32_C(0x54fffe69));
     assert(mcode[shift+33u] == UINT32_C(0x14000025));
-  } else if (profile->evolution == NUMERIC_ARGS_DIV_ASCENDING) {
+  } else if (step_kind == NUMERIC_ARGS_STEP_NUM &&
+      profile->evolution == NUMERIC_ARGS_DIV_ASCENDING) {
     MSize shift = LJ_ABI_BRANCH_TRACK ? 1u : 0u;
     assert(nword > shift+33u);
     assert(mcode[shift+12u] == UINT32_C(0x1e61184f));
@@ -927,7 +1117,8 @@ static void expect_dynamic_fp_mcode(const GCtrace *T,
     assert(mcode[shift+31u] == UINT32_C(0x1e6021e0));
     assert(mcode[shift+32u] == UINT32_C(0x54fffe63));
     assert(mcode[shift+33u] == UINT32_C(0x14000025));
-  } else if (profile->evolution == NUMERIC_ARGS_DIV_DESCENDING &&
+  } else if (step_kind == NUMERIC_ARGS_STEP_NUM &&
+      profile->evolution == NUMERIC_ARGS_DIV_DESCENDING &&
       profile->comparison == NUMERIC_ARGS_INCLUSIVE) {
     MSize shift = LJ_ABI_BRANCH_TRACK ? 1u : 0u;
     assert(nword > shift+33u);
@@ -938,7 +1129,8 @@ static void expect_dynamic_fp_mcode(const GCtrace *T,
     assert(mcode[shift+31u] == UINT32_C(0x1e6f2000));
     assert(mcode[shift+32u] == UINT32_C(0x54fffe69));
     assert(mcode[shift+33u] == UINT32_C(0x14000025));
-  } else if (profile->evolution == NUMERIC_ARGS_DIV_DESCENDING) {
+  } else if (step_kind == NUMERIC_ARGS_STEP_NUM &&
+      profile->evolution == NUMERIC_ARGS_DIV_DESCENDING) {
     MSize shift = LJ_ABI_BRANCH_TRACK ? 1u : 0u;
     assert(nword > shift+33u);
     assert(mcode[shift+12u] == UINT32_C(0x1e61184f));
@@ -950,13 +1142,14 @@ static void expect_dynamic_fp_mcode(const GCtrace *T,
     assert(mcode[shift+33u] == UINT32_C(0x14000025));
   }
   assert(nfarith == 2 && nopposite == 0);
+  assert(nscvtf == (step_kind == NUMERIC_ARGS_STEP_INT ? 1u : 0u));
   if (xreg != phireg)
     assert(nfirstarith == 1 && nbodyarith == 1);
   assert(nfcmp == 2 && npre == 1 && nbody == 1);
 }
 
-static void expect_only_args_root(lua_State *L, GCproto *pt,
-	const NumericArgsProfile *profile)
+static void expect_only_args_root_kind(lua_State *L, GCproto *pt,
+	const NumericArgsProfile *profile, NumericArgsStepKind step_kind)
 {
   jit_State *J = L2J(L);
   GCtrace *T = traceref_safe(J, 1);
@@ -981,10 +1174,18 @@ static void expect_only_args_root(lua_State *L, GCproto *pt,
   assert(trace_mcloop_acq(T) > 0 &&
 	 trace_mcloop_acq(T) < trace_szmcode_acq(T));
 #if LJ_ABI_BRANCH_TRACK
-  assert(trace_szmcode_acq(T) == 140 && trace_mcloop_acq(T) == 80);
+  if (step_kind == NUMERIC_ARGS_STEP_NUM) {
+    assert(trace_szmcode_acq(T) == 140 && trace_mcloop_acq(T) == 80);
+  } else {
+    assert(trace_szmcode_acq(T) == 144 && trace_mcloop_acq(T) == 84);
+  }
   assert(trace_mcode_acq(T)[0] == A64I_BTI_J);
 #else
-  assert(trace_szmcode_acq(T) == 136 && trace_mcloop_acq(T) == 76);
+  if (step_kind == NUMERIC_ARGS_STEP_NUM) {
+    assert(trace_szmcode_acq(T) == 136 && trace_mcloop_acq(T) == 76);
+  } else {
+    assert(trace_szmcode_acq(T) == 140 && trace_mcloop_acq(T) == 80);
+  }
 #endif
   pc = trace_startpc_acq(T);
   if (pc != proto_bc(pt)+5u)
@@ -997,11 +1198,17 @@ static void expect_only_args_root(lua_State *L, GCproto *pt,
   patched = (BCIns)la_load32_acq((const uint32_t *)pc);
   assert(bc_op(patched) == BC_JLOOP && bc_d(patched) == 1);
   assert(proto_trace_acq(pt) == 1);
-  expect_ir_shape(T, profile);
-  expect_snapshot_shape(T, pt);
-  expect_dynamic_fp_mcode(T, profile);
+  expect_ir_shape(T, profile, step_kind);
+  expect_snapshot_shape(T, pt, step_kind);
+  expect_dynamic_fp_mcode(T, profile, step_kind);
   for (traceno = 2; (MSize)traceno < trace_sizetrace_acq(J); traceno++)
     assert(!trace_runnable_acq(traceref_safe(J, traceno), traceno));
+}
+
+static void expect_only_args_root(lua_State *L, GCproto *pt,
+	const NumericArgsProfile *profile)
+{
+  expect_only_args_root_kind(L, pt, profile, NUMERIC_ARGS_STEP_NUM);
 }
 
 static void expect_native_exit(ExitNo first, ExitNo last)
@@ -1063,7 +1270,8 @@ static void assert_publisher_done(PostAdmissionPublisher *publisher)
 }
 
 static void test_xpoll_lifecycle(lua_State *L, GCproto *pt,
-	int32_t idle_vmstate, const NumericArgsProfile *profile)
+	int32_t idle_vmstate, const NumericArgsProfile *profile,
+	NumericArgsStepKind step_kind, const NumericArgsCall *call)
 {
   global_State *g = G(L);
   TGState *tg = L2TG(L);
@@ -1074,8 +1282,10 @@ static void test_xpoll_lifecycle(lua_State *L, GCproto *pt,
   pthread_t worker;
   int status;
 
-  assert(snap_ref_acq(&trace_snap_acq(T)[XPOLL_EXIT]) == R_LOOP);
-  assert(snap_ref_acq(&trace_snap_acq(T)[FINAL_EXIT]) == R_COND);
+  assert(snap_ref_acq(&trace_snap_acq(T)[XPOLL_EXIT]) ==
+	 numeric_args_ref(step_kind, R_LOOP));
+  assert(snap_ref_acq(&trace_snap_acq(T)[FINAL_EXIT]) ==
+	 numeric_args_ref(step_kind, R_COND));
   assert(lj_tg_hs_epoch_ack_acq(tg) == epoch);
   assert(gc2_hs_leader_acq(g) == 0);
   assert(gc2_hs_pending_acq(g) == 0);
@@ -1090,14 +1300,14 @@ static void test_xpoll_lifecycle(lua_State *L, GCproto *pt,
   lj_trace_test_root_entry_pause(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION);
   publisher = (PostAdmissionPublisher){
     .L = L, .g = g, .tg = tg, .epoch = epoch,
-    .expected_value = profile->lifecycle.x,
+    .expected_value = call->x,
     .request = POSTADMISSION_PROFILE
   };
   assert(pthread_create(&worker, NULL, publish_postadmission_request,
 	&publisher) == 0);
   assert(call_triple(L, profile->name,
-	profile->lifecycle.x, profile->lifecycle.limit,
-	profile->lifecycle.step, 0, 0, 0) == profile->lifecycle.result);
+	call->x, call->limit, call->step, 0, 0,
+	step_kind == NUMERIC_ARGS_STEP_INT) == call->result);
   assert(pthread_join(worker, NULL) == 0);
   assert_publisher_done(&publisher);
   expect_profile_exit_and_reentry();
@@ -1110,7 +1320,7 @@ static void test_xpoll_lifecycle(lua_State *L, GCproto *pt,
   assert(lj_tg_profile_request_acq(tg) == 0);
   assert_native_idle(L, idle_vmstate);
   assert(L->cframe == saved_cframe);
-  expect_only_args_root(L, pt, profile);
+  expect_only_args_root_kind(L, pt, profile, step_kind);
 
   clear_stopreq(tg);
   lj_trace_test_root_entry_reset();
@@ -1118,16 +1328,19 @@ static void test_xpoll_lifecycle(lua_State *L, GCproto *pt,
   lj_trace_test_root_entry_pause(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION);
   publisher = (PostAdmissionPublisher){
     .L = L, .g = g, .tg = tg, .epoch = epoch,
-    .expected_value = profile->lifecycle.x,
+    .expected_value = call->x,
     .request = POSTADMISSION_STOPREQ
   };
   assert(pthread_create(&worker, NULL, publish_postadmission_request,
 	&publisher) == 0);
   lua_getglobal(L, profile->name);
   assert(lua_isfunction(L, -1));
-  lua_pushnumber(L, profile->lifecycle.x);
-  lua_pushnumber(L, profile->lifecycle.limit);
-  lua_pushnumber(L, profile->lifecycle.step);
+  lua_pushnumber(L, call->x);
+  lua_pushnumber(L, call->limit);
+  if (step_kind == NUMERIC_ARGS_STEP_INT)
+    lua_pushinteger(L, (lua_Integer)call->step);
+  else
+    lua_pushnumber(L, call->step);
   status = lua_pcall(L, 3, 1, 0);
   assert(pthread_join(worker, NULL) == 0);
   assert(status == LUA_ERRRUN);
@@ -1152,17 +1365,17 @@ static void test_xpoll_lifecycle(lua_State *L, GCproto *pt,
   clear_stopreq(tg);
   assert((lj_tg_flags_acq(tg) &
 	  (TGF_STOPREQ|TGF_STOPREQ_FRESH)) == 0);
-  expect_only_args_root(L, pt, profile);
+  expect_only_args_root_kind(L, pt, profile, step_kind);
 
   lj_trace_test_root_entry_reset();
   lj_trace_test_reset_exit_stats();
   assert(call_triple(L, profile->name,
-	profile->lifecycle.x, profile->lifecycle.limit,
-	profile->lifecycle.step, 0, 0, 0) == profile->lifecycle.result);
+	call->x, call->limit, call->step, 0, 0,
+	step_kind == NUMERIC_ARGS_STEP_INT) == call->result);
   expect_single_exit(FINAL_EXIT);
   assert_native_idle(L, idle_vmstate);
   assert(L->cframe == saved_cframe);
-  expect_only_args_root(L, pt, profile);
+  expect_only_args_root_kind(L, pt, profile, step_kind);
 }
 
 typedef enum MutationResult {
@@ -1811,7 +2024,8 @@ static void test_positive_and_guard_exits(const NumericArgsProfile *profile)
     expect_only_args_root(L, pt, profile);
   }
 
-  test_xpoll_lifecycle(L, pt, idle_vmstate, profile);
+  test_xpoll_lifecycle(L, pt, idle_vmstate, profile,
+	NUMERIC_ARGS_STEP_NUM, &profile->lifecycle);
   if (profile->evolution == NUMERIC_ARGS_DIV_DESCENDING) {
     test_terminating_mutation(L, pt, idle_vmstate, profile,
       POSTADMISSION_QNAN_X, profile->mutation.x, MUTATION_QNAN, 0.0);
@@ -2065,6 +2279,416 @@ static void test_positive_and_guard_exits(const NumericArgsProfile *profile)
   assert(proto_trace_acq(pt) == 0);
   T = traceref_safe(L2J(L), 1);
   assert(T == NULL || !trace_runnable_acq(T, 1));
+  assert_native_idle(L, idle_vmstate);
+  lua_close(L);
+}
+
+static void load_int_step_function(lua_State *L,
+	const NumericArgsProfile *profile)
+{
+  char chunk[512];
+  const char *comparison;
+  char recurrence;
+  int ascending = profile->evolution == NUMERIC_ARGS_ADD_ASCENDING ||
+	profile->evolution == NUMERIC_ARGS_MUL_ASCENDING ||
+	profile->evolution == NUMERIC_ARGS_DIV_ASCENDING;
+  int n;
+
+  if (ascending)
+    comparison = profile->comparison == NUMERIC_ARGS_INCLUSIVE ? "<=" : "<";
+  else
+    comparison = profile->comparison == NUMERIC_ARGS_INCLUSIVE ? ">=" : ">";
+  if (profile->evolution == NUMERIC_ARGS_ADD_ASCENDING ||
+      profile->evolution == NUMERIC_ARGS_ADD_DESCENDING)
+    recurrence = '+';
+  else if (profile->evolution == NUMERIC_ARGS_SUB_DESCENDING)
+    recurrence = '-';
+  else if (profile->evolution == NUMERIC_ARGS_MUL_ASCENDING)
+    recurrence = '*';
+  else
+    recurrence = '/';
+  n = snprintf(chunk, sizeof(chunk),
+    "jit.flush(); jit.on(); "
+    "jit.opt.start('hotloop=1','hotexit=1','maxtrace=2'); "
+    "function %s(x,limit,step) while x%s limit do x=x%cstep end "
+    "return x end", profile->name, comparison, recurrence);
+  assert(n > 0 && (size_t)n < sizeof(chunk));
+  run_lua(L, chunk);
+}
+
+static void numeric_args_int_equality(const NumericArgsProfile *profile,
+	NumericArgsCall *body, NumericArgsCall *first,
+	NumericArgsCall *initial)
+{
+  lua_Number body_after, first_after;
+  switch (profile->evolution) {
+  case NUMERIC_ARGS_ADD_ASCENDING:
+    *body = (NumericArgsCall){ 0.5, 4.5, 2.0, 4.5 };
+    *first = (NumericArgsCall){ 0.5, 2.5, 2.0, 2.5 };
+    body_after = 6.5;
+    first_after = 4.5;
+    break;
+  case NUMERIC_ARGS_MUL_ASCENDING:
+    *body = (NumericArgsCall){ 0.5, 2.0, 2.0, 2.0 };
+    *first = (NumericArgsCall){ 0.5, 1.0, 2.0, 1.0 };
+    body_after = 4.0;
+    first_after = 2.0;
+    break;
+  case NUMERIC_ARGS_DIV_ASCENDING:
+    *body = (NumericArgsCall){ -2.0, -0.5, 2.0, -0.5 };
+    *first = (NumericArgsCall){ -1.0, -0.5, 2.0, -0.5 };
+    body_after = first_after = -0.25;
+    break;
+  case NUMERIC_ARGS_DIV_DESCENDING:
+    *body = (NumericArgsCall){ 2.0, 0.5, 2.0, 0.5 };
+    *first = (NumericArgsCall){ 1.0, 0.5, 2.0, 0.5 };
+    body_after = first_after = 0.25;
+    break;
+  case NUMERIC_ARGS_ADD_DESCENDING:
+    *body = (NumericArgsCall){ 4.5, 0.5, -2.0, 0.5 };
+    *first = (NumericArgsCall){ 2.5, 0.5, -2.0, 0.5 };
+    body_after = first_after = -1.5;
+    break;
+  case NUMERIC_ARGS_SUB_DESCENDING:
+    *body = (NumericArgsCall){ 4.5, 0.5, 2.0, 0.5 };
+    *first = (NumericArgsCall){ 2.5, 0.5, 2.0, 0.5 };
+    body_after = first_after = -1.5;
+    break;
+  default:
+    assert(!"bad INT-step equality profile");
+    return;
+  }
+  *initial = (NumericArgsCall){
+    first->limit, first->limit, first->step, first->limit
+  };
+  if (profile->comparison == NUMERIC_ARGS_INCLUSIVE) {
+    body->result = body_after;
+    first->result = initial->result = first_after;
+  }
+}
+
+static void expect_int_step_call(lua_State *L, GCproto *pt,
+	const NumericArgsProfile *profile, const NumericArgsCall *call,
+	ExitNo exitno)
+{
+  lua_Number result;
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  result = call_triple(L, profile->name, call->x, call->limit, call->step,
+	0, 0, 1);
+  if (result != call->result)
+    fprintf(stderr, "INT-step %s call %.17g %.17g %.17g got %.17g, "
+	"wanted %.17g\n", profile->name, call->x, call->limit,
+	call->step, result, call->result);
+  assert(result == call->result);
+  expect_single_exit(exitno);
+  expect_only_args_root_kind(L, pt, profile, NUMERIC_ARGS_STEP_INT);
+}
+
+static void test_int_step_nonterminating_stop(lua_State *L, GCproto *pt,
+	int32_t idle_vmstate, const NumericArgsProfile *profile,
+	const NumericArgsIntModeData *data, int32_t step)
+{
+  global_State *g = G(L);
+  TGState *tg = L2TG(L);
+  uint64_t epoch = gc2_hs_epoch_acq(g);
+  void *saved_cframe = L->cframe;
+  PostAdmissionPublisher publisher;
+  pthread_t worker;
+  int status;
+
+  clear_stopreq(tg);
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  lj_trace_test_root_entry_pause(LJ_TRACE_ROOT_ENTRY_PAUSE_POSTADMISSION);
+  publisher = (PostAdmissionPublisher){
+    .L = L, .g = g, .tg = tg, .epoch = epoch,
+    .expected_value = data->record.x,
+    .request = POSTADMISSION_STOPREQ
+  };
+  assert(pthread_create(&worker, NULL, publish_postadmission_request,
+	&publisher) == 0);
+  lua_getglobal(L, profile->name);
+  assert(lua_isfunction(L, -1));
+  lua_pushnumber(L, data->record.x);
+  lua_pushnumber(L, data->record.limit);
+  lua_pushinteger(L, (lua_Integer)step);
+  status = lua_pcall(L, 3, 1, 0);
+  assert(pthread_join(worker, NULL) == 0);
+  assert(status == LUA_ERRRUN);
+  assert(lua_isstring(L, -1));
+  assert(strstr(lua_tostring(L, -1),
+	"thread interrupted: VM shutdown") != NULL);
+  lua_pop(L, 1);
+  assert_publisher_done(&publisher);
+  expect_single_exit(XPOLL_EXIT);
+  assert(gc2_hs_actions_acq(g) == LJ_GC2_HS_STOPREQ);
+  assert(gc2_hs_epoch_acq(g) == epoch+1u);
+  assert(lj_tg_hs_epoch_ack_acq(tg) == epoch+1u);
+  assert(gc2_hs_leader_acq(g) == 0);
+  assert(gc2_hs_pending_acq(g) == 0);
+  assert(lj_tg_reqmask_acq(tg) == 0);
+  assert(lj_tg_poll_acq(tg) == 0);
+  assert(lj_tg_profile_request_acq(tg) == 0);
+  assert((lj_tg_flags_acq(tg) & TGF_STOPREQ) != 0);
+  assert((lj_tg_flags_acq(tg) & TGF_STOPREQ_FRESH) == 0);
+  assert_native_idle(L, idle_vmstate);
+  assert(L->cframe == saved_cframe);
+  clear_stopreq(tg);
+  assert((lj_tg_flags_acq(tg) &
+	  (TGF_STOPREQ|TGF_STOPREQ_FRESH)) == 0);
+  expect_only_args_root_kind(L, pt, profile, NUMERIC_ARGS_STEP_INT);
+}
+
+static void test_int_step_terminating(lua_State *L, GCproto *pt,
+	const NumericArgsProfile *profile,
+	const NumericArgsIntModeData *data, int32_t step,
+	lua_Number result, ExitNo exitno)
+{
+  NumericArgsCall call = data->record;
+  call.step = (lua_Number)step;
+  call.result = result;
+  expect_int_step_call(L, pt, profile, &call, exitno);
+}
+
+static void test_int_step_extremes(lua_State *L, GCproto *pt,
+	int32_t idle_vmstate, const NumericArgsProfile *profile,
+	const NumericArgsIntModeData *data)
+{
+  switch (profile->evolution) {
+  case NUMERIC_ARGS_ADD_ASCENDING:
+    test_int_step_nonterminating_stop(L, pt, idle_vmstate, profile,
+	data, INT32_MIN);
+    test_int_step_terminating(L, pt, profile, data, INT32_MAX,
+	data->record.x+(lua_Number)INT32_MAX, PRECOND_EXIT);
+    test_int_step_nonterminating_stop(L, pt, idle_vmstate, profile, data, 0);
+    test_int_step_terminating(L, pt, profile, data, 1, 20.5, FINAL_EXIT);
+    test_int_step_nonterminating_stop(L, pt, idle_vmstate, profile, data, -1);
+    break;
+  case NUMERIC_ARGS_MUL_ASCENDING:
+    test_int_step_terminating(L, pt, profile, data, INT32_MIN,
+	data->record.x*(lua_Number)INT32_MIN*(lua_Number)INT32_MIN,
+	FINAL_EXIT);
+    test_int_step_terminating(L, pt, profile, data, INT32_MAX,
+	data->record.x*(lua_Number)INT32_MAX, PRECOND_EXIT);
+    test_int_step_nonterminating_stop(L, pt, idle_vmstate, profile, data, 0);
+    test_int_step_nonterminating_stop(L, pt, idle_vmstate, profile, data, 1);
+    test_int_step_nonterminating_stop(L, pt, idle_vmstate, profile, data, -1);
+    break;
+  case NUMERIC_ARGS_DIV_ASCENDING:
+    /* SCVTF maps integer zero to +0.0. Negative X reaches -infinity and
+    ** remains in the ascending loop for both comparisons. */
+    test_int_step_terminating(L, pt, profile, data, INT32_MIN,
+	data->record.x/(lua_Number)INT32_MIN, PRECOND_EXIT);
+    test_int_step_terminating(L, pt, profile, data, INT32_MAX,
+	data->record.x/(lua_Number)INT32_MAX, PRECOND_EXIT);
+    test_int_step_nonterminating_stop(L, pt, idle_vmstate, profile, data, 0);
+    test_int_step_nonterminating_stop(L, pt, idle_vmstate, profile, data, 1);
+    test_int_step_terminating(L, pt, profile, data, -1,
+	-data->record.x, PRECOND_EXIT);
+    break;
+  case NUMERIC_ARGS_ADD_DESCENDING:
+    test_int_step_terminating(L, pt, profile, data, INT32_MIN,
+	data->record.x+(lua_Number)INT32_MIN, PRECOND_EXIT);
+    test_int_step_nonterminating_stop(L, pt, idle_vmstate, profile,
+	data, INT32_MAX);
+    test_int_step_nonterminating_stop(L, pt, idle_vmstate, profile, data, 0);
+    test_int_step_nonterminating_stop(L, pt, idle_vmstate, profile, data, 1);
+    test_int_step_terminating(L, pt, profile, data, -1, -0.5, FINAL_EXIT);
+    break;
+  case NUMERIC_ARGS_SUB_DESCENDING:
+    test_int_step_nonterminating_stop(L, pt, idle_vmstate, profile,
+	data, INT32_MIN);
+    test_int_step_terminating(L, pt, profile, data, INT32_MAX,
+	data->record.x-(lua_Number)INT32_MAX, PRECOND_EXIT);
+    test_int_step_nonterminating_stop(L, pt, idle_vmstate, profile, data, 0);
+    test_int_step_terminating(L, pt, profile, data, 1, -0.5, FINAL_EXIT);
+    test_int_step_nonterminating_stop(L, pt, idle_vmstate, profile, data, -1);
+    break;
+  case NUMERIC_ARGS_DIV_DESCENDING:
+    /* The same +0.0 divisor maps positive X to the +infinity fixed point. */
+    test_int_step_terminating(L, pt, profile, data, INT32_MIN,
+	data->record.x/(lua_Number)INT32_MIN, PRECOND_EXIT);
+    test_int_step_terminating(L, pt, profile, data, INT32_MAX,
+	data->record.x/(lua_Number)INT32_MAX, PRECOND_EXIT);
+    test_int_step_nonterminating_stop(L, pt, idle_vmstate, profile, data, 0);
+    test_int_step_nonterminating_stop(L, pt, idle_vmstate, profile, data, 1);
+    test_int_step_terminating(L, pt, profile, data, -1,
+	-data->record.x, PRECOND_EXIT);
+    break;
+  default:
+    assert(!"bad INT-step extreme profile");
+  }
+}
+
+static NumericArgsCall numeric_args_int_x_negative(
+	const NumericArgsProfile *profile)
+{
+  switch (profile->evolution) {
+  case NUMERIC_ARGS_ADD_ASCENDING:
+    return (NumericArgsCall){ 0.0, 1.0, 2.0, 2.0 };
+  case NUMERIC_ARGS_MUL_ASCENDING:
+    return (NumericArgsCall){ 1.0, 1.5, 2.0, 2.0 };
+  case NUMERIC_ARGS_DIV_ASCENDING:
+    return (NumericArgsCall){ -1.0, -0.75, 2.0, -0.5 };
+  case NUMERIC_ARGS_DIV_DESCENDING:
+    return (NumericArgsCall){ 1.0, 0.75, 2.0, 0.5 };
+  case NUMERIC_ARGS_ADD_DESCENDING:
+    return (NumericArgsCall){ 1.0, 0.5, -2.0, -1.0 };
+  case NUMERIC_ARGS_SUB_DESCENDING:
+    return (NumericArgsCall){ 1.0, 0.5, 2.0, -1.0 };
+  default:
+    assert(!"bad INT-step adjacent profile");
+    return (NumericArgsCall){ 0.0, 0.0, 0.0, 0.0 };
+  }
+}
+
+static void test_int_step_positive_and_guard_exits(
+	const NumericArgsProfile *profile)
+{
+  const NumericArgsIntModeData *data = numeric_args_int_data(profile);
+  NumericArgsCall call, body, first, initial;
+  lua_State *L = luaL_newstate();
+  TGState *tg;
+  GCproto *pt;
+  GCtrace *T;
+  const BCIns *startpc;
+  BCIns startins;
+  int32_t idle_vmstate;
+  int i;
+
+  assert(L != NULL);
+  luaL_openlibs(L);
+  tg = L2TG(L);
+  idle_vmstate = lj_tg_vmstate_load_acq(tg);
+  load_int_step_function(L, profile);
+
+  /* X and LIMIT are genuine NUMs while the invariant arrives as an INT. */
+  assert(call_triple(L, profile->name, data->record.x, data->record.limit,
+	data->record.step, 0, 0, 1) == data->record.result);
+  pt = global_proto(L, profile->name);
+  expect_only_args_root_kind(L, pt, profile, NUMERIC_ARGS_STEP_INT);
+  assert_native_idle(L, idle_vmstate);
+
+  /* One root must consume new values for all three arguments. Keeping one
+  ** recording-time value in each call rules out constant specialization. */
+  expect_int_step_call(L, pt, profile, &data->reuse, FINAL_EXIT);
+  call = (NumericArgsCall){
+    data->record.x, data->reuse.limit, data->reuse.step,
+    data->substitute_x_result
+  };
+  expect_int_step_call(L, pt, profile, &call, FINAL_EXIT);
+  call = (NumericArgsCall){
+    data->reuse.x, data->record.limit, data->reuse.step,
+    data->substitute_limit_result
+  };
+  expect_int_step_call(L, pt, profile, &call,
+	profile->evolution == NUMERIC_ARGS_ADD_DESCENDING ||
+	profile->evolution == NUMERIC_ARGS_SUB_DESCENDING ?
+	PRECOND_EXIT : FINAL_EXIT);
+  call = (NumericArgsCall){
+    data->reuse.x, data->reuse.limit, data->record.step,
+    data->substitute_step_result
+  };
+  expect_int_step_call(L, pt, profile, &call, FINAL_EXIT);
+
+  /* Equality is observed independently at the body guard, the first native
+  ** precondition, and the interpreted condition before JLOOP. */
+  numeric_args_int_equality(profile, &body, &first, &initial);
+  expect_int_step_call(L, pt, profile, &body, FINAL_EXIT);
+  expect_int_step_call(L, pt, profile, &first,
+	profile->comparison == NUMERIC_ARGS_INCLUSIVE ?
+	FINAL_EXIT : PRECOND_EXIT);
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  assert(call_triple(L, profile->name, initial.x, initial.limit,
+	initial.step, 0, 0, 1) == initial.result);
+  if (profile->comparison == NUMERIC_ARGS_INCLUSIVE) {
+    expect_single_exit(PRECOND_EXIT);
+  } else {
+    assert(lj_trace_test_root_entry_publishes() == 0);
+    assert(lj_trace_test_root_entry_cleanups() == 0);
+    assert(lj_trace_test_exit_calls() == 0);
+  }
+  expect_only_args_root_kind(L, pt, profile, NUMERIC_ARGS_STEP_INT);
+
+  test_xpoll_lifecycle(L, pt, idle_vmstate, profile,
+	NUMERIC_ARGS_STEP_INT, &data->record);
+  test_int_step_extremes(L, pt, idle_vmstate, profile, data);
+
+  /* The admitted root guards NUM X, INT STEP, then NUM LIMIT. DIV changes an
+  ** exiting INT accumulator to NUM in the interpreter and can re-enter; the
+  ** other recurrences retain their INT accumulator and keep taking exit 0. */
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  for (i = 0; i < 4; i++)
+    assert(call_triple(L, profile->name,
+	  data->integer_x.x, data->integer_x.limit,
+	  data->integer_x.step, 1, 0, 1) == data->integer_x.result);
+  if (profile->evolution == NUMERIC_ARGS_DIV_ASCENDING ||
+      profile->evolution == NUMERIC_ARGS_DIV_DESCENDING)
+    expect_native_exit(X_OR_STEP_TYPE_EXIT, FINAL_EXIT);
+  else
+    expect_native_exit(X_OR_STEP_TYPE_EXIT, X_OR_STEP_TYPE_EXIT);
+  expect_only_args_root_kind(L, pt, profile, NUMERIC_ARGS_STEP_INT);
+
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  for (i = 0; i < 4; i++)
+    assert(call_triple(L, profile->name,
+	  data->record.x, data->record.limit, data->record.step,
+	  0, 0, 0) == data->record.result);
+  expect_native_exit(X_OR_STEP_TYPE_EXIT, X_OR_STEP_TYPE_EXIT);
+  expect_only_args_root_kind(L, pt, profile, NUMERIC_ARGS_STEP_INT);
+
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  for (i = 0; i < 4; i++)
+    assert(call_triple(L, profile->name,
+	  data->integer_limit.x, data->integer_limit.limit,
+	  data->integer_limit.step, 0, 1, 1) ==
+	data->integer_limit.result);
+  expect_native_exit(LIMIT_TYPE_EXIT, LIMIT_TYPE_EXIT);
+  expect_only_args_root_kind(L, pt, profile, NUMERIC_ARGS_STEP_INT);
+
+  lj_trace_test_root_entry_reset();
+  lj_trace_test_reset_exit_stats();
+  for (i = 0; i < 4; i++)
+    assert(call_triple(L, profile->name,
+	  data->precondition.x, data->precondition.limit,
+	  data->precondition.step, 0, 0, 1) == data->precondition.result);
+  expect_native_exit(PRECOND_EXIT, PRECOND_EXIT);
+  expect_only_args_root_kind(L, pt, profile, NUMERIC_ARGS_STEP_INT);
+  T = traceref_safe(L2J(L), 1);
+  assert(trace_nchild_acq(T) == 0 && trace_nextside_acq(T) == 0);
+  assert_native_idle(L, idle_vmstate);
+
+  startpc = trace_startpc_acq(T);
+  startins = trace_startins_acq(T);
+  run_lua(L, "jit.flush()");
+  assert((BCIns)la_load32_acq((const uint32_t *)startpc) == startins);
+  assert(bc_op(startins) == BC_LOOP);
+  assert(proto_trace_acq(pt) == 0);
+  T = traceref_safe(L2J(L), 1);
+  assert(T == NULL || !trace_runnable_acq(T, 1));
+  assert_native_idle(L, idle_vmstate);
+
+  /* Converting an invariant INT is the sole new boundary. An INT X or LIMIT
+  ** at recording time must not admit a root with another conversion. */
+  load_int_step_function(L, profile);
+  call = numeric_args_int_x_negative(profile);
+  for (i = 0; i < 4; i++)
+    assert(call_triple(L, profile->name, call.x, call.limit, call.step,
+	  1, 0, 1) == call.result);
+  expect_no_trace(L, profile->name);
+
+  load_int_step_function(L, profile);
+  for (i = 0; i < 4; i++)
+    assert(call_triple(L, profile->name,
+	  data->integer_limit.x, data->integer_limit.limit,
+	  data->integer_limit.step, 0, 1, 1) ==
+	data->integer_limit.result);
+  expect_no_trace(L, profile->name);
   assert_native_idle(L, idle_vmstate);
   lua_close(L);
 }
@@ -2649,6 +3273,20 @@ int main(int argc, char **argv)
   test_positive_and_guard_exits(&add_descending_inclusive_profile);
   test_positive_and_guard_exits(&descending_profile);
   test_positive_and_guard_exits(&descending_inclusive_profile);
+  test_int_step_positive_and_guard_exits(&strict_profile);
+  test_int_step_positive_and_guard_exits(&inclusive_profile);
+  test_int_step_positive_and_guard_exits(&mul_profile);
+  test_int_step_positive_and_guard_exits(&mul_inclusive_profile);
+  test_int_step_positive_and_guard_exits(&div_profile);
+  test_int_step_positive_and_guard_exits(&div_inclusive_profile);
+  test_int_step_positive_and_guard_exits(&div_descending_profile);
+  test_int_step_positive_and_guard_exits(
+	&div_descending_inclusive_profile);
+  test_int_step_positive_and_guard_exits(&add_descending_profile);
+  test_int_step_positive_and_guard_exits(
+	&add_descending_inclusive_profile);
+  test_int_step_positive_and_guard_exits(&descending_profile);
+  test_int_step_positive_and_guard_exits(&descending_inclusive_profile);
   test_fixed_initializers_remain_separate();
   test_sub_lt_rejected();
   test_div_adjacent_rejected();
