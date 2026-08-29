@@ -9,30 +9,38 @@ current claims.
 
 Development branch: `codex/aarch64-macos-port`.
 
-Last complete JIT fail-closed-gate checkpoint: `4ef37827` (2026-08-29).
-Latest focused exact-`CALLXS` checkpoint: `e2c8778d` (2026-08-29).
-The admitted boundary comprises two signatures in one exact Darwin ARM64
-`CALLXS` root: cached direct CDECL function cdata with either
-`int32_t(int32_t)` or `double(double)` in the certified 16-bytecode integer
-`FORL` geometry. The double profile converts the two generated integer loop
-indices to `NUM`; it does not admit arbitrary generated numeric arguments,
-`float(float)`, or another call-site/root geometry. Mutable cdata `__call`
-lookup samples through enumerated TG roots, guards the current base-metatable
-root and exact function identity, and uses TG-local `tmptv`/`tmptv2` storage
-in generated code. Semantic IR, snapshots, bytecode, CType-selected signature
-profile, trace ownership, and post-register-allocation state are independently
-certified. Checkpoint `23f2f870` added exact errno, forced-exit, callback,
-STOPREQ, cleanup, and reuse evidence for the integer profile. Checkpoint
-`a7056fe5` then narrowed six shared source files back to their actual ARM64 or
-`CALLXS` capability boundaries without widening admission. The complete
-ARM64/arm64e fail-closed umbrella passed at that cleanup checkpoint. Focused
-checkpoint `c56b7382` subsequently proved depth-two generated callback
-re-entry and callback-originated error unwind in the same integer root on
-ordinary ARM64 and arm64e/BTI. Checkpoints `f07ef3aa` and `e2c8778d` added and
-proved the exact double profile without changing the generic ARM64 call
-emitter or native-frame lifecycle. The preceding `0ce4313b` checkpoint
-introduced the target-local ARM64 `XSAVE` staging backend; the native and
-x86_64 vendored suites last passed with 509 tests each at `4d1b6126`.
+Last complete JIT fail-closed-gate checkpoint: `00919589` (2026-08-29).
+Latest focused exact-`CALLXS` checkpoint: `00919589` (2026-08-29).
+The admitted boundary comprises three signatures in two exact Darwin ARM64
+`CALLXS` roots. Cached direct CDECL function cdata with either
+`int32_t(int32_t)` or `double(double)` use the certified 16-bytecode integer
+`FORL` geometry. A separate 13-bytecode `FORL` certificate admits only
+`const char *(const char *)` with a Lua-string argument and a fresh rooted
+`CTID_P_CCHAR` result box; its exact body contains two each of `CNEW`, `XSAVE`,
+`CALLXS`, and `XSTORE`. The double profile converts the two generated integer
+loop indices to `NUM`; it does not admit arbitrary generated numeric
+arguments, `float(float)`, or another call-site/root geometry. Mutable cdata
+`__call` lookup samples through enumerated TG roots, guards the current
+base-metatable root and exact function identity, and uses TG-local
+`tmptv`/`tmptv2` storage in generated code. Semantic IR, snapshots, bytecode,
+CType-selected signatures, trace ownership, and post-register-allocation
+state are independently certified.
+
+Checkpoint `23f2f870` added exact errno, forced-exit, callback, STOPREQ,
+cleanup, and reuse evidence for the integer profile. Checkpoint `a7056fe5`
+then narrowed six shared source files back to their actual ARM64 or `CALLXS`
+capability boundaries without widening admission. Focused checkpoint
+`c56b7382` subsequently proved depth-two generated callback re-entry and
+callback-originated error unwind in the same integer root on ordinary ARM64
+and arm64e/BTI. Checkpoints `f07ef3aa` and `e2c8778d` added and proved the
+exact double profile without changing the generic ARM64 call emitter or
+native-frame lifecycle. Checkpoints `308a635b` and `00919589` added the
+separate boxed-pointer certificate, ported x86's publish-safe fixed-size cdata
+allocation to ARM64, and proved its native result-root lifecycle. The complete
+ARM64/arm64e fail-closed umbrella passed at `00919589`. The preceding
+`0ce4313b` checkpoint introduced the target-local ARM64 `XSAVE` staging
+backend; the native and x86_64 vendored suites last passed with 509 tests each
+at `4d1b6126`.
 
 ARM64 remains explicitly opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`. Native JIT
 work additionally requires `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`. These flags are
@@ -58,17 +66,20 @@ Implemented and exercised on Apple Silicon macOS:
   roots, literal-true `FUNCF`, and the exact `ADD_LT`, `ADD_LE`, `ADD_GT`,
   `ADD_GE`, `SUB_GT`, `SUB_GE`, `MUL_LT`, `MUL_LE`, `DIV_LT`, `DIV_LE`,
   `DIV_GT`, and `DIV_GE` all-parameter loop profiles;
-- one exact Darwin ARM64 FFI call root admitting `int32_t(int32_t)` and
-  `double(double)`, with native-frame entry/leave,
+- two exact Darwin ARM64 FFI call roots admitting `int32_t(int32_t)`,
+  `double(double)`, and `const char *(const char *)`, with native-frame
+  entry/leave,
   rooted pre-call errno preservation under a deliberately clobbering wait,
   callee errno through normal return, result-guard exit, forced epoch exit,
   one-level and depth-two callbacks, callback-error and post-call STOPREQ
   unwind, exact no-replay effects, cleanup and reuse, remote GC/flush
   retirement, mutable cdata `__call` replacement races, non-integral direct
-  double ABI/result proof, and arm64e/BTI execution; and
+  double ABI/result proof, boxed pointer identity and GC survival, and
+  arm64e/BTI execution; and
 - callback-result lifetime across post-detach TG reclamation.
 
-The ARM64 `XSAVE` backend is live only for those two exact certificates.
+The ARM64 `XSAVE` backend is live only for those three exact signatures in two
+root certificates.
 `LJ_HASJIT_FFI_CALLXS` includes experimental Darwin ARM64, but the recorder
 and assembler still reject every other ARM64 signature and call-site
 geometry. This is not generic ARM64 FFI lowering.
@@ -171,6 +182,14 @@ rather than duplicating the integer gate. The only shared recorder change is
 the explicit second signature pair. The generic ARM64 call emitter, ABI
 lowering, and native-frame hot path are unchanged.
 
+Checkpoint `308a635b` keeps the structurally different boxed-pointer root in a
+separate target-local certificate. Its only allocation-path change makes
+ARM64 fixed-size `CNEW` call `lj_cdata_new_forjit(L, id, sz)`, matching the
+existing x86 lockless backend, instead of using the upstream raw allocator and
+generated header stores. This completes arena publication before generated
+code can expose the cdata while leaving the generic ARM64 call emitter and
+the VLA/aligned `lj_cdata_newv` path unchanged.
+
 Large ARM64 lifecycle blocks still remain in common files, particularly
 `src/lj_trace.c`. Move those only as separate structural changes with exact
 source-boundary and runtime proof; do not combine or weaken the independent
@@ -178,7 +197,7 @@ semantic and post-register-allocation gates merely to reduce the diff.
 
 ## Verification
 
-- `tools/ci/arm64_jit_fail_closed_gate.sh`: passed in full at `4ef37827`,
+- `tools/ci/arm64_jit_fail_closed_gate.sh`: passed in full at `00919589`,
   including the exact variable-step integer `FORL`, its overflow and direction
   exits, the 3,072-case `BC_LOOP` compiler proof, 222 runtime profile
   executions, ARM64/arm64e publication, entry, exit, retirement, flush/reuse,
@@ -187,10 +206,11 @@ semantic and post-register-allocation gates merely to reduce the diff.
   owner-private `ffi_xsave_baseslot` and `ffi_xsave_nslots` publications are
   naturally sized `STLR w6` stores through x25, and `ffi_xsave_root` uses the
   existing pointer-sized release helper.
-- `m7_ffi_callxs_arm64_scalar`: passed at `e2c8778d`; independent authentic
-  integer and double traces passed semantic/post-RA mutation checks with four
-  `XSAVE` and four `CALLXS` nodes in aggregate. Unsupported `float(float)`
-  remained unpublished. Stable and concurrently raced cdata `__call`
+- `m7_ffi_callxs_arm64_scalar`: passed at `00919589`; independent authentic
+  integer, double, and boxed-pointer traces passed semantic/post-RA mutation
+  checks. Unsupported `float(float)`, `const void *(const void *)`, and
+  variadic pointer signatures remained unpublished. Stable and concurrently
+  raced cdata `__call`
   replacement, remote full GC, and remote `jit.flush()` completed without
   replay or stall. The integer lifecycle fixture passed
   rooted-retry errno, result-guard and epoch exits, depth-two generated
@@ -198,7 +218,9 @@ semantic and post-register-allocation gates merely to reduce the diff.
   and exact foreign-effect/no-replay oracles. The double lifecycle additionally
   passed direct `1.25` argument/result preservation, generated `8.25`
   result-guard exit, errno, forced POSTCALL exit, cleanup, reuse, and exact
-  no-replay effects.
+  no-replay effects. The pointer lifecycle additionally passed exact address
+  and CType identity, hidden result-root observation, entry rejection,
+  forced exit 7, ordinary reuse, GC survival, and exact foreign-effect counts.
 - Manual arm64e/BTI build: the same semantic/post-RA fixture, production call,
   exact lifecycle, and threaded lifecycle passed through `a7056fe5` in thin
   ARM64e executables. The focused `c56b7382` lifecycle fixture additionally
@@ -206,7 +228,8 @@ semantic and post-register-allocation gates merely to reduce the diff.
   executable and dylib with explicit unwind tables. At `e2c8778d`, the
   independent integer/double admission fixture, production int/double calls,
   and double lifecycle also passed in thin ARM64e/BTI executables; `otool`
-  reported the ARM64E subtype.
+  reported the ARM64E subtype. At `00919589`, the boxed-pointer admission and
+  lifecycle fixtures also passed as thin arm64e/BTI executables and dylib.
 - Disposable x86_64/Rosetta builds: the complete
   `m7_ffi_callxs_authentic` suite passed at `c05a7cd8`, including strict
   generated `CALLT`, `CALLMT`, `CALLM`, callback, forced-exit, STOPREQ, and
@@ -269,9 +292,10 @@ the expected non-GC64 rejection before the configured GC64 target succeeds.
 - General side traces, side-of-side traces, and stitches. Only explicitly
   certified first-side shapes are open.
 - Uncertified conversions, allocations, heap effects, table/upvalue JIT fast
-  paths, and every ARM64 FFI call except exact direct `int32_t(int32_t)` and
-  `double(double)` CDECL calls in the certified integer-`FORL` root. Arbitrary
-  generated NUM arguments, `float(float)`, other signatures, and other
+  paths, and every ARM64 FFI call except exact direct `int32_t(int32_t)`,
+  `double(double)`, and `const char *(const char *)` CDECL calls in their two
+  certified integer-`FORL` roots. Arbitrary generated NUM arguments,
+  `float(float)`, other pointer types, variadics, other signatures, and other
   call-site geometries remain closed.
 - General production JIT side-exit unwind resolution on ARM64/arm64e. The
   exact integer `CALLXS` STOPREQ trace unwind is real; the standalone arbitrary
@@ -289,13 +313,14 @@ Do not describe this branch as a completed ARM64 port yet. A passing stock
 suite proves an important compatibility boundary, not general JIT coverage.
 
 The admitted integer lifecycle has nested-callback and callback-error unwind
-evidence, and the double profile has exact FP ABI/result and exit-lifecycle
-evidence. Continue one signature at a time: pointer, 64-bit integer, boolean,
-aggregate/sret, and variadic. Arbitrary non-integral generated double
-arguments, indirect function pointers, and general call-site/root layouts
-remain separate boundaries. Before admitting general table/helper traces,
-ARM64 `lj_vm_next` also needs the forwarding-safe traversal already used by
-the x86_64 path.
+evidence, the double profile has exact FP ABI/result and exit-lifecycle
+evidence, and the pointer profile has boxed-result/root/GC evidence. Continue
+one signature at a time: 64-bit integer, boolean, aggregate/sret, and
+variadic. Arbitrary non-integral generated double arguments, other pointer
+types, indirect function pointers, and general call-site/root layouts remain
+separate boundaries. Before admitting general table/helper traces, ARM64
+`lj_vm_next` also needs the forwarding-safe traversal already used by the
+x86_64 path.
 
 ## Primary checks
 

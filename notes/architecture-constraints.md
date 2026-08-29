@@ -28,6 +28,10 @@ review boundary for both x86-64 and Apple ARM64 work.
   argument is never sufficient evidence for Apple Silicon.
 - Publish complete `TValue` objects without tearing. Shared table readers and
   writers must validate forwarding, generation, ownership, and retirement.
+- Fixed-size generated `CNEW` must call a runtime helper that completes arena
+  publication before the cdata becomes visible. A raw allocation followed by
+  generated header stores can leave the allocation in `CONSTRUCT`; payload
+  initialization may still follow the helper in generated execution order.
 - A diagnostic or approximate split snapshot must never be reused where an
   exact recurring-state authority is required.
 
