@@ -151,7 +151,8 @@ enum {
   NUMACC_FIXTURE_ADD_GE = 6u,
   NUMACC_FIXTURE_MUL_LT = 7u,
   NUMACC_FIXTURE_MUL_LE = 8u,
-  NUMACC_FIXTURE_DIV_LT = 9u
+  NUMACC_FIXTURE_DIV_LT = 9u,
+  NUMACC_FIXTURE_DIV_LE = 10u
 };
 
 typedef struct NumaccFixtureProfile {
@@ -185,7 +186,9 @@ static const NumaccFixtureProfile numacc_fixture_profiles[] = {
   { NUMACC_FIXTURE_MUL_LE, BC_ISGT, 3, 4, BC_MULVV, IR_MUL,
     A_R_STEP, A_R_X, IR_GE, IR_LE },
   { NUMACC_FIXTURE_DIV_LT, BC_ISGE, 3, 4, BC_DIVVV, IR_DIV,
-    A_R_X, A_R_STEP, IR_GT, IR_LT }
+    A_R_X, A_R_STEP, IR_GT, IR_LT },
+  { NUMACC_FIXTURE_DIV_LE, BC_ISGT, 3, 4, BC_DIVVV, IR_DIV,
+    A_R_X, A_R_STEP, IR_GE, IR_LE }
 };
 
 typedef struct AdmissionFixture {
@@ -227,6 +230,8 @@ static GCproto *numacc_mul_le_fixture_pt;
 static const BCIns *numacc_mul_le_fixture_loop_pc;
 static GCproto *numacc_div_lt_fixture_pt;
 static const BCIns *numacc_div_lt_fixture_loop_pc;
+static GCproto *numacc_div_le_fixture_pt;
+static const BCIns *numacc_div_le_fixture_loop_pc;
 /* Active full-shape prototype. The shared synthetic geometry is always
 ** rebuilt from this exact source certificate before every mutation. */
 static GCproto *numacc_fixture_pt;
@@ -241,7 +246,7 @@ static BCIns loadbc(const BCIns *pc)
 static void select_numacc_fixture(unsigned profile_id)
 {
   assert(profile_id >= NUMACC_FIXTURE_ADD_LT &&
-	 profile_id <= NUMACC_FIXTURE_DIV_LT);
+	 profile_id <= NUMACC_FIXTURE_DIV_LE);
   numacc_fixture_profile = &numacc_fixture_profiles[profile_id-1u];
   assert(numacc_fixture_profile->id == profile_id);
   if (profile_id == NUMACC_FIXTURE_ADD_LT) {
@@ -289,6 +294,11 @@ static void select_numacc_fixture(unsigned profile_id)
 	   numacc_div_lt_fixture_loop_pc != NULL);
     numacc_fixture_pt = numacc_div_lt_fixture_pt;
     numacc_fixture_loop_pc = numacc_div_lt_fixture_loop_pc;
+  } else if (profile_id == NUMACC_FIXTURE_DIV_LE) {
+    assert(numacc_div_le_fixture_pt != NULL &&
+	   numacc_div_le_fixture_loop_pc != NULL);
+    numacc_fixture_pt = numacc_div_le_fixture_pt;
+    numacc_fixture_loop_pc = numacc_div_le_fixture_loop_pc;
   } else {
     assert(!"unknown NUM dynamic-accumulator fixture profile");
   }
@@ -3086,25 +3096,25 @@ static void test_numacc_positive_and_negative(jit_State *J)
 
 static void test_numacc_shape_cross_product(jit_State *J)
 {
-  static const unsigned profiles[9] = {
+  static const unsigned profiles[10] = {
     NUMACC_FIXTURE_ADD_LT, NUMACC_FIXTURE_ADD_LE,
     NUMACC_FIXTURE_SUB_GT, NUMACC_FIXTURE_SUB_GE,
     NUMACC_FIXTURE_ADD_GT, NUMACC_FIXTURE_ADD_GE,
     NUMACC_FIXTURE_MUL_LT, NUMACC_FIXTURE_MUL_LE,
-    NUMACC_FIXTURE_DIV_LT
+    NUMACC_FIXTURE_DIV_LT, NUMACC_FIXTURE_DIV_LE
   };
   static const IROp preops[4] = { IR_GT, IR_GE, IR_LT, IR_LE };
   static const IROp bodyops[4] = { IR_LT, IR_LE, IR_GT, IR_GE };
   MSize p, prearith, bodyarith, pre, body;
   MSize combinations = 0, semantic_admissions = 0, postra_admissions = 0;
 
-  /* Exercise the complete 9x2x2x4x4 source-profile, pre-arithmetic,
+  /* Exercise the complete 10x2x2x4x4 source-profile, pre-arithmetic,
   ** body-arithmetic, pre-guard and body-guard product. Exactly ADD_LT,
-  ** ADD_LE, SUB_GT, SUB_GE, ADD_GT, ADD_GE, MUL_LT, MUL_LE and DIV_LT are
-  ** coherent at both gates. Each profile is crossed with its exact recurrence and one
-  ** distinct adjacent recurrence; the exhaustive mutation suites cover the
-  ** remaining arithmetic families independently. */
-  for (p = 0; p < 9; p++) {
+  ** ADD_LE, SUB_GT, SUB_GE, ADD_GT, ADD_GE, MUL_LT, MUL_LE, DIV_LT and
+  ** DIV_LE are coherent at both gates. Each profile is crossed with its exact
+  ** recurrence and one distinct adjacent recurrence; the exhaustive mutation
+  ** suites cover the remaining arithmetic families independently. */
+  for (p = 0; p < 10; p++) {
     const NumaccFixtureProfile *profile;
     IROp arithmetic_ops[2];
     select_numacc_fixture(profiles[p]);
@@ -3155,13 +3165,13 @@ static void test_numacc_shape_cross_product(jit_State *J)
       }
     }
   }
-  assert(combinations == 9u*2u*2u*4u*4u);
-  assert(combinations == 576);
-  assert(semantic_admissions == 9 && postra_admissions == 9);
+  assert(combinations == 10u*2u*2u*4u*4u);
+  assert(combinations == 640);
+  assert(semantic_admissions == 10 && postra_admissions == 10);
 
   /* Semantic admission and post-RA independently re-read the exact compare
   ** operand direction and recurrence opcode from the live prototype. */
-  for (p = 0; p < 9; p++) {
+  for (p = 0; p < 10; p++) {
     const NumaccFixtureProfile *profile;
     const BCIns *comparepc, *arithmeticpc;
     BCIns saved_compare, saved_arithmetic;
@@ -3352,7 +3362,7 @@ static void test_positive_and_negative(lua_State *L)
   REJECT_REMOVED(R_SUM1, IR_USE, IRT_INT, R_A, 0);
 #undef REJECT_REMOVED
 
-  /* DIV has a dedicated case only for the exact NUM DIV_LT profile. */
+  /* DIV has a dedicated case only for the exact NUM DIV_LT/DIV_LE profiles. */
   make_trace(J);
   setir(R_SUM1, IR_DIV, IRT_NUM, R_A, R_B);
   expect_reject(J, LJ_ARM64_IR_REJECT_TYPE, IR_DIV);
@@ -3950,6 +3960,39 @@ int main(void)
     assert(bc_op(arithmetic) == BC_DIVVV && bc_a(arithmetic) == 3);
     assert(bc_b(arithmetic) == 3 && bc_c(arithmetic) == 4);
   }
+
+  assert(luaL_loadstring(L,
+	"return function(x,limit,divisor) "
+	"while x<=limit do x=x/divisor end return x end") == 0);
+  assert(lua_pcall(L, 0, 1, 0) == 0);
+  assert(tvisfunc(L->top-1) && isluafunc(funcV(L->top-1)));
+  numacc_div_le_fixture_pt = funcproto(funcV(L->top-1));
+  assert(numacc_div_le_fixture_pt->framesize == 5);
+  assert(numacc_div_le_fixture_pt->sizebc == 13);
+  assert(numacc_div_le_fixture_pt->numparams == 3);
+  assert(numacc_div_le_fixture_pt->sizeuv == 0);
+  assert(numacc_div_le_fixture_pt->sizekn == 0);
+  assert(numacc_div_le_fixture_pt->sizekgc == 0);
+  assert(numacc_div_le_fixture_pt->flags2 == PROTO2_CELLOPS);
+  for (i = 0; i < numacc_div_le_fixture_pt->sizebc; i++) {
+    const BCIns *pc = &proto_bc(numacc_div_le_fixture_pt)[i];
+    if (bc_op(loadbc(pc)) == BC_LOOP &&
+	 numacc_div_le_fixture_loop_pc == NULL)
+      numacc_div_le_fixture_loop_pc = pc;
+  }
+  assert(numacc_div_le_fixture_loop_pc ==
+	 proto_bc(numacc_div_le_fixture_pt)+5);
+  assert(bc_j(loadbc(numacc_div_le_fixture_loop_pc)) > 0);
+  assert(bc_op(loadbc(numacc_div_le_fixture_loop_pc+
+	bc_j(loadbc(numacc_div_le_fixture_loop_pc)))) == BC_JMP);
+  {
+    BCIns comparison = loadbc(proto_bc(numacc_div_le_fixture_pt)+3);
+    BCIns arithmetic = loadbc(proto_bc(numacc_div_le_fixture_pt)+8);
+    assert(bc_op(comparison) == BC_ISGT);
+    assert(bc_a(comparison) == 3 && bc_d(comparison) == 4);
+    assert(bc_op(arithmetic) == BC_DIVVV && bc_a(arithmetic) == 3);
+    assert(bc_b(arithmetic) == 3 && bc_c(arithmetic) == 4);
+  }
   J = L2J(L);
   savedL = J->L;
   savedparent = J->parent;
@@ -3996,6 +4039,9 @@ int main(void)
   select_numacc_fixture(NUMACC_FIXTURE_DIV_LT);
   test_numacc_positive_and_negative(J);
   test_numacc_postra_layout(J);
+  select_numacc_fixture(NUMACC_FIXTURE_DIV_LE);
+  test_numacc_positive_and_negative(J);
+  test_numacc_postra_layout(J);
   test_numacc_shape_cross_product(J);
   J->L = savedL;
   J->parent = savedparent;
@@ -4006,9 +4052,9 @@ int main(void)
   J->framedepth = savedframedepth;
   J->retdepth = savedretdepth;
   J->startpc = savedstartpc;
-  L->top -= 13;
+  L->top -= 14;
   lua_close(L);
-  puts("arm64_jit_ir_admission OK: integer, mixed NUM, fixed-half, dynamic-step and ADD_LT/ADD_LE/ADD_GT/ADD_GE/SUB_GT/SUB_GE/MUL_LT/MUL_LE/DIV_LT dynamic-accumulator pure NUM LOOP/FORL policy verified");
+  puts("arm64_jit_ir_admission OK: integer, mixed NUM, fixed-half, dynamic-step and ADD_LT/ADD_LE/ADD_GT/ADD_GE/SUB_GT/SUB_GE/MUL_LT/MUL_LE/DIV_LT/DIV_LE dynamic-accumulator pure NUM LOOP/FORL policy verified");
   return 0;
 }
 
