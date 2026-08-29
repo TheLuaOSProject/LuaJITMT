@@ -374,6 +374,9 @@ LJ_STATIC_ASSERT(DISPATCH_TG(root_anchor_top) >= 0 &&
 LJ_STATIC_ASSERT((DISPATCH_TG(root_anchor_top) & 3) == 0);
 LJ_STATIC_ASSERT(DISPATCH_TG(tmpbuf) >= 0 &&
 		 DISPATCH_TG(tmpbuf) <= 0xffffff);
+LJ_STATIC_ASSERT(DISPATCH_TG(local_total) >= 0 &&
+		 DISPATCH_TG(local_total) <= 0xffffff);
+LJ_STATIC_ASSERT((DISPATCH_TG(local_total) & 7) == 0);
 LJ_STATIC_ASSERT(offsetof(SBuf, w) == 0);
 LJ_STATIC_ASSERT(offsetof(SBuf, b) <= 4095 &&
 		 (offsetof(SBuf, b) & 7) == 0);
@@ -381,6 +384,17 @@ LJ_STATIC_ASSERT(offsetof(SBuf, L) <= 32760 &&
 		 (offsetof(SBuf, L) & 7) == 0);
 LJ_STATIC_ASSERT(GL_OFS(vmstate) >= 0 && GL_OFS(vmstate) <= 4095);
 LJ_STATIC_ASSERT(GL_OFS(hookmask) >= 0 && GL_OFS(hookmask) <= 4095);
+LJ_STATIC_ASSERT(GL_OFS(gc.total) >= 0 && GL_OFS(gc.total) <= 4095 &&
+		 (GL_OFS(gc.total) & 7) == 0);
+LJ_STATIC_ASSERT(GL_OFS(gc.threshold) >= 0 &&
+		 GL_OFS(gc.threshold) <= 4095 &&
+		 (GL_OFS(gc.threshold) & 7) == 0);
+LJ_STATIC_ASSERT(GL_OFS(gc2.alloc_since_trigger) >= 0 &&
+		 GL_OFS(gc2.alloc_since_trigger) <= 4095 &&
+		 (GL_OFS(gc2.alloc_since_trigger) & 7) == 0);
+LJ_STATIC_ASSERT(GL_OFS(gc2.hard_bytes) >= 0 &&
+		 GL_OFS(gc2.hard_bytes) <= 4095 &&
+		 (GL_OFS(gc2.hard_bytes) & 7) == 0);
 LJ_STATIC_ASSERT(GL_OFS(gcroot) + 8*GCROOT_BASEMT_NUM >= 0 &&
 		 GL_OFS(gcroot) + 8*GCROOT_BASEMT_NUM <= 4095);
 LJ_STATIC_ASSERT(((GL_OFS(gcroot) + 8*GCROOT_BASEMT_NUM) & 7) == 0);
@@ -475,6 +489,25 @@ LJ_STATIC_ASSERT(FRAME_TYPEP == 7);
 |.macro arm64_vm_u64_acq, dst, base, index, shift
 |  add ATMP, base, index, lsl #shift
 |  ldar dst, [ATMP]
+|.endmacro
+|// VM-owned color-GC threshold and GC2 hard-assist decision.
+|.macro arm64_vm_gc_should_step, g, tmp1, tmp2, target, done
+|  arm64_vm_u64_acq tmp1, g, GL_OFS(gc.total)
+|  arm64_vm_u64_acq tmp2, g, GL_OFS(gc.threshold)
+|  cmp tmp1, tmp2
+|  bhs target
+|  arm64_vm_u64_acq tmp1, g, GL_OFS(gc2.alloc_since_trigger)
+|  arm64_vm_u64_acq tmp2, g, GL_OFS(gc2.hard_bytes)
+|  cmp tmp1, tmp2
+|  bls done
+|  arm64_vm_u64_acq tmp2, g, GL_OFS(gc2.hard_bytes)
+|  cmp tmp2, #LJ_GC2_ACCT_FLUSH
+|  blo target
+|  add ATMP, DISPATCH, #(DISPATCH_TG(local_total)&0xfff000)
+|  add ATMP, ATMP, #(DISPATCH_TG(local_total)&0xfff)
+|  ldar tmp1, [ATMP]
+|  cmp tmp1, #LJ_GC2_ACCT_FLUSH
+|  bhs target
 |.endmacro
 |.macro arm64_vm_tab_asize_acq, dst, tab
 |  add ATMP, tab, #offsetof(GCtab, asize)
@@ -1420,11 +1453,12 @@ static void build_subroutines(BuildCtx *ctx)
   |  checknum CARG2, ->fff_fallback
   |.endmacro
   |
-  |// Inlined GC threshold check. Caveat: uses CARG1 and CARG2.
+  |// VM-owned GC threshold/assist check.
+  |// Caveat: uses CARG1, CARG2 and labels 1 and 9.
   |.macro ffgccheck
-  |  ldp CARG1, CARG2, GL->gc.total	// Assumes threshold follows total.
-  |  cmp CARG1, CARG2
-  |  blt >1
+  |  arm64_vm_gc_should_step GLREG, CARG1, CARG2, >9, >1
+  |  b >1
+  |9:
   |  bl ->fff_gcstep
   |1:
   |.endmacro
@@ -2264,7 +2298,7 @@ static void build_subroutines(BuildCtx *ctx)
   |   stp BASE, CARG2, L->base
   |   str PC, SAVE_PC			// Redundant (but a defined value).
   |  mov CARG1, L
-  |  bl extern lj_gc_step		// (lua_State *L)
+  |  bl extern lj_gc_step_top		// (lua_State *L)
   |  ldp BASE, CARG2, L->base
   |   ldr CFUNC:CARG3, [BASE, FRAME_FUNC]
   |  mov lr, RA				// Help return address predictor.
@@ -3806,12 +3840,10 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   case BC_TNEW:
   case BC_TDUP:
     |  // RA = dst, RC = (hbits|asize) | tab_const (~)
-    |  ldp CARG3, CARG4, GL->gc.total	// Assumes threshold follows total.
     |   str BASE, L->base
     |   str PC, SAVE_PC
     |   mov CARG1, L
-    |  cmp CARG3, CARG4
-    |  bhs >5
+    |  arm64_vm_gc_should_step GLREG, CARG3, CARG4, >5, >1
     |1:
     if (op == BC_TNEW) {
       |  and CARG2, RC, #0x7ff

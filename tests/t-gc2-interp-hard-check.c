@@ -1,5 +1,5 @@
 /*
-** Focused test for x64 interpreter GC2 hard-threshold checks.
+** Focused test for interpreter GC2 hard-threshold checks.
 */
 
 #include <assert.h>
@@ -11,11 +11,30 @@
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
+#include "lj_bc.h"
 #include "lj_gc.h"
 #include "lj_gc2.h"
 #include "lj_tg.h"
 
 #include "lib/lua_fixture_helpers.h"
+
+static void assert_loaded_chunk_has_op(lua_State *L, BCOp op)
+{
+  GCfunc *fn;
+  GCproto *pt;
+  BCPos i;
+
+  assert(tvisfunc(L->top - 1));
+  fn = funcV(L->top - 1);
+  assert(isluafunc(fn));
+  pt = funcproto(fn);
+  for (i = 0; i < pt->sizebc; i++) {
+    if (bc_op(proto_bc(pt)[i]) == op)
+      return;
+  }
+  fputs("loaded GC2 fixture lacks required bytecode\n", stderr);
+  assert(0);
+}
 
 static void arm_gc2_hard_mark(global_State *g)
 {
@@ -108,6 +127,81 @@ static void test_normal_hard_tnew_batch_gate(lua_State *L, global_State *g)
   lj_tg_local_total_xchg_acqrel(L2TG(L), 0);
 }
 
+static void test_normal_hard_tnew_batch_boundary(lua_State *L,
+					 global_State *g)
+{
+  uint64_t interp_checks0, assist_runs0;
+  uint32_t fixtop_calls0;
+
+  ljt_lua_loadstring(L,
+    "local x = {}\n"
+    "assert(type(x) == 'table')\n");
+  arm_gc2_normal_hard_mark(g);
+  lj_tg_local_total_xchg_acqrel(L2TG(L), LJ_GC2_ACCT_FLUSH);
+  lj_gc_test_reset_step_fixtop_calls();
+  fixtop_calls0 = lj_gc_test_step_fixtop_calls();
+  interp_checks0 = gc2_interp_hard_checks_acq(g);
+  assist_runs0 = gc2_assist_runs_acq(g);
+
+  ljt_lua_pcall(L, 0, 0, "lua_pcall");
+
+  if (lj_gc_test_step_fixtop_calls() <= fixtop_calls0) {
+    fputs("normal hard-only TNEW skipped the local batch boundary\n", stderr);
+    assert(0);
+  }
+  if (gc2_interp_hard_checks_acq(g) <= interp_checks0) {
+    fputs("normal hard-only TNEW skipped the boundary hard check\n", stderr);
+    assert(0);
+  }
+  if (gc2_assist_runs_acq(g) <= assist_runs0) {
+    fputs("normal hard-only TNEW skipped the boundary assist\n", stderr);
+    assert(0);
+  }
+  finish_gc2_mark(g);
+  lj_tg_local_total_xchg_acqrel(L2TG(L), 0);
+}
+
+static void test_hard_only_tdup(lua_State *L, global_State *g)
+{
+  uint64_t interp_checks0, assist_runs0;
+  uint32_t fixtop_calls0;
+  uint8_t color_state0;
+
+  ljt_lua_loadstring(L,
+    "local x = { marker = 17 }\n"
+    "assert(x.marker == 17)\n");
+  assert_loaded_chunk_has_op(L, BC_TDUP);
+  color_state0 = g->gc.state;
+  arm_gc2_hard_mark(g);
+  lj_gc_test_reset_step_fixtop_calls();
+  fixtop_calls0 = lj_gc_test_step_fixtop_calls();
+  interp_checks0 = gc2_interp_hard_checks_acq(g);
+  assist_runs0 = gc2_assist_runs_acq(g);
+
+  ljt_lua_pcall(L, 0, 0, "lua_pcall");
+
+  if (lj_gc_test_step_fixtop_calls() <= fixtop_calls0) {
+    fputs("interpreted hard-only TDUP skipped the fixtop helper\n", stderr);
+    assert(0);
+  }
+  if (gc2_interp_hard_checks_acq(g) <= interp_checks0) {
+    fputs("interpreted hard-only TDUP did not enter the GC2 hard check\n",
+	  stderr);
+    assert(0);
+  }
+  if (gc2_assist_runs_acq(g) <= assist_runs0) {
+    fputs("interpreted hard-only TDUP did not run the GC2 hard assist\n",
+	  stderr);
+    assert(0);
+  }
+  if (g->gc.state != color_state0) {
+    fprintf(stderr, "hard-only TDUP moved color GC state %u -> %u\n",
+	    (unsigned)color_state0, (unsigned)g->gc.state);
+    assert(0);
+  }
+  finish_gc2_mark(g);
+}
+
 static void test_hard_only_c_check(lua_State *L, global_State *g)
 {
   uint64_t interp_checks0, assist_runs0;
@@ -186,6 +280,8 @@ int main(void)
 
   ljt_lua_dostring(L, "if jit then jit.off() end\n");
   test_normal_hard_tnew_batch_gate(L, g);
+  test_normal_hard_tnew_batch_boundary(L, g);
+  test_hard_only_tdup(L, g);
 
   ljt_lua_loadstring(L,
     "local x = {}\n"
