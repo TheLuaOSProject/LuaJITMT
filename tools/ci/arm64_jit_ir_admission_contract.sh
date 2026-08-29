@@ -29,6 +29,7 @@ trace_asm=$tmpdir/trace-asm.txt
 call_region=$tmpdir/call-region.txt
 value_region=$tmpdir/value-region.txt
 postra_region=$tmpdir/postra-region.txt
+arm64_cnew_region=$tmpdir/arm64-cnew-region.txt
 positive_region=$tmpdir/positive-region.txt
 dynamic_forl_region=$tmpdir/dynamic-forl-region.txt
 dynamic_forl_tests=$tmpdir/dynamic-forl-tests.txt
@@ -2662,6 +2663,29 @@ grep -A10 '^void lj_trace_ins' "$root/src/lj_trace.c" | \
   grep -F '#if LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED' >/dev/null
 grep -F '#if LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED' \
   "$root/src/vm_arm64.dasc" >/dev/null
+
+# Fixed-size CNEW must use the same publish-safe helper as the x64 backend.
+# The upstream raw allocator leaves a lockless arena allocation in CONSTRUCT
+# after the generated stores initialize its header.
+awk '/^static void asm_cnew/ { copying = 1 }
+     copying { print }
+     copying && /^\/\* -- Write barriers/ { exit }' \
+  "$root/src/lj_asm_arm64.h" >"$arm64_cnew_region"
+for required in \
+  'lj_ctype_info_predefined(cts, id, &info, &sz, NULL, NULL)' \
+  'lj_ctype_info_snapshot(cts, id, &info, &sz, NULL, NULL)' \
+  'IRCALL_lj_cdata_new_forjit' \
+  'args[1] = ir->op1;' \
+  'args[2] = ASMREF_TMP1;'; do
+  grep -F "$required" "$arm64_cnew_region" >/dev/null || {
+    echo "ARM64 publish-safe CNEW path changed: $required" >&2
+    exit 1
+  }
+done
+if grep -F 'IRCALL_lj_mem_newgco' "$arm64_cnew_region" >/dev/null; then
+  echo "ARM64 CNEW regressed to the unpublished raw allocator" >&2
+  exit 1
+fi
 
 # arm64e/BTI compilation catches pointer-auth and branch-tracking target drift
 # without executing any admitted trace. Verify the intended ABI feature macros

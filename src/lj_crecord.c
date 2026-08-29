@@ -2481,12 +2481,12 @@ static int crec_call_indirect_struct_result(CTInfo info, CTSize size)
 }
 
 #if LJ_HASJIT_FFI_CALLXS && LJ_TARGET_ARM64
-/* Keep the first Darwin ARM64 CALLXS certificates at the recorder boundary:
-** one direct CDECL function cdata with exactly int32_t(int32_t) or
-** double(double). */
-static int crec_call_arm64_scalar_admit(jit_State *J, CTState *cts,
-					 const GCcdata *cd, const CType *ct,
-					 CTypeID id, CTInfo info)
+/* Keep the Darwin ARM64 CALLXS certificates at the recorder boundary: one
+** direct single-argument CDECL function cdata with an exactly admitted
+** argument/result pair. */
+static int crec_call_arm64_admit(jit_State *J, CTState *cts,
+				  const GCcdata *cd, const CType *ct,
+				  CTypeID id, CTInfo info)
 {
   CType field;
   CTypeID fid, result;
@@ -2496,7 +2496,8 @@ static int crec_call_arm64_scalar_admit(jit_State *J, CTState *cts,
       ctype_cconv(info) != CTCC_CDECL)
     return 0;
   result = ctype_cid(info);
-  if (result != CTID_INT32 && result != CTID_DOUBLE)
+  if (result != CTID_INT32 && result != CTID_DOUBLE &&
+      result != CTID_P_CCHAR)
     return 0;
   fid = ctype_sib_acq(ct);
   if (fid == 0)
@@ -2570,7 +2571,7 @@ static int crec_call(jit_State *J, RecordFFData *rd, GCcdata *cd)
     }
 
 #if LJ_HASJIT_FFI_CALLXS && LJ_TARGET_ARM64
-    if (!crec_call_arm64_scalar_admit(J, cts, cd, ct, id, info))
+    if (!crec_call_arm64_admit(J, cts, cd, ct, id, info))
       lj_trace_err(J, LJ_TRERR_NYICALL);
 #endif
 
