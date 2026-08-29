@@ -59,7 +59,7 @@ only after assembly copies TG-owned result carriers into ABI-preserved
 registers. Attached callbacks never publish the debt, nested callbacks
 propagate only the outer auto-attached frame's bit, and legacy backends retain
 eager public detach. See
-`aarch64-ffi-callback-result-lifetime-2026-08-28.md`.
+`../aarch64-checkpoints/aarch64-ffi-callback-result-lifetime-2026-08-28.md`.
 
 ## Regression contract
 
