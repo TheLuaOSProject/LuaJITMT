@@ -9,14 +9,22 @@ without looking like current claims.
 
 Development branch: `codex/aarch64-macos-port`.
 
-Last full functional-gate checkpoint: `b940017e` (2026-08-29). The exact
-ADD_LT invariant-INT-limit widening was introduced at `7d2a07bb`, independently
-certified at the semantic and post-register-allocation gates by `d7a2ec16`, and
-proved at runtime by `c85ac964`. The behavior-neutral cleanup at `32fe50cc`
-restored LuaJIT-style switch layout, simplified one redundant reference bound,
-made argument-kind rejection explicit, and renamed stale local instruction
-macros. `20558576` bound that reject fallback into the source certificate, and
-`b940017e` added the new proof to the umbrella gate.
+Last complete JIT fail-closed-gate checkpoint: `b940017e` (2026-08-29).
+Current cleanup checkpoint: `c8cd7858` (2026-08-29). The intervening
+`96ade477` keeps the ARM64 `JFORL` native entry out of JIT-disabled builds.
+`c8cd7858` fixes the external-unwind final landing so ARM64 and arm64e preserve
+`errno` after the system unwinder returns from the personality, matching the
+existing x64 contract. The current checkpoint passed the complete native
+bootstrap gate and focused JIT-unwind checks; the broader JIT fail-closed gate
+has not been rerun since `b940017e`.
+
+The exact ADD_LT invariant-INT-limit widening was introduced at `7d2a07bb`,
+independently certified at the semantic and post-register-allocation gates by
+`d7a2ec16`, and proved at runtime by `c85ac964`. The behavior-neutral cleanup
+at `32fe50cc` restored LuaJIT-style switch layout, simplified one redundant
+reference bound, made argument-kind rejection explicit, and renamed stale
+local instruction macros. `20558576` bound that reject fallback into the
+source certificate, and `b940017e` added the new proof to the umbrella gate.
 
 ARM64 remains explicitly opt-in with `LUAJIT_MT_ARM64_BOOTSTRAP`. Native JIT
 work additionally requires `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`. These flags are
@@ -30,6 +38,9 @@ Implemented and exercised on Apple Silicon macOS:
   interpreter FFI/callback lifecycle;
 - ARM64 and arm64e/BTI trace publication, authenticated exits, retirement,
   flush/reuse, GDB JIT preparation, and bounded root/first-side entry paths;
+- ARM64 and arm64e external-unwind C, fast-function, and JIT side-exit
+  landings which restore OS error state after context installation without
+  using locks or Apple's reserved `x18`;
 - constant-step integer `FORL`, bounded integer and mixed numeric `LOOP`
   roots, fixed-half and dynamic-step numeric roots, literal-true `FUNCF`, and
   exact all-parameter `ADD_LT`, `ADD_LE`, `ADD_GT`, `ADD_GE`, `SUB_GT`,
@@ -92,10 +103,17 @@ longer run on x86-64.
 
 Relative to local and remote `v2.1` at `a649f737`, the cleanup initially reduced
 the `src/` diff from 56 files with 13,891 insertions and 1,815 deletions to 55
-files with 13,820 insertions and 1,733 deletions. The current checkpoint is 55
-files with 14,179 insertions and 1,733 deletions (net 12,446). Neither exact INT
+files with 13,820 insertions and 1,733 deletions. The current checkpoint is 57
+files with 14,336 insertions and 1,737 deletions (net 12,599). Neither exact INT
 widening capability changed `lj_asm_arm64.h`, `lj_emit_arm64.h`, or
 `vm_arm64.dasc`; both reuse upstream's existing `asm_conv()`/`SCVTF` lowering.
+
+The unwind fix keeps the historical exception prefix and x64 path unchanged.
+Its ARM64 tail uses one exception-owned `x28` carrier and one target-local VM
+landing, preserves the full allocatable GPR/FPR and status-register state, and
+returns through the original signed target. The landing is omitted from
+Windows and `LUAJIT_NO_UNWIND` ARM64 builds, so it adds no unused VM surface to
+those configurations.
 
 Large ARM64 admission and lifecycle blocks remain in common files. Moving them
 into target-local modules is a later structural migration because current
@@ -106,7 +124,19 @@ separation prevents a common-mode acceptance bug.
 ## Verification
 
 - `tools/ci/arm64_jit_fail_closed_gate.sh`: passed in full at `b940017e`.
-- Native ARM64 vendored LuaJIT suite at that exact checkpoint: `509 passed`.
+- Native ARM64 vendored LuaJIT suite during this cleanup tranche: `509 passed`.
+- `tools/ci/arm64_bootstrap_gate.sh`: passed at `c8cd7858`, including 387
+  vendored tests, TG/root/safepoint/protected-call contracts, threading and
+  coroutine tests, and 320 FFI callback rounds across four threads.
+- `tools/ci/arm64_oserr_unwind_contract.sh`: passed at `c8cd7858` for ordinary
+  ARM64, arm64e/BTI, and the x86_64/Rosetta oracle. The injected unwinder
+  clobber changed the unfixed ARM64 result from `EDOM` (33) to `EILSEQ` (92);
+  every fixed landing observed 33.
+- `tools/ci/arm64e_jit_unwind_contract.sh`: passed a registered synthetic JIT
+  frame through the production personality, authenticated trampoline, and
+  landing while preserving `errno` under the same clobber injection.
+- A separate `LUAJIT_NO_UNWIND` ARM64 build passed and contained no
+  `lj_vm_unwind_os_eh` symbol; the ordinary experimental build was restored.
 - The compiler certificate exhaustively checked 2,304 candidates and admitted
   exactly 25 at each independent gate.
 - The runtime certificate ran direct plus two randomized executions on ordinary
