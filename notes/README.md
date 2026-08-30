@@ -14,7 +14,9 @@ and reports that are no longer authoritative are retained in
   `LUAJIT_MT_ARM64_JIT_EXPERIMENTAL`.
 - Latest source-fidelity cleanup: `edbf57fa`.
 - Latest ARM64 VM acquire-load cleanup: `3f109fa2`.
-- Latest complete fail-closed gate: `3f109fa2`.
+- Latest ARM64 interpreter GC2 parity: `d639196b`.
+- Latest ARM64 JIT GC2 cadence parity: `f1fe1f73`.
+- Latest complete fail-closed gate: `f1fe1f73`.
 - After validation, the checked-out build was manually restored to the safe
   ARM64 profile, with `jit.status() == false`.
 
@@ -38,6 +40,9 @@ intentionally rejected; ordinary interpreted Lua remains available.
   including active mutation, generation forwarding, retirement retry,
   separated arrays, hidden keys, and caller-owned result snapshots.
 - Callback-result lifetime through post-detach TG reclamation.
+- GC2 hard-assist parity at interpreter allocation checks, including the fast
+  function helper and the `TNEW`/`TDUP` bytecode paths. Shared pacing fields
+  are acquired explicitly and the exact local-debt batch boundary is covered.
 
 ### Bounded native JIT
 
@@ -62,6 +67,10 @@ intentionally rejected; ordinary interpreted Lua remains available.
   unwind path. The standalone arbitrary arm64e JIT-frame contract is still
   synthetic; only the exact integer `CALLXS` STOPREQ path has real trace-unwind
   evidence.
+- Trace-head GC checks acquire both color-GC fields and both GC2 cadence fields,
+  matching x64's `total >= threshold || alloc_since > hard_check` behavior.
+  The admitted boxed-pointer `CALLXS` trace proves both equality-skip and
+  strict-overdue paths without flushing sub-batch debt or starting stopped GC.
 
 ## Deliberately closed or incomplete
 
@@ -79,9 +88,9 @@ intentionally rejected; ordinary interpreted Lua remains available.
   stress path.
 - Complete sanitizer, weak-memory, sustained-concurrency, and performance
   recovery matrices.
-- The ARM64 VM `gc.total`/`gc.threshold` loads still need a separate GC2
-  parity and hard-assist review. They were not folded into the mechanical
-  acquire-load cleanup.
+- Pre-activation legacy closures with still-open upvalues do not yet have an
+  explicit sharing policy or lifetime proof across `threading.spawn`/attach.
+  Current tests cover captures created after activation, not this older edge.
 
 ## Minimal-divergence review
 
@@ -99,9 +108,9 @@ divergence that was not part of the lockless ARM64 contract:
   redundant exported side-validator test wrapper;
 - normalized DynASM indentation, switch layout, comments, stale names, and
   redundant nested ARM64 conditions; and
-- added one small target-local address-plus-`LDAR` primitive rather than
-  duplicating acquire sequences or changing common VM code. Source and
-  generated-object contracts pin every converted consumer.
+- added small target-local address-plus-`LDAR` primitives for VM and JIT
+  publications rather than duplicating acquire sequences or changing common
+  code. Source and generated-object contracts pin every converted consumer.
 
 The large ARM64 lifecycle sections in `src/lj_trace.c` were reviewed but not
 moved. They span recording, publication, retirement, and unwind lifecycle, and
@@ -114,23 +123,25 @@ whole lifecycle and updates the source contracts without changing behavior.
 
 - `tools/ci/arm64_meta_publication_contract.sh`: source and generated-object
   checks pass at `3f109fa2`, including every new unconditional VM acquire.
-- Safe ARM64 runtime smoke at `3f109fa2`: `jit.arch == "arm64"`,
+- Safe ARM64 runtime smoke at `f1fe1f73`: `jit.arch == "arm64"`,
   `jit.os == "OSX"`, `jit.status() == false`, and 64-bit FFI pointers.
-- `tools/ci/arm64_jit_fail_closed_gate.sh`: complete pass at `3f109fa2` in
-  213.92 seconds, including ordinary ARM64 and arm64e/BTI publication, entry,
-  exits, retirement, flush/reuse, first-side paths, safepoints,
-  forwarding-safe `lj_vm_next`, callback-result lifetime, 3,072 compiler
-  combinations, 37 admitted modes per process, and 222 default runtime mode
-  executions.
-- Exact ARM64 `CALLXS` scalar/lifecycle suite: last focused pass at `00919589`
-  for the integer, double, and boxed-pointer certificates. This suite is not
-  part of the fail-closed umbrella above.
+- `tools/ci/arm64_jit_fail_closed_gate.sh`: complete pass at `f1fe1f73` in
+  about 164 seconds, including ordinary ARM64 and arm64e/BTI publication,
+  entry, exits, retirement, flush/reuse, first-side paths, safepoints,
+  forwarding-safe `lj_vm_next`, callback-result lifetime, interpreter and JIT
+  GC2 contracts, 3,072 compiler combinations, 37 admitted modes per process,
+  and 222 default runtime mode executions.
+- Exact ARM64 `CALLXS` scalar/lifecycle suite: focused pass at `f1fe1f73` for
+  the integer, double, and boxed-pointer certificates, including the native
+  GC2 equality/overdue cadence proof. This suite is not part of the
+  fail-closed umbrella above.
 - Native experimental ARM64 vendored suite: 509 passed at `4d1b6126`.
 - Disposable x86_64/Rosetta vendored suite: 509 passed at `4d1b6126`.
 - Safe ARM64 no-JIT stock suite: 387 passed at `e2c8778d`.
-- ARM64 bootstrap gate: passed at `c8cd7858`, including the stock suite,
+- ARM64 bootstrap gate: passed at `9044cac5`, including the stock suite,
   TG/root/safepoint/protected-call contracts, threading/coroutines, and 320
-  FFI callback rounds across four threads.
+  FFI callback rounds across four threads, plus ordinary ARM64 and arm64e/BTI
+  interpreter GC2 hard-assist proof.
 
 Known diagnostics observed during validation are the pre-existing unused
 `ccall_rawchild_wait` warning, the diagnostic `topofs` warning, and the x86_64
@@ -139,8 +150,8 @@ build.
 
 ## Next review priorities
 
-1. Resolve ARM64 GC-step accounting as a coherent GC2 change, including
-   `gc.total`, `gc.threshold`, local debt, and hard-assist parity.
+1. Define and prove the activation policy for legacy closures that retain open
+   upvalues into an owner stack before they cross `threading.spawn`/attach.
 2. Open only one new JIT or FFI boundary at a time, with independent source,
    IR, snapshot, post-RA, emitted-code, lifecycle, and negative-shape proof.
 3. Keep common-file edits narrower than the protocol being added and preserve
