@@ -1943,8 +1943,8 @@ static void asm_gc_check(ASMState *as)
 {
   const CCallInfo *ci = &lj_ir_callinfo[IRCALL_lj_gc_step_jit];
   IRRef args[2];
-  MCLabel l_end;
-  Reg tmp2;
+  MCLabel l_call, l_end;
+  Reg tmp1, tmp2;
   ra_evictset(as, RSET_SCRATCH);
   l_end = emit_label(as);
   /* Exit trace if in GCSatomic or GCSfinalize. Avoids syncing GC objects. */
@@ -1953,14 +1953,20 @@ static void asm_gc_check(ASMState *as)
   args[0] = ASMREF_TMP1;  /* global_State *g */
   args[1] = ASMREF_TMP2;  /* MSize steps     */
   asm_gencall(as, ci, args);
-  emit_dm(as, A64I_MOVx, ra_releasetmp(as, ASMREF_TMP1), RID_GL);
+  tmp1 = ra_releasetmp(as, ASMREF_TMP1);
+  emit_dm(as, A64I_MOVx, tmp1, RID_GL);
   tmp2 = ra_releasetmp(as, ASMREF_TMP2);
   emit_loadi(as, tmp2, as->gcsteps);
-  /* Jump around GC step if GC total < GC threshold. */
+  l_call = emit_label(as);
+  /* Skip GC step if neither public GC nor GC2 hard threshold is reached. */
   emit_cond_branch(as, CC_LS, l_end);
-  emit_nm(as, A64I_CMPx, RID_TMP, tmp2);
-  emit_getgl(as, tmp2, gc.threshold);
-  emit_getgl(as, RID_TMP, gc.total);
+  emit_nm(as, A64I_CMPx, tmp1, tmp2);
+  emit_getglacq(as, tmp2, gc2.hard_check_bytes);
+  emit_getglacq(as, tmp1, gc2.alloc_since_trigger);
+  emit_cond_branch(as, CC_HS, l_call);
+  emit_nm(as, A64I_CMPx, tmp1, tmp2);
+  emit_getglacq(as, tmp2, gc.threshold);
+  emit_getglacq(as, tmp1, gc.total);
   as->gcsteps = 0;
   checkmclim(as);
 }

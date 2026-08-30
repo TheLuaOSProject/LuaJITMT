@@ -23,6 +23,8 @@
 #include "lj_bc.h"
 #include "lj_ccall.h"
 #include "lj_ctype.h"
+#include "lj_gc.h"
+#include "lj_gc2.h"
 #include "lj_ir.h"
 #include "lj_jit.h"
 #include "lj_state.h"
@@ -226,6 +228,75 @@ static void assert_pointer_result_survives_gc(lua_State *L, CTypeID id,
   GCcdata *result = assert_pointer_result(L, id, pointer, same_root);
   assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
   assert(assert_pointer_result(L, id, pointer, same_root) == result);
+}
+
+static void assert_gc2_hard_cadence(lua_State *L, global_State *g,
+	TGState *tg, GCtrace *T)
+{
+  uint64_t saved_hard, saved_hard_check, saved_since;
+  uint64_t jit_checks0, interp_checks0, assist_runs0;
+  uint64_t cycle_requests0, cycle_starts0, local_total;
+  GCSize saved_threshold;
+  uint8_t saved_gc_state;
+  int status;
+
+  call_configure(L, 0);
+  lj_gc2_cycle_to_idle(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(lj_gc2_jit_entry_open(g));
+  assert(trace_runnable_acq(T, trace_traceno_acq(T)));
+  (void)lj_gc2_flush_alloc(g, tg);
+  assert(lj_tg_local_total_acq(tg) == 0);
+
+  saved_gc_state = g->gc.state;
+  saved_threshold = lj_gc_threshold_load(g);
+  saved_hard = lj_gc2_hard_load(g);
+  saved_hard_check = lj_gc2_hard_check_load(g);
+  saved_since = lj_gc2_alloc_since_load(g);
+  g->gc.state = GCSpause;
+  lj_gc_threshold_store(g, LJ_MAX_MEM);
+  lj_gc2_hard_store(g, LJ_GC2_ACCT_FLUSH);
+  lj_gc2_alloc_since_store(g, LJ_GC2_ACCT_FLUSH + 1u);
+  lj_gc2_hard_check_store(g, LJ_GC2_ACCT_FLUSH + 1u);
+
+  jit_checks0 = gc2_jit_hard_checks_acq(g);
+  interp_checks0 = gc2_interp_hard_checks_acq(g);
+  assist_runs0 = gc2_assist_runs_acq(g);
+  cycle_requests0 = gc2_cycle_requests_acq(g);
+  cycle_starts0 = gc2_cycle_starts_acq(g);
+
+  status = start_run(L, 2);
+  assert(status == 0);
+  assert_pointer_result(L, CTID_P_CCHAR, test_input, NULL);
+  lua_pop(L, 1);
+  assert(gc2_jit_hard_checks_acq(g) == jit_checks0);
+  assert(lj_gc2_hard_check_load(g) == LJ_GC2_ACCT_FLUSH + 1u);
+
+  lj_gc2_hard_check_store(g, LJ_GC2_ACCT_FLUSH);
+  status = start_run(L, 20);
+  assert(status == 0);
+  assert_pointer_result(L, CTID_P_CCHAR, test_input, NULL);
+  lua_pop(L, 1);
+
+  assert(gc2_jit_hard_checks_acq(g) == jit_checks0 + 1u);
+  assert(gc2_interp_hard_checks_acq(g) == interp_checks0);
+  assert(gc2_assist_runs_acq(g) == assist_runs0);
+  assert(gc2_cycle_requests_acq(g) == cycle_requests0);
+  assert(gc2_cycle_starts_acq(g) == cycle_starts0);
+  assert(lj_gc2_hard_check_load(g) ==
+	 LJ_GC2_ACCT_FLUSH + 1u + LJ_GC2_TRACE_HARD_CHECK_BATCH);
+  assert(lj_gc2_alloc_since_load(g) == LJ_GC2_ACCT_FLUSH + 1u);
+  local_total = lj_tg_local_total_acq(tg);
+  assert(local_total > 0 && local_total < LJ_GC2_ACCT_FLUSH);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(lj_gc_threshold_load(g) == LJ_MAX_MEM);
+  assert(trace_runnable_acq(T, trace_traceno_acq(T)));
+
+  lj_gc_threshold_store(g, saved_threshold);
+  lj_gc2_hard_store(g, saved_hard);
+  lj_gc2_hard_check_store(g, saved_hard_check);
+  lj_gc2_alloc_since_store(g, saved_since);
+  g->gc.state = saved_gc_state;
 }
 
 static void capture_test_values(lua_State *L)
@@ -501,6 +572,12 @@ int main(void)
   assert(call_integer_getter(L,
 	"__callxs_pointer_lifecycle_count") == 20);
 
+  /* The admitted CNEW trace must service hard-only cadence without flushing
+  ** its sub-batch allocation debt or starting a stopped-IDLE cycle. */
+  assert_gc2_hard_cadence(L, G(L), tg, T);
+  assert_clean_native_state(tg, T, old_callback_slot, old_ffi_func,
+	old_callback_stopreq);
+
   /* Same-void pointers and varargs are the two closest real signatures which
   ** must remain outside this exact recorder/assembler certificate. */
   call_negative_configure(L);
@@ -535,7 +612,8 @@ int main(void)
   test_L = NULL;
   lua_close(L);
   puts("t-arm64-jit-callxs-pointer-lifecycle OK: pointer ABI, boxed root, "
-       "errno, entry/POSTCALL no-replay and cleanup/reuse verified");
+       "errno, GC2 hard cadence, entry/POSTCALL no-replay and cleanup/reuse "
+       "verified");
   return 0;
 }
 

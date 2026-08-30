@@ -24,6 +24,7 @@ region=$tmpdir/emitter-region.txt
 fixed_region=$tmpdir/fixed-register-region.txt
 asm_arm64_globals=$tmpdir/asm-arm64-global-accesses.txt
 xpoll_region=$tmpdir/asm-xpoll-region.txt
+gc_check_region=$tmpdir/asm-gc-check-region.txt
 archive_object=$tmpdir/lj_asm.archive.o
 audit_object=$tmpdir/lj_asm-audit.o
 audit_relocs=$tmpdir/lj_asm-audit.relocs
@@ -108,21 +109,52 @@ for required in \
   }
 done
 if test "$(grep -Ec '^[[:space:]]*emit_(get|set)gl' \
-     "$root/src/lj_asm_arm64.h")" -ne 5; then
+     "$root/src/lj_asm_arm64.h")" -ne 7; then
   echo "ARM64 assembler global-field allowlist changed" >&2
   exit 1
 fi
 for required in \
   'emit_setgl(as, tab, gc.grayagain);' \
   'emit_getgl(as, link, gc.grayagain);' \
-  'emit_getgl(as, tmp2, gc.threshold);' \
-  'emit_getgl(as, RID_TMP, gc.total);' \
+  'emit_getglacq(as, tmp2, gc2.hard_check_bytes);' \
+  'emit_getglacq(as, tmp1, gc2.alloc_since_trigger);' \
+  'emit_getglacq(as, tmp2, gc.threshold);' \
+  'emit_getglacq(as, tmp1, gc.total);' \
   'emit_getgl32acq(as, gate, gc2.jit_phase_gate);'; do
   grep -F "$required" "$root/src/lj_asm_arm64.h" >/dev/null || {
     echo "ARM64 assembler global-field allowlist is missing: $required" >&2
     exit 1
   }
 done
+
+# asm_gc_check is emitted backwards. At runtime the public threshold test
+# comes first, branches to the call on >=, then the hard cadence skips the call
+# only on <=. All four remotely published words must be acquire-loaded.
+awk '/^static void asm_gc_check\(ASMState \*as\)/ { copying = 1 }
+     copying { print }
+     copying && /^}/ { exit }' "$root/src/lj_asm_arm64.h" >"$gc_check_region"
+test -s "$gc_check_region"
+gc_line_of() {
+  grep -nF "$1" "$gc_check_region" | sed -n "${2:-1}p" | cut -d: -f1
+}
+call_label=$(gc_line_of 'l_call = emit_label(as);')
+hard_skip=$(gc_line_of 'emit_cond_branch(as, CC_LS, l_end);')
+hard_cmp=$(gc_line_of 'emit_nm(as, A64I_CMPx, tmp1, tmp2);' 1)
+hard_limit=$(gc_line_of 'emit_getglacq(as, tmp2, gc2.hard_check_bytes);')
+hard_debt=$(gc_line_of 'emit_getglacq(as, tmp1, gc2.alloc_since_trigger);')
+gc_call=$(gc_line_of 'emit_cond_branch(as, CC_HS, l_call);')
+gc_cmp=$(gc_line_of 'emit_nm(as, A64I_CMPx, tmp1, tmp2);' 2)
+gc_limit=$(gc_line_of 'emit_getglacq(as, tmp2, gc.threshold);')
+gc_total=$(gc_line_of 'emit_getglacq(as, tmp1, gc.total);')
+test "$call_label" -lt "$hard_skip" && test "$hard_skip" -lt "$hard_cmp" &&
+test "$hard_cmp" -lt "$hard_limit" && test "$hard_limit" -lt "$hard_debt" &&
+test "$hard_debt" -lt "$gc_call" && test "$gc_call" -lt "$gc_cmp" &&
+test "$gc_cmp" -lt "$gc_limit" && test "$gc_limit" -lt "$gc_total"
+if grep -E 'emit_getgl\([^;]*(gc\.total|gc\.threshold|gc2\.alloc_since_trigger|gc2\.hard_check_bytes)' \
+     "$gc_check_region" >/dev/null; then
+  echo "ARM64 GC cadence still uses a plain global load" >&2
+  exit 1
+fi
 
 # IR_XPOLL must lower on ARM64 as a gate guard followed by two independent
 # naturally sized TG loads. Source order is reverse runtime emission order.
@@ -168,8 +200,9 @@ if test "$(grep -Ec '_emit_gettg_$' "$audit_relocs")" -ne 8 ||
   exit 1
 fi
 if test "$(grep -Ec '_emit_gettg32_$' "$audit_relocs")" -ne 4 ||
-   test "$(grep -Ec '_emit_getgl32acq_$' "$audit_relocs")" -ne 2; then
-  echo "ARM64 assembler artifact has the wrong XPOLL acquire-helper inventory" >&2
+   test "$(grep -Ec '_emit_getgl32acq_$' "$audit_relocs")" -ne 2 ||
+   test "$(grep -Ec '_emit_getglacq_$' "$audit_relocs")" -ne 8; then
+  echo "ARM64 assembler artifact has the wrong global acquire-helper inventory" >&2
   exit 1
 fi
 
@@ -193,6 +226,10 @@ for required in \
   'ldar[[:space:]]+w3, \[x30\]' \
   'ldar[[:space:]]+w4, \[x30\]' \
   'ldar[[:space:]]+w5, \[x30\]' \
+  'ldar[[:space:]]+x7, \[x30\]' \
+  'ldar[[:space:]]+x8, \[x30\]' \
+  'ldar[[:space:]]+x9, \[x30\]' \
+  'ldar[[:space:]]+x10, \[x30\]' \
   'dmb[[:space:]]+ish' \
   'str[[:space:]]+w30, \[x25'; do
   grep -E "$required" "$disasm" >/dev/null || {
@@ -200,11 +237,12 @@ for required in \
     exit 1
   }
 done
-if test "$(grep -Ec 'add[[:space:]]+x30, x22' "$disasm")" -ne 1 ||
-   grep -E 'ldar[[:space:]]+w[345], \[x22' "$disasm" >/dev/null; then
-  echo "emitted ARM64 XPOLL gate address/load shape changed" >&2
+if test "$(grep -Ec 'add[[:space:]]+x30, x22' "$disasm")" -ne 5 ||
+   grep -E 'ldar[[:space:]]+(w[345]|x(7|8|9|10)), \[x22' \
+     "$disasm" >/dev/null; then
+  echo "emitted ARM64 global acquire address/load shape changed" >&2
   exit 1
 fi
 
-grep -E '[[:space:]](add[[:space:]]+x30, x(22|25)|ldar[[:space:]]+[xw][0-5], \[x30\]|stlr[[:space:]]+(x2|w6), \[x30\]|dmb[[:space:]]+ish|str[[:space:]]+w30, \[x25)' "$disasm"
-echo "arm64_jit_emitter_contract OK: constrained recorder config, TG state and XPOLL verified"
+grep -E '[[:space:]](add[[:space:]]+x30, x(22|25)|ldar[[:space:]]+([xw][0-5]|x(7|8|9|10)), \[x30\]|stlr[[:space:]]+(x2|w6), \[x30\]|dmb[[:space:]]+ish|str[[:space:]]+w30, \[x25)' "$disasm"
+echo "arm64_jit_emitter_contract OK: constrained recorder config, TG state, GC cadence and XPOLL verified"

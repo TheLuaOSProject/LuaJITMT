@@ -70,12 +70,32 @@ static MSize check_emit(jit_State *J, LJArm64EmitTestOp op, int32_t state,
 			const MCode *expected, MSize nexpected,
 			MCode *all, size_t *nall)
 {
-  MCode words[8];
-  MSize i, n = lj_asm_arm64_emit_test(J, words, 8, op, state);
+  MCode words[16];
+  MSize i, n = lj_asm_arm64_emit_test(J, words, 16, op, state);
   assert(n == nexpected);
   for (i = 0; i < n; i++)
     assert(words[i] == expected[i]);
   *nall = append_words(all, *nall, words, n);
+  return n;
+}
+
+static MSize make_getgl_acquire(MCode *words, Reg r, uint32_t ofs,
+				MCode load)
+{
+  uint32_t hi = ofs & 0xfff000u;
+  uint32_t lo = ofs & 0xfffu;
+  MSize n = 0;
+  assert(ofs <= 0xffffffu);
+  if (hi != 0) {
+    words[n++] = ENC_ADDx_IMM_SHIFT12(RID_TMP, RID_GL, hi >> 12);
+    if (lo != 0)
+      words[n++] = ENC_ADDx_IMM(RID_TMP, RID_TMP, lo);
+  } else if (lo != 0) {
+    words[n++] = ENC_ADDx_IMM(RID_TMP, RID_GL, lo);
+  } else {
+    words[n++] = ENC_MOVx(RID_TMP, RID_GL);
+  }
+  words[n++] = load | ((MCode)RID_TMP << 5) | (MCode)r;
   return n;
 }
 
@@ -124,10 +144,10 @@ int main(int argc, char **argv)
     ENC_STLRw(RID_X6, RID_TMP)
   };
   MCode get_jit_gate[3];
-  MSize n_get_jit_gate = 0;
+  MCode get_gc_cadence[12];
+  MSize n_get_jit_gate;
+  MSize n_get_gc_cadence = 0;
   uint32_t gate_ofs = (uint32_t)offsetof(global_State, gc2.jit_phase_gate);
-  uint32_t gate_hi = gate_ofs & 0xfff000u;
-  uint32_t gate_lo = gate_ofs & 0xfffu;
   MCode all[64];
   size_t nall = 0;
   lua_State *L;
@@ -139,19 +159,24 @@ int main(int argc, char **argv)
   assert(!rset_test(RSET_GPR, RID_TMP));
   assert(rset_test(RSET_GPR, RID_BASE));
   assert(gate_ofs <= 0xffffffu && (gate_ofs & 3u) == 0);
-  if (gate_hi != 0) {
-    get_jit_gate[n_get_jit_gate++] =
-      ENC_ADDx_IMM_SHIFT12(RID_TMP, RID_GL, gate_hi >> 12);
-    if (gate_lo != 0)
-      get_jit_gate[n_get_jit_gate++] =
-        ENC_ADDx_IMM(RID_TMP, RID_TMP, gate_lo);
-  } else if (gate_lo != 0) {
-    get_jit_gate[n_get_jit_gate++] =
-      ENC_ADDx_IMM(RID_TMP, RID_GL, gate_lo);
-  } else {
-    get_jit_gate[n_get_jit_gate++] = ENC_MOVx(RID_TMP, RID_GL);
-  }
-  get_jit_gate[n_get_jit_gate++] = ENC_LDARw(RID_X5, RID_TMP);
+  assert((offsetof(global_State, gc.total) & 7u) == 0);
+  assert((offsetof(global_State, gc.threshold) & 7u) == 0);
+  assert((offsetof(global_State, gc2.alloc_since_trigger) & 7u) == 0);
+  assert((offsetof(global_State, gc2.hard_check_bytes) & 7u) == 0);
+  n_get_jit_gate = make_getgl_acquire(get_jit_gate, RID_X5, gate_ofs,
+				      A64I_LDARw);
+  n_get_gc_cadence += make_getgl_acquire(
+    get_gc_cadence + n_get_gc_cadence, RID_X7,
+    (uint32_t)offsetof(global_State, gc.total), A64I_LDARx);
+  n_get_gc_cadence += make_getgl_acquire(
+    get_gc_cadence + n_get_gc_cadence, RID_X8,
+    (uint32_t)offsetof(global_State, gc.threshold), A64I_LDARx);
+  n_get_gc_cadence += make_getgl_acquire(
+    get_gc_cadence + n_get_gc_cadence, RID_X9,
+    (uint32_t)offsetof(global_State, gc2.alloc_since_trigger), A64I_LDARx);
+  n_get_gc_cadence += make_getgl_acquire(
+    get_gc_cadence + n_get_gc_cadence, RID_X10,
+    (uint32_t)offsetof(global_State, gc2.hard_check_bytes), A64I_LDARx);
   L = luaL_newstate();
   assert(L != NULL && L2J(L) != NULL);
   check_emit(L2J(L), LJ_ARM64_EMIT_TEST_GET_CUR_L, 0,
@@ -174,6 +199,8 @@ int main(int argc, char **argv)
 	     get_profile_request, 2, all, &nall);
   check_emit(L2J(L), LJ_ARM64_EMIT_TEST_GET_JIT_GATE, 0,
 	     get_jit_gate, n_get_jit_gate, all, &nall);
+  check_emit(L2J(L), LJ_ARM64_EMIT_TEST_GET_GC_CADENCE, 0,
+	     get_gc_cadence, n_get_gc_cadence, all, &nall);
   check_emit(L2J(L), LJ_ARM64_EMIT_TEST_SET_XSAVE_BASESLOT, positive,
 	     set_xsave_baseslot, 3, all, &nall);
   check_emit(L2J(L), LJ_ARM64_EMIT_TEST_SET_XSAVE_NSLOTS, positive,

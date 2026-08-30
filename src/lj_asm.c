@@ -3375,7 +3375,7 @@ MSize lj_asm_arm64_emit_test(jit_State *J, MCode *buf, MSize cap,
   MCode *end;
   MSize n;
 
-  if (J == NULL || buf == NULL || cap < 8)
+  if (J == NULL || buf == NULL || cap < 16)
     return 0;
   memset(as, 0, sizeof(*as));
   as->J = J;
@@ -3404,6 +3404,12 @@ MSize lj_asm_arm64_emit_test(jit_State *J, MCode *buf, MSize cap,
     break;
   case LJ_ARM64_EMIT_TEST_GET_JIT_GATE:
     emit_getgl32acq(as, RID_X5, gc2.jit_phase_gate);
+    break;
+  case LJ_ARM64_EMIT_TEST_GET_GC_CADENCE:
+    emit_getglacq(as, RID_X10, gc2.hard_check_bytes);
+    emit_getglacq(as, RID_X9, gc2.alloc_since_trigger);
+    emit_getglacq(as, RID_X8, gc.threshold);
+    emit_getglacq(as, RID_X7, gc.total);
     break;
   case LJ_ARM64_EMIT_TEST_SET_XSAVE_BASESLOT:
     emit_settg32(as, RID_X6, ffi_xsave_baseslot);

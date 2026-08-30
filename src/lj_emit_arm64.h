@@ -458,11 +458,18 @@ static void emit_setvmstate_(ASMState *as, int32_t state)
 
 /* -- End TG-local JIT state --------------------------------------------- */
 
-/* Form a global_State field address without a literal pool, then load one
-** remotely published 32 bit word with acquire semantics. The two-ADD form is
-** layout-stable for the large GC2 block and keeps x30 as the only scratch. */
+/* Form a global_State field address without a literal pool. The two-ADD form
+** is layout-stable for the large GC2 block and keeps x30 as the only scratch. */
 LJ_STATIC_ASSERT(offsetof(global_State, gc2.jit_phase_gate) <= 0xffffff);
 LJ_STATIC_ASSERT((offsetof(global_State, gc2.jit_phase_gate) & 3) == 0);
+LJ_STATIC_ASSERT(offsetof(global_State, gc.total) <= 0xffffff);
+LJ_STATIC_ASSERT((offsetof(global_State, gc.total) & 7) == 0);
+LJ_STATIC_ASSERT(offsetof(global_State, gc.threshold) <= 0xffffff);
+LJ_STATIC_ASSERT((offsetof(global_State, gc.threshold) & 7) == 0);
+LJ_STATIC_ASSERT(offsetof(global_State, gc2.alloc_since_trigger) <= 0xffffff);
+LJ_STATIC_ASSERT((offsetof(global_State, gc2.alloc_since_trigger) & 7) == 0);
+LJ_STATIC_ASSERT(offsetof(global_State, gc2.hard_check_bytes) <= 0xffffff);
+LJ_STATIC_ASSERT((offsetof(global_State, gc2.hard_check_bytes) & 7) == 0);
 
 static void emit_gladdr24(ASMState *as, int32_t ofs)
 {
@@ -481,6 +488,20 @@ static void emit_gladdr24(ASMState *as, int32_t ofs)
   }
 }
 
+/* Load one remotely published 64 bit word with acquire semantics. */
+static void emit_getglacq_(ASMState *as, Reg r, int32_t ofs)
+{
+  lj_assertA(r < RID_MAX_GPR && r != RID_GL && r != RID_DISPATCH,
+	     "bad global 64 bit load register %d", r);
+  lj_assertA((ofs & 7) == 0, "unaligned global 64 bit load offset %d", ofs);
+  emit_dn(as, A64I_LDARx, r, RID_TMP);
+  emit_gladdr24(as, ofs);
+}
+
+#define emit_getglacq(as, r, field) \
+  emit_getglacq_((as), (r), (int32_t)offsetof(global_State, field))
+
+/* Load one remotely published 32 bit word with acquire semantics. */
 static void emit_getgl32acq_(ASMState *as, Reg r, int32_t ofs)
 {
   lj_assertA(r < RID_MAX_GPR && r != RID_GL && r != RID_DISPATCH,
