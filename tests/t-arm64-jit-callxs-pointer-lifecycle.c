@@ -265,7 +265,8 @@ static void assert_gc2_hard_cadence(lua_State *L, global_State *g,
   cycle_requests0 = gc2_cycle_requests_acq(g);
   cycle_starts0 = gc2_cycle_starts_acq(g);
 
-  status = start_run(L, 2);
+  status = start_named_run(L, "__callxs_pointer_lifecycle_run",
+	"__callxs_pointer_lifecycle_call", 2);
   assert(status == 0);
   assert_pointer_result(L, CTID_P_CCHAR, test_input, NULL);
   lua_pop(L, 1);
@@ -273,7 +274,8 @@ static void assert_gc2_hard_cadence(lua_State *L, global_State *g,
   assert(lj_gc2_hard_check_load(g) == LJ_GC2_ACCT_FLUSH + 1u);
 
   lj_gc2_hard_check_store(g, LJ_GC2_ACCT_FLUSH);
-  status = start_run(L, 20);
+  status = start_named_run(L, "__callxs_pointer_lifecycle_run",
+	"__callxs_pointer_lifecycle_call", 20);
   assert(status == 0);
   assert_pointer_result(L, CTID_P_CCHAR, test_input, NULL);
   lua_pop(L, 1);
@@ -289,6 +291,7 @@ static void assert_gc2_hard_cadence(lua_State *L, global_State *g,
   local_total = lj_tg_local_total_acq(tg);
   assert(local_total > 0 && local_total < LJ_GC2_ACCT_FLUSH);
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(lj_gc2_jit_entry_open(g));
   assert(lj_gc_threshold_load(g) == LJ_MAX_MEM);
   assert(trace_runnable_acq(T, trace_traceno_acq(T)));
 
