@@ -1,0 +1,394 @@
+[
+  {
+    "pair": 1,
+    "position": 1,
+    "kind": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/gc-sweep-leaf-performance-2026-09-04/insertion.lua",
+      "5000"
+    ],
+    "environment": {
+      "BENCH_SCALE": null,
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/?.lua;/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:26:41.101632+00:00",
+    "timeout_s": 30,
+    "status": "complete",
+    "exit_code": 0,
+    "wall_s": 2.170269641000232,
+    "user_s": 2.157802,
+    "system_s": 0.002982,
+    "finished_utc": "2026-09-04T23:26:43.271986+00:00"
+  },
+  {
+    "pair": 1,
+    "position": 2,
+    "kind": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/gc-sweep-leaf-performance-2026-09-04/insertion.lua",
+      "5000"
+    ],
+    "environment": {
+      "BENCH_SCALE": null,
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.lua;/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:26:43.272331+00:00",
+    "timeout_s": 30,
+    "status": "complete",
+    "exit_code": 0,
+    "wall_s": 0.03185105099964858,
+    "user_s": 0.02556999999999965,
+    "system_s": 0.002957,
+    "finished_utc": "2026-09-04T23:26:43.304250+00:00"
+  },
+  {
+    "pair": 2,
+    "position": 1,
+    "kind": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/gc-sweep-leaf-performance-2026-09-04/insertion.lua",
+      "5000"
+    ],
+    "environment": {
+      "BENCH_SCALE": null,
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.lua;/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:26:43.304487+00:00",
+    "timeout_s": 30,
+    "status": "complete",
+    "exit_code": 0,
+    "wall_s": 0.031613063999884616,
+    "user_s": 0.025346000000000313,
+    "system_s": 0.0029,
+    "finished_utc": "2026-09-04T23:26:43.336180+00:00"
+  },
+  {
+    "pair": 2,
+    "position": 2,
+    "kind": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/gc-sweep-leaf-performance-2026-09-04/insertion.lua",
+      "5000"
+    ],
+    "environment": {
+      "BENCH_SCALE": null,
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/?.lua;/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:26:43.336403+00:00",
+    "timeout_s": 30,
+    "status": "complete",
+    "exit_code": 0,
+    "wall_s": 2.1666341250002006,
+    "user_s": 2.150754,
+    "system_s": 0.001979999999999999,
+    "finished_utc": "2026-09-04T23:26:45.503110+00:00"
+  },
+  {
+    "pair": 3,
+    "position": 1,
+    "kind": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/gc-sweep-leaf-performance-2026-09-04/insertion.lua",
+      "5000"
+    ],
+    "environment": {
+      "BENCH_SCALE": null,
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/?.lua;/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:26:45.503479+00:00",
+    "timeout_s": 30,
+    "status": "complete",
+    "exit_code": 0,
+    "wall_s": 2.1660899559997233,
+    "user_s": 2.155208,
+    "system_s": 0.001987000000000001,
+    "finished_utc": "2026-09-04T23:26:47.669824+00:00"
+  },
+  {
+    "pair": 3,
+    "position": 2,
+    "kind": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/gc-sweep-leaf-performance-2026-09-04/insertion.lua",
+      "5000"
+    ],
+    "environment": {
+      "BENCH_SCALE": null,
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.lua;/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:26:47.670237+00:00",
+    "timeout_s": 30,
+    "status": "complete",
+    "exit_code": 0,
+    "wall_s": 0.031744866000281036,
+    "user_s": 0.02645599999999959,
+    "system_s": 0.0019629999999999995,
+    "finished_utc": "2026-09-04T23:26:47.702109+00:00"
+  },
+  {
+    "pair": 4,
+    "position": 1,
+    "kind": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/gc-sweep-leaf-performance-2026-09-04/insertion.lua",
+      "5000"
+    ],
+    "environment": {
+      "BENCH_SCALE": null,
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.lua;/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:26:47.702385+00:00",
+    "timeout_s": 30,
+    "status": "complete",
+    "exit_code": 0,
+    "wall_s": 0.03171974900033092,
+    "user_s": 0.02540100000000045,
+    "system_s": 0.002910000000000001,
+    "finished_utc": "2026-09-04T23:26:47.734274+00:00"
+  },
+  {
+    "pair": 4,
+    "position": 2,
+    "kind": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/gc-sweep-leaf-performance-2026-09-04/insertion.lua",
+      "5000"
+    ],
+    "environment": {
+      "BENCH_SCALE": null,
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/?.lua;/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:26:47.734529+00:00",
+    "timeout_s": 30,
+    "status": "complete",
+    "exit_code": 0,
+    "wall_s": 2.1659938789998705,
+    "user_s": 2.1522439999999996,
+    "system_s": 0.0009849999999999998,
+    "finished_utc": "2026-09-04T23:26:49.900702+00:00"
+  },
+  {
+    "pair": 5,
+    "position": 1,
+    "kind": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/gc-sweep-leaf-performance-2026-09-04/insertion.lua",
+      "5000"
+    ],
+    "environment": {
+      "BENCH_SCALE": null,
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/?.lua;/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:26:49.901034+00:00",
+    "timeout_s": 30,
+    "status": "complete",
+    "exit_code": 0,
+    "wall_s": 2.166119369000171,
+    "user_s": 2.1523590000000006,
+    "system_s": 0.0009949999999999994,
+    "finished_utc": "2026-09-04T23:26:52.067842+00:00"
+  },
+  {
+    "pair": 5,
+    "position": 2,
+    "kind": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/gc-sweep-leaf-performance-2026-09-04/insertion.lua",
+      "5000"
+    ],
+    "environment": {
+      "BENCH_SCALE": null,
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.lua;/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:26:52.068236+00:00",
+    "timeout_s": 30,
+    "status": "complete",
+    "exit_code": 0,
+    "wall_s": 0.0320909010001742,
+    "user_s": 0.025311000000000305,
+    "system_s": 0.003040000000000001,
+    "finished_utc": "2026-09-04T23:26:52.104262+00:00"
+  },
+  {
+    "pair": 6,
+    "position": 1,
+    "kind": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/gc-sweep-leaf-performance-2026-09-04/insertion.lua",
+      "5000"
+    ],
+    "environment": {
+      "BENCH_SCALE": null,
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.lua;/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:26:52.104539+00:00",
+    "timeout_s": 30,
+    "status": "complete",
+    "exit_code": 0,
+    "wall_s": 0.031775158000073134,
+    "user_s": 0.02428699999999928,
+    "system_s": 0.003864999999999997,
+    "finished_utc": "2026-09-04T23:26:52.136407+00:00"
+  },
+  {
+    "pair": 6,
+    "position": 2,
+    "kind": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/gc-sweep-leaf-performance-2026-09-04/insertion.lua",
+      "5000"
+    ],
+    "environment": {
+      "BENCH_SCALE": null,
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/?.lua;/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:26:52.136724+00:00",
+    "timeout_s": 30,
+    "status": "complete",
+    "exit_code": 0,
+    "wall_s": 2.1699768929997845,
+    "user_s": 2.151947,
+    "system_s": 0.0009910000000000023,
+    "finished_utc": "2026-09-04T23:26:54.306821+00:00"
+  },
+  {
+    "pair": 7,
+    "position": 1,
+    "kind": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/gc-sweep-leaf-performance-2026-09-04/insertion.lua",
+      "5000"
+    ],
+    "environment": {
+      "BENCH_SCALE": null,
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/?.lua;/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:26:54.307307+00:00",
+    "timeout_s": 30,
+    "status": "complete",
+    "exit_code": 0,
+    "wall_s": 2.170039404000363,
+    "user_s": 2.1521159999999995,
+    "system_s": 0.0,
+    "finished_utc": "2026-09-04T23:26:56.477562+00:00"
+  },
+  {
+    "pair": 7,
+    "position": 2,
+    "kind": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/gc-sweep-leaf-performance-2026-09-04/insertion.lua",
+      "5000"
+    ],
+    "environment": {
+      "BENCH_SCALE": null,
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.lua;/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:26:56.477953+00:00",
+    "timeout_s": 30,
+    "status": "complete",
+    "exit_code": 0,
+    "wall_s": 0.031848034000176995,
+    "user_s": 0.02442600000000006,
+    "system_s": 0.003887999999999999,
+    "finished_utc": "2026-09-04T23:26:56.512236+00:00"
+  }
+]

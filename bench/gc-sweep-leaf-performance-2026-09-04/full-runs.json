@@ -1,0 +1,183 @@
+[
+  {
+    "kind": "stock",
+    "mode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/luajit",
+      "-jon",
+      "-e",
+      "io.stdout:setvbuf(\"line\")",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/aux/bench/bench.lua"
+    ],
+    "environment": {
+      "BENCH_SCALE": "1",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?.lua;/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:28:13.092923+00:00",
+    "timeout_s": 180,
+    "status": "complete",
+    "pid": 29264,
+    "exit_code": 0,
+    "wall_s": 8.022562751999885,
+    "user_s": 7.9779789999999995,
+    "system_s": 0.012938,
+    "finished_utc": "2026-09-04T23:28:21.115584+00:00",
+    "reported_rows": 15,
+    "benchmarks": [
+      "arith_loop",
+      "fib30",
+      "tab_hash_write",
+      "tab_store_existing",
+      "tab_insert_newkey",
+      "tab_hash_read",
+      "tab_read_existing",
+      "tab_array",
+      "alloc_tables",
+      "string_intern",
+      "closures_upval",
+      "upval_hot",
+      "ffi_struct",
+      "coroutine_switch",
+      "sbuf_format"
+    ],
+    "stderr_bytes": 0
+  },
+  {
+    "kind": "after",
+    "mode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/luajit",
+      "-jon",
+      "-e",
+      "io.stdout:setvbuf(\"line\")",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/aux/bench/bench.lua"
+    ],
+    "environment": {
+      "BENCH_SCALE": "1",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.lua;/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:28:21.115956+00:00",
+    "timeout_s": 180,
+    "status": "complete",
+    "pid": 29274,
+    "exit_code": 0,
+    "wall_s": 149.14039990699985,
+    "user_s": 145.950953,
+    "system_s": 2.8004569999999998,
+    "finished_utc": "2026-09-04T23:30:50.256430+00:00",
+    "reported_rows": 15,
+    "benchmarks": [
+      "arith_loop",
+      "fib30",
+      "tab_hash_write",
+      "tab_store_existing",
+      "tab_insert_newkey",
+      "tab_hash_read",
+      "tab_read_existing",
+      "tab_array",
+      "alloc_tables",
+      "string_intern",
+      "closures_upval",
+      "upval_hot",
+      "ffi_struct",
+      "coroutine_switch",
+      "sbuf_format"
+    ],
+    "stderr_bytes": 0
+  },
+  {
+    "kind": "stock",
+    "mode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/luajit",
+      "-joff",
+      "-e",
+      "io.stdout:setvbuf(\"line\")",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/aux/bench/bench.lua"
+    ],
+    "environment": {
+      "BENCH_SCALE": "1",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?.lua;/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:30:50.256997+00:00",
+    "timeout_s": 180,
+    "status": "complete",
+    "pid": 32764,
+    "exit_code": 0,
+    "wall_s": 32.07335771699991,
+    "user_s": 31.95757900000001,
+    "system_s": 0.02188699999999999,
+    "finished_utc": "2026-09-04T23:31:22.330770+00:00",
+    "reported_rows": 15,
+    "benchmarks": [
+      "arith_loop",
+      "fib30",
+      "tab_hash_write",
+      "tab_store_existing",
+      "tab_insert_newkey",
+      "tab_hash_read",
+      "tab_read_existing",
+      "tab_array",
+      "alloc_tables",
+      "string_intern",
+      "closures_upval",
+      "upval_hot",
+      "ffi_struct",
+      "coroutine_switch",
+      "sbuf_format"
+    ],
+    "stderr_bytes": 0
+  },
+  {
+    "kind": "after",
+    "mode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/luajit",
+      "-joff",
+      "-e",
+      "io.stdout:setvbuf(\"line\")",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/aux/bench/bench.lua"
+    ],
+    "environment": {
+      "BENCH_SCALE": "1",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.lua;/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:31:22.331263+00:00",
+    "timeout_s": 180,
+    "status": "timeout",
+    "pid": 32943,
+    "exit_code": -9,
+    "wall_s": 180.00249559699978,
+    "user_s": 179.64692399999998,
+    "system_s": 0.022944000000000297,
+    "finished_utc": "2026-09-04T23:34:22.334466+00:00",
+    "reported_rows": 4,
+    "benchmarks": [
+      "arith_loop",
+      "fib30",
+      "tab_hash_write",
+      "tab_store_existing"
+    ],
+    "stderr_bytes": 0
+  }
+]

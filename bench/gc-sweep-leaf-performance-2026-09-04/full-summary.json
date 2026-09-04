@@ -1,0 +1,30 @@
+{
+  "-jon": {
+    "stock_process_status": "complete",
+    "fork_process_status": "complete",
+    "fork_reported_rows": 15,
+    "missing_fork_rows": [],
+    "geometric_mean_fork_over_stock": 1.5405508975257147,
+    "aggregate_status": "complete_single_process_pilot"
+  },
+  "-joff": {
+    "stock_process_status": "complete",
+    "fork_process_status": "timeout",
+    "fork_reported_rows": 4,
+    "missing_fork_rows": [
+      "tab_insert_newkey",
+      "tab_hash_read",
+      "tab_read_existing",
+      "tab_array",
+      "alloc_tables",
+      "string_intern",
+      "closures_upval",
+      "upval_hot",
+      "ffi_struct",
+      "coroutine_switch",
+      "sbuf_format"
+    ],
+    "geometric_mean_fork_over_stock": null,
+    "aggregate_status": "not_computed_incomplete_pilot"
+  }
+}

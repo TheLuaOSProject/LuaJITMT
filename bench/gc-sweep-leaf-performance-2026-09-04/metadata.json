@@ -1,0 +1,90 @@
+{
+  "created_utc": "2026-09-04T23:25:59.549679+00:00",
+  "before_runtime_commit": "09cef065",
+  "source_difference": [
+    "src/lj_gc2.c"
+  ],
+  "after_change": "gc2_trace_sweep_edge final SSB publication additionally requires gc2_gct_may_traverse(gct); no table coalescing or stats changes",
+  "compiler": "gcc (Debian 14.2.0-19) 14.2.0",
+  "cpu": 30,
+  "cpu_metadata": {
+    "/sys/devices/system/cpu/cpu30/topology/thread_siblings_list": "30",
+    "/sys/devices/system/cpu/cpu30/cpufreq/scaling_governor": "performance",
+    "/sys/fs/cgroup/cpu.max": "max 100000"
+  },
+  "isolation": "CPU affinity only; other agents continue functional tests on remaining CPUs where practical; frequency is not fixed and the system is not fully isolated",
+  "binaries": {
+    "before": {
+      "path": "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/luajit",
+      "sha256": "7f6c83ef59dc0116dd0144b63bc6e72479cec2744c3a53db71b810de398186dd",
+      "readelf_notes": "\nDisplaying notes found in: .note.gnu.property\n  Owner                Data size \tDescription\n  GNU                  0x00000010\tNT_GNU_PROPERTY_TYPE_0\n      Properties: x86 ISA needed: x86-64-baseline\n\nDisplaying notes found in: .note.gnu.build-id\n  Owner                Data size \tDescription\n  GNU                  0x00000014\tNT_GNU_BUILD_ID (unique build ID bitstring)\n    Build ID: a4c0f9c994512411ef29fb907064c1851a0a3cc7\n\nDisplaying notes found in: .note.ABI-tag\n  Owner                Data size \tDescription\n  GNU                  0x00000010\tNT_GNU_ABI_TAG (ABI version tag)\n    OS: Linux, ABI: 3.2.0\n",
+      "ldd": "\tlinux-vdso.so.1 (0x00007f0aef84c000)\n\tlibm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007f0aef5db000)\n\tlibgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007f0aef5ae000)\n\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f0aef3ba000)\n\t/lib64/ld-linux-x86-64.so.2 (0x00007f0aef84e000)\n"
+    },
+    "after": {
+      "path": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/luajit",
+      "sha256": "c6e24874cefde9b2033b0e138cc3564d2e27dfc72ce04597b45ab70ad98fc8cf",
+      "readelf_notes": "\nDisplaying notes found in: .note.gnu.property\n  Owner                Data size \tDescription\n  GNU                  0x00000010\tNT_GNU_PROPERTY_TYPE_0\n      Properties: x86 ISA needed: x86-64-baseline\n\nDisplaying notes found in: .note.gnu.build-id\n  Owner                Data size \tDescription\n  GNU                  0x00000014\tNT_GNU_BUILD_ID (unique build ID bitstring)\n    Build ID: 54d546c4e17b8526f2abfef11c4af6c6d2f38e67\n\nDisplaying notes found in: .note.ABI-tag\n  Owner                Data size \tDescription\n  GNU                  0x00000010\tNT_GNU_ABI_TAG (ABI version tag)\n    OS: Linux, ABI: 3.2.0\n",
+      "ldd": "\tlinux-vdso.so.1 (0x00007f6da63ee000)\n\tlibm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007f6da617d000)\n\tlibgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007f6da6150000)\n\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f6da5f5c000)\n\t/lib64/ld-linux-x86-64.so.2 (0x00007f6da63f0000)\n"
+    },
+    "stock": {
+      "path": "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/luajit",
+      "sha256": "d399449cc8cee4b0c600104a4a66fd44eeeac276c0f8571ce8204744041b5e34",
+      "readelf_notes": "\nDisplaying notes found in: .note.gnu.property\n  Owner                Data size \tDescription\n  GNU                  0x00000010\tNT_GNU_PROPERTY_TYPE_0\n      Properties: x86 ISA needed: x86-64-baseline\n\nDisplaying notes found in: .note.gnu.build-id\n  Owner                Data size \tDescription\n  GNU                  0x00000014\tNT_GNU_BUILD_ID (unique build ID bitstring)\n    Build ID: 7ee48eb30ddc2bb66518fe3133b14860908c163c\n\nDisplaying notes found in: .note.ABI-tag\n  Owner                Data size \tDescription\n  GNU                  0x00000010\tNT_GNU_ABI_TAG (ABI version tag)\n    OS: Linux, ABI: 3.2.0\n",
+      "ldd": "\tlinux-vdso.so.1 (0x00007fcc44084000)\n\tlibm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007fcc43ef4000)\n\tlibgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007fcc43ec7000)\n\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007fcc43cd3000)\n\t/lib64/ld-linux-x86-64.so.2 (0x00007fcc44086000)\n"
+    }
+  },
+  "source": {
+    "before": {
+      "src/lj_gc2.c": "03642a1d466a127af219e9654bfc4e2a4ab63fe9119722a7685528df1d5a84f9",
+      "src/lj_ctype.c": "63990b7796d93a7c4c8659e61c2f0ec43dd766a2972ed679f8f46a4237b2171b",
+      "src/lj_ctype.h": "8ee89b4adca50452d429e57ae528568ee9a2ac185eb15922f88e4007d0fd5e7d",
+      "src/lj_trace.c": "0e9b47d38d52d60b82f05f6ab79aa32f1ac05e14317213e41971ecf371ca2200"
+    },
+    "after": {
+      "src/lj_gc2.c": "eeca1e87c175f48d05c91d17a7650ed0725da453ed3ed59ac6fccada30ecdccd",
+      "src/lj_ctype.c": "63990b7796d93a7c4c8659e61c2f0ec43dd766a2972ed679f8f46a4237b2171b",
+      "src/lj_ctype.h": "8ee89b4adca50452d429e57ae528568ee9a2ac185eb15922f88e4007d0fd5e7d",
+      "src/lj_trace.c": "0e9b47d38d52d60b82f05f6ab79aa32f1ac05e14317213e41971ecf371ca2200"
+    },
+    "stock": {
+      "src/lj_ctype.c": "369751a4ad985c3a549969302507787c0a95b0b6cfb9fdc9c29f0bdd7488c8d8",
+      "src/lj_ctype.h": "35a6109638edb52becbd2cad491660a0aab82bf149e38297858e6e129233b0d1",
+      "src/lj_trace.c": "1faa9dd6f22cf8cd15cf69e734bb3b87e09744313924c39a2b52174a50ec82f3"
+    }
+  },
+  "harness_sha256": "ebd0b8d53b6e7a340c90c45ad33d9bdd47acbd5418890d593d6aae127ef926a9",
+  "minimal_harness_sha256": "76dd86261fdbef8731e2e5bf3b74e0e7bce58652aa4950256942bc7406e3a599",
+  "fork_build_description": "make -j4 BUILDMODE=static, default GCC optimization flags, no assertion/helper/sanitizer flags",
+  "stock_revision": "b925b3e3fc6771171602323b45fbe9fb8fc90369",
+  "stock_build_command": [
+    "make",
+    "-C",
+    "src",
+    "-j4",
+    "CC=gcc",
+    "CCOPT=-O2 -fomit-frame-pointer",
+    "CCOPT_x64=-mcx16"
+  ],
+  "stock_standard_equivalence": {
+    "command": [
+      "make",
+      "-C",
+      "src",
+      "-j4",
+      "CC=gcc",
+      "CCOPT=-O2 -fomit-frame-pointer",
+      "CCOPT_x64=-mcx16",
+      "CCSTD=-std=gnu11"
+    ],
+    "pilot_sha256": "d399449cc8cee4b0c600104a4a66fd44eeeac276c0f8571ce8204744041b5e34",
+    "gnu11_sha256": "d399449cc8cee4b0c600104a4a66fd44eeeac276c0f8571ce8204744041b5e34",
+    "byte_identical": true
+  },
+  "cpu_model": "Intel Core i9-14900K",
+  "final_binary_verification": {
+    "before": "7f6c83ef59dc0116dd0144b63bc6e72479cec2744c3a53db71b810de398186dd",
+    "after": "c6e24874cefde9b2033b0e138cc3564d2e27dfc72ce04597b45ab70ad98fc8cf",
+    "stock": "d399449cc8cee4b0c600104a4a66fd44eeeac276c0f8571ce8204744041b5e34"
+  },
+  "final_status": "four full pilot processes terminal; stock/JIT-fork complete, interpreter-fork timeout with four rows; seven insertion pairs complete"
+}

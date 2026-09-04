@@ -1,0 +1,5 @@
+benchmark               total_s      ns/op
+arith_loop               0.2849       5.70
+fib30                    0.0328 32849000.00
+tab_hash_write           0.1369      68.47
+tab_store_existing      13.2789     663.94

@@ -1,0 +1,12 @@
+--- /tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/lj_gc2.c	2026-09-04 22:46:09.764622174 +0000
++++ /tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/lj_gc2.c	2026-09-04 23:20:47.246224458 +0000
+@@ -21865,7 +21865,8 @@
+     ** only private descendants; public root/barrier publication is unfiltered. */
+     return 0;
+   }
+-  if (traversable || gct == (uint32_t)~LJ_TUDATA) {
++  if (gc2_gct_may_traverse(gct) &&
++      (traversable || gct == (uint32_t)~LJ_TUDATA)) {
+     /*
+     ** Mutators never push/pop the single-owner global grey deque. Publish the
+     ** rescued container on this TG's SSB; the worker converts it to grey work

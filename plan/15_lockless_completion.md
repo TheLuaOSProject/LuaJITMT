@@ -15,6 +15,13 @@ Linux until the next release is ready. Windows and macOS investigation/fixes
 resume before that release. Their known gaps stay recorded below without
 blocking independent Linux progress or narrowing final scope.
 
+User priority (2026-09-04, latest steering): stability comes first. Prioritize
+reproducible races, lost GC edges, lifetime/reclamation errors, semantic
+regressions, and stalled progress. Performance remains required, with changes
+backed by those safety checks and measured cost. The work areas below describe
+dependencies; they do not put a performance rewrite ahead of a demonstrated
+correctness defect.
+
 ## Evidence and design rules
 
 1. An ordinary operation must not need a particular suspended peer to resume.
@@ -81,11 +88,13 @@ are verified reasons the full goal is still open:
 | CType state | General FFI readers wait for the parser sequence, including existing user-defined types | Private parser transactions with immutable committed versions |
 | Foreign callbacks | Same callback slot shares one hidden carrier and waits for that state owner | Independently admitted per-actor or per-invocation carriers |
 | FINREG | Owner-only claim states and scans of unrelated claims block registration/clear | Persistent registration, ordering, and finalization transactions |
-| Trace lifecycle | Side/stitch publication waits for SMR; automatic pressure flush handshakes synchronously | Try/abort before publication, durable completion and asynchronous retirement after it |
+| Trace lifecycle | Side publication admission is now bounded; committed root-abort cleanup and automatic pressure flush still wait | Durable post-publication cleanup and asynchronous retirement/flush |
+| Trace stitching | Production stitch probe rejects every edge and the stitch entry returns immediately | Prove C/VM return and snapshot lifetime before enabling real executed stitched traces |
 | VM events | START/STOP/ABORT/RECORD callbacks still retain recorder ownership | Exact event/continuation sessions with callbacks outside shared ownership |
 | Generic FFI traces | CALLXS is live, with incomplete aggregate ABI and caller topology | Extend generic ABI lowering and no-replay frame lifecycle |
 | Win64 table traces | The recorder rejects ordinary HSTORE/ASTORE, including pre-MT stores | Complete Win64 helper ABI and require executed table-store traces under Wine and native CI |
-| Diagnostics | `gcstats()` walks another TG's owner-local allocator lists | Owner-published scalar evidence or a retained bounded snapshot |
+| Diagnostics | Remote allocator-list walks are replaced by scalar publication in `abf234ca`; other snapshot lifetime contracts still apply | Preserve owner/lifetime contracts and audit remaining diagnostic access |
+| Allocator API | The default internal-allocator gate ignores custom `lua_Alloc` callbacks and makes `lua_setallocf` a no-op | Restore exact allocation ownership and callback behavior as a separate tested milestone |
 | Generational GC | Published controls do not prove physical minor collection or all remembered edges | Complete parent-edge audit and prove actual minor-cycle reclamation |
 | Performance | Existing 100x cliff gate and historical samples cannot prove parity | Current pinned-stock measurements and the original final gates |
 
@@ -135,10 +144,44 @@ controls and post-fix completion tests:
   paired stores. The exact post-store/root handoff remains. Seven paired
   insertion measurements found no material speedup; this does not solve the
   traversal cliff. See `notes/table-prestore-barrier-review-2026-09-04.md`.
+- `ea23bf0c`: admit side-trace parent/root bodies once before publication and
+  abort speculative recording on refusal. Recorder ownership retains admitted
+  bodies through linking; optional debugger/perf registration follows linking
+  so same-owner GC cannot invalidate that lifetime proof. Real paused-reclaimer
+  schedules, inspectable RETRY events, GDB allocation failure, and both restored
+  wait negative controls are covered in
+  `notes/jit-stop-admission-nonwaiting-2026-09-04.md`. The committed root-abort
+  retirement wait and disabled stitching remain open.
+- `09d09e63`: preserve public SWEEP table requests after raw writes, and make
+  FINREG membership inspection observational with explicit RETRY propagation.
+  Available-buffer lost-edge controls, cyclic child graphs, real admission
+  refusal, weak/finalizer regressions, and ASan pass. The former predicate's
+  semantic publication also caused self-sustaining collector work. See
+  `notes/gc-sweep-public-table-rescan-2026-09-04.md`.
+- `09cef065`: retain exact SWEEP TValue admission through marking and edge
+  publication, removing duplicate admission. Exact small/huge object lifetime,
+  type/layout, transient failure, and recovery controls pass. See
+  `notes/gc-sweep-edge-admission-reuse-2026-09-04.md`.
+- `006da911`: finish successfully preserved string/cdata leaves without
+  queueing them as graph work. Marking, failure recovery, userdata/finalizer,
+  and cyclic graph obligations remain covered; the leaf-only negative control
+  restores the unnecessary queue. See
+  `notes/gc-sweep-leaf-publication-2026-09-04.md`.
+- `abf234ca`: replace remote allocator-list walks with owner-published arena
+  counts and binmask loads. Protected-arena and targeted TSan controls fail
+  with the old reader and pass with the scalar reader. Counter transitions,
+  rollback, transfer, bootstrap, and partial teardown are covered in
+  `notes/gc-stats-arena-publication-2026-09-04.md`.
 
 The combined normal Linux runtime passes the default stock suite (387 tests
 with JIT off, 509 with JIT on). That is semantic regression coverage, not
 proof of the concurrent progress, reclamation, or performance requirements.
+The combined allocator state-churn fixture still exceeds its 60-second pilot
+limit; stopped-process samples show automatic SWEEP table traversal but do not
+establish whether progress has stalled. Keep that result open. A separate
+sweep-batching fixture now explicitly selects the two lifetime words required
+by its original exact batch assertions; ten combined and ten pre-leaf control
+runs pass with that geometry.
 
 These repairs do not constitute production resize or asynchronous GC
 completion. Continue keeping each protocol change and its exact validation in
@@ -155,12 +198,29 @@ filtered insertion sizes have approximately flat per-operation cost, so the
 current measurements do not establish a simple quadratic law or isolate all
 effects of GC phase, table size, and earlier benchmark cases.
 
-First remove demonstrably redundant publications while preserving receiver
+The leaf correction now has seven alternating fresh-process insertion pairs:
+the 5,000-key reproducer's median falls from 401,201.4 to 2,475.6 ns/key, with
+a paired geometric ratio of 0.006159525. Every process validates the complete
+table after collection. This measures that correction against the same
+stability/admission fixes; it does not establish general or stock parity.
+
+The fresh full JIT harness completes all 15 rows with a fork/stock geometric
+mean of 1.540550898. Closure creation/upvalue mutation and insertion remain
+about 59 times stock, and coroutine switching about 9.6 times stock. The fork
+interpreter pilot times out at 180 seconds after 4/15 rows, including an
+existing-key store cost of 663.94 versus 12.69 ns/op. Do not compute an
+interpreter aggregate from that incomplete run. Commands, frozen sources,
+raw samples, and measurement limits are in
+`notes/gc-sweep-leaf-performance-2026-09-04.md`.
+
+Continue removing demonstrably redundant publications while preserving receiver
 roots and exact post-CAS key/value handoff. Then replace unbounded whole-object
 work accounting with durable traversal progress measured in slots or bytes.
 An ordinary allocation must not inherit a full huge-table scan merely because
 the worker budget says one object. Audit repeated object admission/lease work
-only after the queueing and scan-frequency costs are understood.
+alongside queueing and scan-frequency costs, retaining the exact admission
+through marking, payload access, and durable publication. Compare optimizations
+against the same correctness fixes so dropped work cannot look like a speedup.
 
 Do not apply a worker's clean-table scan shortcut to arbitrary public barriers:
 some existing raw writers rely on those barriers to force discovery without a
@@ -224,6 +284,17 @@ events and then resumable START/RECORD events outside recorder ownership using
 exact session state. Extend SysV and Win64 aggregate ABI lowering, rollback,
 varargs, sret, root calls, protected/continuation frames, and tailcalls while
 proving foreign side effects execute exactly once.
+
+Production stitching is currently disabled in both `lj_trace_stitch_probe()`
+and `lj_trace_stitch()`. A side-publication fix or a fixture which directly
+enters a dormant stitch branch does not establish stitched execution. Restore
+it only with the C/VM return, snapshot reconstruction, GC and no-replay proof.
+
+Keep the temporary internal-only allocator policy visible as incomplete API
+compatibility. Its registry, ownership, realloc/retirement and callback
+requirements are recorded in
+`notes/lua-alloc-temporarily-disabled-2026-07-10.md`; an unrelated GC optimization
+must not silently enable those unfinished paths.
 
 ### F. Close performance and semantic evidence; validate platforms for release
 
