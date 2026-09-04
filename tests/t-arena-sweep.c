@@ -514,6 +514,8 @@ static void test_dtor_pair_reservation_preflight(PRNGState *rs)
   lj_arena_owner_rel(a, lj_arena_alloc_owner_acq(&alloc));
   lj_arena_next_rel(a, NULL);
   alloc.owned[LJ_ARENAK_TRAVERSABLE] = a;
+  /* This fixture injects a mapped arena instead of using allocator adoption. */
+  la_store32_rel(&alloc.owned_count[LJ_ARENAK_TRAVERSABLE], 1u);
   word = (LJ_AFIRST_CELL + 63u) & ~63u;
   first = word + 4u;
   second = first + 2u;

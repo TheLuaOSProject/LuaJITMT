@@ -409,7 +409,38 @@ struct TGAlloc {
   void *owner_tg;
   uint8_t alloc_black;
   uint8_t free_noinsert;
+  /* Diagnostic scalar publications by the existing list owner. Remote stats
+  ** readers never follow owned[]/needsweep[] or acquire allocator ownership.
+  ** Each count describes the last published list transition; the fields do
+  ** not form a coherent allocator snapshot and are never reclaim authority.
+  ** A 47-bit GC address space contains fewer than 2^32 64-KiB arenas. */
+  uint32_t owned_count[LJ_ARENA_NKINDS];
+  uint32_t needsweep_count[LJ_ARENA_NKINDS];
 };
+
+/* Remote readers retain the allocator's lifetime and exclude its private
+** initialization and terminal reset. The embedded main TG meets this contract
+** until joined-world universe destruction; a detached TG needs its own pin. */
+static LJ_AINLINE uint32_t lj_arena_alloc_owned_count_acq(
+  const TGAlloc *alloc, uint32_t kind)
+{
+  return alloc && kind < LJ_ARENA_NKINDS ?
+    la_load32_acq(&alloc->owned_count[kind]) : 0;
+}
+
+static LJ_AINLINE uint32_t lj_arena_alloc_needsweep_count_acq(
+  const TGAlloc *alloc, uint32_t kind)
+{
+  return alloc && kind < LJ_ARENA_NKINDS ?
+    la_load32_acq(&alloc->needsweep_count[kind]) : 0;
+}
+
+static LJ_AINLINE uint32_t lj_arena_alloc_binmask_acq(
+  const TGAlloc *alloc, uint32_t kind)
+{
+  return alloc && kind < LJ_ARENA_NKINDS ?
+    la_load32_acq(&alloc->binmask[kind]) : 0;
+}
 
 static LJ_AINLINE uint32_t lj_arena_remote_pending_acq(
   const TGAlloc *alloc)
@@ -870,6 +901,8 @@ LJ_FUNC uint64_t lj_arena_test_remote_fast_skips(void);
 LJ_FUNC uint64_t lj_arena_test_remote_arena_probes(void);
 LJ_FUNC uint64_t lj_arena_test_adopt_whole_count(void);
 LJ_FUNC void lj_arena_test_gc2_sidecar_fail_alloc(int enabled);
+LJ_FUNC void lj_arena_test_open_sealed_pause(GCArena *a, int enabled);
+LJ_FUNC uint32_t lj_arena_test_open_sealed_paused(void);
 LJ_FUNC int lj_arena_test_set_free_run(GCArena *a, uint32_t start,
 					uint32_t len);
 LJ_FUNC int lj_arena_test_terminal_freeing_word(const GCArena *a,

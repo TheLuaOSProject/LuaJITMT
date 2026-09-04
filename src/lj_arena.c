@@ -71,6 +71,7 @@ static void arena_test_plain_claim_pause_after_close(void);
 static void arena_test_plain_admit_pause_after_enter(void);
 static void arena_test_remote_publish_pause_after_queue(void);
 static void arena_test_remote_drain_pause_after_clear(void);
+static void arena_test_open_sealed_pause_before_cas(GCArena *a);
 static int arena_test_gc2_sidecar_alloc_fails(void);
 static void hugetab_test_realloc_pause_after_busy(void);
 static void hugetab_test_admission_close_pause_after_snapshot(void);
@@ -84,6 +85,7 @@ static void hugetab_test_admission_close_pause_after_close(void);
 #define arena_test_plain_admit_pause_after_enter() ((void)0)
 #define arena_test_remote_publish_pause_after_queue() ((void)0)
 #define arena_test_remote_drain_pause_after_clear() ((void)0)
+#define arena_test_open_sealed_pause_before_cas(a) ((void)0)
 #define arena_test_remote_fast_skip() ((void)0)
 #define arena_test_remote_arena_probe() ((void)0)
 #define arena_test_gc2_sidecar_alloc_fails() 0
@@ -1007,6 +1009,7 @@ static int arena_remote_open_sealed(GCArena *a)
   uint64_t active;
   if (!a)
     return 0;
+  arena_test_open_sealed_pause_before_cas(a);
   active = lj_arena_remote_active_acq(a);
   for (;;) {
     uint64_t expect = active;
@@ -1211,6 +1214,34 @@ static uint64_t arena_test_remote_fast_skip_count;
 static uint64_t arena_test_remote_arena_probe_count;
 static uint64_t arena_test_adopt_whole_count;
 static uint32_t arena_test_gc2_sidecar_fail_alloc_flag;
+static GCArena *arena_test_open_sealed_target;
+static uint32_t arena_test_open_sealed_pause_flag;
+static uint32_t arena_test_open_sealed_pause_seen;
+
+void lj_arena_test_open_sealed_pause(GCArena *a, int enabled)
+{
+  if (enabled) {
+    la_store32_rel(&arena_test_open_sealed_pause_seen, 0);
+    la_storeptr_rel((void **)&arena_test_open_sealed_target, a);
+  }
+  la_store32_rel(&arena_test_open_sealed_pause_flag, enabled != 0);
+}
+
+uint32_t lj_arena_test_open_sealed_paused(void)
+{
+  return la_load32_acq(&arena_test_open_sealed_pause_seen);
+}
+
+static void arena_test_open_sealed_pause_before_cas(GCArena *a)
+{
+  if (la_load32_acq(&arena_test_open_sealed_pause_flag) != 0 &&
+      la_loadptr_acq((void *const *)&arena_test_open_sealed_target) == a) {
+    la_store32_rel(&arena_test_open_sealed_pause_seen, 1);
+    while (la_load32_acq(&arena_test_open_sealed_pause_flag) != 0)
+      la_cpu_pause();
+    la_store32_rel(&arena_test_open_sealed_pause_seen, 0);
+  }
+}
 
 void lj_arena_hugetab_test_admission_close_pause(int enabled)
 {
@@ -5362,6 +5393,42 @@ int lj_arena_test_set_free_run(GCArena *a, uint32_t start, uint32_t len)
 }
 #endif
 
+/* These counters have the same single writer as their owner-local lists.
+** Publication is one store, with no reader admission or retry protocol. The
+** address-space bound in TGAlloc makes overflow impossible for valid lists. */
+static LJ_AINLINE void arena_list_count_add(uint32_t *countp, uint32_t n)
+{
+  uint32_t count = la_load32_rlx(countp);
+  if (LJ_UNLIKELY(n > ~(uint32_t)0 - count)) {
+    lj_assertX(0, "allocator diagnostic arena count overflow");
+    abort();
+  }
+  la_store32_rel(countp, count + n);
+}
+
+static LJ_AINLINE void arena_list_count_pop(uint32_t *countp, GCArena *next)
+{
+  uint32_t count;
+  if (!next) {
+    /* Also handles an existing list-repair branch which detached a bad tail. */
+    la_store32_rel(countp, 0);
+    return;
+  }
+  count = la_load32_rlx(countp);
+  if (LJ_UNLIKELY(count < 2u)) {
+    lj_assertX(0, "allocator diagnostic arena count underflow");
+    abort();
+  }
+  la_store32_rel(countp, count - 1u);
+}
+
+static LJ_AINLINE void arena_binmask_publish(TGAlloc *alloc, uint32_t kind,
+					    uint32_t mask)
+{
+  /* Bins remain owner-private. Only this scalar is observed remotely. */
+  la_store32_rel(&alloc->binmask[kind], mask);
+}
+
 static int arena_link_run_head(TGAlloc *alloc, GCArena *a, uint32_t start,
 			       uint32_t len)
 {
@@ -5379,7 +5446,7 @@ static int arena_link_run_head(TGAlloc *alloc, GCArena *a, uint32_t start,
   /* FREE is the prior exact terminal LP. The node remains private until the
   ** final owner-local bin-head store below. */
   alloc->bins[k][b] = run;
-  alloc->binmask[k] |= (uint32_t)1u << b;
+  arena_binmask_publish(alloc, k, alloc->binmask[k] | ((uint32_t)1u << b));
   return 1;
 }
 
@@ -6128,9 +6195,9 @@ static void arena_publish_bump_run(TGAlloc *alloc, uint32_t k)
 static void arena_refresh_binmask(TGAlloc *alloc, uint32_t k, uint32_t b)
 {
   if (alloc->bins[k][b])
-    alloc->binmask[k] |= (uint32_t)1u << b;
+    arena_binmask_publish(alloc, k, alloc->binmask[k] | ((uint32_t)1u << b));
   else
-    alloc->binmask[k] &= ~((uint32_t)1u << b);
+    arena_binmask_publish(alloc, k, alloc->binmask[k] & ~((uint32_t)1u << b));
 }
 
 static LJArenaFreeRun **arena_find_run(TGAlloc *alloc, uint32_t k,
@@ -6194,7 +6261,7 @@ static LJArenaFreeRun **arena_find_run(TGAlloc *alloc, uint32_t k,
 static void arena_clear_bins(TGAlloc *alloc, uint32_t k)
 {
   memset(alloc->bins[k], 0, sizeof(alloc->bins[k]));
-  alloc->binmask[k] = 0;
+  arena_binmask_publish(alloc, k, 0);
 }
 
 static GCArena *arena_reclaimed_acq(const TGAlloc *alloc, uint32_t k)
@@ -6547,9 +6614,11 @@ static int arena_registry_delete(TGAlloc *alloc, GCArena *a)
   return 1;
 }
 
-static GCArena *arena_unmap_list(TGAlloc *alloc, GCArena *a)
+static GCArena *arena_unmap_list(TGAlloc *alloc, GCArena *a,
+				uint32_t *retained_countp)
 {
   GCArena *retained = NULL;
+  uint32_t retained_count = 0;
   while (a) {
     GCArena *next = lj_arena_next_acq(a);
     uint64_t restore;
@@ -6573,9 +6642,12 @@ static GCArena *arena_unmap_list(TGAlloc *alloc, GCArena *a)
     if (!unmapped) {
       lj_arena_next_rel(a, retained);
       retained = a;
+      retained_count++;
     }
     a = next;
   }
+  if (retained_countp)
+    *retained_countp = retained_count;
   return retained;
 }
 
@@ -6737,7 +6809,7 @@ static int arena_adopt_reclaimed_one(TGAlloc *alloc, uint32_t k)
       alloc->bins[k][b] = head;
     }
   }
-  alloc->binmask[k] |= staged.binmask[k];
+  arena_binmask_publish(alloc, k, alloc->binmask[k] | staged.binmask[k]);
   la_store32_rel(&a->hdr.flags,
 		 lj_arena_flags_acq(a) & ~LJ_AF_RECLAIMED);
   lj_arena_next_rel(a, old_owned);
@@ -6745,13 +6817,14 @@ static int arena_adopt_reclaimed_one(TGAlloc *alloc, uint32_t k)
   if (arena_remote_open_sealed(a)) {
     la_store32_rel(&a->hdr.flags,
 		   lj_arena_flags_acq(a) & ~LJ_AF_PREPSWEEP);
+    arena_list_count_add(&alloc->owned_count[k], 1u);
     return 1;
   }
   /* A publisher won after the clean generation CAS. Roll back owner-visible
   ** staging without touching its bit intent, then retry from CLOSED later. */
   alloc->owned[k] = old_owned;
   memcpy(alloc->bins[k], old_bins, sizeof(old_bins));
-  alloc->binmask[k] = old_binmask;
+  arena_binmask_publish(alloc, k, old_binmask);
   la_store32_rel(&a->hdr.flags,
 		 lj_arena_flags_acq(a) | LJ_AF_RECLAIMED);
 
@@ -6900,6 +6973,8 @@ int lj_arena_alloc_terminal_certificate_ready(TGAlloc *alloc)
 
 void lj_arena_alloc_init(TGAlloc *alloc)
 {
+  /* Initialization/reset is private or follows joined terminal destruction.
+  ** No snapshot reader may race the whole-allocator memset. */
   memset(alloc, 0, sizeof(*alloc));
 }
 
@@ -6910,16 +6985,21 @@ int lj_arena_alloc_fini_try(TGAlloc *alloc)
   if (!alloc)
     return 1;
   for (k = 0; k < LJ_ARENA_NKINDS; k++) {
-    alloc->owned[k] = arena_unmap_list(alloc, alloc->owned[k]);
-    alloc->needsweep[k] = arena_unmap_list(alloc, alloc->needsweep[k]);
-    alloc->quarantine[k] = arena_unmap_list(alloc, alloc->quarantine[k]);
+    uint32_t retained_count;
+    alloc->owned[k] = arena_unmap_list(alloc, alloc->owned[k],
+				     &retained_count);
+    la_store32_rel(&alloc->owned_count[k], retained_count);
+    alloc->needsweep[k] = arena_unmap_list(alloc, alloc->needsweep[k],
+					 &retained_count);
+    la_store32_rel(&alloc->needsweep_count[k], retained_count);
+    alloc->quarantine[k] = arena_unmap_list(alloc, alloc->quarantine[k], NULL);
     la_storeptr_rel((void **)&alloc->reclaimed[k],
-	(void *)arena_unmap_list(alloc, arena_reclaimed_acq(alloc, k)));
+	(void *)arena_unmap_list(alloc, arena_reclaimed_acq(alloc, k), NULL));
     retained |= alloc->owned[k] != NULL || alloc->needsweep[k] != NULL ||
 	alloc->quarantine[k] != NULL || arena_reclaimed_acq(alloc, k) != NULL;
     memset(&alloc->bump[k], 0, sizeof(alloc->bump[k]));
     memset(alloc->bins[k], 0, sizeof(alloc->bins[k]));
-    alloc->binmask[k] = 0;
+    arena_binmask_publish(alloc, k, 0);
   }
   if (!retained) {
     lj_arena_alloc_init(alloc);
@@ -6983,6 +7063,7 @@ void lj_arena_alloc_rebuild_free(TGAlloc *alloc)
 int lj_arena_alloc_prepare_sweep_kind(TGAlloc *alloc, uint32_t k)
 {
   GCArena *a, *reclaimed, *work, *prepared = NULL;
+  uint32_t prepared_count = 0;
   int complete = 1;
   if (k >= LJ_ARENA_NKINDS)
     return 0;
@@ -7006,6 +7087,7 @@ int lj_arena_alloc_prepare_sweep_kind(TGAlloc *alloc, uint32_t k)
   }
   a = alloc->owned[k];
   alloc->owned[k] = NULL;
+  la_store32_rel(&alloc->owned_count[k], 0);
   alloc->bump[k].a = NULL;
   alloc->bump[k].cell = 0;
   alloc->bump[k].end = 0;
@@ -7014,6 +7096,7 @@ int lj_arena_alloc_prepare_sweep_kind(TGAlloc *alloc, uint32_t k)
     (void **)&alloc->reclaimed[k], NULL);
   work = alloc->needsweep[k];  /* PREPSWEEP entries from an earlier retry. */
   alloc->needsweep[k] = NULL;
+  la_store32_rel(&alloc->needsweep_count[k], 0);
 
   /* Publish every newly detached source as PREPSWEEP before it becomes part of
   ** the retry list. Remote physical frees then use nonintrusive late pins even
@@ -7080,9 +7163,11 @@ int lj_arena_alloc_prepare_sweep_kind(TGAlloc *alloc, uint32_t k)
 prepared_one:
     lj_arena_next_rel(work, prepared);
     prepared = work;
+    prepared_count++;
     work = next;
   }
   alloc->needsweep[k] = prepared;
+  la_store32_rel(&alloc->needsweep_count[k], prepared_count);
   return complete;
 }
 
@@ -7099,6 +7184,7 @@ GCArena *lj_arena_alloc_quarantine_one(TGAlloc *alloc, uint32_t kind,
   if (next == a || (next && !(lj_arena_flags_acq(next) & LJ_AF_NEEDSWEEP)))
     next = NULL;
   alloc->needsweep[kind] = next;
+  arena_list_count_pop(&alloc->needsweep_count[kind], next);
   a->hdr.retire_epoch = retire_epoch;
   a->hdr.reclaim_cell = LJ_AFIRST_CELL;
   la_store32_rel(&a->hdr.flags,
@@ -7533,7 +7619,7 @@ int lj_arena_alloc_restore_sweep_kind(TGAlloc *alloc, uint32_t k)
 	alloc->bins[k][b] = head;
       }
     }
-    alloc->binmask[k] |= staged.binmask[k];
+    arena_binmask_publish(alloc, k, alloc->binmask[k] | staged.binmask[k]);
     la_store32_rel(&a->hdr.flags,
 		   lj_arena_flags_acq(a) & ~LJ_AF_NEEDSWEEP);
     lj_arena_next_rel(a, old_owned);
@@ -7541,7 +7627,7 @@ int lj_arena_alloc_restore_sweep_kind(TGAlloc *alloc, uint32_t k)
     if (!arena_remote_open_sealed(a)) {
       alloc->owned[k] = old_owned;
       memcpy(alloc->bins[k], old_bins, sizeof(old_bins));
-      alloc->binmask[k] = old_binmask;
+      arena_binmask_publish(alloc, k, old_binmask);
       la_store32_rel(&a->hdr.flags, old_flags);
       lj_arena_next_rel(a, next);
       lj_arena_reclaim_unseal(a, 1);
@@ -7549,7 +7635,9 @@ int lj_arena_alloc_restore_sweep_kind(TGAlloc *alloc, uint32_t k)
     }
     la_store32_rel(&a->hdr.flags,
 		   lj_arena_flags_acq(a) & ~LJ_AF_PREPSWEEP);
+    arena_list_count_add(&alloc->owned_count[k], 1u);
     alloc->needsweep[k] = next;
+    arena_list_count_pop(&alloc->needsweep_count[k], next);
   }
   return 1;
 }
@@ -7565,6 +7653,7 @@ static void arena_unlink_owned_duplicate(TGAlloc *alloc, uint32_t kind,
 					 GCArena *target)
 {
   GCArena *prev = NULL, *a;
+  uint32_t prefix = 0;
   if (!alloc || kind >= LJ_ARENA_NKINDS || !target)
     return;
   for (a = alloc->owned[kind]; a != NULL;) {
@@ -7576,11 +7665,16 @@ static void arena_unlink_owned_duplicate(TGAlloc *alloc, uint32_t kind,
 	lj_arena_next_rel(prev, next);
       else
 	alloc->owned[kind] = next;
+      if (!next)
+	la_store32_rel(&alloc->owned_count[kind], prefix);
+      else
+	arena_list_count_pop(&alloc->owned_count[kind], next);
       return;
     }
     if (next == a)
       return;
     prev = a;
+    prefix++;
     a = next;
   }
 }
@@ -7602,6 +7696,7 @@ GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind, uint32_t epoch,
     if (next == a || (next && !(next->hdr.flags & LJ_AF_NEEDSWEEP)))
       next = NULL;
     alloc->needsweep[kind] = next;
+    arena_list_count_pop(&alloc->needsweep_count[kind], next);
   }
   lj_arena_next_rel(a, NULL);
   lj_arena_sweep_words(a, preserve_marks);
@@ -7626,6 +7721,7 @@ GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind, uint32_t epoch,
   a->hdr.flags &= ~LJ_AF_NEEDSWEEP;
   lj_arena_next_rel(a, alloc->owned[kind]);
   alloc->owned[kind] = a;
+  arena_list_count_add(&alloc->owned_count[kind], 1u);
   return a;
 }
 
@@ -7669,18 +7765,25 @@ uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src)
   progress_g = owner_tg ? owner_tg->gl : NULL;
   for (k = 0; k < LJ_ARENA_NKINDS; k++) {
     LJArenaBump *b = &src->bump[k];
+    uint32_t moved;
     if (b->a && b->cell < b->end)
       (void)arena_set_free_run(b->a, b->cell, b->end - b->cell);
     src->bump[k].a = NULL;
     src->bump[k].cell = 0;
     src->bump[k].end = 0;
     arena_clear_bins(src, k);
-    n += arena_transfer_list(&dst->owned[k], src->owned[k], owner_tid,
-			     progress_g);
+    moved = arena_transfer_list(&dst->owned[k], src->owned[k], owner_tid,
+				progress_g);
+    arena_list_count_add(&dst->owned_count[k], moved);
+    n += moved;
     src->owned[k] = NULL;
-    n += arena_transfer_list(&dst->needsweep[k], src->needsweep[k],
-			     owner_tid, progress_g);
+    la_store32_rel(&src->owned_count[k], 0);
+    moved = arena_transfer_list(&dst->needsweep[k], src->needsweep[k],
+				owner_tid, progress_g);
+    arena_list_count_add(&dst->needsweep_count[k], moved);
+    n += moved;
     src->needsweep[k] = NULL;
+    la_store32_rel(&src->needsweep_count[k], 0);
     n += arena_transfer_list(&dst->quarantine[k], src->quarantine[k],
 			     owner_tid, progress_g);
     src->quarantine[k] = NULL;
@@ -7728,6 +7831,7 @@ static GCArena *arena_alloc_fresh(TGAlloc *alloc, PRNGState *rs,
   }
   lj_arena_next_rel(a, alloc->owned[k]);
   alloc->owned[k] = a;
+  arena_list_count_add(&alloc->owned_count[k], 1u);
   alloc->bump[k].a = a;
   alloc->bump[k].cell = LJ_AFIRST_CELL;
   alloc->bump[k].end = LJ_ARENA_CELLS;

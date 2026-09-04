@@ -2123,6 +2123,9 @@ static void test_terminal_reconcile(PRNGState *rs)
   lists.owned[0] = arena[0];
   lj_arena_next_rel(arena[0], arena[1]);
   lists.needsweep[0] = arena[2];
+  /* Synthetic list injection must also seed its diagnostic publications. */
+  la_store32_rel(&lists.owned_count[0], 2u);
+  la_store32_rel(&lists.needsweep_count[0], 1u);
   lists.quarantine[0] = arena[3];
   la_storeptr_rel((void **)&lists.reclaimed[0], arena[4]);
 
@@ -2169,6 +2172,8 @@ static void test_terminal_reconcile(PRNGState *rs)
 
   lists.owned[0] = NULL;
   lists.needsweep[0] = NULL;
+  la_store32_rel(&lists.owned_count[0], 0);
+  la_store32_rel(&lists.needsweep_count[0], 0);
   lists.quarantine[0] = NULL;
   la_storeptr_rel((void **)&lists.reclaimed[0], NULL);
   for (i = 0; i < 5u; i++) {

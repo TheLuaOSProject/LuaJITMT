@@ -20,6 +20,11 @@ hot-path API; they exist so stability and benchmark probes can distinguish
 root-spine growth, mark-entry arena reset mistakes, and free-run publication
 state without reading runtime structs directly.
 
+2026-09-04 follow-up: the main-TG arena counts and binmask now come from
+owner-published scalar evidence. Remote snapshots no longer read allocator
+list heads or arena nodes; the independent caps and settled meanings are
+unchanged. See [the mutation/lifetime audit and regression evidence](gc-stats-arena-publication-2026-09-04.md).
+
 ## Coverage
 
 `m9_gc_stats` is the stats-table owner: it exercises the public

@@ -6190,17 +6190,6 @@ static void gc2_root_spine_counts(global_State *g, uint64_t *objectsp,
   *cappedp = capped;
 }
 
-static uint64_t gc2_arena_list_count(GCArena *a)
-{
-  uint64_t n = 0;
-  for (; a != NULL; a = lj_arena_next_acq(a)) {
-    n++;
-    if (n == LJ_GC2_ROOT_SCAN_LIMIT)
-      break;
-  }
-  return n;
-}
-
 void lj_gc2_sweep_bridge_ready(global_State *g)
 {
   uint32_t expect = 0;
@@ -6774,12 +6763,22 @@ void lj_gc2_stats_snapshot(global_State *g, GC2StatsSnapshot *s)
 				&s->root_spine_count_capped);
   s->root_spine_count_cap = LJ_GC2_ROOT_SCAN_LIMIT;
   if (g && g->main_tg) {
-    TGAlloc *alloc = &g->main_tg->alloc;
-    s->arena_traversable_owned =
-      gc2_arena_list_count(alloc->owned[LJ_ARENAK_TRAVERSABLE]);
-    s->arena_traversable_needsweep =
-      gc2_arena_list_count(alloc->needsweep[LJ_ARENAK_TRAVERSABLE]);
-    s->arena_traversable_binmask = alloc->binmask[LJ_ARENAK_TRAVERSABLE];
+    const TGAlloc *alloc = &g->main_tg->alloc;
+    uint32_t owned = lj_arena_alloc_owned_count_acq(
+      alloc, LJ_ARENAK_TRAVERSABLE);
+    uint32_t needsweep = lj_arena_alloc_needsweep_count_acq(
+      alloc, LJ_ARENAK_TRAVERSABLE);
+    /* The main TG is embedded in GG_State; main_tg and the bootstrap allocator
+    ** copy are initialized before publication. Joined terminal teardown must
+    ** exclude this API before resetting that allocator or destroying g. Its
+    ** arena nodes can be relinked by another owner during a valid call, so read
+    ** only the owner's scalar publications. Preserve the diagnostic cap. */
+    s->arena_traversable_owned = owned < LJ_GC2_ROOT_SCAN_LIMIT ?
+      owned : LJ_GC2_ROOT_SCAN_LIMIT;
+    s->arena_traversable_needsweep = needsweep < LJ_GC2_ROOT_SCAN_LIMIT ?
+      needsweep : LJ_GC2_ROOT_SCAN_LIMIT;
+    s->arena_traversable_binmask = lj_arena_alloc_binmask_acq(
+      alloc, LJ_ARENAK_TRAVERSABLE);
   } else {
     s->arena_traversable_owned = 0;
     s->arena_traversable_needsweep = 0;
