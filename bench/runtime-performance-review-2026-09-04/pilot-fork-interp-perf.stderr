@@ -1,0 +1,2 @@
+[ perf record: Woken up 8 times to write data ]
+[ perf record: Captured and wrote 2.044 MB pilot-fork-interp.perf.data (247 samples) ]

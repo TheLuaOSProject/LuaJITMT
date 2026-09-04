@@ -1,0 +1,37 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 247  of event 'cpu_atom/cycles/u'
+# Event count (approx.): 21877356944
+#
+# Overhead  Command  Shared Object  Symbol
+# ........  .......  .............  ................................................
+#
+    12.16%  luajit   luajit         [.] hugetab_search
+    11.02%  luajit   luajit         [.] hugetab_reader_entry
+     9.92%  luajit   luajit         [.] gc2_small_candidate_admit
+     9.37%  luajit   luajit         [.] hugetab_counted_lease_release.part.0
+     6.93%  luajit   luajit         [.] lj_arena_rescue_enter
+     6.53%  luajit   luajit         [.] arena_publish_leave
+     5.71%  luajit   luajit         [.] gc2_mark_small_cell_admitted
+     4.08%  luajit   luajit         [.] gc2_markobj_preserve_status_impl.constprop.0
+     2.86%  luajit   luajit         [.] gc2_recovery_publish_scoped
+     2.45%  luajit   luajit         [.] lj_arena_hugetab_rescue_enter
+     2.45%  luajit   luajit         [.] gc2_small_registered_rescue_enter
+     2.45%  luajit   luajit         [.] gc2_retain_candidate_status
+     2.04%  luajit   luajit         [.] gc2_retained_candidate_valid
+     2.04%  luajit   luajit         [.] gc2_traverse_tab_rec.constprop.0
+     2.04%  luajit   luajit         [.] lj_gc2_tv_lease_acquire
+     2.04%  luajit   luajit         [.] gc2_observed_obj_status_scoped
+     2.04%  luajit   luajit         [.] gc2_flush_ssb
+     2.04%  luajit   luajit         [.] gc2_small_lifetime_nearest
+     2.04%  luajit   luajit         [.] gc2_trace_sweep_edge
+     2.04%  luajit   luajit         [.] gc2_small_containing_start
+     1.22%  luajit   luajit         [.] lj_gc2_lease_release.part.0
+
+
+#
+# (Tip: Compare performance results with: perf diff [<old file> <new file>])
+#

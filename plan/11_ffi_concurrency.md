@@ -144,11 +144,17 @@ FINREG/finqueue dispatch lands.
   Current bridge: interpreted FFI calls enter native state around
   `lj_vm_ffi_call(&cc)`, preserve the native-leave action mask, and check
   `HS_STOPREQ` after callback blacklist handling and result conversion have
-  restored local FFI bookkeeping. Safety-first default: cdata function calls do
-  not record `IR_CALLXS`, so ordinary FFI calls naturally use the interpreted
-  native-state path. Generic `IR_CALLXS` recording stays disabled in code
-  because it does not yet have an explicit native-state enter/leave protocol.
-  The reason is documented beside `crec_call()`. This removes the previous
+  restored local FFI bookkeeping. Current production (reviewed 2026-09-04):
+  generic `IR_CALLXS` recording is enabled for admitted ABI/frame shapes through
+  XSAVE, native enter, the physical call, native leave, and exact result
+  conversion. Scalar, rooted boxed, indirect aggregate results, and selected
+  SysV single-eightbyte aggregate shapes are covered. Multi-eightbyte/odd-sized
+  direct aggregates, Win64 direct aggregates, and root/tailcall/other caller
+  topologies still require generic lowering and lifecycle work. Unadmitted
+  shapes use the interpreted native-state path. See
+  `notes/runtime-jit-ffi-review-2026-09-04.md` for the source-derived admission
+  matrix; interpreted fallback does not prove full JIT completion.
+  Native-state handling removes the previous
   requirement that users identify blocking functions with
   `ffi.blocking(fn)` before GC/shutdown can progress while C is blocked. The
   obsolete public marker entry point has been removed from the supported FFI
@@ -156,8 +162,9 @@ FINREG/finqueue dispatch lands.
   Callback entry applies the same freshness rule: pre-existing sticky
   `TGF_STOPREQ` is tolerated, but a STOPREQ newly acknowledged while the
   carrier was native interrupts before the Lua callback body runs.
-  Traced C-call throughput stays deferred behind the native-state protocol,
-  with narrow helper-backed C-call shapes covered by behavior tests.
+  Traced C-call throughput and GC overlap require measurements of both admitted
+  and unadmitted shapes. The runtime still has peer-dependent CType, callback,
+  and GC coordination waits tracked in `15_lockless_completion.md`.
 - **FFI library C spans**: `ffi.copy()`, `ffi.fill()`, and the unbounded
   `strlen()` scan behind `ffi.string(ptr)` enter native state for the raw C
   library work, then apply the same fresh-STOPREQ rule as interpreted C calls.

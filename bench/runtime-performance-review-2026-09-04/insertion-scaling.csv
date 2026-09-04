@@ -1,0 +1,4 @@
+iterations,scale,stock_ns_per_op,fork_ns_per_op,fork_over_stock,status
+1000,0.005,67.00,1044.00,15.582090,single_process_best_of_five_diagnostic
+2000,0.01,68.50,1021.50,14.912409,single_process_best_of_five_diagnostic
+4000,0.02,71.25,999.25,14.024561,single_process_best_of_five_diagnostic

@@ -1,0 +1,121 @@
+{
+  "revisions": {
+    "fork": "a649f737d9841e1bf17f9102fb526d6bfb6c29e3",
+    "stock": "b925b3e3fc6771171602323b45fbe9fb8fc90369"
+  },
+  "build_command": [
+    "make",
+    "-C",
+    "src",
+    "-j4",
+    "CC=gcc",
+    "CCOPT=-O2 -fomit-frame-pointer",
+    "CCOPT_x64=-mcx16"
+  ],
+  "cpu": 30,
+  "affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31
+  ],
+  "compiler": "gcc (Debian 14.2.0-19) 14.2.0\nCopyright (C) 2024 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+  "kernel": "Linux 7f3bd9b38fd8 7.2.1-ogc3.1.fc44.x86_64 #1 SMP PREEMPT_DYNAMIC Sat Aug 29 04:53:41 UTC 2026 x86_64 GNU/Linux\n",
+  "lscpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           46 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  32\nOn-line CPU(s) list:                     0-31\nVendor ID:                               GenuineIntel\nModel name:                              Intel(R) Core(TM) i9-14900K\nCPU family:                              6\nModel:                                   183\nThread(s) per core:                      2\nCore(s) per socket:                      24\nSocket(s):                               1\nStepping:                                1\nCPU(s) scaling MHz:                      45%\nCPU max MHz:                             6000.0000\nCPU min MHz:                             800.0000\nBogoMIPS:                                6374.40\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf tsc_known_freq pni pclmulqdq dtes64 monitor ds_cpl vmx smx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb ssbd ibrs ibpb stibp ibrs_enhanced tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb intel_pt sha_ni xsaveopt xsavec xgetbv1 xsaves split_lock_detect user_shstk avx_vnni dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp hwp_pkg_req hfi vnmi umip pku ospke waitpkg gfni vaes vpclmulqdq rdpid movdiri movdir64b fsrm md_clear serialize pconfig arch_lbr ibt flush_l1d arch_capabilities\nVirtualization:                          VT-x\nL1d cache:                               896 KiB (24 instances)\nL1i cache:                               1.3 MiB (24 instances)\nL2 cache:                                32 MiB (12 instances)\nL3 cache:                                36 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-31\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Mitigation; Clear Register File\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; PBRSB-eIBRS SW sequence; BHI BHI_DIS_S\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB before exit to userspace\n",
+  "created_utc": "2026-09-04T21:40:32Z",
+  "cpu30_physical_package_id": "0",
+  "cpu30_core_id": "46",
+  "cpu30_thread_siblings_list": "30",
+  "cpu30_governor": "performance",
+  "harness": "/tmp/lj-runtime-performance-review-2026-09-04/fork/plan/aux/bench/bench.lua",
+  "harness_sha256": "ebd0b8d53b6e7a340c90c45ad33d9bdd47acbd5418890d593d6aae127ef926a9",
+  "scale": 1,
+  "internal_samples": 5,
+  "statistic": "minimum process CPU time across five harness iterations per workload",
+  "timeout_seconds": 1800,
+  "jit_flags": {
+    "jit": "-jon",
+    "interp": "-joff"
+  },
+  "diagnostics": [
+    {
+      "target": "01-jit-fork",
+      "perf_attempt": "failed before attaching: process had exited",
+      "perturbed": false
+    },
+    {
+      "target": "01-interp-fork",
+      "perf_record": "49 Hz cycles:u, DWARF call graph, 5 seconds, 247 samples, no lost samples",
+      "perturbed": true,
+      "scope": "while tab_insert_newkey had not yet emitted its row",
+      "symbolization": "relinked identical existing objects into luajit.unstripped; build ID matches profiled binary 1aa21404bbd9ee43680914324fd0275140d27b45"
+    }
+  ],
+  "cpu_max": "max 100000",
+  "binaries": {
+    "stock": {
+      "sha256": "d399449cc8cee4b0c600104a4a66fd44eeeac276c0f8571ce8204744041b5e34",
+      "version": "LuaJIT 2.1.1780076327 -- Copyright (C) 2005-2026 Mike Pall. https://luajit.org/",
+      "repository_CCSTD": "(compiler default; Makefile does not set CCSTD)",
+      "ldd": "\tlinux-vdso.so.1 (0x00007f5641887000)\n\tlibm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007f56416f7000)\n\tlibgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007f56416ca000)\n\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f56414d6000)\n\t/lib64/ld-linux-x86-64.so.2 (0x00007f5641889000)\n"
+    },
+    "fork": {
+      "sha256": "8f96ada9f586a74f8ffc1989a1683e9adbd0bce4cf127798781d8b893c19a694",
+      "version": "LuaJIT 2.1.1785355357 -- Copyright (C) 2005-2026 Mike Pall. https://luajit.org/",
+      "repository_CCSTD": "-std=gnu11",
+      "ldd": "\tlinux-vdso.so.1 (0x00007f7186c50000)\n\tlibm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007f71869df000)\n\tlibgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007f71869b2000)\n\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f71867be000)\n\t/lib64/ld-linux-x86-64.so.2 (0x00007f7186c52000)\n"
+    }
+  },
+  "stock_common_standard_verification": {
+    "command": [
+      "make",
+      "-C",
+      "src",
+      "-j4",
+      "CC=gcc",
+      "CCOPT=-O2 -fomit-frame-pointer",
+      "CCOPT_x64=-mcx16",
+      "CCSTD=-std=gnu11"
+    ],
+    "pilot_sha256": "d399449cc8cee4b0c600104a4a66fd44eeeac276c0f8571ce8204744041b5e34",
+    "gnu11_sha256": "d399449cc8cee4b0c600104a4a66fd44eeeac276c0f8571ce8204744041b5e34",
+    "byte_identical": true
+  },
+  "final_status": {
+    "whole_suite_processes": 4,
+    "whole_suite_completed": 3,
+    "fork_interp": "profiled diagnostic; deliberately terminated with SIGTERM after ten completed rows",
+    "whole_suite_repetitions": 1,
+    "planned_repeats": "Not run after the pilot identified substantial regressions; parent directed termination and review evidence instead.",
+    "raw_perf": "Kept locally under /tmp; checked-in reports contain symbolized summaries, not DWARF stack-memory captures.",
+    "reported_fork_interp_rows": 10
+  }
+}

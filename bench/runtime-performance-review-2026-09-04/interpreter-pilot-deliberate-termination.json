@@ -1,0 +1,28 @@
+{
+  "pid": 16104,
+  "command": [
+    "/tmp/lj-runtime-performance-review-2026-09-04/fork/src/luajit",
+    "-joff",
+    "-e",
+    "io.stdout:setvbuf('line')",
+    "/tmp/lj-runtime-performance-review-2026-09-04/fork/plan/aux/bench/bench.lua"
+  ],
+  "requested_utc": "2026-09-04T21:56:16Z",
+  "reason": "Parent requested deliberate termination after the profiled full-suite interpreter pilot established the SWEEP traversal cliff; preserve all partial rows and do not repeat the full suite.",
+  "signal": "SIGTERM",
+  "clock_ticks_per_second": 100,
+  "exit_code": -15,
+  "timed_out": false,
+  "wall_seconds": 680.2750948810135,
+  "user_seconds": 675.802062,
+  "system_seconds": 2.8353680000000003,
+  "finish_utc": "2026-09-04T21:56:16Z",
+  "completed_rows": 10,
+  "unreported_rows": [
+    "closures_upval",
+    "upval_hot",
+    "ffi_struct",
+    "coroutine_switch",
+    "sbuf_format"
+  ]
+}

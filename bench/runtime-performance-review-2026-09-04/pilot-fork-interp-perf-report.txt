@@ -1,0 +1,888 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 247  of event 'cpu_atom/cycles/u'
+# Event count (approx.): 21877356944
+#
+# Overhead  Command  Shared Object  Symbol
+# ........  .......  .............  ................................................
+#
+    12.16%  luajit   luajit         [.] hugetab_search
+            |
+            ---hugetab_search
+               |
+               |--7.67%--lj_arena_hugetab_lookup
+               |          gc2_small_arena_known
+               |          |
+               |          |--3.67%--gc2_retain_candidate_status
+               |          |          gc2_markobj_preserve_status_impl.constprop.0
+               |          |          |
+               |          |           --3.26%--gc2_trace_sweep_edge
+               |          |                     gc2_trace_sweep_tv_edge.isra.0
+               |          |                     gc2_traverse_tab_rec.constprop.0
+               |          |                     gc2_traverse_obj
+               |          |                     gc2_worker_drain_inner
+               |          |                     lj_gc2_step_explicit
+               |          |                     gc2_step_auto
+               |          |                     lj_meta_cat
+               |          |                     lj_BC_CAT
+               |          |                     lj_vm_pcall_unwind
+               |          |                     lua_pcall
+               |          |                     docall
+               |          |                     pmain
+               |          |                     lj_BC_FUNCC
+               |          |                     lj_vm_cpcall
+               |          |                     lua_cpcall
+               |          |                     main
+               |          |                     0x7fc00a712ca7
+               |          |
+               |          |--2.04%--gc2_observed_obj_status_scoped
+               |          |          gc2_tv_admit_scoped
+               |          |          lj_gc2_tv_lease_acquire
+               |          |          gc2_trace_sweep_tv_edge.isra.0
+               |          |          gc2_traverse_tab_rec.constprop.0
+               |          |          gc2_traverse_obj
+               |          |          gc2_worker_drain_inner
+               |          |          lj_gc2_step_explicit
+               |          |          gc2_step_auto
+               |          |          lj_meta_cat
+               |          |          lj_BC_CAT
+               |          |          lj_vm_pcall_unwind
+               |          |          lua_pcall
+               |          |          docall
+               |          |          pmain
+               |          |          lj_BC_FUNCC
+               |          |          lj_vm_cpcall
+               |          |          lua_cpcall
+               |          |          main
+               |          |          0x7fc00a712ca7
+               |          |
+               |           --1.96%--gc2_recovery_publish_scoped
+               |                     gc2_publish_mutator_
+               |                     gc2_trace_sweep_tv_edge.isra.0
+               |                     gc2_traverse_tab_rec.constprop.0
+               |                     gc2_traverse_obj
+               |                     gc2_worker_drain_inner
+               |                     lj_gc2_step_explicit
+               |                     gc2_step_auto
+               |                     lj_meta_cat
+               |                     lj_BC_CAT
+               |                     lj_vm_pcall_unwind
+               |                     lua_pcall
+               |                     docall
+               |                     pmain
+               |                     lj_BC_FUNCC
+               |                     lj_vm_cpcall
+               |                     lua_cpcall
+               |                     main
+               |                     0x7fc00a712ca7
+               |
+               |--3.67%--lj_arena_hugetab_rescue_enter
+               |          gc2_small_registered_rescue_enter
+               |          gc2_small_candidate_admit
+               |          |
+               |          |--2.04%--gc2_observed_obj_status_scoped
+               |          |          gc2_tv_admit_scoped
+               |          |          lj_gc2_tv_lease_acquire
+               |          |          gc2_trace_sweep_tv_edge.isra.0
+               |          |          gc2_traverse_tab_rec.constprop.0
+               |          |          gc2_traverse_obj
+               |          |          gc2_worker_drain_inner
+               |          |          lj_gc2_step_explicit
+               |          |          gc2_step_auto
+               |          |          lj_meta_cat
+               |          |          lj_BC_CAT
+               |          |          lj_vm_pcall_unwind
+               |          |          lua_pcall
+               |          |          docall
+               |          |          pmain
+               |          |          lj_BC_FUNCC
+               |          |          lj_vm_cpcall
+               |          |          lua_cpcall
+               |          |          main
+               |          |          0x7fc00a712ca7
+               |          |
+               |           --1.63%--gc2_retain_candidate_status
+               |                     gc2_markobj_preserve_status_impl.constprop.0
+               |                     gc2_trace_sweep_edge
+               |                     gc2_trace_sweep_tv_edge.isra.0
+               |                     gc2_traverse_tab_rec.constprop.0
+               |                     gc2_traverse_obj
+               |                     gc2_worker_drain_inner
+               |                     lj_gc2_step_explicit
+               |                     gc2_step_auto
+               |                     lj_meta_cat
+               |                     lj_BC_CAT
+               |                     lj_vm_pcall_unwind
+               |                     lua_pcall
+               |                     docall
+               |                     pmain
+               |                     lj_BC_FUNCC
+               |                     lj_vm_cpcall
+               |                     lua_cpcall
+               |                     main
+               |                     0x7fc00a712ca7
+               |
+                --0.82%--hugetab_counted_lease_release.part.0
+                          lj_arena_hugetab_rescue_enter
+                          gc2_small_registered_rescue_enter
+                          gc2_small_candidate_admit
+                          gc2_observed_obj_status_scoped
+                          gc2_tv_admit_scoped
+                          lj_gc2_tv_lease_acquire
+                          gc2_trace_sweep_tv_edge.isra.0
+                          gc2_traverse_tab_rec.constprop.0
+                          gc2_traverse_obj
+                          gc2_worker_drain_inner
+                          lj_gc2_step_explicit
+                          gc2_step_auto
+                          lj_meta_cat
+                          lj_BC_CAT
+                          lj_vm_pcall_unwind
+                          lua_pcall
+                          docall
+                          pmain
+                          lj_BC_FUNCC
+                          lj_vm_cpcall
+                          lua_cpcall
+                          main
+                          0x7fc00a712ca7
+
+    11.02%  luajit   luajit         [.] hugetab_reader_entry
+            |
+            ---hugetab_reader_entry
+               lj_arena_hugetab_rescue_enter
+               gc2_small_registered_rescue_enter
+               gc2_small_candidate_admit
+               |
+               |--8.57%--gc2_retain_candidate_status
+               |          gc2_markobj_preserve_status_impl.constprop.0
+               |          gc2_trace_sweep_edge
+               |          gc2_trace_sweep_tv_edge.isra.0
+               |          gc2_traverse_tab_rec.constprop.0
+               |          gc2_traverse_obj
+               |          gc2_worker_drain_inner
+               |          lj_gc2_step_explicit
+               |          gc2_step_auto
+               |          lj_meta_cat
+               |          lj_BC_CAT
+               |          lj_vm_pcall_unwind
+               |          lua_pcall
+               |          docall
+               |          pmain
+               |          lj_BC_FUNCC
+               |          lj_vm_cpcall
+               |          lua_cpcall
+               |          main
+               |          0x7fc00a712ca7
+               |
+                --2.45%--gc2_observed_obj_status_scoped
+                          gc2_tv_admit_scoped
+                          lj_gc2_tv_lease_acquire
+                          gc2_trace_sweep_tv_edge.isra.0
+                          gc2_traverse_tab_rec.constprop.0
+                          gc2_traverse_obj
+                          gc2_worker_drain_inner
+                          lj_gc2_step_explicit
+                          gc2_step_auto
+                          lj_meta_cat
+                          lj_BC_CAT
+                          lj_vm_pcall_unwind
+                          lua_pcall
+                          docall
+                          pmain
+                          lj_BC_FUNCC
+                          lj_vm_cpcall
+                          lua_cpcall
+                          main
+                          0x7fc00a712ca7
+
+     9.92%  luajit   luajit         [.] gc2_small_candidate_admit
+            |
+            ---gc2_small_candidate_admit
+               |
+               |--6.12%--gc2_observed_obj_status_scoped
+               |          gc2_tv_admit_scoped
+               |          lj_gc2_tv_lease_acquire
+               |          gc2_trace_sweep_tv_edge.isra.0
+               |          |
+               |           --5.71%--gc2_traverse_tab_rec.constprop.0
+               |                     gc2_traverse_obj
+               |                     gc2_worker_drain_inner
+               |                     lj_gc2_step_explicit
+               |                     gc2_step_auto
+               |                     lj_meta_cat
+               |                     lj_BC_CAT
+               |                     lj_vm_pcall_unwind
+               |                     lua_pcall
+               |                     docall
+               |                     pmain
+               |                     lj_BC_FUNCC
+               |                     lj_vm_cpcall
+               |                     lua_cpcall
+               |                     main
+               |                     0x7fc00a712ca7
+               |
+                --3.80%--gc2_retain_candidate_status
+                          gc2_markobj_preserve_status_impl.constprop.0
+                          gc2_trace_sweep_edge
+                          gc2_trace_sweep_tv_edge.isra.0
+                          gc2_traverse_tab_rec.constprop.0
+                          gc2_traverse_obj
+                          gc2_worker_drain_inner
+                          lj_gc2_step_explicit
+                          gc2_step_auto
+                          lj_meta_cat
+                          lj_BC_CAT
+                          lj_vm_pcall_unwind
+                          lua_pcall
+                          docall
+                          pmain
+                          lj_BC_FUNCC
+                          lj_vm_cpcall
+                          lua_cpcall
+                          main
+                          0x7fc00a712ca7
+
+     9.37%  luajit   luajit         [.] hugetab_counted_lease_release.part.0
+            |
+            ---hugetab_counted_lease_release.part.0
+               lj_arena_hugetab_rescue_enter
+               gc2_small_registered_rescue_enter
+               gc2_small_candidate_admit
+               |
+               |--4.90%--gc2_retain_candidate_status
+               |          gc2_markobj_preserve_status_impl.constprop.0
+               |          gc2_trace_sweep_edge
+               |          gc2_trace_sweep_tv_edge.isra.0
+               |          gc2_traverse_tab_rec.constprop.0
+               |          gc2_traverse_obj
+               |          gc2_worker_drain_inner
+               |          lj_gc2_step_explicit
+               |          gc2_step_auto
+               |          lj_meta_cat
+               |          lj_BC_CAT
+               |          lj_vm_pcall_unwind
+               |          lua_pcall
+               |          docall
+               |          pmain
+               |          lj_BC_FUNCC
+               |          lj_vm_cpcall
+               |          lua_cpcall
+               |          main
+               |          0x7fc00a712ca7
+               |
+                --4.47%--gc2_observed_obj_status_scoped
+                          gc2_tv_admit_scoped
+                          lj_gc2_tv_lease_acquire
+                          gc2_trace_sweep_tv_edge.isra.0
+                          gc2_traverse_tab_rec.constprop.0
+                          gc2_traverse_obj
+                          |
+                           --4.06%--gc2_worker_drain_inner
+                                     lj_gc2_step_explicit
+                                     gc2_step_auto
+                                     lj_meta_cat
+                                     lj_BC_CAT
+                                     lj_vm_pcall_unwind
+                                     lua_pcall
+                                     docall
+                                     pmain
+                                     lj_BC_FUNCC
+                                     lj_vm_cpcall
+                                     lua_cpcall
+                                     main
+                                     0x7fc00a712ca7
+
+     6.93%  luajit   luajit         [.] lj_arena_rescue_enter
+            |
+            ---lj_arena_rescue_enter
+               lj_arena_hugetab_rescue_enter
+               gc2_small_registered_rescue_enter
+               gc2_small_candidate_admit
+               |
+               |--3.67%--gc2_observed_obj_status_scoped
+               |          gc2_tv_admit_scoped
+               |          lj_gc2_tv_lease_acquire
+               |          gc2_trace_sweep_tv_edge.isra.0
+               |          gc2_traverse_tab_rec.constprop.0
+               |          gc2_traverse_obj
+               |          gc2_worker_drain_inner
+               |          lj_gc2_step_explicit
+               |          gc2_step_auto
+               |          lj_meta_cat
+               |          lj_BC_CAT
+               |          lj_vm_pcall_unwind
+               |          lua_pcall
+               |          docall
+               |          pmain
+               |          lj_BC_FUNCC
+               |          lj_vm_cpcall
+               |          lua_cpcall
+               |          main
+               |          0x7fc00a712ca7
+               |
+                --3.26%--gc2_retain_candidate_status
+                          gc2_markobj_preserve_status_impl.constprop.0
+                          gc2_trace_sweep_edge
+                          gc2_trace_sweep_tv_edge.isra.0
+                          gc2_traverse_tab_rec.constprop.0
+                          gc2_traverse_obj
+                          gc2_worker_drain_inner
+                          lj_gc2_step_explicit
+                          gc2_step_auto
+                          lj_meta_cat
+                          lj_BC_CAT
+                          lj_vm_pcall_unwind
+                          lua_pcall
+                          docall
+                          pmain
+                          lj_BC_FUNCC
+                          lj_vm_cpcall
+                          lua_cpcall
+                          main
+                          0x7fc00a712ca7
+
+     6.53%  luajit   luajit         [.] arena_publish_leave
+            |
+            ---arena_publish_leave
+               |
+               |--4.49%--lj_gc2_lease_release.part.0
+               |          gc2_trace_sweep_tv_edge.isra.0
+               |          gc2_traverse_tab_rec.constprop.0
+               |          gc2_traverse_obj
+               |          gc2_worker_drain_inner
+               |          lj_gc2_step_explicit
+               |          gc2_step_auto
+               |          lj_meta_cat
+               |          lj_BC_CAT
+               |          lj_vm_pcall_unwind
+               |          lua_pcall
+               |          docall
+               |          pmain
+               |          lj_BC_FUNCC
+               |          lj_vm_cpcall
+               |          lua_cpcall
+               |          main
+               |          0x7fc00a712ca7
+               |
+                --2.04%--gc2_markobj_preserve_status_impl.constprop.0
+                          gc2_trace_sweep_edge
+                          gc2_trace_sweep_tv_edge.isra.0
+                          gc2_traverse_tab_rec.constprop.0
+                          gc2_traverse_obj
+                          |
+                           --1.63%--gc2_worker_drain_inner
+                                     lj_gc2_step_explicit
+                                     gc2_step_auto
+                                     lj_meta_cat
+                                     lj_BC_CAT
+                                     lj_vm_pcall_unwind
+                                     lua_pcall
+                                     docall
+                                     pmain
+                                     lj_BC_FUNCC
+                                     lj_vm_cpcall
+                                     lua_cpcall
+                                     main
+                                     0x7fc00a712ca7
+
+     5.71%  luajit   luajit         [.] gc2_mark_small_cell_admitted
+            |
+            ---gc2_mark_small_cell_admitted
+               gc2_retain_candidate_status
+               gc2_markobj_preserve_status_impl.constprop.0
+               gc2_trace_sweep_edge
+               gc2_trace_sweep_tv_edge.isra.0
+               gc2_traverse_tab_rec.constprop.0
+               gc2_traverse_obj
+               gc2_worker_drain_inner
+               lj_gc2_step_explicit
+               gc2_step_auto
+               lj_meta_cat
+               lj_BC_CAT
+               lj_vm_pcall_unwind
+               lua_pcall
+               docall
+               pmain
+               lj_BC_FUNCC
+               lj_vm_cpcall
+               lua_cpcall
+               main
+               0x7fc00a712ca7
+
+     4.08%  luajit   luajit         [.] gc2_markobj_preserve_status_impl.constprop.0
+            |
+            ---gc2_markobj_preserve_status_impl.constprop.0
+               gc2_trace_sweep_edge
+               gc2_trace_sweep_tv_edge.isra.0
+               |
+                --3.67%--gc2_traverse_tab_rec.constprop.0
+                          gc2_traverse_obj
+                          gc2_worker_drain_inner
+                          lj_gc2_step_explicit
+                          gc2_step_auto
+                          lj_meta_cat
+                          lj_BC_CAT
+                          lj_vm_pcall_unwind
+                          lua_pcall
+                          docall
+                          pmain
+                          lj_BC_FUNCC
+                          lj_vm_cpcall
+                          lua_cpcall
+                          main
+                          0x7fc00a712ca7
+
+     2.86%  luajit   luajit         [.] gc2_recovery_publish_scoped
+            |
+            ---gc2_recovery_publish_scoped
+               gc2_publish_mutator_
+               gc2_trace_sweep_tv_edge.isra.0
+               gc2_traverse_tab_rec.constprop.0
+               gc2_traverse_obj
+               gc2_worker_drain_inner
+               lj_gc2_step_explicit
+               gc2_step_auto
+               lj_meta_cat
+               lj_BC_CAT
+               lj_vm_pcall_unwind
+               lua_pcall
+               docall
+               pmain
+               lj_BC_FUNCC
+               lj_vm_cpcall
+               lua_cpcall
+               main
+               0x7fc00a712ca7
+
+     2.45%  luajit   luajit         [.] lj_arena_hugetab_rescue_enter
+            |
+            ---lj_arena_hugetab_rescue_enter
+               gc2_small_registered_rescue_enter
+               gc2_small_candidate_admit
+               |
+               |--1.63%--gc2_retain_candidate_status
+               |          gc2_markobj_preserve_status_impl.constprop.0
+               |          gc2_trace_sweep_edge
+               |          gc2_trace_sweep_tv_edge.isra.0
+               |          gc2_traverse_tab_rec.constprop.0
+               |          gc2_traverse_obj
+               |          gc2_worker_drain_inner
+               |          lj_gc2_step_explicit
+               |          gc2_step_auto
+               |          lj_meta_cat
+               |          lj_BC_CAT
+               |          lj_vm_pcall_unwind
+               |          lua_pcall
+               |          docall
+               |          pmain
+               |          lj_BC_FUNCC
+               |          lj_vm_cpcall
+               |          lua_cpcall
+               |          main
+               |          0x7fc00a712ca7
+               |
+                --0.82%--gc2_observed_obj_status_scoped
+                          gc2_tv_admit_scoped
+                          lj_gc2_tv_lease_acquire
+                          gc2_trace_sweep_tv_edge.isra.0
+                          gc2_traverse_tab_rec.constprop.0
+                          gc2_traverse_obj
+                          gc2_worker_drain_inner
+                          lj_gc2_step_explicit
+                          gc2_step_auto
+                          lj_meta_cat
+                          lj_BC_CAT
+                          lj_vm_pcall_unwind
+                          lua_pcall
+                          docall
+                          pmain
+                          lj_BC_FUNCC
+                          lj_vm_cpcall
+                          lua_cpcall
+                          main
+                          0x7fc00a712ca7
+
+     2.45%  luajit   luajit         [.] gc2_small_registered_rescue_enter
+            |
+            ---gc2_small_registered_rescue_enter
+               gc2_small_candidate_admit
+               |
+               |--1.63%--gc2_retain_candidate_status
+               |          gc2_markobj_preserve_status_impl.constprop.0
+               |          gc2_trace_sweep_edge
+               |          gc2_trace_sweep_tv_edge.isra.0
+               |          gc2_traverse_tab_rec.constprop.0
+               |          gc2_traverse_obj
+               |          gc2_worker_drain_inner
+               |          lj_gc2_step_explicit
+               |          gc2_step_auto
+               |          lj_meta_cat
+               |          lj_BC_CAT
+               |          lj_vm_pcall_unwind
+               |          lua_pcall
+               |          docall
+               |          pmain
+               |          lj_BC_FUNCC
+               |          lj_vm_cpcall
+               |          lua_cpcall
+               |          main
+               |          0x7fc00a712ca7
+               |
+                --0.82%--gc2_observed_obj_status_scoped
+                          gc2_tv_admit_scoped
+                          lj_gc2_tv_lease_acquire
+                          gc2_trace_sweep_tv_edge.isra.0
+                          gc2_traverse_tab_rec.constprop.0
+                          gc2_traverse_obj
+                          gc2_worker_drain_inner
+                          lj_gc2_step_explicit
+                          gc2_step_auto
+                          lj_meta_cat
+                          lj_BC_CAT
+                          lj_vm_pcall_unwind
+                          lua_pcall
+                          docall
+                          pmain
+                          lj_BC_FUNCC
+                          lj_vm_cpcall
+                          lua_cpcall
+                          main
+                          0x7fc00a712ca7
+
+     2.45%  luajit   luajit         [.] gc2_retain_candidate_status
+            |
+            ---gc2_retain_candidate_status
+               gc2_markobj_preserve_status_impl.constprop.0
+               gc2_trace_sweep_edge
+               gc2_trace_sweep_tv_edge.isra.0
+               gc2_traverse_tab_rec.constprop.0
+               gc2_traverse_obj
+               gc2_worker_drain_inner
+               lj_gc2_step_explicit
+               gc2_step_auto
+               lj_meta_cat
+               lj_BC_CAT
+               lj_vm_pcall_unwind
+               lua_pcall
+               docall
+               pmain
+               lj_BC_FUNCC
+               lj_vm_cpcall
+               lua_cpcall
+               main
+               0x7fc00a712ca7
+
+     2.04%  luajit   luajit         [.] gc2_retained_candidate_valid
+            |
+            ---gc2_retained_candidate_valid
+               gc2_small_candidate_admit
+               gc2_observed_obj_status_scoped
+               gc2_tv_admit_scoped
+               lj_gc2_tv_lease_acquire
+               gc2_trace_sweep_tv_edge.isra.0
+               gc2_traverse_tab_rec.constprop.0
+               gc2_traverse_obj
+               gc2_worker_drain_inner
+               lj_gc2_step_explicit
+               gc2_step_auto
+               lj_meta_cat
+               lj_BC_CAT
+               lj_vm_pcall_unwind
+               lua_pcall
+               docall
+               pmain
+               lj_BC_FUNCC
+               lj_vm_cpcall
+               lua_cpcall
+               main
+               0x7fc00a712ca7
+
+     2.04%  luajit   luajit         [.] gc2_traverse_tab_rec.constprop.0
+            |
+            ---gc2_traverse_tab_rec.constprop.0
+               gc2_traverse_obj
+               gc2_worker_drain_inner
+               lj_gc2_step_explicit
+               gc2_step_auto
+               lj_meta_cat
+               lj_BC_CAT
+               lj_vm_pcall_unwind
+               lua_pcall
+               docall
+               pmain
+               lj_BC_FUNCC
+               lj_vm_cpcall
+               lua_cpcall
+               main
+               0x7fc00a712ca7
+
+     2.04%  luajit   luajit         [.] lj_gc2_tv_lease_acquire
+            |
+            ---lj_gc2_tv_lease_acquire
+               gc2_trace_sweep_tv_edge.isra.0
+               gc2_traverse_tab_rec.constprop.0
+               gc2_traverse_obj
+               gc2_worker_drain_inner
+               lj_gc2_step_explicit
+               gc2_step_auto
+               lj_meta_cat
+               lj_BC_CAT
+               lj_vm_pcall_unwind
+               lua_pcall
+               docall
+               pmain
+               lj_BC_FUNCC
+               lj_vm_cpcall
+               lua_cpcall
+               main
+               0x7fc00a712ca7
+
+     2.04%  luajit   luajit         [.] gc2_observed_obj_status_scoped
+            |
+            ---gc2_observed_obj_status_scoped
+               gc2_tv_admit_scoped
+               lj_gc2_tv_lease_acquire
+               gc2_trace_sweep_tv_edge.isra.0
+               gc2_traverse_tab_rec.constprop.0
+               gc2_traverse_obj
+               gc2_worker_drain_inner
+               lj_gc2_step_explicit
+               gc2_step_auto
+               lj_meta_cat
+               lj_BC_CAT
+               lj_vm_pcall_unwind
+               lua_pcall
+               docall
+               pmain
+               lj_BC_FUNCC
+               lj_vm_cpcall
+               lua_cpcall
+               main
+               0x7fc00a712ca7
+
+     2.04%  luajit   luajit         [.] gc2_flush_ssb
+            |
+            ---gc2_flush_ssb
+               gc2_ssb_push_tg
+               gc2_publish_mutator_
+               gc2_trace_sweep_tv_edge.isra.0
+               gc2_traverse_tab_rec.constprop.0
+               gc2_traverse_obj
+               gc2_worker_drain_inner
+               lj_gc2_step_explicit
+               gc2_step_auto
+               lj_meta_cat
+               lj_BC_CAT
+               lj_vm_pcall_unwind
+               lua_pcall
+               docall
+               pmain
+               lj_BC_FUNCC
+               lj_vm_cpcall
+               lua_cpcall
+               main
+               0x7fc00a712ca7
+
+     2.04%  luajit   luajit         [.] gc2_small_lifetime_nearest
+            |
+            ---gc2_small_lifetime_nearest
+               |
+               |--1.22%--gc2_recovery_publish_scoped
+               |          gc2_publish_mutator_
+               |          gc2_trace_sweep_tv_edge.isra.0
+               |          gc2_traverse_tab_rec.constprop.0
+               |          gc2_traverse_obj
+               |          gc2_worker_drain_inner
+               |          lj_gc2_step_explicit
+               |          gc2_step_auto
+               |          lj_meta_cat
+               |          lj_BC_CAT
+               |          lj_vm_pcall_unwind
+               |          lua_pcall
+               |          docall
+               |          pmain
+               |          lj_BC_FUNCC
+               |          lj_vm_cpcall
+               |          lua_cpcall
+               |          main
+               |          0x7fc00a712ca7
+               |
+                --0.82%--gc2_small_candidate_admit
+
+     2.04%  luajit   luajit         [.] gc2_trace_sweep_edge
+            |
+            ---gc2_trace_sweep_edge
+               gc2_trace_sweep_tv_edge.isra.0
+               gc2_traverse_tab_rec.constprop.0
+               gc2_traverse_obj
+               gc2_worker_drain_inner
+               lj_gc2_step_explicit
+               gc2_step_auto
+               lj_meta_cat
+               lj_BC_CAT
+               lj_vm_pcall_unwind
+               lua_pcall
+               docall
+               pmain
+               lj_BC_FUNCC
+               lj_vm_cpcall
+               lua_cpcall
+               main
+               0x7fc00a712ca7
+
+     2.04%  luajit   luajit         [.] gc2_small_containing_start
+            |
+            ---gc2_small_containing_start
+               gc2_small_candidate_admit
+               |
+               |--1.22%--gc2_observed_obj_status_scoped
+               |          gc2_tv_admit_scoped
+               |          lj_gc2_tv_lease_acquire
+               |          gc2_trace_sweep_tv_edge.isra.0
+               |          gc2_traverse_tab_rec.constprop.0
+               |          gc2_traverse_obj
+               |          gc2_worker_drain_inner
+               |          lj_gc2_step_explicit
+               |          gc2_step_auto
+               |          lj_meta_cat
+               |          lj_BC_CAT
+               |          lj_vm_pcall_unwind
+               |          lua_pcall
+               |          docall
+               |          pmain
+               |          lj_BC_FUNCC
+               |          lj_vm_cpcall
+               |          lua_cpcall
+               |          main
+               |          0x7fc00a712ca7
+               |
+                --0.82%--gc2_retain_candidate_status
+                          gc2_markobj_preserve_status_impl.constprop.0
+                          gc2_trace_sweep_edge
+                          gc2_trace_sweep_tv_edge.isra.0
+                          gc2_traverse_tab_rec.constprop.0
+                          gc2_traverse_obj
+                          gc2_worker_drain_inner
+                          lj_gc2_step_explicit
+                          gc2_step_auto
+                          lj_meta_cat
+                          lj_BC_CAT
+                          lj_vm_pcall_unwind
+                          lua_pcall
+                          docall
+                          pmain
+                          lj_BC_FUNCC
+                          lj_vm_cpcall
+                          lua_cpcall
+                          main
+                          0x7fc00a712ca7
+
+     1.22%  luajit   luajit         [.] lj_gc2_lease_release.part.0
+            |
+            ---lj_gc2_lease_release.part.0
+               gc2_trace_sweep_tv_edge.isra.0
+               gc2_traverse_tab_rec.constprop.0
+               gc2_traverse_obj
+               gc2_worker_drain_inner
+               lj_gc2_step_explicit
+               gc2_step_auto
+               lj_meta_cat
+               lj_BC_CAT
+               lj_vm_pcall_unwind
+               lua_pcall
+               docall
+               pmain
+               lj_BC_FUNCC
+               lj_vm_cpcall
+               lua_cpcall
+               main
+               0x7fc00a712ca7
+
+     0.82%  luajit   luajit         [.] gc2_trace_sweep_tv_edge.isra.0
+            |
+            ---gc2_trace_sweep_tv_edge.isra.0
+               gc2_traverse_tab_rec.constprop.0
+               gc2_traverse_obj
+
+     0.82%  luajit   luajit         [.] gc2_recovery_small_lifetime_release
+            |
+            ---gc2_recovery_small_lifetime_release
+               gc2_recovery_publish_scoped
+               gc2_publish_mutator_
+               gc2_trace_sweep_tv_edge.isra.0
+               gc2_traverse_tab_rec.constprop.0
+               gc2_traverse_obj
+               gc2_worker_drain_inner
+               lj_gc2_step_explicit
+               gc2_step_auto
+               lj_meta_cat
+               lj_BC_CAT
+               lj_vm_pcall_unwind
+               lua_pcall
+               docall
+               pmain
+               lj_BC_FUNCC
+               lj_vm_cpcall
+               lua_cpcall
+               main
+               0x7fc00a712ca7
+
+     0.82%  luajit   luajit         [.] gc2_small_arena_known
+            |
+            ---gc2_small_arena_known
+               gc2_observed_obj_status_scoped
+               gc2_tv_admit_scoped
+               lj_gc2_tv_lease_acquire
+               gc2_trace_sweep_tv_edge.isra.0
+               gc2_traverse_tab_rec.constprop.0
+               gc2_traverse_obj
+               gc2_worker_drain_inner
+               lj_gc2_step_explicit
+               gc2_step_auto
+               lj_meta_cat
+               lj_BC_CAT
+               lj_vm_pcall_unwind
+               lua_pcall
+               docall
+               pmain
+               lj_BC_FUNCC
+               lj_vm_cpcall
+               lua_cpcall
+               main
+               0x7fc00a712ca7
+
+     0.82%  luajit   luajit         [.] gc2_publish_mutator_
+            |
+            ---gc2_publish_mutator_
+               gc2_trace_sweep_tv_edge.isra.0
+               gc2_traverse_tab_rec.constprop.0
+               gc2_traverse_obj
+               gc2_worker_drain_inner
+               lj_gc2_step_explicit
+               gc2_step_auto
+               lj_meta_cat
+               lj_BC_CAT
+               lj_vm_pcall_unwind
+               lua_pcall
+               docall
+               pmain
+               lj_BC_FUNCC
+               lj_vm_cpcall
+               lua_cpcall
+               main
+               0x7fc00a712ca7
+
+     0.82%  luajit   luajit         [.] lj_arena_hugetab_lookup
+            |
+            ---lj_arena_hugetab_lookup
+               gc2_small_arena_known
+
+
+
+#
+# (Tip: To trace calls using Processor Trace use perf record -e intel_pt// ... ; perf script --call-trace. Then use perf script --time A-B --insn-trace to look at region of interest.)
+#

@@ -2,7 +2,25 @@
 
 ## 00. READ ME FIRST — Operating Instructions for the Implementing Agent
 
-This is the entry point of a 15-document implementation specification plus
+### Current execution plan (2026-09-04)
+
+Read [15_lockless_completion.md](15_lockless_completion.md) for the current
+requirements, verified gaps, dependency order, and completion evidence. It
+supersedes conflicting platform restrictions, unsafe algorithm sketches, and
+stale implementation-status claims below and in documents 01–14. Those
+documents remain the architecture and semantic reference; their dated bridge
+notes are not proof of the current implementation or of completion.
+
+The supported scope is x86-64 Linux, macOS, and Windows. User-facing blocking
+operations may block by contract, and `ffi.cdef` may serialize its writers;
+ordinary runtime operations must make progress while a peer is suspended.
+Replacing a peer-dependent spin with a sleep does not meet that requirement.
+
+Execution order, per the user's 2026-09-04 instruction: focus implementation
+and testing on Linux until the next release is ready. Revisit macOS/Darling and
+Windows/Wine before releasing; they remain in the final product scope.
+
+This is the entry point of the implementation specification plus
 auxiliary code. It tells you exactly how to consume the rest, what the ground
 rules are, and how to verify your work at every step.
 
@@ -49,7 +67,9 @@ reason.
 
 ### 0.3 Reading order
 
-Read in numeric order once, completely, before writing any code:
+Read the current execution plan first, then the architecture in numeric order
+once before changing its protocols; revalidate affected sections against code
+on later passes:
 
     00_README_AGENT.md            (this file)
     01_architecture_overview.md   architecture + all binding decisions (ADRs)
@@ -66,9 +86,11 @@ Read in numeric order once, completely, before writing any code:
     12_implementation_plan.md     milestone playbook M0..M10 — YOUR TASK LIST
     13_testing_and_benchmarks.md  baselines, harness, stress/litmus tests, TSAN
     14_risks_alternatives_bibliography.md
+    15_lockless_completion.md    current scope, corrections, and acceptance
 
-Then execute `12_implementation_plan.md` milestone by milestone. Each
-milestone names its tasks, the documents/sections that specify them, the
+Use document 15's current dependency order, with `12_implementation_plan.md`
+as the milestone inventory. Each milestone names its tasks, the
+documents/sections that specify them, the
 tests that gate completion, and what to do if a gate fails.
 
 Auxiliary code shipped with this report (under `aux/`):
@@ -80,15 +102,19 @@ Auxiliary code shipped with this report (under `aux/`):
     aux/bench/bench_mt.lua   multi-thread scaling benchmarks (post-M4)
     aux/tests/*.lua          threading conformance + stress suite (post-M4)
 
-The two `*_model.c` files compile and run standalone today; they are the
-executable form of the trickiest algorithms. Port them, do not reinvent them.
+The two `*_model.c` files are historical executable sketches. Their passing
+tests do not establish paused-owner progress or absence of lost updates. In
+particular, freezing a source value into `FORWARD` before publishing its
+payload is not helpable. Extend or replace the model before porting a protocol
+whose proof fails; preserve the semantic requirements, not an unsafe sketch.
 
 ### 0.4 Ground rules (binding)
 
-1. **Platforms**: x86-64 Linux for this implementation pass. `LJ_GC64` is
-   mandatory; the build must `#error` if built with `LJ_GC64 == 0` or on any
-   non-x86-64 Linux target. 32-bit, Windows, macOS, ARM64, and console ports
-   are explicitly out of scope for v1 (see 01 §ADR-1).
+1. **Platforms**: x86-64 Linux, macOS, and Windows; `LJ_GC64` is mandatory.
+   Current work is Linux-first. Before the next release, validate macOS with
+   Darling and Windows with Wine as well as native CI.
+   Other architectures remain outside the requested scope. Original ADR-1's
+   Linux-only restriction is superseded by the user's expanded scope.
 2. **No compatibility flag wall**: the lockless runtime is the primary build
    path. Do not hide the implementation behind `LUAJIT_THREADSAFE`/`LJ_MT`, and
    do not preserve a parallel legacy path merely for flag-off compatibility.
@@ -110,9 +136,10 @@ executable form of the trickiest algorithms. Port them, do not reinvent them.
    allocate-with-GC, or call anything that can reach `lj_safepoint_poll`.
    This is the grace-period invariant that makes deferred reclamation sound
    (05 §5.9). Add the `LJ_NOSAFEPOINT` audit comments as specified.
-6. **When a document says DECIDED, implement that option.** Alternatives are
-   recorded for context and fallback only; do not relitigate them unless a
-   milestone gate explicitly fails and names the fallback.
+6. **Keep design decisions accountable to evidence.** Preserve decisions
+   whose correctness and cost remain supported. Correct or replace those
+   contradicted by the current requirements, code, paused-owner schedules, or
+   measurements, and record the reason plus the replacement's proof obligations.
 7. **Measure before and after.** `aux/bench/bench.lua` numbers from the
    reference machine are in 13 §13.2. Re-baseline on your machine at M0 and
    keep a CSV; the single-thread regression budget is ≤10% geomean
