@@ -1322,6 +1322,10 @@ static void test_proto_chunkname_publish_barrier(lua_State *L, global_State *g,
   chunkname = strV(L->top - 1);
 
   lj_gc2_mark_begin(g);
+  /* Keep parser allocation checks from driving the cycle. This fixture tests
+  ** the publication barrier and drains through a primitive which deliberately
+  ** yields ownership to a pending MARK close. */
+  lj_gc_threshold_store(g, LJ_MAX_MEM);
   assert(la_load8_acq(&tg->alloc.alloc_black) == 1);
   assert(lj_gc2_ismarked(g, obj2gco(chunkname)) == 0);
 
@@ -1330,12 +1334,8 @@ static void test_proto_chunkname_publish_barrier(lua_State *L, global_State *g,
   assert(isluafunc(fn));
   pt = funcproto(fn);
   assert(proto_chunkname_acq(pt) == chunkname);
-  /* Parser allocation checks may drive this deliberately-started cycle all
-  ** the way back to IDLE. A mark bit has no liveness meaning after that point;
-  ** while the cycle remains active, the proto publication barrier must mark
-  ** the chunk name immediately. */
-  assert(gc2_phase_acq(g) == LJ_GC2_IDLE ||
-	 lj_gc2_ismarked(g, obj2gco(chunkname)) == 1);
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  assert(lj_gc2_ismarked(g, obj2gco(chunkname)) == 1);
 
   flush_and_drain(g, tg);
   lj_gc2_cycle_to_idle(g);

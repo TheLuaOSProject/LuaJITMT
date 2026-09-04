@@ -42,6 +42,7 @@ local m3_scaffold_deps = {
   "m3_gc2_internal_allocator_only",
   "m3_gc2_recovery",
   "m3_gc2_worker_scheduler",
+  "m3_gc2_mark_close_progress",
   "m3_gc_active_thread_roots",
   "m3_safepoint_handshake",
   "m3_vmevent_native_stdio",
@@ -302,6 +303,23 @@ return function(add)
   })
 
   register({
+    name = "m3_gc2_mark_close_progress",
+    description = "paused GC owner does not block automatic MARK close or spin workers",
+    run = function(t)
+      local pthread = os.getenv("PTHREAD") or "-pthread"
+      make_default(t, { jobs = false })
+      compile_and_run_c(t, t:tmp("lj_t-gc2-mark-close-progress"),
+                        "t-gc2-mark-close-progress.c", {
+        libs = {
+          "-lm", "-ldl", pthread,
+          "-Wl,--wrap=lj_native_enter", "-Wl,--wrap=lj_thr_retry_yield"
+        },
+        timeout = "20s"
+      })
+    end
+  })
+
+  register({
     name = "m3_gc_active_thread_roots",
     description = "active thread GC roots and explicit GC assistance",
     run = function(t)
@@ -463,6 +481,7 @@ return function(add)
       utils.run_case(cases, t, "m3_gc2_markword_token_model")
       utils.run_case(cases, t, "m3_gc2_recovery")
       utils.run_case(cases, t, "m3_gc2_worker_scheduler")
+      utils.run_case(cases, t, "m3_gc2_mark_close_progress")
       utils.run_case(cases, t, "m3_gc_active_thread_roots")
       utils.run_case(cases, t, "m3_safepoint_handshake")
       utils.run_case(cases, t, "m3_vm_safepoint")

@@ -21987,14 +21987,11 @@ static uint32_t gc2_worker_drain_inner(global_State *g, TGState *logical_tg,
 	*progress = 1;
       return 1;
     }
-    if (gc2_mark_close_intent_acq(g) != 0) {
-      /* A helper which lost ownership before reaching its bounded miss may
-      ** leave intent for the current owner. Report a scheduling unit so this
-      ** worker loops instead of parking on that owner's wake. */
-      if (progress)
-	*progress = 1;
-      return 1;
-    }
+    /* An outstanding intent is durable work, not completed work. In
+    ** particular, losing worker_active to a paused owner must let this worker
+    ** park instead of looping on fabricated progress. The active-phase park
+    ** timeout retries the intent even when that owner releases only the
+    ** worker_active futex; no publisher or request state is consumed here. */
     return 0;
   }
   if (!gc2_worker_claim_count_busy(g))
@@ -22375,11 +22372,8 @@ static uint32_t gc2_mark_close_help(global_State *g, lua_State *L,
   int claimed;
   if (!g || gc2_mark_close_intent_acq(g) == 0)
     return 0;
-  if (max_rounds == 0 || limit == 0) {
-    gc2_mark_close_intent_rel(g, 0);
-    lj_gc2_worker_wake(g);
+  if (max_rounds == 0 || limit == 0)
     return 0;
-  }
   phase = gc2_phase_acq(g);
   if (phase != LJ_GC2_MARK) {
     /* Intent is a Boolean advisory until it is cycle-tagged. Do not clear it
@@ -22389,15 +22383,19 @@ static uint32_t gc2_mark_close_help(global_State *g, lua_State *L,
     lj_gc2_worker_wake(g);
     return phase == LJ_GC2_WEAK;
   }
+  /* A previous bounded miss retains the request while granting a native
+  ** turn. A background helper must honor that same lease as an ordinary
+  ** MARK drain before closing entry again. Explicit drivers may already have
+  ** requested exit; their closed gate makes this predicate false. */
+  if (gc2_jit_phase_gate_acq(g) != 0 && gc2_jit_mark_turn_deferred(g))
+    return 0;
   if (gc2_jit_phase_gate_acq(g) != 0)
     gc2_jit_phase_gate_close(g);
   if (lj_tg_any_jit_active(g)) {
     /* A blocking traced FFI call owns its published jit_base until it returns.
-    ** Gate closure is the asynchronous request; MARK never waits for it. Drop
-    ** the advisory close intent as well, otherwise a background worker would
-    ** report fake progress and busy-loop for the duration of the foreign call. */
-    gc2_mark_close_intent_rel(g, 0);
-    lj_gc2_worker_wake(g);
+    ** Gate closure is the asynchronous request; MARK never waits for it. Keep
+    ** the close intent for the later retry. Failed helpers report zero work,
+    ** so a background worker parks while this exact native frame is active. */
     return 0;
   }
   claimed = gc2_worker_claim_mark_close(g);
@@ -22434,15 +22432,15 @@ static uint32_t gc2_mark_close_help(global_State *g, lua_State *L,
     gc2_mark_close_intent_rel(g, 0);
   } else if (!hit) {
     /* A bounded close miss is not permission to monopolize MARK. Barriers and
-    ** black allocation make the completed portion stable, so grant another
-    ** bounded native turn and let a later owner retry the fixpoint. */
-    gc2_mark_close_intent_rel(g, 0);
+    ** black allocation make the completed portion stable. Keep the request
+    ** durable across this incomplete round while granting another bounded
+    ** native turn; the next helper observes that lease before retrying. */
     gc2_jit_phase_gate_open_mark(g, 1);
   }
   gc2_worker_release(g);
   hit = phase == LJ_GC2_WEAK;
-  /* A bounded miss reopened MARK and cleared intent; a successful transition
-  ** consumed it. Wake a worker or mutator helper after releasing the token. */
+  /* A bounded miss reopened MARK with its request intact; a successful
+  ** transition consumed it. Wake a helper after releasing the token. */
   lj_gc2_worker_wake(g);
   return hit;  /* Successful completion already published MARK->WEAK. */
 }
@@ -22465,8 +22463,10 @@ static int gc2_mark_complete_result(global_State *g, lua_State *L,
     return GC2_DRIVER_COMPLETE;
   if (gc2_deferred_epoch_acq(g) != defer0)
     return GC2_DRIVER_DEFERRED;
-  gc2_mark_complete_peer_waits_add(g, 1);
-  gc2_peer_wait_l(L);  /* One bounded handoff opportunity; never owner-wait. */
+  /* The published intent survives an ownership loss. Automatic GC reaches
+  ** this path through step_explicit(L, 1), so it must return without parking
+  ** behind the peer. Explicit collection/step drivers own their retry policy
+  ** above; background workers retry the same intent after wake or timeout. */
   return gc2_phase_acq(g) == LJ_GC2_WEAK ?
     GC2_DRIVER_COMPLETE : GC2_DRIVER_INCOMPLETE;
 }
