@@ -46,6 +46,7 @@ static enum RootExpect root_expect;
 static const char *root_expect_str;
 static GCtab *root_expect_tab;
 static uint32_t root_hook_hits;
+static uint32_t registry_anchor_index;
 static GCtab *race_mt;
 static GCstr *race_hold_key;
 static uint32_t race_anchor_base;
@@ -102,6 +103,23 @@ static void arm_tab_hook(GCtab *tab)
   root_expect_str = NULL;
   root_expect_tab = tab;
   lj_tg_root_test_set_push_hook(root_full_gc_hook);
+}
+
+static void newmetatable_registry_gc_hook(lua_State *L, int stage, GCtab *regt,
+					 GCstr *key, TValue *valueslot,
+					 TValue *rootslot)
+{
+  TGState *tg = L2TG(L);
+  TValue *regslot = lj_tg_root_anchor_slot_acq(tg, registry_anchor_index);
+  assert(stage == 1);
+  assert(regt == root_expect_tab);
+  assert(strcmp(strdata(key), "api.gc.handoff.mt") == 0);
+  assert(valueslot != NULL && rootslot != NULL && regslot != NULL);
+  /* Registry capture reserves a nil anchor before transferring the admitted
+  ** table into it. Force collection at the existing transaction hook, after
+  ** that transfer, rather than mistake the reservation for publication. */
+  lj_api_test_set_newmetatable_hook(NULL);
+  root_full_gc_hook(L, tg, registry_anchor_index, regslot);
 }
 
 static int dummy_cfunc(lua_State *L)
@@ -345,7 +363,11 @@ static void test_meta_roots(lua_State *L)
   void *ud;
   LJTabRoot race_root;
 
-  arm_tab_hook(lj_registry_tab_acq(G(L)));
+  root_expect = ROOT_EXPECT_TAB;
+  root_expect_str = NULL;
+  root_expect_tab = lj_registry_tab_acq(G(L));
+  registry_anchor_index = baseline;
+  lj_api_test_set_newmetatable_hook(newmetatable_registry_gc_hook);
   assert(luaL_newmetatable(L, "api.gc.handoff.mt") == 1);
   lua_pushinteger(L, 44);
   lua_setfield(L, -2, "__value");

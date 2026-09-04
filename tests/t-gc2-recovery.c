@@ -624,6 +624,12 @@ static void test_grey_growth_transaction(void)
   filler = strV(f.L->top - 1);
 
   lj_gc2_mark_begin(f.g);
+  /* Startup table-store handoffs can occupy the other SSB node. Drain that
+  ** unrelated work before replacing the deque: otherwise the flush below
+  ** recycles it and grows this synthetic full queue before failure is armed. */
+  recovery_drain_all(f.g, f.tg);
+  assert(lj_gc2_ismarked(f.g, obj2gco(parent)) == 0);
+  assert(lj_gc2_ismarked(f.g, obj2gco(child)) == 0);
   assert(gc2_grey_stack_acq(f.g) == f.g->gc2.grey_embedded);
   assert(gc2_grey_top_acq(f.g) == gc2_grey_bottom_acq(f.g));
   gc2_grey_top_store_rlx(f.g, 0);
@@ -2119,6 +2125,12 @@ static void test_sticky_failure_without_items_is_bounded(void)
   const uint32_t huge_slot0 = 40503u;
   uint32_t i;
 
+  /* State construction can leave real table-store rescans outside recovery.
+  ** Complete that work before testing that a locator-free failure contributes
+  ** no progress; otherwise worker_drain may legitimately consume startup SSBs. */
+  assert(lua_gc(f.L, LUA_GCCOLLECT, 0) == 0);
+  assert(lua_gc(f.L, LUA_GCSTOP, 0) == 0);
+  assert(lj_gc2_test_ssb_empty(f.g));
   assert(gc2_phase_acq(f.g) == LJ_GC2_IDLE);
   assert(gc2_recovery_items_acq(f.g) == 0);
   assert(gc2_recovery_failed_acq(f.g) == 0);
