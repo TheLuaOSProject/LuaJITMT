@@ -165,6 +165,22 @@ static uint32_t trace_test_exit_calls;
 static uint32_t trace_test_last_exit_parent;
 static uint32_t trace_test_last_exitno;
 static uint32_t trace_test_force_event_handoff_failures;
+static void (*trace_test_stop_hook)(jit_State *J, uint32_t stage);
+
+/* Test-only scheduler edges. The fixture declares this private hook locally. */
+LJ_FUNC void lj_trace_test_set_stop_hook(
+  void (*hook)(jit_State *J, uint32_t stage));
+
+void lj_trace_test_set_stop_hook(void (*hook)(jit_State *J, uint32_t stage))
+{
+  trace_test_stop_hook = hook;
+}
+
+static void trace_test_stop_checkpoint(jit_State *J, uint32_t stage)
+{
+  if (trace_test_stop_hook)
+    trace_test_stop_hook(J, stage);
+}
 
 void lj_trace_test_force_startins_retry(uint32_t count)
 {
@@ -245,6 +261,7 @@ static void trace_test_note_exit(TraceNo parent, ExitNo exitno)
 #define trace_test_take_event_handoff_failure() 0
 #define trace_test_note_exit(parent, exitno) \
   ((void)(parent), (void)(exitno))
+#define trace_test_stop_checkpoint(J, stage) ((void)(J), (void)(stage))
 #endif
 
 static int trace_scope_mark_pending(GCtrace *T)
@@ -4224,10 +4241,6 @@ static void trace_save(jit_State *J, GCtrace *T)
   lj_gc_linkobj_new(g, obj2gco(T));  /* Publish root after body init. */
   traceslot_publish(J, T->traceno, T);
   lj_gc_pubtrace(g, T->traceno);
-  lj_gdbjit_addtrace(J, T);
-#ifdef LUAJIT_USE_PERFTOOLS
-  perftools_addtrace(J, T);
-#endif
 }
 
 int LJ_FASTCALL lj_trace_free_gc(global_State *g, GCtrace *T)
@@ -5767,6 +5780,45 @@ static TraceStartResult trace_start(jit_State *J)
   return TRACE_START_RESULT_ACTIVE;
 }
 
+/* Admit the exact bodies needed for a side/stitch publication. This lookup is
+** still speculative: neither mcode nor the final trace has been committed.
+** Once a runnable slot is validated, the already-held recorder token excludes
+** its peer retirement claim, slot teardown and physical destruction until the
+** link publication below completes. The remaining publication core cannot
+** retire trace graphs or call arbitrary Lua; optional debug allocation/I/O
+** follows the link so same-owner GC assistance cannot retire an admitted parent
+** early. A paused unrelated reclaimer may own metadata SMR while being unable
+** to retire these token-retained bodies, so do not reacquire it after save.
+** Nor may the reader span native sync, optional debugger allocation, perf-map
+** I/O, or the eventual user event callback.
+*/
+static void trace_stop_admit(jit_State *J, TraceNo parentno, TraceNo rootno,
+			     ExitNo exitno, GCtrace **parentp, GCtrace **rootp)
+{
+  global_State *g = J2G(J);
+  GCtrace *parent, *root = NULL;
+  int valid;
+  lj_assertJ(lj_jit_token_held(J),
+	     "trace publication without recorder-token ownership");
+  if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g)))
+    lj_trace_err(J, LJ_TRERR_RETRY);
+  parent = traceref_safe(J, parentno);
+  valid = trace_runnable_acq(parent, parentno);
+  if (rootno != 0) {
+    root = traceref_safe(J, rootno);
+    valid = valid && trace_runnable_acq(root, rootno) &&
+      exitno < trace_nsnap_acq(parent) && trace_snap_acq(parent) != NULL &&
+      trace_exittab_acq(parent) != NULL;
+  }
+  if (valid) {
+    *parentp = parent;
+    *rootp = root;
+  }
+  lj_gc2_smr_read_leave(g);
+  if (LJ_UNLIKELY(!valid))
+    lj_trace_err(J, LJ_TRERR_RETRY);
+}
+
 /* Stop tracing. */
 static int trace_stop(jit_State *J)
 {
@@ -5787,6 +5839,7 @@ static int trace_stop(jit_State *J)
   int addroot = 0;
   int root_patch_lost = 0;
 
+  trace_test_stop_checkpoint(J, 1);  /* Before speculative parent admission. */
   switch (op) {
   case BC_FORL:
     /* The matching FORI is patched after trace publication. */
@@ -5812,33 +5865,28 @@ static int trace_stop(jit_State *J)
     parentno = J->parent;
     rootno = J->cur.root;
     lj_assertJ(parentno != 0 && rootno != 0, "not a side trace");
-    lj_gc2_smr_read_enter(g);
-    parent = traceref_safe(J, parentno);
-    root = traceref_safe(J, rootno);
-    lj_assertJ(parent != NULL && root != NULL, "missing parent/root trace");
+    trace_stop_admit(J, parentno, rootno, exitno, &parent, &root);
     /* Avoid compiling a side trace twice (stack resizing uses parent exit). */
     J->cur.nextside = (TraceNo1)trace_nextside_acq(root);
-    lj_gc2_smr_read_leave(g);
     break;
   case BC_CALLM:
   case BC_CALL:
   case BC_ITERC:
     parentno = (TraceNo)J->exitno;
-    lj_gc2_smr_read_enter(g);
-    parent = traceref_safe(J, parentno);
-    lj_assertJ(parent != NULL, "missing stitched trace");
-    lj_gc2_smr_read_leave(g);
+    trace_stop_admit(J, parentno, 0, exitno, &parent, &root);
     break;
   default:
     lj_assertJ(0, "bad stop bytecode %d", op);
     break;
   }
 
+  trace_test_stop_checkpoint(J, 2);  /* Admission transferred to token lifetime. */
   /* Commit and publish the final trace before enabling bytecode/exits. */
   lj_mcode_commit(J, J->cur.mcode);
   lj_mcode_sync_core(J);
   J->postproc = LJ_POST_NONE;
   trace_save(J, T);
+  trace_test_stop_checkpoint(J, 3);  /* Before the runnable parent link. */
 
   switch (op) {
   case BC_FORL:
@@ -5875,11 +5923,8 @@ static int trace_stop(jit_State *J)
     }
     break;
   case BC_JMP:
-    lj_gc2_smr_read_enter(g);
-    parent = traceref_safe(J, parentno);
-    root = traceref_safe(J, rootno);
-    lj_assertJ(parent != NULL && root != NULL, "missing parent/root trace");
-    lj_assertJ(trace_exittab_acq(parent) != NULL, "missing parent exit table");
+    /* Exact admitted bodies remain live under this unchanged recorder token. */
+    lj_assertJ(lj_jit_token_held(J), "side publication lost recorder token");
     snap = &trace_snap_acq(parent)[exitno];
     topslot = trace_topslot_acq(T);
     if (topslot > snap_topslot_acq(snap)) snap_topslot_rel(snap, topslot);
@@ -5891,20 +5936,25 @@ static int trace_stop(jit_State *J)
     ** after the parent/root metadata above can be observed by other threads.
     */
     trace_exittarget_rel(parent, exitno, trace_mcode_acq(T));
-    lj_gc2_smr_read_leave(g);
     break;
   case BC_CALLM:
   case BC_CALL:
   case BC_ITERC:
-    lj_gc2_smr_read_enter(g);
-    parent = traceref_safe(J, parentno);
-    lj_assertJ(parent != NULL, "missing stitched trace");
+    lj_assertJ(lj_jit_token_held(J), "stitch publication lost recorder token");
     trace_link_rel(parent, traceno);
-    lj_gc2_smr_read_leave(g);
     break;
   default:
     break;
   }
+
+  /* Optional metadata can allocate, assist GC or cross a native boundary.
+  ** Finish every exact parent/root use before this possible same-owner
+  ** retirement/reentry, while preserving metadata-before-event ordering. */
+  trace_test_stop_checkpoint(J, 4);
+  lj_gdbjit_addtrace(J, T);
+#ifdef LUAJIT_USE_PERFTOOLS
+  perftools_addtrace(J, T);
+#endif
 
   if (LJ_UNLIKELY(root_patch_lost)) {
     /* trace_save() already published the body and prototype root. Preserve it

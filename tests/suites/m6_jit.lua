@@ -15,6 +15,7 @@ local shell_quote = utils.shell_quote
 local m6_cases = {
   "m6_dispatch_redispatch",
   "m6_jit_token",
+  "m6_jit_stop_admission",
   "m6_jit_event_session",
   "m6_jit_event_callback_owner",
   "m6_jit_flush_stream_gate",
@@ -710,6 +711,34 @@ print("jit-env-mutation-flush OK")
 end
 
 return function(add)
+  add({
+    name = "m6_jit_stop_admission",
+    description = "Linux side publication completes with a paused IDLE reclaimer",
+    run = function(t)
+      if jit.os ~= "Linux" then
+        print("M6 side-publication pause fixture requires Linux")
+        return
+      end
+      local flags = "-DLJ_GC2_TEST_HELPERS -DLUA_USE_ASSERT"
+      build.with_default_build_restore(t, function()
+        clean_build(t, { quiet = true, xcflags = flags })
+        build_and_run_c(t, t:tmp("lj_t-jit-stop-admission"),
+                        "t-jit-stop-admission.c", {
+          build = false, cflags = flags, timeout = "30s"
+        })
+        local optional = flags ..
+          " -DLUAJIT_USE_GDBJIT -DLUAJIT_USE_PERFTOOLS"
+        clean_build(t, { quiet = true, xcflags = optional })
+        build_and_run_c(t, t:tmp("lj_t-jit-stop-admission-optional"),
+                        "t-jit-stop-admission.c", {
+          build = false, cflags = optional, timeout = "30s",
+          libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=lj_mem_realloc" }
+        })
+      end)
+      print("M6 side-publication admission and cleanup passed")
+    end
+  })
+
   add({
     name = "m6_dispatch_redispatch",
     description = "M6 dispatch redispatch and x64 TG-local dispatch behavior",
