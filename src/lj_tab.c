@@ -2221,16 +2221,21 @@ int lj_tab_resize_desc_install(lua_State *L, GCtab *t, TabResizeDesc *desc)
       return 0;
     }
     if (expected == control) {
+      uint64_t weak = lj_tab_weak_record_raw_acq(t);
+      uint64_t desiredweak = (weak & ~LJ_TAB_WEAK_RECORD_ACAP_MASK) |
+	((uint64_t)desc->oldacap << LJ_TAB_WEAK_RECORD_ACAP_SHIFT);
       /*
-      ** Stable tables need not maintain the cold capacity shadow. Synchronize
-      ** it immediately before the one control-tag CAS; a changed stable word
-      ** makes that CAS fail without exposing the shadow to ordinary readers.
+      ** Stable tables need not maintain the cold capacity shadow. Publish it
+      ** atomically with descriptor control: a separate shadow store could
+      ** overwrite a newer descriptor's capacity before our control CAS loses.
+      ** Preserve the sampled semantic weak cycle/state in the same pair CAS.
+      ** A concurrent weak update also rejects this bounded install attempt;
+      ** neither a losing installer nor a delayed helper may write either word.
       */
-      lj_tab_weak_acap_rel(t, desc->oldacap);
       tab_test_resize_desc_install(
 	L, t, desc, LJ_TAB_RESIZE_DESC_HOOK_BEFORE_CONTROL_CAS);
-      if (!lj_tab_struct_control_cas(t, &expected, desired) &&
-	  expected != desired) {
+      if (!lj_tab_struct_weak_pair_cas(t, &expected, &weak, desired,
+				      desiredweak)) {
 	(void)tab_resize_desc_cancel_installing(g, L, desc);
 	lj_gc2_smr_read_leave(g);
 	return 0;
