@@ -1,0 +1,36 @@
+{
+  "base_commit": "eb77c111bcc14db3c92243b5e5c8860371814e59",
+  "cpu": 30,
+  "scale": 0.05,
+  "iterations": 10000,
+  "pairs": 7,
+  "mode": "interp",
+  "harness_statistic": "minimum process CPU time across five iterations",
+  "source_change": "src/lj_meta.c only",
+  "binaries": {
+    "before": {
+      "sha256": "8a71e007317548de7c2a95b83466e8a1ca75e132a4aba6aa66b2f6efbdc450c9",
+      "ldd": "\tlinux-vdso.so.1 (0x00007faaa2e1c000)\n\tlibm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007faaa2bab000)\n\tlibgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007faaa2b7e000)\n\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007faaa298a000)\n\t/lib64/ld-linux-x86-64.so.2 (0x00007faaa2e1e000)\n"
+    },
+    "after": {
+      "sha256": "dba9c717d5ed02f3f5973f57b5ac9534c8c81674633686f787c627a6a04e5411",
+      "ldd": "\tlinux-vdso.so.1 (0x00007f759e5f8000)\n\tlibm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007f759e387000)\n\tlibgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007f759e35a000)\n\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f759e166000)\n\t/lib64/ld-linux-x86-64.so.2 (0x00007f759e5fa000)\n"
+    }
+  },
+  "compiler": "GCC 14.2.0 (Debian 14.2.0-19)",
+  "build_flags": [
+    "-std=gnu11",
+    "-O2",
+    "-fomit-frame-pointer",
+    "-mcx16"
+  ],
+  "build_mode": "default Linux; no assertions, sanitizers or test helpers",
+  "harness_sha256": "ebd0b8d53b6e7a340c90c45ad33d9bdd47acbd5418890d593d6aae127ef926a9",
+  "source_sha256": {
+    "before": "02516e729e4931c6efd491038adcf202ee882ca79fd67393afab8475835dc6c1",
+    "after": "ee8be87f397f680553f3352fca94e0cb43084d5366c68ecb6296aef0ae9c4a11"
+  },
+  "artifacts": "/tmp/lj-meta-barrier-review-my8sb8yp",
+  "order": "before/after on odd pairs, after/before on even pairs",
+  "timing_limitations": "CPU affinity only; frequency not fixed; combined functional tests ran on CPUs 0-15 during the final measurement tail; no material speedup established"
+}

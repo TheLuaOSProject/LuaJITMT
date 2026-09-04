@@ -783,6 +783,11 @@ cTValue *lj_meta_tget(lua_State *L, cTValue *o, cTValue *k)
   return meta_tget_rooted_mode(L, o, k, L->base + bc_a(*pc), 0);
 }
 
+/* The paired store retains receiver/key anchors through its keyed CAS and
+** post-store barriers. Stores which can add a GC edge have a guarded post-CAS
+** handoff that preserves the edge and schedules the required parent rescan,
+** so this path needs no extra pre-store parent barrier. Raw-slot callers
+** release the anchors on return and retain their existing parent barrier. */
 static TValue *meta_tset_rooted_mode(lua_State *L, cTValue *o, cTValue *k,
 				     GCtab **owner,
 				     MetaChainRoots *kept_roots, int funcenv)
@@ -831,7 +836,8 @@ static TValue *meta_tset_rooted_mode(lua_State *L, cTValue *o, cTValue *k,
 	TValue *dst = lj_tab_set(L, t, key);
 	lj_tab_nomm_rel(t, 0);  /* Invalidate negative metamethod cache. */
 	lj_gc2_barrier_weak_key(L, t, key);
-	lj_gc_pubtab(L, t);
+	if (!kept_roots)
+	  lj_gc_pubtab(L, t);
 	if (owner)
 	  *owner = t;
 	if (!kept_roots)
@@ -843,7 +849,8 @@ static TValue *meta_tset_rooted_mode(lua_State *L, cTValue *o, cTValue *k,
       method = meta_chain_root(roots, META_CHAIN_METHOD);
       if (tvisnil(method)) {
 	lj_tab_nomm_rel(t, 0);  /* Invalidate negative metamethod cache. */
-	lj_gc_pubtab(L, t);
+	if (!kept_roots)
+	  lj_gc_pubtab(L, t);
 	if (tvisnil(key)) {
 	  meta_chain_roots_fini(roots);
 	  lj_err_msg(L, LJ_ERR_NILIDX);

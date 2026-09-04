@@ -1,0 +1,15 @@
+pair,variant,mode,benchmark,iterations,ns_per_op,best_total_s,wall_s
+1,before,interp,tab_insert_newkey,10000,2458.80,0.0246,0.198185165
+1,after,interp,tab_insert_newkey,10000,2452.50,0.0245,0.198062216
+2,after,interp,tab_insert_newkey,10000,2457.20,0.0246,0.197862744
+2,before,interp,tab_insert_newkey,10000,2481.20,0.0248,0.199768152
+3,before,interp,tab_insert_newkey,10000,2456.40,0.0246,0.198647075
+3,after,interp,tab_insert_newkey,10000,2452.50,0.0245,0.198142475
+4,after,interp,tab_insert_newkey,10000,2454.70,0.0245,0.198391315
+4,before,interp,tab_insert_newkey,10000,2458.80,0.0246,0.198253690
+5,before,interp,tab_insert_newkey,10000,2465.30,0.0247,0.198455068
+5,after,interp,tab_insert_newkey,10000,2455.20,0.0246,0.197799385
+6,after,interp,tab_insert_newkey,10000,2447.40,0.0245,0.197477444
+6,before,interp,tab_insert_newkey,10000,2456.60,0.0246,0.198095162
+7,before,interp,tab_insert_newkey,10000,2450.20,0.0245,0.197806376
+7,after,interp,tab_insert_newkey,10000,2453.00,0.0245,0.197667767
