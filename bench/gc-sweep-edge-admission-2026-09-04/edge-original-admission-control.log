@@ -1,0 +1,2 @@
+t-gc2-sweep-edge-lease-latest-control: /tmp/lj-gc-sweep-lease-20260904-2p5yleu8/control/tests/t-gc2-sweep-edge-lease.c:232: test_small_tag_and_direct_bodies: Assertion `watch.small == 1' failed.
+timeout: the monitored command dumped core

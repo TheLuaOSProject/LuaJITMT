@@ -1,0 +1,98 @@
+# ========
+# captured on    : Fri Sep  4 23:09:21 2026
+# header version : 1
+# data offset    : 1072
+# data size      : 855440
+# feat offset    : 856512
+# hostname : 7f3bd9b38fd8
+# os release : 7.2.1-ogc4.1.fc44.x86_64
+# perf version : 6.12.95
+# arch : x86_64
+# nrcpus online : 32
+# nrcpus avail : 32
+# cpudesc : Intel(R) Core(TM) i9-14900K
+# cpuid : GenuineIntel,6,183,1
+# total memory : 65577040 kB
+# cmdline : /usr/bin/perf record -F 49 -g --call-graph dwarf -o /tmp/lj-gc-sweep-lease-20260904-2p5yleu8/performance/control-insert-diagnostic.perf.data -p 15122 -- sleep 2
+# event : name = cpu_atom/cycles/Pu, , id = { 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67 }, type = 0 (PERF_TYPE_HARDWARE), size = 136, config = 0xa00000000, { sample_period, sample_freq } = 49, sample_type = IP|TID|TIME|ADDR|CALLCHAIN|PERIOD|REGS_USER|STACK_USER|IDENTIFIER|DATA_SRC, read_format = ID|LOST, disabled = 1, inherit = 1, exclude_kernel = 1, exclude_hv = 1, freq = 1, precise_ip = 3, sample_id_all = 1, exclude_guest = 1, exclude_callchain_user = 1, sample_regs_user = 0xff0fff, sample_stack_user = 8192
+# event : name = cpu_core/cycles/Pu, , id = { 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83 }, type = 0 (PERF_TYPE_HARDWARE), size = 136, config = 0x400000000, { sample_period, sample_freq } = 49, sample_type = IP|TID|TIME|ADDR|CALLCHAIN|PERIOD|REGS_USER|STACK_USER|IDENTIFIER|DATA_SRC, read_format = ID|LOST, disabled = 1, inherit = 1, exclude_kernel = 1, exclude_hv = 1, freq = 1, precise_ip = 3, sample_id_all = 1, exclude_guest = 1, exclude_callchain_user = 1, sample_regs_user = 0xff0fff, sample_stack_user = 8192
+# event : name = dummy:u, , id = { 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115 }, type = 1 (software), size = 136, config = 0x9 (PERF_COUNT_SW_DUMMY), { sample_period, sample_freq } = 49, sample_type = IP|TID|TIME|ADDR|PERIOD|IDENTIFIER|DATA_SRC, read_format = ID|LOST, inherit = 1, exclude_kernel = 1, exclude_hv = 1, mmap = 1, comm = 1, freq = 1, task = 1, mmap_data = 1, sample_id_all = 1, exclude_guest = 1, mmap2 = 1, comm_exec = 1, ksymbol = 1, bpf_event = 1
+# CPU_TOPOLOGY info available, use -I to display
+# NUMA_TOPOLOGY info available, use -I to display
+# pmu mappings: cpu_atom = 10, cpu_core = 4, breakpoint = 5, cstate_core = 33, cstate_pkg = 34, intel_bts = 11, intel_pt = 12, kprobe = 8, msr = 13, power = 35, software = 1, tracepoint = 2, uncore_arb_0 = 26, uncore_arb_1 = 27, uncore_cbox_0 = 14, uncore_cbox_1 = 15, uncore_cbox_2 = 16, uncore_cbox_3 = 17, uncore_cbox_4 = 18, uncore_cbox_5 = 19, uncore_cbox_6 = 20, uncore_cbox_7 = 21, uncore_cbox_8 = 22, uncore_cbox_9 = 23, uncore_cbox_10 = 24, uncore_cbox_11 = 25, uncore_clock = 28, uncore_imc_free_running_0 = 31, uncore_imc_free_running_1 = 32, uncore_imc_0 = 29, uncore_imc_1 = 30, uprobe = 9
+# CACHE info available, use -I to display
+# time of first sample : 1184.972374
+# time of last sample : 1186.970964
+# sample duration :   1998.590 ms
+# MEM_TOPOLOGY info available, use -I to display
+# HYBRID_TOPOLOGY info available, use -I to display
+# cpu_atom pmu capabilities: branches=32, max_precise=3, pmu_name=alderlake_hybrid
+# cpu_core pmu capabilities: branches=32, max_precise=3, pmu_name=alderlake_hybrid
+# intel_pt pmu capabilities: topa_multiple_entries=1, psb_cyc=1, single_range_output=1, mtc_periods=249, ip_filtering=1, output_subsys=0, cr3_filtering=1, psb_periods=3f, event_trace=0, cycle_thresholds=3f, power_event_trace=0, mtc=1, payloads_lip=0, ptwrite=1, num_address_ranges=2, max_subleaf=1, topa_output=1, tnt_disable=0
+# missing features: TRACING_DATA BRANCH_STACK GROUP_DESC AUXTRACE STAT CLOCKID DIR_FORMAT COMPRESSED CPU_PMU_CAPS CLOCK_DATA
+# ========
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 100  of event 'cpu_atom/cycles/Pu'
+# Event count (approx.): 8757703310
+#
+# Children      Self  Symbol                                            IPC   [IPC Coverage]
+# ........  ........  ................................................  ....................
+#
+    95.92%     2.04%  [.] gc2_traverse_tab_rec.constprop.0              -      -
+    95.92%     0.00%  [.] __libc_start_main                             -      -
+    95.92%     0.00%  [.] _start                                        -      -
+    95.92%     0.00%  [.] docall                                        -      -
+    95.92%     0.00%  [.] gc2_step_auto                                 -      -
+    95.92%     0.00%  [.] gc2_traverse_obj                              -      -
+    95.92%     0.00%  [.] gc2_worker_drain_inner                        -      -
+    95.92%     0.00%  [.] lj_BC_CAT                                     -      -
+    95.92%     0.00%  [.] lj_BC_FUNCC                                   -      -
+    95.92%     0.00%  [.] lj_gc2_step_explicit                          -      -
+    95.92%     0.00%  [.] lj_meta_cat                                   -      -
+    95.92%     0.00%  [.] lj_vm_cpcall                                  -      -
+    95.92%     0.00%  [.] lj_vm_pcall_unwind                            -      -
+    95.92%     0.00%  [.] lua_cpcall                                    -      -
+    95.92%     0.00%  [.] lua_pcall                                     -      -
+    95.92%     0.00%  [.] main                                          -      -
+    95.92%     0.00%  [.] pmain                                         -      -
+    95.92%     0.00%  [.] 0x00007fef390f2ca7                            -      -
+    92.86%     0.00%  [.] gc2_trace_sweep_tv_edge.isra.0                -      -
+    61.24%    19.00%  [.] gc2_small_candidate_admit                     -      -
+    43.60%     1.02%  [.] lj_gc2_tv_lease_acquire                       -      -
+    42.58%     2.04%  [.] gc2_tv_admit_scoped                           -      -
+    41.56%     1.02%  [.] gc2_observed_obj_status_scoped                -      -
+    41.10%     1.02%  [.] gc2_trace_sweep_edge                          -      -
+    40.08%     2.04%  [.] gc2_markobj_preserve_status_impl.constprop.0  -      -
+    38.16%     1.02%  [.] gc2_small_registered_rescue_enter             -      -
+    37.14%     6.12%  [.] lj_arena_hugetab_rescue_enter                 -      -
+    33.96%     4.08%  [.] gc2_retain_candidate_status                   -      -
+    16.62%    11.52%  [.] hugetab_counted_lease_release.part.0          -      -
+    12.24%     1.02%  [.] gc2_small_arena_known                         -      -
+    12.24%    12.24%  [.] hugetab_search                                -      -
+    11.22%     4.08%  [.] lj_arena_hugetab_lookup                       -      -
+     9.30%     9.30%  [.] hugetab_reader_entry                          -      -
+     8.16%     0.00%  [.] gc2_publish_mutator_                          -      -
+     7.14%     2.04%  [.] gc2_recovery_publish_scoped                   -      -
+     5.10%     5.10%  [.] arena_publish_leave                           -      -
+     4.08%     4.08%  [.] lj_arena_rescue_enter                         -      -
+     3.06%     3.06%  [.] gc2_small_containing_start                    -      -
+     2.04%     2.04%  [.] hugetab_fold_deferred_free                    -      -
+     2.04%     2.04%  [.] gc2_mark_small_cell_admitted                  -      -
+     1.02%     1.02%  [.] gc2_mark_table_child_tv_worker                -      -
+     1.02%     1.02%  [.] gc2_flush_ssb                                 -      -
+     1.02%     0.00%  [.] gc2_ssb_push_tg                               -      -
+     1.02%     0.00%  [.] 0x00007fef389dffff                            -      -
+     1.02%     0.00%  [.] lj_gc2_lease_release.part.0                   -      -
+     1.02%     1.02%  [.] gc2_retained_candidate_valid                  -      -
+     1.02%     0.00%  [.] 0xfffe7f8000000000                            -      -
+     1.02%     1.02%  [.] gc2_small_lifetime_nearest                    -      -
+     1.02%     0.00%  [.] 0x00007ffc1d3a7e27                            -      -
+     1.02%     0.00%  [.] 0x00007fef38b6ffff                            -      -
+
+
+#
+# (Tip: To add Node.js USDT(User-Level Statically Defined Tracing): perf buildid-cache --add `which node`)
+#

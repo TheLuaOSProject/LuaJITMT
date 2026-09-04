@@ -1268,6 +1268,10 @@ static int gc2_traverse_thread(global_State *g, lua_State *th,
 void lj_gc2_trace_sweep_roots(global_State *g);
 uint32_t lj_gc2_trace_sweep_root(global_State *g, GCobj *o);
 static uint32_t gc2_trace_sweep_worker_edge(global_State *g, GCobj *o);
+static uint32_t gc2_trace_sweep_edge(global_State *g, GCobj *o,
+				   int worker_edge,
+				   const GC2MarkScope *scope,
+				   uint32_t start, uint32_t gct);
 static uint32_t gc2_trace_sweep_tv_edge(global_State *g, cTValue *tv,
 					 int worker_edge);
 static int lj_gc2_finreg_cdata_preclaim(lua_State *L, global_State *g,
@@ -1420,6 +1424,10 @@ static int gc2_observed_obj_valid_scoped(global_State *g, GCobj *o,
 static int gc2_observed_obj_status_scoped(global_State *g, GCobj *o,
 						  uint32_t *gctp,
 						  GC2MarkScope *scope);
+static int gc2_observed_obj_status_scoped_impl(global_State *g, GCobj *o,
+					     uint32_t *gctp,
+					     GC2MarkScope *scope,
+					     uint32_t *startp);
 static int gc2_observed_obj_valid(global_State *g, GCobj *o);
 static int gc2_queue_obj_info(global_State *g, GCobj *o,
 			      GCArena *known_small,
@@ -7168,8 +7176,8 @@ enum {
 ** establish lifetime, and return ADMITTED with the exact observation scope
 ** still held. The caller must retain that scope through every semantic check:
 ** otherwise address reuse between validation and use can change incarnation. */
-static int gc2_tv_admit_scoped(global_State *g, cTValue *tv,
-			       GC2MarkScope *scope)
+static int gc2_tv_admit_scoped_impl(global_State *g, cTValue *tv,
+				    GC2MarkScope *scope, uint32_t *startp)
 {
   GCobj *o;
   uint32_t gct;
@@ -7185,7 +7193,7 @@ static int gc2_tv_admit_scoped(global_State *g, cTValue *tv,
   if (itype(tv) == LJ_TSTR && o == obj2gco(&g->strempty))
     return o->gch.gct == ~LJ_TSTR ?
 	   GC2_TV_SCOPE_ADMITTED : GC2_TV_SCOPE_STALE;
-  status = gc2_observed_obj_status_scoped(g, o, &gct, scope);
+  status = gc2_observed_obj_status_scoped_impl(g, o, &gct, scope, startp);
   if (status < 0)
     return GC2_TV_SCOPE_RETRY;
   if (status == 0)
@@ -7207,6 +7215,12 @@ ignore:
 #endif
   gc2_mark_scope_leave(scope);
   return GC2_TV_SCOPE_STALE;
+}
+
+static int gc2_tv_admit_scoped(global_State *g, cTValue *tv,
+			       GC2MarkScope *scope)
+{
+  return gc2_tv_admit_scoped_impl(g, tv, scope, NULL);
 }
 
 static int gc2_tv_gcref_type_match_known_status(global_State *g,
@@ -10605,9 +10619,10 @@ static void gc2_recovery_fail_closed(global_State *g)
 ** validator above, this must never turn structural observation into semantic
 ** reachability. In particular, weak clearing and FINREG liveness tests depend
 ** on a white interior cdata remaining white after validation. */
-static int gc2_observed_obj_status_scoped(global_State *g, GCobj *o,
-					  uint32_t *gctp,
-					  GC2MarkScope *scope)
+static int gc2_observed_obj_status_scoped_impl(global_State *g, GCobj *o,
+					     uint32_t *gctp,
+					     GC2MarkScope *scope,
+					     uint32_t *startp)
 {
   GCArena *a;
   uint32_t gct;
@@ -10628,9 +10643,11 @@ static int gc2_observed_obj_status_scoped(global_State *g, GCobj *o,
     GC2MarkScope *hold = scope ? scope : &local;
     int admitted = gc2_small_candidate_admit(g, o, a, 0, &base, &start,
 						      &gct, hold);
-    UNUSED(base); UNUSED(start);
+    UNUSED(base);
     if (admitted <= 0)
       return admitted;
+    if (startp)
+      *startp = start;
     if (!scope)
       gc2_mark_scope_leave(&local);
   } else {
@@ -10673,6 +10690,13 @@ observed_valid:
   if (gctp)
     *gctp = gct;
   return 1;
+}
+
+static int gc2_observed_obj_status_scoped(global_State *g, GCobj *o,
+					  uint32_t *gctp,
+					  GC2MarkScope *scope)
+{
+  return gc2_observed_obj_status_scoped_impl(g, o, gctp, scope, NULL);
 }
 
 static int gc2_observed_obj_valid_scoped(global_State *g, GCobj *o,
@@ -16507,17 +16531,17 @@ void lj_gc2_lease_release(LJGC2Lease *lease)
 static uint32_t gc2_trace_sweep_tv_edge(global_State *g, cTValue *tv,
 					 int worker_edge)
 {
-  LJGC2Lease lease;
+  GC2MarkScope scope;
   GCobj *o;
-  uint32_t traced;
+  uint32_t traced, start = 0;
   int edge;
   if (!g || !tv || !tvisgcv(tv))
     return 0;
-  edge = lj_gc2_tv_lease_acquire(g, tv, &lease);
-  if (edge == LJ_GC2_TV_EDGE_STALE)
+  edge = gc2_tv_admit_scoped_impl(g, tv, &scope, &start);
+  if (edge == GC2_TV_SCOPE_STALE)
     return 0;
   o = gcV(tv);
-  if (edge == LJ_GC2_TV_EDGE_RETRY) {
+  if (edge == GC2_TV_SCOPE_RETRY) {
     /* A semantic edge colliding with DESTRUCT/MUTATING/RECOVERY must leave an
     ** exact allocation-side locator. Stable stale edges never reach this arm
     ** and therefore cannot poison the cycle's reclaim authority. */
@@ -16525,9 +16549,12 @@ static uint32_t gc2_trace_sweep_tv_edge(global_State *g, cTValue *tv,
       gc2_recovery_fail_closed(g);
     return 1;
   }
-  traced = worker_edge ? gc2_trace_sweep_worker_edge(g, o) :
-			 lj_gc2_trace_sweep_root(g, o);
-  lj_gc2_lease_release(&lease);
+  /* The validated tag and allocation start belong to this still-counted
+  ** incarnation. Reuse that admission for marking and all ensuing payload
+  ** accesses instead of re-entering the same arena/HugeTab reader protocol. */
+  traced = gc2_trace_sweep_edge(g, o, worker_edge, &scope, start,
+			      (uint32_t)~itype(tv));
+  gc2_mark_scope_leave(&scope);
   return traced;
 }
 
@@ -17674,6 +17701,62 @@ static int gc2_markobj_preserve_status(global_State *g, GCobj *o,
 {
   return gc2_markobj_preserve_status_impl(g, o, basep, gctp, traversablep,
 						  0, NULL, NULL);
+}
+
+/* The observational TValue admission has already validated this exact header,
+** expected type and cdata allocation geometry. Its counted scope remains held
+** by the caller through direct-body preservation and semantic publication.
+** Reuse that authority, but retain the mark LP and its lifetime revalidation:
+** a concurrent external free can still publish late/DEFER_FREE while counted
+** readers prevent physical destruction. */
+static int gc2_markobj_preserve_admitted_status(global_State *g, GCobj *o,
+					      uint32_t start, uint32_t gct,
+					      const GC2MarkScope *scope,
+					      int *traversablep)
+{
+  int status;
+  if (scope->a && gc2_mark_admission_counted(scope->admission)) {
+    int retry = 0;
+    status = gc2_mark_small_cell_admitted(
+      g, scope->a, start, scope->admission, &retry);
+    if (status == GC2_MARK_DEAD) {
+      if (retry)
+	gc2_queue_retry_witness_test_pause_at(o);
+      return status;
+    }
+    *traversablep = gct != (uint32_t)~LJ_TUDATA &&
+      (lj_arena_flags_acq(scope->a) & LJ_AF_TRAVERSABLE) != 0;
+  } else if (scope->admission == GC2_SCOPE_HUGE_READER) {
+    HugeTab held;
+    LJHugeInfo hi;
+    int marked;
+    lj_assertG(lj_arena_hugetab_reader_covers(&scope->huge, o),
+	       "admitted sweep edge escaped its huge reader");
+    /* A held slot reader pins both the stable header and this exact mapping;
+    ** retirement, realloc and destructive close cannot acquire it. Reuse the
+    ** allocation base even for an already-validated interior cdata header.
+    ** The metadata mark still rejects a later external-free intent and does
+    ** not acquire another reader or depend on the former TG wrapper. */
+    memset(&held, 0, sizeof(held));
+    held.h = scope->huge.h;
+    marked = lj_arena_hugetab_mark(&held, scope->huge.base, &hi);
+    if (marked < 0)
+      return GC2_MARK_DEAD;
+    if (marked > 0)
+      gc2_marks_this_round_add(g, 1);
+    status = marked > 0 ? GC2_MARK_NEW : GC2_MARK_LIVE_ALREADY;
+    *traversablep = gct != (uint32_t)~LJ_TUDATA &&
+      (hi.flags & LJ_HUGEF_TRAVERSABLE) != 0;
+  } else {
+    /* Embedded roots are handled before this helper. A custom allocator's
+    ** observational no-op lease does not establish the arena identity proof;
+    ** keep its existing compatibility validation and preservation path. */
+    return gc2_markobj_preserve_status(g, o, NULL, NULL, traversablep);
+  }
+  if (status == GC2_MARK_NEW && gc2_uncounted_needscan_type(gct))
+    (void)gc2_rescan_pending_clear(o);
+  gc2_preserve_direct_bodies(g, o);
+  return status;
 }
 
 /* Queue ownership needs the transient-admission distinction which ordinary
@@ -21713,11 +21796,12 @@ uint32_t lj_gc2_preserve_sweep_root(global_State *g, GCobj *o)
 }
 
 static uint32_t gc2_trace_sweep_edge(global_State *g, GCobj *o,
-				      int worker_edge)
+				   int worker_edge,
+				   const GC2MarkScope *scope,
+				   uint32_t start, uint32_t gct)
 {
   int status;
   int traversable;
-  uint32_t gct;
   if (!g || !o)
     return 0;
   if (o == obj2gco(&g->strempty)) {
@@ -21729,10 +21813,12 @@ static uint32_t gc2_trace_sweep_edge(global_State *g, GCobj *o,
     return 1;
   }
   if (mainthread_acq(g) && o == obj2gco(mainthread_acq(g)))
-    return (uint32_t)gc2_publish_mutator(g, o);
+    return (uint32_t)gc2_publish_mutator_scoped(g, o, scope);
   if (gc2_phase_acq(g) != LJ_GC2_SWEEP)
     return (uint32_t)lj_gc2_markobj(g, o);
-  status = gc2_markobj_preserve_status(g, o, NULL, &gct, &traversable);
+  status = scope ?
+    gc2_markobj_preserve_admitted_status(g, o, start, gct, scope, &traversable) :
+    gc2_markobj_preserve_status(g, o, NULL, &gct, &traversable);
   if (status == GC2_MARK_DEAD) {
     /* A valid post-write barrier can meet a destructive owner only at the
     ** SC lifetime handshake: either that owner observed our counted reader and
@@ -21740,7 +21826,7 @@ static uint32_t gc2_trace_sweep_edge(global_State *g, GCobj *o,
     ** with the publisher which already owns the count; generic MUTATING alone
     ** fails closed. Once the owner restores LIVE, publication is allocation-
     ** free; otherwise sticky NO_RECLAIM vetoes every irreversible boundary. */
-    if (!gc2_recovery_publish(g, o))
+    if (!gc2_recovery_publish_scoped(g, o, scope))
       gc2_recovery_fail_closed(g);
     return 1;
   }
@@ -21786,19 +21872,19 @@ static uint32_t gc2_trace_sweep_edge(global_State *g, GCobj *o,
     ** before the post-retire grace/reclaim boundary. This also makes every
     ** sweep-time semantic publication visible to the close predicate.
     */
-    return (uint32_t)gc2_publish_mutator(g, o);
+    return (uint32_t)gc2_publish_mutator_scoped(g, o, scope);
   }
   return 0;
 }
 
 uint32_t lj_gc2_trace_sweep_root(global_State *g, GCobj *o)
 {
-  return gc2_trace_sweep_edge(g, o, 0);
+  return gc2_trace_sweep_edge(g, o, 0, NULL, 0, 0);
 }
 
 static uint32_t gc2_trace_sweep_worker_edge(global_State *g, GCobj *o)
 {
-  return gc2_trace_sweep_edge(g, o, 1);
+  return gc2_trace_sweep_edge(g, o, 1, NULL, 0, 0);
 }
 
 void lj_gc2_trace_sweep_roots(global_State *g)

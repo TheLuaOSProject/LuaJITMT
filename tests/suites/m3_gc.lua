@@ -42,6 +42,7 @@ local m3_scaffold_deps = {
   "m3_gc2_no_legacy_runtime",
   "m3_gc2_internal_allocator_only",
   "m3_gc2_recovery",
+  "m3_gc2_sweep_edge_lease",
   "m3_gc2_worker_scheduler",
   "m3_gc2_mark_close_progress",
   "m3_gc_active_thread_roots",
@@ -425,6 +426,37 @@ return function(add)
   })
 
   register({
+    name = "m3_gc2_sweep_edge_lease",
+    description = "SWEEP TValue edges reuse exact admission through marking and retry",
+    run = function(t)
+      if jit.os ~= "Linux" then
+        print("M3 SWEEP edge admission fixture requires Linux linker wrappers")
+        return
+      end
+      local flags = gc2_test_cflags .. " -DLUA_USE_ASSERT"
+      build.with_default_build_restore(t, function()
+        build.build_and_run_c(t, t:tmp("lj_t-gc2-sweep-edge-lease"),
+                              "t-gc2-sweep-edge-lease.c",
+                              build.gc2_test_helper_opts({
+          jobs = false,
+          xcflags = flags,
+          cflags = flags,
+          libs = {
+            "-lm", "-ldl", os.getenv("PTHREAD") or "-pthread",
+            "-Wl,--wrap=lj_arena_rescue_enter",
+            "-Wl,--wrap=lj_arena_hugetab_rescue_enter",
+            "-Wl,--wrap=lj_arena_hugetab_reader_cdata_range_acquire",
+            "-Wl,--wrap=lj_arena_hugetab_mark_cdata_range_reader_acquire",
+            "-Wl,--wrap=lj_arena_hugetab_mark",
+            "-Wl,--wrap=lj_arena_hugetab_reader_release"
+          },
+          timeout = "30s"
+        }))
+      end, { jobs = false })
+    end
+  })
+
+  register({
     name = "m3_gc2_recovery",
     description = "GC2 allocation-free no-drop recovery and replay protocol",
     run = function(t)
@@ -507,6 +539,7 @@ return function(add)
       utils.run_case(cases, t, "m3_gc2_markword_token_model")
       utils.run_case(cases, t, "m3_gc2_sweep_public_table_rescan")
       utils.run_case(cases, t, "m3_gc2_recovery")
+      utils.run_case(cases, t, "m3_gc2_sweep_edge_lease")
       utils.run_case(cases, t, "m3_gc2_worker_scheduler")
       utils.run_case(cases, t, "m3_gc2_mark_close_progress")
       utils.run_case(cases, t, "m3_gc_active_thread_roots")

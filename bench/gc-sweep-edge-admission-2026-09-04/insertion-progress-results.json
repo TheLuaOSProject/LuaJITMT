@@ -1,0 +1,34 @@
+[
+  {
+    "kind": "before",
+    "command": [
+      "timeout",
+      "60s",
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/control/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/performance/insertion-progress.lua",
+      "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/performance/gcprobe.so",
+      "10000"
+    ],
+    "exit": 0
+  },
+  {
+    "kind": "after",
+    "command": [
+      "timeout",
+      "60s",
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/tree/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/performance/insertion-progress.lua",
+      "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/performance/gcprobe.so",
+      "10000"
+    ],
+    "exit": 0
+  }
+]

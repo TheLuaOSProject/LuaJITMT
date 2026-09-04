@@ -1,0 +1,2 @@
+[ perf record: Woken up 4 times to write data ]
+[ perf record: Captured and wrote 0.817 MB /tmp/lj-gc-sweep-lease-20260904-2p5yleu8/performance/control-insert-diagnostic.perf.data (100 samples) ]

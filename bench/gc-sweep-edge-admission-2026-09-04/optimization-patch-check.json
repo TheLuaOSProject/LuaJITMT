@@ -1,0 +1,7 @@
+{
+  "base_commit": "09d09e632803edbc207f91951779b9706f73b640",
+  "base_sha256": "d9236ddf31832f7c50c113d84d56a34d86c1941f0d148b57bca8c98aafa55935",
+  "control_same_as_base": true,
+  "patched_sha256": "03642a1d466a127af219e9654bfc4e2a4ab63fe9119722a7685528df1d5a84f9",
+  "patched_same_as_tested_tree": true
+}

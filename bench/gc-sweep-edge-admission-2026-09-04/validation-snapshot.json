@@ -1,0 +1,39 @@
+{
+  "head": "ea23bf0c0490284b250fe5cbbf4e3f0b8a1fcdb0",
+  "snapshot": {
+    "src/lj_gc2.c": "03642a1d466a127af219e9654bfc4e2a4ab63fe9119722a7685528df1d5a84f9",
+    "src/lj_ctype.c": "63990b7796d93a7c4c8659e61c2f0ec43dd766a2972ed679f8f46a4237b2171b",
+    "src/lj_ctype.h": "8ee89b4adca50452d429e57ae528568ee9a2ac185eb15922f88e4007d0fd5e7d",
+    "src/lj_trace.c": "0e9b47d38d52d60b82f05f6ab79aa32f1ac05e14317213e41971ecf371ca2200",
+    "tests/t-gc2-sweep-edge-lease.c": "0cd61c04b7b877b636d0363b5b4f4d8903a38fe49ccaf99e99b7fafe03e945dd",
+    "tests/t-gc2-sweep-public-table-rescan.c": "5eab792088dc4d272bf460be4a1c26f8223ecd29c488a363da39430c725fcd5d",
+    "tests/suites/m3_gc.lua": "78ba977712ae90717a4c437a1250451940ee502ab58ed50111749a8b2267de32"
+  },
+  "control_gc2_sha256": "d9236ddf31832f7c50c113d84d56a34d86c1941f0d148b57bca8c98aafa55935",
+  "optimization_patch_sha256": "6a674e89aba573b678fd118e0c6e8f7871edcb58c941f3d69c2e0dd5aa0694f6",
+  "gcc": "gcc (Debian 14.2.0-19) 14.2.0",
+  "clang": "Debian clang version 19.1.7 (3+b1)",
+  "canonical_suite_sha256": "6309858f0eb8673704ddba70659176bc517d3b0290a6b9ffbfcc15fa3b4c8d93",
+  "strict_build_argv": [
+    "make",
+    "-j4",
+    "BUILDMODE=static",
+    "XCFLAGS=-DLJ_GC2_TEST_HELPERS -DLUA_USE_ASSERT"
+  ],
+  "asan_build_argv": [
+    "make",
+    "-j4",
+    "CC=clang",
+    "BUILDMODE=static",
+    "CCOPT=-O1 -fno-omit-frame-pointer",
+    "CCDEBUG=-g",
+    "XCFLAGS=-DLJ_GC2_TEST_HELPERS -DLUA_USE_ASSERT -fsanitize=address",
+    "LDFLAGS=-fsanitize=address"
+  ],
+  "asan_build_env": {
+    "ASAN_OPTIONS": "detect_leaks=0"
+  },
+  "asan_runtime_env": {
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  }
+}

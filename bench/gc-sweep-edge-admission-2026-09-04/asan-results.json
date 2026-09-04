@@ -1,0 +1,95 @@
+[
+  {
+    "test": "t-gc2-sweep-edge-lease",
+    "compile": [
+      "clang",
+      "-std=gnu11",
+      "-O1",
+      "-g",
+      "-fno-omit-frame-pointer",
+      "-fsanitize=address",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/asan/src",
+      "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/asan/tests/t-gc2-sweep-edge-lease.c",
+      "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/t-gc2-sweep-edge-lease-latest-asan",
+      "-Wl,--wrap=lj_arena_rescue_enter",
+      "-Wl,--wrap=lj_arena_hugetab_rescue_enter",
+      "-Wl,--wrap=lj_arena_hugetab_reader_cdata_range_acquire",
+      "-Wl,--wrap=lj_arena_hugetab_mark_cdata_range_reader_acquire",
+      "-Wl,--wrap=lj_arena_hugetab_mark",
+      "-Wl,--wrap=lj_arena_hugetab_reader_release"
+    ],
+    "env": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "exit": 0
+  },
+  {
+    "test": "t-gc2-traverse",
+    "compile": [
+      "clang",
+      "-std=gnu11",
+      "-O1",
+      "-g",
+      "-fno-omit-frame-pointer",
+      "-fsanitize=address",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/asan/src",
+      "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/asan/tests/t-gc2-traverse.c",
+      "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/t-gc2-traverse-latest-asan"
+    ],
+    "env": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "exit": 0
+  },
+  {
+    "test": "t-gc2-recovery",
+    "compile": [
+      "clang",
+      "-std=gnu11",
+      "-O1",
+      "-g",
+      "-fno-omit-frame-pointer",
+      "-fsanitize=address",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/asan/src",
+      "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/asan/tests/t-gc2-recovery.c",
+      "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-sweep-lease-20260904-2p5yleu8/t-gc2-recovery-latest-asan"
+    ],
+    "env": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "exit": 0
+  }
+]
