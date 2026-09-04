@@ -21865,8 +21865,14 @@ static uint32_t gc2_trace_sweep_edge(global_State *g, GCobj *o,
     ** only private descendants; public root/barrier publication is unfiltered. */
     return 0;
   }
-  if (traversable || gct == (uint32_t)~LJ_TUDATA) {
+  if (gc2_gct_may_traverse(gct) &&
+      (traversable || gct == (uint32_t)~LJ_TUDATA)) {
     /*
+    ** Allocator classification does not imply a semantic child graph. Strings
+    ** and cdata can share traversable storage; their mark above completes this
+    ** edge. Queueing them would refill SSB/recovery on every parent scan even
+    ** though the worker has no child to visit.
+    **
     ** Mutators never push/pop the single-owner global grey deque. Publish the
     ** rescued container on this TG's SSB; the worker converts it to grey work
     ** before the post-retire grace/reclaim boundary. This also makes every
