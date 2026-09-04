@@ -176,10 +176,12 @@ controls and post-fix completion tests:
 The combined normal Linux runtime passes the default stock suite (387 tests
 with JIT off, 509 with JIT on). That is semantic regression coverage, not
 proof of the concurrent progress, reclamation, or performance requirements.
-The combined allocator state-churn fixture still exceeds its 60-second pilot
-limit; stopped-process samples show automatic SWEEP table traversal but do not
-establish whether progress has stalled. Keep that result open. A separate
-sweep-batching fixture now explicitly selects the two lifetime words required
+The unchanged combined allocator state-churn fixture completes in 63.341
+seconds with a longer bound after an earlier 60-second timeout. Diagnostic
+rounds advance and collect to IDLE; repeated automatic SWEEP traversal remains
+a performance problem in this schedule, not demonstrated nonconvergence. See
+`notes/arena-state-churn-progress-2026-09-04.md`. A separate sweep-batching
+fixture now explicitly selects the two lifetime words required
 by its original exact batch assertions; ten combined and ten pre-leaf control
 runs pass with that geometry.
 

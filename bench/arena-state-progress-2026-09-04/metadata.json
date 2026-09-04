@@ -1,0 +1,75 @@
+{
+  "source_reference": "abf234ca",
+  "source_matches_all_210_tracked_src_files": true,
+  "normal_build": "GCC normal static build; no assertion/test-helper/sanitizer instrumentation",
+  "prior_60_second_run": {
+    "kind": "normal",
+    "name": "t-arena-state",
+    "compile_command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-gc-final-combined-20260904-7jk68bv5/normal/src",
+      "/tmp/lj-gc-final-combined-20260904-7jk68bv5/normal/tests/t-arena-state.c",
+      "/tmp/lj-gc-final-combined-20260904-7jk68bv5/normal/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-final-combined-20260904-7jk68bv5/t-arena-state"
+    ],
+    "compile_exit": 0,
+    "compile_output": "",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "timeout",
+      "60s",
+      "/tmp/lj-gc-final-combined-20260904-7jk68bv5/t-arena-state"
+    ],
+    "exit": 124,
+    "seconds": 60.00229223400038,
+    "output": ""
+  },
+  "sha256": {
+    "tests/t-arena-state.c": "826bb1451f8ff205e8639bb90123efdb39953aece947a31c1888e371d447a30c",
+    "/tmp/lj-gc-final-combined-20260904-7jk68bv5/normal/src/libluajit.a": "1754812d2c77f867f69f28cc23012b0703f6d797d0fdc206d6631108f99c3071",
+    "/tmp/lj-gc-final-combined-20260904-7jk68bv5/t-arena-state": "eaf2015aa8d8e1df3b50cda594978fd71cf95744c368f471dfaf36cd645a7634"
+  },
+  "diagnostic_only": {
+    "path": "/tmp/lj-arena-state-progress-20260904-vs7x1eyd",
+    "change": "C progress callback every 200 insertions and at round/collection boundaries; original 24 universes, 20 rounds, 1800 insertions unchanged",
+    "result": {
+      "name": "leaf-stats",
+      "command": [
+        "taskset",
+        "-c",
+        "12",
+        "/tmp/lj-arena-state-progress-20260904-vs7x1eyd/leaf-stats"
+      ],
+      "exit": -9,
+      "status": "timeout",
+      "seconds": 25.00093664799988,
+      "limit_seconds": 25
+    },
+    "records": 2290,
+    "completed_rounds": 190,
+    "completed_rounds_with_nonidle_phase_or_pending_recovery": 0,
+    "last_record": {
+      "seconds": "24.858733",
+      "state": "9",
+      "round": "11",
+      "index": "1800",
+      "stage": "1",
+      "phase": "3",
+      "recovery": "203",
+      "grey": "0"
+    },
+    "not_a_performance_comparison": "Callback changes recording and GC schedule; raw diagnostic C/CSV remain at path above."
+  }
+}

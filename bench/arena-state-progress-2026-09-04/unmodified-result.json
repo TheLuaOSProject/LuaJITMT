@@ -1,0 +1,12 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "12",
+    "/tmp/lj-gc-final-combined-20260904-7jk68bv5/t-arena-state"
+  ],
+  "exit": 0,
+  "status": "complete",
+  "limit_seconds": 150,
+  "seconds": 63.34098336499983
+}
