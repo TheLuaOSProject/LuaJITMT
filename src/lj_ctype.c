@@ -478,9 +478,10 @@ void lj_ctype_fin_lease_release(CTypeFinLease *lease)
 ** edge and install an exact expected-TAB body lease. The returned token keeps
 ** the table and any separated vector snapshot mapped; no raw generation-record
 ** pointer escapes this helper. */
-static int ctype_fin_gen_tab_acquire_next_smr(CTState *cts, FinRegGen *gen,
-					      CTypeFinLease *lease,
-					      FinRegGen **nextp)
+static int ctype_fin_gen_tab_acquire_next_smr_mode(CTState *cts, FinRegGen *gen,
+						CTypeFinLease *lease,
+						FinRegGen **nextp,
+						int semantic)
 {
   global_State *g;
   LJGC2Lease genlease = { 0 };
@@ -509,8 +510,21 @@ static int ctype_fin_gen_tab_acquire_next_smr(CTState *cts, FinRegGen *gen,
     lj_ctype_fin_lease_release(lease);
     return LJ_CTYPE_FIN_MISS;
   }
-  rc = lj_gc2_obj_lease_acquire(g, obj2gco(t), (uint32_t)~LJ_TTAB,
+  if (semantic) {
+    rc = lj_gc2_obj_lease_acquire(g, obj2gco(t), (uint32_t)~LJ_TTAB,
 				NULL, &lease->table_lease);
+  } else {
+    TValue candidate;
+    /* Membership inspection must not create a semantic SWEEP publication.
+    ** Table traversal asks this predicate while consuming queued graph work;
+    ** republishing every FINREG table here would recreate that work forever.
+    ** Construct only the expected tag, then validate it under an observational
+    ** lease before any table byte is read. Both STALE and RETRY fail admission.
+    */
+    setgcVraw(&candidate, obj2gco(t), LJ_TTAB);
+    rc = lj_gc2_tv_lease_acquire(g, &candidate, &lease->table_lease) ==
+	 LJ_GC2_TV_EDGE_VALID ? 0 : -1;
+  }
   if (rc < 0 || fin_gen_tab_acq(gen) != t) {
     lj_gc2_lease_release(&genlease);
     lj_ctype_fin_lease_release(lease);
@@ -521,6 +535,13 @@ static int ctype_fin_gen_tab_acquire_next_smr(CTState *cts, FinRegGen *gen,
   lease->tab = t;
   lj_gc2_lease_release(&genlease);
   return LJ_CTYPE_FIN_FOUND;
+}
+
+static int ctype_fin_gen_tab_acquire_next_smr(CTState *cts, FinRegGen *gen,
+					      CTypeFinLease *lease,
+					      FinRegGen **nextp)
+{
+  return ctype_fin_gen_tab_acquire_next_smr_mode(cts, gen, lease, nextp, 1);
 }
 
 static int ctype_fin_gen_next_smr(global_State *g, FinRegGen *gen,
@@ -1074,28 +1095,30 @@ int lj_ctype_fin_istab(global_State *g, GCtab *t)
   CTState *cts = ctype_ctsG(g);
   FinRegGen *gen;
   if (!cts || !t)
-    return 0;
+    return LJ_CTYPE_FIN_MISS;
   if (!lj_gc2_smr_read_try(g))
-    return 0;
+    return LJ_CTYPE_FIN_RETRY;
   gen = fin_gen_head_acq(cts);
   while (gen != NULL) {
     CTypeFinLease held = CTYPE_FIN_LEASE_INIT;
     FinRegGen *next = NULL;
-    int rc = ctype_fin_gen_tab_acquire_next_smr(cts, gen, &held, &next);
-    if (rc != LJ_CTYPE_FIN_FOUND) {
+    int rc = ctype_fin_gen_tab_acquire_next_smr_mode(
+      cts, gen, &held, &next, 0);
+    if (rc == LJ_CTYPE_FIN_RETRY) {
       lj_gc2_smr_read_leave(g);
-      return 0;
+      return LJ_CTYPE_FIN_RETRY;
     }
-    if (held.tab == t && fin_gen_tab_enabled_acq(held.tab)) {
+    if (rc == LJ_CTYPE_FIN_FOUND && held.tab == t &&
+	fin_gen_tab_enabled_acq(held.tab)) {
       lj_ctype_fin_lease_release(&held);
       lj_gc2_smr_read_leave(g);
-      return 1;
+      return LJ_CTYPE_FIN_FOUND;
     }
     lj_ctype_fin_lease_release(&held);
     gen = next;
   }
   lj_gc2_smr_read_leave(g);
-  return 0;
+  return LJ_CTYPE_FIN_MISS;
 }
 
 int lj_ctype_fin_mark(global_State *g, void (*mark)(global_State *, GCobj *),

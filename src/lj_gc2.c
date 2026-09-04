@@ -14579,7 +14579,8 @@ static int gc2_ssb_mark_one(global_State *g, GCobj *o)
       gc2_mark_scope_leave(&scope);
       return 1;
     }
-    if (gct == (uint32_t)~LJ_TTAB &&
+    if (gc2_phase_acq(g) != LJ_GC2_SWEEP &&
+	gct == (uint32_t)~LJ_TTAB &&
 	!(lj_obj_gcflags(o) & LJ_GC_NEEDSCAN) &&
 	gc2_table_scan_current(g, gco2tab(o))) {
       /*
@@ -14591,6 +14592,13 @@ static int gc2_ssb_mark_one(global_State *g, GCobj *o)
       ** absent: a delayed old hint-clear can temporarily erase NEEDSCAN after a
       ** new COUNTED token and this very queue locator were installed. All three
       ** observations stay inside the retained body lease.
+      **
+      ** SWEEP public root/table barriers can follow raw payload writes without
+      ** changing that stamp or reserving a rescan token. Their SSB slots are
+      ** explicit requests to cover the new payload, so no prior scan can
+      ** discharge them. Private SWEEP graph discovery suppresses current
+      ** tables before publication in gc2_trace_sweep_edge; consuming every
+      ** published slot here therefore still lets cyclic graphs reach fixpoint.
       */
       if (lj_tab_gc2_rescan_state_acq(gco2tab(o)) == LJ_TAB_RESCAN_NONE) {
 	gc2_mark_scope_leave(&scope);
@@ -15290,8 +15298,20 @@ static int gc2_tab_weak_mode(global_State *g, GCtab *t, GCtab *mt,
     }
     gc2_mark_scope_leave(&strscope);
   #if LJ_HASFFI
-    if (weak && gc2_tab_is_ffi_fin(g, t))
-      weak = (int)(~0u & ~LJ_GC_WEAKVAL);
+    if (weak) {
+      int ffi_fin = gc2_tab_is_ffi_fin(g, t);
+      if (LJ_UNLIKELY(ffi_fin < 0)) {
+	/* Unknown FINREG membership cannot select an ordinary weak policy. */
+	if (own_smr)
+	  lj_gc2_smr_read_leave(g);
+	gc2_mark_scope_leave(&mtscope);
+	if (retryp)
+	  *retryp = 1;
+	return 0;
+      }
+      if (ffi_fin)
+	weak = (int)(~0u & ~LJ_GC_WEAKVAL);
+    }
   #endif
   }
   if (own_smr)
@@ -18468,9 +18488,13 @@ void lj_gc2_test_rescan_pending_clear_cycle(global_State *g, GCobj *o)
 
 static int gc2_note_weak_table(global_State *g, GCtab *t, int weak)
 {
+  int ffi_fin;
   if (!weak)
     return 1;
-  if (gc2_tab_is_ffi_fin(g, t))
+  ffi_fin = gc2_tab_is_ffi_fin(g, t);
+  if (LJ_UNLIKELY(ffi_fin < 0))
+    return 0;  /* Retry before ordinary weak work gains a durable identity. */
+  if (ffi_fin)
     return 1;  /* FFI finalizer registry is owned by FINREG, not weak clear. */
   /* 05 section 5.8: capture traversal-time weak mode. */
   lj_obj_masksetgcflags(obj2gco(t), LJ_GC_WEAK, weak);
@@ -18628,6 +18652,8 @@ static GC2TabProofResult gc2_traverse_tab_rec(
     goto out;
   }
   ffi_fin = gc2_tab_is_ffi_fin(g, t);
+  if (LJ_UNLIKELY(ffi_fin < 0))
+    goto retry_scan;
   if (record_weak)
     weak_recorded = gc2_note_weak_table(
       g, t, weak);  /* 05 section 5.8 discovery scaffold. */

@@ -36,6 +36,7 @@ local m3_scaffold_deps = {
   "m3_state_actor_carrier",
   "m3_gc2_table_store_guard",
   "m3_gc2_public_store_weak_window",
+  "m3_gc2_sweep_public_table_rescan",
   "m3_gc2_weak_resize_retry",
   "m3_gc2_activation_runtime",
   "m3_gc2_no_legacy_runtime",
@@ -148,6 +149,31 @@ return function(add)
         })
       end)
       print("M3 public scalar weak-window regression passed")
+    end
+  })
+
+  register({
+    name = "m3_gc2_sweep_public_table_rescan",
+    description = "public SWEEP rescans and observational FINREG membership",
+    run = function(t)
+      if jit.os ~= "Linux" then
+        print("M3 public SWEEP rescan fixture requires Linux linker wrappers")
+        return
+      end
+      local flags = gc2_test_cflags .. " -DLUA_USE_ASSERT"
+      build.with_default_build_restore(t, function()
+        build.clean_build(t, { quiet = true, xcflags = flags })
+        compile_and_run_c(t, t:tmp("lj-t-gc2-sweep-public-table-rescan"),
+                          "t-gc2-sweep-public-table-rescan.c", {
+          cflags = flags,
+          libs = {
+            "-lm", "-ldl", os.getenv("PTHREAD") or "-pthread",
+            "-Wl,--wrap=lj_ctype_fin_istab"
+          },
+          timeout = "20s"
+        })
+      end)
+      print("M3 public SWEEP table rescan regression passed")
     end
   })
 
@@ -479,6 +505,7 @@ return function(add)
       })
 
       utils.run_case(cases, t, "m3_gc2_markword_token_model")
+      utils.run_case(cases, t, "m3_gc2_sweep_public_table_rescan")
       utils.run_case(cases, t, "m3_gc2_recovery")
       utils.run_case(cases, t, "m3_gc2_worker_scheduler")
       utils.run_case(cases, t, "m3_gc2_mark_close_progress")

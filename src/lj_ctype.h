@@ -1513,6 +1513,8 @@ LJ_FUNC int lj_ctype_fin_get(lua_State *L, CTState *cts, cTValue *key,
 			     CTypeFinLease *lease);
 LJ_FUNC int lj_ctype_fin_newgen(lua_State *L, CTState *cts, cTValue *key,
 				cTValue *claim, CTypeFinLease *lease);
+/* Observational membership: FOUND, MISS, or RETRY. A transient generation or
+** table admission must not classify FINREG storage as an ordinary weak table. */
 LJ_FUNC int lj_ctype_fin_istab(global_State *g, GCtab *t);
 LJ_FUNC int lj_ctype_fin_mark(global_State *g, void (*mark)(global_State *,
 							   GCobj *),
