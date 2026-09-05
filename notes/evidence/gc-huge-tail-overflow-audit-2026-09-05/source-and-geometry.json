@@ -1,0 +1,166 @@
+{
+  "scope": "Read-only design/math audit, no runtime edits or performance measurement",
+  "dense_tree": "/tmp/lj-dense-overflow-20260905-7tl6kcfk/normal",
+  "dense_source_sha256": {
+    "src/lj_arena.c": "8f5ed17aed6b4e978afbd02d57f4bea50c7bea413f2c6baf9adecfbbedcbe1b7",
+    "src/lj_arena.h": "bb96ac4858d601bf45c1025dae45857582c8c76f8496f10234ed9199a862bc3d",
+    "src/lj_gc2.c": "760251a22796a7f6976071e82beea821c068d2ad457bb1cce3757bbe89cc90e1"
+  },
+  "host_page_bytes": 4096,
+  "layout": {
+    "arena_alignment": 65536,
+    "header_bytes": 128,
+    "wide_bytes": 16
+  },
+  "all_huge_tail_geometry_examples": [
+    {
+      "logical_size": 16385,
+      "old_map_bytes": 65536,
+      "tail_map_bytes": 65536,
+      "additional_map_bytes": 0,
+      "payload_end_offset": 16513,
+      "wide_offset": 65520,
+      "payload_last_page": 4,
+      "wide_page": 15,
+      "wide_occupies_new_page_if_payload_fully_touched": true
+    },
+    {
+      "logical_size": 20000,
+      "old_map_bytes": 65536,
+      "tail_map_bytes": 65536,
+      "additional_map_bytes": 0,
+      "payload_end_offset": 20128,
+      "wide_offset": 65520,
+      "payload_last_page": 4,
+      "wide_page": 15,
+      "wide_occupies_new_page_if_payload_fully_touched": true
+    },
+    {
+      "logical_size": 65391,
+      "old_map_bytes": 65536,
+      "tail_map_bytes": 65536,
+      "additional_map_bytes": 0,
+      "payload_end_offset": 65519,
+      "wide_offset": 65520,
+      "payload_last_page": 15,
+      "wide_page": 15,
+      "wide_occupies_new_page_if_payload_fully_touched": false
+    },
+    {
+      "logical_size": 65392,
+      "old_map_bytes": 65536,
+      "tail_map_bytes": 65536,
+      "additional_map_bytes": 0,
+      "payload_end_offset": 65520,
+      "wide_offset": 65520,
+      "payload_last_page": 15,
+      "wide_page": 15,
+      "wide_occupies_new_page_if_payload_fully_touched": false
+    },
+    {
+      "logical_size": 65393,
+      "old_map_bytes": 65536,
+      "tail_map_bytes": 131072,
+      "additional_map_bytes": 65536,
+      "payload_end_offset": 65521,
+      "wide_offset": 131056,
+      "payload_last_page": 15,
+      "wide_page": 31,
+      "wide_occupies_new_page_if_payload_fully_touched": true
+    },
+    {
+      "logical_size": 65408,
+      "old_map_bytes": 65536,
+      "tail_map_bytes": 131072,
+      "additional_map_bytes": 65536,
+      "payload_end_offset": 65536,
+      "wide_offset": 131056,
+      "payload_last_page": 15,
+      "wide_page": 31,
+      "wide_occupies_new_page_if_payload_fully_touched": true
+    },
+    {
+      "logical_size": 65409,
+      "old_map_bytes": 131072,
+      "tail_map_bytes": 131072,
+      "additional_map_bytes": 0,
+      "payload_end_offset": 65537,
+      "wide_offset": 131056,
+      "payload_last_page": 16,
+      "wide_page": 31,
+      "wide_occupies_new_page_if_payload_fully_touched": true
+    },
+    {
+      "logical_size": 65536,
+      "old_map_bytes": 131072,
+      "tail_map_bytes": 131072,
+      "additional_map_bytes": 0,
+      "payload_end_offset": 65664,
+      "wide_offset": 131056,
+      "payload_last_page": 16,
+      "wide_page": 31,
+      "wide_occupies_new_page_if_payload_fully_touched": true
+    },
+    {
+      "logical_size": 130928,
+      "old_map_bytes": 131072,
+      "tail_map_bytes": 131072,
+      "additional_map_bytes": 0,
+      "payload_end_offset": 131056,
+      "wide_offset": 131056,
+      "payload_last_page": 31,
+      "wide_page": 31,
+      "wide_occupies_new_page_if_payload_fully_touched": false
+    },
+    {
+      "logical_size": 130944,
+      "old_map_bytes": 131072,
+      "tail_map_bytes": 196608,
+      "additional_map_bytes": 65536,
+      "payload_end_offset": 131072,
+      "wide_offset": 196592,
+      "payload_last_page": 31,
+      "wide_page": 47,
+      "wide_occupies_new_page_if_payload_fully_touched": true
+    },
+    {
+      "logical_size": 4294967295,
+      "old_map_bytes": 4295032832,
+      "tail_map_bytes": 4295032832,
+      "additional_map_bytes": 0,
+      "payload_end_offset": 4294967423,
+      "wide_offset": 4295032816,
+      "payload_last_page": 1048576,
+      "wide_page": 1048591,
+      "wide_occupies_new_page_if_payload_fully_touched": true
+    },
+    {
+      "logical_size": 18446744073709485936,
+      "old_map_bytes": 18446744073709486080,
+      "tail_map_bytes": 18446744073709486080,
+      "additional_map_bytes": 0,
+      "payload_end_offset": 18446744073709486064,
+      "wide_offset": 18446744073709486064,
+      "payload_last_page": 4503599627370479,
+      "wide_page": 4503599627370479,
+      "wide_occupies_new_page_if_payload_fully_touched": false
+    },
+    {
+      "logical_size": 18446744073709485937,
+      "old_map_bytes": 18446744073709486080,
+      "tail_map_bytes": 0,
+      "additional_map_bytes": null
+    }
+  ],
+  "uniform_residue_window": {
+    "extra_mapping_residues": 16,
+    "residues": 65536,
+    "caution": "Arithmetic window only; no workload-frequency or RSS measurement"
+  },
+  "map_functions": [
+    "lj_arena_huge_mapsize",
+    "lj_arena_huge_map",
+    "lj_arena_huge_unmap",
+    "lj_arena_huge_unmap_claimed"
+  ]
+}

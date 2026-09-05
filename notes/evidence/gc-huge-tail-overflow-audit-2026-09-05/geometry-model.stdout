@@ -1,0 +1,8 @@
+{
+  "status": "arithmetic assertions passed",
+  "examples": 13,
+  "additional_mapping_residues": 16,
+  "residues": 65536,
+  "runtime_executed": false,
+  "timing_measured": false
+}

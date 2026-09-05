@@ -1,0 +1,27 @@
+{
+  "base": "d680421c4cb50b85437d88255bc89358c5e3a6b1",
+  "files": [
+    {
+      "path": "src/lj_arena.c",
+      "sha256": "8f5ed17aed6b4e978afbd02d57f4bea50c7bea413f2c6baf9adecfbbedcbe1b7"
+    },
+    {
+      "path": "src/lj_arena.h",
+      "sha256": "bb96ac4858d601bf45c1025dae45857582c8c76f8496f10234ed9199a862bc3d"
+    },
+    {
+      "path": "src/lj_gc2.c",
+      "sha256": "760251a22796a7f6976071e82beea821c068d2ad457bb1cce3757bbe89cc90e1"
+    },
+    {
+      "path": "src/lj_gc2.h",
+      "sha256": "e638fe043296bc74868746618115c47d2ea0a8f26b27e746f7fcfbc75b313516"
+    }
+  ],
+  "patch_sha256": "58ab8e401f35389d83477e95aad611301d538a2af5dd1bb6eb7a6785ca3ca47a",
+  "frozen_variants": [
+    "strict",
+    "normal",
+    "asan"
+  ]
+}

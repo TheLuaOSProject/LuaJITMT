@@ -1,0 +1,14 @@
+{
+  "base": "d680421c4cb50b85437d88255bc89358c5e3a6b1",
+  "patch_sha256": "58ab8e401f35389d83477e95aad611301d538a2af5dd1bb6eb7a6785ca3ca47a",
+  "source_files_verified": 4,
+  "patch_applied_and_hashes_matched": true,
+  "geometry_command": [
+    "python3",
+    "/workspaces/lj-lockless/notes/evidence/gc-huge-tail-overflow-audit-2026-09-05/geometry-model.py"
+  ],
+  "geometry_rc": 0,
+  "source_is_reviewed_calloc_prototype_not_tail_implementation": true,
+  "runtime_executed": false,
+  "timing_measured": false
+}

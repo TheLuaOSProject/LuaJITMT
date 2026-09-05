@@ -219,6 +219,18 @@ controls and post-fix completion tests:
   and outputs untouched. Strict, ASan, stock, canonical meta, concurrent resize,
   and real queue-growth publication checks pass. Queue allocation and general
   SMR admission remain. See `notes/meta-positive-rooted-hit-2026-09-05.md`.
+- `5d486412`: avoid positive table-reader attempts when an acquire tag-only
+  sample classifies the authoritative receiver as non-table. Exact readers
+  still load the original source cells; function environments stay excluded.
+  Stock, canonical and paused-reclaimer controls pass. See
+  `notes/meta-receiver-tag-2026-09-05.md`.
+- `8cea705d`: repair FNEW fallback tests to keep allocator identity truthful
+  during actual construction, and test identity refusal through the real pure
+  eligibility predicate. Preserve carried SSB/root work instead of relying on
+  empty-buffer assumptions. Canonical and strict checks pass; the malformed
+  setup fails the new unfinished-constructor assertion. Normal runtime
+  preprocessing is unchanged. See
+  `notes/fnew-fixture-valid-allocator-2026-09-05.md`.
 
 The combined normal Linux runtime passes the default stock suite (387 tests
 with JIT off, 509 with JIT on). That is semantic regression coverage, not
@@ -279,6 +291,16 @@ has no complete OOM progress answer. Small FREE and huge DEFER_FREE token-only
 completion must remain blind to the wider proof. See
 `notes/gc-table-overflow-reservation-audit-2026-09-05.md`. Both alternative
 prototypes remain isolated pending full source, failure, lifetime and cost review.
+The corrected AoS prototype now validates all four VM/emitted indexes, both
+proof halves, high-cell reuse, pending-token guards and old-era rejection,
+with explicit negative controls. No corrected AoS timing is claimed. See
+`notes/gc-table-authority-wide-corrected-prototype-2026-09-05.md`.
+The alternative Huge tail reservation has a separate size/bounds/realloc/OOM
+audit in `notes/gc-huge-tail-overflow-audit-2026-09-05.md`. It can remove the
+additional Huge proof allocation but may grow a boundary mapping or fault an
+extra resident page. Published traversable realloc must retain its existing
+refusal gate. Audit feasibility alone does not select or validate a production
+layout.
 
 ### B. Remove measured algorithmic performance cliffs
 
@@ -365,6 +387,11 @@ host exploratory observation, not repeated paired acceptance evidence.
 Generic interpreter FFI, coroutine, and string-buffer costs remain large. See
 `notes/meta-positive-rooted-hit-2026-09-05.md` and
 `notes/linux-rooted-hit-full-performance-2026-09-05.md`.
+The following tag-only classification in `5d486412` reduces interpreter FFI
+cost by about 4.4% across seven matched process pairs, with the four table
+cases approximately unchanged. Most generic FFI admission cost remains;
+no broad FFI or full-harness speedup is inferred from that narrow measurement.
+See `notes/meta-receiver-tag-2026-09-05.md`.
 
 Continue removing demonstrably redundant publications while preserving receiver
 roots and exact post-CAS key/value handoff. Then replace unbounded whole-object

@@ -1,0 +1,18 @@
+{
+  "hash": "sha256",
+  "note": {
+    "path": "../../gc-huge-tail-overflow-audit-2026-09-05.md",
+    "sha256": "1c16664bb06aa22794a7d82c944b17a74405a52d34880e468dcf9b3bbc8f59ab"
+  },
+  "files": {
+    "README.md": "501e3077dd8f1e112106522526b0ea1c283193a2b58a45194566be10c7936292",
+    "geometry-model.py": "c00c57860cd0981258fcf50b8e86b83b75d52f5ba552fb2e0feec2d91896775a",
+    "geometry-model.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "geometry-model.stdout": "6774a1b55d78b7d0d1856602d9c1b78b636921efa630f8863492fddb2f8833b7",
+    "packaging-validation.json": "ae4615f1de860361c07e47c951e7c33cf0de9893585e0832ecf5ad38d3489e5c",
+    "review.md": "fd3a229d65094265ca18f04b6955334ed8f278a0f60fcdb9a58167253262bdf4",
+    "reviewed-dense-W.patch": "58ab8e401f35389d83477e95aad611301d538a2af5dd1bb6eb7a6785ca3ca47a",
+    "reviewed-dense-source-manifest.json": "4658ab80b6e57bea54e24bb8dc35b8fe609d29001565748fc1607e6e683b1e97",
+    "source-and-geometry.json": "1b9b729ffc672ed4b82ca9b4f601304dc76159c79d1ae17f83237bc6ea9a7e5f"
+  }
+}
