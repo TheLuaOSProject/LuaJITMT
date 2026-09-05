@@ -1,0 +1,98 @@
+---- TRACE 1 start 0x7ff03dd89520:5
+---- TRACE 1 IR
+....        SNAP   #0   [ ---- ---- ]
+0001 >  [35mint[m SLOAD  #8    CRI
+0002 >  [35mint[m LE     0001  [35m+2147483646[m
+0003    [35mint[m SLOAD  #7    CI
+0004 >  [33mcdt[m SLOAD  #2    T
+0005 >  [34mnum[m SLOAD  #6    T
+0006 >  [33mcdt[m SLOAD  #4    T
+0007 >  [33mcdt[m SLOAD  #5    T
+....        SNAP   #1   [ ---- ---- ---- ---- ---- ---- ---- [35m0003[m [35m0001[m ---- [35m0003[m ]
+0008 >  [35mint[m GT     0003  [35m+0  [m
+....        SNAP   #2   [ ---- ---- ---- ---- ---- ---- ---- [35m0003[m [35m0001[m ---- [35m0003[m [33m0004[m [35m0003[m ]
+0009    [31mtab[m FLOAD  nil   #276
+0010    p64 FLOAD  0009  tab.node
+0011 >  p64 HREFK  0010  [32m"__newindex"[m @3
+0012 >  [1mfun[m HLOAD  0011
+0013 >  [1mfun[m EQ     0012  [1mffi.meta.__newindex[m
+0014    [35mu16[m FLOAD  0004  cdata.ctypeid
+0015 >  [35mint[m EQ     0014  [35m+102[m
+0016    p64 ADD    0004  [35m+16 [m
+0017    [34mnum[m CONV   0003  [34mnum[m.[35mint[m
+0018    [34mnum[m XSTORE 0016  0017
+....        SNAP   #3   [ ---- ---- ---- ---- ---- ---- ---- [35m0003[m [35m0001[m ---- [35m0003[m [34m0005[m [33m0004[m ---- ---- ---- ]
+0019 >  p64 HREFK  0010  [32m"__index"[m @2
+0020 >  [1mfun[m HLOAD  0019
+0021 >  [1mfun[m EQ     0020  [1mffi.meta.__index[m
+0022    [34mnum[m ADD    0017  0005
+0023    p64 ADD    0004  [35m+24 [m
+0024    [34mnum[m XLOAD  0023  
+0025    [34mnum[m ADD    0024  0022
+....        SNAP   #4   [ ---- ---- ---- ---- ---- ---- ---- [35m0003[m [35m0001[m ---- [35m0003[m [34m0025[m [33m0006[m ---- [33m0007[m [35m0003[m ]
+0026 >  p64 HREFK  0010  [32m"__call"[m @11
+0027 >  [1mfun[m HLOAD  0026
+0028 >  [1mfun[m EQ     0027  [1mffi.meta.__call[m
+0029    [35mu16[m FLOAD  0006  cdata.ctypeid
+0030 >  [35mint[m EQ     0029  [35m+111[m
+0031    p64 FLOAD  0006  cdata.ptr
+0032    [35mu16[m FLOAD  0007  cdata.ctypeid
+0033 >  [35mint[m EQ     0032  [35m+114[m
+0034    p64 FLOAD  0007  cdata.ptr
+....        SNAP   #5   [ ---- ---- ---- ---- ---- ---- ---- [35m0003[m [35m0001[m ---- [35m0003[m [34m0025[m [1mffi.meta.__call[m [34mftsz[m|[33m0006[m [33m0007[m [35m0003[m ]
+0035    nil XSAVE  
+0039    [35mint[m CALLS  lj_ffi_native_trace_enter  (trace: 0x7ff03dbe71a0 0031 [33mNULL[m)
+0040 >  [35mint[m NE     0039  [35m+0  [m
+0041    [35mint[m CALLXS 0031 (0034 0003)
+....        SNAP   #6   [ ---- ---- ---- ---- ---- ---- ---- [35m0003[m [35m0001[m ---- [35m0003[m [34m0025[m [35m0041[m ]
+0042 >  [35mint[m CALLS  lj_ffi_native_trace_leave  ()
+0043 >  [35mint[m EQ     0042  [35m+0  [m
+0044    [34mnum[m CONV   0041  [34mnum[m.[35mint[m
+0045  + [34mnum[m ADD    0044  0025
+0046  + [35mint[m ADD    0003  [35m+1  [m
+....        SNAP   #7   [ ---- ---- ---- ---- ---- ---- [34m0045[m ]
+0047 >  [35mint[m LE     0046  0001
+....        SNAP   #8   [ ---- ---- ---- ---- ---- ---- [34m0045[m [35m0046[m [35m0001[m ---- [35m0046[m ]
+0048 ------ LOOP ------------
+0049 >  nil XPOLL  #0  
+....        SNAP   #9   [ ---- ---- ---- ---- ---- ---- [34m0045[m [35m0046[m [35m0001[m ---- [35m0046[m ]
+0050 >  [35mint[m GT     0046  [35m+0  [m
+....        SNAP   #10  [ ---- ---- ---- ---- ---- ---- [34m0045[m [35m0046[m [35m0001[m ---- [35m0046[m [33m0004[m [35m0046[m ]
+0051    [31mtab[m FLOAD  nil   #276
+0052    p64 FLOAD  0051  tab.node
+0053 >  p64 HREFK  0052  [32m"__newindex"[m @3
+0054 >  [1mfun[m HLOAD  0053
+0055 >  [1mfun[m EQ     0054  [1mffi.meta.__newindex[m
+0056    [34mnum[m CONV   0046  [34mnum[m.[35mint[m
+0057    [34mnum[m XSTORE 0016  0056
+....        SNAP   #11  [ ---- ---- ---- ---- ---- ---- [34m0045[m [35m0046[m [35m0001[m ---- [35m0046[m [34m0045[m [33m0004[m ---- ---- ---- ]
+0058 >  p64 HREFK  0052  [32m"__index"[m @2
+0059 >  [1mfun[m HLOAD  0058
+0060 >  [1mfun[m EQ     0059  [1mffi.meta.__index[m
+0061    [34mnum[m ADD    0056  0045
+0062    [34mnum[m XLOAD  0023  
+0063    [34mnum[m ADD    0062  0061
+....        SNAP   #12  [ ---- ---- ---- ---- ---- ---- [34m0045[m [35m0046[m [35m0001[m ---- [35m0046[m [34m0063[m [33m0006[m ---- [33m0007[m [35m0046[m ]
+0064 >  p64 HREFK  0052  [32m"__call"[m @11
+0065 >  [1mfun[m HLOAD  0064
+0066 >  [1mfun[m EQ     0065  [1mffi.meta.__call[m
+....        SNAP   #13  [ ---- ---- ---- ---- ---- ---- [34m0045[m [35m0046[m [35m0001[m ---- [35m0046[m [34m0063[m [1mffi.meta.__call[m [34mftsz[m|[33m0006[m [33m0007[m [35m0046[m ]
+0067    nil XSAVE  
+0069    [35mint[m CALLS  lj_ffi_native_trace_enter  (trace: 0x7ff03dbe71a0 0031 [33mNULL[m)
+0070 >  [35mint[m NE     0069  [35m+0  [m
+0071    [35mint[m CALLXS 0031 (0034 0046)
+....        SNAP   #14  [ ---- ---- ---- ---- ---- ---- [34m0045[m [35m0046[m [35m0001[m ---- [35m0046[m [34m0063[m [35m0071[m ]
+0072 >  [35mint[m CALLS  lj_ffi_native_trace_leave  ()
+0073 >  [35mint[m EQ     0072  [35m+0  [m
+0074    [34mnum[m CONV   0071  [34mnum[m.[35mint[m
+0075  + [34mnum[m ADD    0074  0063
+0076  + [35mint[m ADD    0046  [35m+1  [m
+....        SNAP   #15  [ ---- ---- ---- ---- ---- ---- [34m0075[m ]
+0077 >  [35mint[m LE     0076  0001
+0078    [35mint[m PHI    0046  0076
+0079    [34mnum[m PHI    0045  0075
+---- TRACE 1 stop -> loop
+
+---- TRACE 2 start 0x7ff03dd89520:5
+---- TRACE 2 abort 0x7ff03dd89520:5 -- NYI: bytecode ISLT  
+

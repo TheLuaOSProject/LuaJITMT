@@ -1,0 +1,8 @@
+t-ffi-callback-nested-native OK: nested callbacks restore native/error state
+t-ffi-callback-owner-lifetime OK: callback carrier survives creator detach and frees safely
+t-ffi-callback-stopreq OK: callback native STOPREQ freshness verified
+t-ffi-callback-attached-carrier OK: main callback runs on attached carrier TG
+t-ffi-callback-auto-attach OK: TLS-less pthread callback auto-attach and stale return verified
+t-ffi-callback-auto-unwind OK: C++ catch detaches callback TG, reclaims it, and releases close lifetime exactly
+t-ffi-callback-runtime OK: 6 threads, 1320 callback rounds
+M7 FFI callback runtime behavior passed

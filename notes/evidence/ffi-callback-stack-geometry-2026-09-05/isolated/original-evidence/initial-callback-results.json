@@ -1,0 +1,99 @@
+[
+  {
+    "variant": "base-normal",
+    "compile": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src",
+      "-I/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/tests",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/callback-negative.c",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal-callback-negative"
+    ],
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal-callback-negative"
+    ],
+    "exit": -6,
+    "stdout": "",
+    "stderr": "lua error: [string \"local ffi,util,vmdef,bit=require('ffi'),requi...\"]:12: assertion failed!\nbase-normal-callback-negative: /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/tests/lib/lua_fixture_helpers.h:19: ljt_lua_fail: Assertion `0' failed.\n"
+  },
+  {
+    "variant": "fix-normal",
+    "compile": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src",
+      "-I/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/tests",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/callback-negative.c",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal-callback-negative"
+    ],
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal-callback-negative"
+    ],
+    "exit": -6,
+    "stdout": "",
+    "stderr": "lua error: [string \"local ffi,util,vmdef,bit=require('ffi'),requi...\"]:12: assertion failed!\nfix-normal-callback-negative: /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/tests/lib/lua_fixture_helpers.h:19: ljt_lua_fail: Assertion `0' failed.\n"
+  },
+  {
+    "variant": "fix-assert",
+    "compile": [
+      "cc",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src",
+      "-I/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/tests",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/callback-negative.c",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert-callback-negative"
+    ],
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert-callback-negative"
+    ],
+    "exit": -5,
+    "stdout": "",
+    "stderr": ""
+  }
+]

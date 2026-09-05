@@ -1,7 +1,7 @@
 # Lockless completion plan
 
 Reviewed: 2026-09-04, starting at `a649f737`.
-Updated: 2026-09-05 after cdata/GC fixes and real native progress probes.
+Updated: 2026-09-05 after cdata/GC fixes, native polling and callback stack repair.
 
 This is the operative continuation of the original plan. It preserves the
 requested end state: one shared Lua heap, safe ordinary racy Lua programs,
@@ -94,7 +94,7 @@ are verified reasons the full goal is still open:
 | Trace lifecycle | Side publication and root-CAS-loser abort cleanup now avoid SMR waits; automatic pressure flush still handshakes synchronously | Extend durable completion to general asynchronous retirement/flush |
 | Trace stitching | Production stitch probe rejects every edge and the stitch entry returns immediately | Prove C/VM return and snapshot lifetime before enabling real executed stitched traces |
 | VM events | START/STOP/ABORT/RECORD callbacks still retain recorder ownership | Exact event/continuation sessions with callbacks outside shared ownership |
-| Generic FFI traces | CALLXS is live, with incomplete aggregate ABI and caller topology | Extend generic ABI lowering and no-replay frame lifecycle |
+| Generic FFI traces | CALLXS is live; first generated callbacks could overwrite loop slots through stale owner stack bounds | XSAVE owner geometry is repaired; continue aggregate ABI, caller topology and no-replay lifecycle work |
 | Cdata method recording | Pre-MT traces could skip replacement methods; shared-MT constructor/field recording still refuses before trace-owned exceptions | Pre-MT method guards are repaired; exact rooted recorder/native lookup and root-publication exclusion are prerequisites for MT enablement |
 | Win64 table traces | The recorder rejects ordinary HSTORE/ASTORE, including pre-MT stores | Complete Win64 helper ABI and require executed table-store traces under Wine and native CI |
 | Diagnostics | Remote allocator-list walks are replaced by scalar publication in `abf234ca`; other snapshot lifetime contracts still apply | Preserve owner/lifetime contracts and audit remaining diagnostic access |
@@ -244,6 +244,13 @@ controls and post-fix completion tests:
   calls/errors; stock and activation cases pass. Retain the measured tiny-loop
   cost rather than the stale-method assumption. Shared-MT recording remains
   refused. See `notes/jit-cdata-basemt-guards-2026-09-05.md`.
+- Generated foreign-call entry now publishes validated XSAVE owner base/top
+  before native admission. This repairs a confirmed first-callback numeric
+  loop overwrite. Scalar callbacks, actual stack relocation/full GC, error
+  unwind and cleanup pass in normal/assertion/ASan builds, including the
+  current mode-0 poll repair. Existing XSAVE-staging and remote-flush aggregate
+  failures reproduce on baseline and remain separate follow-ups. See
+  `notes/ffi-callback-stack-geometry-2026-09-05.md`.
 - `1bce0fa5`: promote exhausted inline table dirty authority into pre-reserved
   persistent wide proof, retaining common stamp/token geometry. Small mappings
   use a dense sidecar plane and Huge mappings use checked tail reservation.

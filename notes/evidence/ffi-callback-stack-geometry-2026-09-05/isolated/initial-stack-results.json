@@ -1,0 +1,83 @@
+[
+  {
+    "variant": "base-normal",
+    "fixture_sha256": "45b63944209665548f09ac465e618baa06e3514c0bdcbfe31db570a418ea3555",
+    "compile": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/src",
+      "-I/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/tests",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/t-ffi-callxs-callback-stack.c",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal-callback-stack"
+    ],
+    "compile_exit": 1,
+    "compile_stdout": "",
+    "compile_stderr": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/t-ffi-callxs-callback-stack.c: In function \u2018assert_clean\u2019:\n/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/t-ffi-callxs-callback-stack.c:114:18: error: implicit declaration of function \u2018G2J\u2019 [-Wimplicit-function-declaration]\n  114 |   jit_State *J = G2J(G(L));\n      |                  ^~~\n/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/t-ffi-callxs-callback-stack.c:114:18: error: initialization of \u2018jit_State *\u2019 {aka \u2018struct jit_State *\u2019} from \u2018int\u2019 makes pointer from integer without a cast [-Wint-conversion]\n"
+  },
+  {
+    "variant": "fix-normal",
+    "fixture_sha256": "45b63944209665548f09ac465e618baa06e3514c0bdcbfe31db570a418ea3555",
+    "compile": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal/src",
+      "-I/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal/tests",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/t-ffi-callxs-callback-stack.c",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal-callback-stack"
+    ],
+    "compile_exit": 1,
+    "compile_stdout": "",
+    "compile_stderr": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/t-ffi-callxs-callback-stack.c: In function \u2018assert_clean\u2019:\n/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/t-ffi-callxs-callback-stack.c:114:18: error: implicit declaration of function \u2018G2J\u2019 [-Wimplicit-function-declaration]\n  114 |   jit_State *J = G2J(G(L));\n      |                  ^~~\n/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/t-ffi-callxs-callback-stack.c:114:18: error: initialization of \u2018jit_State *\u2019 {aka \u2018struct jit_State *\u2019} from \u2018int\u2019 makes pointer from integer without a cast [-Wint-conversion]\n"
+  },
+  {
+    "variant": "fix-assert",
+    "fixture_sha256": "45b63944209665548f09ac465e618baa06e3514c0bdcbfe31db570a418ea3555",
+    "compile": [
+      "cc",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/src",
+      "-I/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/tests",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/t-ffi-callxs-callback-stack.c",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert-callback-stack"
+    ],
+    "compile_exit": 1,
+    "compile_stdout": "",
+    "compile_stderr": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/t-ffi-callxs-callback-stack.c: In function \u2018assert_clean\u2019:\n/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/t-ffi-callxs-callback-stack.c:114:18: error: implicit declaration of function \u2018G2J\u2019 [-Wimplicit-function-declaration]\n  114 |   jit_State *J = G2J(G(L));\n      |                  ^~~\n/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/t-ffi-callxs-callback-stack.c:114:18: error: initialization of \u2018jit_State *\u2019 {aka \u2018struct jit_State *\u2019} from \u2018int\u2019 makes pointer from integer without a cast [-Wint-conversion]\n"
+  }
+]

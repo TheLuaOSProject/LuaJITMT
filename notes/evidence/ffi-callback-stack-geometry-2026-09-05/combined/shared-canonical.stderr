@@ -1,0 +1,4 @@
+== m7_ffi_callxs_callback_stack ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -I'/workspaces/lj-lockless/src' '/workspaces/lj-lockless/tests/t-ffi-callxs-callback-stack.c' '/workspaces/lj-lockless/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj-poll-callback-combined-20260905-xke82c4_/shared-canonical-tmp/lj_t-ffi-callxs-callback-stack'
++ timeout '30s' '/tmp/lj-poll-callback-combined-20260905-xke82c4_/shared-canonical-tmp/lj_t-ffi-callxs-callback-stack'
+ok m7_ffi_callxs_callback_stack

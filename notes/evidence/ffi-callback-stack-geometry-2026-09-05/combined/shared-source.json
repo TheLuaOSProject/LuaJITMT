@@ -1,0 +1,17 @@
+{
+  "base": "8d342cd6",
+  "files": [
+    {
+      "path": "src/lj_ccall.c",
+      "sha256": "4c3668a5da4d83b7987dfb62e92344ad34264274e5272bad4c7cab33d61d3f07"
+    },
+    {
+      "path": "tests/t-ffi-callxs-callback-stack.c",
+      "sha256": "98a08d97ae821ef3db08ca0a4a3cb9af224dad9f341f49c48b562f8163d20f77"
+    },
+    {
+      "path": "tests/suites/m7_ffi.lua",
+      "sha256": "01a43aa910628c5a48b2d5381143669168dbe8940e2d8bec3657ba3ee0988644"
+    }
+  ]
+}

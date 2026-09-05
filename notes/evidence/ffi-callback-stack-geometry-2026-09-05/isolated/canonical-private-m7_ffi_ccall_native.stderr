@@ -1,0 +1,29 @@
+== m7_ffi_ccall_native ==
+fatal: not a git repository (or any of the parent directories): .git
+fatal: not a git repository (or any of the parent directories): .git
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -I'/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tests/t-ffi-cbblack-race.c' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical-tmp/lj_t-ffi-cbblack-race'
++ '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical-tmp/lj_t-ffi-cbblack-race'
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -I'/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tests/t-ffi-ccall-native-helpers.c' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical-tmp/lj_t-ffi-ccall-native-helpers'
++ '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical-tmp/lj_t-ffi-ccall-native-helpers'
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -I'/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tests/t-ffi-ccall-error-state.c' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical-tmp/lj_t-ffi-ccall-error-state'
++ LJ_FFI_ERRSTATE_ALLOC_STRESS='1' timeout '30s' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical-tmp/lj_t-ffi-ccall-error-state'
++ LUA_PATH='/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tests/lib/?.lua;/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/?.lua;/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/jit/?.lua;;' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/luajit' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tests/t-ffi-callxs-production.lua'
++ LJ_M7_FFI_CCALL_ROOT_SO='/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical-tmp/lj_t-ffi-ccall-temp-roots.so' LUA_PATH='/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tests/lib/?.lua;/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/?.lua;/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/jit/?.lua;;' timeout '60s' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/luajit' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tests/t-ffi-ccall-temp-roots.lua'
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -I'/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tests/t-ffi-ccall-struct-overflow.c' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical-tmp/lj_t-ffi-ccall-struct-overflow'
++ LJ_M7_FFI_CCALL_STRUCT_SO='/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical-tmp/lj_t-ffi-ccall-struct-overflow.so' timeout '20s' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical-tmp/lj_t-ffi-ccall-struct-overflow'
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -I'/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tests/t-ffi-lib-native-stopreq.c' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical-tmp/lj_t-ffi-lib-native-stopreq'
++ timeout '20s' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical-tmp/lj_t-ffi-lib-native-stopreq'
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -I'/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tests/t-ffi-ccall-stopreq.c' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical-tmp/lj_t-ffi-ccall-stopreq'
++ LJ_M7_FFI_CCALL_JIT_SO='/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical-tmp/lj_t-ffi-ccall-jit-lib.so' timeout '20s' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical-tmp/lj_t-ffi-ccall-stopreq'
++ LJ_M7_FFI_CCALL_JIT_SO='/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical-tmp/lj_t-ffi-ccall-jit-lib.so' LJ_M7_FFI_CCALL_MIXED_RESULTS='1' LUA_PATH='/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tests/lib/?.lua;/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/?.lua;/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/jit/?.lua;;' timeout '60s' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/luajit' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tests/t-ffi-ccall-native.lua'
++ LUA_PATH='/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tests/lib/?.lua;/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/?.lua;/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/jit/?.lua;;' timeout '60s' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/luajit' '-e' 'local ffi = require"ffi"
+local util = require"jit.util"
+local dst = ffi.new("uint8_t[512]")
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+for _ = 1, 80 do ffi.fill(dst, 256, 0x5a) end
+assert(dst[0] == 0x5a and dst[255] == 0x5a)
+assert(util.traceinfo(1), "bulk ffi.fill loop did not trace")
+print("bulk fill ok")
+'
+ok m7_ffi_ccall_native

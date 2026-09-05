@@ -1,0 +1,102 @@
+[
+  {
+    "case": "m7_ffi_callxs_authentic",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/src/luajit",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tools/test.lua",
+      "m7_ffi_callxs_authentic"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical",
+    "env_override": {
+      "LJ_TEST_ROOT": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical",
+      "JOBS": "4",
+      "MAKE_JOBS": "4",
+      "LUA_PATH": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/?.lua;;"
+    },
+    "exit": 1,
+    "seconds": 38.76510798000163
+  },
+  {
+    "case": "m7_ffi_callback_runtime",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/src/luajit",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tools/test.lua",
+      "m7_ffi_callback_runtime"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical",
+    "env_override": {
+      "LJ_TEST_ROOT": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical",
+      "JOBS": "4",
+      "MAKE_JOBS": "4",
+      "LUA_PATH": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.9664143689988123
+  },
+  {
+    "case": "m7_ffi_ccall_native",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/src/luajit",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tools/test.lua",
+      "m7_ffi_ccall_native"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical",
+    "env_override": {
+      "LJ_TEST_ROOT": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical",
+      "JOBS": "4",
+      "MAKE_JOBS": "4",
+      "LUA_PATH": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 3.9793767270020908
+  },
+  {
+    "case": "m6_jit_xsave",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/src/luajit",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tools/test.lua",
+      "m6_jit_xsave"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical",
+    "env_override": {
+      "LJ_TEST_ROOT": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical",
+      "JOBS": "4",
+      "MAKE_JOBS": "4",
+      "LUA_PATH": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/?.lua;;"
+    },
+    "exit": 1,
+    "seconds": 27.652738114000385
+  },
+  {
+    "case": "m7_ffi_native_frames",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/src/luajit",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tools/test.lua",
+      "m7_ffi_native_frames"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical",
+    "env_override": {
+      "LJ_TEST_ROOT": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical",
+      "JOBS": "4",
+      "MAKE_JOBS": "4",
+      "LUA_PATH": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 27.282972472999973
+  }
+]

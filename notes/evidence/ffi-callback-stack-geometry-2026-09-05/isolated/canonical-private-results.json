@@ -1,0 +1,65 @@
+[
+  {
+    "case": "m7_ffi_callback_runtime",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/src/luajit",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tools/test.lua",
+      "m7_ffi_callback_runtime"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical",
+    "env_override": {
+      "LJ_TEST_ROOT": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical",
+      "JOBS": "4",
+      "MAKE_JOBS": "4",
+      "TMPDIR": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical-tmp",
+      "LUA_PATH": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.8654359850006585
+  },
+  {
+    "case": "m7_ffi_ccall_native",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/src/luajit",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tools/test.lua",
+      "m7_ffi_ccall_native"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical",
+    "env_override": {
+      "LJ_TEST_ROOT": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical",
+      "JOBS": "4",
+      "MAKE_JOBS": "4",
+      "TMPDIR": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical-tmp",
+      "LUA_PATH": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 3.974590955996973
+  },
+  {
+    "case": "m7_ffi_native_frames",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/src/luajit",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tools/test.lua",
+      "m7_ffi_native_frames"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical",
+    "env_override": {
+      "LJ_TEST_ROOT": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical",
+      "JOBS": "4",
+      "MAKE_JOBS": "4",
+      "TMPDIR": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical-tmp",
+      "LUA_PATH": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 27.244589285000984
+  }
+]

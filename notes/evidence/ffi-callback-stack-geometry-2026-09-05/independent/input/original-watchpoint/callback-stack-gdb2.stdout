@@ -1,0 +1,108 @@
+Breakpoint 1 at 0x7f40: file /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/callback-negative.c, line 17.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+
+Breakpoint 1, invoke (callback=0x7ffff7fbb008, value=1) at /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/callback-negative.c:17
+17	 int native=lj_ffi_native_frame_snapshot(testtg,&s)==LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE && s.depth &&
+$1 = 25
+$2 = 29
+$3 = 25
+$4 = {
+  trace = 0x7ffff7915850,
+  L = 0x7ffff7c90080,
+  func = 0x55555555bf40 <invoke>,
+  result_root = 0x0,
+  old_ffi_call_func = 0x0,
+  root_offset = 200,
+  base_offset = 296,
+  top_offset = 320,
+  jit_base_offset = 200,
+  entry_exit_epoch = 17,
+  trace_no = 1,
+  old_callback_slot = 0,
+  flags = 3,
+  old_native_had_stopreq = 0 '\000',
+  had_stopreq = 0 '\000'
+}
+$5 = -17592168380586
+$6 = 0
+$7 = 0
+$8 = 32
+$9 = {
+  u64 = 4607182418800017408,
+  n = 1,
+  gcr = {
+    gcptr64 = 4607182418800017408
+  },
+  it64 = 4607182418800017408,
+  {
+    i = 0,
+    it = 1072693248
+  },
+  ftsz = 4607182418800017408,
+  u32 = {
+    lo = 0,
+    hi = 1072693248
+  }
+}
+Hardware watchpoint 2: -location $step->u64
+
+Hardware watchpoint 2: -location $step->u64
+
+Old value = 4607182418800017408
+New value = 66
+callback_conv_args (cts=0x7ffff7a798a0, L=0x7ffff7c90080, cb=<optimized out>, native_depth=<optimized out>, native_frame_depth=<optimized out>, ffi_call_func=<optimized out>, auto_detach=0 '\000', err=<synthetic pointer>) at lj_ccallback.c:1100
+1100	  L->top = L->base = ++o;
+#0  callback_conv_args (cts=0x7ffff7a798a0, L=0x7ffff7c90080, cb=<optimized out>, native_depth=<optimized out>, native_frame_depth=<optimized out>, ffi_call_func=<optimized out>, auto_detach=0 '\000', err=<synthetic pointer>) at lj_ccallback.c:1100
+#1  lj_ccallback_enter (cts=0x7ffff7a798a0, cf=<optimized out>, cb=<optimized out>) at lj_ccallback.c:1308
+#2  0x00005555555ce8cd in lj_vm_ffi_callback ()
+#3  0x000055555555bff4 in invoke (callback=0x7ffff7fbb008, value=1) at /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/callback-negative.c:21
+#4  0x000055551b6ffd80 in ?? ()
+#5  0x00000000f7c90101 in ?? ()
+$10 = {
+  u64 = 66,
+  n = 3.2608332625522272e-322,
+  gcr = {
+    gcptr64 = 66
+  },
+  it64 = 66,
+  {
+    i = 66,
+    it = 0
+  },
+  ftsz = 66,
+  u32 = {
+    lo = 66,
+    hi = 0
+  }
+}
+
+Program received signal SIGTRAP, Trace/breakpoint trap.
+0x00005555555ce77f in lj_assert_bad_for_arg_type ()
+#0  0x00005555555ce77f in lj_assert_bad_for_arg_type ()
+#1  0x000055555555cb87 in lj_vm_pcall_unwind (L=L@entry=0x7ffff7c90080, base=0x7ffff7a726a0, nres1=nres1@entry=0, ef=ef@entry=0) at lj_state.c:130
+#2  0x000055555558a710 in lua_pcall (L=L@entry=0x7ffff7c90080, nargs=nargs@entry=0, nresults=nresults@entry=-1, errfunc=errfunc@entry=0) at lj_api.c:2797
+#3  0x000055555555bd1f in ljt_lua_dostring (src=0x5555556b7d48 "local ffi,util,vmdef,bit=require('ffi'),require('jit.util'),require('jit.vmdef'),require('bit')\nlocal p=ffi.new('struct {double x;double y;}',0,1)\nlocal fn=ffi.cast('int(*)(int(*)(int),int)',invoke_pt"..., L=0x7ffff7c90080) at /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/tests/lib/lua_fixture_helpers.h:39
+#4  main () at /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/callback-negative.c:37
+$11 = {
+  u64 = 66,
+  n = 3.2608332625522272e-322,
+  gcr = {
+    gcptr64 = 66
+  },
+  it64 = 66,
+  {
+    i = 66,
+    it = 0
+  },
+  ftsz = 66,
+  u32 = {
+    lo = 66,
+    hi = 0
+  }
+}
+A debugging session is active.
+
+	Inferior 1 [process 193986] will be killed.
+
+Quit anyway? (y or n) [answered Y; input not from terminal]

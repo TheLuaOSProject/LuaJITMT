@@ -1,0 +1,11 @@
+t-ffi-cbblack-race OK: duplicate blacklist publishers share one slot
+t-ffi-ccall-native-helpers OK: compact native protocol verified
+t-ffi-ccall-error-state OK: post-call allocation preserves native errors
+t-ffi-callxs-production OK: default scalar CALLXS executed
+t-ffi-ccall-temp-roots OK: aggregate ABI temporaries survive callback GC
+t-ffi-ccall-struct-overflow OK: ccall struct overflow conversion waits on snapshots
+t-ffi-lib-native-stopreq OK: FFI library native STOPREQ verified
+t-ffi-ccall-stopreq OK: FFI ccall STOPREQ freshness verified
+t-ffi-ccall-native OK
+bulk fill ok
+M7 FFI native blocking-call behavior passed

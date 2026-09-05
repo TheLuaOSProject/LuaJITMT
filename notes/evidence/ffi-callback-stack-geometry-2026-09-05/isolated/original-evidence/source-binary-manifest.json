@@ -1,0 +1,61 @@
+{
+  "base": "b4e26564542cb8bfa997a11c6a90e5e0017a2f79",
+  "trees": {
+    "base-normal": {
+      "src/lj_ccallback.c": "bbb42b4087afb15c4af8f6feb41484e1e598a29922d61909d71d9510456ace65",
+      "src/lj_ccall.c": "5d6dfc2842eff5a2da451d66c03f5b5cc54a62a913047e84a1ca7696f9f76184",
+      "src/lj_asm_x86.h": "e5c4bd5411014c84bfc1704f60b24e8efe41bde66ea240908a2af4caaf527742",
+      "src/lj_ffrecord.c": "1acbae42a1ed123361b01b190595a69ec7850c2deb4b8b80249b5e40f7ce17e0",
+      "src/lj_snap.c": "5d01563e076a5ec34dc14c61a42314c45113ed04514c297333ed1750a8167d96",
+      "src/lj_record.c": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+      "src/lj_jit.h": "ff6304cc1a0a1e474c5a03c9ca5b7d2c7055e9610512c3a04ec2ce85f77d333c",
+      "src/lj_opt_loop.c": "471506229c54e4e7e9b4fd87dd7c143a29f6b11408fc4fc876e10c34d48a5d6c",
+      "src/lj_opt_mem.c": "42bfd453c4c7a0de183c02438253be850c48bfef41e624575add0439012a34eb",
+      "src/lj_ctype.h": "8ee89b4adca50452d429e57ae528568ee9a2ac185eb15922f88e4007d0fd5e7d",
+      "src/lj_tg.h": "a5cb46bde2868512743795750b5a1da71cd1a581bc037da127e60b36cb994015"
+    },
+    "fix-normal": {
+      "src/lj_ccallback.c": "bbb42b4087afb15c4af8f6feb41484e1e598a29922d61909d71d9510456ace65",
+      "src/lj_ccall.c": "5d6dfc2842eff5a2da451d66c03f5b5cc54a62a913047e84a1ca7696f9f76184",
+      "src/lj_asm_x86.h": "e5c4bd5411014c84bfc1704f60b24e8efe41bde66ea240908a2af4caaf527742",
+      "src/lj_ffrecord.c": "1acbae42a1ed123361b01b190595a69ec7850c2deb4b8b80249b5e40f7ce17e0",
+      "src/lj_snap.c": "5d01563e076a5ec34dc14c61a42314c45113ed04514c297333ed1750a8167d96",
+      "src/lj_record.c": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+      "src/lj_jit.h": "7608c51820c5f365d5cd7ce74fc79a0a3b87b6f9c437b97d01e83b78e7a6c1fa",
+      "src/lj_opt_loop.c": "68cfffc755981068c5ab818d0ce41c6d438647fe300dc60070c993fe5f3a461f",
+      "src/lj_opt_mem.c": "34162cb91d55b0e94b8a559c182eb93f37485f60551e0d2c8e7adb61a5ac2159",
+      "src/lj_ctype.h": "8ee89b4adca50452d429e57ae528568ee9a2ac185eb15922f88e4007d0fd5e7d",
+      "src/lj_tg.h": "a5cb46bde2868512743795750b5a1da71cd1a581bc037da127e60b36cb994015"
+    },
+    "fix-assert": {
+      "src/lj_ccallback.c": "bbb42b4087afb15c4af8f6feb41484e1e598a29922d61909d71d9510456ace65",
+      "src/lj_ccall.c": "5d6dfc2842eff5a2da451d66c03f5b5cc54a62a913047e84a1ca7696f9f76184",
+      "src/lj_asm_x86.h": "e5c4bd5411014c84bfc1704f60b24e8efe41bde66ea240908a2af4caaf527742",
+      "src/lj_ffrecord.c": "1acbae42a1ed123361b01b190595a69ec7850c2deb4b8b80249b5e40f7ce17e0",
+      "src/lj_snap.c": "5d01563e076a5ec34dc14c61a42314c45113ed04514c297333ed1750a8167d96",
+      "src/lj_record.c": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+      "src/lj_jit.h": "7608c51820c5f365d5cd7ce74fc79a0a3b87b6f9c437b97d01e83b78e7a6c1fa",
+      "src/lj_opt_loop.c": "68cfffc755981068c5ab818d0ce41c6d438647fe300dc60070c993fe5f3a461f",
+      "src/lj_opt_mem.c": "34162cb91d55b0e94b8a559c182eb93f37485f60551e0d2c8e7adb61a5ac2159",
+      "src/lj_ctype.h": "8ee89b4adca50452d429e57ae528568ee9a2ac185eb15922f88e4007d0fd5e7d",
+      "src/lj_tg.h": "a5cb46bde2868512743795750b5a1da71cd1a581bc037da127e60b36cb994015"
+    }
+  },
+  "binaries": {
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit": "6462939c511211260c700dbe6efb8c224801d4b38c66c78e277e785a0bd04134",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/libluajit.a": "26ba92cc9d3de5e2d7d155791c9dc11e369e87aa79360f8c90c453607a60e1da",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal-callback-negative": "d2bbd3dcaa5fcc837ac0ededaa6449cab74525e75e1071250fc8e343b2c157b9",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal-callback-control": "410b52a9697c2ae445c10b8c67e7297f7093f0cb43aa08038a2e1e944b53ef86",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal-callback-off-control": "7f234588350a8b462e5e3c4a0e1f36bbd57d517a825c2139aa8fbd1731c82a9c",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit": "69e91d9c399526567eef614cbdfbc702600720549dc4e24912b17b31c92ca6e5",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/libluajit.a": "a213147bff8ddb0eb27e8155548c7e9148a6b68eeddb08ab7eee073f5e146414",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal-callback-negative": "b5bd796ae228ce81ca02db02cccc639b23beb9c233b49c2ef44b16f3eb0caa8c",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal-callback-control": "297d596dedf4e53aabf437103d25a37f0ddb13ef78c6de6adb6c555e1258ae3c",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal-callback-off-control": "85f05368c981ac2ecff9c60026a9796ffd95ca508fbdca8216941c20349f45f1",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/luajit": "f9feb147a29ccbfe24092292bef57e89ecab4b62154aac67c7350432e169cdc3",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/libluajit.a": "4bbd2c0e936e848ce27adbcd7a119282cbae2d40d5e37e32a8812eba82fdbeea",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert-callback-negative": "7e49d23bebbbad64f52f4ee04073aba50aa3333eaba25c529305831c396bece3",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert-callback-control": "ad3edd28f8cf7d81f89d89e910fa6b1ff1a77f6995f52df5e639a08cac5677aa",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert-callback-off-control": "c82c7b72c4ccc1156e2e4379d5865e91042b7c26f47f3bff738d93306dabd609"
+  }
+}

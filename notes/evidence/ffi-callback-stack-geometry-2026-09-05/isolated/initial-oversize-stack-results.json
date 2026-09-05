@@ -1,0 +1,119 @@
+[
+  {
+    "variant": "base-normal",
+    "fixture_sha256": "1e2ab3ec6a61461eb541a28df324e01a52021873c865aa2c31c630b28b0334c8",
+    "compile": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/src",
+      "-I/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/tests",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/t-ffi-callxs-callback-stack.c",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal-callback-stack"
+    ],
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal-callback-stack"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/src/?.lua;;"
+    },
+    "exit": -6,
+    "seconds": 0.0449221229973773,
+    "stdout": "",
+    "stderr": "lua error: [string \"local ffi = require('ffi')...\"]:27: callback changed the live numeric-for step: 4\nbase-normal-callback-stack: /tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/tests/lib/lua_fixture_helpers.h:19: ljt_lua_fail: Assertion `0' failed.\n",
+    "executable_sha256": "8d3470000ab5c62bd75c111ba58ef5a21a84ce2df4fcf653c51a04544bdf1cf6"
+  },
+  {
+    "variant": "fix-normal",
+    "fixture_sha256": "1e2ab3ec6a61461eb541a28df324e01a52021873c865aa2c31c630b28b0334c8",
+    "compile": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal/src",
+      "-I/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal/tests",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/t-ffi-callxs-callback-stack.c",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal-callback-stack"
+    ],
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal-callback-stack"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal/src/?.lua;;"
+    },
+    "exit": -6,
+    "seconds": 0.041498424998280825,
+    "stdout": "",
+    "stderr": "fix-normal-callback-stack: /tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/t-ffi-callxs-callback-stack.c:103: callback_mark: Assertion `lua_checkstack(L, 8192)' failed.\n",
+    "executable_sha256": "901f3b7bad93ac5b86a55fdc20740c07c79deefa085166a1e3efbcc610de88ee"
+  },
+  {
+    "variant": "fix-assert",
+    "fixture_sha256": "1e2ab3ec6a61461eb541a28df324e01a52021873c865aa2c31c630b28b0334c8",
+    "compile": [
+      "cc",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/src",
+      "-I/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/tests",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/t-ffi-callxs-callback-stack.c",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert-callback-stack"
+    ],
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert-callback-stack"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/src/?.lua;;"
+    },
+    "exit": -6,
+    "seconds": 0.04002602900072816,
+    "stdout": "",
+    "stderr": "fix-assert-callback-stack: /tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/t-ffi-callxs-callback-stack.c:103: callback_mark: Assertion `lua_checkstack(L, 8192)' failed.\n",
+    "executable_sha256": "a40b58269b7ee2aef37e13866b65d0e9e4e5fc2511a07a240f2b4f2e4d352d59"
+  }
+]

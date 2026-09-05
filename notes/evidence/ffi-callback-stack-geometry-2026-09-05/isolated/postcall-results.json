@@ -1,0 +1,87 @@
+[
+  {
+    "variant": "fix-assert",
+    "compile": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/src",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/tests/t-ffi-callxs-postcall.c",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert-callxs-postcall"
+    ],
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert-callxs-postcall"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/src/?.lua;;",
+      "LJ_M7_FFI_CALLXS_SO": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/control-callxs-authentic.so"
+    },
+    "exit": 0,
+    "seconds": 0.008362461001524935,
+    "stdout": "t-ffi-callxs-postcall OK: forced exits and STOPREQ unwind are exact\n",
+    "stderr": "",
+    "fixture_sha256": "8e66ff1c85e97f7731e924ef03149a8c7192628fa8473118dbe3e1b523d27464",
+    "executable_sha256": "903247ef26eccc2f54d61216b19e45aa9891ee27c58e4afdaa001d83e088498f"
+  },
+  {
+    "variant": "fix-asan",
+    "compile": [
+      "clang",
+      "-std=gnu11",
+      "-O1",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-I/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-asan/src",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-asan/tests/t-ffi-callxs-postcall.c",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-asan-callxs-postcall"
+    ],
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-asan-callxs-postcall"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-asan",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-asan/src/?.lua;;",
+      "LJ_M7_FFI_CALLXS_SO": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/control-callxs-authentic.so",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "exit": 0,
+    "seconds": 0.023950306000187993,
+    "stdout": "t-ffi-callxs-postcall OK: forced exits and STOPREQ unwind are exact\n",
+    "stderr": "",
+    "fixture_sha256": "8e66ff1c85e97f7731e924ef03149a8c7192628fa8473118dbe3e1b523d27464",
+    "executable_sha256": "c7bd7a5e694af2adcdff903f02b157085eda5c5da63e9c7c2a90b08b54ab3aac"
+  }
+]

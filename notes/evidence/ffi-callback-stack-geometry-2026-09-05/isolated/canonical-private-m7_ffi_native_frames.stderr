@@ -1,0 +1,4 @@
+== m7_ffi_native_frames ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLUA_USE_ASSERT -DLJ_FFI_NATIVE_FRAME_TEST_HELPERS -I'/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tests/t-ffi-native-frames.c' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical-tmp/lj_t-ffi-native-frames'
++ timeout '20s' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical-tmp/lj_t-ffi-native-frames'
+ok m7_ffi_native_frames

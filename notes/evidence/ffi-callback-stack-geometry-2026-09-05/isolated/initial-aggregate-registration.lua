@@ -99,7 +99,6 @@ local m7_cases = {
   "m7_ffi_callback_install",
   "m7_ffi_callback_runtime",
   "m7_ffi_callxs_authentic",
-  "m7_ffi_callxs_callback_stack",
   "m7_ffi_callxs_sysv_small_aggregate",
   "m7_ffi_ccall_native",
   "m7_ffi_native_frames"
@@ -113,20 +112,6 @@ local function build_clib_ldscript_fixture(t)
 end
 
 return function(add)
-  add({
-    name = "m7_ffi_callxs_callback_stack",
-    description = "generated callbacks preserve XSAVE stack extent and unwind",
-    run = function(t)
-      build.build_default(t)
-      build_and_run_c(t, t:tmp("lj_t-ffi-callxs-callback-stack"),
-                      "t-ffi-callxs-callback-stack.c", {
-        build = false,
-        timeout = "30s"
-      })
-      print("M7 generated callback stack geometry passed")
-    end
-  })
-
   add({
     name = "m7_ffi_callxs_authentic",
     description = "production generic CALLXS scalar/boxed/bool/sret lifecycle",
@@ -160,6 +145,12 @@ return function(add)
         })
         build_and_run_c(t, t:tmp("lj_t-ffi-callxs-callback"),
                         "t-ffi-callxs-callback.c", {
+          build = false,
+          cflags = flags,
+          timeout = "30s"
+        })
+        build_and_run_c(t, t:tmp("lj_t-ffi-callxs-callback-stack"),
+                        "t-ffi-callxs-callback-stack.c", {
           build = false,
           cflags = flags,
           timeout = "30s"

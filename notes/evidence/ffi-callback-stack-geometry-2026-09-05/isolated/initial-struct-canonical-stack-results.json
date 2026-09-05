@@ -1,0 +1,23 @@
+{
+  "case": "m7_ffi_callxs_callback_stack",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/src/luajit",
+    "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tools/test.lua",
+    "m7_ffi_callxs_callback_stack"
+  ],
+  "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical",
+  "env_override": {
+    "LJ_TEST_ROOT": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical",
+    "JOBS": "4",
+    "MAKE_JOBS": "4",
+    "TMPDIR": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical-tmp",
+    "LUA_PATH": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/?.lua;;"
+  },
+  "exit": 0,
+  "seconds": 0.1692990709998412,
+  "stdout": "make: Entering directory '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src'\nmake: Nothing to be done for 'default'.\nmake: Leaving directory '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src'\ncallback stack mode=0 generated=80 callbacks=80 relocated=0 throws=0\ncallback stack mode=1 generated=80 callbacks=80 relocated=1 throws=0\ncallback stack mode=2 generated=1 callbacks=1 relocated=0 throws=1\nM7 generated callback stack geometry passed\n",
+  "stderr": "== m7_ffi_callxs_callback_stack ==\n+ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -I'/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tests/t-ffi-callxs-callback-stack.c' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical-tmp/lj_t-ffi-callxs-callback-stack'\n+ timeout '30s' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical-tmp/lj_t-ffi-callxs-callback-stack'\nok m7_ffi_callxs_callback_stack\n"
+}

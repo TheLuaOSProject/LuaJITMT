@@ -1,0 +1,13 @@
+---- TRACE 1 start 0x7f218cc69320:4
+---- TRACE 1 IR
+....        SNAP   #0   [ ---- ---- ---- ]
+0001    [1mfun[m SLOAD  #0    R
+0002    [31mtab[m FLOAD  0001  func.env
+0003    p64 FLOAD  0002  tab.node
+0004 >  p64 HREFK  0003  [32m"mark_callback"[m @49
+0005 >  [1mfun[m HLOAD  0004
+0006 >  [1mfun[m EQ     0005  [1mC:55d779c04100[m
+....        SNAP   #1   [ ---- ---- ---- trace: 0x7f218cac71a0 [34m+0x1.575de71ae084p-1028[m [34mcontpc[m [1mC:55d779c04100[m [34mftsz[m|]
+0007 >  nil XPOLL  #0  
+---- TRACE 1 stop -> stitch
+

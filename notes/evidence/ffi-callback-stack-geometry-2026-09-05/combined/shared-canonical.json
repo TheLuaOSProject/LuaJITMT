@@ -1,0 +1,23 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-poll-callback-combined-20260905-xke82c4_/normal/src/luajit",
+    "/workspaces/lj-lockless/tools/test.lua",
+    "m7_ffi_callxs_callback_stack"
+  ],
+  "cwd": "/workspaces/lj-lockless",
+  "environment": {
+    "TMPDIR": "/tmp/lj-poll-callback-combined-20260905-xke82c4_/shared-canonical-tmp",
+    "LJ_TEST_ROOT": "/workspaces/lj-lockless",
+    "LJ_TEST_JOBS": "4"
+  },
+  "exit": 0,
+  "seconds": 44.363661292998586,
+  "binaries": {
+    "src/luajit": "11f7826855f03c70bccd80f2bcc16ed1f92c4dac80b4acb5a1734653f811969a",
+    "src/libluajit.a": "4bda56c6bc1e9ce5458f0c891080d9205a3fc542c46fe7af7d692c267368d7e9",
+    "src/libluajit.so": "3175c7dfb14fcd495dc058a8e3d34419594b136e23d94d47c07351574522ce38"
+  }
+}

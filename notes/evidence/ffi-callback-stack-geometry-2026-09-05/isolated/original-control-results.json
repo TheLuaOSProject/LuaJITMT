@@ -1,0 +1,117 @@
+[
+  {
+    "variant": "base-normal",
+    "fixture_sha256": "456708efa90ffbae8c8c814a901ea2ca8585c6505cc9be96c8fb0df27d04543f",
+    "compile": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/src",
+      "-I/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/tests",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/original-evidence/callback-negative.c",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal-original-callback"
+    ],
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal-original-callback"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/src/?.lua;;"
+    },
+    "exit": -6,
+    "seconds": 0.04389146899848129,
+    "stdout": "callback-after\t4\t1\n",
+    "stderr": "lua error: [string \"local ffi,util,vmdef,bit=require('ffi'),requi...\"]:12: callback result\nbase-normal-original-callback: /tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/tests/lib/lua_fixture_helpers.h:19: ljt_lua_fail: Assertion `0' failed.\n",
+    "executable_sha256": "8e13676d47454c47864913b796d90efe3b5ed50d9ecb9b8236ccd0bc2bb6f4da"
+  },
+  {
+    "variant": "fix-normal",
+    "fixture_sha256": "456708efa90ffbae8c8c814a901ea2ca8585c6505cc9be96c8fb0df27d04543f",
+    "compile": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal/src",
+      "-I/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal/tests",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/original-evidence/callback-negative.c",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal-original-callback"
+    ],
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal-original-callback"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.005109620997245656,
+    "stdout": "callback-after\t6640\t80\ncallback-negative\tpostroot\t1\tCALLXS\t2\tafter-exits\t80\ncallback-negative generated=159 generated-callbacks=80 suspended=80\n",
+    "stderr": "",
+    "executable_sha256": "d53758559840c3c2eac816a1a747ed085d70a96cac40aacf514ebb8b5d972354"
+  },
+  {
+    "variant": "fix-assert",
+    "fixture_sha256": "456708efa90ffbae8c8c814a901ea2ca8585c6505cc9be96c8fb0df27d04543f",
+    "compile": [
+      "cc",
+      "-DLUA_USE_ASSERT",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/src",
+      "-I/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/tests",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/original-evidence/callback-negative.c",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert-original-callback"
+    ],
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert-original-callback"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.005149402000824921,
+    "stdout": "callback-after\t6640\t80\ncallback-negative\tpostroot\t1\tCALLXS\t2\tafter-exits\t80\ncallback-negative generated=159 generated-callbacks=80 suspended=80\n",
+    "stderr": "",
+    "executable_sha256": "385039aa3d086fb9c641021304791378a797a1ff5b7a462564c325c0c74c1d08"
+  }
+]

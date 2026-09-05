@@ -1,0 +1,15 @@
+{
+  "command": [
+    "patch",
+    "--batch",
+    "--fuzz=0",
+    "-p1",
+    "-i",
+    "/tmp/lj-callxs-geometry-independent-20260905-d0hkhqq6/input/candidate.patch"
+  ],
+  "cwd": "/tmp/lj-callxs-geometry-independent-20260905-d0hkhqq6/reconstructed",
+  "exit": 0,
+  "stdout": "patching file src/lj_ccall.c\n",
+  "stderr": "",
+  "matches_frozen_candidate": true
+}

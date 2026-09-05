@@ -1,0 +1,63 @@
+[
+  {
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-C",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/src",
+      "-j4",
+      "BUILDMODE=static",
+      "CCDEBUG=-g",
+      "TARGET_STRIP=:"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx",
+    "exit": 0,
+    "seconds": 9.653507806997368,
+    "runtime_sha256": "cc067932db045eba862ddfb013082207ef3816bddca9063f4f05265c92754ab2",
+    "archive_sha256": "acbcdcc664280239ff27994906716ce38b8bd1564f76abeb028b3e828548d54d"
+  },
+  {
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-C",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal/src",
+      "-j4",
+      "BUILDMODE=static",
+      "CCDEBUG=-g",
+      "TARGET_STRIP=:"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx",
+    "exit": 0,
+    "seconds": 9.647870707998663,
+    "runtime_sha256": "914744f658cfef4ba630f37bcf7daae2a5412fe36ec77fbc5bb776ba93b8bf7e",
+    "archive_sha256": "05bed70e86ecc9f50be21af58dff3cc727fbb2452a5220fb33460571f9676be2"
+  },
+  {
+    "variant": "fix-assert",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-C",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/src",
+      "-j4",
+      "BUILDMODE=static",
+      "CCDEBUG=-g",
+      "TARGET_STRIP=:",
+      "XCFLAGS=-DLUA_USE_ASSERT -DLJ_XSAVE_TEST_HELPERS -DLJ_GC2_TEST_HELPERS"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx",
+    "exit": 0,
+    "seconds": 10.090669815999718,
+    "runtime_sha256": "f6fd1a940f674ec92c041055b766d64ebe1208164e7b14c6497b1077a4c0d895",
+    "archive_sha256": "0fdaad90099aa7bcb4210436559b4322e46a7f9787af55a074ef49f7f3bdebfd"
+  }
+]

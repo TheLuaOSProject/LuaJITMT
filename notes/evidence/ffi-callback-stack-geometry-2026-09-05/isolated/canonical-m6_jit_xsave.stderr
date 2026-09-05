@@ -1,0 +1,28 @@
+== m6_jit_xsave ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLUA_USE_ASSERT -DLJ_XSAVE_TEST_HELPERS -DLJ_GC2_TEST_HELPERS -I'/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tests/t-jit-xsave.c' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj_t-jit-xsave'
++ timeout '20s' '/tmp/lj_t-jit-xsave'
+lj_t-jit-xsave: /tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tests/t-jit-xsave.c:976: main: Assertion `tg->ffi_xsave_root != (TValue *)(uintptr_t)1' failed.
+timeout: the monitored command dumped core
+Aborted
+/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/src/luajit: ...ry-20260905-vgzqdmkx/canonical/tests/lib/suite_build.lua:172: command failed (34304): timeout '20s' '/tmp/lj_t-jit-xsave'
+stack traceback:
+	[C]: in function 'error'
+	...eometry-20260905-vgzqdmkx/canonical/tests/lib/ljtest.lua:167: in function 'run'
+	...ry-20260905-vgzqdmkx/canonical/tests/lib/suite_build.lua:172: in function 'compile_and_run_sources'
+	...ry-20260905-vgzqdmkx/canonical/tests/lib/suite_build.lua:157: in function 'compile_and_run_c'
+	...ry-20260905-vgzqdmkx/canonical/tests/lib/suite_build.lua:189: in function 'build_and_run_c'
+	...etry-20260905-vgzqdmkx/canonical/tests/suites/m6_jit.lua:1091: in function <...etry-20260905-vgzqdmkx/canonical/tests/suites/m6_jit.lua:1089>
+	[C]: in function 'xpcall'
+	...ry-20260905-vgzqdmkx/canonical/tests/lib/suite_build.lua:140: in function 'with_default_build_restore'
+	...etry-20260905-vgzqdmkx/canonical/tests/suites/m6_jit.lua:1089: in function 'run'
+	...ry-20260905-vgzqdmkx/canonical/tests/lib/suite_utils.lua:33: in function 'run_case'
+	...back-geometry-20260905-vgzqdmkx/canonical/tools/test.lua:88: in function <...back-geometry-20260905-vgzqdmkx/canonical/tools/test.lua:84>
+	[C]: in function 'pcall'
+	...ry-20260905-vgzqdmkx/canonical/tests/lib/suite_utils.lua:120: in function 'with_directory_lock'
+	...back-geometry-20260905-vgzqdmkx/canonical/tools/test.lua:95: in main chunk
+	[C]: at 0x55d435177100
+stack traceback:
+	[C]: in function 'error'
+	...ry-20260905-vgzqdmkx/canonical/tests/lib/suite_utils.lua:123: in function 'with_directory_lock'
+	...back-geometry-20260905-vgzqdmkx/canonical/tools/test.lua:95: in main chunk
+	[C]: at 0x55d435177100

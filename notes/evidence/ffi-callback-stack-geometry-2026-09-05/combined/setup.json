@@ -1,0 +1,9 @@
+{
+  "base": "8d342cd6",
+  "patch_sha256": "bc8301d1ef7e8475520cacaddc734d418185b2800237c4c3e713c98bd14d0580",
+  "variants": [
+    "normal",
+    "strict",
+    "asan"
+  ]
+}

@@ -1,0 +1,29 @@
+== m7_ffi_callxs_authentic ==
++ LUA_PATH='/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tests/lib/?.lua;/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/?.lua;/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/jit/?.lua;;' LJ_M7_FFI_CALLXS_SO='/tmp/lj_t-ffi-callxs-authentic.so' timeout '30s' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/luajit' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tests/t-ffi-callxs-authentic.lua'
++ LUA_PATH='/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tests/lib/?.lua;/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/?.lua;/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/jit/?.lua;;' LJ_M7_FFI_CALLXS_FLUSH_SO='/tmp/lj_t-ffi-callxs-remote-flush.so' timeout '30s' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/luajit' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tests/t-ffi-callxs-remote-flush.lua'
+/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/luajit: ...5-vgzqdmkx/canonical/tests/t-ffi-callxs-remote-flush.lua:220: assertion failed!
+stack traceback:
+	[C]: in function 'assert'
+	...5-vgzqdmkx/canonical/tests/t-ffi-callxs-remote-flush.lua:220: in main chunk
+	[C]: at 0x557ba6c21fe0
+/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/src/luajit: ...eometry-20260905-vgzqdmkx/canonical/tests/lib/ljtest.lua:241: command failed (256): LUA_PATH='/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tests/lib/?.lua;/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/?.lua;/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/jit/?.lua;;' LJ_M7_FFI_CALLXS_FLUSH_SO='/tmp/lj_t-ffi-callxs-remote-flush.so' timeout '30s' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/src/luajit' '/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/canonical/tests/t-ffi-callxs-remote-flush.lua'
+stack traceback:
+	[C]: in function 'error'
+	...eometry-20260905-vgzqdmkx/canonical/tests/lib/ljtest.lua:167: in function 'run'
+	...eometry-20260905-vgzqdmkx/canonical/tests/lib/ljtest.lua:241: in function 'luajit'
+	...-20260905-vgzqdmkx/canonical/tests/lib/suite_runtime.lua:81: in function 'run_luajit_script'
+	...etry-20260905-vgzqdmkx/canonical/tests/suites/m7_ffi.lua:135: in function <...etry-20260905-vgzqdmkx/canonical/tests/suites/m7_ffi.lua:129>
+	[C]: in function 'xpcall'
+	...ry-20260905-vgzqdmkx/canonical/tests/lib/suite_build.lua:140: in function 'with_default_build_restore'
+	...etry-20260905-vgzqdmkx/canonical/tests/suites/m7_ffi.lua:129: in function 'run'
+	...ry-20260905-vgzqdmkx/canonical/tests/lib/suite_utils.lua:33: in function 'run_case'
+	...back-geometry-20260905-vgzqdmkx/canonical/tools/test.lua:88: in function <...back-geometry-20260905-vgzqdmkx/canonical/tools/test.lua:84>
+	[C]: in function 'pcall'
+	...ry-20260905-vgzqdmkx/canonical/tests/lib/suite_utils.lua:120: in function 'with_directory_lock'
+	...back-geometry-20260905-vgzqdmkx/canonical/tools/test.lua:95: in main chunk
+	[C]: at 0x56491615a100
+stack traceback:
+	[C]: in function 'error'
+	...ry-20260905-vgzqdmkx/canonical/tests/lib/suite_utils.lua:123: in function 'with_directory_lock'
+	...back-geometry-20260905-vgzqdmkx/canonical/tools/test.lua:95: in main chunk
+	[C]: at 0x56491615a100

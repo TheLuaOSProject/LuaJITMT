@@ -1,0 +1,42 @@
+[
+  {
+    "mode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal/src/luajit",
+      "-joff",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal/tests/stock/test",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 1.4681590120017063,
+    "stdout": "387 passed\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal/src/luajit",
+      "-jon",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal/tests/stock/test",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-normal/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 1.9609130489989184,
+    "stdout": "509 passed\n",
+    "stderr": ""
+  }
+]

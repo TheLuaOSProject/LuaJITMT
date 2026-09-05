@@ -1,0 +1,3 @@
+callback stack mode=0 generated=80 callbacks=80 relocated=0 throws=0
+callback stack mode=1 generated=80 callbacks=80 relocated=1 throws=0
+callback stack mode=2 generated=1 callbacks=1 relocated=0 throws=1
