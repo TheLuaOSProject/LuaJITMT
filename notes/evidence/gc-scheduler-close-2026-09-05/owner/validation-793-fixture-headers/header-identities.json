@@ -1,0 +1,10 @@
+{
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/lib/test_sleep.h": {
+    "sha256": "773ab5c72a894c17f5b6c4fa1c398c8fc0e01604c2089d69097e92ea860f17cb",
+    "copy": "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/validation-793-fixture-headers/include/lib/test_sleep.h"
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/lib/tg_stopreq_fixture_helpers.h": {
+    "sha256": "c6ac1fa39f76509178517babb5d557d1415213835ff9949c69cdf7640781d744",
+    "copy": "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/validation-793-fixture-headers/include/lib/tg_stopreq_fixture_helpers.h"
+  }
+}

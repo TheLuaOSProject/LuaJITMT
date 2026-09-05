@@ -1,0 +1,23 @@
+{
+  "proposal_manifest_sha256": "2204511b394ec389fccc7b8527c6cc7f24892b45ef7081a0c276fafcb32ce667",
+  "proposal_artifacts_reverified": 29,
+  "input_identities_reverified": {
+    "validation": 63,
+    "validation-793-fixture-headers": 17
+  },
+  "runtime_passes": 8,
+  "asan_lsan_passes": 4,
+  "reverse_check": {
+    "argv": [
+      "git",
+      "apply",
+      "--reverse",
+      "--check",
+      "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/fixture-cleanup.patch"
+    ],
+    "cwd": "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/candidate",
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  }
+}

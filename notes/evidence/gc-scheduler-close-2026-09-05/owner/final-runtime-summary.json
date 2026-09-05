@@ -1,0 +1,82 @@
+[
+  {
+    "name": "pristine597b-normal",
+    "results": "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/validation/results.json",
+    "seconds": 0.06371807400137186,
+    "ASAN_OPTIONS": null,
+    "archive": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+    "archive_sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+    "exe": "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/validation/pristine597b-normal",
+    "exe_sha256": "97830d6e1fe14d844ccb377625702fae6d9f4abe5eee7308b0a4e29f0b203ecd"
+  },
+  {
+    "name": "fair597b-normal",
+    "results": "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/validation/results.json",
+    "seconds": 0.06385999300255207,
+    "ASAN_OPTIONS": null,
+    "archive": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/src/libluajit.a",
+    "archive_sha256": "e855aa21c230973e14d030ff6baeb8bf3540d54aba41fab0c4ddd4f2b79c3624",
+    "exe": "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/validation/fair597b-normal",
+    "exe_sha256": "71d6fc7eebdab7584fc21ae46609cca7cc8677273bc7a83ce4652b0a043290a2"
+  },
+  {
+    "name": "pristine597b-asan",
+    "results": "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/validation/results.json",
+    "seconds": 0.0637359859974822,
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "archive": "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/libluajit.a",
+    "archive_sha256": "662a83a2ea0d46d158ee1106d033c14d7e1c3df4f88322211d7fdd744cbff3ab",
+    "exe": "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/validation/pristine597b-asan",
+    "exe_sha256": "a94ac5240cf58ef2cd3e5d69f09734affbbd23bff48004f435e06309f759f943"
+  },
+  {
+    "name": "fair597b-asan",
+    "results": "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/validation/results.json",
+    "seconds": 0.06394307099981233,
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "archive": "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/src/libluajit.a",
+    "archive_sha256": "7695dd977a30f74c82b93b591d6447f74bbaeb832051fa772613d3ca5ac97b2d",
+    "exe": "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/validation/fair597b-asan",
+    "exe_sha256": "78c0beadea44bac074a29d3ef1d178f7ea646e1124eaa189a6fe65e280447910"
+  },
+  {
+    "name": "runtime793-fair-strict",
+    "results": "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/validation/results.json",
+    "seconds": 0.0638771249941783,
+    "ASAN_OPTIONS": null,
+    "archive": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/libluajit.a",
+    "archive_sha256": "a700a7df774dc10430d820aa3d3912d6e2b873705ff7fd92ee312a4a32df293f",
+    "exe": "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/validation/runtime793-fair-strict",
+    "exe_sha256": "d66de8e0213d50e6eca1b8ad259a2bd4e740cdf4ea88395f5721cb39bb24ecea"
+  },
+  {
+    "name": "runtime793-fair-asan",
+    "results": "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/validation/results.json",
+    "seconds": 0.06377218400302809,
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "archive": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/libluajit.a",
+    "archive_sha256": "9e93b36f665464f03255ac0a34700f288e79be16ecd5d524768e1514e2c1dd95",
+    "exe": "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/validation/runtime793-fair-asan",
+    "exe_sha256": "02ebca6f92a1511de19b6bf03b040dd9eecff9487bf872cb3cbb402f73982dd2"
+  },
+  {
+    "name": "runtime793-strict",
+    "results": "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/validation-793-fixture-headers/results.json",
+    "seconds": 0.06389137099904474,
+    "ASAN_OPTIONS": null,
+    "archive": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/libluajit.a",
+    "archive_sha256": "3fdbe96a21431044549717f028252d2d0d103a16ae07215cbdc196dd96a7e55f",
+    "exe": "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/validation-793-fixture-headers/runtime793-strict",
+    "exe_sha256": "8859c8aa726905e61e3f47ae05777d72e310521ecd9cef91828bd68895df48e0"
+  },
+  {
+    "name": "runtime793-asan",
+    "results": "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/validation-793-fixture-headers/results.json",
+    "seconds": 0.06380271800298942,
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "archive": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/libluajit.a",
+    "archive_sha256": "9261101e116b1407eb68e0b35d10a44e28da96d9c931983699c18f4a6e097b21",
+    "exe": "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/validation-793-fixture-headers/runtime793-asan",
+    "exe_sha256": "1874244425f262b711543aeeb8d5d10a51f8b4165be90c88fa0c7e206b08a11e"
+  }
+]

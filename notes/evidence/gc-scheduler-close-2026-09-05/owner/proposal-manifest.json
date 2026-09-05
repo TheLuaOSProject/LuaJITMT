@@ -1,0 +1,180 @@
+{
+  "status": "frozen read-only claim witness and unbuilt fixture cleanup proposal",
+  "package": "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf",
+  "artifacts": [
+    {
+      "path": "PROPOSAL.md",
+      "sha256": "c5b16f735256913f7dd1d666efca2d6c839e229d41bfd874e118f286819568f1",
+      "bytes": 4737,
+      "storage": "text"
+    },
+    {
+      "path": "candidate/tests/t-gc2-worker-scheduler.c",
+      "sha256": "e9d2173e1279088d500b7bff816dae54e260b039ad5c5d6034f738d5ad2a1a27",
+      "bytes": 49484,
+      "storage": "text"
+    },
+    {
+      "path": "fixture-cleanup.patch",
+      "sha256": "67b54d179d8a6fb4e95920662344c7737828bf1f86d47977c350367eb2b55f23",
+      "bytes": 515,
+      "storage": "text"
+    },
+    {
+      "path": "freeze-proposal.py",
+      "sha256": "1047bf30286b3a24cb69b6137f119791f36f23f87f5c4309e61f1aaf8947c8ea",
+      "bytes": 1614,
+      "storage": "text"
+    },
+    {
+      "path": "inputs.json",
+      "sha256": "684f4945ce86b41ad9036b1905af3f5dcbdcd3fd39feb21ba9674e6151ada4cc",
+      "bytes": 1633,
+      "storage": "text"
+    },
+    {
+      "path": "prior/HANDOFF.md",
+      "sha256": "f704e165e1b6b96f0aabcd492f37c14890dc4a9cefabb4061ad77957b13b544e",
+      "bytes": 7877,
+      "storage": "text"
+    },
+    {
+      "path": "prior/asan/t-gc2-worker-scheduler-publication.stderr",
+      "sha256": "8109e9731ba38ee946f00c632d67a7878867a6f849aa55a00122bc15d6e8a55d",
+      "bytes": 5405,
+      "storage": "text"
+    },
+    {
+      "path": "prior/asan/t-gc2-worker-scheduler-publication.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "path": "prior/asan/t-gc2-worker-scheduler.stderr",
+      "sha256": "f7afaad90712e64f6ae2fa367000367c9554f1e753eeb992b9c5143119f46316",
+      "bytes": 5297,
+      "storage": "text"
+    },
+    {
+      "path": "prior/asan/t-gc2-worker-scheduler.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "path": "prior/controlasan-build.json",
+      "sha256": "42c2da1fb5c47b51d30558573ad160534f02160c4ed8b5115dfcb06ecf89b1d2",
+      "bytes": 1548,
+      "storage": "text"
+    },
+    {
+      "path": "prior/controlasan-checks/identities.json",
+      "sha256": "cb132438c7543e7a2d1ba1d3f3464df2f43c4ef610f7716cafb4fdbc3d880975",
+      "bytes": 2277,
+      "storage": "text"
+    },
+    {
+      "path": "prior/controlasan-checks/results.json",
+      "sha256": "1d6387d22a5ee2917e63e3d075e3ff6772f78d7e112b3b4a5625c405bafccfb3",
+      "bytes": 11447,
+      "storage": "text"
+    },
+    {
+      "path": "prior/controlasan-checks/t-gc2-worker-scheduler-publication.stderr",
+      "sha256": "626280384ea6e9c38a263852359a82e69f04d1e9c19e27325510bcdaf0aadb60",
+      "bytes": 5636,
+      "storage": "text"
+    },
+    {
+      "path": "prior/controlasan-checks/t-gc2-worker-scheduler-publication.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "path": "prior/manifest.json",
+      "sha256": "f70f3f2c88c405844c0953f158822f9175150df2c5d178c5e51cf4d72d2921ee",
+      "bytes": 122019,
+      "storage": "text"
+    },
+    {
+      "path": "prior/t-gc2-worker-scheduler-publication.c",
+      "sha256": "f476733106d7e2552c9e47757b35f1c1dc78cf8b3cb0d47c17f17ed58fe70dca",
+      "bytes": 49341,
+      "storage": "text"
+    },
+    {
+      "path": "proposal-identities.json",
+      "sha256": "0dc4f175d5cad2a0027229ce676dc54cda8bb010cf8bb4900413081abfa14147",
+      "bytes": 471,
+      "storage": "text"
+    },
+    {
+      "path": "run-witness.py",
+      "sha256": "05aa499bcad0db6a0d46a30ac134d7c4a8c2022c86072ab5a38845c9b69ebc4b",
+      "bytes": 1148,
+      "storage": "text"
+    },
+    {
+      "path": "source/lj_state.c",
+      "sha256": "80d2fa440b4b81e0d460d485dcbe2fc478e2f158c2f79504e44b1a89ffc2bf64",
+      "bytes": 51955,
+      "storage": "text"
+    },
+    {
+      "path": "source/lj_tg.c",
+      "sha256": "16064ba7946becbbc5cc1be2ee00eae4be39f1496c6ab85c5f4cf60f64146406",
+      "bytes": 45600,
+      "storage": "text"
+    },
+    {
+      "path": "source/lj_thr.c",
+      "sha256": "93aed8d88e36795e6186323924f5d96e7edc897b15f491f422223844eb666bb7",
+      "bytes": 69350,
+      "storage": "text"
+    },
+    {
+      "path": "verification.json",
+      "sha256": "ae8652f2eb45a022de9ac51fc592e70d6097d6b30c194d0592342b8e5f6b877f",
+      "bytes": 489,
+      "storage": "text"
+    },
+    {
+      "path": "witness-results.json",
+      "sha256": "9ad1ec7903df43c935ce84f48bd0d9c37e9875109a7a88485333ae4ae0ad127a",
+      "bytes": 831,
+      "storage": "text"
+    },
+    {
+      "path": "witness-state.json",
+      "sha256": "189f9e7a1d774439391305e7591fc1acec4afda5051b3a455b2f9c760ba26bb8",
+      "bytes": 1348,
+      "storage": "text"
+    },
+    {
+      "path": "witness.gdb",
+      "sha256": "948f0c1814f0e939a062ce578bbcd561a186be5211225bcf0c7aa5cd04b30e1d",
+      "bytes": 201,
+      "storage": "text"
+    },
+    {
+      "path": "witness.py",
+      "sha256": "91044a6fff593a3d8e690c649290929dd519d3dc8da59bd54e6b02a6b17ac2e6",
+      "bytes": 1080,
+      "storage": "text"
+    },
+    {
+      "path": "witness.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "path": "witness.stdout",
+      "sha256": "b375a64cd14101b7cc71d9bd4111b685312c0c096e74d9e712084aa5fd76df43",
+      "bytes": 2238,
+      "storage": "text"
+    }
+  ]
+}

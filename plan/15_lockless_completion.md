@@ -363,6 +363,11 @@ controls and post-fix completion tests:
   unchanged scalar ITERN under the paused IDLE reclaimer; its last two cases
   remain unrun. Treat that wait as runtime progress work, retaining the paused
   window and original outcomes. See `notes/gc-helper-fixtures-2026-09-05.md`.
+- The scheduler terminal-unlink fixture now clears its own synthetic shutdown
+  flag before real close admission. The original rejected close and 131,280-byte
+  LeakSanitizer report are preserved; eight isolated and three registered
+  components pass with the cleanup. Runtime close guards remain intact. See
+  `notes/gc-scheduler-close-2026-09-05.md`.
 - `1bce0fa5`: promote exhausted inline table dirty authority into pre-reserved
   persistent wide proof, retaining common stamp/token geometry. Small mappings
   use a dense sidecar plane and Huge mappings use checked tail reservation.

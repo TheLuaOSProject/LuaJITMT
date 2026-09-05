@@ -1,0 +1,35 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/luajit",
+    "/workspaces/lj-lockless/tools/test.lua",
+    "m3_gc2_worker_scheduler"
+  ],
+  "cwd": "/workspaces/lj-lockless",
+  "expected_runtime_processes": 3,
+  "runner_sha256": "914c42cc9565b3b61117de954446da8ca8ffbcab091d338f4cfa036f1443be27",
+  "environment": {
+    "LJ_TEST_ROOT": "/workspaces/lj-lockless",
+    "JOBS": "4",
+    "MAKE_JOBS": "4",
+    "TMPDIR": "/tmp/lj-scheduler-close-root-20260905-7omb3nlo/canonical-tmp",
+    "LUA_PATH": "/workspaces/lj-lockless/src/?.lua;;"
+  },
+  "inputs": {
+    "tests/t-gc2-worker-scheduler.c": "e9d2173e1279088d500b7bff816dae54e260b039ad5c5d6034f738d5ad2a1a27",
+    "tests/t-gc-workers.lua": "cdfe55b4879aeb3398d5c2a2e12aec3fccb97670b8060026cc43f67ea35ebdb9",
+    "tests/suites/m3_gc.lua": "ae284a4686a1c5d036c88bbe8a32addf24e315647e138dc73f8dab3a92a46572"
+  },
+  "exit": 0,
+  "seconds": 45.637694174998614,
+  "binaries": {
+    "luajit": "fb9049d2162eb690c4d13cf11fc4684f521e4800746a6df248fecfb0a94c9679",
+    "libluajit.a": "cbc7e955549f291850dd5693dce77ce1d1f56461ced87eacc77e069603880343",
+    "libluajit.so": "3b04568078a2e251a18aacfd86d888ca214483578b7ecacd14c38fc4e3a3dde9"
+  },
+  "temporary_files": {
+    "canonical-tmp/lj_t-gc2-worker-scheduler": "7484385b2b73a8e8039860520b4ac679ed60857d2eae7ecdf771fe3ecef485cd"
+  }
+}

@@ -614,9 +614,6 @@ static void test_multistate_terminal_tg_reclaim(lua_State *outer_L,
   ** list. The idempotent stopped-pool pass now finalizes and frees it. */
   lj_gc2_worker_stop(g2);
   assert(gc2_worker_tg_retired_acq(g2) == NULL);
-  /* Restore this test's synthetic terminal flag before real close acquires
-  ** its ordinary shutdown authority. */
-  mt_shutdown_rel(g2, 0);
   lua_close(L2);
   assert(lj_thr_get_tg() == outer_tg);
   assert(lj_tg_gcroot_pending_acq(outer_tg) == outer_pending);

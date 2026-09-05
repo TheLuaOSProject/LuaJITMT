@@ -1,0 +1,47 @@
+[
+  {
+    "L": "0x7f1784f20080",
+    "g": "0x7f1784f20130",
+    "mt_shutdown": 0,
+    "n_threads": 1,
+    "n_workers": 0,
+    "worker_active": 0,
+    "phase": 0,
+    "tag": "real-close-entry",
+    "backtrace": "#0  lua_close (L=L@entry=0x7f1784f20080) at lj_state.c:1372\n#1  0x000055e7124c46f6 in test_multistate_terminal_tg_reclaim (outer_L=0x7f1784fe0080, outer_g=0x7f1784fe0130) at /tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/candidate/tests/t-gc2-worker-scheduler.c:620\n#2  main () at /tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/candidate/tests/t-gc2-worker-scheduler.c:1486\n"
+  },
+  {
+    "L": "0x7f1784f20080",
+    "g": "0x7f1784f20130",
+    "mt_shutdown": 0,
+    "n_threads": 1,
+    "n_workers": 0,
+    "worker_active": 0,
+    "phase": 0,
+    "tag": "restored-close-claim-return",
+    "return_value": 1
+  },
+  {
+    "L": "0x7f1784f20080",
+    "g": "0x7f1784f20130",
+    "mt_shutdown": 1,
+    "n_threads": 1,
+    "n_workers": 0,
+    "worker_active": 0,
+    "phase": 0,
+    "tag": "close-state-entry"
+  },
+  {
+    "tag": "gc2-fini-entry",
+    "g": "0x7f1784f20130"
+  },
+  {
+    "L": "0x7f1784f20080",
+    "g": "0x7f1784f20130",
+    "tag": "real-close-returned",
+    "claim_return": 1,
+    "close_state_entered": true,
+    "gc2_fini_entered": true,
+    "backtrace": "#0  test_multistate_terminal_tg_reclaim (outer_L=0x7f1784fe0080, outer_g=0x7f1784fe0130) at /tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/candidate/tests/t-gc2-worker-scheduler.c:621\n#1  main () at /tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/candidate/tests/t-gc2-worker-scheduler.c:1486\n"
+  }
+]

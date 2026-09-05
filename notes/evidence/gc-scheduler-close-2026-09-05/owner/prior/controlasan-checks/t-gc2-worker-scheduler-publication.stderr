@@ -1,0 +1,52 @@
+
+=================================================================
+==397757==ERROR: LeakSanitizer: detected memory leaks
+
+Direct leak of 131072 byte(s) in 1 object(s) allocated from:
+    #0 0x556487cb671d in calloc (/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan-checks/t-gc2-worker-scheduler-publication+0x11371d) (BuildId: 0202685850de304c1e4ab55c17e1774ca3a25e65)
+    #1 0x556487e85bfd in lj_arena_map /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/lj_arena.c:1871:31
+    #2 0x556487e85bfd in arena_alloc_fresh /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/lj_arena.c:8036:16
+    #3 0x556487e82d37 in lj_arena_alloc /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/lj_arena.c:8418:7
+    #4 0x556487d18b6a in gc_mem_newgco_raw_nothrow /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/lj_gc.c:4776:18
+    #5 0x556487d18b6a in lj_mem_newgco_unlinked_deferred_nothrow /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/lj_gc.c:4939:10
+    #6 0x556487de4a0b in newtab_rooted /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/lj_tab.c:2759:16
+    #7 0x556487e3ad33 in cpluaopen /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/lj_state.c:328:23
+    #8 0x556487f958a2 in lj_vm_cpcall_asm (/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan-checks/t-gc2-worker-scheduler-publication+0x3f28a2) (BuildId: 0202685850de304c1e4ab55c17e1774ca3a25e65)
+
+Direct leak of 48 byte(s) in 1 object(s) allocated from:
+    #0 0x556487cb6533 in malloc (/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan-checks/t-gc2-worker-scheduler-publication+0x113533) (BuildId: 0202685850de304c1e4ab55c17e1774ca3a25e65)
+    #1 0x556487e46a86 in tg_registry_link_attaching /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/lj_tg.c:590:32
+    #2 0x556487e46a86 in lj_tg_attach /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/lj_tg.c:653:10
+    #3 0x556487cf93b0 in test_multistate_terminal_tg_reclaim /tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate/tests/t-gc2-worker-scheduler.c:597:3
+    #4 0x556487cf93b0 in main /tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate/tests/t-gc2-worker-scheduler.c:1483:3
+    #5 0x7efde8e78ca7  (/lib/x86_64-linux-gnu/libc.so.6+0x29ca7) (BuildId: c495b62edadd6c356265942ec1282d98058a7b41)
+
+Direct leak of 16 byte(s) in 1 object(s) allocated from:
+    #0 0x556487cb6533 in malloc (/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan-checks/t-gc2-worker-scheduler-publication+0x113533) (BuildId: 0202685850de304c1e4ab55c17e1774ca3a25e65)
+    #1 0x556487d2b942 in gc2_small_arena_registry_new /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/lj_gc2.c:1577:29
+    #2 0x556487d2b942 in gc2_small_arena_registry_init /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/lj_gc2.c:1616:9
+    #3 0x556487d2b942 in lj_gc2_init /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/lj_gc2.c:1958:9
+    #4 0x556487e3a802 in lua_newstate /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/lj_state.c:1347:3
+    #5 0x556487f66b26 in luaL_newstate /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/lib_aux.c:386:7
+    #6 0x556487cf90b0 in test_multistate_terminal_tg_reclaim /tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate/tests/t-gc2-worker-scheduler.c:573:8
+    #7 0x556487cf90b0 in main /tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate/tests/t-gc2-worker-scheduler.c:1483:3
+    #8 0x7efde8e78ca7  (/lib/x86_64-linux-gnu/libc.so.6+0x29ca7) (BuildId: c495b62edadd6c356265942ec1282d98058a7b41)
+
+Indirect leak of 96 byte(s) in 2 object(s) allocated from:
+    #0 0x556487cb6533 in malloc (/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan-checks/t-gc2-worker-scheduler-publication+0x113533) (BuildId: 0202685850de304c1e4ab55c17e1774ca3a25e65)
+    #1 0x556487e46a86 in tg_registry_link_attaching /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/lj_tg.c:590:32
+    #2 0x556487e46a86 in lj_tg_attach /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/lj_tg.c:653:10
+    #3 0x556487d964e1 in gc2_worker_main /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/lj_gc2.c:2766:3
+    #4 0x556487cb3e8a in asan_thread_start(void*) asan_interceptors.cpp.o
+
+Indirect leak of 48 byte(s) in 1 object(s) allocated from:
+    #0 0x556487cb6533 in malloc (/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan-checks/t-gc2-worker-scheduler-publication+0x113533) (BuildId: 0202685850de304c1e4ab55c17e1774ca3a25e65)
+    #1 0x556487e46a86 in tg_registry_link_attaching /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/lj_tg.c:590:32
+    #2 0x556487e46a86 in lj_tg_attach /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/lj_tg.c:653:10
+    #3 0x556487e3a802 in lua_newstate /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/lj_state.c:1347:3
+    #4 0x556487f66b26 in luaL_newstate /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/lib_aux.c:386:7
+    #5 0x556487cf90b0 in test_multistate_terminal_tg_reclaim /tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate/tests/t-gc2-worker-scheduler.c:573:8
+    #6 0x556487cf90b0 in main /tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate/tests/t-gc2-worker-scheduler.c:1483:3
+    #7 0x7efde8e78ca7  (/lib/x86_64-linux-gnu/libc.so.6+0x29ca7) (BuildId: c495b62edadd6c356265942ec1282d98058a7b41)
+
+SUMMARY: AddressSanitizer: 131280 byte(s) leaked in 6 allocation(s).

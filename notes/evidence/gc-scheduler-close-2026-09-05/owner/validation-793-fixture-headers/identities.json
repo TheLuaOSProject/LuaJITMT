@@ -1,0 +1,70 @@
+{
+  "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/candidate/tests/t-gc2-worker-scheduler.c": {
+    "sha256": "e9d2173e1279088d500b7bff816dae54e260b039ad5c5d6034f738d5ad2a1a27",
+    "bytes": 49484
+  },
+  "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/libluajit.a": {
+    "sha256": "3fdbe96a21431044549717f028252d2d0d103a16ae07215cbdc196dd96a7e55f",
+    "bytes": 31057262
+  },
+  "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/lj_gc.c": {
+    "sha256": "2b70a2e1add35cca9aef3fd2c20b3bc6346d9ac77d80faaffe7fa60c5086810d",
+    "bytes": 195005
+  },
+  "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/lj_gc2.c": {
+    "sha256": "6d96637a8a676afcd4208c08397d7fe79a29122bd05b02ca7d8889fa4dc79218",
+    "bytes": 767707
+  },
+  "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/lj_obj.h": {
+    "sha256": "a8962fcc16e961ad29275cffc993ff368c229dc435f5794babbbacd8214557bc",
+    "bytes": 220849
+  },
+  "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/lj_thr.c": {
+    "sha256": "93aed8d88e36795e6186323924f5d96e7edc897b15f491f422223844eb666bb7",
+    "bytes": 69350
+  },
+  "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/lj_state.c": {
+    "sha256": "80d2fa440b4b81e0d460d485dcbe2fc478e2f158c2f79504e44b1a89ffc2bf64",
+    "bytes": 51955
+  },
+  "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/lj_tg.c": {
+    "sha256": "16064ba7946becbbc5cc1be2ee00eae4be39f1496c6ab85c5f4cf60f64146406",
+    "bytes": 45600
+  },
+  "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/validation-793-fixture-headers/runtime793-strict": {
+    "sha256": "8859c8aa726905e61e3f47ae05777d72e310521ecd9cef91828bd68895df48e0",
+    "bytes": 14266536
+  },
+  "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/libluajit.a": {
+    "sha256": "9261101e116b1407eb68e0b35d10a44e28da96d9c931983699c18f4a6e097b21",
+    "bytes": 27452112
+  },
+  "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_gc.c": {
+    "sha256": "2b70a2e1add35cca9aef3fd2c20b3bc6346d9ac77d80faaffe7fa60c5086810d",
+    "bytes": 195005
+  },
+  "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_gc2.c": {
+    "sha256": "6d96637a8a676afcd4208c08397d7fe79a29122bd05b02ca7d8889fa4dc79218",
+    "bytes": 767707
+  },
+  "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_obj.h": {
+    "sha256": "a8962fcc16e961ad29275cffc993ff368c229dc435f5794babbbacd8214557bc",
+    "bytes": 220849
+  },
+  "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_thr.c": {
+    "sha256": "93aed8d88e36795e6186323924f5d96e7edc897b15f491f422223844eb666bb7",
+    "bytes": 69350
+  },
+  "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_state.c": {
+    "sha256": "80d2fa440b4b81e0d460d485dcbe2fc478e2f158c2f79504e44b1a89ffc2bf64",
+    "bytes": 51955
+  },
+  "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_tg.c": {
+    "sha256": "16064ba7946becbbc5cc1be2ee00eae4be39f1496c6ab85c5f4cf60f64146406",
+    "bytes": 45600
+  },
+  "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/validation-793-fixture-headers/runtime793-asan": {
+    "sha256": "1874244425f262b711543aeeb8d5d10a51f8b4165be90c88fa0c7e206b08a11e",
+    "bytes": 20231448
+  }
+}

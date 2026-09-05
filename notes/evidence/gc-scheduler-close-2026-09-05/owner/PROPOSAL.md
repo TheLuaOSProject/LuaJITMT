@@ -1,0 +1,23 @@
+# Scheduler synthetic-shutdown cleanup — read-only witness and proposal
+
+The corrected scheduler's second universe does not actually close: the fixture leaves its manually seeded mt_shutdown=1 in place, and production close admission rejects that state. A read-only debugger witness now observes that exact condition and return. No runtime close-admission rule has been changed. The smallest proposed correction is three added fixture lines: explain the synthetic flag, restore it to0 after terminal-unlink/retired-worker assertions, then call the existing real lua_close. This proposal is unbuilt and unvalidated at this checkpoint.
+
+## Exact observations
+
+Input is the publication-precondition-corrected scheduler fixture SHA256f476733106d7e2552c9e47757b35f1c1dc78cf8b3cb0d47c17f17ed58fe70dca linked against the frozen pristine597b six-helper target-only ASan archive from /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan. Exact compiler/linker argv, six helper macros plus assertions/APICHECK, Clang/O1/debug/ASan flags, archive/ELF/source hashes and prior outcomes are preserved in inputs.json and prior/. Runtime ASAN_OPTIONS remains detect_leaks=1:abort_on_error=1 and LUA_PATH is unchanged.
+
+The prior uninterrupted corrected-control run reports131280 leaked bytes in6 allocations. The same report and allocation origins occur in the fair corrected scheduler; those reports are preserved independently. The pristine original scheduler instead failed earlier at its known SSB drain assertion, which does not prove its later leak state.
+
+The witness runs the exact same corrected-control ELF under GDB, reads the actual L/glref and mt_shutdown at lj_thr_main_close_claim, and stops after the actual return. It writes no runtime field and calls no runtime function from the debugger. At fixture line617's lua_close(L2), actual L=0x7f9118900080, g=0x7f9118900130, mt_shutdown=1, n_threads=1, n_workers=0, worker_active=0, phase=IDLE0. A FinishBreakpoint observes lj_thr_main_close_claim returning0 to lua_close at lj_state.c:1374 while the same state remains. The caller backtrace names test_multistate_terminal_tg_reclaim. Exact snapshots are in witness-state.json and the complete debugger stdout/stderr/argv/env/bound are retained. GDB exits0 after intentionally terminating the stopped inferior; this is a state witness, not a scheduler pass or another leak measurement.
+
+## Source explanation and minimal delta
+
+The subtest explicitly sets mt_shutdown_rel(g2,1) at corrected fixture line603 to exercise terminal registry unlink while raw TLS still belongs to universe1. It then verifies the two worker TGs and deferred Lua TG really unlink and the stopped pool releases retired worker storage. At line617 it asks lua_close(L2) to do the real universe cleanup, but the synthetic terminal flag remains set.
+
+Production lj_thr_main_close_claim at lj_thr.c:1707-1710 rejects mt_shutdown!=0. Production lua_close at lj_state.c:1374-1375 returns immediately on that rejection. The witness confirms the exact rejected call, connecting this fixture precondition to its skipped real close. The runtime gate prevents competing/invalid closes and must remain intact.
+
+Proposed fixture-cleanup.patch SHA25667b54d179d8a6fb4e95920662344c7737828bf1f86d47977c350367eb2b55f23 applies only to the publication-corrected scheduler. Candidate fixture SHA256e9d2173e1279088d500b7bff816dae54e260b039ad5c5d6034f738d5ad2a1a27. It restores only this fixture's synthetic mt_shutdown flag immediately after the existing retired-list-empty assertion and before the unchanged real close call. All terminal-unlink assertions still run while the synthetic flag is1. The outer-universe pending root/TLS assertions, stopped-worker checks, actual close, graph, SSB publication precondition and all original observation bounds remain. No collector/SMR/worker/actor/READY/lifetime/close-admission behavior changes; the subsequent real close must acquire ordinary authority and perform its own shutdown protocol.
+
+## Validation required before integration
+
+Run the proposed fixture with the existing link wrappers and unchanged bounds against the matching pristine and fair six-helper normal/ASan archives. Keep the uninterrupted original leak reports as negative controls, require leak detection to stay enabled, and require all existing terminal/TLS/root/scheduler assertions plus real close cleanup to succeed. A positive read-only witness may additionally confirm that restored synthetic state allows the real close claim; it must not assign state or bypass admission. Keep this fixture-only generation separate from the frozen fair-source validation and from any latest793 runtime combination. No shared fixture or runtime source has been edited.

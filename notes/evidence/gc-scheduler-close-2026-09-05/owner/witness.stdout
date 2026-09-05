@@ -1,0 +1,23 @@
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+[New Thread 0x7f9115bfd6c0 (LWP 403151)]
+[New Thread 0x7f91152fb6c0 (LWP 403152)]
+[Thread 0x7f9115bfd6c0 (LWP 403151) exited]
+[Thread 0x7f91152fb6c0 (LWP 403152) exited]
+[New Thread 0x7f91152fb6c0 (LWP 403153)]
+[New Thread 0x7f9115bfd6c0 (LWP 403154)]
+[Thread 0x7f9115bfd6c0 (LWP 403154) exited]
+[Thread 0x7f91152fb6c0 (LWP 403153) exited]
+[New Thread 0x7f91152fb6c0 (LWP 403155)]
+[New Thread 0x7f9115bfd6c0 (LWP 403156)]
+[Thread 0x7f9115bfd6c0 (LWP 403156) exited]
+[Thread 0x7f91152fb6c0 (LWP 403155) exited]
+[New Thread 0x7f9115bfd6c0 (LWP 403157)]
+[New Thread 0x7f91152fb6c0 (LWP 403158)]
+[Thread 0x7f91152fb6c0 (LWP 403158) exited]
+[Thread 0x7f9115bfd6c0 (LWP 403157) exited]
+WITNESS {"L": "0x7f9118900080", "g": "0x7f9118900130", "mt_shutdown": 1, "n_threads": 1, "n_workers": 0, "worker_active": 0, "phase": 0, "tag": "close-claim-entry", "backtrace": "#0  lj_thr_main_close_claim (L=L@entry=0x7f9118900080) at lj_thr.c:1707\n#1  0x000055d57ee19595 in lua_close (L=L@entry=0x7f9118900080) at lj_state.c:1374\n#2  0x000055d57ecd66ae in test_multistate_terminal_tg_reclaim (outer_L=0x7f91189c0080, outer_g=0x7f91189c0130) at /tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate/tests/t-gc2-worker-scheduler.c:617\n#3  main () at /tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate/tests/t-gc2-worker-scheduler.c:1483\n"}
+WITNESS {"L": "0x7f9118900080", "g": "0x7f9118900130", "mt_shutdown": 1, "n_threads": 1, "n_workers": 0, "worker_active": 0, "phase": 0, "tag": "close-claim-return", "return_value": 0, "backtrace": "#0  0x000055d57ee19595 in lua_close (L=L@entry=0x7f9118900080) at lj_state.c:1374\n#1  0x000055d57ecd66ae in test_multistate_terminal_tg_reclaim (outer_L=0x7f91189c0080, outer_g=0x7f91189c0130) at /tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate/tests/t-gc2-worker-scheduler.c:617\n#2  main () at /tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate/tests/t-gc2-worker-scheduler.c:1483\n"}
+
+Thread 1 "t-gc2-worker-sc" hit Breakpoint -24, 0x000055d57ee19595 in lua_close (L=L@entry=0x7f9118900080) at lj_state.c:1374
+1374	  if (!lj_thr_main_close_claim(L))

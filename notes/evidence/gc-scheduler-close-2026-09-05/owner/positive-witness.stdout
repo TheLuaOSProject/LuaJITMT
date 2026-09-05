@@ -1,0 +1,26 @@
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+[New Thread 0x7f17820fe6c0 (LWP 411161)]
+[New Thread 0x7f17817fc6c0 (LWP 411162)]
+[Thread 0x7f17817fc6c0 (LWP 411162) exited]
+[Thread 0x7f17820fe6c0 (LWP 411161) exited]
+[New Thread 0x7f17817fc6c0 (LWP 411163)]
+[New Thread 0x7f17820fe6c0 (LWP 411164)]
+[Thread 0x7f17817fc6c0 (LWP 411163) exited]
+[Thread 0x7f17820fe6c0 (LWP 411164) exited]
+[New Thread 0x7f17817fc6c0 (LWP 411165)]
+[New Thread 0x7f17820fe6c0 (LWP 411166)]
+[Thread 0x7f17820fe6c0 (LWP 411166) exited]
+[Thread 0x7f17817fc6c0 (LWP 411165) exited]
+[New Thread 0x7f17820fe6c0 (LWP 411167)]
+[New Thread 0x7f17817fc6c0 (LWP 411168)]
+[Thread 0x7f17820fe6c0 (LWP 411167) exited]
+[Thread 0x7f17817fc6c0 (LWP 411168) exited]
+WITNESS {"L": "0x7f1784f20080", "g": "0x7f1784f20130", "mt_shutdown": 0, "n_threads": 1, "n_workers": 0, "worker_active": 0, "phase": 0, "tag": "real-close-entry", "backtrace": "#0  lua_close (L=L@entry=0x7f1784f20080) at lj_state.c:1372\n#1  0x000055e7124c46f6 in test_multistate_terminal_tg_reclaim (outer_L=0x7f1784fe0080, outer_g=0x7f1784fe0130) at /tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/candidate/tests/t-gc2-worker-scheduler.c:620\n#2  main () at /tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/candidate/tests/t-gc2-worker-scheduler.c:1486\n"}
+WITNESS {"L": "0x7f1784f20080", "g": "0x7f1784f20130", "mt_shutdown": 0, "n_threads": 1, "n_workers": 0, "worker_active": 0, "phase": 0, "tag": "restored-close-claim-return", "return_value": 1}
+WITNESS {"L": "0x7f1784f20080", "g": "0x7f1784f20130", "mt_shutdown": 1, "n_threads": 1, "n_workers": 0, "worker_active": 0, "phase": 0, "tag": "close-state-entry"}
+WITNESS {"tag": "gc2-fini-entry", "g": "0x7f1784f20130"}
+WITNESS {"L": "0x7f1784f20080", "g": "0x7f1784f20130", "tag": "real-close-returned", "claim_return": 1, "close_state_entered": true, "gc2_fini_entered": true, "backtrace": "#0  test_multistate_terminal_tg_reclaim (outer_L=0x7f1784fe0080, outer_g=0x7f1784fe0130) at /tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/candidate/tests/t-gc2-worker-scheduler.c:621\n#1  main () at /tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/candidate/tests/t-gc2-worker-scheduler.c:1486\n"}
+
+Thread 1 "pristine597b-as" hit Breakpoint -27, test_multistate_terminal_tg_reclaim (outer_L=0x7f1784fe0080, outer_g=0x7f1784fe0130) at /tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/candidate/tests/t-gc2-worker-scheduler.c:621
+621	  assert(lj_thr_get_tg() == outer_tg);

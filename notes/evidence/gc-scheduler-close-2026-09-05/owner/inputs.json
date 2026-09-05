@@ -1,0 +1,32 @@
+{
+  "control_package": "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno",
+  "runtime": "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan",
+  "exe": "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan-checks/t-gc2-worker-scheduler-publication",
+  "fixture": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate/tests/t-gc2-worker-scheduler.c",
+  "identities": {
+    "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan-checks/t-gc2-worker-scheduler-publication": {
+      "sha256": "7938b05c102fe4ba2c9041f209e5d845bc16824be5a8075d82f1776c69d02db0",
+      "bytes": 20193096
+    },
+    "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate/tests/t-gc2-worker-scheduler.c": {
+      "sha256": "f476733106d7e2552c9e47757b35f1c1dc78cf8b3cb0d47c17f17ed58fe70dca",
+      "bytes": 49341
+    },
+    "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/libluajit.a": {
+      "sha256": "662a83a2ea0d46d158ee1106d033c14d7e1c3df4f88322211d7fdd744cbff3ab",
+      "bytes": 27383824
+    },
+    "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/lj_thr.c": {
+      "sha256": "93aed8d88e36795e6186323924f5d96e7edc897b15f491f422223844eb666bb7",
+      "bytes": 69350
+    },
+    "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/lj_state.c": {
+      "sha256": "80d2fa440b4b81e0d460d485dcbe2fc478e2f158c2f79504e44b1a89ffc2bf64",
+      "bytes": 51955
+    },
+    "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/lj_tg.c": {
+      "sha256": "16064ba7946becbbc5cc1be2ee00eae4be39f1496c6ab85c5f4cf60f64146406",
+      "bytes": 45600
+    }
+  }
+}

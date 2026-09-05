@@ -1,0 +1,9 @@
+{
+  "head": "eb8a5b2f9ce2fd6128f4dbeef25b03896b81cfcd",
+  "owner": "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf",
+  "manifest_sha256": "4fd711596b9c705bb0a4d890586268bc2ce3680ea4a0996358d7e0743de27f59",
+  "verified_artifacts": 103,
+  "patch_sha256": "67b54d179d8a6fb4e95920662344c7737828bf1f86d47977c350367eb2b55f23",
+  "before": "f476733106d7e2552c9e47757b35f1c1dc78cf8b3cb0d47c17f17ed58fe70dca",
+  "after": "e9d2173e1279088d500b7bff816dae54e260b039ad5c5d6034f738d5ad2a1a27"
+}

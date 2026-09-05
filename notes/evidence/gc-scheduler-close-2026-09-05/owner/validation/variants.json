@@ -1,0 +1,130 @@
+[
+  {
+    "name": "pristine597b-normal",
+    "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers",
+    "flags": [
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS"
+    ],
+    "asan": false
+  },
+  {
+    "name": "fair597b-normal",
+    "source": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate",
+    "flags": [
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS"
+    ],
+    "asan": false
+  },
+  {
+    "name": "pristine597b-asan",
+    "source": "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan",
+    "flags": [
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS"
+    ],
+    "asan": true
+  },
+  {
+    "name": "fair597b-asan",
+    "source": "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan",
+    "flags": [
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS"
+    ],
+    "asan": true
+  },
+  {
+    "name": "runtime793-strict",
+    "source": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict",
+    "flags": [
+      "-DLUA_USE_APICHECK",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS"
+    ],
+    "asan": false,
+    "build_metadata": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict-build.json"
+  },
+  {
+    "name": "runtime793-asan",
+    "source": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan",
+    "flags": [
+      "-DLUA_USE_APICHECK",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS"
+    ],
+    "asan": true,
+    "build_metadata": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan-build.json"
+  },
+  {
+    "name": "runtime793-fair-strict",
+    "source": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict",
+    "flags": [
+      "-DLUA_USE_APICHECK",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS"
+    ],
+    "asan": false,
+    "build_metadata": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict-build.json"
+  },
+  {
+    "name": "runtime793-fair-asan",
+    "source": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan",
+    "flags": [
+      "-DLUA_USE_APICHECK",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS"
+    ],
+    "asan": true,
+    "build_metadata": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan-build.json"
+  }
+]

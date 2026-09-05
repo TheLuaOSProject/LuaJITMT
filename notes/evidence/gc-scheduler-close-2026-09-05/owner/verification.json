@@ -1,0 +1,18 @@
+{
+  "input_hashes_reverified": 6,
+  "prior_manifest_sha256": "f70f3f2c88c405844c0953f158822f9175150df2c5d178c5e51cf4d72d2921ee",
+  "prior_artifacts_reverified": 616,
+  "reverse_check": {
+    "argv": [
+      "git",
+      "apply",
+      "--reverse",
+      "--check",
+      "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/fixture-cleanup.patch"
+    ],
+    "cwd": "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/candidate",
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  }
+}

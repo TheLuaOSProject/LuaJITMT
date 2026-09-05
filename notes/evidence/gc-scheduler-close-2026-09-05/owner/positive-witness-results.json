@@ -1,0 +1,21 @@
+{
+  "argv": [
+    "gdb",
+    "-q",
+    "-batch",
+    "-x",
+    "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/positive-witness.gdb",
+    "--args",
+    "/tmp/lj-scheduler-terminal-close-20260905-nhl_nrgf/validation/pristine597b-asan"
+  ],
+  "cwd": "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan",
+  "LUA_PATH": "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/?.lua;/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/tests/lib/?.lua;;",
+  "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+  "timeout_seconds": 60,
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 0.16398299199499888,
+  "stdout": "positive-witness.stdout",
+  "stderr": "positive-witness.stderr",
+  "purpose": "read-only successful real-close witness; debugger terminates stopped inferior after lua_close returns; not a fixture pass"
+}
