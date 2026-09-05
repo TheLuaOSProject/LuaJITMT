@@ -1,0 +1,2576 @@
+/*
+** Threading library.
+** Copyright (C) 2005-2026 Mike Pall. See Copyright Notice in luajit.h
+*/
+
+#include <errno.h>
+#include <limits.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define lib_threading_c
+#define LUA_LIB
+
+#include "lua.h"
+#include "lauxlib.h"
+#include "lualib.h"
+
+#include "lj_obj.h"
+#include "lj_atomic.h"
+#include "lj_arena.h"
+#include "lj_chan.h"
+#include "lj_ccallback.h"
+#if LJ_HASFFI
+#include "lj_ccall.h"
+#endif
+#include "lj_err.h"
+#include "lj_gc.h"
+#include "lj_gc2.h"
+#include "lj_lib.h"
+#include "lj_safepoint.h"
+#include "lj_state.h"
+#include "lj_str.h"
+#include "lj_tab.h"
+#include "lj_thr.h"
+#include "lj_tg.h"
+#include "lj_trace.h"
+#include "lj_udata.h"
+#include "lj_vm.h"
+
+#define THREADING_MAIN_KEY	"__main"
+
+static int threading_arena_internal(global_State *g)
+{
+  return g->allocf == lj_arena_allocf && g->main_tg &&
+	 lj_tg_flags_test_acq(g->main_tg, TGF_ARENA_INTERNAL);
+}
+
+static int threading_tg_is_registered(global_State *g, TGState *target);
+
+static int threading_jit_detach_preabort_ready(global_State *g, TGState *tg)
+{
+#if LJ_HASJIT
+  LJJitOwnerWord word;
+  uint32_t tid;
+  if (!g || !tg || tg->gl != g || !(tid = lj_tg_tid_acq(tg)))
+    return 0;
+  word = jit_owner_word_acq(g);
+  /* A low-half recorder is cancellable by the immediately following
+  ** abort_owner. A high-half callback lifecycle is not. */
+  return jit_owner_lifecycle(word) != tid &&
+    lj_jit_event_sessions_logical_detach_ready(tg);
+#else
+  UNUSED(g);
+  UNUSED(tg);
+  return 1;
+#endif
+}
+
+static int threading_detach_scope_quiescent(global_State *g, TGState *tg,
+					     lua_State *L)
+{
+  uint32_t tid;
+  if (!g || !tg || tg->gl != g || !(tid = lj_tg_tid_acq(tg)) ||
+      vmevent_owner_acq(g) == tid || (L && L->cframe != NULL) ||
+      lj_tg_in_native_acq(tg) != 0)
+    return 0;
+#if LJ_HASFFI
+  if (ccallback_depth_acq(&tg->cb) != 0 ||
+      ccallback_L_acq(&tg->cb) != NULL ||
+      ccallback_slot_acq(&tg->cb) != 0 ||
+      ccallback_auto_detach_acq(&tg->cb) != 0 ||
+      lj_tg_ffi_call_func_acq(tg) != NULL)
+    return 0;
+#if LJ_HASJIT
+  if (lj_ffi_native_frame_depth_acq(tg) != 0)
+    return 0;
+#endif
+#endif
+  return 1;
+}
+
+/* -- Thread methods ------------------------------------------------------ */
+
+static LJThread *threading_tothread(lua_State *L)
+{
+  if (!(L->base < L->top && tvisudata(L->base) &&
+	lj_udata_udtype_acq(udataV(L->base)) == UDTYPE_THREAD))
+    lj_err_argtype(L, 1, "threading.thread");
+  return (LJThread *)uddata(udataV(L->base));
+}
+
+static GCudata *threading_thread_udata_candidate(global_State *g, GCobj *o,
+					  LJGC2Lease *lease)
+{
+  GCudata *ud;
+  /* The live-node/state reference can be tombstoned immediately after its
+  ** acquire load. Retain the exact typed allocation before any payload read;
+  ** a shape-only queued validator would drop its body lease on return. */
+  if (!lease || lj_gc2_obj_lease_acquire(g, o, (uint32_t)~LJ_TUDATA,
+						NULL, lease) < 0)
+    return NULL;
+  ud = gco2ud(o);
+  if (lj_udata_udtype_acq(ud) == UDTYPE_THREAD)
+    return ud;
+  lj_gc2_lease_release(lease);
+  return NULL;
+}
+
+GCudata *lj_thread_live_udata_acq(global_State *g, LJThreadLive *node,
+				   LJGC2Lease *lease)
+{
+  GCudata *ud;
+  if (!lease)
+    return NULL;
+  memset(lease, 0, sizeof(*lease));
+  if (!node)
+    return NULL;
+  ud = threading_thread_udata_candidate(
+    g, lj_thread_live_udata_ref_acq(node), lease);
+  if (ud && lj_gc_udata_payload_valid(ud, NULL))
+    return ud;
+  lj_gc2_lease_release(lease);
+  return NULL;
+}
+
+GCudata *lj_thread_state_udata_acq(global_State *g, const lua_State *L,
+				    LJGC2Lease *lease)
+{
+  if (!lease)
+    return NULL;
+  memset(lease, 0, sizeof(*lease));
+  if (!L)
+    return NULL;
+  return threading_thread_udata_candidate(
+    g, lj_state_mt_thread_acq(L), lease);
+}
+
+static void threading_live_init_local(lua_State *L, GCudata *ud,
+				      LJThreadLive *node)
+{
+  TValue tv;
+  lj_thread_live_next_rel(node, NULL);
+  lj_thread_live_retired_next_rel(node, NULL);
+  lj_thread_live_udata_ref_rel(node, obj2gco(ud));
+  /* LJThreadLive is raw arena storage, not a GC object on the ownership spine.
+  ** Mark it before publication so a cycle whose root snapshot already passed
+  ** cannot reclaim the native-root node before the next global scan. */
+  (void)lj_gc2_markmem_registered_publish_try(G(L), node);
+  setudataV(L, &tv, ud);
+  lj_gc_pubroot(L, &tv);  /* 09 section 9.2: native live root. */
+}
+
+static LJThreadLive *threading_live_new(lua_State *L, GCudata *ud)
+{
+  LJThreadLive *node = lj_mem_newt(L, sizeof(LJThreadLive), LJThreadLive);
+  threading_live_init_local(L, ud, node);
+  return node;
+}
+
+static void threading_live_retire(global_State *g, LJThreadLive *node)
+{
+  LJThreadLive *head;
+  if (!g || !node)
+    return;
+  /* A detached-list owner retains node before the CAS; the append-only
+  ** retired list retains it afterwards. These are tactical root-snapshot
+  ** marks, not body leases, so an ordinary SMR writer is a benign miss. */
+  (void)lj_gc2_markmem_registered_publish_try(g, node);
+  /*
+  ** Scanners can hold an unlinked node until the surrounding SMR read section
+  ** ends. Keep the active next pointer stable for those readers and use a
+  ** separate close-time list for storage reclamation.
+  */
+  do {
+    head = lj_thread_live_retired_head_acq(g);
+    lj_thread_live_retired_next_rel(node, head);
+  } while (!lj_thread_live_retired_head_cas(g, &head, node));
+  /* Close mark-before-publish versus IDLE->MARK clear/root-snapshot. */
+  (void)lj_gc2_markmem_registered_publish_try(g, node);
+}
+
+static void threading_live_trim_dead_head(global_State *g)
+{
+  LJThreadLive *head;
+  if (!g)
+    return;
+  for (;;) {
+    LJThreadLive *next;
+    head = lj_thread_live_head_acq(g);
+    if (!head || lj_thread_live_udata_ref_acq(head) != NULL)
+      return;
+    next = lj_thread_live_next_acq(head);
+    if (lj_thread_live_head_cas(g, &head, next))
+      threading_live_retire(g, head);
+  }
+}
+
+static void threading_live_list_publish(global_State *g, LJThreadLive *node)
+{
+  LJThreadLive *head;
+  do {
+    head = lj_thread_live_head_acq(g);
+    lj_thread_live_next_rel(node, head);
+  } while (!lj_thread_live_head_cas(g, &head, node));
+  /* Mark again after the list LP. If a cycle cleared the construction mark and
+  ** completed its global snapshot between allocation and this CAS, the
+  ** post-publication phase read preserves the raw node in that cycle. */
+  (void)lj_gc2_markmem_registered_publish_try(g, node);
+}
+
+static void threading_live_publish(lua_State *L, LJThread *th,
+				   LJThreadLive *node)
+{
+  global_State *g = G(L);
+  threading_live_list_publish(g, node);
+  {
+    LJGC2Lease lease;
+    GCudata *ud = lj_thread_live_udata_acq(g, node, &lease);
+    if (ud) {
+      TValue tv;
+      setudataV(L, &tv, ud);
+      (void)lj_gc2_markobj(g, obj2gco(ud));
+      lj_gc_pubroot(L, &tv);  /* Publish against cycles started after new. */
+    }
+    lj_gc2_lease_release(&lease);
+  }
+  la_add32_acqrel(&g->threading_live_count, 1);
+  lj_thread_live_node_rel(th, node);
+}
+
+#if defined(LJ_GC2_TEST_HELPERS)
+void lj_threading_test_live_node_publish(lua_State *L, GCudata *ud,
+					 LJThreadLive *node)
+{
+  if (!L || !ud || !node)
+    return;
+  threading_live_init_local(L, ud, node);
+  threading_live_list_publish(G(L), node);
+}
+
+void lj_threading_test_live_node_retire(global_State *g, LJThreadLive *node)
+{
+  threading_live_retire(g, node);
+}
+#endif
+
+static void threading_live_remove(global_State *g, LJThread *th)
+{
+  LJThreadLive *node;
+  if (!g || !th)
+    return;
+  node = lj_thread_live_node_xchg_acqrel(th, NULL);
+  if (node) {
+    uint32_t old;
+    lj_thread_live_udata_ref_rel(node, NULL);
+    old = la_sub32_acqrel(&g->threading_live_count, 1);
+    lj_assertG(old > 0, "threading live root count underflow");
+    UNUSED(old);
+    threading_live_trim_dead_head(g);
+  }
+}
+
+void lj_threading_live_free_all(global_State *g)
+{
+  LJThreadLive *node = lj_thread_live_head_xchg_acqrel(g, NULL);
+  while (node) {
+    LJThreadLive *next = lj_thread_live_next_acq(node);
+    lj_mem_freet(g, node);
+    node = next;
+  }
+  node = lj_thread_live_retired_head_xchg_acqrel(g, NULL);
+  while (node) {
+    LJThreadLive *next = lj_thread_live_retired_next_acq(node);
+    lj_mem_freet(g, node);
+    node = next;
+  }
+  la_store32_rlx(&g->threading_live_count, 0);
+}
+
+static GCtab *threading_env_from_module(lua_State *L, GCtab *mod)
+{
+  cTValue *tv = lj_tab_getstr(mod, lj_str_newlit(L, "spawn"));
+  if (tv) {
+    TValue snap;
+    lj_tv_load_acq(&snap, tv);
+    if (tvisfunc(&snap)) {
+      GCfunc *fn = funcV(&snap);
+      if (!isluafunc(fn)) {
+	GCtab *env = lj_func_env_acq(fn);
+	if (env)
+	  return env;
+      }
+    }
+  }
+  return NULL;
+}
+
+static void threading_root_table(lua_State *L, GCRootID id, GCtab *t)
+{
+  /*
+  ** Threading's private library tables are not registry entries. Store them on
+  ** fixed roots before userdata/function lifetimes can separate from the
+  ** registration frame. Fixed-root stores are raw pointer publications, so also
+  ** publish the table body and side storage to both collectors for any active
+  ** cycle that has already seen the table body.
+  */
+  if (t) {
+    global_State *g = G(L);
+    GCobj *o = obj2gco(t);
+    LJGC2Lease lease;
+    TValue *array;
+    MSize asize, acap, hmask;
+    Node *node;
+    lj_gcroot_rel(g, id, o);
+    lj_gc_pubobjroot(L, o);
+    /* Reclaim is opportunistic. Root publication must not yield waiting for
+    ** its SMR writer: the retained table is sufficient for the later GC2
+    ** traversal, and a successful tactical reader only preserves the current
+    ** vector generations early. */
+    if (lj_gc2_smr_read_try(g)) {
+      if (lj_gc2_obj_lease_acquire(g, o, (uint32_t)~LJ_TTAB,
+					   NULL, &lease) >= 0) {
+	if (lj_tab_array_snapshot_gc_held(g, t, &array, &asize, &acap) ==
+	    LJ_TAB_GC_SNAPSHOT_OK && array)
+	  (void)lj_gc2_markmem(g, acap ? (void *)lj_tab_array_hdrw(array) :
+					  (void *)array);
+	UNUSED(asize);
+	if (lj_tab_node_snapshot_gc_held(g, t, &node, &hmask) ==
+	    LJ_TAB_GC_SNAPSHOT_OK && hmask > 0)
+	  (void)lj_gc2_markmem(g, lj_tab_node_hdrw(node));
+	lj_gc2_lease_release(&lease);
+      }
+      lj_gc2_smr_read_leave(g);
+    }
+    lj_gc2_preserve_root(g, o);
+  }
+}
+
+static void threading_state_set_ud(lua_State *L, lua_State *L1, GCudata *ud)
+{
+  lj_state_mt_thread_rel(L1, ud);
+  lj_gc_pubobjobj(L, L1, ud);
+}
+
+static TValue *threading_storeudata_str(lua_State *L, GCtab *env, GCstr *key,
+					GCudata *ud)
+{
+  TValue keytv, tv, *dst;
+  setudataV(L, &tv, ud);
+  setstrV(L, &keytv, key);
+  for (;;) {
+    dst = lj_tab_setstr(L, env, key);
+    if (lj_tab_trystoretv_cas_keyed(L, env, dst, &keytv, &tv) ==
+	LJ_TAB_STORE_CAS_OK)
+      return dst;
+    lj_tab_store_wait_l(L);  /* threading env store saw stale/FORWARD slot. */
+  }
+}
+
+static GCudata *threading_new_thread_ud(lua_State *L, GCtab *env)
+{
+  LJUdataRoot root;
+  GCudata *ud;
+  LJThread *th;
+  lj_state_checkstack(L, 1);  /* No stack growth with root live. */
+  ud = lj_udata_newrooted(L, sizeof(LJThread), env, &root);
+  th = (LJThread *)uddata(ud);
+  memset(th, 0, sizeof(*th));
+  lj_udata_metatable_rel(ud, env);
+  threading_root_table(L, GCROOT_THREADING_THREAD_MT, env);
+  lj_gc_pubobjobj(L, ud, env);
+  lj_thread_udata_rel(th, ud);
+  /* Keep the userdata generic and held by its constructor root until every
+  ** specialized payload byte is initialized. */
+  lj_udata_finreg_mt_rooted(L, ud, env, &root);
+  lj_udata_specialize(L, ud, UDTYPE_THREAD);
+  lj_udata_pushrooted(L, ud, &root);
+  return ud;
+}
+
+static void threading_publish_thread_state(lua_State *L, GCudata *ud,
+					   LJThread *th, lua_State *L1)
+{
+  lj_thread_state_store_rel(th, L1);
+  lj_gc_pubobjobj(L, ud, L1);
+}
+
+static void threading_start_roots_publish(lua_State *L, GCudata *ud,
+					  LJThread *th, TValue *roots,
+					  uint32_t n)
+{
+  global_State *g = G(L);
+  /* The spawn constructor owns roots before the pointer release; afterwards
+  ** the published thread userdata owns the exact vector. The two raw marks
+  ** only close the cycle-start snapshot race and may lose benignly to an
+  ** ordinary metadata writer. */
+  (void)lj_gc2_markmem_registered_publish_try(g, roots);
+  lj_thread_start_root_count_rel(th, n);
+  lj_thread_start_roots_rel(th, roots);
+  (void)lj_gc2_markmem_registered_publish_try(g, roots);
+  lj_udata_rescan(L, ud);
+}
+
+static void threading_start_roots_init(lua_State *L, GCudata *ud, LJThread *th,
+				       ptrdiff_t baseofs, uint32_t n)
+{
+  TValue *base;
+  TValue *roots;
+  uint32_t i;
+  if (n == 0)
+    return;
+  roots = lj_mem_newvec(L, n, TValue);
+  base = restorestack(L, baseofs);
+  for (i = 0; i < n; i++) {
+    copyTVrel(L, &roots[i], base + i);
+    lj_gc_pubroot(L, &roots[i]);
+    lj_gc_pubobjtv(L, ud, &roots[i]);
+  }
+  /* Count precedes the pointer LP; a pointer acquire then observes the
+  ** complete element range. */
+  threading_start_roots_publish(L, ud, th, roots, n);
+}
+
+#if defined(LJ_GC2_TEST_HELPERS)
+void lj_threading_test_start_roots_publish(lua_State *L, GCudata *ud,
+					   TValue *roots, uint32_t n)
+{
+  if (!L || !ud || !roots || n == 0)
+    return;
+  threading_start_roots_publish(L, ud, (LJThread *)uddata(ud), roots, n);
+}
+#endif
+
+static void threading_start_roots_clear(lua_State *L, LJThread *th)
+{
+  TValue *roots = lj_thread_start_roots_acq(th);
+  uint32_t i, n = lj_thread_start_root_count_acq(th);
+  TValue nilv;
+  if (!roots)
+    return;
+  setnilV(&nilv);
+  for (i = 0; i < n; i++)
+    copyTVrel(L, &roots[i], &nilv);
+}
+
+static void threading_spawn_gc_handoff(lua_State *L, GCudata *ud)
+{
+  global_State *g = G(L);
+  /*
+  ** The thread userdata is published to the live-thread list before the child
+  ** can run. Use the same GC2 root-publication barrier as other native root
+  ** lists so the cycle sees the userdata and its startup roots. GC2 has a
+  ** snapshot-style root set, so preserving a late root may still abort the
+  ** current cycle to idle and let the next cycle rescan from roots.
+  */
+  lj_gc_pubobjroot(L, obj2gco(ud));
+  lj_gc2_preserve_root(g, obj2gco(ud));
+}
+
+static void threading_result_gc_handoff(lua_State *L, LJThread *th)
+{
+  GCudata *ud;
+  if (!L || !th)
+    return;
+  ud = lj_thread_udata_acq(th);
+  if (!ud)
+    return;
+  /*
+  ** Completing a worker mutates the child stack after the thread userdata may
+  ** already have been marked through the live-thread list. Requeue the userdata
+  ** for GC2 traversal, mark the stack dirty for owner-scan freshness, and
+  ** preserve both GC2 roots so join-visible result graphs are scanned from the
+  ** completed child stack instead of relying on a stale thread mark. The legacy
+  ** color collector is deliberately not part of this handoff.
+  */
+  (void)lj_tg_stack_dirty_epoch_add_rlx(L2TG(L), 1);
+  lj_gc2_preserve_root(G(L), obj2gco(ud));
+  lj_gc2_preserve_root(G(L), obj2gco(L));
+}
+
+static int64_t threading_timeout_ns(lua_State *L, int narg, int has_default,
+				    int64_t def)
+{
+  if (has_default && L->base + narg - 1 >= L->top)
+    return def;
+  {
+    lua_Number sec = lj_lib_checknum(L, narg);
+    lua_Number nsec;
+    if (sec <= 0)
+      return 0;
+    nsec = sec * 1000000000.0;
+    return nsec > (lua_Number)INT64_MAX ? INT64_MAX : (int64_t)nsec;
+  }
+}
+
+static int64_t threading_now_ns(void)
+{
+  return (int64_t)lj_thr_now_ns();
+}
+
+static int64_t threading_deadline_ns(int64_t ns)
+{
+  int64_t now = threading_now_ns();
+  if (ns > INT64_MAX - now)
+    return INT64_MAX;
+  return now + ns;
+}
+
+static int64_t threading_remaining_ns(int64_t deadline)
+{
+  int64_t now = threading_now_ns();
+  return deadline > now ? deadline - now : 0;
+}
+
+#define THREADING_NATIVE_WAIT_SLICE_NS 1000000ll
+
+static int64_t threading_native_wait_slice(int has_timeout, int64_t ns)
+{
+  if (has_timeout && ns < THREADING_NATIVE_WAIT_SLICE_NS)
+    return ns;
+  return THREADING_NATIVE_WAIT_SLICE_NS;
+}
+
+static uint32_t threading_futex_wait_l(lua_State *L, uint32_t *addr,
+				       uint32_t expect, int64_t ns)
+{
+  uint32_t actions;
+  /*
+  ** Public blocking waits are native parks, but the waiting TG must still be
+  ** visible to soft handshakes while parked. A C library call can be entered
+  ** while its owner still holds an asynchronously abortable recorder token.
+  ** Never park with that token: a peer which needs it may be the very thread
+  ** this wait is joining, creating an owner-token/join cycle with no runnable
+  ** side left to finish recorder cleanup.
+  */
+  lj_trace_abort_owner_before_park(L);
+  lj_native_enter(L2TG(L));
+  (void)la_futex_wait(addr, expect, ns);
+  actions = lj_native_leave(L);
+  return actions;
+}
+
+static void threading_wake_thread(LJThread *th)
+{
+  la_add32_rlx(&th->futex, 1);
+  la_futex_wake(&th->futex, INT_MAX);
+}
+
+static int threading_start_release(LJThread *th)
+{
+  uint32_t expect = LJ_THREAD_STARTING;
+  if (la_cas32(&th->state, &expect, LJ_THREAD_RUNNING, LA_ACQ_REL, LA_ACQ)) {
+    la_futex_wake(&th->state, INT_MAX);
+    return 1;
+  }
+  return expect == LJ_THREAD_RUNNING;
+}
+
+static void threading_start_abort(LJThread *th)
+{
+  for (;;) {
+    uint32_t state = la_load32_acq(&th->state);
+    uint32_t expect = LJ_THREAD_STARTING;
+    if (state != LJ_THREAD_STARTING)
+      return;
+    if (la_cas32(&th->state, &expect, LJ_THREAD_ABORTING,
+		 LA_ACQ_REL, LA_ACQ)) {
+      la_futex_wake(&th->state, INT_MAX);
+      return;
+    }
+  }
+}
+
+static int threading_worker_wait_start(lua_State *L, LJThread *th)
+{
+  int native = 0;
+  /* Parent checks fresh STOPREQ after pthread_create before user code runs. */
+  for (;;) {
+    uint32_t state = la_load32_acq(&th->state);
+    if (state == LJ_THREAD_RUNNING || state == LJ_THREAD_ABORTING ||
+	state == LJ_THREAD_DONE) {
+      if (native)
+	(void)lj_native_leave(L);
+      if (state == LJ_THREAD_RUNNING)
+	(void)lj_safepoint_poll(L);
+      return state == LJ_THREAD_RUNNING;
+    }
+    if (!native) {
+      lj_native_enter(L2TG(L));
+      native = 1;
+    }
+    (void)la_futex_wait(&th->state, state, 1000000);
+  }
+}
+
+static int threading_worker_start_ok(lua_State *L, LJThread *th)
+{
+  if (threading_worker_wait_start(L, th)) {
+    if (!lj_safepoint_had_stopreq(L))
+      return 1;
+  }
+  return 0;
+}
+
+typedef struct ThreadingStackCopyCtx {
+  lua_State *child;
+  ptrdiff_t baseofs;
+  ptrdiff_t nargs;
+} ThreadingStackCopyCtx;
+
+static TValue *threading_stack_copy_cp(lua_State *L, lua_CFunction dummy,
+				       void *ud)
+{
+  ThreadingStackCopyCtx *ctx = (ThreadingStackCopyCtx *)ud;
+  TValue *base = restorestack(L, ctx->baseofs);
+  ptrdiff_t i;
+  UNUSED(dummy);
+  for (i = 0; i <= ctx->nargs; i++) {
+    TValue *dst = ctx->child->top++;
+    copyTV(ctx->child, dst, base + i);
+    lj_state_stack_pubtv(L, ctx->child, dst);
+  }
+  return NULL;
+}
+
+static void threading_stack_copy_claimed_l(lua_State *L, lua_State *child,
+					   ptrdiff_t baseofs, ptrdiff_t nargs,
+					   uint32_t tid)
+{
+  ThreadingStackCopyCtx ctx;
+  ptrdiff_t oldtop = savestack(child, child->top);
+  int errcode;
+  if (!lj_state_claim(child, tid))
+    lj_err_callermsg(L, "thread busy");
+  ctx.child = child;
+  ctx.baseofs = baseofs;
+  ctx.nargs = nargs;
+  errcode = lj_vm_cpcall(L, NULL, &ctx, threading_stack_copy_cp);
+  if (LJ_UNLIKELY(errcode)) {
+    child->top = restorestack(child, oldtop);
+    lj_state_release(child, tid);
+    lj_err_throw(L, errcode);
+  }
+  lj_state_release(child, tid);
+}
+
+typedef struct ThreadingStackPublishCtx {
+  lua_State *target;
+} ThreadingStackPublishCtx;
+
+static TValue *threading_stack_publish_cp(lua_State *L, lua_CFunction dummy,
+					  void *ud)
+{
+  ThreadingStackPublishCtx *ctx = (ThreadingStackPublishCtx *)ud;
+  UNUSED(dummy);
+  lj_state_stack_pubrange(L, ctx->target);
+  return NULL;
+}
+
+static int threading_stack_publish_protected(lua_State *L, lua_State *target)
+{
+  ThreadingStackPublishCtx ctx;
+  ctx.target = target;
+  return lj_vm_cpcall(L, NULL, &ctx, threading_stack_publish_cp);
+}
+
+static void threading_state_set_env(lua_State *L, lua_State *child, GCtab *env)
+{
+  lj_state_env_rel(child, env);
+  if (env)
+    lj_gc_pubobjobj(L, child, env);
+}
+
+static void threading_entering_leave(global_State *g)
+{
+  if (mt_entering_sub_acqrel(g, 1) == 1)
+    mt_entering_futex_wake(g, INT_MAX);
+}
+
+static int threading_entering_begin(global_State *g)
+{
+  /* Acq-rel pairs the entrant with the registry writer's post-CAS acquire
+  ** recheck; neither side may miss the other's publication. */
+  mt_entering_add_acqrel(g, 1);
+  /* The sole-mutator string collector publishes its gate, fences, then checks
+  ** this counter.  Publish our counter first and fence before checking its
+  ** gate so the store-buffering outcome (both sides believe they won) is
+  ** forbidden.  A losing entrant keeps its reservation while yielding: this
+  ** prevents lua_close from freeing g and makes the collector's race visible. */
+  la_fence_seq();
+  for (;;) {
+    if (mt_shutdown_acq(g) != 0) {
+      threading_entering_leave(g);
+      return 0;
+    }
+    /* Pair admission with the dead-registry writer's post-CAS counter check.
+    ** An entrant which loses this race backs out before reading tg_list; a
+    ** reclaimer which loses observes mt_entering and abandons its try-pass. */
+    if (gc2_tg_reclaiming_acq(g) == 0 &&
+	lj_str_reclaim_exclusive_acq(g) == 0)
+      return 1;
+    /* Keep this reservation continuously: dropping it here would let
+    ** lua_close free g before the retry. The writer never waits for us; its
+    ** post-CAS counter check abandons the reclaim pass. */
+    (void)lj_thr_retry_yield(NULL);
+  }
+}
+
+static void threading_wait_entering(lua_State *L, global_State *g)
+{
+  while (mt_entering_acq(g) != 0) {
+    uint32_t entering = mt_entering_acq(g);
+    if (entering == 0)
+      break;
+    (void)threading_futex_wait_l(L, &g->mt_entering, entering, 1000000);
+  }
+}
+
+static void threading_shutdown_clear_self_stopreq(lua_State *L)
+{
+  TGState *tg = L2TG(L);
+  if (!tg)
+    return;
+  /*
+  ** The shutdown handshake is deliberately broadcast: every live child TG
+  ** must observe STOPREQ, including children which are parked in native code.
+  ** Its initiating main TG participates in the same handshake for the normal
+  ** epoch/pending protocol, but must not carry the synthetic one-shot STOPREQ
+  ** edge into the rest of lua_close(). There is no second STOPREQ publisher
+  ** once mt_shutdown is set and the synchronous handshake has completed.
+  */
+  (void)lj_tg_flags_and_rlx(tg,
+	(uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH));
+  lj_tg_poll_rel(tg, 0);
+  la_fence_seq();
+  /* Preserve a non-STOPREQ handshake which raced shutdown completion. */
+  if (lj_tg_reqmask_acq(tg) != 0) {
+    lj_tg_poll_rel(tg, 1);
+    lj_tg_poll_futex_wake(tg, 1);
+  }
+}
+
+void lj_threading_shutdown(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *cur = lj_thr_get_tg();
+  LJThreadLive *node;
+  LJThread *th;
+  mt_shutdown_rel(g, 1);
+  mt_gc_exclusive_futex_wake(g, INT_MAX);
+  if (!lj_thread_live_head_acq(g) && mt_live_acq(g) == 0 &&
+      mt_entering_acq(g) == 0)
+    return;
+  lj_assertG(cur == NULL || cur == g->main_tg,
+	     "lua_close called from non-main OS thread");
+  UNUSED(cur);
+  threading_wait_entering(L, g);
+  if (mt_live_acq(g) != 0) {
+    (void)lj_safepoint_handshake(g, LJ_GC2_HS_STOPREQ);
+    threading_shutdown_clear_self_stopreq(L);
+    while (mt_live_acq(g) != 0) {
+      uint32_t live = mt_live_acq(g);
+      if (live == 0)
+	break;
+      (void)threading_futex_wait_l(L, &g->mt_live, live, 1000000);
+    }
+  }
+  for (node = lj_thread_live_head_acq(g); node != NULL;
+       node = lj_thread_live_next_acq(node)) {
+    LJGC2Lease lease;
+    GCudata *ud = lj_thread_live_udata_acq(g, node, &lease);
+    if (!ud)
+      continue;
+    th = (LJThread *)uddata(ud);
+    if (th->main_thread || lj_thread_state_load_acq(th) == NULL) {
+      lj_gc2_lease_release(&lease);
+      continue;
+    }
+    while (la_load32_acq(&th->state) != LJ_THREAD_DONE) {
+      uint32_t futex = la_load32_acq(&th->futex);
+      if (la_load32_acq(&th->state) == LJ_THREAD_DONE)
+	break;
+      (void)threading_futex_wait_l(L, &th->futex, futex, 1000000);
+    }
+    if (la_load32_acq(&th->joined) == 0) {
+      uint32_t expect = 0;
+      if (la_cas32(&th->joined, &expect, 1, LA_ACQ_REL, LA_ACQ))
+	(void)lj_thr_join(&th->thr, NULL);
+    }
+    /* pthread_create failure can leave an unregistered provisional TG whose
+    ** checked allocator teardown saw a real reader/certificate veto. Its live
+    ** node is the durable retry owner: close finalizers are one-shot, so keep
+    ** that node through finalization and let the joined-worker terminal drain
+    ** below close the TG before native-root storage is released. */
+    if (th->tg && la_load32_acq(&th->joined) != 0 &&
+	lj_tg_fini_state_acq(th->tg) == TG_FINI_RETRY &&
+	!threading_tg_is_registered(g, th->tg)) {
+      lj_gc2_lease_release(&lease);
+      continue;
+    }
+    threading_live_remove(g, th);
+    (void)lj_tg_reclaim_dead(g);
+    lj_gc2_lease_release(&lease);
+  }
+  /* GC2 workers may still hold a scoped raw-node snapshot. Tombstoning is
+  ** complete here, but physical node release belongs to close_state after the
+  ** collector pool has joined. */
+}
+
+static void threading_gc_leave(global_State *g);
+
+#if LJ_HASJIT
+static int threading_mt_active_prepare_traces(lua_State *L)
+{
+  global_State *g = G(L);
+  jit_State *J = L2J(L);
+  int token = lj_jit_token_acquire_wait(J);
+  if (!lj_trace_hasany(g))
+    return token;
+  if ((hookmask_load(g) & HOOK_GC)) {
+    lj_trace_abort(g);
+    (void)lj_trace_flushall_gc(L);
+    return token;
+  }
+  if (lj_trace_flushall_hs(L)) {
+    if (token)
+      lj_jit_token_release(J);
+    lj_err_callermsg(L, "cannot activate threading while a GC hook is active");
+  }
+  return token;
+}
+
+static void threading_mt_active_finish_traces(lua_State *L, int token)
+{
+  if (token)
+    lj_jit_token_release(L2J(L));
+}
+#else
+#define threading_mt_active_prepare_traces(L)	(UNUSED(L), 0)
+#define threading_mt_active_finish_traces(L, token) \
+  (UNUSED(L), UNUSED(token))
+#endif
+
+static int threading_gc_enter_counted(lua_State *L, GCudata *rootud,
+				      int retain_entering)
+{
+  global_State *g = G(L);
+  for (;;) {
+    uint32_t expect;
+    uint32_t exclusive;
+    while ((exclusive = mt_gc_exclusive_acq(g)) != 0) {
+      if (mt_shutdown_acq(g) != 0) {
+	if (!retain_entering)
+	  threading_entering_leave(g);
+	return 0;
+      }
+      mt_gc_exclusive_futex_wait(g, exclusive, 1000000);
+    }
+    if (mt_shutdown_acq(g) != 0) {
+      if (!retain_entering)
+	threading_entering_leave(g);
+      return 0;
+    }
+    expect = 0;
+    if (mt_active_acq(g) == 0) {
+      int token = threading_mt_active_prepare_traces(L);
+      (void)mt_active_cas(g, &expect, 1);
+      threading_mt_active_finish_traces(L, token);
+    } else {
+      (void)mt_active_cas(g, &expect, 1);
+    }
+    if (rootud)
+      threading_spawn_gc_handoff(L, rootud);
+    if (mt_live_add_rlx(g, 1) == 0) {
+      GCSize threshold = lj_gc_threshold_load(g);
+      /* A finalizer temporarily suppresses automatic collection while its
+      ** callback runs. The callback latch is nested-safe and excludes GC2's
+      ** queue-drain owner scope; legacy g->gc.state is unrelated here. */
+      if (threshold == LJ_MAX_MEM &&
+	  (gc2_finalizer_spawn_latch_acq(g) &
+	   LJ_GC2_FINSPAWN_CALLBACK_ACTIVE) != 0)
+	threshold = lj_gc_mt_threshold_load(g);
+      lj_gc_mt_threshold_store(g, threshold);
+      /* M4: no automatic GC while children run. */
+      lj_gc_threshold_store(g, LJ_MAX_MEM);
+    }
+    /* Pair live publication with the string collector's post-gate recheck.
+    ** mt_entering remains held until after this test, so either counter also
+    ** independently closes the transition window. */
+    la_fence_seq();
+    if (mt_gc_exclusive_acq(g) == 0 &&
+	lj_str_reclaim_exclusive_acq(g) == 0) {
+      if (!retain_entering)
+	threading_entering_leave(g);
+      if (mt_shutdown_acq(g) != 0) {
+	threading_gc_leave(g);
+	return 0;
+      }
+      return 1;
+    }
+    threading_gc_leave(g);
+  }
+}
+
+static int threading_gc_enter(lua_State *L, GCudata *rootud)
+{
+  global_State *g = G(L);
+  if (!threading_entering_begin(g))
+    return 0;
+  return threading_gc_enter_counted(L, rootud, 0);
+}
+
+static void threading_gc_leave(global_State *g)
+{
+  if (mt_live_sub_acqrel(g, 1) == 1) {
+    lj_gc_threshold_store(g, lj_gc_mt_threshold_load(g));
+    lj_gc2_finalizer_spawn_release(g);
+    mt_live_futex_wake(g, INT_MAX);
+  }
+}
+
+static void threading_rehome_unstarted_stack(lua_State *L, lua_State *L1,
+					     TGState *tg)
+{
+  global_State *g = G(L);
+  TGState *dst = L2TG(L);
+  TValue *oldst = tvref(L1->stack);
+  TValue *st;
+  ptrdiff_t delta;
+  GCobj *up;
+  MSize stacksize;
+  size_t sz;
+  L1->tg_hint = dst;
+  if (!oldst || !tg || !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
+      g->allocf != lj_arena_allocf)
+    return;
+  if (lj_arena_owner_acq(lj_arena_of(oldst)) !=
+      lj_arena_alloc_owner_acq(&tg->alloc))
+    return;
+  stacksize = L1->stacksize;
+  sz = (size_t)stacksize * sizeof(TValue);
+  st = (TValue *)lj_mem_realloc(L, NULL, 0, (GCSize)sz);
+  memcpy(st, oldst, sz);
+  setmrefrel(L1->stack, st);
+  delta = (char *)st - (char *)oldst;
+  setmrefrel(L1->maxstack, (TValue *)((char *)tvref(L1->maxstack) + delta));
+  L1->base = (TValue *)((char *)L1->base + delta);
+  L1->top = (TValue *)((char *)L1->top + delta);
+  for (up = lj_state_openupval_acq(L1); up != NULL;
+       up = lj_obj_gcw_acq(up))
+    setmref(gco2uv(up)->v, (TValue *)((char *)uvval(gco2uv(up)) + delta));
+  lj_state_stack_pubrange(L, L1);
+  /* This TG never reached attach publication, so generic pointer routing
+  ** cannot resolve its allocator owner and would fall back to the main TG.
+  ** Free through the exact allocator which issued oldst; otherwise a small
+  ** run enters the main bins while its arena remains child-owned, and a huge
+  ** stack consults the wrong HugeTab. Preserve lj_mem_free's accounting. */
+  lj_gc_total_sub(g, (GCSize)sz);
+  if (LJ_UNLIKELY(lj_arena_allocf(&tg->allocd, oldst, sz, 0) != NULL))
+    abort();
+}
+
+typedef struct ThreadingWorkerCtx {
+  LJThread *th;
+  lua_State *L;
+  TGState *tg;
+  global_State *g;
+  uint32_t tid;
+  uint8_t tls_set;
+  uint8_t claimed;
+  uint8_t tg_state_set;
+  uint8_t attached;
+} ThreadingWorkerCtx;
+
+static int threading_tg_is_registered(global_State *g, TGState *target);
+
+static int threading_worker_start_cancelled(ThreadingWorkerCtx *ctx)
+{
+  uint32_t state = la_load32_acq(&ctx->th->state);
+  return mt_shutdown_acq(ctx->g) != 0 ||
+    state == LJ_THREAD_ABORTING || state == LJ_THREAD_DONE ||
+    lj_tg_flags_test_acq(ctx->tg, TGF_STOPREQ_FRESH);
+}
+
+static int threading_worker_claim(ThreadingWorkerCtx *ctx)
+{
+  lua_State *L = ctx->L;
+  uint32_t tid = ctx->tid;
+  uint32_t actor = lj_thr_actor_current();
+  LJStateOwner desired = lj_state_owner_pack(tid, actor);
+  if (actor == 0 || lj_tg_actor_acq(ctx->tg) != actor ||
+      lj_tg_tid_acq(ctx->tg) != tid)
+    abort();
+  for (;;) {
+    LJStateOwner current;
+    uint32_t owner, gcprep;
+    current = lj_state_owner_word_acq(L);
+    owner = lj_state_owner_tid(current);
+    gcprep = lj_state_gcprep_state_acq(L);
+    /* The parent-published TG root makes terminal preparation impossible.
+    ** PENDING/DONE here would mean a live-rooted state was reclaimed. */
+    if (LJ_UNLIKELY(gcprep != LJ_STATE_GCPREP_NONE))
+      abort();
+    if (owner == tid) {
+      if (current != desired)
+	abort();
+      ctx->claimed = 1;
+      return !threading_worker_start_cancelled(ctx);
+    }
+    if (owner == 0) {
+      LJStateOwner expect = 0;
+      if (current != 0 ||
+	  !lj_state_owner_word_cas(L, &expect, desired))
+	continue;
+      if (LJ_UNLIKELY(lj_state_gcprep_state_acq(L) !=
+		      LJ_STATE_GCPREP_NONE))
+	abort();
+      ctx->claimed = 1;
+      return !threading_worker_start_cancelled(ctx);
+    }
+    /* Cancellation cannot return an unclaimed state to cleanup: GC could win
+    ** a new GCSCAN CAS after any owner==0 observation. Keep the TG responsive
+    ** and wait until this worker owns L, then cleanup clears the hint under
+    ** that retained claim. */
+    if (owner == LJ_THREAD_GCSCAN || owner == LJ_THREAD_GCPREP) {
+      (void)lj_safepoint_poll_tg(ctx->tg);
+    }
+    (void)lj_state_owner_wait(NULL, L, owner, 1000000);
+  }
+}
+
+static int threading_worker_prepare(ThreadingWorkerCtx *ctx)
+{
+  LJThread *th = ctx->th;
+  TGState *tg = ctx->tg;
+  global_State *g = ctx->g;
+  int run;
+
+  /* The parent initialized tg with L and published all raw root fields before
+  ** pthread_create. Make that prepared identity registry-visible before the
+  ** owner CAS; do not rewrite any L/TG root while a GCSCAN may hold L. */
+  lj_thr_set_tg(tg);
+  ctx->tls_set = 1;
+  ctx->tg_state_set = 1;
+  lj_native_enter(tg);
+  lj_tg_attach(g, tg);
+  ctx->attached = 1;
+  run = threading_worker_claim(ctx);
+  (void)lj_native_leave_tg(tg);
+  if (!run || threading_worker_start_cancelled(ctx)) {
+    th->status = LUA_ERRRUN;
+    th->nresults = 0;
+    return 0;
+  }
+  return 1;
+}
+
+static TValue *threading_worker_cp(lua_State *L, lua_CFunction dummy,
+				   void *ud)
+{
+  ThreadingWorkerCtx *ctx = (ThreadingWorkerCtx *)ud;
+  LJThread *th = ctx->th;
+  global_State *g = ctx->g;
+  int status;
+  UNUSED(dummy);
+
+  lj_state_stack_pubrange(L, L);
+  la_store32_rel(&th->start_ready, 1);
+  threading_wake_thread(th);
+
+  if (!threading_worker_start_ok(L, th)) {
+    th->status = LUA_ERRRUN;
+    th->nresults = 0;
+  } else if (mt_shutdown_acq(g) != 0) {
+    th->status = LUA_ERRRUN;
+    th->nresults = 0;
+  } else {
+    lj_state_stack_pubrange(L, L);
+    la_store32_rel(&th->start_ready, 2);
+    threading_wake_thread(th);
+    status = lua_pcall(L, (int)th->nargs, LUA_MULTRET, 0);
+    th->status = (uint32_t)status;
+    th->nresults = (uint32_t)(L->top - L->base);
+    /*
+    ** Results become join-visible after DONE. Mirror freshly produced stack
+    ** refs into GC2 before releasing ownership to the joiner.
+    */
+    lj_state_stack_pubrange(L, L);
+    threading_result_gc_handoff(L, th);
+  }
+  return NULL;
+}
+
+static void threading_worker_error_result(ThreadingWorkerCtx *ctx, int errcode)
+{
+  lua_State *L = ctx->L;
+  LJThread *th = ctx->th;
+  th->status = (uint32_t)errcode;
+  if (ctx->claimed && L->top > L->base) {
+    TValue err;
+    copyTV(L, &err, L->top - 1);
+    L->top = L->base;
+    copyTV(L, L->top, &err);
+    lj_state_stack_pubtv(L, L, L->top);
+    L->top++;
+    th->nresults = 1;
+    threading_result_gc_handoff(L, th);
+  } else {
+    th->nresults = 0;
+    threading_result_gc_handoff(L, th);
+  }
+}
+
+static void threading_worker_cleanup(ThreadingWorkerCtx *ctx)
+{
+  LJThread *th = ctx->th;
+  lua_State *L = ctx->L;
+  TGState *tg = ctx->tg;
+  global_State *g = ctx->g;
+  int was_attached = ctx->attached || threading_tg_is_registered(g, tg);
+  /* Worker cleanup is internal and cannot report a retry. Fail before aborting
+  ** recorder state, disowning callbacks or changing registry/state ownership
+  ** if a protected VM/native scope, an uncancellable JIT lifecycle, or an
+  ** immutable event session still names this exact TG. A low recorder token is
+  ** deliberately cancelled by abort_owner immediately below. */
+  if (was_attached &&
+      (!threading_detach_scope_quiescent(g, tg, L) ||
+       !threading_jit_detach_preabort_ready(g, tg)))
+    abort();
+  /* A BC_FUNCF hot edge can start the recorder immediately before the worker
+  ** returns to this C boundary. Cancel its unpublished state while L and the
+  ** owner TG are still claimed and published; detaching first would strand the
+  ** global recorder token under a dead tid.
+  */
+  if (ctx->claimed)
+    lj_trace_abort_owner(L);
+  if (ctx->claimed)
+    lj_ccallback_disown_state(L);
+  /* The child state hint is a raw TG-facing publication. Close stable-slot
+  ** lifecycle admission before clearing it; lj_tg_detach() completes the
+  ** already-owned DETACHING transaction after state ownership is released. */
+  if (was_attached && !lj_tg_registry_detach_begin(g, tg))
+    abort();
+  /* The startup path publishes this hint before its state claim. A failed
+  ** racy claim must not leave the child naming a TG that userdata teardown can
+  ** later release. */
+  L->tg_hint = NULL;
+  if (ctx->tg_state_set && !was_attached) {
+    lj_tg_store_cur_L(tg, NULL);
+    lj_tg_store_thread_L(tg, NULL);
+    lj_tg_store_thread_ud(tg, NULL);
+  }
+  if (ctx->claimed) {
+    /* The child state outlives its OS-thread TG until join/userdata teardown.
+    ** Clear the owner hint before releasing the state; detach may make the TG
+    ** reclaimable immediately after this boundary. */
+    lj_state_release(L, ctx->tid);
+  }
+  if (was_attached)
+    lj_tg_detach(g, tg);
+  if (ctx->tls_set)
+    lj_thr_set_tg(NULL);
+  threading_gc_leave(g);
+  la_store32_rel(&th->state, LJ_THREAD_DONE);
+  threading_wake_thread(th);
+}
+
+static void *threading_worker(void *arg)
+{
+  LJThread *th = (LJThread *)arg;
+  lua_State *L = lj_thread_state_load_acq(th);
+  TGState *tg = th->tg;
+  global_State *g = G(L);
+  uint32_t tid = lj_thr_id(&th->thr);
+  ThreadingWorkerCtx ctx;
+  int errcode;
+
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.th = th;
+  ctx.L = L;
+  ctx.tg = tg;
+  ctx.g = g;
+  ctx.tid = tid;
+  /* Preparation is intentionally outside lj_vm_cpcall: TLS/root publication
+  ** and lj_tg_attach are nonthrowing (registry allocation has a fallback),
+  ** while installing a protected VM frame itself mutates L and needs owner
+  ** authority first. */
+  if (threading_worker_prepare(&ctx)) {
+    /* The protected VM frame is installed only after this OS thread owns L.
+    ** lj_vm_cpcall itself checkpoints and may unwind mutable state. */
+    errcode = lj_vm_cpcall(L, NULL, &ctx, threading_worker_cp);
+    if (LJ_UNLIKELY(errcode))
+      threading_worker_error_result(&ctx, errcode);
+  }
+  threading_worker_cleanup(&ctx);
+  return NULL;
+}
+
+static int threading_is_current_thread(lua_State *L, LJThread *th)
+{
+  TGState *tg = L2TG(L);
+  return tg != NULL && lj_tg_load_thread_ud(tg) == lj_thread_udata_acq(th);
+}
+
+static int threading_tg_is_registered(global_State *g, TGState *target)
+{
+  TGState *tg;
+  if (!g || !target)
+    return 0;
+  for (tg = gc2_tg_list_acq(g);
+       tg != NULL;
+       tg = lj_tg_next_acq(tg)) {
+    if (tg == target)
+      return 1;
+  }
+  return 0;
+}
+
+int lj_threading_live_retry_tgs_terminal(global_State *g)
+{
+  LJThreadLive *node;
+  uint32_t n = 0;
+  if (!g)
+    return 1;
+  /* threading_shutdown has joined every child and deliberately retained only
+  ** provisional RETRY TGs on this live-root spine. GC2 workers are joined by
+  ** the caller, so a failed checked retry is a persistent terminal veto, not
+  ** permission to drop the one raw owner. */
+  node = lj_thread_live_head_acq(g);
+  while (node != NULL) {
+    LJThreadLive *next = lj_thread_live_next_acq(node);
+    LJGC2Lease lease;
+    GCudata *ud;
+    if (next == node)
+      return 0;
+    if (lj_thread_live_udata_ref_acq(node) == NULL)
+      goto next_node;  /* Ordinary shutdown tombstone; storage drains later. */
+    ud = lj_thread_live_udata_acq(g, node, &lease);
+    if (!ud)
+      return 0;  /* A non-null terminal root must have an exact typed body. */
+    {
+      LJThread *th = (LJThread *)uddata(ud);
+      TGState *tg = th->tg;
+      if (!tg || la_load32_acq(&th->state) != LJ_THREAD_DONE ||
+	  la_load32_acq(&th->joined) == 0 ||
+	  lj_tg_fini_state_acq(tg) != TG_FINI_RETRY ||
+	  threading_tg_is_registered(g, tg)) {
+	lj_gc2_lease_release(&lease);
+	return 0;
+      }
+      if (!lj_tg_fini_thread(g, tg)) {
+	lj_gc2_lease_release(&lease);
+	return 0;
+      }
+      /* Close every userdata-facing raw pointer before tombstoning the live
+      ** root or releasing TG storage. The body lease spans the full handoff. */
+      th->tg = NULL;
+      lj_thread_state_store_rel(th, NULL);
+      threading_live_remove(g, th);
+      lj_mem_freet(g, tg);
+      lj_gc2_lease_release(&lease);
+    }
+next_node:
+    if (++n >= LJ_GC2_ROOT_SCAN_LIMIT)
+      return 0;  /* Corrupt/cyclic native-root metadata cannot be skipped. */
+    node = next;
+  }
+  return 1;
+}
+
+typedef struct ThreadingAttachCtx {
+  global_State *g;
+  TGState *tg;
+  uint32_t tid;
+  uint8_t entering;
+  uint8_t tls_set;
+  uint8_t claimed;
+  uint8_t tg_state_set;
+  uint8_t gc_entered;
+  uint8_t attached;
+  uint8_t success;
+} ThreadingAttachCtx;
+
+static TValue *threading_attach_cp(lua_State *L, lua_CFunction dummy,
+				   void *ud)
+{
+  ThreadingAttachCtx *ctx = (ThreadingAttachCtx *)ud;
+  LJGC2Lease lease;
+  GCudata *thread_ud;
+  UNUSED(dummy);
+  thread_ud = lj_thread_state_udata_acq(ctx->g, L, &lease);
+  lj_tg_store_thread_ud(ctx->tg, thread_ud);
+  lj_gc2_lease_release(&lease);
+  /* Keep the admission token across both the attach transaction and every
+  ** protected failure cleanup. The successful path transitions to mt_live;
+  ** the failed path must remain visible to lua_close until its final access to
+  ** L, g and the private TG has completed. */
+  if (!threading_gc_enter_counted(L, NULL, 1)) {
+    return NULL;
+  }
+  ctx->gc_entered = 1;
+  if (mt_shutdown_acq(ctx->g) != 0)
+    return NULL;
+  ctx->success = 1;
+  ctx->entering = 0;
+  threading_entering_leave(ctx->g);
+  return NULL;
+}
+
+static void threading_attach_cleanup(lua_State *L, ThreadingAttachCtx *ctx,
+				     int disown_callbacks)
+{
+  /* The admission/live reservation makes this membership probe stable against
+  ** dead-TG reclamation, including provisional attach cleanup before claim. */
+  int was_attached = ctx->attached ||
+    threading_tg_is_registered(ctx->g, ctx->tg);
+  if (was_attached &&
+      (!threading_detach_scope_quiescent(
+	ctx->g, ctx->tg, ctx->tg_state_set ? L : NULL) ||
+       !threading_jit_detach_preabort_ready(ctx->g, ctx->tg)))
+    abort();  /* No mutation is safe past an unfinished JIT owner/session. */
+  /* Foreign attached threads have the same recorder lifetime boundary as
+  ** spawned workers: no recorder state may retain this TG's soon-dead tid.
+  */
+  if (was_attached && ctx->claimed && ctx->tg_state_set)
+    lj_trace_abort_owner(L);
+  if (was_attached && ctx->claimed && ctx->tg_state_set && disown_callbacks)
+    lj_ccallback_disown_state(L);
+  if (was_attached &&
+      !lj_tg_registry_detach_begin(ctx->g, ctx->tg))
+    abort();
+  if (ctx->tg_state_set && !was_attached) {
+    lj_tg_store_cur_L(ctx->tg, NULL);
+    lj_tg_store_thread_L(ctx->tg, NULL);
+    lj_tg_store_thread_ud(ctx->tg, NULL);
+  }
+  if (ctx->tg_state_set)
+    L->tg_hint = NULL;
+  if (ctx->claimed)
+    lj_state_release(L, ctx->tid);
+  if (was_attached) {
+    lj_tg_detach(ctx->g, ctx->tg);
+    ctx->tg_state_set = 0;
+  }
+  if (ctx->tls_set)
+    lj_thr_set_tg(NULL);
+  if (!was_attached) {
+    if (!lj_tg_fini_thread(ctx->g, ctx->tg))
+      abort();
+    if (lj_tg_actor_acq(ctx->tg) != 0 &&
+	!lj_thr_tg_handoff_current(ctx->tg))
+      abort();  /* Provisional local TG dies only after disowning its actor. */
+    free(ctx->tg);
+  }
+  /* Do not reclaim a registered foreign TG inline. Apart from competing with
+  ** the main/collector reclaimer, doing so would make the release below cease
+  ** to be the lifetime boundary observed by lua_close. If both counters are
+  ** held, release entering first so mt_live protects the second atomic. */
+  if (ctx->entering) {
+    ctx->entering = 0;
+    threading_entering_leave(ctx->g);
+  }
+  if (ctx->gc_entered) {
+    ctx->gc_entered = 0;
+    threading_gc_leave(ctx->g);  /* Final access to g on this failure path. */
+  }
+}
+
+static uint32_t threading_join_claim_results(lua_State *L, lua_State *child,
+					     uint32_t tid)
+{
+  uint32_t actions = 0;
+  while (!lj_state_claim(child, tid)) {
+    uint32_t owner = lj_state_owner_acq(child);
+    int had_stopreq = lj_safepoint_had_stopreq(L);
+    if (owner != 0)
+      actions |= lj_state_owner_wait(L, child, owner, 1000000);
+    else
+      actions |= lj_thr_retry_yield(L);
+    lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+  }
+  return actions;
+}
+
+static int threading_join_core(lua_State *L, LJThread *th, int has_timeout,
+			       int64_t ns)
+{
+  int remove_live = 0;
+  uint32_t join_actions = 0;
+  int join_had_stopreq = lj_safepoint_had_stopreq(L);
+  int64_t deadline = ns > 0 ? threading_deadline_ns(ns) : 0;
+  uint32_t state;
+  join_actions = lj_safepoint_poll_pending_stopreq(L, join_actions);
+  lj_safepoint_checkstop_fresh(L, join_actions, join_had_stopreq);
+  join_had_stopreq = lj_safepoint_had_stopreq(L);
+  if (threading_is_current_thread(L, th)) {
+    if (has_timeout) {
+      setnilV(L->top++);
+      lua_pushliteral(L, "timeout");
+      return 2;
+    }
+    lj_err_callermsg(L, "self-join would deadlock");
+  }
+  if (th->main_thread)
+    lj_err_callermsg(L, "cannot join main thread");
+  for (;;) {
+    state = la_load32_acq(&th->state);
+    if (state == LJ_THREAD_DONE)
+      break;
+    if (has_timeout) {
+      ns = threading_remaining_ns(deadline);
+    }
+    if (has_timeout && ns == 0) {
+      setnilV(L->top++);
+      lua_pushliteral(L, "timeout");
+      return 2;
+    }
+    {
+      uint32_t futex = la_load32_acq(&th->futex);
+      uint32_t actions;
+      int had_stopreq = lj_safepoint_had_stopreq(L);
+      if (la_load32_acq(&th->state) == LJ_THREAD_DONE)
+	continue;
+      /* Join waiters still own their Lua stack. Root-scan handshakes cannot
+      ** remotely acknowledge them, and the handshake wakes the TG poll futex
+      ** rather than the thread-completion futex. Bounded waits let the owner
+      ** leave native state and apply safepoints without changing join timeout
+      ** semantics.
+      */
+      if (la_load32_acq(&th->state) != LJ_THREAD_DONE)
+	actions = threading_futex_wait_l(L, &th->futex, futex,
+					 threading_native_wait_slice(has_timeout,
+								     ns));
+      else
+	actions = 0;
+      lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+    }
+  }
+
+  if (la_load32_acq(&th->joined) == 0) {
+    uint32_t expect = 0;
+    if (la_cas32(&th->joined, &expect, 1, LA_ACQ_REL, LA_ACQ)) {
+      join_had_stopreq = lj_safepoint_had_stopreq(L);
+      lj_native_enter(L2TG(L));
+      (void)lj_thr_join(&th->thr, NULL);
+      join_actions = lj_native_leave(L);
+      remove_live = 1;
+    }
+  }
+
+  lj_state_checkstack(L, th->nresults + 1u);
+  setboolV(L->top++, th->status == LUA_OK);
+  {
+    uint32_t tid = lj_thr_current_id(G(L));
+    uint32_t i;
+    lua_State *child = lj_thread_state_load_acq(th);
+    join_actions |= threading_join_claim_results(L, child, tid);
+    for (i = 0; i < th->nresults; i++) {
+      copyTV(L, L->top, child->base + i);
+      lj_state_stack_pubtv(L, L, L->top);
+      L->top++;
+    }
+    lj_state_release(child, tid);
+  }
+  threading_start_roots_clear(L, th);
+  if (remove_live) {
+    threading_live_remove(G(L), th);
+    (void)lj_tg_reclaim_dead(G(L));
+  }
+  lj_safepoint_checkstop_fresh(L, join_actions, join_had_stopreq);
+  return (int)th->nresults + 1;
+}
+
+static uint32_t threading_thr_create_l(lua_State *L, LJThread *th,
+				       int had_stopreq,
+				       int *rcp, int *fresh_stopreqp)
+{
+  uint32_t actions;
+  lj_native_enter(L2TG(L));
+  *rcp = lj_thr_create(&th->thr, threading_worker, th);
+  actions = lj_native_leave(L);
+  if (fresh_stopreqp)
+    *fresh_stopreqp = lj_safepoint_fresh_stopreq(L, actions, had_stopreq);
+  return actions;
+}
+
+static void threading_join_aborted_start(lua_State *L, LJThread *th,
+					 uint32_t *actionsp)
+{
+  uint32_t expect = 0;
+  threading_start_abort(th);
+  if (la_cas32(&th->joined, &expect, 1, LA_ACQ_REL, LA_ACQ)) {
+    uint32_t actions;
+    lj_native_enter(L2TG(L));
+    (void)lj_thr_join(&th->thr, NULL);
+    actions = lj_native_leave(L);
+    if (actionsp)
+      *actionsp |= actions;
+  }
+  threading_live_remove(G(L), th);
+  (void)lj_tg_reclaim_dead(G(L));
+}
+
+/* Finish a TG for which pthread_create never published a worker owner. A
+** racing GC arena/HugeTab admission may make checked physical teardown refuse
+** without waiting. In that case the existing live-root node keeps both the
+** userdata and th->tg authoritative until joined-world shutdown removes the
+** node and the userdata finalizer retries. joined=1 prevents shutdown from
+** attempting pthread_join on a handle which was never created. */
+static void threading_unstarted_tg_finish(lua_State *L, LJThread *th,
+					   TGState *tg)
+{
+  global_State *g = G(L);
+  if (!lj_tg_fini_thread(g, tg)) {
+    la_store32_rel(&th->joined, 1);
+    la_store32_rel(&th->state, LJ_THREAD_DONE);
+    threading_wake_thread(th);
+    return;
+  }
+  threading_live_remove(g, th);
+  th->tg = NULL;
+  lj_mem_freet(g, tg);
+  la_store32_rel(&th->state, LJ_THREAD_DONE);
+}
+
+#define LJLIB_MODULE_threading_thread
+
+LJLIB_CF(threading_thread_join)
+{
+  LJThread *th = threading_tothread(L);
+  int64_t ns;
+  int has_timeout;
+  has_timeout = L->base + 1 < L->top;
+  ns = threading_timeout_ns(L, 2, 1, -1);
+  return threading_join_core(L, th, has_timeout, ns);
+}
+
+LJLIB_CF(threading_thread_id)
+{
+  LJThread *th = threading_tothread(L);
+  setintV(L->top++, (int32_t)lj_thr_id(&th->thr));
+  return 1;
+}
+
+LJLIB_CF(threading_thread_running)
+{
+  LJThread *th = threading_tothread(L);
+  setboolV(L->top++, th->main_thread ||
+	   la_load32_acq(&th->state) != LJ_THREAD_DONE);
+  return 1;
+}
+
+LJLIB_CF(threading_thread___tostring)
+{
+  (void)threading_tothread(L);
+  lua_pushliteral(L, "threading.thread");
+  return 1;
+}
+
+LJLIB_CF(threading_thread___gc)
+{
+  if (L->base < L->top && tvisudata(L->base) &&
+      lj_udata_udtype_acq(udataV(L->base)) == UDTYPE_THREAD) {
+    global_State *g = G(L);
+    LJThread *th = (LJThread *)uddata(udataV(L->base));
+    if (!th->main_thread && th->tg &&
+	la_load32_acq(&th->state) == LJ_THREAD_DONE &&
+	la_load32_acq(&th->joined) != 0) {
+      (void)lj_tg_reclaim_dead(g);
+      if (!threading_tg_is_registered(g, th->tg)) {
+	TGState *tg = th->tg;
+	if (!lj_tg_fini_thread(g, tg)) {
+	  /* lua_close finalizes every userdata, including native-rooted ones.
+	  ** A retained live node is therefore the repeatable terminal owner; leave
+	  ** both pointers intact for lj_threading_live_retry_tgs_terminal(). */
+	  if (lj_tg_fini_state_acq(tg) == TG_FINI_RETRY &&
+	      lj_thread_live_node_acq(th) != NULL)
+	    return 0;
+	  abort();
+	}
+	th->tg = NULL;
+	lj_thread_state_store_rel(th, NULL);
+	threading_live_remove(g, th);
+	lj_mem_freet(g, tg);
+      } else {
+	/* The userdata is relinquishing the last external owner while an SSB
+	** publication still pins the embedded node storage. Let registry reclaim
+	** finalize it through lj_mem_* after the final pin is dropped. */
+	lj_tg_flags_or_rlx(th->tg, TGF_DEFER_FREE);
+	th->tg = NULL;
+	lj_thread_state_store_rel(th, NULL);
+      }
+    }
+  }
+  return 0;
+}
+
+LJLIB_PUSH("threading.thread") LJLIB_SET(__metatable)
+LJLIB_PUSH(top-1) LJLIB_SET(__index)
+
+/* -- Mutex methods ------------------------------------------------------- */
+
+static LJMutex *threading_tomutex(lua_State *L)
+{
+  if (!(L->base < L->top && tvisudata(L->base) &&
+	lj_udata_udtype_acq(udataV(L->base)) == UDTYPE_MUTEX))
+    lj_err_argtype(L, 1, "threading.mutex");
+  return (LJMutex *)uddata(udataV(L->base));
+}
+
+#define LJLIB_MODULE_threading_mutex
+
+LJLIB_CF(threading_mutex_lock)
+{
+  LJMutex *m = threading_tomutex(L);
+  for (;;) {
+    uint32_t expect = LJ_MUTEX_UNLOCKED;
+    if (la_cas32(&m->state, &expect, LJ_MUTEX_LOCKED, LA_ACQ_REL, LA_ACQ))
+      return 0;
+    {
+      uint32_t actions;
+      int had_stopreq = lj_safepoint_had_stopreq(L);
+      actions = threading_futex_wait_l(L, &m->state, LJ_MUTEX_LOCKED,
+				       THREADING_NATIVE_WAIT_SLICE_NS);
+      lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+    }
+  }
+}
+
+LJLIB_CF(threading_mutex_trylock)
+{
+  LJMutex *m = threading_tomutex(L);
+  uint32_t expect = LJ_MUTEX_UNLOCKED;
+  setboolV(L->top++, la_cas32(&m->state, &expect, LJ_MUTEX_LOCKED,
+			      LA_ACQ_REL, LA_ACQ));
+  return 1;
+}
+
+LJLIB_CF(threading_mutex_unlock)
+{
+  LJMutex *m = threading_tomutex(L);
+  uint32_t old = la_xchg32_acqrel(&m->state, LJ_MUTEX_UNLOCKED);
+  if (old == LJ_MUTEX_UNLOCKED)
+    lj_err_callermsg(L, "unlock of unlocked mutex");
+  la_futex_wake(&m->state, INT_MAX);
+  return 0;
+}
+
+LJLIB_CF(threading_mutex___tostring)
+{
+  (void)threading_tomutex(L);
+  lua_pushliteral(L, "threading.mutex");
+  return 1;
+}
+
+LJLIB_PUSH("threading.mutex") LJLIB_SET(__metatable)
+LJLIB_PUSH(top-1) LJLIB_SET(__index)
+
+/* -- Channel methods ----------------------------------------------------- */
+
+static LJChan *threading_tochan(lua_State *L)
+{
+  if (!(L->base < L->top && tvisudata(L->base) &&
+	lj_udata_udtype_acq(udataV(L->base)) == UDTYPE_CHANNEL))
+    lj_err_argtype(L, 1, "threading.channel");
+  return (LJChan *)uddata(udataV(L->base));
+}
+
+static void threading_push_recv(lua_State *L, int rc, TValue *out)
+{
+  if (rc == LJ_CHAN_OK) {
+    copyTV(L, L->top, out);
+    lj_state_stack_pubtv(L, L, L->top);
+    L->top++;
+    setboolV(L->top++, 1);
+  } else if (rc == LJ_CHAN_CLOSED) {
+    setnilV(L->top++);
+    setboolV(L->top++, 0);
+  } else if (rc == LJ_CHAN_TIMEOUT) {
+    setnilV(L->top++);
+    lua_pushliteral(L, "timeout");
+  } else {
+    setnilV(L->top++);
+    setboolV(L->top++, 0);
+  }
+}
+
+#define LJLIB_MODULE_threading_channel
+
+LJLIB_CF(threading_channel_send)
+{
+  GCudata *ud;
+  LJChan *ch = threading_tochan(L);
+  ptrdiff_t base = savestack(L, L->base);
+  cTValue *tv = lj_lib_checkany(L, 2);
+  int64_t ns = threading_timeout_ns(L, 3, 1, -1);
+  int rc;
+  ud = udataV(L->base);
+  lj_gc_pubobjtv(L, ud, tv);  /* 09 section 9.5: publish Lua refs to channel. */
+  rc = lj_chan_send_timeout(L, ch, tv, ns);
+  L->base = restorestack(L, base);
+  if (rc == LJ_CHAN_CLOSED)
+    lj_err_callermsg(L, "closed channel");
+  if (rc == LJ_CHAN_TIMEOUT) {
+    setnilV(L->top++);
+    lua_pushliteral(L, "timeout");
+    return 2;
+  }
+  setboolV(L->top++, 1);
+  return 1;
+}
+
+LJLIB_CF(threading_channel_recv)
+{
+  TValue out;
+  LJChan *ch = threading_tochan(L);
+  ptrdiff_t base = savestack(L, L->base);
+  int rc;
+  int64_t ns = threading_timeout_ns(L, 2, 1, -1);
+  setnilV(&out);
+  rc = lj_chan_recv_timeout_gc(L, ch, &out, ns);
+  L->base = restorestack(L, base);
+  threading_push_recv(L, rc, &out);
+  L->base = restorestack(L, base);
+  return 2;
+}
+
+LJLIB_CF(threading_channel_peek)
+{
+  TValue out;
+  LJChan *ch = threading_tochan(L);
+  int rc;
+  setnilV(&out);
+  rc = lj_chan_peek_gc(L, ch, &out);
+  threading_push_recv(L, rc, &out);
+  return 2;
+}
+
+LJLIB_CF(threading_channel_close)
+{
+  lj_chan_close(threading_tochan(L));
+  return 0;
+}
+
+LJLIB_CF(threading_channel___gc)
+{
+  if (L->base < L->top && tvisudata(L->base) &&
+      lj_udata_udtype_acq(udataV(L->base)) == UDTYPE_CHANNEL)
+    lj_chan_close((LJChan *)uddata(udataV(L->base)));
+  return 0;
+}
+
+LJLIB_CF(threading_channel___tostring)
+{
+  (void)threading_tochan(L);
+  lua_pushliteral(L, "threading.channel");
+  return 1;
+}
+
+LJLIB_PUSH("threading.channel") LJLIB_SET(__metatable)
+LJLIB_PUSH(top-1) LJLIB_SET(__index)
+
+static TValue *threading_gc_stats_storetv_str(lua_State *L, GCtab *t,
+					      const char *name,
+					      cTValue *src)
+{
+  GCstr *key = lj_str_newz(L, name);
+  TValue keytv, *dst;
+  setstrV(L, &keytv, key);
+  for (;;) {
+    dst = lj_tab_setstr(L, t, key);
+    if (lj_tab_trystoretv_cas_keyed(L, t, dst, &keytv, src) ==
+	LJ_TAB_STORE_CAS_OK)
+      return dst;
+    lj_tab_store_wait_l(L);  /* GC stats string store saw stale/FORWARD slot. */
+  }
+}
+
+static TValue *threading_gc_stats_storetv_int(lua_State *L, GCtab *t,
+					      int32_t key, cTValue *src)
+{
+  TValue keytv, *dst;
+  setintV(&keytv, key);
+  for (;;) {
+    dst = lj_tab_setint(L, t, key);
+    if (lj_tab_trystoretv_cas_keyed(L, t, dst, &keytv, src) ==
+	LJ_TAB_STORE_CAS_OK)
+      return dst;
+    lj_tab_store_wait_l(L);  /* GC stats int store saw stale/FORWARD slot. */
+  }
+}
+
+static void threading_gc_stats_setnum(lua_State *L, GCtab *t,
+				      const char *name, uint64_t n)
+{
+  TValue tv;
+  setnumV(&tv, (lua_Number)n);
+  threading_gc_stats_storetv_str(L, t, name, &tv);
+}
+
+static void threading_gc_stats_setint(lua_State *L, GCtab *t,
+				      const char *name, uint32_t n)
+{
+  TValue tv;
+  setintV(&tv, (int32_t)n);
+  threading_gc_stats_storetv_str(L, t, name, &tv);
+}
+
+static void threading_gc_stats_set_latency_buckets(lua_State *L, GCtab *t,
+						   const GC2StatsSnapshot *s)
+{
+  GCtab *bt;
+  TValue tv;
+  uint32_t i;
+  lua_createtable(L, LJ_GC2_HS_LATENCY_BUCKETS, 0);
+  bt = tabV(L->top - 1);
+  for (i = 0; i < LJ_GC2_HS_LATENCY_BUCKETS; i++) {
+    setnumV(&tv, (lua_Number)s->poll_ack_latency_buckets[i]);
+    threading_gc_stats_storetv_int(L, bt, (int32_t)i + 1, &tv);
+  }
+  lj_gc_pubtab(L, bt);
+  settabV(L, &tv, bt);
+  threading_gc_stats_storetv_str(L, t, "poll_ack_latency_buckets", &tv);
+  lj_gc_pubtabobj(L, t, bt);
+  L->top--;
+}
+
+static void threading_gc_stats_push(lua_State *L)
+{
+  global_State *g = G(L);
+  GC2StatsSnapshot s;
+  GCtab *t;
+  lj_gc2_stats_snapshot(g, &s);
+  lua_createtable(L, 0, 96);
+  t = tabV(L->top - 1);
+  threading_gc_stats_setnum(L, t, "total_bytes", s.total_bytes);
+  threading_gc_stats_setnum(L, t, "total_kbytes", s.total_bytes >> 10);
+  threading_gc_stats_setint(L, t, "phase", s.phase);
+  threading_gc_stats_setint(L, t, "gc_state", s.gc_state);
+  threading_gc_stats_setint(L, t, "generational", s.generational);
+  threading_gc_stats_setint(L, t, "cycle_minor_requested",
+			    s.cycle_minor_requested);
+  threading_gc_stats_setint(L, t, "cycle_sweep_minor",
+			    s.cycle_sweep_minor);
+  threading_gc_stats_setint(L, t, "minor_sweep_enabled",
+			    s.minor_sweep_enabled);
+  threading_gc_stats_setint(L, t, "cycle_roots_minor",
+			    s.cycle_roots_minor);
+  threading_gc_stats_setint(L, t, "minor_roots_enabled",
+			    s.minor_roots_enabled);
+  threading_gc_stats_setnum(L, t, "cycle_requests", s.cycle_requests);
+  threading_gc_stats_setnum(L, t, "cycle_starts", s.cycle_starts);
+  threading_gc_stats_setnum(L, t, "major_cycle_starts",
+			    s.major_cycle_starts);
+  threading_gc_stats_setnum(L, t, "minor_cycle_requests",
+			    s.minor_cycle_requests);
+  threading_gc_stats_setnum(L, t, "minor_cycle_starts",
+			    s.minor_cycle_starts);
+  threading_gc_stats_setnum(L, t, "minor_sweep_deferred",
+			    s.minor_sweep_deferred);
+  threading_gc_stats_setnum(L, t, "minor_sweep_arenas",
+			    s.minor_sweep_arenas);
+  threading_gc_stats_setnum(L, t, "minor_roots_deferred",
+			    s.minor_roots_deferred);
+  threading_gc_stats_setnum(L, t, "major_root_scans", s.major_root_scans);
+  threading_gc_stats_setnum(L, t, "minor_root_scans", s.minor_root_scans);
+  threading_gc_stats_setnum(L, t, "pending_root_flushes",
+			    s.pending_root_flushes);
+  threading_gc_stats_setnum(L, t, "pending_root_flushed",
+			    s.pending_root_flushed);
+  threading_gc_stats_setnum(L, t, "pending_root_flush_max",
+			    s.pending_root_flush_max);
+  threading_gc_stats_setnum(L, t, "minor_survival_base_live",
+			    s.minor_survival_base_live);
+  threading_gc_stats_setnum(L, t, "minor_survival_bytes",
+			    s.minor_survival_bytes);
+  threading_gc_stats_setint(L, t, "minor_survival_pct",
+			    s.minor_survival_pct);
+  threading_gc_stats_setint(L, t, "minor_survival_threshold_pct",
+			    s.minor_survival_threshold_pct);
+  threading_gc_stats_setnum(L, t, "minor_survival_major_requests",
+			    s.minor_survival_major_requests);
+  threading_gc_stats_setnum(L, t, "remembered_barriers",
+			    s.remembered_barriers);
+  threading_gc_stats_setnum(L, t, "remembered_pushed", s.remembered_pushed);
+  threading_gc_stats_setnum(L, t, "remembered_overflows",
+			    s.remembered_overflows);
+  threading_gc_stats_setnum(L, t, "remembered_filtered",
+			    s.remembered_filtered);
+  threading_gc_stats_setnum(L, t, "remembered_drained",
+			    s.remembered_drained);
+  threading_gc_stats_setnum(L, t, "poll_ack_samples", s.poll_ack_samples);
+  threading_gc_stats_setnum(L, t, "poll_ack_latency_sum_ns",
+			    s.poll_ack_latency_sum_ns);
+  threading_gc_stats_setnum(L, t, "poll_ack_latency_max_ns",
+			    s.poll_ack_latency_max_ns);
+  threading_gc_stats_set_latency_buckets(L, t, &s);
+  threading_gc_stats_setnum(L, t, "alloc_total_bytes",
+			    s.alloc_total_bytes);
+  threading_gc_stats_setnum(L, t, "alloc_since_trigger",
+			    s.alloc_since_trigger);
+  threading_gc_stats_setnum(L, t, "cycle_alloc_bytes", s.cycle_alloc_bytes);
+  threading_gc_stats_setnum(L, t, "trigger_bytes", s.trigger_bytes);
+  threading_gc_stats_setnum(L, t, "hard_bytes", s.hard_bytes);
+  threading_gc_stats_setnum(L, t, "assist_runs", s.assist_runs);
+  threading_gc_stats_setnum(L, t, "assist_grey_drained",
+			    s.assist_grey_drained);
+  threading_gc_stats_setnum(L, t, "assist_ssb_converted",
+			    s.assist_ssb_converted);
+  threading_gc_stats_setnum(L, t, "assist_weak_drained",
+			    s.assist_weak_drained);
+  threading_gc_stats_setnum(L, t, "jit_hard_checks", s.jit_hard_checks);
+  threading_gc_stats_setnum(L, t, "interp_hard_checks",
+			    s.interp_hard_checks);
+  threading_gc_stats_setnum(L, t, "worker_runs", s.worker_runs);
+  threading_gc_stats_setnum(L, t, "worker_grey_drained",
+			    s.worker_grey_drained);
+  threading_gc_stats_setnum(L, t, "worker_ssb_converted",
+			    s.worker_ssb_converted);
+  threading_gc_stats_setnum(L, t, "worker_weak_drained",
+			    s.worker_weak_drained);
+  threading_gc_stats_setnum(L, t, "worker_idle_declares",
+			    s.worker_idle_declares);
+  threading_gc_stats_setnum(L, t, "worker_busy_retries",
+			    s.worker_busy_retries);
+  threading_gc_stats_setnum(L, t, "worker_wakes", s.worker_wakes);
+  threading_gc_stats_setnum(L, t, "worker_parks", s.worker_parks);
+  threading_gc_stats_setnum(L, t, "worker_async_progress",
+			    s.worker_async_progress);
+  threading_gc_stats_setnum(L, t, "thread_scan_frame_fallbacks",
+			    s.thread_scan_frame_fallbacks);
+  threading_gc_stats_setnum(L, t, "ffi_native_scan_attempts",
+			    s.ffi_native_scan_attempts);
+  threading_gc_stats_setnum(L, t, "ffi_native_scan_stable_frames",
+			    s.ffi_native_scan_stable_frames);
+  threading_gc_stats_setnum(L, t, "ffi_native_scan_retries",
+			    s.ffi_native_scan_retries);
+  threading_gc_stats_setnum(L, t, "ffi_native_scan_invalid",
+			    s.ffi_native_scan_invalid);
+  threading_gc_stats_setnum(L, t, "sweep_owner_runs", s.sweep_owner_runs);
+  threading_gc_stats_setnum(L, t, "sweep_owner_arenas",
+			    s.sweep_owner_arenas);
+  threading_gc_stats_setnum(L, t, "sweep_owner_live_cells",
+			    s.sweep_owner_live_cells);
+  threading_gc_stats_setnum(L, t, "sweep_live_updates",
+			    s.sweep_live_updates);
+  threading_gc_stats_setnum(L, t, "sweep_live_huge_bytes",
+			    s.sweep_live_huge_bytes);
+  threading_gc_stats_setnum(L, t, "live_estimate", s.live_estimate);
+  threading_gc_stats_setnum(L, t, "smr_reclaim_runs", s.smr_reclaim_runs);
+  threading_gc_stats_setnum(L, t, "smr_reclaimed", s.smr_reclaimed);
+  threading_gc_stats_setnum(L, t, "root_spine_objects",
+			    s.root_spine_objects);
+  threading_gc_stats_setnum(L, t, "root_spine_tombstones",
+			    s.root_spine_tombstones);
+  threading_gc_stats_setnum(L, t, "root_spine_count_cap",
+			    s.root_spine_count_cap);
+  threading_gc_stats_setint(L, t, "root_spine_count_capped",
+			    s.root_spine_count_capped);
+  threading_gc_stats_setnum(L, t, "arena_traversable_owned",
+			    s.arena_traversable_owned);
+  threading_gc_stats_setnum(L, t, "arena_traversable_needsweep",
+			    s.arena_traversable_needsweep);
+  threading_gc_stats_setint(L, t, "arena_traversable_binmask",
+			    s.arena_traversable_binmask);
+  threading_gc_stats_setnum(L, t, "weak_clear_tables", s.weak_clear_tables);
+  threading_gc_stats_setnum(L, t, "weak_clear_cleared", s.weak_clear_cleared);
+  threading_gc_stats_setnum(L, t, "weak_bridge_skipped",
+			    s.weak_bridge_skipped);
+  threading_gc_stats_setnum(L, t, "weak_bridge_fallbacks",
+			    s.weak_bridge_fallbacks);
+  threading_gc_stats_setnum(L, t, "weak_bridge_backfills",
+			    s.weak_bridge_backfills);
+  threading_gc_stats_setnum(L, t, "weak_bridge_backfill_tables",
+			    s.weak_bridge_backfill_tables);
+  threading_gc_stats_setnum(L, t, "weak_bridge_backfill_slots",
+			    s.weak_bridge_backfill_slots);
+  threading_gc_stats_setnum(L, t, "weak_bridge_backfill_cleared",
+			    s.weak_bridge_backfill_cleared);
+  threading_gc_stats_setnum(L, t, "weak_keys_marked", s.weak_keys_marked);
+  threading_gc_stats_setnum(L, t, "weak_values_marked", s.weak_values_marked);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_sets", s.finreg_cdata_sets);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_clears",
+			    s.finreg_cdata_clears);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_queued",
+			    s.finreg_cdata_queued);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_sweep_queued",
+			    s.finreg_cdata_sweep_queued);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_pweak_queued",
+			    s.finreg_cdata_pweak_queued);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_pweak_claimed",
+			    s.finreg_cdata_pweak_claimed);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_preclaim_overflow",
+			    s.finreg_cdata_preclaim_overflow);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_preclaim_dispatched",
+			    s.finreg_cdata_preclaim_dispatched);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_order_seen",
+			    s.finreg_cdata_order_seen);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_order_claimed",
+			    s.finreg_cdata_order_claimed);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_order_unlinked",
+			    s.finreg_cdata_order_unlinked);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_order_queued",
+			    s.finreg_cdata_order_queued);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_order_retired",
+			    s.finreg_cdata_order_retired);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_order_tombstones",
+			    s.finreg_cdata_order_tombstones);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_order_fallbacks",
+			    s.finreg_cdata_order_fallbacks);
+  threading_gc_stats_setnum(L, t, "finreg_cdata_pending_order_hits",
+			    s.finreg_cdata_pending_order_hits);
+  threading_gc_stats_setnum(L, t, "finreg_udata_sets", s.finreg_udata_sets);
+  threading_gc_stats_setnum(L, t, "finreg_udata_clears",
+			    s.finreg_udata_clears);
+  threading_gc_stats_setnum(L, t, "finreg_udata_queued",
+			    s.finreg_udata_queued);
+  threading_gc_stats_setnum(L, t, "finreg_udata_registered",
+			    s.finreg_udata_registered);
+  threading_gc_stats_setnum(L, t, "finreg_udata_retired_nodes",
+			    s.finreg_udata_retired_nodes);
+  threading_gc_stats_setnum(L, t, "finreg_udata_discovered",
+			    s.finreg_udata_discovered);
+  threading_gc_stats_setnum(L, t, "finreg_udata_forgets",
+			    s.finreg_udata_forgets);
+  threading_gc_stats_setnum(L, t, "finalizer_queued", s.finalizer_queued);
+  threading_gc_stats_setnum(L, t, "finalizer_dequeued", s.finalizer_dequeued);
+  threading_gc_stats_setnum(L, t, "finalizer_mpsc_drained",
+			    s.finalizer_mpsc_drained);
+  threading_gc_stats_setnum(L, t, "finalizer_enters", s.finalizer_enters);
+  threading_gc_stats_setnum(L, t, "finalizer_leaves", s.finalizer_leaves);
+  threading_gc_stats_setnum(L, t, "finalizer_sweep_blocks",
+			    s.finalizer_sweep_blocks);
+  threading_gc_stats_setnum(L, t, "finalizer_spawn_deferrals",
+			    s.finalizer_spawn_deferrals);
+  threading_gc_stats_setnum(L, t, "finalizer_spawn_release_wakes",
+			    s.finalizer_spawn_release_wakes);
+  lj_gc_pubtab(L, t);
+}
+
+#define LJLIB_MODULE_threading
+
+LJLIB_PUSH(top-4) LJLIB_SET(!)  /* Set environment to thread methods. */
+
+LJLIB_CF(threading_cpucount)		LJLIB_REC(.)
+{
+  setintV(L->top++, (int32_t)lj_thr_cpucount());
+  return 1;
+}
+
+LJLIB_CF(threading_now)
+{
+  uint64_t ns = lj_thr_now_ns();
+  if (ns == 0) {
+    setnilV(L->top++);
+  } else {
+    setnumV(L->top++, (lua_Number)ns / 1000000000.0);
+  }
+  return 1;
+}
+
+LJLIB_CF(threading_fence)
+{
+  UNUSED(L);
+  lj_thr_fence();
+  return 0;
+}
+
+LJLIB_CF(threading_sleep)
+{
+  lua_Number sec = L->base < L->top ? lj_lib_checknum(L, 1) : 0;
+  int64_t ns = 0;
+  if (sec > 0) {
+    lua_Number nsec = sec * 1000000000.0;
+    ns = nsec > (lua_Number)INT64_MAX ? INT64_MAX : (int64_t)nsec;
+  }
+  {
+    int had_stopreq = lj_safepoint_had_stopreq(L);
+    uint32_t actions = lj_thr_sleep_ns(L, ns);
+    lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+  }
+  return 0;
+}
+
+LJLIB_CF(threading_gcstats)
+{
+  threading_gc_stats_push(L);
+  return 1;
+}
+
+LJLIB_CF(threading_gcworkers)
+{
+  int hasdata = L->base < L->top && !tvisnil(L->base);
+  int32_t data = lj_lib_optint(L, 1, 0);
+  global_State *g = G(L);
+  uint32_t old = lj_gc2_workers_count(g);
+  uint32_t actions = 0;
+  if (hasdata) {
+    int ok = lj_gc2_workers_set_l(L, data <= 0 ? 0u : (uint32_t)data,
+				  &actions);
+    lj_safepoint_checkstop(L, actions);
+    if (!ok)
+      lj_err_callermsg(L, "cannot start GC worker");
+  }
+  setintV(L->top++, (int32_t)old);
+  return 1;
+}
+
+LJLIB_CF(threading_gcmode)
+{
+  int hasmode = L->base < L->top && !tvisnil(L->base);
+  global_State *g = G(L);
+  int old = gc2_generational_acq(g) != 0;
+  if (hasmode) {
+    int opt = lj_lib_checkopt(L, 1, -1, "\13incremental\14generational");
+    lj_gc2_set_generational(g, opt == 1);
+  }
+  setstrV(L, L->top++, lj_str_newz(L, old ? "generational" : "incremental"));
+  return 1;
+}
+
+static lua_State *threading_spawn_core(lua_State *L, GCtab *env, TValue *base,
+				       ptrdiff_t nargs)
+{
+  GCudata *ud;
+  LJThread *th;
+  LJThreadLive *live;
+  TGState *tg;
+  lua_State *L1;
+  uint32_t tid = lj_thr_current_id(G(L));
+  uint32_t worker_tid;
+  ptrdiff_t baseofs = savestack(L, base);
+  GCtab *startenv;
+  int rc;
+
+  if (mt_shutdown_acq(G(L)) != 0)
+    lj_err_callermsg(L, "VM shutdown in progress");
+  worker_tid = lj_thr_newid();
+  if (worker_tid == 0)
+    lj_err_callermsg(L, "thread owner id space exhausted");
+  lj_state_checkstack(L, 2);
+  startenv = lj_state_env_acq(L);
+  L1 = lua_newthread(L);
+  threading_state_set_env(L, L1, startenv);
+  lj_state_checkstack(L1, (MSize)(nargs + 1));
+  threading_stack_copy_claimed_l(L, L1, baseofs, nargs, tid);
+
+  ud = threading_new_thread_ud(L, env);
+  threading_state_set_ud(L, L1, ud);
+  th = (LJThread *)uddata(ud);
+  threading_start_roots_init(L, ud, th, baseofs, (uint32_t)(nargs + 1));
+  live = threading_live_new(L, ud);
+  threading_live_publish(L, th, live);
+  tg = lj_mem_newt(L, sizeof(TGState), TGState);
+  threading_publish_thread_state(L, ud, th, L1);
+  lj_state_thread_registry_publish(G(L), L1);
+  th->tg = tg;
+  th->state = LJ_THREAD_STARTING;
+  th->nargs = (uint32_t)nargs;
+  lj_tg_init_thread(G(L), tg, L1, threading_arena_internal(G(L)));
+  lj_tg_flags_or_rlx(tg, TGF_LUA_ALLOC);
+  th->thr.tid = worker_tid;
+  lj_tg_tid_rel(tg, th->thr.tid);
+  lj_tg_derive_prng(G(L), tg, th->thr.tid);
+  lj_tg_store_thread_ud(tg, ud);
+  if (!lj_state_rehome_stack(L1)) {
+    L1->tg_hint = L2TG(L);
+    threading_unstarted_tg_finish(L, th, tg);
+    lj_err_mem(L);
+  }
+  if (!threading_gc_enter(L, ud)) {
+    threading_rehome_unstarted_stack(L, L1, tg);
+    threading_unstarted_tg_finish(L, th, tg);
+    lj_err_callermsg(L, "VM shutdown in progress");
+  }
+  {
+    int had_stopreq = lj_safepoint_had_stopreq(L);
+    int fresh_stopreq = 0;
+    uint32_t actions = threading_thr_create_l(L, th, had_stopreq, &rc,
+					      &fresh_stopreq);
+    if (rc != 0) {
+      char errbuf[LJ_ERR_ERRNO_BUFSZ];
+      const char *emsg = lj_err_strerrno(rc, errbuf, sizeof(errbuf));
+      threading_rehome_unstarted_stack(L, L1, tg);
+      threading_unstarted_tg_finish(L, th, tg);
+      threading_gc_leave(G(L));
+      lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+      lj_err_callermsg(L, emsg);
+    }
+    if (fresh_stopreq) {
+      threading_join_aborted_start(L, th, &actions);
+      lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+      lj_err_callermsg(L, "VM shutdown in progress");
+    }
+    while (la_load32_acq(&th->start_ready) == 0 &&
+	   la_load32_acq(&th->state) == LJ_THREAD_STARTING) {
+      uint32_t futex = la_load32_acq(&th->futex);
+      if (la_load32_acq(&th->start_ready) != 0 ||
+	  la_load32_acq(&th->state) != LJ_THREAD_STARTING)
+	break;
+      if (la_load32_acq(&th->start_ready) == 0 &&
+	  la_load32_acq(&th->state) == LJ_THREAD_STARTING)
+	actions |= threading_futex_wait_l(L, &th->futex, futex, 1000000);
+      if (lj_safepoint_fresh_stopreq(L, actions, had_stopreq)) {
+	threading_join_aborted_start(L, th, &actions);
+	lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+	lj_err_callermsg(L, "VM shutdown in progress");
+      }
+    }
+  }
+
+  {
+    int errcode = threading_stack_publish_protected(L, L1);
+    if (LJ_UNLIKELY(errcode)) {
+      uint32_t actions = 0;
+      threading_join_aborted_start(L, th, &actions);
+      UNUSED(actions);
+      lj_err_throw(L, errcode);
+    }
+  }
+  if (!threading_start_release(th)) {
+    uint32_t actions = 0;
+    threading_join_aborted_start(L, th, &actions);
+    lj_safepoint_checkstop_fresh(L, actions, lj_safepoint_had_stopreq(L));
+    lj_err_callermsg(L, "cannot start thread");
+  }
+  while (la_load32_acq(&th->start_ready) < 2 &&
+	 la_load32_acq(&th->state) == LJ_THREAD_RUNNING) {
+    uint32_t futex = la_load32_acq(&th->futex);
+    uint32_t actions;
+    int had_stopreq = lj_safepoint_had_stopreq(L);
+    if (la_load32_acq(&th->start_ready) >= 2 ||
+	la_load32_acq(&th->state) != LJ_THREAD_RUNNING)
+      break;
+    if (la_load32_acq(&th->start_ready) < 2 &&
+	la_load32_acq(&th->state) == LJ_THREAD_RUNNING)
+      actions = threading_futex_wait_l(L, &th->futex, futex, 1000000);
+    else
+      actions = 0;
+    lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+  }
+  return L1;
+}
+
+LJLIB_CF(threading_spawn)
+{
+  ptrdiff_t nargs;
+  if (!(L->base < L->top && tvisfunc(L->base)))
+    lj_err_argt(L, 1, LUA_TFUNCTION);
+  nargs = L->top - L->base - 1;
+  (void)threading_spawn_core(L, lj_func_env_acq(curr_func(L)), L->base,
+			     nargs);
+  copyTV(L, L->base, L->top-1);
+  L->top = L->base + 1;
+  return 1;
+}
+
+LJLIB_CF(threading_current)
+{
+  GCtab *env = lj_func_env_acq(curr_func(L));
+  TGState *tg = L2TG(L);
+  GCudata *ud = tg ? lj_tg_load_thread_ud(tg) : NULL;
+  if (!ud) {
+    GCstr *key = lj_str_newlit(L, THREADING_MAIN_KEY);
+    cTValue *tv = lj_tab_getstr(env, key);
+    if (L != mainthread_acq(G(L)))
+      lj_err_callermsg(L, "attached thread is not joinable");
+    if (tv) {
+      TValue mainv;
+      lj_tv_load_acq(&mainv, tv);
+      if (tvisudata(&mainv) &&
+	  lj_udata_udtype_acq(udataV(&mainv)) == UDTYPE_THREAD)
+	ud = udataV(&mainv);
+    }
+    if (!ud) {
+      LJThread *th;
+      ud = threading_new_thread_ud(L, env);
+      th = (LJThread *)uddata(ud);
+      threading_publish_thread_state(L, ud, th, L);
+      th->tg = tg;
+      th->state = LJ_THREAD_RUNNING;
+      th->main_thread = (L == mainthread_acq(G(L)));
+      th->thr.tid = tg ? lj_tg_tid_acq(tg) : 0;
+      threading_state_set_ud(L, L, ud);
+      if (tg)
+	lj_tg_store_thread_ud(tg, ud);
+      threading_storeudata_str(L, env, key, ud);
+      lj_gc_pubtab(L, env);
+      return 1;
+    }
+    if (tg)
+      lj_tg_store_thread_ud(tg, ud);
+    threading_state_set_ud(L, L, ud);
+  }
+  setudataV(L, L->top, ud);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  return 1;
+}
+
+LJLIB_PUSH(top-3) LJLIB_SET(!)  /* Set environment to mutex methods. */
+
+LJLIB_CF(threading_mutex)
+{
+  GCtab *env = lj_func_env_acq(curr_func(L));
+  LJUdataRoot root;
+  GCudata *ud;
+  LJMutex *m;
+  lj_state_checkstack(L, 1);  /* No stack growth with root live. */
+  ud = lj_udata_newrooted(L, sizeof(LJMutex), env, &root);
+  m = (LJMutex *)uddata(ud);
+  lj_udata_metatable_rel(ud, env);
+  threading_root_table(L, GCROOT_THREADING_MUTEX_MT, env);
+  lj_gc_pubobjobj(L, ud, env);
+  lj_udata_finreg_mt_rooted(L, ud, env, &root);
+  m->state = LJ_MUTEX_UNLOCKED;
+  lj_udata_specialize(L, ud, UDTYPE_MUTEX);
+  lj_udata_pushrooted(L, ud, &root);
+  lj_gc_check(L);
+  return 1;
+}
+
+LJLIB_PUSH(top-2) LJLIB_SET(!)  /* Set environment to channel methods. */
+
+LJLIB_CF(threading_channel)
+{
+  int32_t n = L->base < L->top ? lj_lib_checkint(L, 1) : 0;
+  uint32_t cap;
+  uint32_t rcap;
+  uint64_t bytes;
+  GCtab *env;
+  GCudata *ud;
+  LJUdataRoot root;
+  if (n < 0)
+    lj_err_arg(L, 1, LJ_ERR_NUMRNG);
+  cap = (uint32_t)n;
+  rcap = lj_chan_round_capacity(cap);
+  bytes = sizeof(LJChan) + ((uint64_t)rcap - 1u) * sizeof(LJChanSlot);
+  if (bytes > LJ_MAX_UDATA)
+    lj_err_arg(L, 1, LJ_ERR_NUMRNG);
+  env = lj_func_env_acq(curr_func(L));
+  lj_state_checkstack(L, 1);  /* No stack growth with root live. */
+  ud = lj_udata_newrooted(L, lj_chan_memsize(cap), env, &root);
+  lj_udata_metatable_rel(ud, env);
+  threading_root_table(L, GCROOT_THREADING_CHANNEL_MT, env);
+  lj_gc_pubobjobj(L, ud, env);
+  lj_udata_finreg_mt_rooted(L, ud, env, &root);
+  lj_chan_init((LJChan *)uddata(ud), cap);
+  lj_udata_specialize(L, ud, UDTYPE_CHANNEL);
+  lj_udata_pushrooted(L, ud, &root);
+  lj_gc_check(L);
+  return 1;
+}
+
+static int threading_attach(lua_State *L, int wait)
+{
+  global_State *g;
+  TGState *cur, *tg;
+  uint32_t tid;
+  MSize topofs;
+  ThreadingAttachCtx ctx;
+  int errcode;
+  if (!L)
+    return 0;
+  g = G(L);
+  cur = lj_thr_get_tg();
+  if (cur)
+    return lj_tg_load_thread_L(cur) == L;
+  if (L == mainthread_acq(g))
+    return 0;
+  if (!threading_entering_begin(g))
+    return 0;
+  tid = lj_thr_newid();
+  if (tid == 0) {
+    threading_entering_leave(g);
+    return 0;
+  }
+  tg = (TGState *)malloc(sizeof(TGState));
+  if (!tg) {
+    threading_entering_leave(g);
+    return 0;
+  }
+  /* Publish an empty provisional TG before the state-owner CAS. Thus every
+  ** real owner id is registry-resolvable, while mt_entering keeps g and this
+  ** private lifecycle transaction alive until it transitions to mt_live. */
+  lj_tg_init_thread(g, tg, NULL, threading_arena_internal(g));
+  lj_tg_flags_or_rlx(tg, TGF_HEAP);
+  lj_tg_tid_rel(tg, tid);
+  lj_tg_derive_prng(g, tg, tid);
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.g = g;
+  ctx.tg = tg;
+  ctx.tid = tid;
+  ctx.entering = 1;
+  lj_thr_set_tg(tg);
+  ctx.tls_set = 1;
+  /* Keep the rootless provisional TG remotely acknowledgeable through state
+  ** claim and stable root publication. The final leave polls before cpcall. */
+  lj_native_enter(tg);
+  lj_tg_attach(g, tg);
+  ctx.attached = 1;
+  for (;;) {
+    if (mt_shutdown_acq(g) != 0)
+      break;
+    if (lj_state_claim(L, tid)) {
+      ctx.claimed = 1;
+      break;
+    }
+    if (!wait)
+      break;
+    {
+      uint32_t owner = lj_state_owner_acq(L);
+      if (owner != 0)
+	(void)lj_state_owner_wait(NULL, L, owner, 1000000);
+      else
+	(void)lj_thr_retry_yield(NULL);
+    }
+  }
+  if (!ctx.claimed || mt_shutdown_acq(g) != 0 ||
+      lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH)) {
+    /* Provisional detach clears the still-native TG after servicing requests. */
+    threading_attach_cleanup(L, &ctx, 0);
+    return 0;
+  }
+  setmref(L->glref, g);
+  L->tg_hint = tg;
+  lj_tg_store_cur_L(tg, L);
+  lj_tg_store_thread_L(tg, L);
+  ctx.tg_state_set = 1;
+  /* The provisional TG joined the current GC phase without a Lua root.
+  ** Publish every existing stack edge immediately after installing that root,
+  ** before a protected frame or user callback can further mutate L. */
+  lj_state_stack_pubrange(L, L);
+  (void)lj_native_leave_tg(tg);
+  if (mt_shutdown_acq(g) != 0 ||
+      lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH)) {
+    threading_attach_cleanup(L, &ctx, 0);
+    return 0;
+  }
+  topofs = (MSize)(L->top - tvref(L->stack));
+  errcode = lj_vm_cpcall(L, NULL, &ctx, threading_attach_cp);
+  if (LJ_UNLIKELY(errcode)) {
+    /* Foreign attach is an int-valued admission API. Do not rethrow after
+    ** releasing its final VM-lifetime token: a concurrent lua_close is then
+    ** entitled to reclaim L before an error unwinder could inspect it. */
+    L->top = tvref(L->stack) + topofs;
+    threading_attach_cleanup(L, &ctx, 0);
+    return 0;
+  }
+  if (!ctx.success) {
+    threading_attach_cleanup(L, &ctx, 1);
+    return 0;
+  }
+  return 1;
+}
+
+int lj_threading_attach(lua_State *L)
+{
+  return threading_attach(L, 0);
+}
+
+/* TLS-less foreign callbacks must serialize on their owner carrier state. */
+int lj_threading_attach_wait(lua_State *L)
+{
+  return threading_attach(L, 1);
+}
+
+static void threading_detach_commit(lua_State *L, TGState *tg,
+				    int disown_callbacks)
+{
+  global_State *g = G(L);
+  uint32_t tid;
+  tid = lj_tg_tid_acq(tg);
+  lj_trace_abort_owner(L);
+  if (disown_callbacks)
+    lj_ccallback_disown_state(L);
+  /* Close stable admission before the state stops naming this owner. Keep the
+  ** raw TLS body live through state release, then let monolithic detach clear
+  ** roots/TLS and publish RETIRED only after that final ownership use. */
+  if (!lj_tg_registry_detach_begin(g, tg))
+    abort();
+  L->tg_hint = NULL;
+  lj_state_release(L, tid);
+  lj_tg_detach(g, tg);
+  lj_thr_set_tg(NULL);
+  threading_gc_leave(g);
+}
+
+void lj_threading_detach(lua_State *L, int disown_callbacks)
+{
+  global_State *g;
+  TGState *tg;
+  if (!L)
+    return;
+  g = G(L);
+  tg = lj_thr_get_tg();
+  if (!tg || tg == g->main_tg || lj_tg_load_thread_L(tg) != L)
+    return;
+  /* Public detach is a retryable no-op. Test the exact target tid in both JIT
+  ** owner-word halves, every protected VM/native/callback scope, and every
+  ** event slot before abort/disown, registry, state-owner or TLS mutation. */
+  if (!threading_detach_scope_quiescent(g, tg, L) ||
+      !threading_jit_detach_preabort_ready(g, tg))
+    return;
+  threading_detach_commit(L, tg, disown_callbacks);
+}
+
+int lj_threading_detach_callback_unwind(lua_State *L)
+{
+#if LJ_HASFFI
+  global_State *g;
+  TGState *tg;
+  CCallbackRuntime *cb;
+  if (!L)
+    return 0;
+  g = G(L);
+  tg = lj_thr_get_tg();
+  if (!tg || tg == g->main_tg || tg->gl != g || L2TG(L) != tg ||
+      lj_tg_load_cur_L(tg) != L || lj_tg_load_thread_L(tg) != L)
+    return 0;
+  cb = &tg->cb;
+  /* Only the unwind hook may consume this bit. Every callback/native root has
+  ** already been popped, and err_unwind() has removed the logical C frame.
+  ** Clear just this one debt so the unchanged public scope predicate can
+  ** certify all remaining detach invariants. */
+  if (ccallback_auto_detach_acq(cb) != 1 ||
+      ccallback_depth_acq(cb) != 0 || ccallback_L_acq(cb) != NULL ||
+      ccallback_slot_acq(cb) != 0 ||
+      ccallback_native_had_stopreq_acq(cb) != 0 ||
+      lj_tg_ffi_call_func_acq(tg) != NULL)
+    return 0;
+  ccallback_auto_detach_rel(cb, 0);
+  if (!threading_detach_scope_quiescent(g, tg, L) ||
+      !threading_jit_detach_preabort_ready(g, tg)) {
+    ccallback_auto_detach_rel(cb, 1);
+    return 0;
+  }
+  threading_detach_commit(L, tg, 0);
+  return 1;
+#else
+  UNUSED(L);
+  return 0;
+#endif
+}
+
+#include "lj_libdef.h"
+
+LJ_FUNC int luaopen_threading(lua_State *L)
+{
+  GCtab *thread_mt, *mutex_mt, *channel_mt;
+  GCtab *env;
+  LJ_LIB_REG(L, NULL, threading_thread);
+  thread_mt = tabV(L->top-1);
+  threading_root_table(L, GCROOT_THREADING_THREAD_MT, thread_mt);
+  LJ_LIB_REG(L, NULL, threading_mutex);
+  mutex_mt = tabV(L->top-1);
+  threading_root_table(L, GCROOT_THREADING_MUTEX_MT, mutex_mt);
+  LJ_LIB_REG(L, NULL, threading_channel);
+  channel_mt = tabV(L->top-1);
+  threading_root_table(L, GCROOT_THREADING_CHANNEL_MT, channel_mt);
+  LJ_LIB_REG(L, "threading", threading);
+  env = threading_env_from_module(L, tabV(L->top-1));
+  threading_root_table(L, GCROOT_THREADING_ENV, env);
+  return 1;
+}

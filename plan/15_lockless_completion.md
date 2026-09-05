@@ -624,6 +624,12 @@ while preserving eventual reclamation and useful progress for other owners.
 Then replace the synchronous driver and borrowed root/action completion
 protocols. See `notes/gc-worker-sweep-2026-09-05.md` and
 `notes/gc-pending-root-eof-2026-09-05.md`.
+The no-worker JIT source review separates a durable cycle request from a
+committed-service receipt and a new native allocation allowance. Existing
+positive drain results mix transfers, retries and physical progress; worker
+advertisement and threshold movement cannot pay that obligation. The exact
+service-to-native-turn rule remains unresolved, so no runtime patch is ready.
+See `notes/gc-jit-foreground-design-2026-09-05.md`.
 The scheduler SSB-empty assertion now reproduces on all three frozen variants:
 the fixture ignored a refused owner flush. It now establishes publication
 before the unchanged worker-drain checks; 60 corrected runs and six negative

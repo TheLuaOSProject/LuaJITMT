@@ -1,0 +1,17 @@
+{
+  "owner_manifest_sha256": "8d9bb4a2e6757d479253b58a8a2e879d96af95ccfc730d646730c7b5864b8d3e",
+  "verified_artifacts": 231,
+  "verified_bytes": 8048014,
+  "accepted_runtime_inputs": 225,
+  "base_runtime_inputs": 225,
+  "shared_runtime_inputs_checked": 225,
+  "shared_exact_difference": [
+    "src/lj_tab.c",
+    "src/lj_tab.h"
+  ],
+  "shared_head": "4ab0a6bddcfe4654ab8beb1ceabe2067d78f65c8",
+  "status": "design reviewed; committed-service receipt and native-turn payment rule remain unresolved",
+  "runtime_edits": 0,
+  "builds": 0,
+  "runtime_tests": 0
+}

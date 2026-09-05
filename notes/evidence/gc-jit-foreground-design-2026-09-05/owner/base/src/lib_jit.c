@@ -1,0 +1,1529 @@
+/*
+** JIT library.
+** Copyright (C) 2005-2026 Mike Pall. See Copyright Notice in luajit.h
+*/
+
+#include <stdlib.h>
+
+#define lib_jit_c
+#define LUA_LIB
+
+#include "lua.h"
+#include "lauxlib.h"
+#include "lualib.h"
+
+#include "lj_obj.h"
+#include "lj_atomic.h"
+#include "lj_gc.h"
+#include "lj_gc2.h"
+#include "lj_err.h"
+#include "lj_debug.h"
+#include "lj_buf.h"
+#include "lj_str.h"
+#include "lj_tab.h"
+#include "lj_tabtxn.h"
+#include "lj_state.h"
+#include "lj_thr.h"
+#include "lj_bc.h"
+#if LJ_HASFFI
+#include "lj_ctype.h"
+#endif
+#if LJ_HASJIT
+#include "lj_ir.h"
+#include "lj_jit.h"
+#include "lj_ircall.h"
+#include "lj_iropt.h"
+#include "lj_target.h"
+#endif
+#include "lj_trace.h"
+#include "lj_dispatch.h"
+#include "lj_safepoint.h"
+#include "lj_tg.h"
+#include "lj_vm.h"
+#include "lj_vmevent.h"
+#include "lj_profile.h"
+#include "lj_lib.h"
+
+#include "luajit.h"
+
+/* -- jit.* functions ----------------------------------------------------- */
+
+#define LJLIB_MODULE_jit
+
+static int setjitmode(lua_State *L, int mode)
+{
+  int idx = 0;
+  if (L->base == L->top || tvisnil(L->base)) {  /* jit.on/off/flush([nil]) */
+    mode |= LUAJIT_MODE_ENGINE;
+  } else {
+    /* jit.on/off/flush(func|proto, nil|true|false) */
+    if (tvisfunc(L->base) || tvisproto(L->base))
+      idx = 1;
+    else if (!tvistrue(L->base))  /* jit.on/off/flush(true, nil|true|false) */
+      goto err;
+    if (L->base+1 < L->top && tvisbool(L->base+1))
+      mode |= boolV(L->base+1) ? LUAJIT_MODE_ALLFUNC : LUAJIT_MODE_ALLSUBFUNC;
+    else
+      mode |= LUAJIT_MODE_FUNC;
+  }
+  if (luaJIT_setmode(L, idx, mode) != 1) {
+    if ((mode & LUAJIT_MODE_MASK) == LUAJIT_MODE_ENGINE)
+      lj_err_caller(L, LJ_ERR_NOJIT);
+  err:
+    lj_err_argt(L, 1, LUA_TFUNCTION);
+  }
+  return 0;
+}
+
+LJLIB_CF(jit_on)
+{
+  return setjitmode(L, LUAJIT_MODE_ON);
+}
+
+LJLIB_CF(jit_off)
+{
+  return setjitmode(L, LUAJIT_MODE_OFF);
+}
+
+LJLIB_CF(jit_flush)
+{
+#if LJ_HASJIT
+  if (L->base < L->top && tvisnumber(L->base)) {
+    int traceno = lj_lib_checkint(L, 1);
+    luaJIT_setmode(L, traceno, LUAJIT_MODE_FLUSH|LUAJIT_MODE_TRACE);
+    return 0;
+  }
+#endif
+  return setjitmode(L, LUAJIT_MODE_FLUSH);
+}
+
+#if LJ_HASJIT
+/* Push a string for every flag bit that is set. */
+static void flagbits_to_strings(lua_State *L, uint32_t flags, uint32_t base,
+				const char *str)
+{
+  for (; *str; base <<= 1, str += 1+*str)
+    if (flags & base)
+      setstrV(L, L->top++, lj_str_new(L, str+1, *(uint8_t *)str));
+}
+#endif
+
+LJLIB_CF(jit_status)
+{
+#if LJ_HASJIT
+  jit_State *J = L2J(L);
+  uint32_t flags = jit_flags_acq(J);
+  L->top = L->base;
+  setboolV(L->top++, (flags & JIT_F_ON) ? 1 : 0);
+  flagbits_to_strings(L, flags, JIT_F_CPU, JIT_F_CPUSTRING);
+  flagbits_to_strings(L, flags, JIT_F_OPT, JIT_F_OPTSTRING);
+  return (int)(L->top - L->base);
+#else
+  setboolV(L->top++, 0);
+  return 1;
+#endif
+}
+
+LJLIB_CF(jit_security)
+{
+  int idx = lj_lib_checkopt(L, 1, -1, LJ_SECURITY_MODESTRING);
+  setintV(L->top++, ((LJ_SECURITY_MODE >> (2*idx)) & 3));
+  return 1;
+}
+
+#ifndef LUAJIT_DISABLE_VMEVENT
+
+static LJ_AINLINE int jit_attach_raw_equal(cTValue *a, cTValue *b)
+{
+  return a && b && tv_rawload(a) == tv_rawload(b);
+}
+
+/* Preserve the stock event-name hash exactly: the full string length seeds
+** the hash, but mixing stops at the first embedded NUL. */
+static int32_t jit_attach_event_key(GCstr *s)
+{
+  const uint8_t *p = (const uint8_t *)strdata(s);
+  uint32_t h = s->len;
+  while (*p)
+    h = h ^ (lj_rol(h, 6) + *p++);
+  return VMEVENT_HASHIDX(h);
+}
+
+static void jit_attach_txn_abort_checked(lua_State *L,
+					 LJTabKeyedStoreTxn *txn)
+{
+  if (LJ_UNLIKELY(!lj_tab_keyed_store_abort(L, txn)))
+    abort();
+}
+
+static void jit_attach_txn_finish_checked(lua_State *L,
+					  LJTabKeyedStoreTxn *txn)
+{
+  if (LJ_UNLIKELY(!lj_tab_keyed_store_finish(L, txn)))
+    abort();
+}
+
+#if LJ_HASJIT
+/* VM-event readers index clocks with the final numeric registry key, not the
+** original event string. Iteration canonicalizes some negative integer hash
+** keys to doubles, so accept either exact integral representation. */
+static int jit_attach_clock_slot(cTValue *key, uint32_t *slot)
+{
+  int64_t i64;
+  int32_t registry_key;
+  if (tvisint(key)) {
+    registry_key = intV(key);
+  } else if (tvisnum(key)) {
+    if (!lj_num2int_check(numV(key), i64, registry_key))
+      return 0;
+  } else {
+    return 0;
+  }
+  return lj_jit_event_attachment_clock_slot(registry_key, slot);
+}
+
+/* Return zero only after a BUSY claim has dropped every prepared authority
+** and completed one L-aware wait. Once a writer is CLAIMED, commit and
+** publish are deliberately adjacent: there is no cancellation path and no
+** branch, wait, throw or semantic runtime call can strand the lane odd. */
+static int jit_attach_clocked_commit(lua_State *L,
+				     LJTabKeyedStoreTxn *txn, uint32_t slot,
+				     int *committed, int *status)
+{
+  LJJitEventAttachmentWriter writer;
+  int claim = lj_jit_event_attachment_writer_claim(G(L), slot, &writer);
+  if (claim == LJ_JIT_EVENT_ATTACHMENT_WRITER_BUSY) {
+    jit_attach_txn_abort_checked(L, txn);
+    lj_tab_store_wait_l(L);
+    return 0;
+  }
+  if (claim == LJ_JIT_EVENT_ATTACHMENT_WRITER_EXHAUSTED) {
+    jit_attach_txn_abort_checked(L, txn);
+    lj_err_callermsg(L, "jit.attach event clock exhausted");
+  }
+  if (claim != LJ_JIT_EVENT_ATTACHMENT_WRITER_CLAIMED) {
+    jit_attach_txn_abort_checked(L, txn);
+    abort();
+  }
+
+  *committed = lj_tab_keyed_store_commit(txn, status);
+  lj_jit_event_attachment_writer_publish(&writer);
+
+  if (*committed)
+    jit_attach_txn_finish_checked(L, txn);
+  else
+    jit_attach_txn_abort_checked(L, txn);
+  return 1;
+}
+#endif
+
+static void jit_attach_unclocked_commit(lua_State *L,
+					LJTabKeyedStoreTxn *txn,
+					int invalidate_cache,
+					int *committed, int *status)
+{
+  *committed = lj_tab_keyed_store_commit(txn, status);
+  if (*committed && invalidate_cache)
+    vmevmask_store_rel(G(L), VMEVENT_NOCACHE);
+  if (*committed)
+    jit_attach_txn_finish_checked(L, txn);
+  else
+    jit_attach_txn_abort_checked(L, txn);
+}
+
+static int jit_attach_event(lua_State *L, ptrdiff_t tabofs,
+			    ptrdiff_t keyofs, ptrdiff_t fnoffs,
+			    int32_t registry_key)
+{
+  int confirm_committed_stale = 0;
+#if LJ_HASJIT
+  uint32_t clock_slot = LJ_JIT_EVENT_ATTACHMENT_SLOT_NONE;
+  int clocked =
+    lj_jit_event_attachment_clock_slot(registry_key, &clock_slot);
+#else
+  UNUSED(registry_key);
+#endif
+
+  for (;;) {
+    LJTabKeyedStoreTxn txn;
+    cTValue *tabroot = restorestack(L, tabofs);
+    cTValue *keyroot = restorestack(L, keyofs);
+    cTValue *fnroot;
+    cTValue *expected;
+    uintptr_t dst_addr = 0;
+    int resolve_status, prepare_status, committed, status;
+
+    resolve_status = lj_tab_keyed_slot_resolve_or_insert_rooted_l(
+      L, &tabroot, &keyroot, &dst_addr);
+    if (LJ_UNLIKELY(resolve_status != LJ_TAB_KEYED_SLOT_FOUND))
+      lj_err_callermsg(L, "thread busy");
+
+    /* resolve_or_insert() returns rebased stack roots. No raw stack pointer or
+    ** table body from an earlier L-aware operation crosses this boundary. */
+    fnroot = restorestack(L, fnoffs);
+    if (LJ_UNLIKELY(!tvistab(tabroot) || !tvisfunc(fnroot)))
+      abort();
+    lj_tab_keyed_store_txn_init(&txn);
+    prepare_status = lj_tab_keyed_store_prepare_snapshot(
+      L, &txn, tabV(tabroot), dst_addr, keyroot, fnroot);
+    if (prepare_status != LJ_TAB_STORE_CAS_OK) {
+      if (LJ_UNLIKELY(prepare_status != LJ_TAB_STORE_CAS_CHANGED &&
+		      prepare_status != LJ_TAB_STORE_CAS_STALE &&
+		      prepare_status != LJ_TAB_STORE_CAS_FORWARD))
+	abort();
+      lj_tab_store_wait_l(L);
+      continue;
+    }
+
+    /* A same-value initial attach must still publish an invalidation. Only a
+    ** previous committed-plus-STALE attempt earns this fresh confirmation. */
+    expected = lj_tab_keyed_store_expected(&txn);
+    fnroot = restorestack(L, fnoffs);
+    if (LJ_UNLIKELY(!expected || !tvisfunc(fnroot))) {
+      jit_attach_txn_abort_checked(L, &txn);
+      abort();
+    }
+    if (confirm_committed_stale && jit_attach_raw_equal(expected, fnroot)) {
+      jit_attach_txn_abort_checked(L, &txn);
+      return 0;
+    }
+
+#if LJ_HASJIT
+    if (clocked) {
+      if (!jit_attach_clocked_commit(L, &txn, clock_slot,
+				     &committed, &status))
+	continue;
+    } else
+#endif
+    {
+      jit_attach_unclocked_commit(L, &txn, 1, &committed, &status);
+    }
+
+    if (!committed) {
+      if (LJ_UNLIKELY(status != LJ_TAB_STORE_CAS_CHANGED &&
+		      status != LJ_TAB_STORE_CAS_STALE &&
+		      status != LJ_TAB_STORE_CAS_FORWARD))
+	abort();
+      /* Attach never treats a failed semantic CAS as success. Resolve and
+      ** prepare afresh against the same captured registry table. */
+      lj_tab_store_wait_l(L);
+      continue;
+    }
+    if (status == LJ_TAB_STORE_CAS_OK)
+      return 0;
+    if (LJ_UNLIKELY(status != LJ_TAB_STORE_CAS_STALE))
+      abort();
+    confirm_committed_stale = 1;
+    lj_tab_store_wait_l(L);
+  }
+}
+
+static int jit_detach_events(lua_State *L, ptrdiff_t tabofs,
+			     ptrdiff_t ctrlofs, ptrdiff_t keyofs,
+			     ptrdiff_t valofs, ptrdiff_t fnoffs)
+{
+  for (;;) {
+    cTValue *tabroot = restorestack(L, tabofs);
+    TValue *ctrl = restorestack(L, ctrlofs);
+    int next_status = lj_tab_itern_rooted(L, tabroot, ctrl);
+    if (next_status == 0)
+      return 0;
+    if (LJ_UNLIKELY(next_status != 1))
+      abort();
+
+    /* The rooted iterator may wait and rehome the stack. Its structural
+    ** cursor, actual key and exact value are the only durable traversal state. */
+    {
+      cTValue *valroot = restorestack(L, valofs);
+      cTValue *fnroot = restorestack(L, fnoffs);
+      if (LJ_UNLIKELY(!tvisfunc(fnroot)))
+	abort();
+      if (!tvisfunc(valroot) || funcV(valroot) != funcV(fnroot))
+	continue;
+    }
+
+    for (;;) {
+      LJTabKeyedStoreTxn txn;
+      cTValue *keyroot;
+      cTValue *valroot;
+      uintptr_t dst_addr = 0;
+      int resolve_status, prepare_status, committed, status;
+#if LJ_HASJIT
+      uint32_t clock_slot = LJ_JIT_EVENT_ATTACHMENT_SLOT_NONE;
+      int clocked;
+#endif
+
+      tabroot = restorestack(L, tabofs);
+      keyroot = restorestack(L, keyofs);
+      resolve_status = lj_tab_keyed_slot_resolve_rooted_try(
+        L, tabroot, keyroot, &dst_addr);
+      if (resolve_status == LJ_TAB_KEYED_SLOT_RETRY) {
+	lj_tab_store_wait_l(L);
+	continue;
+      }
+      if (resolve_status == LJ_TAB_KEYED_SLOT_ABSENT)
+	break;
+      if (LJ_UNLIKELY(resolve_status != LJ_TAB_KEYED_SLOT_FOUND))
+	abort();
+
+      tabroot = restorestack(L, tabofs);
+      keyroot = restorestack(L, keyofs);
+      valroot = restorestack(L, valofs);
+      if (LJ_UNLIKELY(!tvistab(tabroot) || !tvisfunc(valroot)))
+	abort();
+      lj_tab_keyed_store_txn_init(&txn);
+      prepare_status = lj_tab_keyed_store_prepare_exact(
+        L, &txn, tabV(tabroot), dst_addr, keyroot, valroot, niltv(L));
+      if (prepare_status == LJ_TAB_STORE_CAS_CHANGED)
+	break;  /* A replacement (or nil) won; never erase it. */
+      if (prepare_status != LJ_TAB_STORE_CAS_OK) {
+	if (LJ_UNLIKELY(prepare_status != LJ_TAB_STORE_CAS_STALE &&
+			prepare_status != LJ_TAB_STORE_CAS_FORWARD))
+	  abort();
+	lj_tab_store_wait_l(L);
+	continue;
+      }
+
+#if LJ_HASJIT
+      keyroot = restorestack(L, keyofs);
+      clocked = jit_attach_clock_slot(keyroot, &clock_slot);
+      if (clocked) {
+	if (!jit_attach_clocked_commit(L, &txn, clock_slot,
+				       &committed, &status))
+	  continue;
+      } else
+#endif
+      {
+	jit_attach_unclocked_commit(L, &txn, 0, &committed, &status);
+      }
+
+      if (!committed) {
+	if (status == LJ_TAB_STORE_CAS_CHANGED)
+	  break;  /* Preserve the exact competing replacement. */
+	if (LJ_UNLIKELY(status != LJ_TAB_STORE_CAS_STALE &&
+			status != LJ_TAB_STORE_CAS_FORWARD))
+	  abort();
+	lj_tab_store_wait_l(L);
+	continue;
+      }
+      if (status == LJ_TAB_STORE_CAS_OK)
+	break;
+      if (LJ_UNLIKELY(status != LJ_TAB_STORE_CAS_STALE))
+	abort();
+      /* The CAS committed into an old generation. Resolve the same rooted key
+      ** again; prepare_exact advances if the current value is no longer fn. */
+      lj_tab_store_wait_l(L);
+    }
+  }
+}
+
+#endif /* !LUAJIT_DISABLE_VMEVENT */
+
+LJLIB_CF(jit_attach)
+{
+#ifdef LUAJIT_DISABLE_VMEVENT
+  luaL_error(L, "vmevent API disabled");
+#else
+  int attach;
+  const char *conflict;
+  ptrdiff_t tabofs, fnoffs;
+
+  /* Compatibility order is observable: disabled builds reject first; enabled
+  ** builds validate the function, then the optional event name, then perform
+  ** exactly one registry lookup/creation. */
+  (void)lj_lib_checkfunc(L, 1);
+  attach = lj_lib_optstr(L, 2) != NULL;
+  if (attach)
+    lj_state_stack_pubtv(L, L, L->base + 1);
+  conflict = luaL_findtable(L, LUA_REGISTRYINDEX, LJ_VMEVENTS_REGKEY,
+			    LJ_VMEVENTS_HSIZE);
+  if (LJ_UNLIKELY(conflict != NULL))
+    lj_err_callerv(L, LJ_ERR_BADMODN, conflict);
+
+  if (attach) {
+    cTValue *eventroot;
+    ptrdiff_t eventofs, keyofs;
+    int32_t registry_key;
+
+    lj_state_checkstack(L, 1);
+    fnoffs = savestack(L, L->base);
+    eventofs = savestack(L, L->base + 1);
+    tabofs = savestack(L, L->top - 1);
+    eventroot = restorestack(L, eventofs);
+    if (LJ_UNLIKELY(!tvisstr(eventroot)))
+      abort();
+    registry_key = jit_attach_event_key(strV(eventroot));
+    keyofs = savestack(L, L->top);
+    setintV(L->top, registry_key);
+    lj_state_stack_pubtv(L, L, L->top);
+    L->top++;
+    return jit_attach_event(L, tabofs, keyofs, fnoffs, registry_key);
+  } else {
+    TValue *ctrl;
+    ptrdiff_t ctrlofs, keyofs, valofs;
+
+    /* Keep one table and three contiguous traversal roots. The LJ_KEYINDEX
+    ** cursor survives concurrent resize without reusing an invalid actual key. */
+    lj_state_checkstack(L, 3);
+    fnoffs = savestack(L, L->base);
+    tabofs = savestack(L, L->top - 1);
+    ctrl = L->top;
+    ctrlofs = savestack(L, ctrl);
+    keyofs = savestack(L, ctrl + 1);
+    valofs = savestack(L, ctrl + 2);
+    ctrl->u32.lo = 0;
+    ctrl->u32.hi = LJ_KEYINDEX;
+    setnilV(ctrl + 1);
+    setnilV(ctrl + 2);
+    lj_state_stack_pubtv(L, L, ctrl);
+    lj_state_stack_pubtv(L, L, ctrl + 1);
+    lj_state_stack_pubtv(L, L, ctrl + 2);
+    L->top += 3;
+    return jit_detach_events(L, tabofs, ctrlofs, keyofs, valofs, fnoffs);
+  }
+#endif
+  return 0;
+}
+
+LJLIB_PUSH(top-5) LJLIB_SET(os)
+LJLIB_PUSH(top-4) LJLIB_SET(arch)
+LJLIB_PUSH(top-3) LJLIB_SET(version_num)
+LJLIB_PUSH(top-2) LJLIB_SET(version)
+
+#include "lj_libdef.h"
+
+/* -- jit.util.* functions ------------------------------------------------ */
+
+#define LJLIB_MODULE_jit_util
+
+/* -- Reflection API for Lua functions ------------------------------------ */
+
+static TValue *jit_util_storetv_str(lua_State *L, GCtab *t, GCstr *key,
+				    cTValue *src)
+{
+  TValue keytv, *dst;
+  setstrV(L, &keytv, key);
+  for (;;) {
+    dst = lj_tab_setstr(L, t, key);
+    if (lj_tab_trystoretv_cas_keyed(L, t, dst, &keytv, src) ==
+	LJ_TAB_STORE_CAS_OK)
+      return dst;
+    lj_tab_store_wait_l(L);  /* jit.util string store saw stale/FORWARD slot. */
+  }
+}
+
+#if LJ_HASJIT
+static TValue *jit_util_storetv_int(lua_State *L, GCtab *t, int32_t key,
+				    cTValue *src)
+{
+  TValue keytv, *dst;
+  setintV(&keytv, key);
+  for (;;) {
+    dst = lj_tab_setint(L, t, key);
+    if (lj_tab_trystoretv_cas_keyed(L, t, dst, &keytv, src) ==
+	LJ_TAB_STORE_CAS_OK)
+      return dst;
+    lj_tab_store_wait_l(L);  /* jit.util int store saw stale/FORWARD slot. */
+  }
+}
+#endif
+
+static void setintfield(lua_State *L, GCtab *t, const char *name, int32_t val)
+{
+  TValue tv;
+  setintV(&tv, val);
+  jit_util_storetv_str(L, t, lj_str_newz(L, name), &tv);
+}
+
+static void setintptrfield(lua_State *L, GCtab *t, GCstr *key, intptr_t val)
+{
+  TValue tv;
+  setintptrV(&tv, val);
+  jit_util_storetv_str(L, t, key, &tv);
+}
+
+static void setprotofield(lua_State *L, GCtab *t, GCstr *key, GCproto *pt)
+{
+  TValue tv;
+  setprotoV(L, &tv, pt);
+  jit_util_storetv_str(L, t, key, &tv);
+  lj_gc_pubtabobj(L, t, pt);
+}
+
+#if LJ_HASJIT
+static void setintindex(lua_State *L, GCtab *t, int32_t key, int32_t val)
+{
+  TValue tv;
+  setintV(&tv, val);
+  jit_util_storetv_int(L, t, key, &tv);
+}
+#endif
+
+/* local info = jit.util.funcinfo(func [,pc]) */
+LJLIB_CF(jit_util_funcinfo)
+{
+  GCproto *pt = lj_lib_checkLproto(L, 1, 1);
+  if (pt) {
+    BCPos pc = (BCPos)lj_lib_optint(L, 2, 0);
+    GCtab *t;
+    lua_createtable(L, 0, 16);  /* Increment hash size if fields are added. */
+    t = tabV(L->top-1);
+    setintfield(L, t, "linedefined", pt->firstline);
+    setintfield(L, t, "lastlinedefined", pt->firstline + pt->numline);
+    setintfield(L, t, "stackslots", pt->framesize);
+    setintfield(L, t, "params", pt->numparams);
+    setintfield(L, t, "bytecodes", (int32_t)pt->sizebc);
+    setintfield(L, t, "gcconsts", (int32_t)proto_sizekgc_acq(pt));
+    setintfield(L, t, "nconsts", (int32_t)pt->sizekn);
+    setintfield(L, t, "upvalues", (int32_t)pt->sizeuv);
+    if (pc < pt->sizebc)
+      setintfield(L, t, "currentline", lj_debug_line(pt, pc));
+    lua_pushboolean(L, (pt->flags & PROTO_VARARG));
+    lua_setfield(L, -2, "isvararg");
+    lua_pushboolean(L, (pt->flags & PROTO_CHILD));
+    lua_setfield(L, -2, "children");
+    setstrV(L, L->top++, proto_chunkname_acq(pt));
+    lua_setfield(L, -2, "source");
+    lj_debug_pushloc(L, pt, pc);
+    lua_setfield(L, -2, "loc");
+    setprotofield(L, t, lj_str_newlit(L, "proto"), pt);
+    lj_gc_pubtab(L, t);
+  } else {
+    GCfunc *fn = funcV(L->base);
+    GCtab *t;
+    lua_createtable(L, 0, 4);  /* Increment hash size if fields are added. */
+    t = tabV(L->top-1);
+    if (!iscfunc(fn))
+      setintfield(L, t, "ffid", fn->c.ffid);
+    setintptrfield(L, t, lj_str_newlit(L, "addr"), (intptr_t)(void *)fn->c.f);
+    setintfield(L, t, "upvalues", lj_func_nupvalues(fn));
+    lj_gc_pubtab(L, t);
+  }
+  return 1;
+}
+
+/* local ins, m = jit.util.funcbc(func, pc) */
+LJLIB_CF(jit_util_funcbc)
+{
+  GCproto *pt = lj_lib_checkLproto(L, 1, 0);
+  BCPos pc = (BCPos)lj_lib_checkint(L, 2);
+  if (pc < pt->sizebc) {
+    BCIns ins = proto_bc(pt)[pc];
+    BCOp op = bc_op(ins);
+    lj_assertL(op < BC__MAX, "bad bytecode op %d", op);
+    setintV(L->top, ins);
+    setintV(L->top+1, lj_bc_mode[op]);
+    L->top += 2;
+    return 2;
+  }
+  return 0;
+}
+
+/* local k = jit.util.funck(func, idx) */
+LJLIB_CF(jit_util_funck)
+{
+  GCproto *pt = lj_lib_checkLproto(L, 1, 0);
+  ptrdiff_t idx = (ptrdiff_t)lj_lib_checkint(L, 2);
+  if (idx >= 0) {
+    if (idx < (ptrdiff_t)pt->sizekn) {
+      proto_knumtv_load_acq(L->top-1, pt, (MSize)idx);
+      return 1;
+    }
+  } else {
+    if (~idx < (ptrdiff_t)proto_sizekgc_acq(pt)) {
+      GCobj *gc = proto_kgc_acq(pt, idx);
+      setgcV(L, L->top-1, gc, ~gc->gch.gct);
+      return 1;
+    }
+  }
+  return 0;
+}
+
+/* local name = jit.util.funcuvname(func, idx) */
+LJLIB_CF(jit_util_funcuvname)
+{
+  GCproto *pt = lj_lib_checkLproto(L, 1, 0);
+  uint32_t idx = (uint32_t)lj_lib_checkint(L, 2);
+  if (idx < pt->sizeuv) {
+    setstrV(L, L->top-1, lj_str_newz(L, lj_debug_uvname(pt, idx)));
+    return 1;
+  }
+  return 0;
+}
+
+/* -- Reflection API for traces ------------------------------------------- */
+
+#if LJ_HASJIT
+
+/* Check trace number. Must not throw for non-existent trace numbers. */
+static GCtrace *jit_checktrace_tr(lua_State *L, TraceNo tr)
+{
+  jit_State *J = L2J(L);
+  TraceVec *tv = tracevec_acq(J);
+  lua_State *owner = jit_owner_l_acq(J);
+  if (tr > 0 && lj_trace_state_load(J) != LJ_TRACE_IDLE &&
+      trace_traceno_acq(&J->cur) == tr &&
+      owner == L && lj_jit_token_held_l(L, J) && lj_jit_token_held(J) &&
+      lj_trace_state_load(J) != LJ_TRACE_IDLE) {
+    /*
+    ** RECORD vmevents expose the pending trace number before trace_stop()
+    ** publishes a body in the trace vector. The recorder owns J->cur under the
+    ** JIT token, so same-thread jit.util callbacks may inspect that current
+    ** body without making all trace-vector slots semantic GC roots.
+    */
+    return &J->cur;
+  }
+  if (tr > 0 && tv && (MSize)tr < tv->sizetrace) {
+    GCtrace *T = traceref_fromgco_safe(gcref_acq(tv->slot[tr]));
+    if (T && trace_traceno_acq(T) == tr &&
+	la_load64_acq(&T->retire_epoch) == 0)
+      return T;
+  }
+  return NULL;
+}
+
+static LJ_AINLINE int jit_trace_read_lock(lua_State *L, jit_State *J)
+{
+  if (lj_jit_token_held_l(L, J) || lj_jit_token_held(J))
+    return 0;
+  return lj_jit_token_try_l(L, J) ? 1 : -1;
+}
+
+static LJ_AINLINE void jit_trace_read_unlock(lua_State *L, jit_State *J,
+					     int token)
+{
+  if (token > 0)
+    lj_jit_token_release_l(L, J);
+}
+
+/* Trace reflection is observational. A concurrent exclusive SMR reclaimer is
+** therefore a transient "trace unavailable" result, never permission to wait
+** behind that peer. Drop the temporary recorder token before returning so a
+** reclaimer which needs it cannot form a token/SMR dependency cycle. */
+static LJ_AINLINE int jit_trace_read_smr_try(lua_State *L, jit_State *J,
+					     int token)
+{
+  if (lj_gc2_smr_read_try(G(L)))
+    return 1;
+  jit_trace_read_unlock(L, J, token);
+  return 0;
+}
+
+/* Names of link types. ORDER LJ_TRLINK */
+static const char *const jit_trlinkname[] = {
+  "none", "root", "loop", "tail-recursion", "up-recursion", "down-recursion",
+  "interpreter", "return", "stitch"
+};
+
+#if defined(exitstub_trace_addr)
+static LJ_AINLINE MCode *jit_traceexitstub_addr_acq(const GCtrace *T,
+						    ExitNo exitno)
+{
+  TraceMCodeView tv;
+  tv.mcode = trace_mcode_acq(T);
+  tv.szmcode = trace_szmcode_acq(T);
+  tv.exitstub = trace_exitstub_acq(T);
+  if (tv.mcode == NULL)
+    return NULL;
+#if LJ_TARGET_X86ORX64 && LJ_64
+  if (tv.exitstub == NULL)
+    return NULL;
+#endif
+  return exitstub_trace_addr(&tv, exitno);
+}
+#endif
+
+/* local info = jit.util.traceinfo(tr) */
+LJLIB_CF(jit_util_traceinfo)
+{
+  TraceNo tr = (TraceNo)lj_lib_checkint(L, 1);
+  jit_State *J = L2J(L);
+  int token = jit_trace_read_lock(L, J);
+  GCtrace *T;
+  IRRef nins = 0, nk = 0;
+  SnapNo nsnap = 0;
+  TraceLink linktype = LJ_TRLINK_NONE;
+  TraceNo link = 0;
+  if (token < 0)
+    return 0;
+  if (!jit_trace_read_smr_try(L, J, token))
+    return 0;
+  T = jit_checktrace_tr(L, tr);
+  if (T) {
+    GCtab *t;
+    nins = trace_nins_acq(T);
+    nk = trace_nk_acq(T);
+    nsnap = trace_nsnap_acq(T);
+    linktype = trace_linktype_acq(T);
+    link = trace_link_acq(T);
+    lj_gc2_smr_read_leave(G(L));
+    jit_trace_read_unlock(L, J, token);
+    lua_createtable(L, 0, 8);  /* Increment hash size if fields are added. */
+    t = tabV(L->top-1);
+    setintfield(L, t, "nins", (int32_t)nins - REF_BIAS - 1);
+    setintfield(L, t, "nk", REF_BIAS - (int32_t)nk);
+    setintfield(L, t, "link", (int32_t)link);
+    setintfield(L, t, "nexit", (int32_t)nsnap);
+    setstrV(L, L->top++, lj_str_newz(L, jit_trlinkname[linktype]));
+    lua_setfield(L, -2, "linktype");
+    /* There are many more fields. Add them only when needed. */
+    lj_gc_pubtab(L, t);
+    return 1;
+  }
+  lj_gc2_smr_read_leave(G(L));
+  jit_trace_read_unlock(L, J, token);
+  return 0;
+}
+
+/* local m, ot, op1, op2, prev = jit.util.traceir(tr, idx) */
+LJLIB_CF(jit_util_traceir)
+{
+  TraceNo tr = (TraceNo)lj_lib_checkint(L, 1);
+  IRRef ref = (IRRef)lj_lib_checkint(L, 2) + REF_BIAS;
+  jit_State *J = L2J(L);
+  int token = jit_trace_read_lock(L, J);
+  GCtrace *T;
+  IRIns ir;
+  int have = 0;
+  if (token < 0)
+    return 0;
+  if (!jit_trace_read_smr_try(L, J, token))
+    return 0;
+  T = jit_checktrace_tr(L, tr);
+  if (T && ref >= REF_BIAS && ref < trace_nins_acq(T)) {
+    ir = ir_load_acq(&trace_ir_acq(T)[ref]);
+    have = 1;
+  }
+  lj_gc2_smr_read_leave(G(L));
+  jit_trace_read_unlock(L, J, token);
+  if (have) {
+    int32_t m = lj_ir_mode[ir.o];
+    setintV(L->top-2, m);
+    setintV(L->top-1, ir.ot);
+    setintV(L->top++, (int32_t)ir.op1 - (irm_op1(m)==IRMref ? REF_BIAS : 0));
+    setintV(L->top++, (int32_t)ir.op2 - (irm_op2(m)==IRMref ? REF_BIAS : 0));
+    setintV(L->top++, ir.prev);
+    return 5;
+  }
+  return 0;
+}
+
+/* local k, t [, slot] = jit.util.tracek(tr, idx) */
+LJLIB_CF(jit_util_tracek)
+{
+  TraceNo tr = (TraceNo)lj_lib_checkint(L, 1);
+  IRRef ref = (IRRef)lj_lib_checkint(L, 2) + REF_BIAS;
+  jit_State *J = L2J(L);
+  int token = jit_trace_read_lock(L, J);
+  GCtrace *T;
+  IRIns kir[2];
+  TValue kgcv;
+  LJGC2Lease kgclease;
+  int32_t slot = -1;
+  int have = 0, have_kgc = 0;
+  if (token < 0)
+    return 0;
+  if (!jit_trace_read_smr_try(L, J, token))
+    return 0;
+  T = jit_checktrace_tr(L, tr);
+  if (T && ref >= trace_nk_acq(T) && ref < REF_BIAS) {
+    IRIns *irbase = trace_ir_acq(T);
+    IRIns *ir = &irbase[ref];
+    IRIns irs = ir_load_acq(ir);
+    if (irs.o == IR_KSLOT) {
+      slot = irs.op2;
+      ir = &irbase[irs.op1];
+      irs = ir_load_acq(ir);
+    }
+    kir[0] = irs;
+    if (ir_isk64(&kir[0]))
+      kir[1] = ir_load_acq(&ir[1]);
+    if (kir[0].o == IR_KGC) {
+      /* The copied IR word still names a reclaimable child. Retain that exact
+      ** allocation after the trace-body interval closes and through stack-root
+      ** publication; a native TValue copy alone is not a GC root. */
+      lj_ir_kvalue(L, &kgcv, &kir[0]);
+      if (lj_gc2_tv_lease_acquire(G(L), &kgcv, &kgclease) !=
+	  LJ_GC2_TV_EDGE_VALID) {
+	lj_gc2_smr_read_leave(G(L));
+	jit_trace_read_unlock(L, J, token);
+	return 0;
+      }
+      have_kgc = 1;
+    }
+    have = 1;
+  }
+  lj_gc2_smr_read_leave(G(L));
+  jit_trace_read_unlock(L, J, token);
+  if (have) {
+#if LJ_HASFFI
+    if (kir[0].o == IR_KINT64) ctype_loadffi(L);
+#endif
+    if (have_kgc) {
+      copyTVrel(L, L->top-2, &kgcv);
+      lj_state_stack_pubtv(L, L, L->top-2);
+      lj_gc2_lease_release(&kgclease);
+    } else {
+      lj_ir_kvalue(L, L->top-2, &kir[0]);
+    }
+    setintV(L->top-1, (int32_t)irt_type(kir[0].t));
+    if (slot == -1)
+      return 2;
+    setintV(L->top++, slot);
+    return 3;
+  }
+  return 0;
+}
+
+/* local snap = jit.util.tracesnap(tr, sn[, getpos]) */
+LJLIB_CF(jit_util_tracesnap)
+{
+  TraceNo tr = (TraceNo)lj_lib_checkint(L, 1);
+  SnapNo sn = (SnapNo)lj_lib_checkint(L, 2);
+  int getpos = (L->base+2 < L->top && tvistruecond(L->base+2));
+  jit_State *J = L2J(L);
+  int token = jit_trace_read_lock(L, J);
+  GCtrace *T;
+  SnapEntry mapcopy[256];
+  IRRef snapref = 0;
+  MSize nslots = 0, nent = 0, n;
+  int32_t pcpos = 0;
+  int have = 0;
+  if (token < 0)
+    return 0;
+  if (!jit_trace_read_smr_try(L, J, token))
+    return 0;
+  T = jit_checktrace_tr(L, tr);
+  if (T && sn < trace_nsnap_acq(T)) {
+    SnapShot *snap = &trace_snap_acq(T)[sn];
+    SnapEntry *map = &trace_snapmap_acq(T)[snap_mapofs_acq(snap)];
+    nent = snap_nent_acq(snap);
+    snapref = snap_ref_acq(snap);
+    nslots = snap_nslots_acq(snap);
+    for (n = 0; n < nent; n++)
+      mapcopy[n] = snapentry_acq(&map[n]);
+    if (getpos) {
+      const BCIns *pc = snap_pc_acq(&map[nent]);
+      const BCIns *startpc = pc;
+      while (bc_op((BCIns)la_load32_acq(
+	       (const uint32_t *)startpc)) < BC_FUNCF)
+	startpc--;
+      pcpos = (int32_t)(pc - startpc);
+    }
+    have = 1;
+  }
+  lj_gc2_smr_read_leave(G(L));
+  jit_trace_read_unlock(L, J, token);
+  if (have) {
+    GCtab *t;
+    /* Allocation and table publication happen only after the trace body has
+    ** been reduced to bounded scalar copies. A reclaimer never waits behind a
+    ** reflective Lua allocation while the body SMR interval is open. */
+    lua_createtable(L, nent+2, 0);
+    t = tabV(L->top-1);
+    setintindex(L, t, 0, (int32_t)snapref - REF_BIAS);
+    setintindex(L, t, 1, (int32_t)nslots);
+    for (n = 0; n < nent; n++)
+      setintindex(L, t, (int32_t)(n+2), (int32_t)mapcopy[n]);
+    setintindex(L, t, (int32_t)(nent+2), (int32_t)SNAP(255, 0, 0));
+    lj_gc_pubtab(L, t);
+    if (getpos) {
+      setintV(L->top++, pcpos);
+      return 2;
+    }
+    return 1;
+  }
+  return 0;
+}
+
+/* local mcode, addr, loop = jit.util.tracemc(tr) */
+LJLIB_CF(jit_util_tracemc)
+{
+  TraceNo tr = (TraceNo)lj_lib_checkint(L, 1);
+  jit_State *J = L2J(L);
+  int token = jit_trace_read_lock(L, J);
+  GCtrace *T;
+  MSize szmcode = 0;
+  MSize mcloop = 0;
+  if (token < 0)
+    return 0;
+  if (!jit_trace_read_smr_try(L, J, token))
+    return 0;
+  T = jit_checktrace_tr(L, tr);
+  if (T) {
+    MCode *mcode = trace_mcode_acq(T);
+    if (mcode != NULL)
+      szmcode = trace_szmcode_acq(T);
+  }
+  lj_gc2_smr_read_leave(G(L));
+  jit_trace_read_unlock(L, J, token);
+  if (szmcode != 0) {
+    char *copy = lj_buf_tmp(L, szmcode);
+    MSize capacity = szmcode;
+    intptr_t mcodeaddr = 0;
+    int have = 0;
+
+    /* Scratch growth may allocate, so do it before reacquiring body SMR. The
+    ** second one-shot lookup is the linearization point: a reused trace number
+    ** may name a different immutable body, but it is copied only when it fits
+    ** the already-owned TG scratch storage. */
+    token = jit_trace_read_lock(L, J);
+    if (token < 0)
+      return 0;
+    if (!jit_trace_read_smr_try(L, J, token))
+      return 0;
+    T = jit_checktrace_tr(L, tr);
+    if (T) {
+      MCode *mcode = trace_mcode_acq(T);
+      szmcode = trace_szmcode_acq(T);
+      if (mcode != NULL && szmcode != 0 && szmcode <= capacity) {
+	memcpy(copy, mcode, szmcode);
+	mcodeaddr = (intptr_t)(void *)mcode;
+	mcloop = trace_mcloop_acq(T);
+	have = 1;
+      }
+    }
+    lj_gc2_smr_read_leave(G(L));
+    jit_trace_read_unlock(L, J, token);
+    if (have) {
+      /* The managed scratch copy survives trace retirement and is reclaimed
+      ** with its TG even if string interning throws. */
+      setstrV(L, L->top-1, lj_str_new(L, copy, szmcode));
+      setintptrV(L->top++, mcodeaddr);
+      setintV(L->top++, (int32_t)mcloop);
+      return 3;
+    }
+  }
+  return 0;
+}
+
+/* local addr = jit.util.traceexitstub([tr,] exitno) */
+LJLIB_CF(jit_util_traceexitstub)
+{
+#if defined(exitstub_trace_addr)
+  if (L->top > L->base+1) {  /* Don't throw for one-argument variant. */
+    TraceNo tr = (TraceNo)lj_lib_checkint(L, 1);
+    ExitNo exitno = (ExitNo)lj_lib_checkint(L, 2);
+    jit_State *J = L2J(L);
+    int token = jit_trace_read_lock(L, J);
+    GCtrace *T;
+    intptr_t addr = 0;
+    if (token < 0)
+      return 0;
+    if (!jit_trace_read_smr_try(L, J, token))
+      return 0;
+    T = jit_checktrace_tr(L, tr);
+    if (T) {
+#ifdef EXITSTUBS_PER_GROUP
+      ExitNo maxexit = trace_nsnap_acq(T);
+#else
+      ExitNo maxexit = trace_nsnap_acq(T);
+      if (trace_root_acq(T) != 0)
+	maxexit++;
+#endif
+      if (exitno < maxexit)
+	/* Reduce the borrowed pointer to a scalar while its trace body is still
+	** admitted. Evaluating the pointer itself after leave is a C lifetime bug. */
+	addr = (intptr_t)(void *)jit_traceexitstub_addr_acq(T, exitno);
+    }
+    lj_gc2_smr_read_leave(G(L));
+    jit_trace_read_unlock(L, J, token);
+    if (addr != 0) {
+      setintptrV(L->top-1, addr);
+      return 1;
+    }
+    /*
+    ** The two-argument form names a trace and an exit. If a concurrent flush
+    ** invalidated that trace, return no result; do not fall through and
+    ** reinterpret the trace number as the one-argument global exit number.
+    ** Full flush may already have retired the corresponding exit-stub group.
+    */
+    return 0;
+  }
+#endif
+#ifdef EXITSTUBS_PER_GROUP
+  ExitNo exitno = (ExitNo)lj_lib_checkint(L, 1);
+  jit_State *J = L2J(L);
+  if (exitno < EXITSTUBS_PER_GROUP*LJ_MAX_EXITSTUBGR) {
+    setintptrV(L->top-1, (intptr_t)(void *)exitstub_addr(J, exitno));
+    return 1;
+  }
+#endif
+  return 0;
+}
+
+/* local addr = jit.util.ircalladdr(idx) */
+LJLIB_CF(jit_util_ircalladdr)
+{
+  uint32_t idx = (uint32_t)lj_lib_checkint(L, 1);
+  if (idx < IRCALL__MAX) {
+    ASMFunction func = lj_ir_callinfo[idx].func;
+    setintptrV(L->top-1, (intptr_t)(void *)lj_ptr_strip(func));
+    return 1;
+  }
+  return 0;
+}
+
+#endif
+
+#include "lj_libdef.h"
+
+static int luaopen_jit_util(lua_State *L)
+{
+  LJ_LIB_REG(L, NULL, jit_util);
+  return 1;
+}
+
+/* -- jit.opt module ------------------------------------------------------ */
+
+#if LJ_HASJIT
+
+#define LJLIB_MODULE_jit_opt
+
+/* Parse optimization level. */
+static int jitopt_level(jit_State *J, const char *str)
+{
+  if (str[0] >= '0' && str[0] <= '9' && str[1] == '\0') {
+    uint32_t flags;
+    if (str[0] == '0') flags = JIT_F_OPT_0;
+    else if (str[0] == '1') flags = JIT_F_OPT_1;
+    else if (str[0] == '2') flags = JIT_F_OPT_2;
+    else flags = JIT_F_OPT_3;
+    jit_flags_setmask(J, JIT_F_OPT_MASK, flags);
+    return 1;  /* Ok. */
+  }
+  return 0;  /* No match. */
+}
+
+/* Parse optimization flag. */
+static int jitopt_flag(jit_State *J, const char *str)
+{
+  const char *lst = JIT_F_OPTSTRING;
+  uint32_t opt;
+  int set = 1;
+  if (str[0] == '+') {
+    str++;
+  } else if (str[0] == '-') {
+    str++;
+    set = 0;
+  } else if (str[0] == 'n' && str[1] == 'o') {
+    str += str[2] == '-' ? 3 : 2;
+    set = 0;
+  }
+  for (opt = JIT_F_OPT; ; opt <<= 1) {
+    size_t len = *(const uint8_t *)lst;
+    if (len == 0)
+      break;
+    if (strncmp(str, lst+1, len) == 0 && str[len] == '\0') {
+      if (set)
+	jit_flags_setmask(J, 0, opt);
+      else
+	jit_flags_setmask(J, opt, 0);
+      return 1;  /* Ok. */
+    }
+    lst += 1+len;
+  }
+  return 0;  /* No match. */
+}
+
+/* Parse optimization parameter. */
+static int jitopt_param(jit_State *J, const char *str)
+{
+  const char *lst = JIT_P_STRING;
+  int i;
+  for (i = 0; i < JIT_P__MAX; i++) {
+    size_t len = *(const uint8_t *)lst;
+    lj_assertJ(len != 0, "bad JIT_P_STRING");
+    if (strncmp(str, lst+1, len) == 0 && str[len] == '=') {
+      uint32_t n = 0;
+      const char *p = &str[len+1];
+      while (*p >= '0' && *p <= '9')
+	n = n*10 + (*p++ - '0');
+      if (*p || (int32_t)n < 0) return 0;  /* Malformed number. */
+      if (i == JIT_P_sizemcode) {  /* Adjust to required range here. */
+#if LJ_TARGET_JUMPRANGE
+	uint32_t maxkb = ((1 << (LJ_TARGET_JUMPRANGE - 10)) - 64);
+#else
+	uint32_t maxkb = ((1 << (31 - 10)) - 64);
+#endif
+	n = (n + (LJ_PAGESIZE >> 10) - 1) & ~((LJ_PAGESIZE >> 10) - 1);
+	if (n > maxkb) n = maxkb;
+      }
+      jit_param_rel(J, i, (int32_t)n);
+      if (i == JIT_P_hotloop)
+	lj_dispatch_init_hotcount(J2G(J));
+      return 1;  /* Ok. */
+    }
+    lst += 1+len;
+  }
+  return 0;  /* No match. */
+}
+
+/* jit.opt.start(flags...) */
+LJLIB_CF(jit_opt_start)
+{
+  jit_State *J = L2J(L);
+  int nargs = (int)(L->top - L->base);
+  if (nargs == 0) {
+    int token = lj_jit_token_acquire_wait(J);
+    jit_flags_setmask(J, JIT_F_OPT_MASK, JIT_F_OPT_DEFAULT);
+    if (token)
+      lj_jit_token_release(J);
+  } else {
+    int i;
+    for (i = 1; i <= nargs; i++) {
+      const char *str = strdata(lj_lib_checkstr(L, i));
+      int token = lj_jit_token_acquire_wait(J);
+      int ok = jitopt_level(J, str) || jitopt_flag(J, str) ||
+	       jitopt_param(J, str);
+      if (token)
+	lj_jit_token_release(J);
+      if (!ok)
+	lj_err_callerv(L, LJ_ERR_JITOPT, str);
+    }
+  }
+  return 0;
+}
+
+#include "lj_libdef.h"
+
+#endif
+
+/* -- jit.profile module -------------------------------------------------- */
+
+#if LJ_HASPROFILE
+
+#define LJLIB_MODULE_jit_profile
+
+/* Not loaded by default, use: local profile = require("jit.profile") */
+
+#define KEY_PROFILE_THREAD	(U64x(81000000,00000000)|'t')
+#define KEY_PROFILE_FUNC	(U64x(81000000,00000000)|'f')
+
+static TValue *jit_profile_registry_store(lua_State *L, GCtab *registry,
+					  cTValue *key, cTValue *tv)
+{
+  TValue *dst;
+  for (;;) {
+    dst = lj_tab_set(L, registry, key);
+    if (lj_tab_trystoretv_cas_keyed(L, registry, dst, key, tv) ==
+	LJ_TAB_STORE_CAS_OK)
+      return dst;
+    lj_tab_store_wait_l(L);  /* jit.profile registry saw stale/FORWARD slot. */
+  }
+}
+
+static void jit_profile_registry_clear(lua_State *L)
+{
+  GCtab *registry = lj_registry_tab_acq(G(L));
+  TValue key;
+  key.u64 = KEY_PROFILE_THREAD;
+  jit_profile_registry_store(L, registry, &key, niltv(L));
+  key.u64 = KEY_PROFILE_FUNC;
+  jit_profile_registry_store(L, registry, &key, niltv(L));
+  lj_gc_pubtab(L, registry);
+}
+
+typedef struct JitProfileCallbackCtx {
+  lua_State *caller;
+  GCfunc *fn;
+  int samples;
+  int vmstate;
+} JitProfileCallbackCtx;
+
+static TValue *jit_profile_callback_setup_cp(lua_State *L,
+					     lua_CFunction dummy, void *ud)
+{
+  JitProfileCallbackCtx *ctx = (JitProfileCallbackCtx *)ud;
+  char vmst = (char)ctx->vmstate;
+  UNUSED(dummy);
+  setfuncV(L, L->top, ctx->fn);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  setthreadV(L, L->top, ctx->caller);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  setintV(L->top++, ctx->samples);
+  setstrV(L, L->top, lj_str_new(L, &vmst, 1));
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  return NULL;
+}
+
+static void jit_profile_callback(lua_State *L2, lua_State *L, int samples,
+				 int vmstate)
+{
+  LJStateClaim claim;
+  TValue key;
+  cTValue *tv;
+  TValue cbtv;
+  key.u64 = KEY_PROFILE_FUNC;
+  tv = lj_tab_get(L, lj_registry_tab_acq(G(L)), &key);
+  if (!tv)
+    return;
+  lj_tv_load_acq(&cbtv, tv);
+  if (tvisfunc(&cbtv)) {
+    JitProfileCallbackCtx ctx;
+    ptrdiff_t oldtop;
+    int errcode;
+    int status;
+    if (!lj_state_resumeclaim(L2, lj_thr_current_id(G(L)), &claim))
+      return;  /* Drop samples while the hidden callback coroutine is busy. */
+    ctx.caller = L;
+    ctx.fn = funcV(&cbtv);
+    ctx.samples = samples;
+    ctx.vmstate = vmstate;
+    oldtop = savestack(L2, L2->top);
+    errcode = lj_vm_cpcall(L2, NULL, &ctx, jit_profile_callback_setup_cp);
+    if (LJ_UNLIKELY(errcode)) {
+      L2->top = restorestack(L2, oldtop);
+      lj_state_dropresumeclaim(&claim);
+      lj_err_throw(L, errcode);
+    }
+    status = lua_pcall(L2, 3, 0, 0);  /* callback(thread, samples, vmstate) */
+    if (status) {
+      L2->top = L2->base;
+      lj_state_dropresumeclaim(&claim);
+      (void)lj_profile_stop_hs(L);
+      jit_profile_registry_clear(L);
+      lj_trace_abort(G(L));
+      return;
+    }
+    lj_state_dropresumeclaim(&claim);
+    lj_trace_abort(G(L2));
+  }
+}
+
+typedef struct JitProfileStartCtx {
+  const char *mode;
+  lua_State *callback_state;
+} JitProfileStartCtx;
+
+static TValue *jit_profile_start_cp(lua_State *L, lua_CFunction dummy,
+				    void *ud)
+{
+  JitProfileStartCtx *ctx = (JitProfileStartCtx *)ud;
+  UNUSED(dummy);
+  luaJIT_profile_start(L, ctx->mode,
+		       (luaJIT_profile_callback)jit_profile_callback,
+		       ctx->callback_state);
+  return NULL;
+}
+
+/* profile.start(mode, cb) */
+LJLIB_CF(jit_profile_start)
+{
+  GCtab *registry = lj_registry_tab_acq(G(L));
+  GCstr *mode = lj_lib_optstr(L, 1);
+  GCfunc *func = lj_lib_checkfunc(L, 2);
+  lua_State *L2 = lua_newthread(L);  /* Thread that runs profiler callback. */
+  JitProfileStartCtx ctx;
+  TValue key, tv;
+  int errcode;
+  luaJIT_profile_stop(L);
+  jit_profile_registry_clear(L);
+  /* Anchor thread and function in registry. */
+  key.u64 = KEY_PROFILE_THREAD;
+  setthreadV(L, &tv, L2);
+  jit_profile_registry_store(L, registry, &key, &tv);
+  lj_gc2_barrier_weak_write(L, registry, &key, &tv);
+  key.u64 = KEY_PROFILE_FUNC;
+  setfuncV(L, &tv, func);
+  jit_profile_registry_store(L, registry, &key, &tv);
+  lj_gc2_barrier_weak_write(L, registry, &key, &tv);
+  lj_gc_pubtab(L, registry);
+  ctx.mode = mode ? strdata(mode) : "";
+  ctx.callback_state = L2;
+  errcode = lj_vm_cpcall(L, NULL, &ctx, jit_profile_start_cp);
+  if (LJ_UNLIKELY(errcode)) {
+    /* The low-level lifecycle has already rolled STARTING back. Remove the
+    ** Lua callback roots before preserving the original profile-start error. */
+    jit_profile_registry_clear(L);
+    lj_err_throw(L, errcode);
+  }
+  if (!lj_profile_active(L))
+    jit_profile_registry_clear(L);
+  return 0;
+}
+
+/* profile.stop() */
+LJLIB_CF(jit_profile_stop)
+{
+  int had_stopreq = lj_safepoint_had_stopreq(L);
+  uint32_t actions = lj_profile_stop_hs(L);
+  jit_profile_registry_clear(L);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+  return 0;
+}
+
+/* dump = profile.dumpstack([thread,] fmt, depth) */
+LJLIB_CF(jit_profile_dumpstack)
+{
+  lua_State *L2 = L;
+  int arg = 0;
+  size_t len;
+  int depth;
+  GCstr *fmt;
+  const char *p;
+  if (L->top > L->base && tvisthread(L->base)) {
+    L2 = threadV(L->base);
+    arg = 1;
+  }
+  fmt = lj_lib_checkstr(L, arg+1);
+  depth = lj_lib_checkint(L, arg+2);
+  p = luaJIT_profile_dumpstack(L2, strdata(fmt), depth, &len);
+  lua_pushlstring(L, p, len);
+  return 1;
+}
+
+#include "lj_libdef.h"
+
+static int luaopen_jit_profile(lua_State *L)
+{
+  LJ_LIB_REG(L, NULL, jit_profile);
+  return 1;
+}
+
+#endif
+
+/* -- JIT compiler initialization ----------------------------------------- */
+
+#if LJ_HASJIT
+/* Default values for JIT parameters. */
+static const int32_t jit_param_default[JIT_P__MAX+1] = {
+#define JIT_PARAMINIT(len, name, value)	(value),
+JIT_PARAMDEF(JIT_PARAMINIT)
+#undef JIT_PARAMINIT
+  0
+};
+
+#if LJ_TARGET_ARM && LJ_TARGET_LINUX
+#include <sys/utsname.h>
+#endif
+
+/* Arch-dependent CPU feature detection. */
+static uint32_t jit_cpudetect(void)
+{
+  uint32_t flags = 0;
+#if LJ_TARGET_X86ORX64
+
+  uint32_t vendor[4];
+  uint32_t features[4];
+  if (lj_vm_cpuid(0, vendor) && lj_vm_cpuid(1, features)) {
+    flags |= ((features[2] >> 0)&1) * JIT_F_SSE3;
+    flags |= ((features[2] >> 19)&1) * JIT_F_SSE4_1;
+    if (vendor[0] >= 7) {
+      uint32_t xfeatures[4];
+      lj_vm_cpuid(7, xfeatures);
+      flags |= ((xfeatures[1] >> 8)&1) * JIT_F_BMI2;
+    }
+  }
+  /* Don't bother checking for SSE2 -- the VM will crash before getting here. */
+
+#elif LJ_TARGET_ARM
+
+  int ver = LJ_ARCH_VERSION;  /* Compile-time ARM CPU detection. */
+#if LJ_TARGET_LINUX
+  if (ver < 70) {  /* Runtime ARM CPU detection. */
+    struct utsname ut;
+    uname(&ut);
+    if (strncmp(ut.machine, "armv", 4) == 0) {
+      if (ut.machine[4] >= '8') ver = 80;
+      else if (ut.machine[4] == '7') ver = 70;
+      else if (ut.machine[4] == '6') ver = 60;
+    }
+  }
+#endif
+  flags |= ver >= 70 ? JIT_F_ARMV7 :
+	   ver >= 61 ? JIT_F_ARMV6T2_ :
+	   ver >= 60 ? JIT_F_ARMV6_ : 0;
+  flags |= LJ_ARCH_HASFPU == 0 ? 0 : ver >= 70 ? JIT_F_VFPV3 : JIT_F_VFPV2;
+
+#elif LJ_TARGET_ARM64
+
+  /* No optional CPU features to detect (for now). */
+
+#elif LJ_TARGET_PPC
+
+#if LJ_ARCH_SQRT
+  flags |= JIT_F_SQRT;
+#endif
+#if LJ_ARCH_ROUND
+  flags |= JIT_F_ROUND;
+#endif
+
+#elif LJ_TARGET_MIPS
+
+  /* Compile-time MIPS CPU detection. */
+#if LJ_ARCH_VERSION >= 20
+  flags |= JIT_F_MIPSXXR2;
+#endif
+  /* Runtime MIPS CPU detection. */
+#if defined(__GNUC__)
+  if (!(flags & JIT_F_MIPSXXR2)) {
+    int x;
+#ifdef __mips16
+    x = 0;  /* Runtime detection is difficult. Ensure optimal -march flags. */
+#else
+    /* On MIPS32R1 rotr is treated as srl. rotr r2,r2,1 -> srl r2,r2,1. */
+    __asm__("li $2, 1\n\t.long 0x00221042\n\tmove %0, $2" : "=r"(x) : : "$2");
+#endif
+    if (x) flags |= JIT_F_MIPSXXR2;  /* Either 0x80000000 (R2) or 0 (R1). */
+  }
+#endif
+
+#else
+#error "Missing CPU detection for this architecture"
+#endif
+  return flags;
+}
+
+/* Initialize JIT compiler. */
+static void jit_init(lua_State *L)
+{
+  jit_State *J = L2J(L);
+  jit_flags_rel(J, jit_cpudetect() | JIT_F_ON | JIT_F_OPT_DEFAULT);
+  memcpy(J->param, jit_param_default, sizeof(J->param));
+#if LJ_TARGET_UNALIGNED
+  L2TG(L)->tmptv.u64 = U64x(0000504d,4d500000);
+#endif
+  lj_dispatch_update(G(L), 0);
+#if LJ_TARGET_UNALIGNED
+  /* If you get a crash below then your toolchain indicates unaligned
+  ** accesses are OK, but your kernel disagrees. I.e. fix your toolchain.
+  */
+  {
+    uint32_t unaligned;
+    /* Preserve the hardware probe without a C-level misaligned dereference.
+    ** Optimizers lower this fixed-size copy to the same target load. */
+    memcpy(&unaligned, (char *)&L2TG(L)->tmptv + 2, sizeof(unaligned));
+    if (unaligned != 0x504d4d50u) L->top = NULL;
+  }
+#endif
+}
+#endif
+
+LUALIB_API int luaopen_jit(lua_State *L)
+{
+#if LJ_HASJIT
+  jit_init(L);
+#endif
+  lua_pushliteral(L, LJ_OS_NAME);
+  lua_pushliteral(L, LJ_ARCH_NAME);
+  lua_pushinteger(L, LUAJIT_VERSION_NUM);  /* Deprecated. */
+  lua_pushliteral(L, LUAJIT_VERSION);
+  LJ_LIB_REG(L, LUA_JITLIBNAME, jit);
+#if LJ_HASPROFILE
+  lj_lib_prereg(L, LUA_JITLIBNAME ".profile", luaopen_jit_profile,
+		lj_state_env_acq(L));
+#endif
+#ifndef LUAJIT_DISABLE_JITUTIL
+  lj_lib_prereg(L, LUA_JITLIBNAME ".util", luaopen_jit_util,
+		lj_state_env_acq(L));
+#endif
+#if LJ_HASJIT
+  LJ_LIB_REG(L, "jit.opt", jit_opt);
+#endif
+  L->top -= 2;
+  return 1;
+}

@@ -1,0 +1,10 @@
+{
+  "builds": 0,
+  "checked_entries": 64,
+  "fixture_edits": 0,
+  "manifest_sha256": "407576f5b20f575a802918e517605a9f18522293fc9532d75ff170b0d54d416b",
+  "mismatches": [],
+  "package": "/tmp/lj-jit-sweep-diagnosis-20260905-jjdidw9u",
+  "runtime_edits": 0,
+  "runtime_tests_in_this_checkpoint": 0
+}
