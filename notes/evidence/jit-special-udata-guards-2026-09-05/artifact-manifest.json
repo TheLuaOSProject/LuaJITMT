@@ -1,0 +1,456 @@
+{
+  "scope": "lj_record.c special-userdata method guards only; direct namespace receiver and cache/close defects remain separate baseline findings.",
+  "artifacts": [
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan-binaries.json",
+      "relative_path": "root/asan-binaries.json",
+      "sha256": "74d477ba28f87d745e7e5e8faeec3aeb1ce1c50f46931eb4ef83ad6cfa0176fc",
+      "bytes": 168,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan-build-and-reducer.json",
+      "relative_path": "root/asan-build-and-reducer.json",
+      "sha256": "0d5d28713c56c72da8ea6bc1b781c8541dee01424a42343d8f3038badc6005a8",
+      "bytes": 39924,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan-fixture-results.json",
+      "relative_path": "root/asan-fixture-results.json",
+      "sha256": "d721d0dd1fcc033d14e3a77c91e7136a4fb6783e4285db271021af425b3536d8",
+      "bytes": 102602,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan-regression-remaining-binaries.json",
+      "relative_path": "root/asan-regression-remaining-binaries.json",
+      "sha256": "0af3a7053d74b0c9be7dbff4e507792e4c6be6d100310369ab717ded3069e128",
+      "bytes": 296,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan-regression-remaining-results.json",
+      "relative_path": "root/asan-regression-remaining-results.json",
+      "sha256": "e14403d495724684f491f1020333f842037a541f42a3db65440740ab118fffba",
+      "bytes": 17290,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan-regression-results.json",
+      "relative_path": "root/asan-regression-results.json",
+      "sha256": "6c64540101fc41f46fbce0853a901432b71cf527f04ea08751fd46edd367001d",
+      "bytes": 7509,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan-remote-flush.so",
+      "relative_path": "root/asan-remote-flush.so",
+      "sha256": "5a3133dee8397ad6869009cdba03914000db508a9da0773a555abdfb065bbc7d",
+      "bytes": 16608,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan-t-ffi-callxs-callback-stack",
+      "relative_path": "root/asan-t-ffi-callxs-callback-stack",
+      "sha256": "7d9d38a106ad5790497ae6c061e17c5d7d692855f45fd24bd7dd7fb239b1e701",
+      "bytes": 19955368,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan-t-jit-first-attach",
+      "relative_path": "root/asan-t-jit-first-attach",
+      "sha256": "bcea57ebeaf0738849a0e3a36a0d912673c1a6875e4c01ce17afba5fbec84336",
+      "bytes": 19950776,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan-t-jit-xsave",
+      "relative_path": "root/asan-t-jit-xsave",
+      "sha256": "aecdee4c8f818121f1a65f2d9ff920e18f59bba3c5e8923920bc294b9102b13d",
+      "bytes": 20094128,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline-binaries.json",
+      "relative_path": "root/baseline-binaries.json",
+      "sha256": "ec95441c7afb6192dc71fd633221d81ad411d9c7a19f2ae732bdf6c31b783472",
+      "bytes": 168,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline-build-and-reducer.json",
+      "relative_path": "root/baseline-build-and-reducer.json",
+      "sha256": "18b773857e46ddae769e5ef792ef64264fd394abec5697585edf341df8f8f8c7",
+      "bytes": 6907,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline-fixture-results.json",
+      "relative_path": "root/baseline-fixture-results.json",
+      "sha256": "16d4b1cc8c806051d87d50c513b9e3426c92945b216204e281440926ded49357",
+      "bytes": 109228,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline.json",
+      "relative_path": "root/baseline.json",
+      "sha256": "4e43939e4f021d21b1c05484a05eab1d5f62b7005563d7d4dfc089468304ebd6",
+      "bytes": 144,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline.tar",
+      "relative_path": "root/baseline.tar",
+      "sha256": "a95c600895deedac347aa96cd57e3dbceaf9225a60698ad829be1c5b3f545815",
+      "bytes": 40007680,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/build-and-reducer.py",
+      "relative_path": "root/build-and-reducer.py",
+      "sha256": "d628dc738a1fce993becb291f25488077ac5da0fcc3aae2ff1adb32aac68e355",
+      "bytes": 2337,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate-binaries.json",
+      "relative_path": "root/candidate-binaries.json",
+      "sha256": "071484028b569c585f4854b7f3a82099500fee0057700daed07b469c422d46f5",
+      "bytes": 168,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate-build-and-reducer.json",
+      "relative_path": "root/candidate-build-and-reducer.json",
+      "sha256": "2e1ab62c5846d391a6438add1ebfc6c1d0fed57b21cdc0e44948d59c0d24a512",
+      "bytes": 6523,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate-fixture-results.json",
+      "relative_path": "root/candidate-fixture-results.json",
+      "sha256": "27328aeb6088814d682e7f0492f1cef6d1cca466bb21c52d99c75f7b9752547e",
+      "bytes": 99843,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate-regression-remaining-binaries.json",
+      "relative_path": "root/candidate-regression-remaining-binaries.json",
+      "sha256": "64b8fa88c24d7587cddd3134f602baa424bf254b4d8eaf16ecd96d17c8fc6e69",
+      "bytes": 216,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate-regression-remaining-results.json",
+      "relative_path": "root/candidate-regression-remaining-results.json",
+      "sha256": "55f5b77ae8e363a4ceb78cac23ab61cfc1e5e87b0ccf2b4671229451cf07f5f8",
+      "bytes": 14217,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate-regression-results.json",
+      "relative_path": "root/candidate-regression-results.json",
+      "sha256": "1bd7dc46eb959c86c414cbfa637f1ff6ddf1964dd7dd45f3e59f48e81e6a64f7",
+      "bytes": 7283,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate-remote-flush.so",
+      "relative_path": "root/candidate-remote-flush.so",
+      "sha256": "1d1346ed5a22f133d8c0fcd44bdf4565d5e526d11fe93c16c3b97258780db9c1",
+      "bytes": 16624,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate-source.patch",
+      "relative_path": "root/candidate-source.patch",
+      "sha256": "c67caffd432a8e460a8e5feac5d265e664910a5cd5f2bc9cd0ee991b346ea084",
+      "bytes": 1910,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate-t-ffi-callxs-callback-stack",
+      "relative_path": "root/candidate-t-ffi-callxs-callback-stack",
+      "sha256": "cf93b6954bee1e709231793602a45a71a67c54de748572c65f2c0fd7f7867a79",
+      "bytes": 1729832,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate-t-jit-first-attach",
+      "relative_path": "root/candidate-t-jit-first-attach",
+      "sha256": "26daa340a9c2b6af57049cfa6ed3ae6b9827e540038be689e9e0e8979bbd178e",
+      "bytes": 1728568,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/canonical.json",
+      "relative_path": "root/canonical.json",
+      "sha256": "b412ff5959118812281d5e73b328dd334c6193ff4ea4bfb6b243358d1d7cc566",
+      "bytes": 1155,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/canonical.py",
+      "relative_path": "root/canonical.py",
+      "sha256": "cbce39d0f7df011d58cd1aed44c00f0be8eb39f8c580080f25f6eff134e01cc3",
+      "bytes": 1213,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/canonical.stderr",
+      "relative_path": "root/canonical.stderr",
+      "sha256": "74f03c574326a1a14a0ca3854657c5e17748e5ea05098aa91491c61769d169cb",
+      "bytes": 23695,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/canonical.stdout",
+      "relative_path": "root/canonical.stdout",
+      "sha256": "b4f6277350df42bec3d3c8647941a0b3f7adbef1823997ea6526b8220fd0ed17",
+      "bytes": 19492,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/clib-method-reducer.lua",
+      "relative_path": "root/clib-method-reducer.lua",
+      "sha256": "45e7563ad9b17f5b303cf613d0b993e26e4df4fb2b1aef24773aed153acab752",
+      "bytes": 1213,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/final-validation.json",
+      "relative_path": "root/final-validation.json",
+      "sha256": "7348e21cc21939accd0fe975c23972fd57953cd960ee29d223e701a3ea1a51e6",
+      "bytes": 6867,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/initial-reducer-results.json",
+      "relative_path": "root/initial-reducer-results.json",
+      "sha256": "6b2622eb5cb42a28364d07034894d8bf83feb9c31ed1c746ac3d990d58184239",
+      "bytes": 1381,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/regressions-remaining.py",
+      "relative_path": "root/regressions-remaining.py",
+      "sha256": "70491198010c67c74da6d626f384f91859619a8deaeb6fbab495cd1f376d4517",
+      "bytes": 2974,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/regressions.py",
+      "relative_path": "root/regressions.py",
+      "sha256": "5df80dc8adee9669efb1283b1431fb5d0b647f700b1925192e799f944f888198",
+      "bytes": 3069,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/run-fixture.py",
+      "relative_path": "root/run-fixture.py",
+      "sha256": "c379acacae315c185bf33e486b7cb95ace0d066d2327d53c1405911f9fc315dc",
+      "bytes": 1793,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/runtime-input-identity.json",
+      "relative_path": "root/runtime-input-identity.json",
+      "sha256": "c5fa149b233df6a28e9d083a31383623b86f04270853ef00209fc0bb4228fc49",
+      "bytes": 41222,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/setup.json",
+      "relative_path": "root/setup.json",
+      "sha256": "a0274b76ed225f860c90b030154c89c49afcda91c4731d297a5a67af7714f9cc",
+      "bytes": 318,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/source-and-tests.patch",
+      "relative_path": "root/source-and-tests.patch",
+      "sha256": "fdaed4a8038d25e084464695445c273761bc1a89297e982f71d0783fcea7e85f",
+      "bytes": 9662,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/strict-binaries.json",
+      "relative_path": "root/strict-binaries.json",
+      "sha256": "453d36a4b5e75ee8e37350e5e4ca5e3b76e985e3632cf41be881a2b4744994bb",
+      "bytes": 168,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/strict-build-and-reducer.json",
+      "relative_path": "root/strict-build-and-reducer.json",
+      "sha256": "e037d135446985db641d397637599710a79ab2161235470e228350060336fac9",
+      "bytes": 4673,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/strict-fixture-results.json",
+      "relative_path": "root/strict-fixture-results.json",
+      "sha256": "2b4eb69cc8a4e3cff8a37230dea408545d7d98ef5b3966a37549089f54b122d3",
+      "bytes": 98492,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/strict-regression-remaining-binaries.json",
+      "relative_path": "root/strict-regression-remaining-binaries.json",
+      "sha256": "25a2097230661d018f9d6bd492fe3295e6fb0ac11ff139a0deace8b42a27b60c",
+      "bytes": 302,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/strict-regression-remaining-results.json",
+      "relative_path": "root/strict-regression-remaining-results.json",
+      "sha256": "ca157e6371687c58ec42d6c76aeb0b99de5254892f6a2821f05429618a57b714",
+      "bytes": 16307,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/strict-regression-results.json",
+      "relative_path": "root/strict-regression-results.json",
+      "sha256": "7ba8468f091f70c7a49bba89062b664667980ced3123b9aa7548d14e6ae37e86",
+      "bytes": 7182,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/strict-remote-flush.so",
+      "relative_path": "root/strict-remote-flush.so",
+      "sha256": "1d1346ed5a22f133d8c0fcd44bdf4565d5e526d11fe93c16c3b97258780db9c1",
+      "bytes": 16624,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/strict-t-ffi-callxs-callback-stack",
+      "relative_path": "root/strict-t-ffi-callxs-callback-stack",
+      "sha256": "060e0d85384eb07837efe136ee7f16523fb0554694aa29e55f38b762ccc2cd01",
+      "bytes": 14058280,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/strict-t-jit-first-attach",
+      "relative_path": "root/strict-t-jit-first-attach",
+      "sha256": "89b066d8084dd635a6e2a0c885c7bc95c9ba6ecc4438a76540e7dc096db6a318",
+      "bytes": 14056928,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/strict-t-jit-xsave",
+      "relative_path": "root/strict-t-jit-xsave",
+      "sha256": "b5f24fe525fe945cf55d9a29a055169be3b7709b6255d07bab8cf71007ff5d36",
+      "bytes": 14167336,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "relative_path": "root/t-jit-special-udata-guards.lua",
+      "sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+      "bytes": 5620,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/validation-summary.json",
+      "relative_path": "root/validation-summary.json",
+      "sha256": "639d97b6e48e79265d4a497c8175e2a41f5a9295c15cc9a8ba668b94d0defee2",
+      "bytes": 5535,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/method-guard-review.md",
+      "relative_path": "independent/method-guard-review.md",
+      "sha256": "9eb7fd93d2f573035e566fe720dadb40ce679dbf7344e0d34d04427c2f2e6494",
+      "bytes": 3769,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-index-type.lua",
+      "relative_path": "independent/captured-clib-index-type.lua",
+      "sha256": "5afcd46316cdb25182b4e7aec99a03a982907b91fa9cc2de0c75bb45ce413187",
+      "bytes": 849,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-index-type-results.json",
+      "relative_path": "independent/captured-clib-index-type-results.json",
+      "sha256": "8547bc696c1e929d40b8d4ad810e95f758e3d05529cb8649f033df6f8ced77e8",
+      "bytes": 7955,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/clib-cache-lifecycle.lua",
+      "relative_path": "independent/clib-cache-lifecycle.lua",
+      "sha256": "2375915500001c3da5ea9bf06c18d413fd6049014db4f567ec5d37fdd266c120",
+      "bytes": 1164,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/additional-results.json",
+      "relative_path": "independent/additional-results.json",
+      "sha256": "c9140f9b86a1ac18910fa30ec39b9a0f85bafbbc1caf8a79761fa11e305251ff",
+      "bytes": 15898,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "relative_path": "root/baseline/src/luajit",
+      "sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+      "bytes": 1514736,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/libluajit.a",
+      "relative_path": "root/baseline/src/libluajit.a",
+      "sha256": "1522fb7d4c449fb2955e6d060f24f7b3d4a6d71ad7e29f1350065f303adb7cbb",
+      "bytes": 2352940,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "relative_path": "root/candidate/src/luajit",
+      "sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+      "bytes": 1514736,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/libluajit.a",
+      "relative_path": "root/candidate/src/libluajit.a",
+      "sha256": "4bf1b8d3c33a3b5e1e884f7cd02c78d89bf9a3206a9fe6e0dcec6a7be8b7e18c",
+      "bytes": 2352740,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/strict/src/luajit",
+      "relative_path": "root/strict/src/luajit",
+      "sha256": "dc6659c01a663d8a4c7cd386df867a7e5b0a2946f71ae2211660f6d6264fb341",
+      "bytes": 14093840,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/strict/src/libluajit.a",
+      "relative_path": "root/strict/src/libluajit.a",
+      "sha256": "f8076322a7835d5184173ec5185911566eadde17a0fa266a29290a2468c9a270",
+      "bytes": 31006174,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/src/luajit",
+      "relative_path": "root/asan/src/luajit",
+      "sha256": "ab096a11dffab40b162e27691a88eefa166a22ba31f7a9f23160d1bae35609de",
+      "bytes": 19985088,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/src/libluajit.a",
+      "relative_path": "root/asan/src/libluajit.a",
+      "sha256": "484000650ba6095ffe4d9f4848351c924b471fd63eb7bae1effb40292e3b4108",
+      "bytes": 27401040,
+      "storage": "hash_only"
+    }
+  ],
+  "archived_text_files": 44,
+  "hash_only_files": 20,
+  "archived_text_bytes": 698701
+}

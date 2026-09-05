@@ -1,0 +1,1402 @@
+[
+  {
+    "workload": "clib",
+    "pair": 0,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "clib"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.10710363700127346,
+    "exit": 0,
+    "stdout": "sample\t1\t0.020081000\t20000000\nsample\t2\t0.020058000\t20000000\nsample\t3\t0.020057000\t20000000\nsample\t4\t0.020057000\t20000000\nsample\t5\t0.020057000\t20000000\nresult\tclib\t20000000\t0.020057000\t27\t338\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "clib",
+    "pair": 0,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "clib"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21224101500047254,
+    "exit": 0,
+    "stdout": "sample\t1\t0.041047000\t20000000\nsample\t2\t0.041023000\t20000000\nsample\t3\t0.041022000\t20000000\nsample\t4\t0.041021000\t20000000\nsample\t5\t0.041026000\t20000000\nresult\tclib\t20000000\t0.041021000\t38\t512\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "clib",
+    "pair": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "clib"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21221439999862923,
+    "exit": 0,
+    "stdout": "sample\t1\t0.041051000\t20000000\nsample\t2\t0.041023000\t20000000\nsample\t3\t0.041023000\t20000000\nsample\t4\t0.041022000\t20000000\nsample\t5\t0.041025000\t20000000\nresult\tclib\t20000000\t0.041022000\t38\t512\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "clib",
+    "pair": 1,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "clib"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.10719975499887369,
+    "exit": 0,
+    "stdout": "sample\t1\t0.020087000\t20000000\nsample\t2\t0.020058000\t20000000\nsample\t3\t0.020057000\t20000000\nsample\t4\t0.020058000\t20000000\nsample\t5\t0.020057000\t20000000\nresult\tclib\t20000000\t0.020057000\t27\t338\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "clib",
+    "pair": 2,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "clib"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.1071574369998416,
+    "exit": 0,
+    "stdout": "sample\t1\t0.020077000\t20000000\nsample\t2\t0.020058000\t20000000\nsample\t3\t0.020057000\t20000000\nsample\t4\t0.020057000\t20000000\nsample\t5\t0.020060000\t20000000\nresult\tclib\t20000000\t0.020057000\t27\t338\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "clib",
+    "pair": 2,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "clib"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21217659300236846,
+    "exit": 0,
+    "stdout": "sample\t1\t0.041043000\t20000000\nsample\t2\t0.041026000\t20000000\nsample\t3\t0.041023000\t20000000\nsample\t4\t0.041022000\t20000000\nsample\t5\t0.041021000\t20000000\nresult\tclib\t20000000\t0.041021000\t38\t512\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "clib",
+    "pair": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "clib"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21231583400003728,
+    "exit": 0,
+    "stdout": "sample\t1\t0.041050000\t20000000\nsample\t2\t0.041023000\t20000000\nsample\t3\t0.041022000\t20000000\nsample\t4\t0.041022000\t20000000\nsample\t5\t0.041027000\t20000000\nresult\tclib\t20000000\t0.041022000\t38\t512\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "clib",
+    "pair": 3,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "clib"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.10723466399940662,
+    "exit": 0,
+    "stdout": "sample\t1\t0.020087000\t20000000\nsample\t2\t0.020058000\t20000000\nsample\t3\t0.020057000\t20000000\nsample\t4\t0.020057000\t20000000\nsample\t5\t0.020057000\t20000000\nresult\tclib\t20000000\t0.020057000\t27\t338\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "clib",
+    "pair": 4,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "clib"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.10725841000021319,
+    "exit": 0,
+    "stdout": "sample\t1\t0.020078000\t20000000\nsample\t2\t0.020058000\t20000000\nsample\t3\t0.020057000\t20000000\nsample\t4\t0.020058000\t20000000\nsample\t5\t0.020058000\t20000000\nresult\tclib\t20000000\t0.020057000\t27\t338\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "clib",
+    "pair": 4,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "clib"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21208826800284442,
+    "exit": 0,
+    "stdout": "sample\t1\t0.041049000\t20000000\nsample\t2\t0.041023000\t20000000\nsample\t3\t0.041022000\t20000000\nsample\t4\t0.041022000\t20000000\nsample\t5\t0.041025000\t20000000\nresult\tclib\t20000000\t0.041022000\t38\t512\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "clib",
+    "pair": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "clib"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21220859399909386,
+    "exit": 0,
+    "stdout": "sample\t1\t0.041051000\t20000000\nsample\t2\t0.041022000\t20000000\nsample\t3\t0.041021000\t20000000\nsample\t4\t0.041022000\t20000000\nsample\t5\t0.041022000\t20000000\nresult\tclib\t20000000\t0.041021000\t38\t512\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "clib",
+    "pair": 5,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "clib"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.10712427500038757,
+    "exit": 0,
+    "stdout": "sample\t1\t0.020078000\t20000000\nsample\t2\t0.020058000\t20000000\nsample\t3\t0.020057000\t20000000\nsample\t4\t0.020057000\t20000000\nsample\t5\t0.020057000\t20000000\nresult\tclib\t20000000\t0.020057000\t27\t338\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "clib",
+    "pair": 6,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "clib"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.10725600400110125,
+    "exit": 0,
+    "stdout": "sample\t1\t0.020083000\t20000000\nsample\t2\t0.020058000\t20000000\nsample\t3\t0.020057000\t20000000\nsample\t4\t0.020057000\t20000000\nsample\t5\t0.020057000\t20000000\nresult\tclib\t20000000\t0.020057000\t27\t338\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "clib",
+    "pair": 6,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "clib"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21215113799917162,
+    "exit": 0,
+    "stdout": "sample\t1\t0.041049000\t20000000\nsample\t2\t0.041022000\t20000000\nsample\t3\t0.041025000\t20000000\nsample\t4\t0.041022000\t20000000\nsample\t5\t0.041022000\t20000000\nresult\tclib\t20000000\t0.041022000\t38\t512\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "file",
+    "pair": 0,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "file"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21239773799970862,
+    "exit": 0,
+    "stdout": "sample\t1\t0.041147000\t20000000\nsample\t2\t0.041050000\t20000000\nsample\t3\t0.041073000\t20000000\nsample\t4\t0.041021000\t20000000\nsample\t5\t0.041021000\t20000000\nresult\tfile\t20000000\t0.041021000\t31\t468\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "file",
+    "pair": 0,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "file"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.9653939880008693,
+    "exit": 0,
+    "stdout": "sample\t1\t0.191387000\t20000000\nsample\t2\t0.191360000\t20000000\nsample\t3\t0.191360000\t20000000\nsample\t4\t0.191359000\t20000000\nsample\t5\t0.191358000\t20000000\nresult\tfile\t20000000\t0.191358000\t40\t608\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "file",
+    "pair": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "file"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.6825902040000074,
+    "exit": 0,
+    "stdout": "sample\t1\t0.050172000\t20000000\nsample\t2\t0.050138000\t20000000\nsample\t3\t0.191363000\t20000000\nsample\t4\t0.191360000\t20000000\nsample\t5\t0.191358000\t20000000\nresult\tfile\t20000000\t0.050138000\t40\t608\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "file",
+    "pair": 1,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "file"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.2128373150007974,
+    "exit": 0,
+    "stdout": "sample\t1\t0.041259000\t20000000\nsample\t2\t0.041040000\t20000000\nsample\t3\t0.041021000\t20000000\nsample\t4\t0.041130000\t20000000\nsample\t5\t0.041021000\t20000000\nresult\tfile\t20000000\t0.041021000\t31\t468\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "file",
+    "pair": 2,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "file"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21379370899740024,
+    "exit": 0,
+    "stdout": "sample\t1\t0.041206000\t20000000\nsample\t2\t0.041051000\t20000000\nsample\t3\t0.041148000\t20000000\nsample\t4\t0.042135000\t20000000\nsample\t5\t0.041072000\t20000000\nresult\tfile\t20000000\t0.041051000\t31\t468\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "file",
+    "pair": 2,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "file"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.8238092249994224,
+    "exit": 0,
+    "stdout": "sample\t1\t0.050169000\t20000000\nsample\t2\t0.191363000\t20000000\nsample\t3\t0.191359000\t20000000\nsample\t4\t0.191360000\t20000000\nsample\t5\t0.191356000\t20000000\nresult\tfile\t20000000\t0.050169000\t40\t608\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "file",
+    "pair": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "file"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.8262656070000958,
+    "exit": 0,
+    "stdout": "sample\t1\t0.139135000\t20000000\nsample\t2\t0.113058000\t20000000\nsample\t3\t0.182834000\t20000000\nsample\t4\t0.191360000\t20000000\nsample\t5\t0.191358000\t20000000\nresult\tfile\t20000000\t0.113058000\t40\t608\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "file",
+    "pair": 3,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "file"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21115527099755127,
+    "exit": 0,
+    "stdout": "sample\t1\t0.041239000\t20000000\nsample\t2\t0.040247000\t20000000\nsample\t3\t0.040763000\t20000000\nsample\t4\t0.040692000\t20000000\nsample\t5\t0.041089000\t20000000\nresult\tfile\t20000000\t0.040247000\t31\t468\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "file",
+    "pair": 4,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "file"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21257975699700182,
+    "exit": 0,
+    "stdout": "sample\t1\t0.041299000\t20000000\nsample\t2\t0.041122000\t20000000\nsample\t3\t0.041022000\t20000000\nsample\t4\t0.041021000\t20000000\nsample\t5\t0.041021000\t20000000\nresult\tfile\t20000000\t0.041021000\t31\t468\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "file",
+    "pair": 4,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "file"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.8237720359975356,
+    "exit": 0,
+    "stdout": "sample\t1\t0.050164000\t20000000\nsample\t2\t0.191362000\t20000000\nsample\t3\t0.191354000\t20000000\nsample\t4\t0.191357000\t20000000\nsample\t5\t0.191356000\t20000000\nresult\tfile\t20000000\t0.050164000\t40\t608\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "file",
+    "pair": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "file"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.399723599999561,
+    "exit": 0,
+    "stdout": "sample\t1\t0.050164000\t20000000\nsample\t2\t0.050137000\t20000000\nsample\t3\t0.050137000\t20000000\nsample\t4\t0.050139000\t20000000\nsample\t5\t0.191387000\t20000000\nresult\tfile\t20000000\t0.050137000\t40\t608\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "file",
+    "pair": 5,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "file"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.2129461539989279,
+    "exit": 0,
+    "stdout": "sample\t1\t0.041232000\t20000000\nsample\t2\t0.041032000\t20000000\nsample\t3\t0.041074000\t20000000\nsample\t4\t0.041065000\t20000000\nsample\t5\t0.041124000\t20000000\nresult\tfile\t20000000\t0.041032000\t31\t468\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "file",
+    "pair": 6,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "file"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21300281699950574,
+    "exit": 0,
+    "stdout": "sample\t1\t0.041310000\t20000000\nsample\t2\t0.041068000\t20000000\nsample\t3\t0.041209000\t20000000\nsample\t4\t0.041096000\t20000000\nsample\t5\t0.041035000\t20000000\nresult\tfile\t20000000\t0.041035000\t31\t468\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "file",
+    "pair": 6,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "file"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.9652245060024143,
+    "exit": 0,
+    "stdout": "sample\t1\t0.191380000\t20000000\nsample\t2\t0.191359000\t20000000\nsample\t3\t0.191358000\t20000000\nsample\t4\t0.191356000\t20000000\nsample\t5\t0.191358000\t20000000\nresult\tfile\t20000000\t0.191356000\t40\t608\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "call",
+    "pair": 0,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "call"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21797074999994948,
+    "exit": 0,
+    "stdout": "sample\t1\t0.041984000\t125000250000\nsample\t2\t0.042189000\t125000250000\nsample\t3\t0.042245000\t125000250000\nsample\t4\t0.042259000\t125000250000\nsample\t5\t0.042036000\t125000250000\nresult\tcall\t500000\t0.041984000\t54\t972\t1\t2\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "call",
+    "pair": 0,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "call"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21851250200052164,
+    "exit": 0,
+    "stdout": "sample\t1\t0.042311000\t125000250000\nsample\t2\t0.042396000\t125000250000\nsample\t3\t0.042312000\t125000250000\nsample\t4\t0.041965000\t125000250000\nsample\t5\t0.042266000\t125000250000\nresult\tcall\t500000\t0.041965000\t65\t1149\t1\t2\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "call",
+    "pair": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "call"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21758633900026325,
+    "exit": 0,
+    "stdout": "sample\t1\t0.042009000\t125000250000\nsample\t2\t0.041850000\t125000250000\nsample\t3\t0.042291000\t125000250000\nsample\t4\t0.041996000\t125000250000\nsample\t5\t0.042203000\t125000250000\nresult\tcall\t500000\t0.041850000\t65\t1149\t1\t2\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "call",
+    "pair": 1,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "call"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21638743500079727,
+    "exit": 0,
+    "stdout": "sample\t1\t0.041858000\t125000250000\nsample\t2\t0.041790000\t125000250000\nsample\t3\t0.041880000\t125000250000\nsample\t4\t0.041859000\t125000250000\nsample\t5\t0.041876000\t125000250000\nresult\tcall\t500000\t0.041790000\t54\t972\t1\t2\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "call",
+    "pair": 2,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "call"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21989844199924846,
+    "exit": 0,
+    "stdout": "sample\t1\t0.042360000\t125000250000\nsample\t2\t0.042666000\t125000250000\nsample\t3\t0.042654000\t125000250000\nsample\t4\t0.042599000\t125000250000\nsample\t5\t0.042607000\t125000250000\nresult\tcall\t500000\t0.042360000\t54\t972\t1\t2\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "call",
+    "pair": 2,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "call"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21785211700262153,
+    "exit": 0,
+    "stdout": "sample\t1\t0.042211000\t125000250000\nsample\t2\t0.042195000\t125000250000\nsample\t3\t0.041956000\t125000250000\nsample\t4\t0.042178000\t125000250000\nsample\t5\t0.042211000\t125000250000\nresult\tcall\t500000\t0.041956000\t65\t1149\t1\t2\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "call",
+    "pair": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "call"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21861101899776259,
+    "exit": 0,
+    "stdout": "sample\t1\t0.042583000\t125000250000\nsample\t2\t0.042175000\t125000250000\nsample\t3\t0.042279000\t125000250000\nsample\t4\t0.042231000\t125000250000\nsample\t5\t0.042217000\t125000250000\nresult\tcall\t500000\t0.042175000\t65\t1149\t1\t2\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "call",
+    "pair": 3,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "call"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21753360599905136,
+    "exit": 0,
+    "stdout": "sample\t1\t0.042192000\t125000250000\nsample\t2\t0.042076000\t125000250000\nsample\t3\t0.042051000\t125000250000\nsample\t4\t0.042025000\t125000250000\nsample\t5\t0.042005000\t125000250000\nresult\tcall\t500000\t0.042005000\t54\t972\t1\t2\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "call",
+    "pair": 4,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "call"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21689468799741007,
+    "exit": 0,
+    "stdout": "sample\t1\t0.041833000\t125000250000\nsample\t2\t0.042077000\t125000250000\nsample\t3\t0.041926000\t125000250000\nsample\t4\t0.042058000\t125000250000\nsample\t5\t0.041951000\t125000250000\nresult\tcall\t500000\t0.041833000\t54\t972\t1\t2\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "call",
+    "pair": 4,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "call"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.2182885449983587,
+    "exit": 0,
+    "stdout": "sample\t1\t0.042121000\t125000250000\nsample\t2\t0.042257000\t125000250000\nsample\t3\t0.042312000\t125000250000\nsample\t4\t0.042283000\t125000250000\nsample\t5\t0.042239000\t125000250000\nresult\tcall\t500000\t0.042121000\t65\t1149\t1\t2\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "call",
+    "pair": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "call"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.219231638002384,
+    "exit": 0,
+    "stdout": "sample\t1\t0.042215000\t125000250000\nsample\t2\t0.042591000\t125000250000\nsample\t3\t0.042298000\t125000250000\nsample\t4\t0.042490000\t125000250000\nsample\t5\t0.042450000\t125000250000\nresult\tcall\t500000\t0.042215000\t65\t1149\t1\t2\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "call",
+    "pair": 5,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "call"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21802166199995554,
+    "exit": 0,
+    "stdout": "sample\t1\t0.041867000\t125000250000\nsample\t2\t0.042215000\t125000250000\nsample\t3\t0.042210000\t125000250000\nsample\t4\t0.042257000\t125000250000\nsample\t5\t0.042320000\t125000250000\nresult\tcall\t500000\t0.041867000\t54\t972\t1\t2\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "call",
+    "pair": 6,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "call"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21713574600289576,
+    "exit": 0,
+    "stdout": "sample\t1\t0.041769000\t125000250000\nsample\t2\t0.041795000\t125000250000\nsample\t3\t0.042267000\t125000250000\nsample\t4\t0.042166000\t125000250000\nsample\t5\t0.042158000\t125000250000\nresult\tcall\t500000\t0.041769000\t54\t972\t1\t2\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "call",
+    "pair": 6,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "call"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21923365100155934,
+    "exit": 0,
+    "stdout": "sample\t1\t0.042460000\t125000250000\nsample\t2\t0.042533000\t125000250000\nsample\t3\t0.042417000\t125000250000\nsample\t4\t0.042352000\t125000250000\nsample\t5\t0.042343000\t125000250000\nresult\tcall\t500000\t0.042343000\t65\t1149\t1\t2\n",
+    "stderr": "",
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 0,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11362634300166974,
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": "",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 0,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11348947100123041,
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": "",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.1136336499985191,
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": "",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 1,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11374569899999187,
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": "",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 2,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11420930999884149,
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": "",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 2,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11371219799912069,
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": "",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11363755300044431,
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": "",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 3,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11353810299988254,
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": "",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 4,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11389089499789407,
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": "",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 4,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11353084499933175,
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": "",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11353128500195453,
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": "",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 5,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11356786499891314,
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": "",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 6,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11353803499878268,
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": "",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a"
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 6,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11353330999918398,
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": "",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  }
+]

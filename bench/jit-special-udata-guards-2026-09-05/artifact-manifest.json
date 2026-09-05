@@ -1,0 +1,33 @@
+{
+  "scope": "Seven alternating fresh pairs per workload, CPU31, shared host, no discarded samples; exact one-file production difference.",
+  "artifacts": [
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost.lua",
+      "relative_path": "cost.lua",
+      "sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+      "bytes": 2167,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/benchmark.py",
+      "relative_path": "benchmark.py",
+      "sha256": "393c12cfd51d7f02c24870046427ce034f2c436d328109a7e64b7d33e2095749",
+      "bytes": 1245,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost-results.json",
+      "relative_path": "cost-results.json",
+      "sha256": "38156a24a68ad953476378d2b00adeeef89a58865b739793099122cb391ded98",
+      "bytes": 56730,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/cost-summary.json",
+      "relative_path": "cost-summary.json",
+      "sha256": "78a96f4b059906f0f735e7828e83637ec35c7d349b0ae8a997ba3982583b9d34",
+      "bytes": 2095,
+      "storage": "archived_text"
+    }
+  ]
+}

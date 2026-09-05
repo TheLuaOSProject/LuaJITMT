@@ -1,0 +1,6 @@
+{
+  "base": "e34282576c7df0180e8113a4cfba07fd637a36b3",
+  "archive_sha256": "a95c600895deedac347aa96cd57e3dbceaf9225a60698ad829be1c5b3f545815",
+  "source_sha256": "07116bc933781976c91453a9ca89a46aef4a81d80bf71ab2f6e5269383fcce87",
+  "patch_sha256": "c67caffd432a8e460a8e5feac5d265e664910a5cd5f2bc9cd0ee991b346ea084"
+}

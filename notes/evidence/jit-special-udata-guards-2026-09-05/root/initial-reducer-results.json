@@ -1,0 +1,28 @@
+[
+  {
+    "command": [
+      "/workspaces/lj-lockless/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/clib-method-reducer.lua"
+    ],
+    "exit": 0,
+    "seconds": 0.004698107000876917,
+    "stdout": "clib mutable __index\twarmexits\t0\tresult\t0\tcalls\t80\texits\t0\n",
+    "stderr": "",
+    "fixture_sha256": "45e7563ad9b17f5b303cf613d0b993e26e4df4fb2b1aef24773aed153acab752",
+    "exe_sha256": "fcfc133052586a7ea73013af2c8da345cec431effa868080da5e1b27309db574"
+  },
+  {
+    "command": [
+      "/workspaces/lj-lockless/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/clib-method-reducer.lua"
+    ],
+    "exit": 1,
+    "seconds": 0.005864720998943085,
+    "stdout": "clib mutable __index\twarmexits\t1\tresult\t80\tcalls\t0\texits\t1\n",
+    "stderr": "/workspaces/lj-lockless/src/luajit: ...-method-review-20260905-djl20ksd/clib-method-reducer.lua:42: ...-method-review-20260905-djl20ksd/clib-method-reducer.lua:35: native code used the old namespace method\nstack traceback:\n\t[C]: in function 'assert'\n\t...-method-review-20260905-djl20ksd/clib-method-reducer.lua:42: in main chunk\n\t[C]: at 0x55813c66b100\n",
+    "fixture_sha256": "45e7563ad9b17f5b303cf613d0b993e26e4df4fb2b1aef24773aed153acab752",
+    "exe_sha256": "fcfc133052586a7ea73013af2c8da345cec431effa868080da5e1b27309db574"
+  }
+]

@@ -1,0 +1,2290 @@
+[
+  {
+    "kind": "candidate",
+    "udtype": "clib",
+    "mode": "function",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "clib",
+      "function"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.004184040000836831,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\tfunction\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "clib",
+    "mode": "function",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "clib",
+      "function"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003903616001480259,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\tfunction\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "clib",
+    "mode": "table",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "clib",
+      "table"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0038054979995649774,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\ttable\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "clib",
+    "mode": "table",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "clib",
+      "table"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.00383303899798193,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\ttable\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "clib",
+    "mode": "missing",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "clib",
+      "missing"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0037402479974844027,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\tmissing\twarm-exits\t0\told-exits\t0\tok\tfalse\tresult\t...-review-20260905-djl20ksd/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "clib",
+    "mode": "missing",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "clib",
+      "missing"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003741139000339899,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\tmissing\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...-review-20260905-djl20ksd/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "clib",
+    "mode": "nonfunction",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "clib",
+      "nonfunction"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0037237800024740864,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\tnonfunction\twarm-exits\t0\told-exits\t0\tok\tfalse\tresult\t...-review-20260905-djl20ksd/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a number value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "clib",
+    "mode": "nonfunction",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "clib",
+      "nonfunction"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0042018159983854275,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\tnonfunction\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...-review-20260905-djl20ksd/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a number value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "clib",
+    "mode": "replace",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "clib",
+      "replace"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0038125030005176086,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\treplace\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "clib",
+    "mode": "replace",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "clib",
+      "replace"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0038405699997383635,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\treplace\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "clib",
+    "mode": "replace_missing",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "clib",
+      "replace_missing"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0036623199994210154,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\treplace_missing\twarm-exits\t0\told-exits\t0\tok\tfalse\tresult\t...-review-20260905-djl20ksd/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "clib",
+    "mode": "replace_missing",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "clib",
+      "replace_missing"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003730003001692239,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\treplace_missing\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...-review-20260905-djl20ksd/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "clib",
+    "mode": "resize",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "clib",
+      "resize"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.004752701999677811,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\tresize\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "clib",
+    "mode": "resize",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "clib",
+      "resize"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.004916107998724328,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\tresize\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "clib",
+    "mode": "methodlife",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "clib",
+      "methodlife"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.004139226002735086,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\tmethodlife\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "clib",
+    "mode": "methodlife",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "clib",
+      "methodlife"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.004333890999987489,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\tmethodlife\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "clib",
+    "mode": "table_entry",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "clib",
+      "table_entry"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003506225999444723,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\ttable_entry\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "clib",
+    "mode": "table_entry",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "clib",
+      "table_entry"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0037911219988018274,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\ttable_entry\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "clib",
+    "mode": "newindex",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "clib",
+      "newindex"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003609528997913003,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\tnewindex\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\tnil\tcalls\t0\twrites\t80000\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "clib",
+    "mode": "newindex",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "clib",
+      "newindex"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0037793240007886197,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\tnewindex\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\tnil\tcalls\t0\twrites\t80000\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "clib",
+    "mode": "newindex_table",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "clib",
+      "newindex_table"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0034479419991839677,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\tnewindex_table\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\tnil\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "clib",
+    "mode": "newindex_table",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "clib",
+      "newindex_table"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0038623300024482887,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\tnewindex_table\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\tnil\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "file",
+    "mode": "function",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "file",
+      "function"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0036037429999851156,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tfile\tfunction\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "file",
+    "mode": "function",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "file",
+      "function"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003862699002638692,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tfile\tfunction\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "file",
+    "mode": "table",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "file",
+      "table"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0037142860019230284,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tfile\ttable\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "file",
+    "mode": "table",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "file",
+      "table"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003875676000461681,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tfile\ttable\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "file",
+    "mode": "missing",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "file",
+      "missing"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.00361043000157224,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tfile\tmissing\twarm-exits\t0\told-exits\t0\tok\tfalse\tresult\t...-review-20260905-djl20ksd/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "file",
+    "mode": "missing",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "file",
+      "missing"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0037861190030525904,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tfile\tmissing\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...-review-20260905-djl20ksd/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "file",
+    "mode": "nonfunction",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "file",
+      "nonfunction"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0038257119995250832,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tfile\tnonfunction\twarm-exits\t0\told-exits\t0\tok\tfalse\tresult\t...-review-20260905-djl20ksd/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a number value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "file",
+    "mode": "nonfunction",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "file",
+      "nonfunction"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003883114997734083,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tfile\tnonfunction\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...-review-20260905-djl20ksd/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a number value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "file",
+    "mode": "replace",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "file",
+      "replace"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0039019499999994878,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tfile\treplace\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "file",
+    "mode": "replace",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "file",
+      "replace"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0038663080013066065,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tfile\treplace\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "file",
+    "mode": "replace_missing",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "file",
+      "replace_missing"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.00372696400154382,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tfile\treplace_missing\twarm-exits\t0\told-exits\t0\tok\tfalse\tresult\t...-review-20260905-djl20ksd/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "file",
+    "mode": "replace_missing",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "file",
+      "replace_missing"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003712169000209542,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tfile\treplace_missing\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...-review-20260905-djl20ksd/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "file",
+    "mode": "resize",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "file",
+      "resize"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.004874350001045968,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tfile\tresize\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "file",
+    "mode": "resize",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "file",
+      "resize"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0048050289988168515,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tfile\tresize\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "file",
+    "mode": "methodlife",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "file",
+      "methodlife"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.004437112002051435,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tfile\tmethodlife\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "file",
+    "mode": "methodlife",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "file",
+      "methodlife"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.004469339000934269,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tfile\tmethodlife\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "file",
+    "mode": "table_entry",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "file",
+      "table_entry"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0039040929987095296,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tfile\ttable_entry\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "file",
+    "mode": "table_entry",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "file",
+      "table_entry"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003917598998668836,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tfile\ttable_entry\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "file",
+    "mode": "newindex",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "file",
+      "newindex"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.00371654799891985,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tfile\tnewindex\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\tnil\tcalls\t0\twrites\t80000\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "file",
+    "mode": "newindex",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "file",
+      "newindex"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003751397001906298,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tfile\tnewindex\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\tnil\tcalls\t0\twrites\t80000\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "file",
+    "mode": "newindex_table",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "file",
+      "newindex_table"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003775887002120726,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tfile\tnewindex_table\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\tnil\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "file",
+    "mode": "newindex_table",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "file",
+      "newindex_table"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0038290189986582845,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tfile\tnewindex_table\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\tnil\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "buffer",
+    "mode": "function",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "buffer",
+      "function"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003796785000304226,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tbuffer\tfunction\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "buffer",
+    "mode": "function",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "buffer",
+      "function"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003950215999793727,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tbuffer\tfunction\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "buffer",
+    "mode": "table",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "buffer",
+      "table"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003752010001335293,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tbuffer\ttable\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "buffer",
+    "mode": "table",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "buffer",
+      "table"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.004014941001514671,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tbuffer\ttable\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "buffer",
+    "mode": "missing",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "buffer",
+      "missing"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0036851460026809946,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tbuffer\tmissing\twarm-exits\t0\told-exits\t0\tok\tfalse\tresult\t...-review-20260905-djl20ksd/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "buffer",
+    "mode": "missing",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "buffer",
+      "missing"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0036223269999027252,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tbuffer\tmissing\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...-review-20260905-djl20ksd/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "buffer",
+    "mode": "nonfunction",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "buffer",
+      "nonfunction"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003846196999802487,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tbuffer\tnonfunction\twarm-exits\t0\told-exits\t0\tok\tfalse\tresult\t...-review-20260905-djl20ksd/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a number value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "buffer",
+    "mode": "nonfunction",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "buffer",
+      "nonfunction"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0037755130033474416,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tbuffer\tnonfunction\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...-review-20260905-djl20ksd/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a number value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "buffer",
+    "mode": "replace",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "buffer",
+      "replace"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0038698519965691958,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tbuffer\treplace\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "buffer",
+    "mode": "replace",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "buffer",
+      "replace"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0038358839992724825,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tbuffer\treplace\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "buffer",
+    "mode": "replace_missing",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "buffer",
+      "replace_missing"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003797014000156196,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tbuffer\treplace_missing\twarm-exits\t0\told-exits\t0\tok\tfalse\tresult\t...-review-20260905-djl20ksd/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "buffer",
+    "mode": "replace_missing",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "buffer",
+      "replace_missing"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0039061060015228577,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tbuffer\treplace_missing\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...-review-20260905-djl20ksd/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "buffer",
+    "mode": "resize",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "buffer",
+      "resize"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.004928927999571897,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tbuffer\tresize\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "buffer",
+    "mode": "resize",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "buffer",
+      "resize"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.00529628100048285,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tbuffer\tresize\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "buffer",
+    "mode": "methodlife",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "buffer",
+      "methodlife"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.004685097002948169,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tbuffer\tmethodlife\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "buffer",
+    "mode": "methodlife",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "buffer",
+      "methodlife"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.004783157997735543,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tbuffer\tmethodlife\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "buffer",
+    "mode": "table_entry",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "buffer",
+      "table_entry"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.00380551799753448,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tbuffer\ttable_entry\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "buffer",
+    "mode": "table_entry",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "buffer",
+      "table_entry"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003814095998677658,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tbuffer\ttable_entry\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "buffer",
+    "mode": "newindex",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "buffer",
+      "newindex"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0037815039977431297,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tbuffer\tnewindex\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\tnil\tcalls\t0\twrites\t80000\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "buffer",
+    "mode": "newindex",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "buffer",
+      "newindex"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0039734140009386465,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tbuffer\tnewindex\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\tnil\tcalls\t0\twrites\t80000\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "buffer",
+    "mode": "newindex_table",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "buffer",
+      "newindex_table"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0037281300028553233,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tbuffer\tnewindex_table\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\tnil\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "buffer",
+    "mode": "newindex_table",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "buffer",
+      "newindex_table"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0038628490001428872,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tbuffer\tnewindex_table\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\tnil\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "plain",
+    "mode": "function",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "plain",
+      "function"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0037511139998969156,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tplain\tfunction\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "plain",
+    "mode": "function",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "plain",
+      "function"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0038088469991635066,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tplain\tfunction\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "plain",
+    "mode": "table",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "plain",
+      "table"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0037283230012690183,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tplain\ttable\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "plain",
+    "mode": "table",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "plain",
+      "table"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003753498000151012,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tplain\ttable\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "plain",
+    "mode": "missing",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "plain",
+      "missing"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0036753089989360888,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tplain\tmissing\twarm-exits\t0\told-exits\t0\tok\tfalse\tresult\t...-review-20260905-djl20ksd/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "plain",
+    "mode": "missing",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "plain",
+      "missing"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003697828000440495,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tplain\tmissing\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...-review-20260905-djl20ksd/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "plain",
+    "mode": "nonfunction",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "plain",
+      "nonfunction"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003659199999674456,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tplain\tnonfunction\twarm-exits\t0\told-exits\t0\tok\tfalse\tresult\t...-review-20260905-djl20ksd/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a number value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "plain",
+    "mode": "nonfunction",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "plain",
+      "nonfunction"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0036787829994864296,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tplain\tnonfunction\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...-review-20260905-djl20ksd/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a number value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "plain",
+    "mode": "replace",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "plain",
+      "replace"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003845627001282992,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tplain\treplace\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "plain",
+    "mode": "replace",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "plain",
+      "replace"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003889547999278875,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tplain\treplace\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "plain",
+    "mode": "replace_missing",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "plain",
+      "replace_missing"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0037144400012039114,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tplain\treplace_missing\twarm-exits\t0\told-exits\t0\tok\tfalse\tresult\t...-review-20260905-djl20ksd/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "plain",
+    "mode": "replace_missing",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "plain",
+      "replace_missing"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0038097369979368523,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tplain\treplace_missing\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...-review-20260905-djl20ksd/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "plain",
+    "mode": "resize",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "plain",
+      "resize"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.004766154997923877,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tplain\tresize\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "plain",
+    "mode": "resize",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "plain",
+      "resize"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.005009521999454591,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tplain\tresize\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "plain",
+    "mode": "methodlife",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "plain",
+      "methodlife"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.004523445000813808,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tplain\tmethodlife\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "plain",
+    "mode": "methodlife",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "plain",
+      "methodlife"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.004432048997841775,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tplain\tmethodlife\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "plain",
+    "mode": "table_entry",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "plain",
+      "table_entry"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0036232520033081528,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tplain\ttable_entry\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "plain",
+    "mode": "table_entry",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "plain",
+      "table_entry"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003742744000192033,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tplain\ttable_entry\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "plain",
+    "mode": "newindex",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "plain",
+      "newindex"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0036073269984626677,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tplain\tnewindex\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\tnil\tcalls\t0\twrites\t80000\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "plain",
+    "mode": "newindex",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "plain",
+      "newindex"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003854277998470934,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tplain\tnewindex\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\tnil\tcalls\t0\twrites\t80000\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "plain",
+    "mode": "newindex_table",
+    "jitmode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "plain",
+      "newindex_table"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.0037542850004683714,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tplain\tnewindex_table\twarm-exits\t0\told-exits\t0\tok\ttrue\tresult\tnil\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "kind": "candidate",
+    "udtype": "plain",
+    "mode": "newindex_table",
+    "jitmode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/t-jit-special-udata-guards.lua",
+      "plain",
+      "newindex_table"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "seconds": 0.003669197998533491,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;"
+    },
+    "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "exit": 0,
+    "stdout": "special-userdata-guard\tplain\tnewindex_table\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\tnil\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  }
+]

@@ -1,0 +1,122 @@
+[
+  {
+    "variant": "baseline",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-index-type.lua"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.002736045997153269,
+    "exit": 0,
+    "stdout": "captured clib method\twarmexits\t0\tok\tfalse\tresult\t...dependent-20260905-75jums60/captured-clib-index-type.lua:11: bad argument #1 to 'index' (userdata expected, got userdata)\texits\t0\n",
+    "stderr": "",
+    "fixture_sha256": "5afcd46316cdb25182b4e7aec99a03a982907b91fa9cc2de0c75bb45ce413187",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+    "source_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e"
+  },
+  {
+    "variant": "baseline",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-index-type.lua"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.005383593997976277,
+    "exit": 1,
+    "stdout": "captured clib method\twarmexits\t1\tok\ttrue\tresult\t80\texits\t1\n",
+    "stderr": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit: ...dependent-20260905-75jums60/captured-clib-index-type.lua:26: captured CLibrary index accepted an IO userdata\nstack traceback:\n\t[C]: in function 'assert'\n\t...dependent-20260905-75jums60/captured-clib-index-type.lua:26: in function 'check'\n\t...dependent-20260905-75jums60/captured-clib-index-type.lua:30: in main chunk\n\t[C]: at 0x55ced2a17100\n",
+    "fixture_sha256": "5afcd46316cdb25182b4e7aec99a03a982907b91fa9cc2de0c75bb45ce413187",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+    "source_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e"
+  },
+  {
+    "variant": "candidate",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-index-type.lua"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.0028169090001028962,
+    "exit": 0,
+    "stdout": "captured clib method\twarmexits\t0\tok\tfalse\tresult\t...dependent-20260905-75jums60/captured-clib-index-type.lua:11: bad argument #1 to 'index' (userdata expected, got userdata)\texits\t0\n",
+    "stderr": "",
+    "fixture_sha256": "5afcd46316cdb25182b4e7aec99a03a982907b91fa9cc2de0c75bb45ce413187",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "source_sha256": "07116bc933781976c91453a9ca89a46aef4a81d80bf71ab2f6e5269383fcce87"
+  },
+  {
+    "variant": "candidate",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-index-type.lua"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.005357509999157628,
+    "exit": 1,
+    "stdout": "captured clib method\twarmexits\t1\tok\ttrue\tresult\t80\texits\t1\n",
+    "stderr": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit: ...dependent-20260905-75jums60/captured-clib-index-type.lua:26: captured CLibrary index accepted an IO userdata\nstack traceback:\n\t[C]: in function 'assert'\n\t...dependent-20260905-75jums60/captured-clib-index-type.lua:26: in function 'check'\n\t...dependent-20260905-75jums60/captured-clib-index-type.lua:30: in main chunk\n\t[C]: at 0x55da7713e100\n",
+    "fixture_sha256": "5afcd46316cdb25182b4e7aec99a03a982907b91fa9cc2de0c75bb45ce413187",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "source_sha256": "07116bc933781976c91453a9ca89a46aef4a81d80bf71ab2f6e5269383fcce87"
+  },
+  {
+    "variant": "strict",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-index-type.lua"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/strict/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/strict/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.003877302999171661,
+    "exit": 1,
+    "stdout": "captured clib method\twarmexits\t1\tok\ttrue\tresult\t80\texits\t1\n",
+    "stderr": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/strict/src/luajit: ...dependent-20260905-75jums60/captured-clib-index-type.lua:26: captured CLibrary index accepted an IO userdata\nstack traceback:\n\t[C]: in function 'assert'\n\t...dependent-20260905-75jums60/captured-clib-index-type.lua:26: in function 'check'\n\t...dependent-20260905-75jums60/captured-clib-index-type.lua:30: in main chunk\n\t[C]: at 0x55b8147b3fc0\n",
+    "fixture_sha256": "5afcd46316cdb25182b4e7aec99a03a982907b91fa9cc2de0c75bb45ce413187",
+    "exe_sha256": "dc6659c01a663d8a4c7cd386df867a7e5b0a2946f71ae2211660f6d6264fb341",
+    "source_sha256": "07116bc933781976c91453a9ca89a46aef4a81d80bf71ab2f6e5269383fcce87"
+  },
+  {
+    "variant": "asan",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-index-type.lua"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.017071772999770474,
+    "exit": 1,
+    "stdout": "captured clib method\twarmexits\t1\tok\ttrue\tresult\t80\texits\t1\n",
+    "stderr": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/src/luajit: ...dependent-20260905-75jums60/captured-clib-index-type.lua:26: captured CLibrary index accepted an IO userdata\nstack traceback:\n\t[C]: in function 'assert'\n\t...dependent-20260905-75jums60/captured-clib-index-type.lua:26: in function 'check'\n\t...dependent-20260905-75jums60/captured-clib-index-type.lua:30: in main chunk\n\t[C]: at 0x55c909045e60\n",
+    "fixture_sha256": "5afcd46316cdb25182b4e7aec99a03a982907b91fa9cc2de0c75bb45ce413187",
+    "exe_sha256": "ab096a11dffab40b162e27691a88eefa166a22ba31f7a9f23160d1bae35609de",
+    "source_sha256": "07116bc933781976c91453a9ca89a46aef4a81d80bf71ab2f6e5269383fcce87"
+  }
+]

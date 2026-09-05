@@ -1,0 +1,246 @@
+{
+  "base": "e34282576c7df0180e8113a4cfba07fd637a36b3",
+  "source_sha256": "07116bc933781976c91453a9ca89a46aef4a81d80bf71ab2f6e5269383fcce87",
+  "fixture_sha256": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+  "positive_runtime_processes": 326,
+  "baseline_fixture_passes": 58,
+  "baseline_fixture_failures": [
+    [
+      "clib",
+      "function"
+    ],
+    [
+      "clib",
+      "table"
+    ],
+    [
+      "clib",
+      "missing"
+    ],
+    [
+      "clib",
+      "nonfunction"
+    ],
+    [
+      "clib",
+      "replace"
+    ],
+    [
+      "clib",
+      "replace_missing"
+    ],
+    [
+      "clib",
+      "resize"
+    ],
+    [
+      "clib",
+      "methodlife"
+    ],
+    [
+      "clib",
+      "newindex"
+    ],
+    [
+      "clib",
+      "newindex_table"
+    ],
+    [
+      "file",
+      "function"
+    ],
+    [
+      "file",
+      "table"
+    ],
+    [
+      "file",
+      "missing"
+    ],
+    [
+      "file",
+      "nonfunction"
+    ],
+    [
+      "file",
+      "replace"
+    ],
+    [
+      "file",
+      "replace_missing"
+    ],
+    [
+      "file",
+      "resize"
+    ],
+    [
+      "file",
+      "methodlife"
+    ],
+    [
+      "file",
+      "newindex"
+    ],
+    [
+      "file",
+      "newindex_table"
+    ],
+    [
+      "buffer",
+      "function"
+    ],
+    [
+      "buffer",
+      "table"
+    ],
+    [
+      "buffer",
+      "missing"
+    ],
+    [
+      "buffer",
+      "nonfunction"
+    ],
+    [
+      "buffer",
+      "replace"
+    ],
+    [
+      "buffer",
+      "replace_missing"
+    ],
+    [
+      "buffer",
+      "resize"
+    ],
+    [
+      "buffer",
+      "methodlife"
+    ],
+    [
+      "buffer",
+      "newindex"
+    ],
+    [
+      "buffer",
+      "newindex_table"
+    ]
+  ],
+  "normal_object_differences": [
+    "lj_record.o",
+    "lj_record_dyn.o"
+  ],
+  "variants": {
+    "candidate": {
+      "positive_runtime_processes": 108,
+      "fixture_processes": 88,
+      "stock_tests_each_mode": {
+        "jit_off": 387,
+        "jit_on": 509
+      },
+      "wrong_driver_invocation": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/src/luajit",
+        "-jon",
+        "/tmp/lj-special-udata-method-review-20260905-djl20ksd/candidate/tests/t-jit-cdata-pure-exclusions.lua"
+      ],
+      "wrong_driver_failure": "Missing required exclusion mode; seven correct mode invocations pass in remaining results.",
+      "binaries": {
+        "luajit": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+        "libluajit.a": "4bf1b8d3c33a3b5e1e884f7cd02c78d89bf9a3206a9fe6e0dcec6a7be8b7e18c"
+      },
+      "compiled_fixture_binaries": {
+        "candidate-t-ffi-callxs-callback-stack": "cf93b6954bee1e709231793602a45a71a67c54de748572c65f2c0fd7f7867a79",
+        "candidate-t-jit-first-attach": "26daa340a9c2b6af57049cfa6ed3ae6b9827e540038be689e9e0e8979bbd178e"
+      },
+      "remote_library_sha256": "1d1346ed5a22f133d8c0fcd44bdf4565d5e526d11fe93c16c3b97258780db9c1"
+    },
+    "strict": {
+      "positive_runtime_processes": 109,
+      "fixture_processes": 88,
+      "stock_tests_each_mode": {
+        "jit_off": 387,
+        "jit_on": 509
+      },
+      "wrong_driver_invocation": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-special-udata-method-review-20260905-djl20ksd/strict/src/luajit",
+        "-jon",
+        "/tmp/lj-special-udata-method-review-20260905-djl20ksd/strict/tests/t-jit-cdata-pure-exclusions.lua"
+      ],
+      "wrong_driver_failure": "Missing required exclusion mode; seven correct mode invocations pass in remaining results.",
+      "binaries": {
+        "luajit": "dc6659c01a663d8a4c7cd386df867a7e5b0a2946f71ae2211660f6d6264fb341",
+        "libluajit.a": "f8076322a7835d5184173ec5185911566eadde17a0fa266a29290a2468c9a270"
+      },
+      "compiled_fixture_binaries": {
+        "strict-t-ffi-callxs-callback-stack": "060e0d85384eb07837efe136ee7f16523fb0554694aa29e55f38b762ccc2cd01",
+        "strict-t-jit-first-attach": "89b066d8084dd635a6e2a0c885c7bc95c9ba6ecc4438a76540e7dc096db6a318",
+        "strict-t-jit-xsave": "b5f24fe525fe945cf55d9a29a055169be3b7709b6255d07bab8cf71007ff5d36"
+      },
+      "remote_library_sha256": "1d1346ed5a22f133d8c0fcd44bdf4565d5e526d11fe93c16c3b97258780db9c1"
+    },
+    "asan": {
+      "positive_runtime_processes": 109,
+      "fixture_processes": 88,
+      "stock_tests_each_mode": {
+        "jit_off": 387,
+        "jit_on": 509
+      },
+      "wrong_driver_invocation": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/src/luajit",
+        "-jon",
+        "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/tests/t-jit-cdata-pure-exclusions.lua"
+      ],
+      "wrong_driver_failure": "Missing required exclusion mode; seven correct mode invocations pass in remaining results.",
+      "binaries": {
+        "luajit": "ab096a11dffab40b162e27691a88eefa166a22ba31f7a9f23160d1bae35609de",
+        "libluajit.a": "484000650ba6095ffe4d9f4848351c924b471fd63eb7bae1effb40292e3b4108"
+      },
+      "compiled_fixture_binaries": {
+        "asan-t-ffi-callxs-callback-stack": "7d9d38a106ad5790497ae6c061e17c5d7d692855f45fd24bd7dd7fb239b1e701",
+        "asan-t-jit-first-attach": "bcea57ebeaf0738849a0e3a36a0d912673c1a6875e4c01ce17afba5fbec84336",
+        "asan-t-jit-xsave": "aecdee4c8f818121f1a65f2d9ff920e18f59bba3c5e8923920bc294b9102b13d"
+      },
+      "remote_library_sha256": "5a3133dee8397ad6869009cdba03914000db508a9da0773a555abdfb065bbc7d"
+    }
+  },
+  "canonical": {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/strict/src/luajit",
+      "/workspaces/lj-lockless/tools/test.lua",
+      "m6_jit_special_udata_guards"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LJ_TEST_ROOT": "/workspaces/lj-lockless",
+      "JOBS": "4",
+      "MAKE_JOBS": "4",
+      "TMPDIR": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/canonical-tmp",
+      "LUA_PATH": "/workspaces/lj-lockless/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 44.60766331999912,
+    "sources": {
+      "src/lj_record.c": "07116bc933781976c91453a9ca89a46aef4a81d80bf71ab2f6e5269383fcce87",
+      "tests/suites/m6_jit.lua": "cdc5757a074620dd1acca6d619c75884c082b7c4be0558c3002353c61d062e7a",
+      "tests/t-jit-special-udata-guards.lua": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf"
+    },
+    "default_binaries": {
+      "luajit": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+      "libluajit.a": "4bf1b8d3c33a3b5e1e884f7cd02c78d89bf9a3206a9fe6e0dcec6a7be8b7e18c",
+      "libluajit.so": "ecbf90fc3d84bfe75f50f45a81b83d0e4a1d53482e071c8ad4e4414f1c028972"
+    }
+  },
+  "source_and_tests_patch_sha256": "fdaed4a8038d25e084464695445c273761bc1a89297e982f71d0783fcea7e85f"
+}

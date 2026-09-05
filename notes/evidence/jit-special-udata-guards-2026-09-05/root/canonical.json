@@ -1,0 +1,30 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-special-udata-method-review-20260905-djl20ksd/strict/src/luajit",
+    "/workspaces/lj-lockless/tools/test.lua",
+    "m6_jit_special_udata_guards"
+  ],
+  "cwd": "/workspaces/lj-lockless",
+  "environment": {
+    "LJ_TEST_ROOT": "/workspaces/lj-lockless",
+    "JOBS": "4",
+    "MAKE_JOBS": "4",
+    "TMPDIR": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/canonical-tmp",
+    "LUA_PATH": "/workspaces/lj-lockless/src/?.lua;;"
+  },
+  "exit": 0,
+  "seconds": 44.60766331999912,
+  "sources": {
+    "src/lj_record.c": "07116bc933781976c91453a9ca89a46aef4a81d80bf71ab2f6e5269383fcce87",
+    "tests/suites/m6_jit.lua": "cdc5757a074620dd1acca6d619c75884c082b7c4be0558c3002353c61d062e7a",
+    "tests/t-jit-special-udata-guards.lua": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf"
+  },
+  "default_binaries": {
+    "luajit": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073",
+    "libluajit.a": "4bf1b8d3c33a3b5e1e884f7cd02c78d89bf9a3206a9fe6e0dcec6a7be8b7e18c",
+    "libluajit.so": "ecbf90fc3d84bfe75f50f45a81b83d0e4a1d53482e071c8ad4e4414f1c028972"
+  }
+}

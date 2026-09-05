@@ -1,0 +1,113 @@
+{
+  "clib": {
+    "n": 20000000,
+    "pairs": 7,
+    "median_seconds": {
+      "baseline": 0.020057,
+      "candidate": 0.041022
+    },
+    "median_ns": {
+      "baseline": 1.00285,
+      "candidate": 2.0511
+    },
+    "median_paired_percent": 104.52709777135168,
+    "geometric_paired_ratio": 2.045249609891132,
+    "shapes_nins_mcodebytes_warmexits_callxs": {
+      "baseline": [
+        [
+          27,
+          338,
+          1,
+          0
+        ]
+      ],
+      "candidate": [
+        [
+          38,
+          512,
+          1,
+          0
+        ]
+      ]
+    }
+  },
+  "file": {
+    "n": 20000000,
+    "pairs": 7,
+    "median_seconds": {
+      "baseline": 0.041021,
+      "candidate": 0.050169
+    },
+    "median_ns": {
+      "baseline": 2.05105,
+      "candidate": 2.50845
+    },
+    "median_paired_percent": 22.28858389605324,
+    "geometric_paired_ratio": 2.018226845859675,
+    "shapes_nins_mcodebytes_warmexits_callxs": {
+      "baseline": [
+        [
+          31,
+          468,
+          1,
+          0
+        ]
+      ],
+      "candidate": [
+        [
+          40,
+          608,
+          1,
+          0
+        ]
+      ]
+    }
+  },
+  "call": {
+    "n": 500000,
+    "pairs": 7,
+    "median_seconds": {
+      "baseline": 0.041867,
+      "candidate": 0.042121
+    },
+    "median_ns": {
+      "baseline": 83.734,
+      "candidate": 84.242
+    },
+    "median_paired_percent": 0.4047137245565935,
+    "geometric_paired_ratio": 1.0034667456231194,
+    "shapes_nins_mcodebytes_warmexits_callxs": {
+      "baseline": [
+        [
+          54,
+          972,
+          1,
+          2
+        ]
+      ],
+      "candidate": [
+        [
+          65,
+          1149,
+          1,
+          2
+        ]
+      ]
+    }
+  },
+  "ffi_struct": {
+    "n": 30000000,
+    "pairs": 7,
+    "median_seconds": {
+      "baseline": 0.0206,
+      "candidate": 0.0206
+    },
+    "median_ns": {
+      "baseline": 0.6866666666666666,
+      "candidate": 0.6866666666666666
+    },
+    "median_paired_percent": 0.0,
+    "geometric_paired_ratio": 1.0,
+    "shapes_nins_mcodebytes_warmexits_callxs": {}
+  }
+}

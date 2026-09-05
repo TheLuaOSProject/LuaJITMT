@@ -1,0 +1,151 @@
+[
+  {
+    "name": "stock-joff",
+    "test": true,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/src/luajit",
+      "-joff",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/tests/stock/test",
+    "seconds": 2.959195629999158,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "exit": 0,
+    "stdout": "387 passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "cdata-base-guards-joff",
+    "test": true,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/tests/t-jit-cdata-basemt-guards.lua"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan",
+    "seconds": 0.029665694000868825,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "exit": 0,
+    "stdout": "cdata-base-guard\tcall\twarm-exits\t0\tafter-exits\t0\tcalls\t80\texpected\t80\ncdata-base-guard\tindex\twarm-exits\t0\tafter-exits\t0\tcalls\t160\texpected\t160\ncdata-base-guard\tnewindex\twarm-exits\t0\tafter-exits\t0\tcalls\t160\texpected\t160\ncdata-base-guard\tmissing\twarm-exits\t0\tafter-exits\t0\tcalls\t0\texpected\t0\ncdata-base-guard\tnonfunction\twarm-exits\t0\tafter-exits\t0\tcalls\t0\texpected\t0\ncdata-base-guard\tresize\twarm-exits\t0\tafter-exits\t0\tcalls\t80\texpected\t80\ncdata-base-guard\tmethodlife\twarm-exits\t0\tafter-exits\t0\tcalls\t80\texpected\t80\ncdata-base-guard\treplace\twarm-exits\t0\tafter-exits\t0\tcalls\t80\texpected\t80\ncdata base-table native guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "stock-jon",
+    "test": true,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/src/luajit",
+      "-jon",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/tests/stock/test",
+    "seconds": 3.7757855510026275,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "exit": 0,
+    "stdout": "509 passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "cdata-base-guards-jon",
+    "test": true,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/tests/t-jit-cdata-basemt-guards.lua"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan",
+    "seconds": 0.027508677998412168,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "exit": 0,
+    "stdout": "cdata-base-guard\tcall\twarm-exits\t1\tafter-exits\t80\tcalls\t80\texpected\t80\ncdata-base-guard\tindex\twarm-exits\t1\tafter-exits\t159\tcalls\t160\texpected\t160\ncdata-base-guard\tnewindex\twarm-exits\t1\tafter-exits\t80\tcalls\t160\texpected\t160\ncdata-base-guard\tmissing\twarm-exits\t1\tafter-exits\t1\tcalls\t0\texpected\t0\ncdata-base-guard\tnonfunction\twarm-exits\t1\tafter-exits\t1\tcalls\t0\texpected\t0\ncdata-base-guard\tresize\twarm-exits\t1\tafter-exits\t80\tcalls\t80\texpected\t80\ncdata-base-guard\tmethodlife\twarm-exits\t1\tafter-exits\t80\tcalls\t80\texpected\t80\ncdata-base-guard\treplace\twarm-exits\t1\tafter-exits\t1\tcalls\t80\texpected\t80\ncdata base-table native guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-jit-cdata-pure.lua",
+    "test": true,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/tests/t-jit-cdata-pure.lua"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan",
+    "seconds": 0.015078624001034768,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tindex\texits\t159\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-jit-cdata-pure-side.lua",
+    "test": true,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/tests/t-jit-cdata-pure-side.lua"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan",
+    "seconds": 0.01471678400048404,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "exit": 0,
+    "stdout": "trace\t1\tlink\t1\tloop\tparent\t0\texits\t2\ntrace\t2\tlink\t1\troot\tparent\t1\texits\t0\ntrace\t3\tlink\t1\troot\tparent\t1\texits\t5\ntrace\t4\tlink\t0\tinterpreter\tparent\t3\texits\t0\ntrace\t1\tlink\t1\tloop\tparent\t0\texits\t3\ntrace\t2\tlink\t1\troot\tparent\t1\texits\t0\ntrace\t3\tlink\t1\troot\tparent\t1\texits\t6\ntrace\t4\tlink\t0\tinterpreter\tparent\t3\texits\t0\ntrace\t5\tlink\t1\troot\tparent\t1\texits\t0\ntrace\t6\tlink\t1\troot\tparent\t3\texits\t4\nside-link-pass\toldside\t3\tbefore-exits\t5\tcalls\t640\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-jit-cdata-pure-exclusions.lua",
+    "test": true,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/tests/t-jit-cdata-pure-exclusions.lua"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan",
+    "seconds": 0.01508385900160647,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/asan/src/luajit: ...0905-djl20ksd/asan/tests/t-jit-cdata-pure-exclusions.lua:38: assertion failed!\nstack traceback:\n\t[C]: in function 'assert'\n\t...0905-djl20ksd/asan/tests/t-jit-cdata-pure-exclusions.lua:38: in function 'main'\n\t...0905-djl20ksd/asan/tests/t-jit-cdata-pure-exclusions.lua:71: in main chunk\n\t[C]: at 0x5562fd195e60\n"
+  }
+]

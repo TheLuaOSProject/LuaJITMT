@@ -1,0 +1,5 @@
+{
+  "strict-t-ffi-callxs-callback-stack": "060e0d85384eb07837efe136ee7f16523fb0554694aa29e55f38b762ccc2cd01",
+  "strict-t-jit-first-attach": "89b066d8084dd635a6e2a0c885c7bc95c9ba6ecc4438a76540e7dc096db6a318",
+  "strict-t-jit-xsave": "b5f24fe525fe945cf55d9a29a055169be3b7709b6255d07bab8cf71007ff5d36"
+}

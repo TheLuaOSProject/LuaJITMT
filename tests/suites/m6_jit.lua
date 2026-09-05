@@ -31,6 +31,7 @@ local m6_cases = {
   "m6_jit_barrier_xpoll",
   "m6_jit_xbar_xpoll",
   "m6_jit_cdata_basemt_guards",
+  "m6_jit_special_udata_guards",
   "m6_jit_cdata_pure",
   "m6_jit_cdata_pure_lifecycle",
   "m6_jit_xsave",
@@ -1173,6 +1174,33 @@ assert(threading.gcworkers(0) == 1)
         libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=lj_mem_realloc" }
       })
       print("M6 pure cdata lifecycle behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_special_udata_guards",
+    description = "native special userdata dispatch guards mutable methods",
+    run = function(t)
+      if jit.os ~= "Linux" or jit.arch ~= "x64" then
+        print("M6 special userdata native guard fixtures require Linux/x64")
+        return
+      end
+      build_default(t)
+      for _, kind in ipairs({ "clib", "file", "buffer", "plain" }) do
+        for _, mode in ipairs({
+          "function", "table", "missing", "nonfunction", "replace",
+          "replace_missing", "resize", "methodlife", "table_entry",
+          "newindex", "newindex_table"
+        }) do
+          runtime.luajit_script(t, "t-jit-special-udata-guards.lua", { kind, mode }, {
+            joff = true, timeout = "20s"
+          })
+          runtime.luajit_script(t, "t-jit-special-udata-guards.lua", { kind, mode }, {
+            jon = true, timeout = "20s"
+          })
+        end
+      end
+      print("M6 special userdata native method guards passed")
     end
   })
 
