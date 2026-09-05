@@ -1,0 +1,7 @@
+/usr/bin/ld: /tmp/ccmgDB99.o: in function `test_huge_overflow':
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaassert/tests/t-gc2-sweep-table-coalescing.c:474:(.text.startup+0x5c6): undefined reference to `__wrap_calloc'
+/usr/bin/ld: /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaassert/src/libluajit.a(lj_arena.o): in function `lj_arena_map':
+lj_arena.c:(.text+0x9655): undefined reference to `__wrap_calloc'
+/usr/bin/ld: /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaassert/src/libluajit.a(lj_gc.o): in function `gc_shutdown_seen_grow':
+lj_gc.c:(.text+0xe70): undefined reference to `__wrap_calloc'
+collect2: error: ld returned 1 exit status

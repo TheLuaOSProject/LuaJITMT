@@ -1,0 +1,76 @@
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/tests/t-arena-empty-reclaimed.c:3:2: error: "t-arena-empty-reclaimed requires LJ_ARENA_TEST_HELPERS"
+    3 | #error "t-arena-empty-reclaimed requires LJ_ARENA_TEST_HELPERS"
+      |  ^
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/tests/t-arena-empty-reclaimed.c:238:3: error: call to undeclared function 'lj_arena_test_empty_reclaimed_pause'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  238 |   lj_arena_test_empty_reclaimed_pause(a, 1);
+      |   ^
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/tests/t-arena-empty-reclaimed.c:238:3: note: did you mean 'lj_arena_alloc_empty_reclaimed_head'?
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/src/lj_arena.h:1017:18: note: 'lj_arena_alloc_empty_reclaimed_head' declared here
+ 1017 | LJ_FUNC GCArena *lj_arena_alloc_empty_reclaimed_head(const TGAlloc *alloc);
+      |                  ^
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/tests/t-arena-empty-reclaimed.c:240:13: error: use of undeclared identifier 'lj_arena_test_empty_reclaimed_paused'; did you mean 'lj_arena_test_empty_reclaimed_pause'?
+  240 |   wait_seen(lj_arena_test_empty_reclaimed_paused);
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |             lj_arena_test_empty_reclaimed_pause
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/tests/t-arena-empty-reclaimed.c:238:3: note: 'lj_arena_test_empty_reclaimed_pause' declared here
+  238 |   lj_arena_test_empty_reclaimed_pause(a, 1);
+      |   ^
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/tests/t-arena-empty-reclaimed.c:242:3: error: call to undeclared function 'lj_arena_test_plain_late_pause'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  242 |   lj_arena_test_plain_late_pause(1);
+      |   ^
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/tests/t-arena-empty-reclaimed.c:242:3: note: did you mean 'lj_arena_test_lifetime_pause'?
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/src/lj_arena.h:962:14: note: 'lj_arena_test_lifetime_pause' declared here
+  962 | LJ_FUNC void lj_arena_test_lifetime_pause(int enabled);
+      |              ^
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/tests/t-arena-empty-reclaimed.c:244:13: error: use of undeclared identifier 'lj_arena_test_plain_late_paused'; did you mean 'lj_arena_test_plain_late_pause'?
+  244 |   wait_seen(lj_arena_test_plain_late_paused);
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |             lj_arena_test_plain_late_pause
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/tests/t-arena-empty-reclaimed.c:242:3: note: 'lj_arena_test_plain_late_pause' declared here
+  242 |   lj_arena_test_plain_late_pause(1);
+      |   ^
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/tests/t-arena-empty-reclaimed.c:278:5: error: call to undeclared function 'lj_arena_test_open_sealed_pause'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  278 |     lj_arena_test_open_sealed_pause(a, 1);
+      |     ^
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/tests/t-arena-empty-reclaimed.c:278:5: note: did you mean 'lj_arena_test_lifetime_pause'?
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/src/lj_arena.h:962:14: note: 'lj_arena_test_lifetime_pause' declared here
+  962 | LJ_FUNC void lj_arena_test_lifetime_pause(int enabled);
+      |              ^
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/tests/t-arena-empty-reclaimed.c:280:15: error: use of undeclared identifier 'lj_arena_test_open_sealed_paused'; did you mean 'lj_arena_test_open_sealed_pause'?
+  280 |     wait_seen(lj_arena_test_open_sealed_paused);
+      |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |               lj_arena_test_open_sealed_pause
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/tests/t-arena-empty-reclaimed.c:278:5: note: 'lj_arena_test_open_sealed_pause' declared here
+  278 |     lj_arena_test_open_sealed_pause(a, 1);
+      |     ^
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/tests/t-arena-empty-reclaimed.c:311:3: error: call to undeclared function 'lj_arena_test_empty_reclaimed_pause'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  311 |   lj_arena_test_empty_reclaimed_pause(a, 1);
+      |   ^
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/tests/t-arena-empty-reclaimed.c:313:13: error: use of undeclared identifier 'lj_arena_test_empty_reclaimed_paused'; did you mean 'lj_arena_test_empty_reclaimed_pause'?
+  313 |   wait_seen(lj_arena_test_empty_reclaimed_paused);
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |             lj_arena_test_empty_reclaimed_pause
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/tests/t-arena-empty-reclaimed.c:238:3: note: 'lj_arena_test_empty_reclaimed_pause' declared here
+  238 |   lj_arena_test_empty_reclaimed_pause(a, 1);
+      |   ^
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/tests/t-arena-empty-reclaimed.c:539:3: error: call to undeclared function 'lj_arena_test_reclaimed_publish_pause'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  539 |   lj_arena_test_reclaimed_publish_pause(published, 1);
+      |   ^
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/tests/t-arena-empty-reclaimed.c:541:13: error: use of undeclared identifier 'lj_arena_test_reclaimed_publish_paused'; did you mean 'lj_arena_test_reclaimed_publish_pause'?
+  541 |   wait_seen(lj_arena_test_reclaimed_publish_paused);
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |             lj_arena_test_reclaimed_publish_pause
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/tests/t-arena-empty-reclaimed.c:539:3: note: 'lj_arena_test_reclaimed_publish_pause' declared here
+  539 |   lj_arena_test_reclaimed_publish_pause(published, 1);
+      |   ^
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/tests/t-arena-empty-reclaimed.c:546:3: error: call to undeclared function 'lj_arena_test_open_sealed_pause'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  546 |   lj_arena_test_open_sealed_pause(a, 1);
+      |   ^
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/tests/t-arena-empty-reclaimed.c:548:13: error: use of undeclared identifier 'lj_arena_test_open_sealed_paused'; did you mean 'lj_arena_test_open_sealed_pause'?
+  548 |   wait_seen(lj_arena_test_open_sealed_paused);
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |             lj_arena_test_open_sealed_pause
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/tests/t-arena-empty-reclaimed.c:278:5: note: 'lj_arena_test_open_sealed_pause' declared here
+  278 |     lj_arena_test_open_sealed_pause(a, 1);
+      |     ^
+13 errors generated.

@@ -1,0 +1,19 @@
+{
+  "owner": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam",
+  "source_manifest": "b82c0e15e79c9b755bb469367d21bcdc3d5110b99c98f88bd7572600a611d07c",
+  "verified_artifacts": 20,
+  "actual_reviewer_dependencies": {
+    "src/lj_gc2.c": "6d96637a8a676afcd4208c08397d7fe79a29122bd05b02ca7d8889fa4dc79218",
+    "src/lj_gc.c": "2b70a2e1add35cca9aef3fd2c20b3bc6346d9ac77d80faaffe7fa60c5086810d",
+    "src/lj_obj.h": "a8962fcc16e961ad29275cffc993ff368c229dc435f5794babbbacd8214557bc",
+    "src/lj_tg.c": "16064ba7946becbbc5cc1be2ee00eae4be39f1496c6ab85c5f4cf60f64146406",
+    "src/lj_thr.h": "f39140aec08b622f0db5123fdf311e5e753075462b7a0f75c251c86a58985b28"
+  },
+  "reviewed_owner_sources": {
+    "src/lj_gc2.c": "c7a8145f17fc2e01dd8884d0816d22b6177a176a6f94da92ad1d1191c7785288",
+    "src/lj_gc.c": "0d71c5c4cc1ee42c60ca8f2e6c04931723c8d5fff093aac3b073b4c74bc4edf0",
+    "src/lj_gc.h": "7608931249f84498b743d8b354edd15230162704e08881eef48a83030c9f2d0a",
+    "src/lj_obj.h": "d51798a95fe01bc14157335d565012c3eb114950c16ad2ab4fc78ffeecca7e00"
+  },
+  "note": "Current shared dependencies include landed GC-control and FFI comparison; actual candidate remains independently based on597b. Review concerns the isolated full patch and its source contracts, not a combined build."
+}

@@ -1,0 +1,5 @@
+# Preserved compile attempts and exact required fixture configuration
+
+The initial six-helper broad generation attempted two arena-empty fixtures and table-coalescing without LJ_ARENA_TEST_HELPERS; compilation rejected missing helper declarations. No runtime test ran in those attempts. New full source-identical seven-helper assertion/APICHECK and target-only ASan variants include the required arena macro; the two arena-empty fixtures then compile and pass.
+
+The coalescing fixture defines its calloc wrapper only under LJ_TEST_WRAP_CALLOC (tests/t-gc2-sweep-table-coalescing.c:768), so the broad runner's textual wrapper discovery also needed that fixture-local macro. The seven-helper attempts correctly passed compilation but failed linking __wrap_calloc until the macro was supplied. Those link failures remain in arenaassert-checks/arenaasan-checks. run-coalescing.py is a separate third compile generation adding the existing fixture-local macro; it changes no source, predicate, gate or bound. This local test macro does not alter the runtime archives.

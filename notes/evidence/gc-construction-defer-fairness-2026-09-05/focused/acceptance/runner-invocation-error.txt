@@ -1,0 +1,1 @@
+The first copied retained runner invocation omitted its required variant argument and exited before any compilation or fixture run. Command: python3 acceptance/v2/run.py; cwd /tmp/lj-reclaim-fair-pass-20260905-kw8kfdam; Python IndexError at sys.argv[1]. Corrected invocation is recorded separately in acceptance/v2/candidate-results.json. No runtime failure occurred.

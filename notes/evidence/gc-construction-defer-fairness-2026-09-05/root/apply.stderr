@@ -1,0 +1,14 @@
+Checking patch src/lj_gc.c...
+Hunk #1 succeeded at 2972 (offset 2 lines).
+Hunk #2 succeeded at 3016 (offset 2 lines).
+Hunk #3 succeeded at 3318 (offset 2 lines).
+Hunk #4 succeeded at 4172 (offset 2 lines).
+Hunk #5 succeeded at 4180 (offset 2 lines).
+Checking patch src/lj_gc.h...
+Checking patch src/lj_gc2.c...
+Hunk #1 succeeded at 1755 (offset 1 line).
+Checking patch src/lj_obj.h...
+Applied patch src/lj_gc.c cleanly.
+Applied patch src/lj_gc.h cleanly.
+Applied patch src/lj_gc2.c cleanly.
+Applied patch src/lj_obj.h cleanly.

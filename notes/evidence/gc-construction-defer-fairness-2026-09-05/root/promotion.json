@@ -1,0 +1,43 @@
+[
+  {
+    "path": "src/lj_gc.c",
+    "before": "2b70a2e1add35cca9aef3fd2c20b3bc6346d9ac77d80faaffe7fa60c5086810d",
+    "after": "73a929ef4cfaf7e6c7a82130d3ae02215700ddd71d61548acfb9641fbd42bd12"
+  },
+  {
+    "path": "src/lj_gc.h",
+    "before": "56b9e71567ffca558f06be0a844da3389faca8a8ede1da1d3cf0a614e7beddf6",
+    "after": "877512faa2e699d12ee233777f9280bd0d5e8ded4bccc66e723bcf8d491a4a38"
+  },
+  {
+    "path": "src/lj_gc2.c",
+    "before": "6d96637a8a676afcd4208c08397d7fe79a29122bd05b02ca7d8889fa4dc79218",
+    "after": "6efa3711a2a32cf49b741460de1353d903ff9ed375edec7b5fab0032304ded2d"
+  },
+  {
+    "path": "src/lj_obj.h",
+    "before": "a8962fcc16e961ad29275cffc993ff368c229dc435f5794babbbacd8214557bc",
+    "after": "d0266776612462413025cea536a088a9178a972b3b5f0e6ed5e201375fbd03f4"
+  },
+  {
+    "path": "tests/t-gc2-constructor-defer.c",
+    "source": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/acceptance/v2/t-owner-defer.c",
+    "source_sha256": "935acb6d75b4907259be08fffbf7bc10ee13b353faec34dd4a4a9524a1cdafe6",
+    "after": "935acb6d75b4907259be08fffbf7bc10ee13b353faec34dd4a4a9524a1cdafe6",
+    "change": "byte-identical"
+  },
+  {
+    "path": "tests/t-gc2-constructor-mixed.c",
+    "source": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/acceptance/mixed-v2/t-mixed-owner.c",
+    "source_sha256": "935594e3e5fb6fee978565f9acc8974c65d28862cac1f0cc798f205658854bf2",
+    "after": "8881c32640b89caa2454eaaea57088511e1a249a122cc9e92de8bb9f260d27df",
+    "change": "include path only"
+  },
+  {
+    "path": "tests/t-gc2-constructor-fairness.c",
+    "source": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/acceptance/fair-v1/t-fair-owner.c",
+    "source_sha256": "8338bf08105263c7944f44d2dd00cfdb2da0e86f897a17ee77d617354db01ae6",
+    "after": "c68c806b08e366c63598be30a5bcadfcf3cad4fc72e02225b56716b31f7ae77b",
+    "change": "include path only"
+  }
+]

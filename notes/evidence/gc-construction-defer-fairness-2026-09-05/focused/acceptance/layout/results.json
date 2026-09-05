@@ -1,0 +1,85 @@
+[
+  {
+    "name": "rejected-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/acceptance/layout/layout.c",
+      "-o",
+      "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/acceptance/layout/rejected-layout"
+    ],
+    "cwd": "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate",
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06647589500062168,
+    "stdout": "rejected-compile.stdout",
+    "stderr": "rejected-compile.stderr"
+  },
+  {
+    "name": "rejected-run",
+    "argv": [
+      "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/acceptance/layout/rejected-layout"
+    ],
+    "cwd": "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate",
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.0006780039984732866,
+    "stdout": "rejected-run.stdout",
+    "stderr": "rejected-run.stderr"
+  },
+  {
+    "name": "fair-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "-DFAIR_VARIANT",
+      "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/acceptance/layout/layout.c",
+      "-o",
+      "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/acceptance/layout/fair-layout"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate",
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06899364599667024,
+    "stdout": "fair-compile.stdout",
+    "stderr": "fair-compile.stderr"
+  },
+  {
+    "name": "fair-run",
+    "argv": [
+      "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/acceptance/layout/fair-layout"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate",
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.000778800000261981,
+    "stdout": "fair-run.stdout",
+    "stderr": "fair-run.stderr"
+  }
+]

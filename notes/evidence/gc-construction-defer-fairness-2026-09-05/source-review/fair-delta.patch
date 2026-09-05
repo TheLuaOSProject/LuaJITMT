@@ -1,0 +1,161 @@
+--- a/src/lj_gc2.c
++++ b/src/lj_gc2.c
+@@ -1754,6 +1754,7 @@
+   gc2_sweep_root_cursor_rel(g, NULL);
+   gc2_sweep_root_done_rel(g, 0);
+   gc2_sweep_grace_needed_rel(g, 0);
++  gc2_sweep_owner_next_tid_store_rlx(g, 0);
+   gc2_sweep_to_idle_store_rlx(g, 0);
+   gc2_preserve_abort_to_idle_store_rlx(g, 0);
+   gc2_alloc_total_bytes_store_rlx(g, 0);
+@@ -5861,13 +5862,16 @@
+ 
+ static uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
+ 					     uint32_t limit,
+-					     int *finishedp)
++					     int *finishedp,
++					     int *root_owner_blockedp)
+ {
+   uint32_t n = 0, arenas = 0, epoch;
+   uint64_t live = 0;
+   int minor, preserve_marks;
+   if (finishedp)
+     *finishedp = 0;
++  if (root_owner_blockedp)
++    *root_owner_blockedp = 0;
+   if (!g || !tg || limit == 0 ||
+       !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
+     return 0;
+@@ -6025,8 +6029,8 @@
+       /* Retain the exact arena/cursor and finish all writer cleanup before
+       ** ending this quantum. A suspended publisher cannot advance while a
+       ** nested full collector repeatedly consumes its cursor work. */
+-      if (root_owner_blocked)
+-	gc2_quantum_defer(g);
++      if (root_owner_blocked && root_owner_blockedp)
++	*root_owner_blockedp = 1;
+       if (lj_state_gcprep_pending_acq(g) != 0)
+ 	break;
+       if (!step)
+@@ -6082,6 +6086,7 @@
+   uint32_t n;
+   int claimed = 0;
+   int gate_owned = 0;
++  int root_owner_blocked = 0;
+   if (!g || !tg || limit == 0)
+     return 0;
+   if (gc2_worker_active_acq(g) == 0) {
+@@ -6112,7 +6117,10 @@
+       }
+       gate_owned = 1;
+     }
+-    n = lj_gc2_sweep_owner_progress(g, tg, limit, NULL);
++    n = lj_gc2_sweep_owner_progress(
++      g, tg, limit, NULL, &root_owner_blocked);
++    if (root_owner_blocked)
++      gc2_quantum_defer(g);
+   }
+   if (gate_owned && gc2_phase_acq(g) == LJ_GC2_SWEEP &&
+       gc2_sweep_bridge_ready_acq(g) != 0)
+@@ -22202,8 +22210,9 @@
+ 
+ static uint32_t gc2_worker_sweep_progress(global_State *g, uint32_t limit)
+ {
+-  TGState *tg;
+-  uint32_t n = 0;
++  TGState *tg, *head, *start;
++  uint32_t n = 0, next_tid;
++  int root_owner_blocked = 0;
+   uint64_t defer0 = gc2_deferred_epoch_acq(g);
+   if (gc2_jit_recorder_active(g)) {
+     /* Recorder construction is denied in SWEEP. Fail closed if a forced or
+@@ -22295,17 +22304,52 @@
+     if (strings)
+       return strings;
+   }
+-  for (tg = gc2_tg_list_acq(g);
+-       tg != NULL && n < limit;
+-       tg = lj_tg_next_acq(tg)) {
++  /* worker_active excludes physical TG unlink/reclaim during this pass.
++  ** Attach only prepends; capture that head once so new owners join the next
++  ** invocation. Resolve the scalar hint through this list, never through a
++  ** retained TG pointer. The existing self-next attach repair is a tail. */
++  head = start = gc2_tg_list_acq(g);
++  next_tid = gc2_sweep_owner_next_tid_acq(g);
++  if (next_tid != 0) {
++    for (tg = head; tg != NULL;) {
++      TGState *next;
++      if (lj_tg_tid_acq(tg) == next_tid) {
++        start = tg;
++        break;
++      }
++      next = lj_tg_next_acq(tg);
++      if (next == tg)
++        break;
++      tg = next;
++    }
++  }
++  tg = start;
++  while (tg != NULL && n < limit) {
++    TGState *next = lj_tg_next_acq(tg);
+     uint8_t flags = lj_tg_flags_acq(tg);
+-    int finished = 0;
+-    if ((flags & (TGF_DEAD|TGF_ARENA_INTERNAL)) != TGF_ARENA_INTERNAL)
+-      continue;
+-    n += lj_gc2_sweep_owner_progress(g, tg, limit - n, &finished);
++    int finished = 0, owner_blocked = 0;
++    if (next == NULL || next == tg)
++      next = head;
++    if ((flags & (TGF_DEAD|TGF_ARENA_INTERNAL)) == TGF_ARENA_INTERNAL) {
++      n += lj_gc2_sweep_owner_progress(
++        g, tg, limit - n, &finished, &owner_blocked);
++      root_owner_blocked |= owner_blocked;
++    }
++    /* Preserve the work quota and one-finished-arena boundary, but resume at
++    ** the next owner after either boundary. A persistent EOF retry must not
++    ** reclaim the front of every subsequent invocation. */
++    gc2_sweep_owner_next_tid_store_rlx(g, next ? lj_tg_tid_acq(next) : 0);
+     if (finished || gc2_deferred_epoch_acq(g) != defer0)
+       break;
+-  }
++    tg = next;
++    if (tg == start)
++      break;  /* At most one pass of the captured list, including zero work. */
++  }
++  /* All physical writer cleanup preceded the local refusal. Give independent
++  ** owners their bounded turns, then stop higher-level immediate retry loops.
++  ** Another consumer's event already supplies the same invocation boundary. */
++  if (root_owner_blocked && gc2_deferred_epoch_acq(g) == defer0)
++    gc2_quantum_defer(g);
+   return n;  /* 05 section 5.6.3 worker-owned sweep bridge. */
+ }
+ 
+--- a/src/lj_obj.h
++++ b/src/lj_obj.h
+@@ -1953,6 +1953,7 @@
+   uint32_t generational;  /* M10: requested generational mode. */
+   GCRef *grey_stack;	/* GC2 grey work deque ring. */
+   MSize grey_capacity;	/* Allocated grey deque slots. */
++  uint32_t sweep_owner_next_tid;  /* Worker-owned sweep scheduling hint. */
+   uint64_t grey_top;	/* Chase-Lev steal-side index. */
+   uint64_t grey_bottom;	/* Chase-Lev owner-side index. */
+   uint64_t grey_pushed;	/* Grey entries scheduled from SSB/traversal. */
+@@ -4141,6 +4142,18 @@
+ LJ_GC2_COUNTER64_ACCESSORS(gc2_sweep_to_idle, sweep_to_idle)
+ LJ_GC2_COUNTER64_ACCESSORS(gc2_preserve_abort_to_idle, preserve_abort_to_idle)
+ 
++/* The worker token serializes this scalar hint. It never pins a TG body. */
++static LJ_AINLINE uint32_t gc2_sweep_owner_next_tid_acq(global_State *g)
++{
++  return la_load32_acq(&g->gc2.sweep_owner_next_tid);
++}
++
++static LJ_AINLINE void gc2_sweep_owner_next_tid_store_rlx(global_State *g,
++                                                       uint32_t tid)
++{
++  la_store32_rlx(&g->gc2.sweep_owner_next_tid, tid);
++}
++
+ static LJ_AINLINE TGState *gc2_tg_list_acq(global_State *g)
+ {
+   return (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);

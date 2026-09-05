@@ -1,0 +1,42 @@
+{
+  "argv": [
+    "make",
+    "-C",
+    "src",
+    "-j4",
+    "BUILDMODE=static",
+    "XCFLAGS=-DLUA_USE_ASSERT -DLUA_USE_APICHECK -DLJ_GC2_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_FUNC_TEST_HELPERS -DLJ_UDATA_TEST_HELPERS -DLJ_STR_TEST_HELPERS",
+    "TARGET_STRIP=:",
+    "CC=clang",
+    "HOST_CC=clang",
+    "CCOPT=-O1",
+    "CCDEBUG=-g",
+    "TARGET_CFLAGS=-fsanitize=address -fno-omit-frame-pointer",
+    "TARGET_LDFLAGS=-fsanitize=address"
+  ],
+  "cwd": "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan",
+  "timeout_seconds": 180,
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 10.145870758002275,
+  "stdout": "controlasan-build.stdout",
+  "stderr": "controlasan-build.stderr",
+  "binaries": {
+    "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/libluajit.a": {
+      "sha256": "662a83a2ea0d46d158ee1106d033c14d7e1c3df4f88322211d7fdd744cbff3ab",
+      "bytes": 27383824
+    },
+    "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/luajit": {
+      "sha256": "3fde8951c7c0b5f0c22776cfa6247ede33b890956b492da28ff19e11ec08d7fa",
+      "bytes": 19989720
+    },
+    "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/host/minilua": {
+      "sha256": "db5da14c0619d5cd7804c43a6a3e149d4a8f12ad9926e7f302087f7f70f23f82",
+      "bytes": 550944
+    },
+    "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/host/buildvm": {
+      "sha256": "16c82d508f9f495799503b1639edda86553737250d86423b4420f0f067e88a38",
+      "bytes": 247008
+    }
+  }
+}

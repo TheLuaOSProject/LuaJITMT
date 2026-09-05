@@ -1,0 +1,1 @@
+t-gc2-worker-scheduler: /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/tests/t-gc2-worker-scheduler.c:1265: void test_async_mark(lua_State *, global_State *, TGState *): Assertion `wait_ssb_empty(g)' failed.

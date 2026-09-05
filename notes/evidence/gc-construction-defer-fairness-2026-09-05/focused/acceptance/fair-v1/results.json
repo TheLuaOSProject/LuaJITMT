@@ -1,0 +1,125 @@
+[
+  {
+    "name": "compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/src",
+      "-I/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/acceptance/fair-v1/t-fair-owner.c",
+      "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/acceptance/fair-v1/candidate-t-fair-owner"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate",
+    "LUA_PATH": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/src/?.lua;/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/lib/?.lua;;",
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.2144964310064097,
+    "stdout": "compile.stdout",
+    "stderr": "compile.stderr"
+  },
+  {
+    "name": "one-quota1",
+    "argv": [
+      "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/acceptance/fair-v1/candidate-t-fair-owner",
+      "0",
+      "1",
+      "1"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate",
+    "LUA_PATH": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/src/?.lua;/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/lib/?.lua;;",
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.01568496899562888,
+    "stdout": "one-quota1.stdout",
+    "stderr": "one-quota1.stderr"
+  },
+  {
+    "name": "three-quota1",
+    "argv": [
+      "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/acceptance/fair-v1/candidate-t-fair-owner",
+      "0",
+      "3",
+      "1"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate",
+    "LUA_PATH": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/src/?.lua;/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/lib/?.lua;;",
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.015576422003505286,
+    "stdout": "three-quota1.stdout",
+    "stderr": "three-quota1.stderr"
+  },
+  {
+    "name": "three-quota64",
+    "argv": [
+      "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/acceptance/fair-v1/candidate-t-fair-owner",
+      "0",
+      "3",
+      "64"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate",
+    "LUA_PATH": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/src/?.lua;/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/lib/?.lua;;",
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.01548611700127367,
+    "stdout": "three-quota64.stdout",
+    "stderr": "three-quota64.stderr"
+  },
+  {
+    "name": "three-workers2",
+    "argv": [
+      "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/acceptance/fair-v1/candidate-t-fair-owner",
+      "2",
+      "3",
+      "64"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate",
+    "LUA_PATH": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/src/?.lua;/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/lib/?.lua;;",
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.21415093499672366,
+    "stdout": "three-workers2.stdout",
+    "stderr": "three-workers2.stderr"
+  },
+  {
+    "name": "three-detached-hint",
+    "argv": [
+      "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/acceptance/fair-v1/candidate-t-fair-owner",
+      "0",
+      "3",
+      "1",
+      "detach"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate",
+    "LUA_PATH": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/src/?.lua;/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/lib/?.lua;;",
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.015774241997860372,
+    "stdout": "three-detached-hint.stdout",
+    "stderr": "three-detached-hint.stderr"
+  }
+]

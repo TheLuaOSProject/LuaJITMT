@@ -1,0 +1,71 @@
+[
+  {
+    "name": "mixed-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/src",
+      "-I/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/acceptance/mixed-v2/t-mixed-owner.c",
+      "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/acceptance/mixed-v2/candidate-t-mixed-owner"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate",
+    "LUA_PATH": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/src/?.lua;/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/lib/?.lua;;",
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.1642516949941637,
+    "stdout": "mixed-compile.stdout",
+    "stderr": "mixed-compile.stderr"
+  },
+  {
+    "name": "mixed-workers-0",
+    "argv": [
+      "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/acceptance/mixed-v2/candidate-t-mixed-owner",
+      "0",
+      "1"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate",
+    "LUA_PATH": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/src/?.lua;/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/lib/?.lua;;",
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.015655303002859,
+    "stdout": "mixed-workers-0.stdout",
+    "stderr": "mixed-workers-0.stderr"
+  },
+  {
+    "name": "mixed-workers-2",
+    "argv": [
+      "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/acceptance/mixed-v2/candidate-t-mixed-owner",
+      "2",
+      "1"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate",
+    "LUA_PATH": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/src/?.lua;/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/lib/?.lua;;",
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.21397373999934644,
+    "stdout": "mixed-workers-2.stdout",
+    "stderr": "mixed-workers-2.stderr"
+  }
+]

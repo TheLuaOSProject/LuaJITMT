@@ -1,0 +1,266 @@
+{
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/src/libluajit.a": {
+    "sha256": "e855aa21c230973e14d030ff6baeb8bf3540d54aba41fab0c4ddd4f2b79c3624",
+    "bytes": 2977110
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/src/luajit": {
+    "sha256": "0d9c0c43e5f434f3ec14fad821d5c69e39bc748a625db92dd96feb045af47470",
+    "bytes": 2005936
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-gc-root-pending.c": {
+    "sha256": "1d14bde9051fa4335a4fc4697e32af2f91a849802b5dbf1394757b04a1a0e5af",
+    "bytes": 13493
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-gc-root-pending": {
+    "sha256": "44a59ae1b541db5ea4ef5eae0a47b450c8547b5ac2698989249d6c4d28661cb2",
+    "bytes": 1975816
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-gc-root-pending-race.c": {
+    "sha256": "c21200c39ad2a2ff9588574ac80713c99c3c733f688e4c86cc8939cd15d4fe21",
+    "bytes": 31585
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-gc-root-pending-race": {
+    "sha256": "fec74bbdbd5bb1ec31f4bd2e6803ca4c36059dcce459585ec35f8588cd47e5fc",
+    "bytes": 2153624
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-udata-construction-roots.c": {
+    "sha256": "96926960676cec393c50af93adc16b69e7c3d2cc49665881d274d0f25c27353e",
+    "bytes": 4745
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-udata-construction-roots": {
+    "sha256": "3d808d529680be0476bf9ab2152b56c388be37d3966dabc8d164683ae86f04cc",
+    "bytes": 2041776
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-arena-sweep.c": {
+    "sha256": "f9fd8f1ca0cc483112720c2cf26be13b6e85e4f8b893d9ecd185fccb6ed7503f",
+    "bytes": 60163
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-arena-sweep": {
+    "sha256": "9ac22fd3edf059e3c3867fbf34884869d9025c856b3e7258bd0eba279b95498b",
+    "bytes": 2081456
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-arena-gcsweep.c": {
+    "sha256": "d3ae9eba04c758f4c6f850e8a388fa9f820bc87181cdaebcc3c21ab6cc36e030",
+    "bytes": 96308
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-arena-gcsweep": {
+    "sha256": "2d2fabafa005428a9169cd07b94fa68cfe84bc8eeb7c357c17ea1ef899b2cee3",
+    "bytes": 2469352
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-arena-gcphase.c": {
+    "sha256": "06fdc69eba8e635b2a101d71f97d80ca44d73b04d6b9685217cce8650b20ccdc",
+    "bytes": 1482
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-arena-gcphase": {
+    "sha256": "decb888c92e4981b0248be2b854b1d93a8a3f4e738ee2cc768ae043074066f9b",
+    "bytes": 2036000
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-arena-empty-reclaimed.c": {
+    "sha256": "ff8435cabe930c2b6231c5b496b1f108077d430b41006819d5e82c31276537b4",
+    "bytes": 25808
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-arena-empty-reclaimed-runtime.c": {
+    "sha256": "8a8760c7c0d556e8ddede289f584d6f45044a1f65b0924372cd2a331459c696c",
+    "bytes": 4579
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-gc2-phase.c": {
+    "sha256": "f8b1b459c14259049de305ddd3a35e7bac708c68c83f23d2e11dcfd10dba6196",
+    "bytes": 50360
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-gc2-phase": {
+    "sha256": "5b20ed392ea017ffd60a94c901508d136dd5eea226b5f60d22d31d84a926e0ae",
+    "bytes": 2225376
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-gc2-worker-scheduler.c": {
+    "sha256": "e032c08598b035cf7982ebd71af87574edc9b8e99eff2b278d49cb860c98d978",
+    "bytes": 48916
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-gc2-worker-scheduler": {
+    "sha256": "fe17f4e07b895fba4084870f2c1305304069174245f9639aed33e384969bb9a6",
+    "bytes": 2238928
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-gc2-mark-close-progress.c": {
+    "sha256": "498023f352758333085ef80d274b2bed8222b60be0059ada50c3cdcc7471b828",
+    "bytes": 6513
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-gc2-mark-close-progress": {
+    "sha256": "cceecbf4e84a7061938546f9a0fc01729178e51e5bfcfff6483b45cff53d6466",
+    "bytes": 1941176
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-gc2-jit-mark-coop.c": {
+    "sha256": "9b00dfda6667716fdedacc2c32ee02e6bf1727f9ab0392af8be53159b173379e",
+    "bytes": 21400
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-gc2-jit-mark-coop": {
+    "sha256": "cb28d727579505203acca1693c3d3e2498767d47c64a3f1a38d2afbe285d824d",
+    "bytes": 2111584
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-gc2-jit-sweep-coop.c": {
+    "sha256": "6e24068164a750d66e1a738a724d2645290fa3db369c083a1ab0b417a2111748",
+    "bytes": 13743
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-gc2-jit-sweep-coop": {
+    "sha256": "859bb4f56fe580f5020339682c1122c68bade29314adfe0106e9e783cbb8638d",
+    "bytes": 2078488
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-jit-idle-reclaim-entry.c": {
+    "sha256": "d0d24a06085383dc95bb7f5ab83b1daf18d54fe46b98d6ece4190d34c3cd5343",
+    "bytes": 15006
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-jit-idle-reclaim-entry": {
+    "sha256": "0c97c1fd3f775395be47755ba2251b960f412fe8f838094e49bb720d93b9435b",
+    "bytes": 2082640
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-gc2-sweep-table-coalescing.c": {
+    "sha256": "95b6a2097ad3e05bd64292a26b1bb765f502edacfec0a08b04cdafc9f9be3a32",
+    "bytes": 29311
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-gc2-sweep-public-table-rescan.c": {
+    "sha256": "81d79757038e0dabba677b85ebf3c5c635b92c9ff6cb06891e3078c0669855fe",
+    "bytes": 15992
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-gc2-sweep-public-table-rescan": {
+    "sha256": "58e6880aaef05734173e875ce01c9672c1c9d233940731a862bba1d17d120768",
+    "bytes": 2114112
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-gc2-sweep-leaf-publication.c": {
+    "sha256": "fc8424ba778dbd25bdd998e9ee68d3f081bea82fba651b35a128762cd4f2966c",
+    "bytes": 8650
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-gc2-sweep-leaf-publication": {
+    "sha256": "4c8932d8bfc722de2b16951a41264a43c728ae7aecebeb1dee9098023d7711a3",
+    "bytes": 2081576
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-gc2-sweep-edge-lease.c": {
+    "sha256": "0cd61c04b7b877b636d0363b5b4f4d8903a38fe49ccaf99e99b7fafe03e945dd",
+    "bytes": 18523
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-gc2-sweep-edge-lease": {
+    "sha256": "1b17bd6b4f99de6dbf849b5fba2bad11166ba7f52974f06e10a55a099b3848d2",
+    "bytes": 2112528
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-gc2-finreg-cdata-preclaim-roots.c": {
+    "sha256": "2586400d38acbacbe8aafc16fc6d2bd3126018f37feba1652e65277a4296427c",
+    "bytes": 2088
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-gc2-finreg-cdata-preclaim-roots": {
+    "sha256": "d8b212cc92d9a08208f00054de0a7dbabd9ab2fc54bac058a4013c16405ad52f",
+    "bytes": 2028192
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-str-reclaim-sole.c": {
+    "sha256": "72122a29bb5e9c61b3432874a8686c16349050dc9eee5db68190a66685ac31d2",
+    "bytes": 4636
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-str-reclaim-sole": {
+    "sha256": "f5f1a6dbe82a4745ecdc62b9932d37a3464963a916d6f5ddfd646e10ad43fbcf",
+    "bytes": 1932216
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-tg-terminal-orphan.c": {
+    "sha256": "c532022e5a5863ea1893bb0c222ffed11401a4b8fb15285ca18fbf860ea9cb81",
+    "bytes": 7917
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-tg-terminal-orphan": {
+    "sha256": "59e7ec528c1a17224ca7bf5063ecc6b00602fd80b2f02166babf03417c58b2d4",
+    "bytes": 1948744
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-tg-registry-lease.c": {
+    "sha256": "653162d4de10e11a081515c258064ef1e30ca6ac1686bf6a8391345156bc61e9",
+    "bytes": 9142
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-tg-registry-lease": {
+    "sha256": "dd5ed023e028706401627d68bdaabdb4ab3f04bb1ad836a51e61a023eaccd0ba",
+    "bytes": 1972400
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-safepoint-native-root-hold.c": {
+    "sha256": "e7993ffdfd42218236986f960d95765b865d7a3f05b4637dbf4c7b33be8b5946",
+    "bytes": 8076
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-safepoint-native-root-hold": {
+    "sha256": "1de3052d1e59dab6bfb0ffdf3b477baaa209962596be14b68f823c9540aaf5b0",
+    "bytes": 2066768
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-safepoint-remote-root-completion.c": {
+    "sha256": "9d8944de53856419fc82aefed90f7dac346cd5d014c2bb2b92f2904cf8566dfb",
+    "bytes": 12256
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-safepoint-remote-root-completion": {
+    "sha256": "468770e99cc8276b04b614682b840291754396d396dc81c782e1b9f559e99829",
+    "bytes": 2093224
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-safepoint-local-native-duplicate.c": {
+    "sha256": "2e0ae7c4ff8e8d8d605478ca3d33a5c9bf3eec74af37894091ae9b6543903ded",
+    "bytes": 6813
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-safepoint-local-native-duplicate": {
+    "sha256": "79d11525f0b95e15db891c3987e3f03d292cb607a511d7855bd67af4c62f3f11",
+    "bytes": 2057840
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-threading-spawn-native.c": {
+    "sha256": "f158a9de972f0c22e61a14b018ff8d7e6e5f170ae9da0415b06169df6148c3ab",
+    "bytes": 11138
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-threading-spawn-native": {
+    "sha256": "d8ab1f58484235e794a09b70fdf611f91997c756d26ac87371c43dd67cb32138",
+    "bytes": 2070504
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-gc2-activation-veto.c": {
+    "sha256": "ece5fd1105ec52d2775751e0281113155b61e548640e4caf5d8d3bad67685455",
+    "bytes": 20088
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-gc2-activation-veto": {
+    "sha256": "3a7f37d53758d391fb826423998ebdd528dd9146727383f9204c3cd574fa05ad",
+    "bytes": 2025744
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-gc2-pacing-atomic.c": {
+    "sha256": "491ace4dfb97ccc5485ce9a0964664a3ab281eff2af54cfe5b72b9ed896e2b28",
+    "bytes": 2577
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-gc2-pacing-atomic": {
+    "sha256": "72663bb04bd16b7eb626be3b1a257bbc6a416741a36cf381641e2b3ce0a0f38c",
+    "bytes": 1916632
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-gc2-alloc-account.c": {
+    "sha256": "5d16d4eb914e2614578b04a2a6e3589c62c3965def9b7a93dee8601a8ab1abfd",
+    "bytes": 47143
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-gc2-alloc-account": {
+    "sha256": "e6613deb7496af21dd1b8b3fdbc9cd9733e6832839db833f63e8514e1d82fe52",
+    "bytes": 2118096
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-gc2-interp-hard-check.c": {
+    "sha256": "d1ab1088824cfc34996ef9e725cf79cb7fcd3490b3134ec382987c02cb2c8845",
+    "bytes": 6794
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-gc2-interp-hard-check": {
+    "sha256": "c4d7adcdf104f6657d0a8c95affdb77cf10e6e705c6e92724e559c968e8c29cc",
+    "bytes": 2051960
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-gc2-jit-hard-check.c": {
+    "sha256": "1c197b0eb79fde4f0b2f18d37c559c6b9079c7532d6c0dcf2db027a3c6bdc91d",
+    "bytes": 6966
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-gc2-jit-hard-check": {
+    "sha256": "913c1e4a56e14d1d9dbcec704366e0d90dd1150b1cb5062d9b38bf8809b595b2",
+    "bytes": 2039144
+  },
+  "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate/tests/t-gc2-worker-scheduler.c": {
+    "sha256": "f476733106d7e2552c9e47757b35f1c1dc78cf8b3cb0d47c17f17ed58fe70dca",
+    "bytes": 49341
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert/t-gc2-worker-scheduler-publication": {
+    "sha256": "72817ce159b9445235a6b15a8587f46fd3bd20f68df6f2224a3a66df28538b92",
+    "bytes": 2239392
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-gc-active-thread-roots.lua": {
+    "sha256": "9e3c7ace9da75dc5e05639fba417142f6e4ac6f948d97f60953a1df5ac1001c4",
+    "bytes": 4883
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-gc-workers.lua": {
+    "sha256": "cdfe55b4879aeb3398d5c2a2e12aec3fccb97670b8060026cc43f67ea35ebdb9",
+    "bytes": 2442
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-gc2-finalizer-peer-collect.lua": {
+    "sha256": "20c65ba8fe542ac38afc61bbf4dddadd32c3f6f39f75c6c519e9b3ecd589c358",
+    "bytes": 2436
+  }
+}

@@ -1,0 +1,4 @@
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/tests/t-arena-empty-reclaimed-runtime.c:3:2: error: "runtime empty-spare fixture requires arena and GC2 test helpers"
+    3 | #error "runtime empty-spare fixture requires arena and GC2 test helpers"
+      |  ^
+1 error generated.

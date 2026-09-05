@@ -1,0 +1,96 @@
+{
+  "verified_manifests": [
+    {
+      "package": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam",
+      "manifest": "source-manifest.json",
+      "sha256": "b82c0e15e79c9b755bb469367d21bcdc3d5110b99c98f88bd7572600a611d07c",
+      "entries": 20
+    },
+    {
+      "package": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam",
+      "manifest": "focused-manifest.json",
+      "sha256": "d02f89df5ab80c7a5b3a0b68ad24b73593078c24d82884770567745930e5da89",
+      "entries": 109
+    },
+    {
+      "package": "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno",
+      "manifest": "manifest.json",
+      "sha256": "f70f3f2c88c405844c0953f158822f9175150df2c5d178c5e51cf4d72d2921ee",
+      "entries": 616
+    },
+    {
+      "package": "/tmp/lj-reclaim-fair-pass-proof-20260905-64ihi1r2",
+      "manifest": "artifact-manifest.json",
+      "sha256": "fc7f95281ca5278f6ee4de340693a31dbd7029b43f2da9569a274fef7d541849",
+      "entries": 6
+    }
+  ],
+  "source_checks": [
+    {
+      "name": "focused",
+      "tree": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate",
+      "inputs": 807
+    },
+    {
+      "name": "broad-asan",
+      "tree": "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan",
+      "inputs": 807
+    },
+    {
+      "name": "arenaassert",
+      "tree": "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaassert",
+      "inputs": 807
+    },
+    {
+      "name": "arenaasan",
+      "tree": "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaasan",
+      "inputs": 807
+    },
+    {
+      "name": "controlasan",
+      "tree": "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan",
+      "inputs": 807
+    },
+    {
+      "name": "root-candidate",
+      "tree": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+      "inputs": 225
+    },
+    {
+      "name": "root-strict",
+      "tree": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict",
+      "inputs": 225
+    },
+    {
+      "name": "root-asan",
+      "tree": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan",
+      "inputs": 225
+    }
+  ],
+  "root_runtime_passes": 170,
+  "initial_passes": 39,
+  "broader_passes": 82,
+  "canonical_passes": 49,
+  "cost_processes": 42,
+  "cost_samples": 210,
+  "runtime_base": "79345529bd932e68f8159ec17224467a10cad09b",
+  "source_head": "a983e643944a94db4a7026cbfd017c565259649b",
+  "source_delta": {
+    "src/lj_gc.c": {
+      "before": "2b70a2e1add35cca9aef3fd2c20b3bc6346d9ac77d80faaffe7fa60c5086810d",
+      "after": "73a929ef4cfaf7e6c7a82130d3ae02215700ddd71d61548acfb9641fbd42bd12"
+    },
+    "src/lj_gc.h": {
+      "before": "56b9e71567ffca558f06be0a844da3389faca8a8ede1da1d3cf0a614e7beddf6",
+      "after": "877512faa2e699d12ee233777f9280bd0d5e8ded4bccc66e723bcf8d491a4a38"
+    },
+    "src/lj_gc2.c": {
+      "before": "6d96637a8a676afcd4208c08397d7fe79a29122bd05b02ca7d8889fa4dc79218",
+      "after": "6efa3711a2a32cf49b741460de1353d903ff9ed375edec7b5fab0032304ded2d"
+    },
+    "src/lj_obj.h": {
+      "before": "a8962fcc16e961ad29275cffc993ff368c229dc435f5794babbbacd8214557bc",
+      "after": "d0266776612462413025cea536a088a9178a972b3b5f0e6ed5e201375fbd03f4"
+    }
+  }
+}

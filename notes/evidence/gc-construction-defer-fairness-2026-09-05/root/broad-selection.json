@@ -1,0 +1,288 @@
+{
+  "owner": "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno",
+  "manifest_sha256": "f70f3f2c88c405844c0953f158822f9175150df2c5d178c5e51cf4d72d2921ee",
+  "verified_artifacts": 616,
+  "excluded": {
+    "t-jit-idle-reclaim-entry": "Unchanged paused ITERN wait retained in owner/current baseline evidence; separate runtime repair pending.",
+    "t-gc2-worker-scheduler": "Await accepted synthetic-shutdown fixture cleanup; original LSan report is preserved.",
+    "t-gc2-worker-scheduler-publication": "Same current publication fixture as above; no duplicate old generation here.",
+    "t-gc2-alloc-account": "Already passed in this exact combined generation.",
+    "t-gc2-interp-hard-check": "Already passed in this exact combined generation."
+  },
+  "selected": [
+    {
+      "name": "t-gc-root-pending",
+      "source": "tests/t-gc-root-pending.c",
+      "wraps": [],
+      "modes": [
+        []
+      ]
+    },
+    {
+      "name": "t-gc-root-pending-race",
+      "source": "tests/t-gc-root-pending-race.c",
+      "wraps": [],
+      "modes": [
+        []
+      ]
+    },
+    {
+      "name": "t-udata-construction-roots",
+      "source": "tests/t-udata-construction-roots.c",
+      "wraps": [],
+      "modes": [
+        []
+      ]
+    },
+    {
+      "name": "t-arena-sweep",
+      "source": "tests/t-arena-sweep.c",
+      "wraps": [],
+      "modes": [
+        []
+      ]
+    },
+    {
+      "name": "t-arena-gcsweep",
+      "source": "tests/t-arena-gcsweep.c",
+      "wraps": [],
+      "modes": [
+        []
+      ]
+    },
+    {
+      "name": "t-arena-gcphase",
+      "source": "tests/t-arena-gcphase.c",
+      "wraps": [],
+      "modes": [
+        []
+      ]
+    },
+    {
+      "name": "t-arena-empty-reclaimed",
+      "source": "tests/t-arena-empty-reclaimed.c",
+      "wraps": [],
+      "modes": [
+        []
+      ]
+    },
+    {
+      "name": "t-arena-empty-reclaimed-runtime",
+      "source": "tests/t-arena-empty-reclaimed-runtime.c",
+      "wraps": [],
+      "modes": [
+        []
+      ]
+    },
+    {
+      "name": "t-gc2-phase",
+      "source": "tests/t-gc2-phase.c",
+      "wraps": [],
+      "modes": [
+        []
+      ]
+    },
+    {
+      "name": "t-gc2-mark-close-progress",
+      "source": "tests/t-gc2-mark-close-progress.c",
+      "wraps": [
+        "lj_native_enter",
+        "lj_thr_retry_yield"
+      ],
+      "modes": [
+        []
+      ]
+    },
+    {
+      "name": "t-gc2-jit-mark-coop",
+      "source": "tests/t-gc2-jit-mark-coop.c",
+      "wraps": [],
+      "modes": [
+        []
+      ]
+    },
+    {
+      "name": "t-gc2-jit-sweep-coop",
+      "source": "tests/t-gc2-jit-sweep-coop.c",
+      "wraps": [],
+      "modes": [
+        []
+      ]
+    },
+    {
+      "name": "t-gc2-sweep-table-coalescing",
+      "source": "tests/t-gc2-sweep-table-coalescing.c",
+      "wraps": [
+        "calloc"
+      ],
+      "modes": [
+        []
+      ]
+    },
+    {
+      "name": "t-gc2-sweep-public-table-rescan",
+      "source": "tests/t-gc2-sweep-public-table-rescan.c",
+      "wraps": [
+        "lj_ctype_fin_istab"
+      ],
+      "modes": [
+        []
+      ]
+    },
+    {
+      "name": "t-gc2-sweep-leaf-publication",
+      "source": "tests/t-gc2-sweep-leaf-publication.c",
+      "wraps": [],
+      "modes": [
+        []
+      ]
+    },
+    {
+      "name": "t-gc2-sweep-edge-lease",
+      "source": "tests/t-gc2-sweep-edge-lease.c",
+      "wraps": [
+        "lj_arena_hugetab_mark",
+        "lj_arena_hugetab_mark_cdata_range_reader_acquire",
+        "lj_arena_hugetab_reader_cdata_range_acquire",
+        "lj_arena_hugetab_reader_release",
+        "lj_arena_hugetab_rescue_enter",
+        "lj_arena_rescue_enter"
+      ],
+      "modes": [
+        []
+      ]
+    },
+    {
+      "name": "t-gc2-finreg-cdata-preclaim-roots",
+      "source": "tests/t-gc2-finreg-cdata-preclaim-roots.c",
+      "wraps": [],
+      "modes": [
+        []
+      ]
+    },
+    {
+      "name": "t-str-reclaim-sole",
+      "source": "tests/t-str-reclaim-sole.c",
+      "wraps": [],
+      "modes": [
+        []
+      ]
+    },
+    {
+      "name": "t-tg-terminal-orphan",
+      "source": "tests/t-tg-terminal-orphan.c",
+      "wraps": [
+        "lj_arena_hugetab_transfer",
+        "munmap"
+      ],
+      "modes": [
+        []
+      ]
+    },
+    {
+      "name": "t-tg-registry-lease",
+      "source": "tests/t-tg-registry-lease.c",
+      "wraps": [],
+      "modes": [
+        []
+      ]
+    },
+    {
+      "name": "t-safepoint-native-root-hold",
+      "source": "tests/t-safepoint-native-root-hold.c",
+      "wraps": [
+        "lj_gc2_flush_ssb",
+        "lj_gc2_scan_cycle_global_roots",
+        "lj_gc2_scan_cycle_owner_tg_roots_native_parked"
+      ],
+      "modes": [
+        [
+          "0"
+        ],
+        [
+          "1"
+        ],
+        [
+          "2"
+        ],
+        [
+          "3"
+        ]
+      ]
+    },
+    {
+      "name": "t-safepoint-remote-root-completion",
+      "source": "tests/t-safepoint-remote-root-completion.c",
+      "wraps": [
+        "lj_gc2_scan_cycle_owner_tg_roots_native_parked"
+      ],
+      "modes": [
+        [
+          "0"
+        ],
+        [
+          "1"
+        ],
+        [
+          "2"
+        ],
+        [
+          "3"
+        ],
+        [
+          "4"
+        ],
+        [
+          "5"
+        ]
+      ]
+    },
+    {
+      "name": "t-safepoint-local-native-duplicate",
+      "source": "tests/t-safepoint-local-native-duplicate.c",
+      "wraps": [
+        "lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+        "lj_lex_gc2_markroots"
+      ],
+      "modes": [
+        []
+      ]
+    },
+    {
+      "name": "t-threading-spawn-native",
+      "source": "tests/t-threading-spawn-native.c",
+      "wraps": [
+        "lj_tg_fini_thread",
+        "lj_vm_cpcall",
+        "pthread_create"
+      ],
+      "modes": [
+        []
+      ]
+    },
+    {
+      "name": "t-gc2-activation-veto",
+      "source": "tests/t-gc2-activation-veto.c",
+      "wraps": [],
+      "modes": [
+        []
+      ]
+    },
+    {
+      "name": "t-gc2-pacing-atomic",
+      "source": "tests/t-gc2-pacing-atomic.c",
+      "wraps": [],
+      "modes": [
+        []
+      ]
+    },
+    {
+      "name": "t-gc2-jit-hard-check",
+      "source": "tests/t-gc2-jit-hard-check.c",
+      "wraps": [],
+      "modes": [
+        []
+      ]
+    }
+  ]
+}

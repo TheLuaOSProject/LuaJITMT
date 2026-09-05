@@ -1,0 +1,101 @@
+[
+  {
+    "path": "src/host/minilua",
+    "argv": [
+      "nm",
+      "-u",
+      "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/src/host/minilua"
+    ],
+    "exit_code": 0,
+    "sha256": "b0bde76c92fd435d55c44ed2e34a24ea983f2ec7d6a8c62ecf2073bbc8720424",
+    "sanitizer_references": [],
+    "stdout": "src-host-minilua-undefined.stdout",
+    "stderr": "src-host-minilua-undefined.stderr"
+  },
+  {
+    "path": "src/host/buildvm",
+    "argv": [
+      "nm",
+      "-u",
+      "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/src/host/buildvm"
+    ],
+    "exit_code": 0,
+    "sha256": "d0b73aebff4e4bd698e88aca3ecc94f48a85e55f374d875105ee5ebde506955f",
+    "sanitizer_references": [],
+    "stdout": "src-host-buildvm-undefined.stdout",
+    "stderr": "src-host-buildvm-undefined.stderr"
+  },
+  {
+    "path": "src/lj_gc2.o",
+    "argv": [
+      "nm",
+      "-u",
+      "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/src/lj_gc2.o"
+    ],
+    "exit_code": 0,
+    "sha256": "b2d16492dbb49b7104de812af95de2c476abf37e8409541160f60c7f00384c55",
+    "sanitizer_references": [
+      "                 U __asan_handle_no_return",
+      "                 U __asan_init",
+      "                 U __asan_memcpy",
+      "                 U __asan_memset",
+      "                 U __asan_option_detect_stack_use_after_return",
+      "                 U __asan_register_elf_globals",
+      "                 U __asan_report_load1",
+      "                 U __asan_report_load2",
+      "                 U __asan_report_load4",
+      "                 U __asan_report_load8",
+      "                 U __asan_report_store1",
+      "                 U __asan_report_store4",
+      "                 U __asan_report_store8",
+      "                 U __asan_set_shadow_00",
+      "                 U __asan_set_shadow_f5",
+      "                 U __asan_set_shadow_f8",
+      "                 U __asan_stack_free_5",
+      "                 U __asan_stack_malloc_0",
+      "                 U __asan_stack_malloc_1",
+      "                 U __asan_stack_malloc_2",
+      "                 U __asan_stack_malloc_3",
+      "                 U __asan_stack_malloc_4",
+      "                 U __asan_stack_malloc_5",
+      "                 U __asan_unregister_elf_globals",
+      "                 U __asan_version_mismatch_check_v8"
+    ],
+    "stdout": "src-lj_gc2.o-undefined.stdout",
+    "stderr": "src-lj_gc2.o-undefined.stderr"
+  },
+  {
+    "path": "src/lj_gc.o",
+    "argv": [
+      "nm",
+      "-u",
+      "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/src/lj_gc.o"
+    ],
+    "exit_code": 0,
+    "sha256": "dc0edbf3f16a62d00106fd164137e2a3a7cd791e399a4038d86027fd6ec207d9",
+    "sanitizer_references": [
+      "                 U __asan_handle_no_return",
+      "                 U __asan_init",
+      "                 U __asan_memset",
+      "                 U __asan_option_detect_stack_use_after_return",
+      "                 U __asan_register_elf_globals",
+      "                 U __asan_report_load1",
+      "                 U __asan_report_load2",
+      "                 U __asan_report_load4",
+      "                 U __asan_report_load8",
+      "                 U __asan_report_store1",
+      "                 U __asan_report_store4",
+      "                 U __asan_report_store8",
+      "                 U __asan_set_shadow_00",
+      "                 U __asan_set_shadow_f5",
+      "                 U __asan_stack_malloc_0",
+      "                 U __asan_stack_malloc_1",
+      "                 U __asan_stack_malloc_2",
+      "                 U __asan_stack_malloc_3",
+      "                 U __asan_unregister_elf_globals",
+      "                 U __asan_version_mismatch_check_v8"
+    ],
+    "stdout": "src-lj_gc.o-undefined.stdout",
+    "stderr": "src-lj_gc.o-undefined.stderr"
+  }
+]

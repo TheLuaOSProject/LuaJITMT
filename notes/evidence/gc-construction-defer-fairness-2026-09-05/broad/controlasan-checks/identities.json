@@ -1,0 +1,46 @@
+{
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/src/libluajit.a": {
+    "sha256": "662a83a2ea0d46d158ee1106d033c14d7e1c3df4f88322211d7fdd744cbff3ab",
+    "bytes": 27383824
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/tests/t-gc2-worker-scheduler.c": {
+    "sha256": "e032c08598b035cf7982ebd71af87574edc9b8e99eff2b278d49cb860c98d978",
+    "bytes": 48916
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan-checks/t-gc2-worker-scheduler": {
+    "sha256": "5f432de1940c5787cbedaa3f2d9a250d08c767d09abc1208387e1902cb181cb4",
+    "bytes": 20191672
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/tests/t-jit-idle-reclaim-entry.c": {
+    "sha256": "d0d24a06085383dc95bb7f5ab83b1daf18d54fe46b98d6ece4190d34c3cd5343",
+    "bytes": 15006
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan-checks/t-jit-idle-reclaim-entry": {
+    "sha256": "dd4180423735bec6251896a34ad726a04439a9c43fe816372980a710b906a4e2",
+    "bytes": 19994448
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/tests/t-gc2-alloc-account.c": {
+    "sha256": "5d16d4eb914e2614578b04a2a6e3589c62c3965def9b7a93dee8601a8ab1abfd",
+    "bytes": 47143
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan-checks/t-gc2-alloc-account": {
+    "sha256": "c4ce3bceae0602ecb04009f58a264bf218cdb1f602de3a21da902a41a0123d4a",
+    "bytes": 19317448
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan/tests/t-gc2-interp-hard-check.c": {
+    "sha256": "d1ab1088824cfc34996ef9e725cf79cb7fcd3490b3134ec382987c02cb2c8845",
+    "bytes": 6794
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan-checks/t-gc2-interp-hard-check": {
+    "sha256": "892009baafd68d31f5f8b07239289eccb21cba8281402247c351918f6febc4b3",
+    "bytes": 19964960
+  },
+  "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate/tests/t-gc2-worker-scheduler.c": {
+    "sha256": "f476733106d7e2552c9e47757b35f1c1dc78cf8b3cb0d47c17f17ed58fe70dca",
+    "bytes": 49341
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/controlasan-checks/t-gc2-worker-scheduler-publication": {
+    "sha256": "7938b05c102fe4ba2c9041f209e5d845bc16824be5a8075d82f1776c69d02db0",
+    "bytes": 20193096
+  }
+}

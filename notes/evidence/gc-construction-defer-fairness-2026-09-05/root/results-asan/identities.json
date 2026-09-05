@@ -1,0 +1,198 @@
+{
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/luajit": {
+    "sha256": "e04da76d3c7f707642a56baa54a5df15bbe8e4bcfbfec1fb2d2adc8ada5039fa",
+    "bytes": 20058920
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/libluajit.a": {
+    "sha256": "9e93b36f665464f03255ac0a34700f288e79be16ecd5d524768e1514e2c1dd95",
+    "bytes": 27504282
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/tests/t-gc-generational-mode.lua": {
+    "sha256": "a6558752d2fb1c41fce1790c65be7fe6147f5e4a6327f1edff72bf9a57a3bb68",
+    "bytes": 4626
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/tests/t-gc2-alloc-account.c": {
+    "sha256": "931232437a4fa22103d3673dcf31f1ad5c2689ebbd70110ce1a743a786f5ddda",
+    "bytes": 48308
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/results-asan/t-gc2-alloc-account": {
+    "sha256": "bb13fe54cfdcb44ce7ab9836bb9771793841102eec32b8c2634067f404b62de4",
+    "bytes": 19435864
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lua.h": {
+    "sha256": "5bcec229da426c785982dffe2f832a5dc83dac0024a09e40a6b725b1968b8a6b",
+    "bytes": 12323
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/luaconf.h": {
+    "sha256": "a70c46233a56ea0c74d4df2e88e45371bf94df9b10ef9d2a81cbe18758c1ceff",
+    "bytes": 4792
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lauxlib.h": {
+    "sha256": "7093ea70fb38341d10475814b90961cec22f9643c11e3ea4c2ddc2cd4b03164e",
+    "bytes": 6028
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lualib.h": {
+    "sha256": "10fd6bccc4ae40cc9094b10d8d8de5a8d3febb90668cde599c253bec04bf4546",
+    "bytes": 1165
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_obj.h": {
+    "sha256": "d0266776612462413025cea536a088a9178a972b3b5f0e6ed5e201375fbd03f4",
+    "bytes": 221336
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_def.h": {
+    "sha256": "625089c379122ad13e4b8078e073512da41ebfe80173f806abb0d1e4d3b66858",
+    "bytes": 12263
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_arch.h": {
+    "sha256": "d21ad3f86b2f7651de5ab1dcfc4a3c504deae83d8b2b77d5ccbf75394a98ca7b",
+    "bytes": 18650
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_atomic.h": {
+    "sha256": "0a7bbdc91ae21c4dcbe09cd7de500e0aeb341173f5059f43659678e5be53fac1",
+    "bytes": 13030
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_gc2token.h": {
+    "sha256": "3c1ccf57ef4dd5f5a9a251e0472569939bd0bca8d21260f0497a0d1f84aa29b6",
+    "bytes": 56496
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_tgregistry.h": {
+    "sha256": "e97c3112f34628eec2a0e10e7722e0b85f92f94aec92c3ab1e7f93a7bdd4ec99",
+    "bytes": 26565
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_tgslot.h": {
+    "sha256": "f11ac945f5a0d12026bea04a07fc35dedd0571cd3c21a737c508d3e973384b6f",
+    "bytes": 19875
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_cdata.h": {
+    "sha256": "f2e5fcfa4759afe46442017def8d746ecccf914a460c3e7accfedf114a1536f7",
+    "bytes": 5398
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_gc.h": {
+    "sha256": "877512faa2e699d12ee233777f9280bd0d5e8ded4bccc66e723bcf8d491a4a38",
+    "bytes": 24042
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_ctype.h": {
+    "sha256": "8ee89b4adca50452d429e57ae528568ee9a2ac185eb15922f88e4007d0fd5e7d",
+    "bytes": 51704
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_gc2.h": {
+    "sha256": "244b10c49ad036b661a08adc178e6b8247d8ff1b18ed63bc035d3440df16a9f9",
+    "bytes": 37421
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_arena.h": {
+    "sha256": "c1e19e04c5a65aa05f7f37a195864995988610f06b4fb9ec897405982a4cd1c8",
+    "bytes": 71525
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_err.h": {
+    "sha256": "ba27aab6b3b40569b92d95fb467785e79fccd974100eb658ba9ea9e4f530eaaa",
+    "bytes": 2341
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_errmsg.h": {
+    "sha256": "e60dbd39214f5b6e1ae6cc2ea505705a0ecbe981d5f2dcfb8d6eb25af8eb88c5",
+    "bytes": 8271
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_oserr.h": {
+    "sha256": "9ed2d42fb151864f50d3e1e32b5035b64ba14b41fb4f5a07a8b44504183d36af",
+    "bytes": 1192
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_meta.h": {
+    "sha256": "da0ea0cce5a729d8cd9fd417f7d36f044445c16f8fad6f9dae3a2f89c26d4501",
+    "bytes": 2829
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_safepoint.h": {
+    "sha256": "328aa2bc63d753257d8adca5a5417ccdda059b942138aecda20a3da53752d46c",
+    "bytes": 2894
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_tg.h": {
+    "sha256": "a5cb46bde2868512743795750b5a1da71cd1a581bc037da127e60b36cb994015",
+    "bytes": 50068
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_bc.h": {
+    "sha256": "e0ba29a7f70141876b2a071483db1d489b2b7b57cd6f6dc879ecb3cea0f283fa",
+    "bytes": 10419
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_tab.h": {
+    "sha256": "08f3fca94f1fe734238b3cfe3c45686375413a29bbd77da1d83a2590553b137d",
+    "bytes": 33046
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_thr.h": {
+    "sha256": "f39140aec08b622f0db5123fdf311e5e753075462b7a0f75c251c86a58985b28",
+    "bytes": 16065
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_dispatch.h": {
+    "sha256": "c73f12ffc1cf58a7443d310e71d45d6ac1b791f0688b7f848521e149110c14e5",
+    "bytes": 6274
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_jit.h": {
+    "sha256": "7608c51820c5f365d5cd7ce74fc79a0a3b87b6f9c437b97d01e83b78e7a6c1fa",
+    "bytes": 36301
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_ir.h": {
+    "sha256": "c1c811b87570b2ade55348b356f9b0331c7fa51af6961433d72194adedd1f0a6",
+    "bytes": 21302
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/tests/t-gc2-interp-hard-check.c": {
+    "sha256": "6584c6cc748f3ae27b93409e24755296d20eaa5ecc1ef6e0576017194021943a",
+    "bytes": 7335
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/results-asan/t-gc2-interp-hard-check": {
+    "sha256": "d5b6e8cbb2e7542ff893de6690dfa279b73e949d197731d3d5da5e62eeb4a758",
+    "bytes": 20047688
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/tests/lib/lua_fixture_helpers.h": {
+    "sha256": "cba26c57b088692886b4df5223a3670fad11ec7951002a98c54be4fedb6844fe",
+    "bytes": 1220
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/tests/t-func-construction-anchor.c": {
+    "sha256": "42e9d47359fb27565565fe07678abbc8de7abf119226075cab3a1142768a6f0f",
+    "bytes": 9458
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/results-asan/t-func-construction-anchor": {
+    "sha256": "deeafb51254d6f6bee0e479cbf69afe20f5d8e6edad0a07db0015c359a8ef980",
+    "bytes": 20061320
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_frame.h": {
+    "sha256": "a6d79f6ee5ea7d347994569f4e56d202d58cb1a13a8834426120cae95adcbdf7",
+    "bytes": 9800
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_func.h": {
+    "sha256": "c5f3c6e41e05d21e9727416116ba55a9d4d8e854e7f972921477ae4b189338b9",
+    "bytes": 3769
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_state.h": {
+    "sha256": "b4f27d321bb82ffaa9ba446700a7a95cf29b87c4b114140c17ad5c47d55664f2",
+    "bytes": 6403
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_vm.h": {
+    "sha256": "820b79292b456fd8d374e509cb804f1fa5e2601684d4d9356cf9369e9f84ef48",
+    "bytes": 4473
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/tests/lib/thread_fixture_helpers.h": {
+    "sha256": "5ab95c830d2c88560d21c2fc7f9a75a280bc318afd9f1a449cf0c7f0f30b95d7",
+    "bytes": 1666
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/acceptance/v2/t-owner-defer.c": {
+    "sha256": "935acb6d75b4907259be08fffbf7bc10ee13b353faec34dd4a4a9524a1cdafe6",
+    "bytes": 6399
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/results-asan/t-owner-defer": {
+    "sha256": "07e61e54fc4c1abc1f5022b1d3169a6a7e870d479168c2675775c1e026ecdbcc",
+    "bytes": 20042336
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/acceptance/mixed-v2/t-mixed-owner.c": {
+    "sha256": "935594e3e5fb6fee978565f9acc8974c65d28862cac1f0cc798f205658854bf2",
+    "bytes": 6548
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/results-asan/t-mixed-owner": {
+    "sha256": "1f4fa9b28d8c9a1ae6320b0340925f95fe098342271e1f67aac9818075755121",
+    "bytes": 20075696
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/acceptance/fair-v1/t-fair-owner.c": {
+    "sha256": "8338bf08105263c7944f44d2dd00cfdb2da0e86f897a17ee77d617354db01ae6",
+    "bytes": 10383
+  },
+  "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/results-asan/t-fair-owner": {
+    "sha256": "1e92e4dade54e11f6daaa1b502ea71c1914561c189ff8e6a1f1b85b0cb179ce0",
+    "bytes": 20094544
+  }
+}

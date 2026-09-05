@@ -1,0 +1,126 @@
+{
+  "status": "frozen implementation before validation",
+  "package": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam",
+  "artifacts": [
+    {
+      "path": "SOURCE-HANDOFF.md",
+      "sha256": "fb5050936a579b48af6b0e23336b8ba0a613ae9c1b40e1a5e08ecf9b91e89c11",
+      "bytes": 5058,
+      "storage": "text"
+    },
+    {
+      "path": "SOURCE-PROPOSAL.md",
+      "sha256": "2071083daf86448af78c07efd01645366eef118a6c4d7cc082f583ffdf124be9",
+      "bytes": 7746,
+      "storage": "text"
+    },
+    {
+      "path": "candidate/src/lj_gc.c",
+      "sha256": "0d71c5c4cc1ee42c60ca8f2e6c04931723c8d5fff093aac3b073b4c74bc4edf0",
+      "bytes": 195241,
+      "storage": "text"
+    },
+    {
+      "path": "candidate/src/lj_gc.h",
+      "sha256": "7608931249f84498b743d8b354edd15230162704e08881eef48a83030c9f2d0a",
+      "bytes": 22424,
+      "storage": "text"
+    },
+    {
+      "path": "candidate/src/lj_gc2.c",
+      "sha256": "c7a8145f17fc2e01dd8884d0816d22b6177a176a6f94da92ad1d1191c7785288",
+      "bytes": 770006,
+      "storage": "text"
+    },
+    {
+      "path": "candidate/src/lj_obj.h",
+      "sha256": "d51798a95fe01bc14157335d565012c3eb114950c16ad2ab4fc78ffeecca7e00",
+      "bytes": 221270,
+      "storage": "text"
+    },
+    {
+      "path": "candidate/src/lj_tg.c",
+      "sha256": "16064ba7946becbbc5cc1be2ee00eae4be39f1496c6ab85c5f4cf60f64146406",
+      "bytes": 45600,
+      "storage": "text"
+    },
+    {
+      "path": "candidate/src/lj_thr.h",
+      "sha256": "f39140aec08b622f0db5123fdf311e5e753075462b7a0f75c251c86a58985b28",
+      "bytes": 16065,
+      "storage": "text"
+    },
+    {
+      "path": "candidate/tests/t-func-construction-anchor.c",
+      "sha256": "42e9d47359fb27565565fe07678abbc8de7abf119226075cab3a1142768a6f0f",
+      "bytes": 9458,
+      "storage": "text"
+    },
+    {
+      "path": "candidate.patch",
+      "sha256": "a62a8251ba8315f8ce07871635f1367659be3136895102776955c7204a4e018a",
+      "bytes": 9371,
+      "storage": "text"
+    },
+    {
+      "path": "fair-delta.patch",
+      "sha256": "16d1bbc6eedd4aa17f0949b60307a94281334b671db3f77c34d7a51c51a16089",
+      "bytes": 5876,
+      "storage": "text"
+    },
+    {
+      "path": "implement.py",
+      "sha256": "cd1adf088f658a03f852bcc32349b3af3596453052aae367edd1e3a8e3b7b4bb",
+      "bytes": 5817,
+      "storage": "text"
+    },
+    {
+      "path": "prior/ACCEPTANCE-HANDOFF.md",
+      "sha256": "d3c60fb650e4b48ef0fe278a5480b59941e24d1d6970cddb7b9b6ae3a9be8473",
+      "bytes": 7602,
+      "storage": "text"
+    },
+    {
+      "path": "prior/acceptance-manifest.json",
+      "sha256": "30aed87c54ccf6274ecda0b5948363c5c83ae59991a59db9e5924f1965ec53d7",
+      "bytes": 19476,
+      "storage": "text"
+    },
+    {
+      "path": "prior/candidate.patch",
+      "sha256": "6904c48d7d24ad9776c390c3618d7cb0b562ba96bafab124be0d58bc8b22cb44",
+      "bytes": 4287,
+      "storage": "text"
+    },
+    {
+      "path": "prior/focused-manifest.json",
+      "sha256": "1c95ae02cd52c065634b7fc6a68c34ed8544c2106a5c34d7e7215ab4b4fde1ee",
+      "bytes": 6242,
+      "storage": "text"
+    },
+    {
+      "path": "setup.py",
+      "sha256": "07c1d20995d7a5f3e545be5dad8128b499daa9acf60c400cd1b1eeed7b33fda8",
+      "bytes": 1014,
+      "storage": "text"
+    },
+    {
+      "path": "source-freeze.py",
+      "sha256": "ac336b504032c18664bde0147b4775f3127eb9e11a3ffe21e971e995ddf68c49",
+      "bytes": 1730,
+      "storage": "text"
+    },
+    {
+      "path": "source-identity.json",
+      "sha256": "a48ee587065da86b37dbe56f08731454882008546b22d7abea067008cf430868",
+      "bytes": 83491,
+      "storage": "text"
+    },
+    {
+      "path": "source-validation.json",
+      "sha256": "5ba9c1931beeb4348d5d1f3be2cb36e07e8bed34f83de9c9b22cdc772d1bc003",
+      "bytes": 745,
+      "storage": "text"
+    }
+  ]
+}

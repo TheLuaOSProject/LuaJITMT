@@ -1,0 +1,20 @@
+/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/layout/baseline: \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/layout/layout.c \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_dispatch.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_obj.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lua.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luaconf.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_def.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_arch.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_atomic.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_gc2token.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_tgregistry.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_tgslot.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_bc.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_jit.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_ir.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_tg.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_arena.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_ctype.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_gc.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_gc2.h

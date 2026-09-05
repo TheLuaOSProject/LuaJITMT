@@ -1,0 +1,1136 @@
+[
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 0,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.044668408998405,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+    "exit": 0,
+    "stdout": "sample\t1\t0.785928000\nsample\t2\t1.034422000\nsample\t3\t1.028055000\nsample\t4\t1.030430000\nsample\t5\t1.030625000\nresult\ttnew\t100000\t0.785928000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 0,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.056391666003037,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.787612000\nsample\t2\t1.034088000\nsample\t3\t1.032257000\nsample\t4\t1.035056000\nsample\t5\t1.031744000\nresult\ttnew\t100000\t0.787612000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.078073418000713,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.794094000\nsample\t2\t1.039368000\nsample\t3\t1.037601000\nsample\t4\t1.036327000\nsample\t5\t1.035108000\nresult\ttnew\t100000\t0.794094000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 1,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.0150436729963985,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+    "exit": 0,
+    "stdout": "sample\t1\t0.782276000\nsample\t2\t1.028603000\nsample\t3\t1.025240000\nsample\t4\t1.023117000\nsample\t5\t1.020746000\nresult\ttnew\t100000\t0.782276000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 2,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.075372166000307,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+    "exit": 0,
+    "stdout": "sample\t1\t0.788753000\nsample\t2\t1.041394000\nsample\t3\t1.035837000\nsample\t4\t1.037167000\nsample\t5\t1.036384000\nresult\ttnew\t100000\t0.788753000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 2,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.0413491199942655,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.784729000\nsample\t2\t1.029709000\nsample\t3\t1.028435000\nsample\t4\t1.032349000\nsample\t5\t1.031049000\nresult\ttnew\t100000\t0.784729000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.043169764998311,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.786713000\nsample\t2\t1.031659000\nsample\t3\t1.027457000\nsample\t4\t1.031684000\nsample\t5\t1.030783000\nresult\ttnew\t100000\t0.786713000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 3,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.048249810002744,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+    "exit": 0,
+    "stdout": "sample\t1\t0.786799000\nsample\t2\t1.033155000\nsample\t3\t1.028989000\nsample\t4\t1.031876000\nsample\t5\t1.031467000\nresult\ttnew\t100000\t0.786799000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 4,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.047102112002904,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+    "exit": 0,
+    "stdout": "sample\t1\t0.786772000\nsample\t2\t1.033146000\nsample\t3\t1.029173000\nsample\t4\t1.031768000\nsample\t5\t1.032002000\nresult\ttnew\t100000\t0.786772000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 4,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.067033437997452,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.791659000\nsample\t2\t1.036785000\nsample\t3\t1.033782000\nsample\t4\t1.035713000\nsample\t5\t1.034387000\nresult\ttnew\t100000\t0.791659000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.072303328997805,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.791363000\nsample\t2\t1.037560000\nsample\t3\t1.035206000\nsample\t4\t1.036074000\nsample\t5\t1.035754000\nresult\ttnew\t100000\t0.791363000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 5,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.023709658998996,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+    "exit": 0,
+    "stdout": "sample\t1\t0.782459000\nsample\t2\t1.028421000\nsample\t3\t1.024643000\nsample\t4\t1.027589000\nsample\t5\t1.026109000\nresult\ttnew\t100000\t0.782459000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 6,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.060465647002275,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+    "exit": 0,
+    "stdout": "sample\t1\t0.785535000\nsample\t2\t1.034153000\nsample\t3\t1.032821000\nsample\t4\t1.035750000\nsample\t5\t1.036637000\nresult\ttnew\t100000\t0.785535000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 6,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.043780847001472,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.786531000\nsample\t2\t1.031643000\nsample\t3\t1.028663000\nsample\t4\t1.031468000\nsample\t5\t1.030328000\nresult\ttnew\t100000\t0.786531000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 0,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.908729783004674,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+    "exit": 0,
+    "stdout": "sample\t1\t0.713562000\nsample\t2\t1.000515000\nsample\t3\t1.021910000\nsample\t4\t1.039464000\nsample\t5\t1.055593000\nresult\ttdup\t100000\t0.713562000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 0,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.910309471997607,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.715099000\nsample\t2\t1.000618000\nsample\t3\t1.022188000\nsample\t4\t1.039624000\nsample\t5\t1.054636000\nresult\ttdup\t100000\t0.715099000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.884943764998752,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.710545000\nsample\t2\t0.995506000\nsample\t3\t1.017077000\nsample\t4\t1.034272000\nsample\t5\t1.049766000\nresult\ttdup\t100000\t0.710545000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 1,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.863592083995172,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+    "exit": 0,
+    "stdout": "sample\t1\t0.708116000\nsample\t2\t0.992981000\nsample\t3\t1.015362000\nsample\t4\t1.032330000\nsample\t5\t1.036976000\nresult\ttdup\t100000\t0.708116000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 2,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.900792938999075,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+    "exit": 0,
+    "stdout": "sample\t1\t0.710086000\nsample\t2\t1.004001000\nsample\t3\t1.019517000\nsample\t4\t1.036597000\nsample\t5\t1.052796000\nresult\ttdup\t100000\t0.710086000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 2,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.896234580002783,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.708868000\nsample\t2\t0.998696000\nsample\t3\t1.019458000\nsample\t4\t1.037887000\nsample\t5\t1.053183000\nresult\ttdup\t100000\t0.708868000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.890456294997421,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.710645000\nsample\t2\t0.996394000\nsample\t3\t1.017967000\nsample\t4\t1.035448000\nsample\t5\t1.052035000\nresult\ttdup\t100000\t0.710645000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 3,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.900926656999218,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+    "exit": 0,
+    "stdout": "sample\t1\t0.714971000\nsample\t2\t1.002308000\nsample\t3\t1.022392000\nsample\t4\t1.027682000\nsample\t5\t1.055068000\nresult\ttdup\t100000\t0.714971000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 4,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.8917917020007735,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+    "exit": 0,
+    "stdout": "sample\t1\t0.714313000\nsample\t2\t1.000712000\nsample\t3\t1.022314000\nsample\t4\t1.025170000\nsample\t5\t1.051357000\nresult\ttdup\t100000\t0.714313000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 4,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.889883875999658,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.707511000\nsample\t2\t0.997451000\nsample\t3\t1.018884000\nsample\t4\t1.036279000\nsample\t5\t1.052634000\nresult\ttdup\t100000\t0.707511000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.881949189999432,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.706328000\nsample\t2\t0.994878000\nsample\t3\t1.017052000\nsample\t4\t1.034787000\nsample\t5\t1.051617000\nresult\ttdup\t100000\t0.706328000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 5,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.902406791996327,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+    "exit": 0,
+    "stdout": "sample\t1\t0.714155000\nsample\t2\t0.999232000\nsample\t3\t1.019922000\nsample\t4\t1.038252000\nsample\t5\t1.052636000\nresult\ttdup\t100000\t0.714155000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 6,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.909122812998248,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+    "exit": 0,
+    "stdout": "sample\t1\t0.709579000\nsample\t2\t1.002350000\nsample\t3\t1.022704000\nsample\t4\t1.040330000\nsample\t5\t1.056121000\nresult\ttdup\t100000\t0.709579000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 6,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.882517790996644,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.709413000\nsample\t2\t0.994732000\nsample\t3\t1.016374000\nsample\t4\t1.033959000\nsample\t5\t1.050646000\nresult\ttdup\t100000\t0.709413000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 0,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.09072511499835,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+    "exit": 0,
+    "stdout": "sample\t1\t0.762415000\nsample\t2\t0.757977000\nsample\t3\t0.756507000\nsample\t4\t0.757893000\nsample\t5\t0.756809000\nresult\ttnew\t100000\t0.756507000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 0,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.075736320999567,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.761326000\nsample\t2\t0.752887000\nsample\t3\t0.755322000\nsample\t4\t0.756084000\nsample\t5\t0.754181000\nresult\ttnew\t100000\t0.752887000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.03174914799456,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.761054000\nsample\t2\t0.755577000\nsample\t3\t0.753867000\nsample\t4\t0.755033000\nsample\t5\t0.754647000\nresult\ttnew\t100000\t0.753867000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 1,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.082860093003546,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+    "exit": 0,
+    "stdout": "sample\t1\t0.759527000\nsample\t2\t0.753326000\nsample\t3\t0.754651000\nsample\t4\t0.754780000\nsample\t5\t0.753416000\nresult\ttnew\t100000\t0.753326000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 2,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.125002474000212,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+    "exit": 0,
+    "stdout": "sample\t1\t0.766297000\nsample\t2\t0.761475000\nsample\t3\t0.760822000\nsample\t4\t0.760735000\nsample\t5\t0.760641000\nresult\ttnew\t100000\t0.760641000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 2,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.05601079799817,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.757385000\nsample\t2\t0.754124000\nsample\t3\t0.752739000\nsample\t4\t0.754599000\nsample\t5\t0.754250000\nresult\ttnew\t100000\t0.752739000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.089472974999808,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.758966000\nsample\t2\t0.754285000\nsample\t3\t0.752851000\nsample\t4\t0.752394000\nsample\t5\t0.752405000\nresult\ttnew\t100000\t0.752394000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 3,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.105913783998403,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+    "exit": 0,
+    "stdout": "sample\t1\t0.764956000\nsample\t2\t0.757817000\nsample\t3\t0.759847000\nsample\t4\t0.757273000\nsample\t5\t0.758042000\nresult\ttnew\t100000\t0.757273000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 4,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.158400222993805,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+    "exit": 0,
+    "stdout": "sample\t1\t0.762668000\nsample\t2\t0.757988000\nsample\t3\t0.759429000\nsample\t4\t0.761878000\nsample\t5\t0.758803000\nresult\ttnew\t100000\t0.757988000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 4,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.030526461996487,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.755258000\nsample\t2\t0.750677000\nsample\t3\t0.750914000\nsample\t4\t0.750265000\nsample\t5\t0.750630000\nresult\ttnew\t100000\t0.750265000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.109682294001686,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.759586000\nsample\t2\t0.754567000\nsample\t3\t0.756583000\nsample\t4\t0.754794000\nsample\t5\t0.754938000\nresult\ttnew\t100000\t0.754567000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 5,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.080187117004243,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+    "exit": 0,
+    "stdout": "sample\t1\t0.768433000\nsample\t2\t0.764011000\nsample\t3\t0.763808000\nsample\t4\t0.764251000\nsample\t5\t0.763727000\nresult\ttnew\t100000\t0.763727000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 6,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.060487905000628,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+    "exit": 0,
+    "stdout": "sample\t1\t0.766016000\nsample\t2\t0.759715000\nsample\t3\t0.760172000\nsample\t4\t0.761104000\nsample\t5\t0.760329000\nresult\ttnew\t100000\t0.759715000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 6,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.074877868995827,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.768262000\nsample\t2\t0.761438000\nsample\t3\t0.760559000\nsample\t4\t0.761357000\nsample\t5\t0.760811000\nresult\ttnew\t100000\t0.760559000\n",
+    "stderr": ""
+  }
+]

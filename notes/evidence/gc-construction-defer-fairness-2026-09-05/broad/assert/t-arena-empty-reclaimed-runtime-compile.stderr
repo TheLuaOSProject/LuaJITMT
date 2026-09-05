@@ -1,0 +1,3 @@
+/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-arena-empty-reclaimed-runtime.c:3:2: error: #error "runtime empty-spare fixture requires arena and GC2 test helpers"
+    3 | #error "runtime empty-spare fixture requires arena and GC2 test helpers"
+      |  ^~~~~

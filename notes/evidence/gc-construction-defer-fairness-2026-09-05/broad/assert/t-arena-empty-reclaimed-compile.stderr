@@ -1,0 +1,48 @@
+/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-arena-empty-reclaimed.c:3:2: error: #error "t-arena-empty-reclaimed requires LJ_ARENA_TEST_HELPERS"
+    3 | #error "t-arena-empty-reclaimed requires LJ_ARENA_TEST_HELPERS"
+      |  ^~~~~
+/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-arena-empty-reclaimed.c: In function ‘test_late_after_shortcut_claim’:
+/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-arena-empty-reclaimed.c:238:3: error: implicit declaration of function ‘lj_arena_test_empty_reclaimed_pause’; did you mean ‘lj_arena_alloc_empty_reclaimed_head’? [-Wimplicit-function-declaration]
+  238 |   lj_arena_test_empty_reclaimed_pause(a, 1);
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |   lj_arena_alloc_empty_reclaimed_head
+/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-arena-empty-reclaimed.c:240:13: error: ‘lj_arena_test_empty_reclaimed_paused’ undeclared (first use in this function); did you mean ‘lj_arena_alloc_empty_reclaimed_head’?
+  240 |   wait_seen(lj_arena_test_empty_reclaimed_paused);
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |             lj_arena_alloc_empty_reclaimed_head
+/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-arena-empty-reclaimed.c:240:13: note: each undeclared identifier is reported only once for each function it appears in
+/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-arena-empty-reclaimed.c:242:3: error: implicit declaration of function ‘lj_arena_test_plain_late_pause’; did you mean ‘lj_arena_test_lifetime_pause’? [-Wimplicit-function-declaration]
+  242 |   lj_arena_test_plain_late_pause(1);
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |   lj_arena_test_lifetime_pause
+/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-arena-empty-reclaimed.c:244:13: error: ‘lj_arena_test_plain_late_paused’ undeclared (first use in this function); did you mean ‘lj_arena_test_lifetime_paused’?
+  244 |   wait_seen(lj_arena_test_plain_late_paused);
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |             lj_arena_test_lifetime_paused
+/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-arena-empty-reclaimed.c: In function ‘test_failed_adoption’:
+/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-arena-empty-reclaimed.c:278:5: error: implicit declaration of function ‘lj_arena_test_open_sealed_pause’; did you mean ‘lj_arena_test_lifetime_pause’? [-Wimplicit-function-declaration]
+  278 |     lj_arena_test_open_sealed_pause(a, 1);
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     lj_arena_test_lifetime_pause
+/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-arena-empty-reclaimed.c:280:15: error: ‘lj_arena_test_open_sealed_paused’ undeclared (first use in this function); did you mean ‘lj_arena_test_lifetime_paused’?
+  280 |     wait_seen(lj_arena_test_open_sealed_paused);
+      |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |               lj_arena_test_lifetime_paused
+/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-arena-empty-reclaimed.c: In function ‘test_reader_after_shortcut_claim’:
+/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-arena-empty-reclaimed.c:313:13: error: ‘lj_arena_test_empty_reclaimed_paused’ undeclared (first use in this function); did you mean ‘lj_arena_alloc_empty_reclaimed_head’?
+  313 |   wait_seen(lj_arena_test_empty_reclaimed_paused);
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |             lj_arena_alloc_empty_reclaimed_head
+/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-arena-empty-reclaimed.c: In function ‘test_quarantine_producer_during_adoption’:
+/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-arena-empty-reclaimed.c:539:3: error: implicit declaration of function ‘lj_arena_test_reclaimed_publish_pause’; did you mean ‘lj_arena_test_lifetime_pause’? [-Wimplicit-function-declaration]
+  539 |   lj_arena_test_reclaimed_publish_pause(published, 1);
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |   lj_arena_test_lifetime_pause
+/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-arena-empty-reclaimed.c:541:13: error: ‘lj_arena_test_reclaimed_publish_paused’ undeclared (first use in this function); did you mean ‘lj_arena_test_lifetime_paused’?
+  541 |   wait_seen(lj_arena_test_reclaimed_publish_paused);
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |             lj_arena_test_lifetime_paused
+/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-arena-empty-reclaimed.c:548:13: error: ‘lj_arena_test_open_sealed_paused’ undeclared (first use in this function); did you mean ‘lj_arena_test_lifetime_paused’?
+  548 |   wait_seen(lj_arena_test_open_sealed_paused);
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |             lj_arena_test_lifetime_paused

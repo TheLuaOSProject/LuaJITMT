@@ -1,7 +1,7 @@
 # Lockless completion plan
 
 Reviewed: 2026-09-04, starting at `a649f737`.
-Updated: 2026-09-05 after GC control, retained-cdata lookup and helper-fixture review.
+Updated: 2026-09-05 after GC control, retained-cdata lookup and constructor fairness.
 
 This is the operative continuation of the original plan. It preserves the
 requested end state: one shared Lua heap, safe ordinary racy Lua programs,
@@ -81,7 +81,7 @@ are verified reasons the full goal is still open:
 | Table iteration | Ordinary scalar ITERN waits for global SMR while an unrelated IDLE reclaimer is suspended | Prove independently leased iteration progress, including exact source validation and terminal END; preserve general hash/GC-result lifetime requirements |
 | Descriptor installation | Separate capacity-shadow store can corrupt a winning descriptor before the losing ownership CAS | Publish control and capacity in one atomic pair; deterministic competing-generation test |
 | Automatic GC | Durable IDLE requests now enter at safe boundaries; public control survives delayed attachment stores; worker-enabled cycles still miss SWEEP completion bounds | Resolve worker completion and unfinished-owner deferral, then complete asynchronous phase ownership; retain independent finalizer suppression |
-| Closure construction | A test-only nested full collect revisits an unfinished closure; the first deferral candidate stops that wait but starves later eligible TGs | Preserve construction/retry authority, prove completion after publish/cancel, and provide fair bounded owner traversal across work-budget boundaries |
+| Closure construction | Test-injected nested collection now defers an unfinished owner, and scalar continuation preserves sweep turns for other TGs | Complete same-TG arena fairness and asynchronous phase ownership; retain exact construction state and eventual publish/cancel completion |
 | Native acknowledgement | Completed exact owner-root actions can release through the unique remote executor; local/duplicate and broader actions still hold | Replace mutable-root borrowing and retain exact completion authority; local native-depth polls can overlap a remote pre-claim scan |
 | First MT attachment | Mode-0 traces omitted the TG request poll and real attachment waited for natural exit | Every XPOLL now observes the TG request; the larger attachment/flush ownership dependencies still require asynchronous completion |
 | Worker scheduling | MARK-close ownership loss can be reported as progress and cause repeated drain-loop execution | Return/defer without false progress or peer sleep; preserve durable retry |
@@ -349,6 +349,13 @@ controls and post-fix completion tests:
   completion. Preserve this counterexample when adding a bounded continuation
   between owner turns. See
   `notes/gc-construction-defer-review-2026-09-05.md`.
+- Constructor deferral now includes a scalar next-TG continuation resolved
+  through the current claimed list. Multiple real blockers, quota one and
+  actual hinted-TG unlink preserve independent completion before owner release.
+  The latest-source combination passes 170 functional processes; 42 paired
+  allocation-cost processes show overlapping timings. Same-TG multiple-arena
+  fairness, earlier subsystem deferrals and synchronous handshakes remain.
+  See `notes/gc-construction-defer-fairness-2026-09-05.md`.
 - The hard-assist and allocation-account fixtures now prove their measured
   cycle and SSB-pool setup, and exact meta-store publication counts are backed
   by actual source-stack observations. Ten isolated final processes and five

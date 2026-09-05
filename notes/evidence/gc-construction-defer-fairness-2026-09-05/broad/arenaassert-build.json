@@ -1,0 +1,36 @@
+{
+  "argv": [
+    "make",
+    "-C",
+    "src",
+    "-j4",
+    "BUILDMODE=static",
+    "XCFLAGS=-DLUA_USE_ASSERT -DLUA_USE_APICHECK -DLJ_GC2_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_FUNC_TEST_HELPERS -DLJ_UDATA_TEST_HELPERS -DLJ_STR_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS",
+    "TARGET_STRIP=:"
+  ],
+  "cwd": "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaassert",
+  "timeout_seconds": 180,
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 8.434121013997355,
+  "stdout": "arenaassert-build.stdout",
+  "stderr": "arenaassert-build.stderr",
+  "binaries": {
+    "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaassert/src/libluajit.a": {
+      "sha256": "6b226d5a51bfbd3a96b353040a3cb4cc344a02237f8f3915aa29a4b9edfbf624",
+      "bytes": 2988672
+    },
+    "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaassert/src/luajit": {
+      "sha256": "a55d9a76f51da0895383557acb67080443ad46bd2b8e0d179732bf50d69f275b",
+      "bytes": 2013592
+    },
+    "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaassert/src/host/minilua": {
+      "sha256": "8ab7d5a14b0525e3759effc570de0f02965b5618600fbfe15499924a399f1538",
+      "bytes": 154760
+    },
+    "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaassert/src/host/buildvm": {
+      "sha256": "070836d59abc428ed92aeb9f055a1e24a58ff975ea50cb96bbdb4aa093265ca5",
+      "bytes": 122336
+    }
+  }
+}

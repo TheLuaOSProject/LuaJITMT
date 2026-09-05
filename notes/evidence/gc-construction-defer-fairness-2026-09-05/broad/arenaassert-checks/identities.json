@@ -1,0 +1,26 @@
+{
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaassert/src/libluajit.a": {
+    "sha256": "6b226d5a51bfbd3a96b353040a3cb4cc344a02237f8f3915aa29a4b9edfbf624",
+    "bytes": 2988672
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaassert/tests/t-arena-empty-reclaimed.c": {
+    "sha256": "ff8435cabe930c2b6231c5b496b1f108077d430b41006819d5e82c31276537b4",
+    "bytes": 25808
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaassert-checks/t-arena-empty-reclaimed": {
+    "sha256": "602970cdf99eee38bf7e173a5c11ce60ce707fa89533913ab25e9516829d9b94",
+    "bytes": 1994680
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaassert/tests/t-arena-empty-reclaimed-runtime.c": {
+    "sha256": "8a8760c7c0d556e8ddede289f584d6f45044a1f65b0924372cd2a331459c696c",
+    "bytes": 4579
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaassert-checks/t-arena-empty-reclaimed-runtime": {
+    "sha256": "93b024f84a881a993da7b575592633e4aec26d2937634cb033d2b570ba00b5c3",
+    "bytes": 1941712
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaassert/tests/t-gc2-sweep-table-coalescing.c": {
+    "sha256": "95b6a2097ad3e05bd64292a26b1bb765f502edacfec0a08b04cdafc9f9be3a32",
+    "bytes": 29311
+  }
+}

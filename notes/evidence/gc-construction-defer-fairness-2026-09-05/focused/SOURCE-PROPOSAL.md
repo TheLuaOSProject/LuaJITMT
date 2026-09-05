@@ -1,0 +1,38 @@
+# Bounded fair owner traversal — source proposal before implementation
+
+New isolated generation, starting from the exact rejected three-file candidate (patch `6904c48d7d24ad9776c390c3618d7cb0b562ba96bafab124be0d58bc8b22cb44`) over pristine 597b. The previous failure manifest and full provenance are copied under `prior/`. No candidate3 automatic-control source is present. The new source tree is currently byte-identical to the rejected candidate; this proposal has not been applied or built.
+
+## Minimal local alternative and its limit
+
+Forward `root_owner_blocked` as a local result from `lj_gc2_sweep_owner_progress`, allow the enclosing TG loop to visit other eligible TGs, then publish one deferred_epoch event at the end of the bounded invocation. This directly fixes the captured two-owner case without removing any safety gate.
+
+However, delaying the event alone does not establish general fairness. An owner can consume the remaining raw-work budget before the loop reaches a later owner; every next invocation currently restarts at the list head. Very small drain limits or multiple suspended owners can repeat that shape. Ignoring blocked work in the cost sum or granting an unbudgeted extra quantum to every TG would weaken the existing work bound. Reducing every owner to a one-unit visit would increase ordinary single-owner overhead and still leave a head-restart edge when the number of owners exceeds the total budget.
+
+## Proposed bounded pass with an identity-only continuation
+
+Keep the local-result change and add one scalar scheduling hint, `uint32_t sweep_owner_next_tid`, in GC2 state (`lj_obj.h`), initialized to zero with other GC2 state. This makes the complete candidate four source files including the existing `lj_gc.c` / `lj_gc.h` / `lj_gc2.c` changes. The new field is not a pointer, root, lifetime pin, completion flag, or reclamation authority.
+
+1. `lj_gc2_sweep_owner_progress` receives an optional local blocked-result output. Initialize it to zero, set it only after the existing writer/unseal cleanup when the scanner reports an exact intrusive owner, and stop that owner's quantum exactly as in the rejected candidate. Preserve all existing work counters, cursor/EOF resets, finish attempts and gate cleanup. The direct test wrapper can retain the immediate event behavior after its standalone owner call; the real multi-owner driver delays the event until its pass ends.
+2. Under the existing worker token, snapshot the current TG-list head once. Resolve `sweep_owner_next_tid` by matching a current TG's ID while walking that list; use the head if zero or absent. Never dereference a saved pointer across invocations. Current TG flags and the complete existing owner-progress guards still determine eligibility.
+3. Traverse at most one circular pass of this captured list: from the resolved start through the tail, then from the captured head back to (but not again through) the start. Each TG is offered at most one existing bounded owner call in the invocation. Concurrent head insertion joins the next invocation; it cannot extend this captured pass indefinitely.
+4. Keep the original cumulative raw-work budget: call each owner with `limit - n`, account its returned work exactly, and stop at `n == limit`. Keep the existing immediate end after a completed arena, preserving the physical-commit/JIT-gate boundary. Existing non-root deferred events also still end the invocation.
+5. Before a normal budget/finish/defer exit, store the ID of the next TG in this captured circular order. Thus a suspended or expensive owner cannot regain the front of every quantum. If the pass was complete, a subsequent full pass is still allowed; if the saved ID disappeared, the hint simply falls back to the current head and never grants access to a retired TG.
+6. Aggregate root-owner refusal locally. Before returning from the TG pass, publish one `gc2_quantum_defer` event if a root owner was deferred and no other event has already changed this invocation's sampled epoch. All owner physical writers have already been released. Top-level full collect, explicit steps, automatic batches and worker backoff therefore retain their existing deferred result and bounded behavior, after eligible peers have had the available bounded turns.
+
+An inexpensive head-ID check should keep the single-owner case from doing a separate full lookup scan. No global allocation, TG pin, new lock, admission gate, or publisher wake protocol is introduced. The ordinary work quota, original one-finished-arena boundary, and all return/counter accounting remain.
+
+## Authority and lifecycle argument
+
+The scheduling hint only selects which current list member to examine first. `tg_reclaim_dead_admissible` (`lj_tg.c:946-959`) rejects physical TG reclamation while `worker_active != 0`; its writer rechecks the same condition around the metadata gate. This is the existing lifetime proof for the current worker TG traversal. The new code inherits that proof only during an invocation. Across invocations it retains a scalar ID, and resolves that ID through the current list before using any TG pointer.
+
+TG IDs are allocated through the existing non-wrapping logical-ID allocator (`lj_thr_newid` / `lj_thr_id_alloc`). Even an absent or obsolete hint is merely a scheduling miss. It cannot bypass DEAD/internal-arena flags, semantic closure, JIT/finalizer/native guards, the sealed physical writer, root/lifetime/READY/destructor predicates, or quarantine finish. The field need not retain an owner when the owner detaches: its existing work-transfer/retirement protocol owns that responsibility.
+
+Pending arenas and their existing retry cursors remain on their exact owner's lists. A skip means only that this invocation moves to another current TG. It does not clear a pending flag, alter bitmap ownership, publish READY, classify an object, reset a generation, or signal completion. Actual constructor publication/cancellation remains the sole release authority, as proven by the prior positive retained-work cases.
+
+This bounds physical work by the existing `limit` and list traversal by one captured TG pass plus optional ID resolution. For a stable finite set of eligible owners, continuation after every budget boundary gives each owner a turn despite one or several suspended peers, including `limit == 1`. Arbitrary perpetual attachment/detachment has the existing lifecycle/fairness constraints and should not be described as wait-free. ID lookup can cost an extra list walk for multi-owner resumption; this is the explicit performance tradeoff to check.
+
+## First validation, before broad checks
+
+Keep the exact original function fixture and the successful retained-work publish/cancel/automatic cases. Reuse the frozen tail-constructor mixed fixture without weakening its final independent-owner assertion. The new fair scheduler may let the unrelated arena finish during the first nested full call before it returns deferred; the fixture's initial 'eligible must still be pending' condition is a scheduling-specific precondition from the rejected candidate, so a diagnostic-only successor should record that earlier success and still require actual nested deferral and retained constructor state. The final independent progress requirement and owner-release completion remain.
+
+Then exercise zero/two workers, drain limit 1 as well as 64, and multiple real held publisher TGs before an eligible owner, to cover the budget-exhaustion edge motivating the hint. A detach of the hinted owner should confirm fallback resolves only live list members. Keep all generations, source/ELF/archive hashes, exact flags and fixed bounds. Do not combine candidate3 or claim release readiness based only on the two-owner passing case.

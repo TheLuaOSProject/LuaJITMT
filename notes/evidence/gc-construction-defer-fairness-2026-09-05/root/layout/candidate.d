@@ -1,0 +1,20 @@
+/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/layout/candidate: \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/layout/layout.c \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/lj_dispatch.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/lj_obj.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/lua.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luaconf.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/lj_def.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/lj_arch.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/lj_atomic.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/lj_gc2token.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/lj_tgregistry.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/lj_tgslot.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/lj_bc.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/lj_jit.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/lj_ir.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/lj_tg.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/lj_arena.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/lj_ctype.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/lj_gc.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/lj_gc2.h

@@ -1,0 +1,8 @@
+TAIL fillers=1159 cell=4093 cells=4096 size=48
+STATE peer-birth phase=0 cycle=0 deferred=0 owner_runs=0 arenas=0 ptr=0x7f2636300000 cell=4093 block=1 root=1 life=2 ready=0 mark=0 flags=9 cursor=0 late=0 retire=0 quarantine=(nil) owned=0x7f26361a0000
+STATE peer-after-collect phase=3 cycle=1 deferred=1 owner_runs=4 arenas=0 ptr=0x7f2636300000 cell=4093 block=1 root=1 life=2 ready=0 mark=1 flags=25 cursor=616 late=0 retire=19 quarantine=0x7f2636300000 owned=(nil)
+MIXED initial result=0 ns=1205767 cycle=1 old_epoch=0 eligible=0x7f2636320000 epoch=0 flags=25 main_quarantine=0x7f2636320000 main_needsweep=(nil)
+MIXED held workers=2 objects=1 ns=157874613 events=262 parks=263 runs=262 eligible_done=1 epoch=1 cycle=1 phase=3
+STATE peer-before-release phase=3 cycle=1 deferred=264 owner_runs=268 arenas=1 ptr=0x7f2636300000 cell=4093 block=1 root=1 life=2 ready=0 mark=1 flags=25 cursor=616 late=0 retire=19 quarantine=0x7f2636300000 owned=(nil)
+MIXED released result=1 phase=0 peer_quarantine=(nil) eligible_epoch=2
+t-mixed-owner OK

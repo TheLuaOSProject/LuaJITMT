@@ -1,0 +1,41 @@
+{
+  "root": "/tmp/lj-reclaim-fair-pass-proof-20260905-64ihi1r2",
+  "artifacts": [
+    {
+      "relative_path": "SOURCE-HANDOFF.md",
+      "sha256": "fb5050936a579b48af6b0e23336b8ba0a613ae9c1b40e1a5e08ecf9b91e89c11",
+      "bytes": 5058,
+      "storage": "text"
+    },
+    {
+      "relative_path": "candidate.patch",
+      "sha256": "a62a8251ba8315f8ce07871635f1367659be3136895102776955c7204a4e018a",
+      "bytes": 9371,
+      "storage": "text"
+    },
+    {
+      "relative_path": "fair-delta.patch",
+      "sha256": "16d1bbc6eedd4aa17f0949b60307a94281334b671db3f77c34d7a51c51a16089",
+      "bytes": 5876,
+      "storage": "text"
+    },
+    {
+      "relative_path": "review.md",
+      "sha256": "6a37b0b31a0db0ab88129621762e0dd347172d4111a6c84242004fc67da789c4",
+      "bytes": 4313,
+      "storage": "text"
+    },
+    {
+      "relative_path": "source-manifest.json",
+      "sha256": "b82c0e15e79c9b755bb469367d21bcdc3d5110b99c98f88bd7572600a611d07c",
+      "bytes": 3771,
+      "storage": "text"
+    },
+    {
+      "relative_path": "verification.json",
+      "sha256": "6e7ab8339dbae3b9016588a24f84f75ee635b197060d2000bb1489fddcf772ab",
+      "bytes": 1268,
+      "storage": "text"
+    }
+  ]
+}

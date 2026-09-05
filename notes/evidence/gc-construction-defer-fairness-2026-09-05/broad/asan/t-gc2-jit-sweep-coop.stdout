@@ -1,0 +1,1 @@
+t-gc2-jit-sweep-coop OK: x64 TNEW/CNEW traces ran during SWEEP and bounded reclaim reached IDLE

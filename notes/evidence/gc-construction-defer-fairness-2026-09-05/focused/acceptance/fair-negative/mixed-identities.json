@@ -1,0 +1,18 @@
+{
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/acceptance/mixed-v2/t-mixed-owner.c": {
+    "sha256": "935594e3e5fb6fee978565f9acc8974c65d28862cac1f0cc798f205658854bf2",
+    "bytes": 6548
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/acceptance/v2/t-owner-defer.c": {
+    "sha256": "935acb6d75b4907259be08fffbf7bc10ee13b353faec34dd4a4a9524a1cdafe6",
+    "bytes": 6399
+  },
+  "/tmp/lj-reclaim-owner-defer-20260905-gwiiudxk/candidate/src/libluajit.a": {
+    "sha256": "1af3f648f2a010f3b49c5d9f9a910f969646b647ca1cb9653229f2066bbf0944",
+    "bytes": 2976886
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/acceptance/fair-negative/rejected-t-mixed-owner": {
+    "sha256": "90c4bb98154a3f0b081959f63f2e5ab917f1edc9908798769b96feda52f1071e",
+    "bytes": 2010360
+  }
+}

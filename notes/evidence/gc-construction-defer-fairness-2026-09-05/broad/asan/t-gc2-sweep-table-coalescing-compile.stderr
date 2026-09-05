@@ -1,0 +1,4 @@
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan/tests/t-gc2-sweep-table-coalescing.c:783:3: error: call to undeclared function 'lj_arena_test_gc2_sidecar_fail_alloc'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  783 |   lj_arena_test_gc2_sidecar_fail_alloc(1);
+      |   ^
+1 error generated.

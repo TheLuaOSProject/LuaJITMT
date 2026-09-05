@@ -1,0 +1,4 @@
+/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-gc2-sweep-table-coalescing.c: In function ‘test_reserved_failure’:
+/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-gc2-sweep-table-coalescing.c:783:3: error: implicit declaration of function ‘lj_arena_test_gc2_sidecar_fail_alloc’ [-Wimplicit-function-declaration]
+  783 |   lj_arena_test_gc2_sidecar_fail_alloc(1);
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

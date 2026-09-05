@@ -1,0 +1,51 @@
+{
+  "focused_manifest": "d02f89df5ab80c7a5b3a0b68ad24b73593078c24d82884770567745930e5da89",
+  "focused_artifacts_reverified": 109,
+  "source_inputs_reverified": {
+    "asan": 807,
+    "arenaassert": 807,
+    "arenaasan": 807,
+    "controlasan": 807
+  },
+  "reverse_checks": [
+    {
+      "argv": [
+        "git",
+        "apply",
+        "--reverse",
+        "--check",
+        "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate.patch"
+      ],
+      "cwd": "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/asan",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "git",
+        "apply",
+        "--reverse",
+        "--check",
+        "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate.patch"
+      ],
+      "cwd": "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaassert",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "git",
+        "apply",
+        "--reverse",
+        "--check",
+        "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate.patch"
+      ],
+      "cwd": "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaasan",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  ]
+}

@@ -1,0 +1,6859 @@
+/*
+** LuaJIT VM tags, values and objects.
+** Copyright (C) 2005-2026 Mike Pall. See Copyright Notice in luajit.h
+**
+** Portions taken verbatim or adapted from the Lua interpreter.
+** Copyright (C) 1994-2008 Lua.org, PUC-Rio. See Copyright Notice in lua.h
+*/
+
+#ifndef _LJ_OBJ_H
+#define _LJ_OBJ_H
+
+#include "lua.h"
+#include "lj_def.h"
+#include "lj_arch.h"
+#include "lj_atomic.h"
+#include "lj_gc2token.h"
+#include "lj_tgregistry.h"
+
+struct global_State;
+#if defined(LUA_USE_ASSERT) || defined(LUA_USE_APICHECK)
+LJ_FUNC_NORET void lj_assert_fail(struct global_State *g, const char *file,
+				  int line, const char *func,
+				  const char *fmt, ...);
+#endif
+
+LJ_FUNCA void lj_tab_wait_no_l(void);
+
+/* -- Memory references --------------------------------------------------- */
+
+/* Memory and GC object sizes. */
+typedef uint32_t MSize;
+typedef uint64_t GCSize;
+
+/* Memory reference */
+typedef struct MRef {
+  uint64_t ptr64;	/* True 64 bit pointer. */
+} MRef;
+
+#define mref(r, t)	((t *)(void *)(r).ptr64)
+#define mref_acq(r, t)	((t *)(void *)(uintptr_t)la_load64_acq(&(r).ptr64))
+#define mrefu(r)	((r).ptr64)
+
+#define setmref(r, p)	((r).ptr64 = (uint64_t)(void *)(p))
+#define setmrefu(r, u)	((r).ptr64 = (uint64_t)(u))
+#define setmrefr(r, v)	((r).ptr64 = (v).ptr64)
+
+static LJ_AINLINE void setmrefrel_(MRef *r, const void *p)
+{
+  la_store64_rel(&r->ptr64, (uint64_t)(uintptr_t)p);
+}
+#define setmrefrel(r, p)	setmrefrel_(&(r), (const void *)(p))
+
+/* -- GC object references ------------------------------------------------ */
+
+/* GCobj reference */
+typedef struct GCRef {
+  uint64_t gcptr64;	/* True 64 bit pointer. */
+} GCRef;
+
+/* Common GC header for all collectable objects. */
+#define GCHeader	GCRef nextgc; uint8_t marked; uint8_t gct
+/* This occupies 6 bytes, so use the next 2 bytes for non-32 bit fields. */
+
+#define gcref(r)	((GCobj *)(r).gcptr64)
+#define gcref_acq(r)	((GCobj *)(uintptr_t)la_load64_acq(&(r).gcptr64))
+#define gcrefp(r, t)	((t *)(void *)(r).gcptr64)
+#define gcrefu(r)	((r).gcptr64)
+#define gcrefu_acq(r)	(la_load64_acq(&(r).gcptr64))
+#define gcrefeq(r1, r2)	((r1).gcptr64 == (r2).gcptr64)
+
+#define setgcref(r, gc)	((r).gcptr64 = (uint64_t)&(gc)->gch)
+#define setgcreft(r, gc, it) \
+  (r).gcptr64 = (uint64_t)&(gc)->gch | (((uint64_t)(it)) << 47)
+#define setgcrefp(r, p)	((r).gcptr64 = (uint64_t)(p))
+#define setgcrefnull(r)	((r).gcptr64 = 0)
+#define setgcrefr(r, v)	((r).gcptr64 = (v).gcptr64)
+
+#define gcnext(gc)	(gcref((gc)->gch.nextgc))
+
+/* IMPORTANT NOTE:
+**
+** All uses of the setgcref* macros MUST be accompanied with a write barrier.
+**
+** This is to ensure the integrity of the incremental GC. The invariant
+** to preserve is that a black object never points to a white object.
+** I.e. never store a white object into a field of a black object.
+**
+** It's ok to LEAVE OUT the write barrier ONLY in the following cases:
+** - The source is not a GC object (NULL).
+** - The target is a GC root. I.e. everything in global_State.
+** - The target is a lua_State field (threads are never black).
+** - The target is a stack slot, see setgcV et al.
+** - The target is an open upvalue, i.e. pointing to a stack slot.
+** - The target is a newly created object (i.e. marked white). But make
+**   sure nothing invokes the GC inbetween.
+** - The target and the source are the same object (self-reference).
+** - The target already contains the object (e.g. moving elements around).
+**
+** The most common case is a store to a stack slot. All other cases where
+** a barrier has been omitted are annotated with a NOBARRIER comment.
+**
+** The same logic applies for stores to table slots (array part or hash
+** part). ALL uses of lj_tab_set* require a barrier for the stored value
+** *and* the stored key, based on the above rules. In practice this means
+** a barrier is needed if *either* of the key or value are a GC object.
+**
+** It's ok to LEAVE OUT the write barrier in the following special cases:
+** - The stored value is nil. The key doesn't matter because it's either
+**   not resurrected or lj_tab_newkey() will take care of the key barrier.
+** - The key doesn't matter if the *previously* stored value is guaranteed
+**   to be non-nil (because the key is kept alive in the table).
+** - The key doesn't matter if it's guaranteed not to be part of the table,
+**   since lj_tab_newkey() takes care of the key barrier. This applies
+**   trivially to new tables, but watch out for resurrected keys. Storing
+**   a nil value leaves the key in the table!
+**
+** In case of doubt use lj_gc_anybarriert() as it's rather cheap. It's used
+** by the interpreter for all table stores.
+**
+** Note: In contrast to Lua's GC, LuaJIT's GC does *not* specially mark
+** dead keys in tables. The reference is left in, but it's guaranteed to
+** be never dereferenced as long as the value is nil. It's ok if the key is
+** freed or if any object subsequently gets the same address.
+**
+** Not destroying dead keys helps to keep key hash slots stable. This avoids
+** specialization back-off for HREFK when a value flips between nil and
+** non-nil and the GC gets in the way. It also allows safely hoisting
+** HREF/HREFK across GC steps. Dead keys are only removed if a table is
+** resized (i.e. by NEWREF) and xREF must not be CSEd across a resize.
+**
+** The trade-off is that a write barrier for tables must take the key into
+** account, too. Implicitly resurrecting the key by storing a non-nil value
+** may invalidate the incremental GC invariant.
+*/
+
+/* -- Common type definitions --------------------------------------------- */
+
+/* Types for handling bytecodes. Need this here, details in lj_bc.h. */
+typedef uint32_t BCIns;  /* Bytecode instruction. */
+typedef uint32_t BCPos;  /* Bytecode position. */
+typedef uint32_t BCReg;  /* Bytecode register. */
+typedef int32_t BCLine;  /* Bytecode line number. */
+
+/* Internal assembler functions. Never call these directly from C. */
+typedef void (*ASMFunction)(void);
+
+/* Resizable string buffer. Need this here, details in lj_buf.h. */
+#define SBufHeader	char *w, *e, *b; MRef L
+typedef struct SBuf {
+  SBufHeader;
+} SBuf;
+
+/* -- Tags and values ----------------------------------------------------- */
+
+/* Frame link. */
+typedef union {
+  int32_t ftsz;		/* Frame type and size of previous frame. */
+  MRef pcr;		/* Or PC for Lua frames. */
+} FrameLink;
+
+/* Tagged value. */
+typedef LJ_ALIGN(8) union TValue {
+  uint64_t u64;		/* 64 bit pattern overlaps number. */
+  lua_Number n;		/* Number object overlaps split tag/value object. */
+  GCRef gcr;		/* GCobj reference with tag. */
+  int64_t it64;
+  struct {
+    LJ_ENDIAN_LOHI(
+      int32_t i;	/* Integer value. */
+    , uint32_t it;	/* Internal object tag. Must overlap MSW of number. */
+    )
+  };
+  int64_t ftsz;		/* Frame type and size of previous frame, or PC. */
+  struct {
+    LJ_ENDIAN_LOHI(
+      uint32_t lo;	/* Lower 32 bits of number. */
+    , uint32_t hi;	/* Upper 32 bits of number. */
+    )
+  } u32;
+} TValue;
+
+typedef const TValue cTValue;
+
+#define tvref(r)	(mref(r, TValue))
+
+#define tv_rawload(o)		la_load64_rlx(&(o)->u64)
+#define tv_rawload_acq(o)	la_load64_acq(&(o)->u64)
+#define tv_rawstore(o, u)	la_store64_rlx(&(o)->u64, (u))
+#define tv_rawstore_rel(o, u)	la_store64_rel(&(o)->u64, (u))
+
+/* More external and GCobj tags for internal objects. */
+#define LAST_TT		LUA_TTHREAD
+#define LUA_TPROTO	(LAST_TT+1)
+#define LUA_TCDATA	(LAST_TT+2)
+
+/* Internal object tags.
+**
+** The upper 13 bits must be 1 (0xfff8...) for a special NaN. The next
+** 4 bits hold the internal tag. The lowest 47 bits either hold a pointer,
+** a zero-extended 32 bit integer or all bits set to 1 for primitive types.
+**
+**                     ------MSW------.------LSW------
+** primitive types    |1..1|itype|1..................1|
+** GC objects         |1..1|itype|-------GCRef--------|
+** lightuserdata      |1..1|itype|seg|------ofs-------|
+** int (LJ_DUALNUM)   |1..1|itype|0..0|-----int-------|
+** number              ------------double-------------
+**
+** ORDER LJ_T
+** Primitive types nil/false/true must be first, lightuserdata next.
+** GC objects are at the end, table/userdata must be lowest.
+** Also check lj_ir.h for similar ordering constraints.
+*/
+#define LJ_TNIL			(~0u)
+#define LJ_TFALSE		(~1u)
+#define LJ_TTRUE		(~2u)
+#define LJ_TLIGHTUD		(~3u)
+#define LJ_TSTR			(~4u)
+#define LJ_TUPVAL		(~5u)
+#define LJ_TTHREAD		(~6u)
+#define LJ_TPROTO		(~7u)
+#define LJ_TFUNC		(~8u)
+#define LJ_TTRACE		(~9u)
+#define LJ_TCDATA		(~10u)
+#define LJ_TTAB			(~11u)
+#define LJ_TUDATA		(~12u)
+/* This is just the canonical number type used in some places. */
+#define LJ_TNUMX		(~13u)
+
+/* Integers have itype == LJ_TISNUM doubles have itype < LJ_TISNUM */
+#define LJ_TISNUM		LJ_TNUMX
+#define LJ_TISTRUECOND		LJ_TFALSE
+#define LJ_TISPRI		LJ_TTRUE
+#define LJ_TISGCV		(LJ_TSTR+1)
+#define LJ_TISTABUD		LJ_TTAB
+
+/* Type marker for slot holding a traversal index. Must be lightuserdata. */
+#define LJ_KEYINDEX		0xfffe7fffu
+
+#define LJ_GCVMASK		(((uint64_t)1 << 47) - 1)
+
+/* Shared hard bound for remotely scanned runtime root containers. Producers
+** must reject the slot at this index; scanners may therefore visit exactly
+** every published entry without silently clamping a larger container. */
+#define LJ_ROOT_SCAN_LIMIT	1000000u
+
+#if LJ_64
+/* To stay within 47 bits, lightuserdata is segmented. */
+#define LJ_LIGHTUD_BITS_SEG	8
+#define LJ_LIGHTUD_BITS_LO	(47 - LJ_LIGHTUD_BITS_SEG)
+#define LJ_LIGHTUD_INTERNAL_SEG	(((uint64_t)1 << LJ_LIGHTUD_BITS_SEG) - 1u)
+#define LJ_LIGHTUD_INTERNAL_BASE \
+  ((((uint64_t)LJ_TLIGHTUD) << 47) | \
+   (LJ_LIGHTUD_INTERNAL_SEG << LJ_LIGHTUD_BITS_LO))
+#define LJ_LIGHTUD_INTERNAL_LO_MASK \
+  (((uint64_t)1 << LJ_LIGHTUD_BITS_LO) - 1u)
+#define LJ_TFORWARD_BITS	(LJ_LIGHTUD_INTERNAL_BASE | 1u)
+#define LJ_TKEYLOCK_BITS	(LJ_LIGHTUD_INTERNAL_BASE | 2u)
+
+/*
+** Persistent resize markers reserve the remaining low three-bit internal
+** lightuserdata tags. The upper payload is a non-repeating per-universe
+** descriptor id, never an address: arena mappings may use more than the 39
+** directly encoded lightuserdata bits and descriptor storage is reclaimed
+** only after SMR grace.
+*/
+#define LJ_TAB_RESIZE_MARK_KIND_BITS	3u
+#define LJ_TAB_RESIZE_MARK_KIND_MASK \
+  (((uint64_t)1 << LJ_TAB_RESIZE_MARK_KIND_BITS) - 1u)
+#define LJ_TAB_RESIZE_MARK_ID_BITS \
+  (LJ_LIGHTUD_BITS_LO - LJ_TAB_RESIZE_MARK_KIND_BITS)
+#define LJ_TAB_RESIZE_MARK_ID_MAX \
+  (((uint64_t)1 << LJ_TAB_RESIZE_MARK_ID_BITS) - 1u)
+#define LJ_TAB_RESIZE_MARK_SRC		3u
+#define LJ_TAB_RESIZE_MARK_DST		4u
+#define LJ_TAB_RESIZE_MARK_DONE		5u
+#define LJ_TAB_RESIZE_MARK_NIL_DONE	6u
+#define LJ_TAB_RESIZE_MARK_BITS(id, kind) \
+  (LJ_LIGHTUD_INTERNAL_BASE | \
+   ((uint64_t)(id) << LJ_TAB_RESIZE_MARK_KIND_BITS) | (uint64_t)(kind))
+#endif
+
+/* -- String object ------------------------------------------------------- */
+
+typedef uint32_t StrHash;	/* String hash value. */
+typedef uint32_t StrID;		/* String ID. */
+
+typedef struct StrCanonRec StrCanonRec;
+
+typedef struct StrTabHdr {
+  MSize mask;		/* String hash mask (size of hash table - 1). */
+  MSize resize;		/* Reserved resize claim for M5 lock-free interning. */
+  MSize copy_cursor;	/* Reserved resize copy cursor. */
+  uint64_t retire_epoch;  /* Safepoint epoch when retired. */
+  struct StrTabHdr *retired_next;  /* Retired string table headers. */
+  GCRef bucket[1];	/* String hash table anchors. */
+} StrTabHdr;
+
+/* RCU header for the secondary canonical-string quarantine index. */
+typedef struct StrCanonHdr {
+  MSize mask;		/* Quarantine hash mask (size - 1). */
+  MSize resize;	/* Exact topology-owner claim. */
+  uint64_t retire_epoch;
+  struct StrCanonHdr *retired_next;
+  StrCanonRec *bucket[1];
+} StrCanonHdr;
+
+/* String object header. String payload follows. */
+typedef struct GCstr {
+  GCHeader;
+  uint8_t reserved;	/* Used by lexer for fast lookup of reserved words. */
+  uint8_t hashalg;	/* Hash algorithm. */
+  StrID sid;		/* Interned string ID. */
+  StrHash hash;		/* Hash of string. */
+  MSize len;		/* Size of string. */
+  LJ_ALIGN(8) uintptr_t canon;  /* Atomic canonical-lifecycle word. */
+} GCstr;
+
+/*
+** Exact retirement owner for a string body removed from the intern table.
+** The body cannot use GCstr.nextgc for retirement: that word remains the
+** successor link observed by pre-unlink intern-table readers.  A side record
+** therefore keeps the body and the header generation that protected it until
+** both the safepoint grace interval and all header pins have drained.
+*/
+struct StrCanonRec {
+  StrCanonRec *next;	/* Retired/ownership list link. */
+  StrCanonRec *qnext;	/* Quarantine bucket link. */
+  GCstr *str;
+  StrTabHdr *hdr;
+  uint64_t retire_epoch;
+  uint64_t main_unlink_epoch;
+  uint64_t close_epoch;
+  uint64_t q_unlink_epoch;
+  GCSize size;
+  StrHash hash;
+  MSize len;
+  uint32_t main_linked;
+  uint32_t status;
+};
+
+/* Compatibility name for the already-landed prototype retirement paths. */
+typedef StrCanonRec StrBodyRetire;
+
+/*
+** Sole-mutator string reclamation batches.  These are deliberately separate
+** from StrCanonRec: the latter is the long-lived canonical-quarantine identity
+** required by the fully concurrent protocol, while a batch is valid only
+** under the b1.2 explicit-collection exclusion gate.
+*/
+#define LJ_STR_RETIRE_BATCH_CAP 256u
+typedef struct StrRetireBatch {
+  struct StrRetireBatch *next;
+  StrTabHdr *hdr;
+  uint64_t retire_epoch;
+  uint32_t count;
+  uint32_t sealed;
+  GCstr *body[LJ_STR_RETIRE_BATCH_CAP];
+} StrRetireBatch;
+
+#define strref(r)	(&gcref((r))->str)
+#define strref_acq(r)	(&gcref_acq((r))->str)
+#define strdata(s)	((const char *)((s)+1))
+#define strdatawr(s)	((char *)((s)+1))
+#define strVdata(o)	strdata(strV(o))
+
+/* -- Userdata object ----------------------------------------------------- */
+
+/* Userdata object. Payload follows. */
+typedef struct GCudata {
+  GCHeader;
+  uint8_t udtype;	/* Userdata type. */
+  uint8_t unused2;
+  GCRef env;		/* Should be at same offset in GCfunc. */
+  MSize len;		/* Size of payload. */
+  GCRef metatable;	/* Must be at same offset in GCtab. */
+  uint32_t align1;	/* To force 8 byte alignment of the payload. */
+} GCudata;
+
+/* Userdata types. */
+enum {
+  UDTYPE_USERDATA,	/* Regular userdata. */
+  UDTYPE_IO_FILE,	/* I/O library FILE. */
+  UDTYPE_FFI_CLIB,	/* FFI C library namespace. */
+  UDTYPE_BUFFER,	/* String buffer. */
+  UDTYPE_CHANNEL,	/* threading.channel object. */
+  UDTYPE_THREAD,	/* threading.thread object. */
+  UDTYPE_MUTEX,		/* threading.mutex object. */
+  UDTYPE__MAX
+};
+
+static LJ_AINLINE uint8_t lj_udata_udtype_acq(const GCudata *ud)
+{
+  return la_load8_acq(&ud->udtype);
+}
+
+static LJ_AINLINE void lj_udata_udtype_rel(GCudata *ud, uint8_t udtype)
+{
+  la_store8_rel(&ud->udtype, udtype);
+}
+
+#define uddata(u)	((void *)((u)+1))
+#define sizeudata(u)	(sizeof(struct GCudata)+(u)->len)
+
+/* -- C data object ------------------------------------------------------- */
+
+/* C data object. Payload follows. */
+typedef struct GCcdata {
+  GCHeader;
+  uint16_t ctypeid;	/* C type ID. */
+  uint16_t flags;	/* Internal cdata flags; uses x64 header padding. */
+} GCcdata;
+
+LJ_STATIC_ASSERT(offsetof(GCcdata, flags) ==
+		 offsetof(GCcdata, ctypeid) + sizeof(uint16_t));
+#if LJ_64
+LJ_STATIC_ASSERT(sizeof(GCcdata) == 16);
+#endif
+
+/* Prepended to variable-sized or realigned C data objects. */
+typedef struct GCcdataVar {
+  uint16_t offset;	/* Offset to allocated memory (relative to GCcdata). */
+  uint16_t extra;	/* Extra space allocated (incl. GCcdata + GCcdatav). */
+  MSize len;		/* Size of payload. */
+} GCcdataVar;
+
+#define cdataptr(cd)	((void *)((cd)+1))
+#define LJ_CDATA_CALLBACK_FREE	0x0001u
+/* Exact allocation byte tail (size modulo one arena cell). Coverage bits give
+** the cell span; these four immutable bits distinguish every byte extent inside
+** the final cell. Bit 0 remains the mutable callback-release flag. */
+#define LJ_CDATA_SIZE_TAIL_SHIFT	1u
+#define LJ_CDATA_SIZE_TAIL_MASK	0x001eu
+static LJ_AINLINE uint16_t cdata_size_tail_flags(size_t size)
+{
+  return (uint16_t)(((uint16_t)(size & 15u)) <<
+		    LJ_CDATA_SIZE_TAIL_SHIFT);
+}
+
+static LJ_AINLINE int cdata_size_tail_matches(const GCcdata *cd, size_t size)
+{
+  return (la_load16_acq(&cd->flags) & LJ_CDATA_SIZE_TAIL_MASK) ==
+    cdata_size_tail_flags(size);
+}
+static LJ_AINLINE uint16_t cdata_flags_acq(const GCcdata *cd)
+{
+  return la_load16_acq(&cd->flags);
+}
+
+static LJ_AINLINE void cdata_flags_rel(GCcdata *cd, uint16_t flags)
+{
+  la_store16_rel(&cd->flags, flags);
+}
+
+static LJ_AINLINE void cdata_flags_or_atomic(GCcdata *cd, uint16_t flags)
+{
+  uint16_t old = cdata_flags_acq(cd);
+  for (;;) {
+    uint16_t next = (uint16_t)(old | flags);
+    if (la_cas16(&cd->flags, &old, next, LA_ACQ_REL, LA_ACQ))
+      return;
+  }
+}
+
+#define cdataisv(cd)	(la_load8_acq(&(cd)->marked) & 0x80)
+#define cdatav(cd)	((GCcdataVar *)((char *)(cd) - sizeof(GCcdataVar)))
+#define cdatavlen(cd)	check_exp(cdataisv(cd), cdatav(cd)->len)
+#define sizecdatav(cd)	(cdatavlen(cd) + cdatav(cd)->extra)
+#define memcdatav(cd)	((void *)((char *)(cd) - cdatav(cd)->offset))
+
+/* -- Prototype object ---------------------------------------------------- */
+
+#define SCALE_NUM_GCO	((int32_t)sizeof(lua_Number)/sizeof(GCRef))
+#define round_nkgc(n)	(((n) + SCALE_NUM_GCO-1) & ~(SCALE_NUM_GCO-1))
+
+typedef struct GCproto {
+  GCHeader;
+  uint8_t numparams;	/* Number of parameters. */
+  uint8_t framesize;	/* Fixed frame size. */
+  MSize sizebc;		/* Number of bytecode instructions. */
+  uint32_t flags2;	/* Extended prototype flags. */
+  uint32_t gc2_scan_cycle;  /* Last completed immutable GC2 payload scan. */
+  GCRef gclist;
+  MRef k;		/* Split constant array (points to the middle). */
+  MRef uv;		/* Upvalue list. local slot|0x8000 or parent uv idx. */
+  MSize sizekgc;	/* Number of collectable constants. */
+  MSize sizekn;		/* Number of lua_Number constants. */
+  MSize sizept;		/* Total size including colocated arrays. */
+  uint8_t sizeuv;	/* Number of upvalues. */
+  uint8_t flags;	/* Miscellaneous flags (see below). */
+  uint16_t trace;	/* Anchor for chain of root traces. */
+  /* ------ The following fields are for debugging/tracebacks only ------ */
+  GCRef chunkname;	/* Name of the chunk this function was defined in. */
+  BCLine firstline;	/* First line of the function definition. */
+  BCLine numline;	/* Number of lines for the function definition. */
+  MRef lineinfo;	/* Compressed map from bytecode ins. to source line. */
+  MRef uvinfo;		/* Upvalue names. */
+  MRef varinfo;		/* Names and compressed extents of local variables. */
+  MRef jit_startins;	/* Stable original ins for JIT-patched bytecode. */
+} GCproto;
+
+/* Bytecode loading may publish a traversal-safe proto prefix before nested KGC
+** constructors finish. sizekgc is the release-published immutable boundary for
+** the initialized GCRef prefix; concurrent traversal snapshots it with acquire. */
+static LJ_AINLINE MSize proto_sizekgc_acq(const GCproto *pt)
+{
+  return (MSize)la_load32_acq(&pt->sizekgc);
+}
+
+static LJ_AINLINE void proto_sizekgc_rel(GCproto *pt, MSize sizekgc)
+{
+  la_store32_rel(&pt->sizekgc, (uint32_t)sizekgc);
+}
+
+/* Flags for prototype. */
+#define PROTO_CHILD		0x01	/* Has child prototypes. */
+#define PROTO_VARARG		0x02	/* Vararg function. */
+#define PROTO_FFI		0x04	/* Uses BC_KCDATA for FFI datatypes. */
+#define PROTO_NOJIT		0x08	/* JIT disabled for this function. */
+#define PROTO_ILOOP		0x10	/* Patched bytecode with ILOOP etc. */
+/* Only used during parsing. */
+#define PROTO_HAS_RETURN	0x20	/* Already emitted a return. */
+#define PROTO_FIXUP_RETURN	0x40	/* Need to fixup emitted returns. */
+/* Top bits used for counting created closures. */
+#define PROTO_CLCOUNT		0x20	/* Base of saturating 3 bit counter. */
+#define PROTO_CLC_BITS		3
+#define PROTO_CLC_POLY		(3*PROTO_CLCOUNT)  /* Polymorphic threshold. */
+
+/* Extended prototype flags. */
+#define PROTO2_LEGACYUV		0x00000001u  /* Loaded from v2 bytecode. */
+#define PROTO2_CELLUV		0x00000002u  /* Local upvalues are cell slots. */
+#define PROTO2_CELLOPS		0x00000004u  /* Prototype uses CGET/CSET. */
+
+#define proto_initflags2(pt) \
+  ((void)((pt)->flags2 = 0, (pt)->gc2_scan_cycle = 0))
+#define proto_legacyuv(pt)	(((pt)->flags2 & PROTO2_LEGACYUV) != 0)
+#define proto_setlegacyuv(pt)	((pt)->flags2 |= PROTO2_LEGACYUV)
+#define proto_celluv(pt)	(((pt)->flags2 & PROTO2_CELLUV) != 0)
+#define proto_setcelluv(pt)	((pt)->flags2 |= PROTO2_CELLUV)
+#define proto_cellops(pt)	(((pt)->flags2 & PROTO2_CELLOPS) != 0)
+#define proto_setcellops(pt)	((pt)->flags2 |= PROTO2_CELLOPS)
+
+static LJ_AINLINE uint32_t proto_gc2_scan_cycle_acq(const GCproto *pt)
+{
+  return la_load32_acq(&pt->gc2_scan_cycle);
+}
+
+static LJ_AINLINE void proto_gc2_scan_cycle_rel(GCproto *pt, uint32_t cycle)
+{
+  la_store32_rel(&pt->gc2_scan_cycle, cycle);
+}
+
+#define PROTO_UV_LOCAL		0x8000	/* Upvalue for local slot. */
+#define PROTO_UV_IMMUTABLE	0x4000	/* Immutable upvalue. */
+
+#define proto_kgc(pt, idx) \
+  check_exp((uintptr_t)(intptr_t)(idx) >= \
+	    ~(uintptr_t)proto_sizekgc_acq(pt)+1u, \
+	    gcref(mref((pt)->k, GCRef)[(idx)]))
+#define proto_kgc_acq(pt, idx) \
+  check_exp((uintptr_t)(intptr_t)(idx) >= \
+	    ~(uintptr_t)proto_sizekgc_acq(pt)+1u, \
+	    gcref_acq(mref((pt)->k, GCRef)[(idx)]))
+#define proto_knumtv(pt, idx) \
+  check_exp((uintptr_t)(idx) < (pt)->sizekn, &mref((pt)->k, TValue)[(idx)])
+#define proto_bc(pt)		((BCIns *)((char *)(pt) + sizeof(GCproto)))
+#define proto_bcpos(pt, pc)	((BCPos)((pc) - proto_bc(pt)))
+#define proto_uv(pt)		(mref((pt)->uv, uint16_t))
+
+#define proto_chunkname(pt)	(strref((pt)->chunkname))
+#define proto_chunkname_acq(pt)	(strref_acq((pt)->chunkname))
+#define proto_chunknamestr(pt)	(strdata(proto_chunkname((pt))))
+#define proto_chunknamestr_acq(pt)	(strdata(proto_chunkname_acq((pt))))
+#define proto_lineinfo(pt)	(mref((pt)->lineinfo, const void))
+#define proto_uvinfo(pt)	(mref((pt)->uvinfo, const uint8_t))
+#define proto_varinfo(pt)	(mref((pt)->varinfo, const uint8_t))
+#define proto_jit_startins(pt)	(mref((pt)->jit_startins, BCIns))
+
+/* Zero is the unpublished sentinel. Root patching only accepts FORL/LOOP,
+** ITERL/FUNCF, ITERN and RET* originals; none has the all-zero BC_ISLT
+** encoding, so every published recovery instruction is distinguishable. */
+static LJ_AINLINE BCIns proto_jit_startins_acq(const GCproto *pt,
+						const BCIns *pc)
+{
+  const BCIns *bc = proto_bc(pt);
+  const BCIns *shadow = mref(pt->jit_startins, const BCIns);
+  uintptr_t b = (uintptr_t)(const void *)bc;
+  uintptr_t p = (uintptr_t)(const void *)pc;
+  uintptr_t bytes = (uintptr_t)pt->sizebc * sizeof(BCIns);
+  uintptr_t s = (uintptr_t)(const void *)shadow;
+  if (!shadow || b > ~(uintptr_t)0 - bytes || s != b + bytes ||
+      p < b || p - b >= bytes ||
+      ((p - b) & (sizeof(BCIns)-1u)) != 0)
+    return 0;
+  return (BCIns)la_load32_acq(
+    (const uint32_t *)&shadow[(p - b) / sizeof(BCIns)]);
+}
+
+static LJ_AINLINE void proto_jit_startins_rel(GCproto *pt, const BCIns *pc,
+					       BCIns ins)
+{
+  BCIns *bc = proto_bc(pt);
+  BCIns *shadow = proto_jit_startins(pt);
+  uintptr_t b = (uintptr_t)(void *)bc;
+  uintptr_t p = (uintptr_t)(const void *)pc;
+  uintptr_t bytes = (uintptr_t)pt->sizebc * sizeof(BCIns);
+  uintptr_t s = (uintptr_t)(void *)shadow;
+  BCIns *slot;
+  BCIns old;
+  if (LJ_UNLIKELY(shadow == NULL || b > ~(uintptr_t)0 - bytes ||
+		  s != b + bytes || p < b || p - b >= bytes ||
+		  ((p - b) & (sizeof(BCIns)-1u)) != 0))
+    abort();  /* Patched bytecode without its recovery slot is unrecoverable. */
+  slot = &shadow[(p - b) / sizeof(BCIns)];
+  old = (BCIns)la_load32_acq((const uint32_t *)slot);
+  if (LJ_UNLIKELY(old != 0 && old != ins))
+    abort();  /* The immutable original instruction may never change. */
+  la_store32_rel((uint32_t *)slot, (uint32_t)ins);
+}
+
+/* -- Upvalue object ------------------------------------------------------ */
+
+typedef struct GCupval {
+  GCHeader;
+  uint8_t closed;	/* Set if closed (i.e. uv->v == &uv->u.value). */
+  uint8_t immutable;	/* Low bit: immutable. High bit: arena-owned FNEW. */
+  union {
+    TValue tv;		/* If closed: the value itself. */
+    struct {		/* If open: double linked list, anchored at thread. */
+      GCRef prev;
+      GCRef next;
+    };
+  };
+  MRef v;		/* Points to stack slot (open) or above (closed). */
+  uint32_t dhash;	/* Disambiguation hash: dh1 != dh2 => cannot alias. */
+} GCupval;
+
+#define uvprev(uv_)	(&gcref((uv_)->prev)->uv)
+#define uvnext(uv_)	(&gcref((uv_)->next)->uv)
+#define uvval(uv_)	(mref((uv_)->v, TValue))
+
+#define LJ_UV_IMMUTABLE	0x01u
+
+/* -- Function object (closures) ------------------------------------------ */
+
+/* Common header for functions. env should be at same offset in GCudata. */
+#define GCfuncHeader \
+  GCHeader; uint8_t ffid; uint8_t nupvalues; \
+  GCRef env; GCRef gclist; MRef pc
+
+typedef struct GCfuncC {
+  GCfuncHeader;
+  lua_CFunction f;	/* C function to be called. */
+  TValue upvalue[1];	/* Array of upvalues (TValue). */
+} GCfuncC;
+
+typedef struct GCfuncL {
+  GCfuncHeader;
+  GCRef uvptr[1];	/* Array of _pointers_ to upvalue objects (GCupval). */
+} GCfuncL;
+
+typedef union GCfunc {
+  GCfuncC c;
+  GCfuncL l;
+} GCfunc;
+
+#define FF_LUA		0
+#define FF_C		1
+static LJ_AINLINE uint32_t lj_func_ffid_acq(const GCfunc *fn)
+{
+  return (uint32_t)la_load8_acq(&fn->c.ffid);
+}
+static LJ_AINLINE void lj_func_ffid_rel(GCfunc *fn, uint32_t ffid)
+{
+  la_store8_rel(&fn->c.ffid, (uint8_t)ffid);
+}
+#define isluafunc(fn)	(lj_func_ffid_acq((fn)) == FF_LUA)
+#define iscfunc(fn)	(lj_func_ffid_acq((fn)) == FF_C)
+#define isffunc(fn)	(lj_func_ffid_acq((fn)) > FF_C)
+#define funcproto(fn) \
+  check_exp(isluafunc(fn), (GCproto *)(mref((fn)->l.pc, char)-sizeof(GCproto)))
+#define sizeCfunc(n)	(sizeof(GCfuncC)-sizeof(TValue)+sizeof(TValue)*(n))
+#define sizeLfunc(n)	(sizeof(GCfuncL)-sizeof(GCRef)+sizeof(GCRef)*(n))
+
+/* -- Table object -------------------------------------------------------- */
+
+/* Hash node. */
+typedef struct Node {
+  TValue val;		/* Value object. Must be first field. */
+  TValue key;		/* Key object. */
+  MRef next;		/* Hash chain. */
+} Node;
+
+LJ_STATIC_ASSERT(offsetof(Node, val) == 0);
+
+typedef struct TabNodeHdr {
+  MSize hmask;		/* Hash mask paired with the following Node vector. */
+  MSize flags;		/* Low bits: freecount. High bits: state flags. */
+  MRef next_gen;	/* Replacement generation during/after retirement. */
+} TabNodeHdr;
+
+#define TABNODE_FREECOUNT_BITS	31
+#define TABNODE_FREECOUNT_MASK	((((MSize)1u) << TABNODE_FREECOUNT_BITS) - 1u)
+#define TABNODE_FLAGS_MASK	((MSize)~TABNODE_FREECOUNT_MASK)
+#define TABNODE_FLAG_RETIRING	(((MSize)1u) << 31)
+
+LJ_STATIC_ASSERT(sizeof(TabNodeHdr) == 16);
+LJ_STATIC_ASSERT(((MSize)1u << LJ_MAX_HBITS) <= TABNODE_FREECOUNT_MASK);
+
+struct GCtab;
+
+typedef struct TabNodeRetire {
+  struct GCtab *tab;	/* Table that unpublished this hash vector. */
+  Node *node;		/* Retired hash vector, owned only when armed. */
+  MSize hmask;		/* Original hash mask for vector free. */
+  uint64_t retire_epoch;  /* Safepoint epoch when retired. */
+  uint32_t armed;	/* Node vector has been unpublished from its table. */
+  struct TabNodeRetire *next;
+} TabNodeRetire;
+
+typedef struct TabArrayHdr {
+  MSize asize;		/* Visible array size paired with the slots vector. */
+  MSize acap;		/* Capacity plus high-bit state flags. */
+  MRef next_gen;	/* Replacement array during/after retirement. */
+} TabArrayHdr;
+
+#define TABARRAY_ACAP_BITS	28
+#define TABARRAY_ACAP_MASK	((((MSize)1u) << TABARRAY_ACAP_BITS) - 1u)
+#define TABARRAY_FLAGS_MASK	((MSize)~TABARRAY_ACAP_MASK)
+#define TABARRAY_FLAG_RETIRING	(((MSize)1u) << 31)
+
+LJ_STATIC_ASSERT(sizeof(TabArrayHdr) == 16);
+LJ_STATIC_ASSERT(LJ_MAX_ASIZE <= TABARRAY_ACAP_MASK);
+LJ_STATIC_ASSERT((TABARRAY_FLAG_RETIRING & TABARRAY_ACAP_MASK) == 0);
+
+typedef struct TabArrayRetire {
+  struct GCtab *tab;	/* Table that unpublished this array vector. */
+  TValue *array;	/* Retired array vector, owned only when armed. */
+  MSize acap;		/* Original array capacity for vector free. */
+  uint64_t retire_epoch;  /* Safepoint epoch when retired. */
+  uint32_t armed;	/* Array vector has been unpublished from its table. */
+  struct TabArrayRetire *next;
+} TabArrayRetire;
+
+enum {
+  TAB_RESIZE_DESC_PREPARED = 1,
+  TAB_RESIZE_DESC_INSTALLING,
+  TAB_RESIZE_DESC_INSTALLED,
+  TAB_RESIZE_DESC_RETIRING,
+  TAB_RESIZE_DESC_MIGRATING,
+  TAB_RESIZE_DESC_PUBLISHING,
+  TAB_RESIZE_DESC_CLEARING,
+  TAB_RESIZE_DESC_TERMINATING,
+  TAB_RESIZE_DESC_TERMINAL
+};
+
+#define TAB_RESIZE_DESC_F_PUBLISHED	0x00000001u
+#define TAB_RESIZE_DESC_F_CUTOVER	0x00000002u
+#define TAB_RESIZE_DESC_F_VM_GUARD	0x00000004u
+#define TAB_RESIZE_DESC_F_VM_GUARD_RELEASED	0x00000008u
+
+/*
+** Cold persistent identity for a helpable resize. The installed substrate
+** retains an immutable old-generation snapshot; move intents, successor roots
+** and completion accounting join it before the first runtime marker is
+** published. Registry membership is the raw-memory and semantic table-root
+** owner. IDs never repeat within their global_State, and terminal records
+** remain findable until SMR grace has elapsed.
+*/
+typedef struct TabResizeDesc {
+  struct GCtab *tab;
+  TValue *oldarray;
+  Node *oldnode;
+  uint64_t id;
+  uint64_t stable_control;  /* Exact pre-install {owner, acap} word. */
+  uint64_t retire_epoch;
+  uint32_t oldasize;
+  uint32_t oldhmask;
+  uint32_t oldacap;
+  uint32_t newacap;
+  uint32_t snapshot_state;
+  uint32_t phase;
+  uint32_t flags;
+  struct TabResizeDesc *next;
+} TabResizeDesc;
+
+typedef struct GC2FinRegUDataNode {
+  GCRef obj;		/* Userdata object tracked for metatable __gc. */
+  struct GC2FinRegUDataNode *next;
+  struct GC2FinRegUDataNode *retired_next;
+  uint32_t active;	/* Node is still part of active discovery set. */
+} GC2FinRegUDataNode;
+
+typedef struct GCtab {
+  GCHeader;
+  uint8_t nomm;		/* Negative cache for fast metamethods. */
+  int8_t colo;		/* Colocated-array size; high bit means it was split. */
+  uint8_t gc2_rescan_state;  /* Exact GC2 table NEEDSCAN count membership. */
+  MRef array;		/* Array part. */
+  GCRef gclist;
+  GCRef metatable;	/* Must be at same offset in GCudata. */
+  MRef node;		/* Hash part. */
+  uint32_t asize;	/* Size of array part (keys [0, asize-1]). */
+  uint32_t hmask;	/* Hash part mask (size of hash part - 1). */
+  MRef freetop;		/* Top of free elements. */
+  union {
+    struct {
+      union {
+	struct {
+	  uint32_t acap;  /* Stable compatibility mirror of array capacity. */
+	  uint32_t struct_owner;  /* Stable compound-op owner tid. */
+	};
+	uint64_t struct_control;  /* Stable pair or tagged resize descriptor. */
+      };
+      /*
+      ** Exact GC2 weak snapshot state plus the descriptor-time capacity shadow.
+      ** The weak state needs two low bits and the cycle occupies the upper
+      ** word; bits 2..29 retain acap while control contains a descriptor.
+      */
+      uint64_t weak_record;
+    };
+    la_u128 struct_weak_pair;  /* Atomic descriptor completion pair. */
+  };
+} GCtab;
+
+LJ_STATIC_ASSERT((offsetof(GCtab, weak_record) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(GCtab, struct_control) & 7u) == 0);
+LJ_STATIC_ASSERT((offsetof(GCtab, struct_weak_pair) & 15u) == 0);
+LJ_STATIC_ASSERT(offsetof(GCtab, weak_record) ==
+		 offsetof(GCtab, struct_control) + 8u);
+
+enum {
+  LJ_TAB_RESCAN_NONE = 0,
+  LJ_TAB_RESCAN_COUNTED = 1,
+  LJ_TAB_RESCAN_INSTALLING = 2,
+  LJ_TAB_RESCAN_CANCELLED = 3
+};
+
+static LJ_AINLINE uint8_t lj_tab_nomm_acq(const GCtab *t)
+{
+  return la_load8_acq(&t->nomm);
+}
+
+static LJ_AINLINE void lj_tab_nomm_rel(GCtab *t, uint8_t nomm)
+{
+  la_store8_rel(&t->nomm, nomm);
+}
+
+static LJ_AINLINE int8_t lj_tab_colo_acq(const GCtab *t)
+{
+  return (int8_t)la_load8_acq((const uint8_t *)&t->colo);
+}
+
+static LJ_AINLINE void lj_tab_colo_rel(GCtab *t, int8_t colo)
+{
+  la_store8_rel((uint8_t *)&t->colo, (uint8_t)colo);
+}
+
+static LJ_AINLINE uint8_t lj_tab_gc2_rescan_state_acq(const GCtab *t)
+{
+  return la_load8_acq(&t->gc2_rescan_state);
+}
+
+static LJ_AINLINE void lj_tab_gc2_rescan_state_store_rlx(GCtab *t,
+						  uint8_t state)
+{
+  la_store8_rlx(&t->gc2_rescan_state, state);
+}
+
+static LJ_AINLINE void lj_tab_gc2_rescan_state_rel(GCtab *t, uint8_t state)
+{
+  la_store8_rel(&t->gc2_rescan_state, state);
+}
+
+static LJ_AINLINE int lj_tab_gc2_rescan_state_cas(GCtab *t, uint8_t *oldp,
+						   uint8_t state)
+{
+  return la_cas8(&t->gc2_rescan_state, oldp, state, LA_ACQ_REL, LA_ACQ);
+}
+
+#define LJ_TAB_COLO_MASK	0x7fu
+
+static LJ_AINLINE MSize lj_tab_colo_size(const GCtab *t)
+{
+  /* Resizing preserves the original inline allocation size in the low bits
+  ** and sets the sign bit once table indexing moves to a separated array.
+  ** Physical-size and GC validation consumers must ignore that state bit. */
+  return (MSize)(la_load8_acq((const uint8_t *)&t->colo) &
+		 LJ_TAB_COLO_MASK);
+}
+
+#define sizetabcolo(n)	((n)*sizeof(TValue) + sizeof(GCtab))
+#define tabref(r)	((GCtab *)gcref((r)))
+#define tabref_acq(r)	((GCtab *)gcref_acq((r)))
+#define noderef(r)	(mref((r), Node))
+#define nextnode(n)	(mref((n)->next, Node))
+
+static LJ_AINLINE TValue *lj_tab_array_acq(const GCtab *t)
+{
+  return (TValue *)(void *)(uintptr_t)la_load64_acq(&t->array.ptr64);
+}
+
+static LJ_AINLINE void lj_tab_array_set(GCtab *t, const TValue *array)
+{
+  setmref(t->array, array);
+}
+
+static LJ_AINLINE void lj_tab_array_rel(GCtab *t, const TValue *array)
+{
+  la_store64_rel(&t->array.ptr64, (uint64_t)(uintptr_t)(const void *)array);
+}
+
+static LJ_AINLINE MSize lj_tab_asize_acq(const GCtab *t)
+{
+  return (MSize)la_load32_acq(&t->asize);
+}
+
+static LJ_AINLINE void lj_tab_asize_rel(GCtab *t, MSize asize)
+{
+  la_store32_rel(&t->asize, (uint32_t)asize);
+}
+
+typedef union LJTabStructControl {
+  uint64_t word;
+  struct {
+    uint32_t acap;
+    uint32_t owner;
+  } stable;
+} LJTabStructControl;
+
+#define LJ_TAB_STRUCT_DESC_TAG		U64x(ffff0000,00000000)
+#define LJ_TAB_STRUCT_DESC_MASK		(~LJ_GCVMASK)
+#define LJ_TAB_STRUCT_OWNER_LIMIT	0xffff0000u
+#define LJ_TAB_STRUCT_DESC_OWNER	0xffffffffu
+
+#define LJ_TAB_WEAK_RECORD_STATE_MASK	((uint64_t)3u)
+#define LJ_TAB_WEAK_RECORD_ACAP_SHIFT	2u
+#define LJ_TAB_WEAK_RECORD_ACAP_MASK \
+  ((uint64_t)TABARRAY_ACAP_MASK << LJ_TAB_WEAK_RECORD_ACAP_SHIFT)
+#define LJ_TAB_WEAK_RECORD_SEMANTIC_MASK \
+  (U64x(ffffffff,00000000) | LJ_TAB_WEAK_RECORD_STATE_MASK)
+
+LJ_STATIC_ASSERT(TABARRAY_ACAP_BITS == 28);
+LJ_STATIC_ASSERT((LJ_TAB_WEAK_RECORD_ACAP_MASK &
+		  LJ_TAB_WEAK_RECORD_SEMANTIC_MASK) == 0);
+
+static LJ_AINLINE uint64_t lj_tab_weak_record_raw_acq(const GCtab *t)
+{
+  return la_load64_acq(&t->weak_record);
+}
+
+static LJ_AINLINE MSize
+lj_tab_weak_record_raw_acap(uint64_t record)
+{
+  return (MSize)((record & LJ_TAB_WEAK_RECORD_ACAP_MASK) >>
+		 LJ_TAB_WEAK_RECORD_ACAP_SHIFT);
+}
+
+static LJ_AINLINE void lj_tab_weak_acap_rel(GCtab *t, MSize acap)
+{
+  uint64_t current = lj_tab_weak_record_raw_acq(t);
+  uint64_t bits;
+  lj_assertX(acap <= TABARRAY_ACAP_MASK, "invalid table array capacity");
+  bits = (uint64_t)acap << LJ_TAB_WEAK_RECORD_ACAP_SHIFT;
+  for (;;) {
+    uint64_t desired = (current & ~LJ_TAB_WEAK_RECORD_ACAP_MASK) | bits;
+    if (la_cas64(&t->weak_record, &current, desired, LA_ACQ_REL, LA_ACQ))
+      return;
+  }
+}
+
+static LJ_AINLINE void
+lj_tab_weak_record_init_rlx(GCtab *t, MSize acap, uint64_t record)
+{
+  uint64_t raw;
+  lj_assertX(acap <= TABARRAY_ACAP_MASK, "invalid initial array capacity");
+  raw = ((uint64_t)acap << LJ_TAB_WEAK_RECORD_ACAP_SHIFT) |
+	(record & LJ_TAB_WEAK_RECORD_SEMANTIC_MASK);
+  la_store64_rlx(&t->weak_record, raw);
+}
+
+/*
+** Atomically replace the descriptor control and capacity shadow while
+** preserving the most recently observed weak cycle/state. On failure both
+** expected words are updated to the current pair.
+*/
+static LJ_AINLINE int
+lj_tab_struct_weak_pair_cas(GCtab *t, uint64_t *controlp,
+			    uint64_t *weakp, uint64_t control,
+			    uint64_t weak)
+{
+  la_u128 expected, desired;
+  int ok;
+  expected.lo = *controlp;
+  expected.hi = *weakp;
+  desired.lo = control;
+  desired.hi = weak;
+  ok = la_cas128(&t->struct_weak_pair, &expected, desired);
+  if (!ok) {
+    *controlp = expected.lo;
+    *weakp = expected.hi;
+  }
+  return ok;
+}
+
+static LJ_AINLINE uint64_t lj_tab_struct_control_pack(uint32_t acap,
+						      uint32_t owner)
+{
+  LJTabStructControl control;
+  lj_assertX(owner < LJ_TAB_STRUCT_OWNER_LIMIT,
+	     "table structural owner overlaps resize descriptor tag");
+  control.stable.acap = acap;
+  control.stable.owner = owner;
+  return control.word;
+}
+
+static LJ_AINLINE uint32_t lj_tab_struct_control_acap(uint64_t word)
+{
+  LJTabStructControl control;
+  control.word = word;
+  return control.stable.acap;
+}
+
+static LJ_AINLINE uint32_t lj_tab_struct_control_owner(uint64_t word)
+{
+  LJTabStructControl control;
+  control.word = word;
+  return control.stable.owner;
+}
+
+static LJ_AINLINE int lj_tab_struct_control_is_desc(uint64_t word)
+{
+  return (word & LJ_TAB_STRUCT_DESC_MASK) == LJ_TAB_STRUCT_DESC_TAG;
+}
+
+static LJ_AINLINE uint64_t
+lj_tab_struct_control_desc_word(const TabResizeDesc *desc)
+{
+  uintptr_t p = (uintptr_t)(const void *)desc;
+  lj_assertX(desc != NULL && (p & ~(uintptr_t)LJ_GCVMASK) == 0,
+	     "resize descriptor address exceeds tagged control word");
+  return LJ_TAB_STRUCT_DESC_TAG | (uint64_t)p;
+}
+
+static LJ_AINLINE TabResizeDesc *
+lj_tab_struct_control_desc(uint64_t word)
+{
+  return lj_tab_struct_control_is_desc(word) ?
+    (TabResizeDesc *)(void *)(uintptr_t)(word & LJ_GCVMASK) : NULL;
+}
+
+static LJ_AINLINE uint64_t lj_tab_struct_control_acq(const GCtab *t)
+{
+  return la_load64_acq(&t->struct_control);
+}
+
+static LJ_AINLINE int lj_tab_struct_control_cas(GCtab *t, uint64_t *oldp,
+						uint64_t control)
+{
+  return la_cas64(&t->struct_control, oldp, control, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE void lj_tab_struct_control_store_rlx(GCtab *t,
+							uint32_t acap,
+							uint32_t owner)
+{
+  la_store64_rlx(&t->struct_control,
+		 lj_tab_struct_control_pack(acap, owner));
+}
+
+static LJ_AINLINE TabResizeDesc *
+lj_tab_resize_desc_control_acq(const GCtab *t)
+{
+  return lj_tab_struct_control_desc(lj_tab_struct_control_acq(t));
+}
+
+static LJ_AINLINE MSize lj_tab_acap_acq(const GCtab *t)
+{
+  uint64_t control = lj_tab_struct_control_acq(t);
+  if (LJ_LIKELY(!lj_tab_struct_control_is_desc(control)))
+    return (MSize)lj_tab_struct_control_acap(control);
+  /*
+  ** Never dereference the encoded descriptor here. A reader may load its tag
+  ** immediately before terminal reclamation. The colocated weak-record shadow
+  ** remains valid for the GCtab lifetime and is synchronized before the sole
+  ** stable->descriptor install CAS.
+  */
+  return lj_tab_weak_record_raw_acap(lj_tab_weak_record_raw_acq(t));
+}
+
+static LJ_AINLINE void lj_tab_acap_rel(GCtab *t, MSize acap)
+{
+  uint64_t control = lj_tab_struct_control_acq(t);
+  /*
+  ** Legacy resize holds the structural owner, while a private resize has sole
+  ** table authority. Thus this is the same release publication as the former
+  ** standalone acap store, without locked RMWs on the production resize path.
+  ** Descriptor installation first synchronizes the weak shadow and then CASes
+  ** this exact stable word, so it never relies on a concurrently overwritten
+  ** private/legacy publication.
+  */
+  lj_assertX(!lj_tab_struct_control_is_desc(control),
+	     "array capacity store during descriptor resize");
+  la_store64_rel(&t->struct_control, lj_tab_struct_control_pack(
+    (uint32_t)acap, lj_tab_struct_control_owner(control)));
+}
+
+static LJ_AINLINE uint32_t lj_tab_struct_owner_acq(const GCtab *t)
+{
+  uint64_t control = lj_tab_struct_control_acq(t);
+  return lj_tab_struct_control_is_desc(control) ?
+    LJ_TAB_STRUCT_DESC_OWNER : lj_tab_struct_control_owner(control);
+}
+
+static LJ_AINLINE void lj_tab_struct_owner_store_rlx(GCtab *t, uint32_t owner)
+{
+  uint64_t control = la_load64_rlx(&t->struct_control);
+  lj_assertX(!lj_tab_struct_control_is_desc(control),
+	     "owner initialization during descriptor resize");
+  la_store64_rlx(&t->struct_control, lj_tab_struct_control_pack(
+    lj_tab_struct_control_acap(control), owner));
+}
+
+static LJ_AINLINE void lj_tab_struct_owner_rel(GCtab *t, uint32_t owner)
+{
+  uint64_t control = lj_tab_struct_control_acq(t);
+  lj_assertX(!lj_tab_struct_control_is_desc(control),
+	     "legacy owner store during descriptor resize");
+  la_store64_rel(&t->struct_control, lj_tab_struct_control_pack(
+    lj_tab_struct_control_acap(control), owner));
+}
+
+static LJ_AINLINE int lj_tab_struct_owner_cas(GCtab *t, uint32_t *oldp,
+					      uint32_t owner)
+{
+  uint64_t control = lj_tab_struct_control_acq(t);
+  uint32_t expected = *oldp;
+  for (;;) {
+    uint32_t current;
+    uint64_t desired;
+    if (lj_tab_struct_control_is_desc(control)) {
+      *oldp = LJ_TAB_STRUCT_DESC_OWNER;
+      return 0;
+    }
+    current = lj_tab_struct_control_owner(control);
+    if (current != expected) {
+      *oldp = current;
+      return 0;
+    }
+    desired = lj_tab_struct_control_pack(
+      lj_tab_struct_control_acap(control), owner);
+    if (lj_tab_struct_control_cas(t, &control, desired))
+      return 1;
+  }
+}
+
+enum {
+  LJ_TAB_WEAK_RECORD_NONE = 0,
+  LJ_TAB_WEAK_RECORD_INSTALLING = 1,
+  LJ_TAB_WEAK_RECORD_PUBLISHED = 2
+};
+
+static LJ_AINLINE uint64_t lj_tab_weak_record_pack(uint32_t cycle,
+						   uint32_t state)
+{
+  lj_assertX(state <= LJ_TAB_WEAK_RECORD_STATE_MASK,
+	     "invalid table weak-record state");
+  return ((uint64_t)cycle << 32) | (uint64_t)state;
+}
+
+static LJ_AINLINE uint32_t lj_tab_weak_record_cycle(uint64_t record)
+{
+  return (uint32_t)(record >> 32);
+}
+
+static LJ_AINLINE uint32_t lj_tab_weak_record_state(uint64_t record)
+{
+  return (uint32_t)(record & LJ_TAB_WEAK_RECORD_STATE_MASK);
+}
+
+static LJ_AINLINE uint64_t lj_tab_weak_record_acq(const GCtab *t)
+{
+  return lj_tab_weak_record_raw_acq(t) &
+	 LJ_TAB_WEAK_RECORD_SEMANTIC_MASK;
+}
+
+static LJ_AINLINE void lj_tab_weak_record_store_rlx(GCtab *t,
+						     uint64_t record)
+{
+  uint64_t current = la_load64_rlx(&t->weak_record);
+  record &= LJ_TAB_WEAK_RECORD_SEMANTIC_MASK;
+  for (;;) {
+    uint64_t desired = (current & LJ_TAB_WEAK_RECORD_ACAP_MASK) | record;
+    if (la_cas64(&t->weak_record, &current, desired, LA_RLX, LA_RLX))
+      return;
+  }
+}
+
+static LJ_AINLINE int lj_tab_weak_record_cas(GCtab *t, uint64_t *oldp,
+					      uint64_t record)
+{
+  uint64_t expected = *oldp & LJ_TAB_WEAK_RECORD_SEMANTIC_MASK;
+  uint64_t current = lj_tab_weak_record_raw_acq(t);
+  record &= LJ_TAB_WEAK_RECORD_SEMANTIC_MASK;
+  for (;;) {
+    uint64_t semantic = current & LJ_TAB_WEAK_RECORD_SEMANTIC_MASK;
+    uint64_t desired;
+    if (semantic != expected) {
+      *oldp = semantic;
+      return 0;
+    }
+    desired = (current & LJ_TAB_WEAK_RECORD_ACAP_MASK) | record;
+    if (la_cas64(&t->weak_record, &current, desired, LA_ACQ_REL, LA_ACQ))
+      return 1;
+  }
+}
+
+/* White-box compatibility accessors used by the recycled-inline-TNEW test. */
+static LJ_AINLINE uint32_t lj_tab_weak_cycle_acq(const GCtab *t)
+{
+  return lj_tab_weak_record_cycle(lj_tab_weak_record_acq(t));
+}
+
+static LJ_AINLINE void lj_tab_weak_cycle_store_rlx(GCtab *t, uint32_t cycle)
+{
+  lj_tab_weak_record_store_rlx(t, lj_tab_weak_record_pack(
+    cycle, cycle ? LJ_TAB_WEAK_RECORD_PUBLISHED : LJ_TAB_WEAK_RECORD_NONE));
+}
+
+static LJ_AINLINE int lj_tab_array_separated(const GCtab *t)
+{
+  return LJ_MAX_COLOSIZE == 0 || lj_tab_colo_acq(t) <= 0;
+}
+
+static LJ_AINLINE const TabArrayHdr *lj_tab_array_hdr(const TValue *array)
+{
+  return (const TabArrayHdr *)(const void *)
+    ((const char *)(const void *)array - sizeof(TabArrayHdr));
+}
+
+static LJ_AINLINE TabArrayHdr *lj_tab_array_hdrw(TValue *array)
+{
+  return (TabArrayHdr *)(void *)((char *)(void *)array - sizeof(TabArrayHdr));
+}
+
+static LJ_AINLINE TValue *lj_tab_array_slots(TabArrayHdr *hdr)
+{
+  return (TValue *)(void *)((char *)(void *)hdr + sizeof(TabArrayHdr));
+}
+
+static LJ_AINLINE GCSize lj_tab_array_bytes(MSize acap)
+{
+  return (GCSize)sizeof(TabArrayHdr) + (GCSize)acap * (GCSize)sizeof(TValue);
+}
+
+static LJ_AINLINE MSize lj_tab_array_hdr_pack_acap(MSize acap, MSize flags)
+{
+  return (acap & TABARRAY_ACAP_MASK) | (flags & TABARRAY_FLAGS_MASK);
+}
+
+static LJ_AINLINE void lj_tab_array_hdr_init(TabArrayHdr *hdr, MSize asize,
+					     MSize acap)
+{
+  hdr->asize = asize;
+  hdr->acap = lj_tab_array_hdr_pack_acap(acap, 0);
+  setmref(hdr->next_gen, NULL);
+}
+
+static LJ_AINLINE int lj_tab_array_is_colocated(const GCtab *t,
+						const TValue *array)
+{
+#if LJ_MAX_COLOSIZE != 0
+  return array == (const TValue *)(const void *)
+    ((const char *)(const void *)t + sizeof(GCtab));
+#else
+  UNUSED(t); UNUSED(array);
+  return 0;
+#endif
+}
+
+static LJ_AINLINE MSize lj_tab_array_hdr_asize_acq(const TValue *array)
+{
+  return (MSize)la_load32_acq(&lj_tab_array_hdr(array)->asize);
+}
+
+static LJ_AINLINE MSize lj_tab_array_hdr_acap_acq(const TValue *array)
+{
+  return (MSize)la_load32_acq(&lj_tab_array_hdr(array)->acap) &
+	 TABARRAY_ACAP_MASK;
+}
+
+static LJ_AINLINE MSize lj_tab_array_hdr_flags_acq(const TValue *array)
+{
+  return (MSize)la_load32_acq(&lj_tab_array_hdr(array)->acap) &
+	 TABARRAY_FLAGS_MASK;
+}
+
+static LJ_AINLINE TValue *lj_tab_array_nextgen_acq(const TValue *array)
+{
+  return (TValue *)(void *)(uintptr_t)
+    la_load64_acq(&lj_tab_array_hdr(array)->next_gen.ptr64);
+}
+
+static LJ_AINLINE int lj_tab_array_nextgen_cas(TValue *array,
+					       const TValue **oldp,
+					       const TValue *next)
+{
+  uint64_t old = (uint64_t)(uintptr_t)(const void *)*oldp;
+  int ok = la_cas64(&lj_tab_array_hdrw(array)->next_gen.ptr64, &old,
+		    (uint64_t)(uintptr_t)(const void *)next,
+		    LA_ACQ_REL, LA_ACQ);
+  *oldp = (const TValue *)(const void *)(uintptr_t)old;
+  return ok;
+}
+
+static LJ_AINLINE void lj_tab_array_nextgen_rel(TValue *array,
+						const TValue *next)
+{
+  la_store64_rel(&lj_tab_array_hdrw(array)->next_gen.ptr64,
+		 (uint64_t)(uintptr_t)(const void *)next);
+}
+
+static LJ_AINLINE int lj_tab_array_is_retiring(const GCtab *t,
+					       const TValue *array)
+{
+  return array && !lj_tab_array_is_colocated(t, array) &&
+	 ((lj_tab_array_hdr_flags_acq(array) & TABARRAY_FLAG_RETIRING) != 0);
+}
+
+static LJ_AINLINE void lj_tab_array_hdr_flags_or_rel(TValue *array,
+						     MSize flags)
+{
+  uint32_t *word = &lj_tab_array_hdrw(array)->acap;
+  uint32_t old = la_load32_acq(word);
+  uint32_t want;
+  flags &= TABARRAY_FLAGS_MASK;
+  /* 06 section 6.3.2: publish generation state before replacement. */
+  do {
+    want = old | (uint32_t)flags;
+  } while (old != want && !la_cas32(word, &old, want, LA_ACQ_REL, LA_ACQ));
+}
+
+static LJ_AINLINE int lj_tab_array_hdr_flags_try_or_rel(TValue *array,
+							MSize flags)
+{
+  uint32_t *word = &lj_tab_array_hdrw(array)->acap;
+  uint32_t old = la_load32_acq(word);
+  uint32_t want;
+  flags &= TABARRAY_FLAGS_MASK;
+  do {
+    if (old & (uint32_t)flags)
+      return 0;
+    want = old | (uint32_t)flags;
+  } while (!la_cas32(word, &old, want, LA_ACQ_REL, LA_ACQ));
+  return 1;
+}
+
+static LJ_AINLINE MSize lj_tab_array_snapshot_acq(const GCtab *t,
+						  TValue **arrayp)
+{
+  MSize asize;
+  TValue *array;
+retry_snapshot:
+  asize = lj_tab_asize_acq(t);
+  array = lj_tab_array_acq(t);
+  if (lj_tab_array_is_retiring(t, array)) {
+    lj_tab_wait_no_l();
+    goto retry_snapshot;
+  }
+  if (array && !lj_tab_array_is_colocated(t, array))
+    asize = lj_tab_array_hdr_asize_acq(array);
+  *arrayp = array;
+  return asize;
+}
+
+static LJ_AINLINE void *lj_tab_array_mem_acq(const GCtab *t)
+{
+  TValue *array;
+  (void)lj_tab_array_snapshot_acq(t, &array);
+  if (array && !lj_tab_array_is_colocated(t, array))
+    return (void *)lj_tab_array_hdrw(array);
+  return (void *)array;
+}
+
+static LJ_AINLINE MSize lj_tab_array_separated_snapshot_acq(const GCtab *t,
+							    TValue **arrayp)
+{
+  TValue *array;
+retry_snapshot:
+  array = lj_tab_array_acq(t);
+  if (lj_tab_array_is_retiring(t, array)) {
+    lj_tab_wait_no_l();
+    goto retry_snapshot;
+  }
+  *arrayp = array;
+  if (array && !lj_tab_array_is_colocated(t, array))
+    return lj_tab_array_hdr_acap_acq(array);
+  return 0;
+}
+
+static LJ_AINLINE MSize lj_tab_array_separated_acap_acq(const GCtab *t)
+{
+  TValue *array;
+  return lj_tab_array_separated_snapshot_acq(t, &array);
+}
+
+static LJ_AINLINE Node *lj_tab_node_acq(const GCtab *t)
+{
+  return (Node *)(void *)(uintptr_t)la_load64_acq(&t->node.ptr64);
+}
+
+static LJ_AINLINE void lj_tab_node_set(GCtab *t, const Node *node)
+{
+  setmref(t->node, node);
+}
+
+static LJ_AINLINE void lj_tab_node_rel(GCtab *t, const Node *node)
+{
+  la_store64_rel(&t->node.ptr64, (uint64_t)(uintptr_t)(const void *)node);
+}
+
+static LJ_AINLINE const TabNodeHdr *lj_tab_node_hdr(const Node *node)
+{
+  return (const TabNodeHdr *)(const void *)
+    ((const char *)(const void *)node - sizeof(TabNodeHdr));
+}
+
+static LJ_AINLINE TabNodeHdr *lj_tab_node_hdrw(Node *node)
+{
+  return (TabNodeHdr *)(void *)((char *)(void *)node - sizeof(TabNodeHdr));
+}
+
+static LJ_AINLINE GCSize lj_tab_node_bytes(MSize hmask)
+{
+  return (GCSize)sizeof(TabNodeHdr) +
+	 (GCSize)(hmask + 1u) * (GCSize)sizeof(Node);
+}
+
+static LJ_AINLINE MSize lj_tab_node_hmask_acq(const Node *node)
+{
+  return (MSize)la_load32_acq(&lj_tab_node_hdr(node)->hmask);
+}
+
+static LJ_AINLINE int lj_tab_hmask_value_valid(MSize hmask)
+{
+  MSize hsize;
+  if (hmask > (((MSize)1u << LJ_MAX_HBITS) - 1u))
+    return 0;
+  hsize = hmask + 1u;
+  return (hsize & hmask) == 0;
+}
+
+static LJ_AINLINE void lj_tab_node_hmask_set(Node *node, MSize hmask)
+{
+  lj_tab_node_hdrw(node)->hmask = hmask;
+}
+
+static LJ_AINLINE MSize lj_tab_node_hdr_flags_acq(const Node *node)
+{
+  return (MSize)la_load32_acq(&lj_tab_node_hdr(node)->flags) &
+	 TABNODE_FLAGS_MASK;
+}
+
+static LJ_AINLINE uint32_t lj_tab_node_hdr_flags_word_acq(const Node *node)
+{
+  return la_load32_acq(&lj_tab_node_hdr(node)->flags);
+}
+
+static LJ_AINLINE int lj_tab_node_hdr_flags_word_cas(Node *node,
+						     uint32_t *oldp,
+						     uint32_t want)
+{
+  return la_cas32(&lj_tab_node_hdrw(node)->flags, oldp, want,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE MSize lj_tab_node_freecount_acq(const Node *node)
+{
+  return (MSize)la_load32_acq(&lj_tab_node_hdr(node)->flags) &
+	 TABNODE_FREECOUNT_MASK;
+}
+
+static LJ_AINLINE void lj_tab_node_freecount_set_rel(Node *node,
+						     MSize freecount)
+{
+  uint32_t *word = &lj_tab_node_hdrw(node)->flags;
+  uint32_t old = la_load32_acq(word);
+  uint32_t want;
+  freecount &= TABNODE_FREECOUNT_MASK;
+  /* 06 section 6.3.4: keep freecount atomic with generation flags. */
+  do {
+    want = (old & (uint32_t)TABNODE_FLAGS_MASK) | (uint32_t)freecount;
+  } while (old != want && !la_cas32(word, &old, want, LA_ACQ_REL, LA_ACQ));
+}
+
+static LJ_AINLINE int lj_tab_node_free_reserve(Node *node)
+{
+  uint32_t *word = &lj_tab_node_hdrw(node)->flags;
+  uint32_t old = la_load32_acq(word);
+  for (;;) {
+    uint32_t count = old & (uint32_t)TABNODE_FREECOUNT_MASK;
+    if (old & (uint32_t)TABNODE_FLAG_RETIRING)
+      return -1;
+    if (count == 0)
+      return 0;
+    if (la_cas32(word, &old, (old & (uint32_t)TABNODE_FLAGS_MASK) |
+		 (count - 1u), LA_ACQ_REL, LA_ACQ))
+      return 1;
+  }
+}
+
+static LJ_AINLINE void lj_tab_node_free_release(Node *node)
+{
+  uint32_t *word = &lj_tab_node_hdrw(node)->flags;
+  uint32_t old = la_load32_acq(word);
+  uint32_t want;
+  /* 06 section 6.3.4: return an abandoned key-claim reservation. */
+  do {
+    uint32_t count = old & (uint32_t)TABNODE_FREECOUNT_MASK;
+    want = (old & (uint32_t)TABNODE_FLAGS_MASK) |
+	   ((count + 1u) & (uint32_t)TABNODE_FREECOUNT_MASK);
+  } while (!la_cas32(word, &old, want, LA_ACQ_REL, LA_ACQ));
+}
+
+static LJ_AINLINE Node *lj_tab_node_nextgen_acq(const Node *node)
+{
+  return (Node *)(void *)(uintptr_t)
+    la_load64_acq(&lj_tab_node_hdr(node)->next_gen.ptr64);
+}
+
+static LJ_AINLINE int lj_tab_node_nextgen_cas(Node *node, const Node **oldp,
+					      const Node *next)
+{
+  uint64_t old = (uint64_t)(uintptr_t)(const void *)*oldp;
+  int ok = la_cas64(&lj_tab_node_hdrw(node)->next_gen.ptr64, &old,
+		    (uint64_t)(uintptr_t)(const void *)next,
+		    LA_ACQ_REL, LA_ACQ);
+  *oldp = (const Node *)(const void *)(uintptr_t)old;
+  return ok;
+}
+
+static LJ_AINLINE void lj_tab_node_nextgen_rel(Node *node, const Node *next)
+{
+  la_store64_rel(&lj_tab_node_hdrw(node)->next_gen.ptr64,
+		 (uint64_t)(uintptr_t)(const void *)next);
+}
+
+static LJ_AINLINE int lj_tab_node_is_retiring(const Node *node)
+{
+  return (lj_tab_node_hdr_flags_acq(node) & TABNODE_FLAG_RETIRING) != 0;
+}
+
+static LJ_AINLINE void lj_tab_node_hdr_flags_or_rel(Node *node, MSize flags)
+{
+  uint32_t *word = &lj_tab_node_hdrw(node)->flags;
+  uint32_t old = la_load32_acq(word);
+  uint32_t want;
+  flags &= TABNODE_FLAGS_MASK;
+  /* 06 section 6.3.4: publish generation state before replacement. */
+  do {
+    want = old | (uint32_t)flags;
+  } while (old != want && !la_cas32(word, &old, want, LA_ACQ_REL, LA_ACQ));
+}
+
+static LJ_AINLINE int lj_tab_node_hdr_flags_try_or_rel(Node *node, MSize flags)
+{
+  uint32_t *word = &lj_tab_node_hdrw(node)->flags;
+  uint32_t old = la_load32_acq(word);
+  uint32_t want;
+  flags &= TABNODE_FLAGS_MASK;
+  do {
+    if (old & (uint32_t)flags)
+      return 0;
+    want = old | (uint32_t)flags;
+  } while (!la_cas32(word, &old, want, LA_ACQ_REL, LA_ACQ));
+  return 1;
+}
+
+static LJ_AINLINE Node *lj_tab_node_snapshot_acq(const GCtab *t,
+						 MSize *hmaskp)
+{
+  Node *node;
+  MSize hmask, thmask;
+  uint32_t retries = 0;
+retry_snapshot:
+  node = lj_tab_node_acq(t);
+  hmask = lj_tab_node_hmask_acq(node);
+  if (LJ_UNLIKELY(!lj_tab_hmask_value_valid(hmask))) {
+    if (++retries < 4) {
+      lj_tab_wait_no_l();
+      goto retry_snapshot;
+    }
+    hmask = 0;
+  }
+  if (lj_tab_node_is_retiring(node)) {
+    Node *next = lj_tab_node_nextgen_acq(node);
+    if (next && next != node) {
+      node = next;
+      hmask = lj_tab_node_hmask_acq(node);
+      if (LJ_UNLIKELY(!lj_tab_hmask_value_valid(hmask))) {
+	if (++retries < 4) {
+	  lj_tab_wait_no_l();
+	  goto retry_snapshot;
+	}
+	hmask = 0;
+      }
+      if (!lj_tab_node_is_retiring(node))
+	goto snapshot_done;
+    }
+    lj_tab_wait_no_l();
+    goto retry_snapshot;
+  }
+  thmask = (MSize)la_load32_acq(&t->hmask);
+  if (LJ_UNLIKELY(hmask != thmask && lj_tab_hmask_value_valid(thmask) &&
+		  ++retries < 4)) {
+    lj_tab_wait_no_l();
+    goto retry_snapshot;
+  }
+snapshot_done:
+  {
+    Node *root = lj_tab_node_acq(t);
+    if (LJ_UNLIKELY(node != root)) {
+      if (++retries < 4) {
+	lj_tab_wait_no_l();
+	goto retry_snapshot;
+      }
+      /* Bounded fallback stays on a published generation. */
+      node = root;
+      hmask = lj_tab_node_hmask_acq(node);
+    }
+  }
+  *hmaskp = hmask;
+  return node;
+}
+
+static LJ_AINLINE MSize lj_tab_hmask_acq(const GCtab *t)
+{
+  return (MSize)la_load32_acq(&t->hmask);
+}
+
+static LJ_AINLINE void lj_tab_hmask_rel(GCtab *t, MSize hmask)
+{
+  la_store32_rel(&t->hmask, (uint32_t)hmask);
+}
+
+/*
+** Node.next is a shared publication edge once hash nodes can be observed by
+** another TG. Table walkers that can race with resize/forwarding must acquire
+** through this helper so a published chain link also exposes the initialized
+** target node.
+*/
+static LJ_AINLINE Node *lj_tab_nextnode_acq(const Node *n)
+{
+  return (Node *)(void *)(uintptr_t)la_load64_acq(&n->next.ptr64);
+}
+
+static LJ_AINLINE void lj_tab_nextnode_set(Node *n, const Node *next)
+{
+  setmref(n->next, next);
+}
+
+static LJ_AINLINE void lj_tab_nextnode_rel(Node *n, const Node *next)
+{
+  la_store64_rel(&n->next.ptr64, (uint64_t)(uintptr_t)(const void *)next);
+}
+/*
+** GC64 keeps the hash free cursor in the table header, not in Node[0]. The
+** cursor is only a hint, but it crosses the same resize/publication boundary
+** as the node vector, so name the acquire/release edge instead of open-coding
+** the MRef access at each table mutation site.
+*/
+static LJ_AINLINE Node *lj_tab_freetop_acq(const GCtab *t)
+{
+  return (Node *)(void *)(uintptr_t)la_load64_acq(&t->freetop.ptr64);
+}
+
+static LJ_AINLINE void lj_tab_freetop_rel(GCtab *t, const Node *freetop)
+{
+  la_store64_rel(&t->freetop.ptr64,
+		 (uint64_t)(uintptr_t)(const void *)freetop);
+}
+
+#define getfreetop(t, n)	(lj_tab_freetop_acq((t)))
+#define setfreetop(t, n, v)	(lj_tab_freetop_rel((t), (v)))
+
+/* -- State objects ------------------------------------------------------- */
+
+/* VM states. */
+enum {
+  LJ_VMST_INTERP,	/* Interpreter. */
+  LJ_VMST_C,		/* C function. */
+  LJ_VMST_GC,		/* Garbage collector. */
+  LJ_VMST_EXIT,		/* Trace exit handler. */
+  LJ_VMST_RECORD,	/* Trace recorder. */
+  LJ_VMST_OPT,		/* Optimizer. */
+  LJ_VMST_ASM,		/* Assembler. */
+  LJ_VMST__MAX
+};
+
+/* Metamethods. ORDER MM */
+#ifdef LJ_HASFFI
+#define MMDEF_FFI(_) _(new)
+#else
+#define MMDEF_FFI(_)
+#endif
+
+#if LJ_52 || LJ_HASFFI
+#define MMDEF_PAIRS(_) _(pairs) _(ipairs)
+#else
+#define MMDEF_PAIRS(_)
+#define MM_pairs	255
+#define MM_ipairs	255
+#endif
+
+#define MMDEF(_) \
+  _(index) _(newindex) _(gc) _(mode) _(eq) _(len) \
+  /* Only the above (fast) metamethods are negative cached (max. 8). */ \
+  _(lt) _(le) _(concat) _(call) \
+  /* The following must be in ORDER ARITH. */ \
+  _(add) _(sub) _(mul) _(div) _(mod) _(pow) _(unm) \
+  /* The following are used in the standard libraries. */ \
+  _(metatable) _(tostring) MMDEF_FFI(_) MMDEF_PAIRS(_)
+
+typedef enum {
+#define MMENUM(name)	MM_##name,
+MMDEF(MMENUM)
+#undef MMENUM
+  MM__MAX,
+  MM____ = MM__MAX,
+  MM_FAST = MM_len
+} MMS;
+
+/* GC root IDs. */
+typedef enum {
+  GCROOT_MMNAME,	/* Metamethod names. */
+  GCROOT_MMNAME_LAST = GCROOT_MMNAME + MM__MAX-1,
+  GCROOT_BASEMT,	/* Metatables for base types. */
+  GCROOT_BASEMT_NUM = GCROOT_BASEMT + ~LJ_TNUMX,
+  GCROOT_IO_INPUT,	/* Userdata for default I/O input file. */
+  GCROOT_IO_OUTPUT,	/* Userdata for default I/O output file. */
+  GCROOT_THREADING_ENV,	/* threading.* private function environment. */
+  GCROOT_THREADING_THREAD_MT,  /* threading.thread userdata method table. */
+  GCROOT_THREADING_MUTEX_MT,  /* threading.mutex userdata method table. */
+  GCROOT_THREADING_CHANNEL_MT,  /* threading.channel userdata method table. */
+  GCROOT_MAX
+} GCRootID;
+
+#define basemt_it(g, it)	(*lj_gcroot_ref((g), GCROOT_BASEMT+~(it)))
+#define basemt_obj(g, o)	(*lj_gcroot_ref((g), GCROOT_BASEMT+itypemap(o)))
+#define mmname_str(g, mm)	lj_mmname_str_acq((g), (mm))
+
+/* Garbage collector state. */
+typedef struct GCState {
+  GCSize total;		/* Memory currently allocated. */
+  GCSize threshold;	/* Memory threshold. */
+  uint8_t currentwhite;	/* Current white color. */
+  uint8_t state;	/* GC state. */
+  uint8_t unused0;
+#if LJ_64
+  uint8_t lightudnum;	/* Number of lightuserdata segments - 1. */
+#else
+  uint8_t unused1;
+#endif
+  MSize sweepstr;	/* Sweep position in string table. */
+  GCRef root;		/* List of all collectable objects. */
+  MRef sweep;		/* Sweep position in root list. */
+  GCRef gray;		/* List of gray objects. */
+  GCRef grayagain;	/* List of objects for atomic traversal. */
+  GCRef weak;		/* List of weak tables (to be cleared). */
+  GCSize debt;		/* Debt (how much GC is behind schedule). */
+  GCSize estimate;	/* Estimate of memory actually in use. */
+  MSize stepmul;	/* Incremental GC step granularity. */
+  MSize pause;		/* Pause between successive GC cycles. */
+#if LJ_64
+  MRef lightudseg;	/* Upper bits of lightuserdata segments. */
+#endif
+} GCState;
+
+/* String interning state. */
+typedef struct StrInternState {
+  StrTabHdr *tabh;	/* String hash table header and anchors. */
+  StrTabHdr *retired;	/* Retired table headers kept until state close. */
+  StrCanonHdr *qtabh;	/* Secondary canonical quarantine header. */
+  StrCanonHdr *qretired;	/* Retired quarantine headers awaiting SMR. */
+  StrBodyRetire *retired_body;  /* Unlinked bodies awaiting SMR grace. */
+  StrBodyRetire *sweep_pending;  /* Pre-CAS unlink ownership record. */
+  StrRetireBatch *retired_batch;  /* Sealed sole-mutator body batches. */
+  StrRetireBatch *sweep_batch;  /* Published current sole-mutator batch. */
+  StrTabHdr *sweep_hdr;	/* Header owned by the bounded GC2 string sweep. */
+  GCRef *sweep_link;	/* Exact incoming-edge cursor in sweep_hdr. */
+  uint64_t sweep_grace_epoch;  /* Epoch at the current string grace edge. */
+  uint64_t sweep_tagged;	/* Successfully tagged incoming edges. */
+  uint64_t sweep_rescued;	/* Tagged exact matches preserved by interners. */
+  uint64_t sweep_unlinked;	/* Successfully retired string bodies. */
+  uint64_t sweep_reclaimed;	/* Physically reclaimed string bodies. */
+  MSize mask;		/* Mirror of tabh->mask for existing fast paths. */
+  MSize num;		/* Number of strings in hash table. */
+  MSize qmask;		/* Mirror of qtabh->mask for diagnostics/growth. */
+  MSize qcount;	/* Saturating authoritative Q count; zero is exact. */
+  MSize sweep_bucket;	/* Bucket containing sweep_link. */
+  uint32_t sweep_phase;	/* LJ_STR_SWEEP_* bounded subphase. */
+  uint32_t sweep_cycle;	/* GC2 cycle which owns sweep_hdr. */
+  uint32_t sweep_batch_pending;  /* Batch slot spans the exact unlink CAS. */
+  uint32_t reclaim_requested;  /* Explicit lua_gc(LUA_GCCOLLECT) request. */
+  uint32_t reclaim_exclusive;  /* Nonwaiting sole-mutator admission gate. */
+  StrID id;		/* Next string ID. */
+  uint8_t idreseed;	/* String ID reseed counter. */
+  uint8_t second;	/* String interning table uses secondary hashing. */
+  uint8_t unused1;
+  uint8_t unused2;
+  LJ_ALIGN(8) uint64_t seed;	/* Random string seed. */
+} StrInternState;
+
+typedef struct TabState {
+  TabNodeRetire *retired_nodes;  /* Retired hash vectors awaiting SMR. */
+  TabArrayRetire *retired_arrays;  /* Retired array vectors awaiting SMR. */
+} TabState;
+
+/*
+** Resize descriptors are cold structural state. Keep them out of TabState so
+** adding the registry does not shift established global_State/VM offsets.
+*/
+typedef struct TabResizeState {
+  TabResizeDesc *resize_descs;  /* Active/recent persistent resize identities. */
+  uint64_t resize_next_id;  /* Monotonic marker id; zero is never issued. */
+} TabResizeState;
+
+#define LJ_GC2_HS_LATENCY_BUCKETS 48
+#define LJ_GC2_WORKER_MAX 2
+#define LJ_GC2_GREY_EMBEDDED 256u
+
+/* Global registry/reclaimer mode. Ordinary SMR readers require OPEN. A
+** SWEEP_STABLE owner does not change TG/HugeTab topology and permits the
+** narrower counted Huge registry admission. */
+#define LJ_GC2_SMR_OPEN			0u
+#define LJ_GC2_SMR_META_EXCLUSIVE	1u
+#define LJ_GC2_SMR_SWEEP_STABLE		2u
+
+typedef struct TGState TGState;
+typedef struct LJThreadLive LJThreadLive;
+typedef struct GC2SSBNode GC2SSBNode;
+typedef struct GC2WeakOverflow GC2WeakOverflow;
+typedef struct GC2State {
+  uint32_t phase;	/* LJ_GC2_*; authoritative scaffold phase. */
+  uint32_t jit_phase_gate;  /* Native trace entry admitted by GC2. */
+  uint32_t cycle;	/* Monotonically increasing color-GC cycle id. */
+  uint64_t thread_scan_cycle;  /* Nonzero 64-bit thread-snapshot generation. */
+  LJ_ALIGN(16) LJGC2Activation activation;  /* Veto-only typed phase mirror. */
+  uint32_t cycle_leader;  /* Request tid or exact GCSCAN phase-edge gate. */
+  uint64_t hs_epoch;	/* Soft-handshake generation. */
+  uint32_t hs_pending;	/* Outstanding handshake acknowledgements. */
+  uint32_t hs_actions;	/* Current LJ_GC2_HS_* action bits. */
+  uint32_t hs_leader;	/* Serializes safepoint handshake leaders. */
+  uint64_t hs_signal_ns;  /* Current handshake publication timestamp. */
+  uint64_t hs_ack_latency_samples;  /* Safepoint ack latency samples. */
+  uint64_t hs_ack_latency_sum_ns;  /* Total safepoint ack latency. */
+  uint64_t hs_ack_latency_max_ns;  /* Max safepoint ack latency. */
+  uint64_t hs_ack_latency_buckets[LJ_GC2_HS_LATENCY_BUCKETS];
+  uint64_t smr_reclaim_runs;  /* Retired-object epoch drains with work. */
+  uint64_t smr_reclaimed;  /* Retired objects freed after a grace period. */
+  uint32_t smr_readers;  /* Retired-list root scans currently active. */
+  uint32_t smr_reclaiming;  /* One LJ_GC2_SMR_* registry/reclaimer mode. */
+  uint64_t cycle_requests;  /* Allocation-triggered cycle requests. */
+  uint64_t cycle_starts;  /* Requested cycles consumed at mark begin. */
+  uint64_t major_cycle_starts;  /* Actual major GC2 mark begins. */
+  uint64_t minor_cycle_requests;  /* Generational minor requests seen. */
+  uint64_t minor_cycle_starts;  /* Actual fully-minor GC2 mark begins. */
+  uint32_t cycle_minor_requested;  /* Current cycle requested minor mode. */
+  uint32_t cycle_sweep_minor;  /* Current cycle uses minor sweep identity. */
+  uint32_t minor_sweep_enabled;  /* Public gate for minor sweep identity. */
+  uint32_t cycle_roots_minor;  /* Current cycle may use minor root set. */
+  uint32_t minor_roots_enabled;  /* Public gate for minor root selection. */
+  uint64_t minor_sweep_deferred;  /* Minor requests kept on major sweep. */
+  uint64_t minor_sweep_arenas;  /* Arenas swept with minor identity. */
+  uint64_t minor_roots_deferred;  /* Minor requests kept on full roots. */
+  uint64_t major_root_scans;  /* Full/global root scans selected. */
+  uint64_t minor_root_scans;  /* Minor root scans selected. */
+  uint64_t pending_root_flushes;  /* Pending-root drains with work. */
+  uint64_t pending_root_flushed;  /* Objects moved from pending-root stacks. */
+  uint64_t pending_root_flush_max;  /* Largest pending-root drain batch. */
+  uint64_t minor_survival_base_live;  /* Previous live estimate for survival. */
+  uint64_t minor_survival_bytes;  /* Last estimated young bytes kept by minor. */
+  uint32_t minor_survival_pct;  /* Last minor survival percentage. */
+  uint32_t minor_survival_threshold_pct;  /* Survival pct forcing a major. */
+  uint64_t minor_survival_major_requests;  /* High-survival major requests. */
+  uint32_t force_major;  /* One-shot full-GC major-cycle override. */
+  uint64_t remembered_barriers;  /* Idle generational barriers observed. */
+  uint64_t remembered_pushed;  /* Idle remembered entries queued. */
+  uint64_t remembered_overflows;  /* Remembered SSB overflows forcing major. */
+	  uint64_t remembered_filtered;  /* Remembered pairs rejected by age filter. */
+	  uint64_t remembered_drained;  /* Remembered entries consumed by minor starts. */
+	  uint64_t marks_this_round;  /* New arena/HugeTab marks this round. */
+	  uint32_t mark_root_scanned;  /* MARK close owner/global snapshot state. */
+	  uint32_t jit_mark_resume;  /* Cycle authorized for cooperative MARK entry. */
+	  uint32_t jit_mark_auto_yield;  /* Bounded pre-dispatch attempts per cycle. */
+	  uint64_t jit_mark_yield_until_ns;  /* Bounded MARK mutator lease. */
+	  uint32_t jit_sweep_displaced;  /* Closed gate displaced native execution. */
+	  uint64_t jit_sweep_yield_until_ns;  /* Bounded mutator turn after quiesce. */
+	  void *small_arena_tab;  /* Shared directory for mapped small arenas. */
+	  GC2SSBNode *ssb_head;	/* Published mutator SSB buffers. */
+  GC2SSBNode *ssb_drain;  /* Worker-private detached remainder. */
+  uint32_t ssb_consumer_active;  /* Consumers with a locally detached chain. */
+  uint32_t ssb_published;  /* Published SSB node count. */
+  uint32_t ssb_drained;	/* Drained/recycled SSB node count. */
+  uint64_t ssb_items_published;  /* Published SSB entries. */
+  uint64_t ssb_items_drained;  /* Drained/recycled SSB entries. */
+  uint64_t recovery_items;  /* Exact durable queue-overflow identities. */
+  uint64_t recovery_huge_items;  /* Exact identities in HugeTab lanes. */
+  uint64_t recovery_published;  /* New allocation-free recovery identities. */
+  uint64_t recovery_redirtied;  /* Publications racing claimed recovery work. */
+  uint64_t recovery_drained;  /* Recovery identities fully traversed. */
+  uint32_t recovery_main_state;  /* Exact embedded main-thread recovery. */
+  uint32_t recovery_failed;  /* Sticky semantic no-drop fail-closed veto. */
+  uint32_t recovery_scan_lane;  /* Packed worker-owned lane/quantum cursor. */
+  uint32_t recovery_small_slot;  /* Worker-owned small-registry resume slot. */
+  uint32_t recovery_small_cell;  /* Worker-owned in-arena resume cell. */
+  uint32_t recovery_huge_slot;  /* Worker-owned HugeTab resume slot. */
+  uint64_t fixpoint_rounds;  /* Bounded mark fixpoint round attempts. */
+  uint64_t fixpoint_hits;  /* Rounds ending at zero-mark empty work. */
+  uint64_t mark_complete_runs;  /* Final mark completion attempts. */
+  uint64_t mark_complete_hits;  /* Final mark completion reached fixpoint. */
+  uint64_t mark_complete_peer_waits;  /* Waits for active peer mark drains. */
+  uint64_t mark_to_weak;  /* MARK-to-WEAK phase publications. */
+  uint64_t weak_complete_runs;  /* P_WEAK completion attempts. */
+  uint64_t weak_complete_progress;  /* Worker progress during P_WEAK finish. */
+  uint64_t weak_to_sweep;  /* WEAK-to-SWEEP phase publications. */
+  uint32_t sweep_bridge_ready;  /* Root sweep reached close boundary. */
+  uint32_t sweep_root_scanned;  /* Mandatory SWEEP owner/global snapshot done. */
+  GCRef *sweep_root_cursor;  /* Bounded old-generation root-prune link. */
+  uint32_t sweep_root_done;  /* Final pending-root flush reached EOF. */
+  uint32_t sweep_grace_needed;  /* Quarantine awaits another HS epoch. */
+  uint64_t sweep_to_idle;  /* SWEEP-to-IDLE phase publications. */
+  uint64_t preserve_abort_to_idle;  /* Preserve aborts leaving an active phase. */
+  uint64_t alloc_total_bytes;  /* Monotonic flushed mutator allocation bytes. */
+  uint64_t alloc_since_trigger;  /* Flushed mutator allocation bytes. */
+  uint64_t cycle_alloc_bytes;  /* Flushed allocation bytes at cycle start. */
+  uint64_t trigger_bytes;  /* Allocation bytes before next GC2 trigger. */
+  uint64_t hard_bytes;	/* Allocation bytes before mutator assists. */
+  uint64_t hard_check_bytes;  /* Next trace-side hard assist check. */
+  uint64_t helper_soft_limit;  /* Next helper-side idle totalbytes GC step. */
+  uint64_t assist_runs;  /* Mutator assist attempts past hard limit. */
+  uint64_t assist_grey_drained;  /* Grey objects traced by assists. */
+  uint64_t assist_ssb_converted;  /* SSB entries converted by assists. */
+  uint64_t assist_weak_drained;  /* Weak tables clear-scanned by assists. */
+  uint64_t jit_hard_checks;  /* Trace GC checks entered past hard limit. */
+  uint64_t interp_hard_checks;  /* Interpreter GC checks past hard limit. */
+  uint64_t jit_scoped_slots_retired;  /* Scoped flush trace slots retired. */
+  void *clib_cache_retired;  /* Unloaded FFI CLibrary cache entries. */
+  void *clib_handle_retired;  /* Handles retained through trace teardown. */
+  uint32_t gcpause_pct;	/* GC2 pacing percentage. */
+  uint32_t assist_shift;  /* Bounded assist work is 1 << shift. */
+  uint32_t assist_active;  /* Nonblocking owner token for mark assists. */
+  uint32_t generational;  /* M10: requested generational mode. */
+  GCRef *grey_stack;	/* GC2 grey work deque ring. */
+  MSize grey_capacity;	/* Allocated grey deque slots. */
+  uint32_t sweep_owner_next_tid;  /* Worker-owned sweep scheduling hint. */
+  uint64_t grey_top;	/* Chase-Lev steal-side index. */
+  uint64_t grey_bottom;	/* Chase-Lev owner-side index. */
+  uint64_t grey_pushed;	/* Grey entries scheduled from SSB/traversal. */
+  uint64_t grey_drained;  /* Grey entries popped for traversal. */
+  GCRef grey_embedded[LJ_GC2_GREY_EMBEDDED];  /* Allocation-free base ring. */
+  void *worker_thread[LJ_GC2_WORKER_MAX];  /* Opaque LJThr* parked workers. */
+  void *worker_tg[LJ_GC2_WORKER_MAX];  /* Opaque TGState* parked workers. */
+  void *worker_tg_retired;  /* Dead worker TGs awaiting registry unlink. */
+  uint32_t n_workers;	/* Parked GC workers started for this state. */
+  uint32_t worker_control;  /* Serializes parked worker lifecycle changes. */
+  uint32_t worker_stop;  /* Request parked worker shutdown. */
+  uint32_t worker_wake;  /* Futex word for worker wakeups. */
+  uint32_t worker_started;  /* Workers that have entered their loops. */
+  uint32_t worker_exited;  /* Workers that have left their loops. */
+  uint32_t worker_active;  /* Single sweep/worker/close owner token. */
+  uint32_t mark_close_intent;  /* Fair MARK fixpoint/transition contender. */
+  uint64_t worker_runs;  /* Non-owner worker drain attempts with work. */
+  uint64_t worker_grey_drained;  /* Grey objects traced by workers. */
+  uint64_t worker_ssb_converted;  /* SSB entries converted by workers. */
+  uint64_t worker_weak_drained;  /* Weak tables clear-scanned by workers. */
+  uint64_t worker_idle_declares;  /* Owned worker passes with no progress. */
+  uint64_t worker_busy_retries;  /* Worker attempts that found active owner. */
+  uint64_t worker_wakes;  /* Parked worker wake publications. */
+  uint64_t worker_parks;  /* Parked worker sleeps after no progress. */
+  uint64_t worker_async_progress;  /* Work completed by parked workers. */
+  uint64_t deferred_epoch;  /* Durable retry quanta which must yield/back off. */
+  uint64_t tg_thread_roots;  /* Live TG thread_L roots marked by GC2. */
+  uint64_t tg_cur_roots;  /* Live TG cur_L roots marked by GC2. */
+  uint64_t tg_trace_roots;  /* Live TG executing traces marked by GC2. */
+  uint64_t thread_scan_claims;  /* Suspended thread stacks claimed by GC2. */
+  uint64_t thread_scan_busy;  /* Thread stacks deferred to running owners. */
+  uint64_t thread_scan_requeues;  /* Busy suspended threads kept grey. */
+  uint64_t thread_scan_owner_scans;  /* Busy stacks covered by owner scans. */
+  uint64_t thread_scan_needscan;  /* Busy stacks handed to owning TG scan. */
+  uint64_t thread_scan_owner_needscans;  /* Pending owned stacks scanned. */
+  LJ_ALIGN(16) LJGC2TableDesc table_rescan_desc;  /* Dormant helpable handoff. */
+  LJ_ALIGN(16) LJGC2TableTopology table_token_topology;  /* Completed membership changes. */
+  uint64_t table_token_scan_requested;  /* Sticky dormant exact-generation hint. */
+  uint32_t table_token_small_slot;  /* Small-registry resume slot. */
+  uint32_t table_token_small_cell;  /* Small-sidecar resume cell. */
+  LJTGRegistrySlot *table_token_huge_node;  /* Stable TG-slot resume identity. */
+  uint64_t table_token_huge_incarnation;  /* Exact TG incarnation at cursor. */
+  uint32_t table_token_huge_slot;  /* Physical HugeTab resume slot. */
+  uint32_t table_token_huge_pad;  /* Keep following counters naturally aligned. */
+  uint64_t table_token_scan_visited;  /* Side identities inspected. */
+  uint64_t table_token_scan_completed;  /* Exact PENDING -> NONE wins. */
+  uint64_t table_token_scan_terminal;  /* Payload-free FREE/DEFER cancels. */
+  uint64_t table_token_scan_transient;  /* Retryable admission/snapshot losses. */
+  uint64_t table_token_scan_structural;  /* Fail-closed malformed identities. */
+  uint64_t table_token_scan_smr_skips;  /* Full-SMR admission unavailable. */
+  uint64_t table_token_scan_payloads;  /* Admitted payload traversals entered. */
+  uint64_t table_token_pass_epoch;  /* Membership sequence at pass start. */
+  uint64_t table_token_pass_desc;  /* Exact IDLE descriptor generation. */
+  uint64_t table_token_pass_ack_epoch;  /* Membership sequence paired with ack. */
+  uint64_t table_token_pass_ack_desc;  /* Descriptor generation paired with ack. */
+  uint64_t table_token_pass_act_epoch;  /* Activation mark epoch at pass start. */
+  uint64_t table_token_pass_act_control;  /* Packed generation/gate/state. */
+  uint64_t table_token_pass_ack_act_epoch;  /* Activation epoch paired with ack. */
+  uint64_t table_token_pass_ack_act_control;  /* Activation authority paired with ack. */
+  uint64_t table_token_pass_restarts;  /* Invalidated/incomplete full passes. */
+  uint64_t table_token_pass_acks;  /* Exact full-pass certificates published. */
+  uint32_t table_token_pass_cycle;  /* GC cycle retained across bounded turns. */
+  uint32_t table_token_pass_phase;  /* Exact MARK/WEAK/SWEEP phase. */
+  uint32_t table_token_pass_lane;  /* Small then stable-spine Huge lane. */
+  uint32_t table_token_pass_hazard;  /* Transient/structural skip in this pass. */
+  uint32_t table_token_pass_ack_cycle;  /* GC cycle paired with last ack. */
+  uint32_t table_token_pass_ack_phase;  /* GC phase paired with last ack. */
+  uint32_t thread_scan_needscan_pending;  /* Live NEEDSCAN handoffs. */
+  uint32_t table_rescan_pending;  /* Live table NEEDSCAN handoffs. */
+  uint64_t thread_scan_dirty_misses;  /* Same-cycle scans rejected as stale. */
+  uint64_t thread_scan_frame_fallbacks;  /* Invalid frame walks using maxstack. */
+  uint64_t ffi_native_scan_attempts;  /* Certified parked-owner scan calls. */
+  uint64_t ffi_native_scan_stable_frames;  /* Exact frames fully validated. */
+  uint64_t ffi_native_scan_retries;  /* Incomplete/retry scan results. */
+  uint64_t ffi_native_scan_invalid;  /* Malformed certificate/frame failures. */
+  uint64_t sweep_owner_runs;  /* Owner traversable arena sweep batches. */
+  uint64_t sweep_owner_arenas;  /* Traversable arenas swept by owner. */
+  uint64_t sweep_owner_live_cells;  /* Post-sweep live cells observed. */
+  uint64_t sweep_live_updates;  /* Sweep-closure live estimate refreshes. */
+  uint64_t sweep_live_huge_bytes;  /* Marked traversable huge bytes observed. */
+  uint64_t live_estimate;  /* GC2 live bytes from swept traversable memory. */
+  GCRef *weak_stack;	/* GC2-owned weak-table discovery vector. */
+  uint8_t *weak_ready;	/* Published weak discovery slots. */
+  GC2WeakOverflow *weak_overflow;  /* Weak tables past vector capacity. */
+  MSize weak_capacity;	/* Allocated weak discovery slots. */
+  uint32_t weak_drain_active;  /* Cursor-reserved weak clears in flight. */
+  uint32_t weak_write_active;  /* Mutator weak-table stores in flight. */
+  uint32_t weak_mark_closed;  /* WEAK root/SSB/grey closure before clears. */
+  uint32_t weak_root_scanned;  /* Close owns one completed root snapshot. */
+  uint64_t weak_count;	/* Weak discovery slots reserved this cycle. */
+  uint64_t weak_tables_seen;  /* Weak table traversals found by GC2. */
+  uint64_t weak_tables_weakkey;  /* Weak-key table traversals. */
+  uint64_t weak_tables_weakval;  /* Weak-value table traversals. */
+  uint64_t weak_tables_allweak;  /* Weak key+value table traversals. */
+  uint64_t weak_tables_queued;  /* Weak tables stored in GC2 vector. */
+  uint64_t weak_tables_overflow;  /* Weak discoveries beyond vector capacity. */
+  uint64_t weak_scan_cursor;  /* Next weak snapshot table to scan. */
+  uint64_t weak_scan_runs;  /* Weak snapshot scan attempts with work. */
+  uint64_t weak_scan_tables;  /* Weak snapshot tables scanned. */
+  uint64_t weak_scan_slots;  /* Weak snapshot entries inspected. */
+  uint64_t weak_scan_clearable;  /* Entries that match weak clear rules. */
+  uint64_t weak_clear_cursor;  /* Next weak snapshot table to clear. */
+  uint64_t weak_clear_runs;  /* Weak snapshot clear attempts with work. */
+  uint64_t weak_clear_tables;  /* Weak snapshot tables clear-scanned. */
+  uint64_t weak_clear_slots;  /* Weak snapshot clear entries inspected. */
+  uint64_t weak_clear_cleared;  /* Weak entries cleared by GC2. */
+  uint64_t weak_bridge_skipped;  /* Bridge weak fallback skipped after coverage. */
+  uint64_t weak_bridge_fallbacks;  /* Bridge weak fallback executions. */
+  uint64_t weak_bridge_backfills;  /* Bridge weak gaps cleared by GC2 owner. */
+  uint64_t weak_bridge_backfill_tables;  /* Missing bridge weak tables cleared. */
+  uint64_t weak_bridge_backfill_slots;  /* Backfilled weak entries inspected. */
+  uint64_t weak_bridge_backfill_cleared;  /* Backfilled weak entries cleared. */
+  uint64_t finreg_cdata_sets;  /* Cdata finalizer registrations mirrored. */
+  uint64_t finreg_cdata_clears;  /* Cdata finalizer clears mirrored. */
+  uint64_t finreg_cdata_queued;  /* Cdata finalizers queued from FINREG. */
+  uint64_t finreg_cdata_sweep_queued;  /* Cdata sweep/free FINREG tripwire. */
+  uint64_t finreg_cdata_pweak_queued;  /* Cdata queued during P_WEAK. */
+  GCRef *finreg_cdata_preclaim_obj;  /* P_WEAK claimed cdata queue objs. */
+  TValue *finreg_cdata_preclaim_fin;  /* P_WEAK claimed finalizer values. */
+  MSize finreg_cdata_preclaim_capacity;  /* Claimed cdata queue slots. */
+  MSize finreg_cdata_preclaim_head;  /* Next claimed cdata record to drain. */
+  MSize finreg_cdata_preclaim_count;  /* One-past-last claimed record. */
+  uint64_t finreg_cdata_pweak_claimed;  /* Cdata finalizers claimed in P_WEAK. */
+  uint64_t finreg_cdata_preclaim_overflow;  /* Claimed queue full fallbacks. */
+  uint64_t finreg_cdata_preclaim_dispatched;  /* Claimed callbacks consumed. */
+  uint64_t finreg_cdata_order_seen;  /* Ordered FINREG nodes inspected. */
+  uint64_t finreg_cdata_order_claimed;  /* Ordered FINREG slots claimed. */
+  uint64_t finreg_cdata_order_unlinked;  /* Ordered cdata unlinked from root. */
+  uint64_t finreg_cdata_order_queued;  /* Ordered cdata queued from FINREG. */
+  uint64_t finreg_cdata_order_retired;  /* Ordered FINREG nodes retired. */
+  uint64_t finreg_cdata_order_tombstones;  /* Dead ordered FINREG records. */
+  uint64_t finreg_cdata_order_fallbacks;  /* Ordered scan fallback cases. */
+  uint64_t finreg_cdata_pending_order_hits;  /* Ordered pending positives. */
+#if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
+  uint32_t finreg_cdata_preclaim_test_fail;  /* Test-only preclaim failures. */
+  uint32_t finreg_cdata_preclaim_publish_pause;
+  uint32_t finreg_cdata_preclaim_publish_paused;
+  uint32_t finreg_cdata_preclaim_publish_release;
+#endif
+  uint64_t finreg_udata_sets;  /* Userdata finalizer registrations mirrored. */
+  uint64_t finreg_udata_clears;  /* Userdata finalizer clears mirrored. */
+  uint64_t finreg_udata_queued;  /* Userdata finalizers queued for dispatch. */
+  void *finreg_udata_head;  /* GC2-owned userdata metatable side list. */
+  void *finreg_udata_retired;  /* Unlinked nodes retained until teardown. */
+  uint64_t finreg_udata_registered;  /* Userdata side-list nodes published. */
+  uint64_t finreg_udata_retired_nodes;  /* Userdata side-list nodes unlinked. */
+  uint64_t finreg_udata_discovered;  /* Userdata queued from side list. */
+  uint64_t finreg_udata_forgets;  /* Stale userdata side-list refs cleared. */
+  void *finalizer_mpsc;  /* Producer-published finalizer stack. */
+  void *finalizer_tail;  /* Single-consumer finalizer ring tail. */
+  uint32_t finalizer_active;  /* Finalizer callbacks currently executing. */
+  uint32_t finalizer_owner_actor;  /* Physical actor owning finalizer FIFO. */
+  uint32_t finalizer_spawn_latch;  /* Callback-active/deferred bit latch. */
+  uint64_t finalizer_queued;  /* Objects published to the GC2 finalizer queue. */
+  uint64_t finalizer_dequeued;  /* Objects popped from the GC2 finalizer queue. */
+  uint64_t finalizer_mpsc_drained;  /* Objects drained from producer stack. */
+  uint64_t finalizer_enters;  /* Finalizer callback guard enters. */
+  uint64_t finalizer_leaves;  /* Finalizer callback guard leaves. */
+  uint64_t finalizer_sweep_blocks;  /* Sweep attempts blocked by finalizers. */
+  uint64_t finalizer_spawn_deferrals;  /* Live spawned TG kept SWEEP open. */
+  uint64_t finalizer_spawn_release_wakes;  /* Last spawned TG woke scheduler. */
+#if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
+  uint32_t finalizer_drain_test_pause;  /* Test hook: pause one drain splice. */
+  uint32_t finalizer_drain_test_paused;
+  uint32_t finalizer_drain_test_release;
+#endif
+  uint64_t weak_keys_marked;  /* P_WEAK write barriers marking keys. */
+  uint64_t weak_values_marked;  /* P_WEAK write barriers marking values. */
+  LJTGRegistrySlot *tg_registry_head;  /* Stable, immutable-next TG slots. */
+  uint32_t tg_registry_nodes;  /* Slots linked for this universe. */
+  uint32_t tg_registry_incomplete;  /* At least one legacy-only TG attach. */
+  uint32_t tg_registry_alloc_failures;  /* Shadow slot OOM telemetry. */
+#if defined(LJ_GC2_TEST_HELPERS)
+  uint32_t tg_registry_test_fail_alloc;  /* One-shot slot OOM injection. */
+#endif
+  TGState *tg_list;	/* Registered per-thread state blocks. */
+  uint32_t n_threads;	/* Number of registered TG blocks. */
+  uint32_t tg_reclaiming;  /* Try-only dead-TG registry writer gate. */
+} GC2State;
+LJ_STATIC_ASSERT((offsetof(GC2State, activation) & 15u) == 0);
+#if LJ_HASJIT
+typedef struct jit_State jit_State;
+/* IR_FLOAD encodes GG-relative immutable SIMD constants in a 10-bit fold key.
+** Keep their aligned backing slots near the front of global_State even as GC2
+** metadata grows; the extra slot preserves the historical align-up geometry. */
+#define LJ_GG_KSIMD_SLOTS 5u
+#endif
+
+/* Global state, shared by all threads of a Lua universe. */
+typedef struct global_State {
+  lua_Alloc allocf;	/* Memory allocator. */
+  void *allocd;		/* Memory allocator data. */
+  uint32_t allocf_arena;  /* Active allocator is the internal arena shim. */
+#if LJ_HASJIT
+  LJ_ALIGN(16) TValue ksimd[LJ_GG_KSIMD_SLOTS];
+#endif
+  GCState gc;		/* Garbage collector. */
+  GCstr strempty;	/* Empty string. */
+  uint8_t stremptyz;	/* Zero terminator of empty string. */
+  uint8_t hookmask;	/* Hook mask. */
+  uint8_t dispatchmode;	/* Dispatch mode. */
+  uint8_t vmevmask;	/* VM event mask. */
+  uint32_t hookactive;	/* Active debug hook callbacks. */
+  uint32_t vmevent_owner;  /* TG serializing VM-event protected callbacks. */
+  StrInternState str;	/* String interning. */
+  TabState tab;		/* Table raw storage retirement. */
+  int32_t vmstate;  /* VM state or current JIT code trace number. */
+  GCRef mainthref;	/* Link to main thread. */
+  SBuf tmpbuf;		/* Temporary string buffer. */
+  TValue tmptv, tmptv2;	/* Temporary TValues. */
+  TabNodeHdr nilnodehdr;  /* Header for nilnode's empty hash vector. */
+  Node nilnode;		/* Fallback 1-element hash part (nil key and value). */
+  TValue registrytv;	/* Anchor for registry. */
+  GCRef vmthref;	/* Link to VM thread. */
+  GCupval uvhead;	/* Dormant self-linked compatibility sentinel. */
+  int32_t hookcount;	/* Instruction hook countdown. */
+  int32_t hookcstart;	/* Start count for instruction hook counter. */
+  lua_Hook hookf;	/* Hook function. */
+  lua_CFunction wrapf;	/* Wrapper for C function calls. */
+  lua_CFunction panic;	/* Called as a last resort for errors. */
+  BCIns bc_cfunc_int;	/* Bytecode for internal C function calls. */
+  BCIns bc_cfunc_ext;	/* Bytecode for external C function calls. */
+  GCRef cur_L;		/* Currently executing lua_State. */
+  MRef jit_base;	/* Current JIT code L->base or NULL. */
+  MRef ctype_state;	/* Pointer to C type state. */
+  PRNGState prng;	/* Global PRNG state. */
+  GCRef gcroot[GCROOT_MAX];  /* GC roots. */
+#if LJ_HASJIT
+  jit_State *jitp;	/* Pointer to the universe-global JIT state. */
+  /* Exact atomic state: low 32 bits recorder token, high 32 bits callback
+  ** lifecycle reservation. Keep this qword in the former token/synccore
+  ** footprint so every downstream GG/J/dispatch offset remains unchanged. */
+  LJ_ALIGN(8) uint64_t jit_owner_word;
+#endif
+  TGState *main_tg;	/* Main per-OS-thread state block. */
+  uint32_t gcroot_pending_hint;  /* Conservative non-empty pending-root hint. */
+#if LJ_HASJIT
+  uint32_t jit_mcode_synccore;  /* Occupies former alignment padding. */
+#endif
+  uint64_t gcroot_repair_epoch;  /* Root-spine publications needing repair. */
+  uint64_t gcroot_repaired_epoch;  /* Last root-spine repair scan epoch. */
+  LJThreadLive *threading_live;  /* Lockless threading.thread root list. */
+  LJThreadLive *threading_live_retired;  /* Unlinked live-root tombstones. */
+  uint32_t threading_live_count;  /* Non-tombstone threading.thread roots. */
+  uint32_t thread_gcprep_pending;  /* Reserved/queued terminal destructors. */
+  lua_State *threading_states;  /* All non-main lua_State objects. */
+  lua_State *thread_gcprep;  /* Terminal THREAD preparation queue. */
+  GC2State gc2;		/* Concurrent GC scaffold state. */
+  /*
+  ** Bit 0 is the one-way secondary-Lua-thread latch. Bits 1..31 are a
+  ** transient count of installed table-resize VM guards. Native x64 tests the
+  ** raw word, so a live descriptor invalidates private trace/VM assumptions
+  ** without adding an instruction to the ordinary zero-word fast path.
+  */
+  uint32_t mt_active;
+  uint32_t mt_live;	/* Active secondary Lua threads. */
+  uint32_t mt_entering;	/* Secondary entrants before mt_live claim. */
+  uint32_t mt_gc_exclusive;  /* Explicit color GC excludes secondary entry. */
+  uint32_t mt_shutdown;	/* VM teardown is rejecting new secondary threads. */
+  GCSize mt_gc_threshold;  /* Saved automatic-GC threshold. */
+  TabResizeState tab_resize;  /* Cold persistent table-resize state. */
+} global_State;
+
+LJ_STATIC_ASSERT(offsetof(global_State, nilnode) ==
+		 offsetof(global_State, nilnodehdr) + sizeof(TabNodeHdr));
+#if LJ_HASJIT
+LJ_STATIC_ASSERT((offsetof(global_State, jit_owner_word) & 7u) == 0);
+LJ_STATIC_ASSERT(offsetof(global_State, main_tg) ==
+		 offsetof(global_State, jit_owner_word) + sizeof(uint64_t));
+LJ_STATIC_ASSERT(offsetof(global_State, jit_mcode_synccore) ==
+		 offsetof(global_State, gcroot_pending_hint) + sizeof(uint32_t));
+#endif
+
+#define niltv(L) \
+  check_exp(tvisnil(&G(L)->nilnode.val), &G(L)->nilnode.val)
+#define niltvg(g) \
+  check_exp(tvisnil(&(g)->nilnode.val), &(g)->nilnode.val)
+
+static LJ_AINLINE uint32_t lj_gcroot_pending_hint_acq(global_State *g)
+{
+  return la_load32_acq(&g->gcroot_pending_hint);
+}
+
+static LJ_AINLINE void lj_gcroot_pending_hint_rel(global_State *g,
+						  uint32_t hint)
+{
+  la_store32_rel(&g->gcroot_pending_hint, hint);
+}
+
+static LJ_AINLINE uint32_t lj_gcroot_pending_hint_xchg(global_State *g,
+						       uint32_t hint)
+{
+  return la_xchg32_acqrel(&g->gcroot_pending_hint, hint);
+}
+
+static LJ_AINLINE uint64_t lj_gcroot_repair_epoch_acq(global_State *g)
+{
+  return la_load64_acq(&g->gcroot_repair_epoch);
+}
+
+static LJ_AINLINE void lj_gcroot_repair_epoch_add(global_State *g)
+{
+  la_add64_rlx(&g->gcroot_repair_epoch, 1);
+}
+
+static LJ_AINLINE uint64_t lj_gcroot_repaired_epoch_acq(global_State *g)
+{
+  return la_load64_acq(&g->gcroot_repaired_epoch);
+}
+
+static LJ_AINLINE void lj_gcroot_repaired_epoch_rel(global_State *g,
+						    uint64_t epoch)
+{
+  la_store64_rel(&g->gcroot_repaired_epoch, epoch);
+}
+
+static LJ_AINLINE int32_t vmstate_load_acq(global_State *g)
+{
+  return (int32_t)la_load32_acq((uint32_t *)&g->vmstate);
+}
+
+static LJ_AINLINE void vmstate_store_rel(global_State *g, int32_t vmstate)
+{
+  la_store32_rel((uint32_t *)&g->vmstate, (uint32_t)vmstate);
+}
+
+#define setvmstate(g, st)	vmstate_store_rel((g), ~LJ_VMST_##st)
+
+#if LJ_HASJIT
+typedef uint64_t LJJitOwnerWord;
+
+#define LJ_JIT_OWNER_TOKEN_MASK UINT64_C(0xffffffff)
+
+static LJ_AINLINE LJJitOwnerWord jit_owner_pack(uint32_t token,
+						 uint32_t lifecycle)
+{
+  return (LJJitOwnerWord)token | ((LJJitOwnerWord)lifecycle << 32);
+}
+
+static LJ_AINLINE uint32_t jit_owner_token(LJJitOwnerWord owner)
+{
+  return (uint32_t)(owner & LJ_JIT_OWNER_TOKEN_MASK);
+}
+
+static LJ_AINLINE uint32_t jit_owner_lifecycle(LJJitOwnerWord owner)
+{
+  return (uint32_t)(owner >> 32);
+}
+
+static LJ_AINLINE LJJitOwnerWord jit_owner_word_acq(global_State *g)
+{
+  return la_load64_acq(&g->jit_owner_word);
+}
+
+static LJ_AINLINE int jit_owner_word_cas(global_State *g,
+					  LJJitOwnerWord *oldp,
+					  LJJitOwnerWord owner)
+{
+  return la_cas64(&g->jit_owner_word, oldp, owner, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t jit_token_acq(global_State *g)
+{
+  return jit_owner_token(jit_owner_word_acq(g));
+}
+
+static LJ_AINLINE uint32_t jit_lifecycle_acq(global_State *g)
+{
+  return jit_owner_lifecycle(jit_owner_word_acq(g));
+}
+
+static LJ_AINLINE int jit_token_cas(global_State *g, uint32_t *oldp,
+				    uint32_t owner)
+{
+  LJJitOwnerWord old = jit_owner_pack(*oldp, 0);
+  int ok = jit_owner_word_cas(g, &old, jit_owner_pack(owner, 0));
+  if (!ok)
+    *oldp = jit_owner_token(old);
+  return ok;
+}
+
+static LJ_AINLINE int jit_token_release_exact(global_State *g,
+					       uint32_t owner)
+{
+  LJJitOwnerWord old = jit_owner_pack(owner, 0);
+  return owner != 0 && jit_owner_word_cas(g, &old, jit_owner_pack(0, 0));
+}
+
+#if defined(LJ_GC2_TEST_HELPERS) || defined(LJ_TRACE_TEST_HELPERS)
+/* Tests which synthesize a foreign owner must replace the complete word. A
+** token-only store could erase a future live lifecycle reservation. */
+static LJ_AINLINE void jit_owner_test_rel(global_State *g, uint32_t token,
+					   uint32_t lifecycle)
+{
+  la_store64_rel(&g->jit_owner_word, jit_owner_pack(token, lifecycle));
+}
+#endif
+#endif
+
+static LJ_AINLINE uint8_t dispatchmode_load_acq(global_State *g)
+{
+  return la_load8_acq(&g->dispatchmode);  /* 07 section 7.3 dispatch table. */
+}
+
+static LJ_AINLINE void dispatchmode_store_rel(global_State *g, uint8_t mode)
+{
+  la_store8_rel(&g->dispatchmode, mode);  /* 07 section 7.3 dispatch table. */
+}
+
+static LJ_AINLINE int dispatchmode_cas(global_State *g, uint8_t *oldp,
+				       uint8_t mode)
+{
+  return la_cas8(&g->dispatchmode, oldp, mode, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint8_t vmevmask_load_acq(global_State *g)
+{
+  return la_load8_acq(&g->vmevmask);  /* VM event handler cache mask. */
+}
+
+static LJ_AINLINE void vmevmask_store_rel(global_State *g, uint8_t mask)
+{
+  la_store8_rel(&g->vmevmask, mask);  /* VM event handler cache mask. */
+}
+
+static LJ_AINLINE int vmevmask_cas(global_State *g, uint8_t *oldp,
+				   uint8_t mask)
+{
+  return la_cas8(&g->vmevmask, oldp, mask, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint8_t vmevmask_update(global_State *g, uint8_t clear,
+					  uint8_t set)
+{
+  uint8_t old = vmevmask_load_acq(g);
+  for (;;) {
+    uint8_t next = (uint8_t)((old & (uint8_t)~clear) | set);
+    if (vmevmask_cas(g, &old, next))
+      return next;
+  }
+}
+
+/* Bounded bit-only VM-event cache updates. Unlike vmevmask_update(), each is
+** exactly one atomic RMW and cannot spin behind a continuously changing peer.
+** Fetch-and/or/and also preserves every unrelated event bit. */
+static LJ_AINLINE uint8_t vmevmask_clear_bits_acqrel(global_State *g,
+						      uint8_t bits)
+{
+  return la_and8_acqrel(&g->vmevmask, (uint8_t)~bits);
+}
+
+static LJ_AINLINE uint8_t vmevmask_set_bits_acqrel(global_State *g,
+						    uint8_t bits)
+{
+  return la_or8_acqrel(&g->vmevmask, bits);
+}
+
+static LJ_AINLINE uint32_t vmevent_owner_acq(global_State *g)
+{
+  return la_load32_acq(&g->vmevent_owner);
+}
+
+static LJ_AINLINE int vmevent_owner_cas(global_State *g, uint32_t *oldp,
+					uint32_t owner)
+{
+  return la_cas32(&g->vmevent_owner, oldp, owner, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE void vmevent_owner_rel(global_State *g, uint32_t owner)
+{
+  uint32_t expect = owner;
+  int released = la_cas32(&g->vmevent_owner, &expect, 0, LA_REL, LA_RLX);
+  lj_assertG(released, "VM-event owner changed before release");
+  UNUSED(released);
+}
+
+#define LJ_MT_ACTIVE_LATCH		0x00000001u
+#define LJ_MT_RESIZE_GUARD_ONE		0x00000002u
+#define LJ_MT_RESIZE_GUARD_MASK		0xfffffffeu
+
+static LJ_AINLINE uint32_t mt_active_word_acq(global_State *g)
+{
+  return la_load32_acq(&g->mt_active);
+}
+
+/* Exact sticky-thread semantic state, excluding transient resize guards. */
+static LJ_AINLINE uint32_t mt_active_acq(global_State *g)
+{
+  return mt_active_word_acq(g) & LJ_MT_ACTIVE_LATCH;
+}
+
+/*
+** Set the sticky-thread bit without overwriting a concurrently acquired
+** resize-guard count. oldp and active retain the historical boolean API.
+*/
+static LJ_AINLINE int mt_active_cas(global_State *g, uint32_t *oldp,
+				    uint32_t active)
+{
+  uint32_t expected = *oldp & LJ_MT_ACTIVE_LATCH;
+  uint32_t current = mt_active_word_acq(g);
+  for (;;) {
+    uint32_t desired;
+    if ((current & LJ_MT_ACTIVE_LATCH) != expected) {
+      *oldp = current & LJ_MT_ACTIVE_LATCH;
+      return 0;
+    }
+    desired = (current & LJ_MT_RESIZE_GUARD_MASK) |
+	      (active & LJ_MT_ACTIVE_LATCH);
+    if (la_cas32(&g->mt_active, &current, desired, LA_ACQ_REL, LA_ACQ))
+      return 1;
+  }
+}
+
+static LJ_AINLINE uint32_t mt_resize_guard_count_acq(global_State *g)
+{
+  return mt_active_word_acq(g) >> 1;
+}
+
+static LJ_AINLINE int mt_resize_guard_enter(global_State *g)
+{
+  uint32_t current = mt_active_word_acq(g);
+  for (;;) {
+    uint32_t first;
+    if ((current & LJ_MT_RESIZE_GUARD_MASK) ==
+	LJ_MT_RESIZE_GUARD_MASK)
+      return 0;
+    first = (current & LJ_MT_RESIZE_GUARD_MASK) == 0 ? 2u : 1u;
+    if (la_cas32(&g->mt_active, &current,
+		 current + LJ_MT_RESIZE_GUARD_ONE, LA_ACQ_REL, LA_ACQ))
+      return (int)first;
+  }
+}
+
+static LJ_AINLINE void mt_resize_guard_leave(global_State *g)
+{
+  uint32_t current = mt_active_word_acq(g);
+  for (;;) {
+    if (LJ_UNLIKELY((current & LJ_MT_RESIZE_GUARD_MASK) == 0)) {
+      lj_assertG(0, "table-resize VM guard underflow");
+      return;  /* Never corrupt the sticky latch in a release build. */
+    }
+    if (la_cas32(&g->mt_active, &current,
+		 current - LJ_MT_RESIZE_GUARD_ONE, LA_ACQ_REL, LA_ACQ))
+      return;
+  }
+}
+
+static LJ_AINLINE uint32_t mt_live_acq(global_State *g)
+{
+  return la_load32_acq(&g->mt_live);
+}
+
+static LJ_AINLINE uint32_t mt_live_add_rlx(global_State *g, uint32_t n)
+{
+  return la_add32_rlx(&g->mt_live, n);
+}
+
+static LJ_AINLINE uint32_t mt_live_sub_acqrel(global_State *g, uint32_t n)
+{
+  return la_sub32_acqrel(&g->mt_live, n);
+}
+
+static LJ_AINLINE void mt_live_futex_wait(global_State *g, uint32_t live,
+					  int64_t timeout_ns)
+{
+  (void)la_futex_wait(&g->mt_live, live, timeout_ns);
+}
+
+static LJ_AINLINE void mt_live_futex_wake(global_State *g, int n)
+{
+  la_futex_wake(&g->mt_live, n);
+}
+
+static LJ_AINLINE uint32_t mt_entering_acq(global_State *g)
+{
+  return la_load32_acq(&g->mt_entering);
+}
+
+static LJ_AINLINE uint32_t mt_entering_add_rlx(global_State *g, uint32_t n)
+{
+  return la_add32_rlx(&g->mt_entering, n);
+}
+
+static LJ_AINLINE uint32_t mt_entering_add_acqrel(global_State *g,
+						   uint32_t n)
+{
+  return la_add32_acqrel(&g->mt_entering, n);
+}
+
+static LJ_AINLINE uint32_t mt_entering_sub_acqrel(global_State *g, uint32_t n)
+{
+  return la_sub32_acqrel(&g->mt_entering, n);
+}
+
+static LJ_AINLINE void mt_entering_futex_wait(global_State *g,
+					      uint32_t entering,
+					      int64_t timeout_ns)
+{
+  (void)la_futex_wait(&g->mt_entering, entering, timeout_ns);
+}
+
+static LJ_AINLINE void mt_entering_futex_wake(global_State *g, int n)
+{
+  la_futex_wake(&g->mt_entering, n);
+}
+
+static LJ_AINLINE int mt_active_or_entering_acq(global_State *g)
+{
+  return mt_active_word_acq(g) != 0 || mt_entering_acq(g) != 0;
+}
+
+static LJ_AINLINE uint32_t mt_gc_exclusive_acq(global_State *g)
+{
+  return la_load32_acq(&g->mt_gc_exclusive);
+}
+
+static LJ_AINLINE void mt_gc_exclusive_rel(global_State *g, uint32_t active)
+{
+  la_store32_rel(&g->mt_gc_exclusive, active);
+}
+
+static LJ_AINLINE int mt_gc_exclusive_cas(global_State *g, uint32_t *oldp,
+					  uint32_t active)
+{
+  return la_cas32(&g->mt_gc_exclusive, oldp, active, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE void mt_gc_exclusive_futex_wait(global_State *g,
+						  uint32_t active,
+						  int64_t timeout_ns)
+{
+  (void)la_futex_wait(&g->mt_gc_exclusive, active, timeout_ns);
+}
+
+static LJ_AINLINE void mt_gc_exclusive_futex_wake(global_State *g, int n)
+{
+  la_futex_wake(&g->mt_gc_exclusive, n);
+}
+
+static LJ_AINLINE uint32_t mt_shutdown_acq(global_State *g)
+{
+  return la_load32_acq(&g->mt_shutdown);
+}
+
+static LJ_AINLINE void mt_shutdown_rel(global_State *g, uint32_t shutdown)
+{
+  la_store32_rel(&g->mt_shutdown, shutdown);
+}
+
+/* Hook management. Hook event masks are defined in lua.h. */
+#define HOOK_EVENTMASK		0x0f
+#define HOOK_ACTIVE		0x10
+#define HOOK_ACTIVE_SHIFT	4
+#define HOOK_VMEVENT		0x20
+#define HOOK_GC			0x40
+#define HOOK_PROFILE		0x80
+
+static LJ_AINLINE uint8_t hookmask_load(global_State *g)
+{
+  return la_load8_acq(&g->hookmask);  /* 03 section 3.6 global hooks. */
+}
+
+static LJ_AINLINE void hookmask_store(global_State *g, uint8_t mask)
+{
+  la_store8_rel(&g->hookmask, mask);  /* 03 section 3.6 global hooks. */
+}
+
+static LJ_AINLINE uint8_t hookmask_update(global_State *g, uint8_t clear,
+					  uint8_t set)
+{
+  uint8_t old = hookmask_load(g);
+  for (;;) {
+    uint8_t next = (uint8_t)((old & (uint8_t)~clear) | set);
+    if (la_cas8(&g->hookmask, &old, next, LA_ACQ_REL, LA_ACQ))
+      return next;  /* 03 section 3.6 global hooks. */
+  }
+}
+
+static LJ_AINLINE int hookmask_set_if_clear(global_State *g, uint8_t blocked,
+					    uint8_t set)
+{
+  uint8_t old = hookmask_load(g);
+  for (;;) {
+    uint8_t next;
+    if ((old & blocked))
+      return 0;
+    next = (uint8_t)(old | set);
+    if (la_cas8(&g->hookmask, &old, next, LA_ACQ_REL, LA_ACQ))
+      return 1;  /* 03 section 3.6 global hooks. */
+  }
+}
+
+static LJ_AINLINE int hookmask_vmevent_enter(global_State *g)
+{
+  /* VM-event callbacks own the process-wide hook suppression bits only when no
+  ** debug/profile/GC callback is already using them. Event arguments live on
+  ** their initiating L and can be discarded without waiting on a busy hook.
+  */
+  return hookmask_set_if_clear(g,
+    HOOK_ACTIVE|HOOK_VMEVENT|HOOK_GC|HOOK_PROFILE,
+    HOOK_ACTIVE|HOOK_VMEVENT);
+}
+
+static LJ_AINLINE void hookmask_vmevent_leave(global_State *g)
+{
+  uint8_t old = hookmask_load(g);
+  for (;;) {
+    uint8_t next = (uint8_t)(old & (uint8_t)~HOOK_VMEVENT);
+    /* Preserve a concurrently entered debug or GC hook. hookactive is sampled
+    ** inside the CAS loop so its increment-before-mask and decrement-after-mask
+    ** protocols cannot be hidden by this event's leave.
+    */
+    if (la_load32_acq(&g->hookactive) == 0 && !(next & HOOK_GC))
+      next &= (uint8_t)~HOOK_ACTIVE;
+    else
+      next |= HOOK_ACTIVE;
+    if (la_cas8(&g->hookmask, &old, next, LA_ACQ_REL, LA_ACQ))
+      return;
+  }
+}
+
+static LJ_AINLINE int hookmask_profile_enter(global_State *g, uint8_t *savep)
+{
+  uint8_t old = hookmask_load(g);
+  for (;;) {
+    uint8_t saved = (uint8_t)(old & (uint8_t)~HOOK_PROFILE);
+    uint8_t next = (old & HOOK_VMEVENT) ? saved : HOOK_VMEVENT;
+    if (next == old || la_cas8(&g->hookmask, &old, next, LA_ACQ_REL, LA_ACQ)) {
+      *savep = saved;
+      return !(saved & HOOK_VMEVENT);
+    }
+  }
+}
+
+static LJ_AINLINE void hookmask_profile_leave(global_State *g, uint8_t saved)
+{
+  uint8_t old = hookmask_load(g);
+  for (;;) {
+    uint8_t next = (uint8_t)((saved & (uint8_t)~HOOK_EVENTMASK) |
+			     (old & (HOOK_EVENTMASK|HOOK_PROFILE)));
+    if (la_load32_acq(&g->hookactive) != 0)
+      next |= HOOK_ACTIVE;
+    if (la_cas8(&g->hookmask, &old, next, LA_ACQ_REL, LA_ACQ))
+      return;  /* Preserve hook changes and a retriggered profile bit. */
+  }
+}
+
+static LJ_AINLINE uint8_t hookmask_setevents(global_State *g, uint8_t mask)
+{
+  return hookmask_update(g, HOOK_EVENTMASK, (uint8_t)(mask & HOOK_EVENTMASK));
+}
+
+static LJ_AINLINE uint8_t hookmask_restore_(global_State *g, uint8_t h)
+{
+  uint8_t old = hookmask_load(g);
+  h &= (uint8_t)~HOOK_EVENTMASK;
+  for (;;) {
+    uint8_t next = (uint8_t)((old & HOOK_EVENTMASK) | h);
+    if (la_load32_acq(&g->hookactive) != 0)
+      next |= HOOK_ACTIVE;
+    if (la_cas8(&g->hookmask, &old, next, LA_ACQ_REL, LA_ACQ))
+      return next;  /* 03 section 3.6 global hooks. */
+  }
+}
+
+#define hook_active(g)		(hookmask_load((g)) & HOOK_ACTIVE)
+#define hook_enter(g)		((void)hookmask_update((g), 0, HOOK_ACTIVE))
+#define hook_entergc(g) \
+  ((void)hookmask_update((g), HOOK_PROFILE, HOOK_ACTIVE|HOOK_GC))
+#define hook_vmevent(g) \
+  ((void)hookmask_update((g), 0, HOOK_ACTIVE|HOOK_VMEVENT))
+#define hook_leave(g)		((void)hookmask_update((g), HOOK_ACTIVE, 0))
+#define hook_save(g)		(hookmask_load((g)) & (uint8_t)~HOOK_EVENTMASK)
+#define hook_restore(g, h) \
+  ((void)hookmask_restore_((g), (h)))
+
+static LJ_AINLINE void hook_call_enter(global_State *g)
+{
+  uint32_t old = la_load32_acq(&g->hookactive);
+  for (;;) {
+    if (la_cas32(&g->hookactive, &old, old + 1u, LA_ACQ_REL, LA_ACQ))
+      break;  /* 03 section 3.6: concurrent hooks share active bit. */
+  }
+  (void)hookmask_update(g, 0, HOOK_ACTIVE);
+}
+
+static LJ_AINLINE void hook_call_leave(global_State *g)
+{
+  uint32_t old = la_load32_acq(&g->hookactive);
+  for (;;) {
+    if (old == 0)
+      return;
+    if (la_cas32(&g->hookactive, &old, old - 1u, LA_ACQ_REL, LA_ACQ))
+      break;
+  }
+  if (old == 1u) {
+    (void)hookmask_update(g, HOOK_ACTIVE, 0);
+    if (la_load32_acq(&g->hookactive) != 0)
+      (void)hookmask_update(g, 0, HOOK_ACTIVE);
+  }
+}
+
+static LJ_AINLINE lua_Hook hookf_load(global_State *g)
+{
+  return la_loadfunc_acq(&g->hookf);  /* 03 section 3.6 global hooks. */
+}
+
+static LJ_AINLINE void hookf_store(global_State *g, lua_Hook hookf)
+{
+  la_storefunc_rel(&g->hookf, hookf);  /* 03 section 3.6 global hooks. */
+}
+
+static LJ_AINLINE void wrapf_store(global_State *g, lua_CFunction wrapf)
+{
+  la_storefunc_rel(&g->wrapf, wrapf);  /* Wrapper callback before BC_FUNCCW. */
+}
+
+static LJ_AINLINE lua_CFunction panicf_load(global_State *g)
+{
+  return la_loadfunc_acq(&g->panic);  /* Universe-global panic callback. */
+}
+
+static LJ_AINLINE void panicf_store(global_State *g, lua_CFunction panicf)
+{
+  la_storefunc_rel(&g->panic, panicf);  /* Universe-global panic callback. */
+}
+
+static LJ_AINLINE lua_CFunction panicf_xchg(global_State *g,
+					    lua_CFunction panicf)
+{
+  return la_xchgfunc_acqrel(&g->panic, panicf);  /* lua_atpanic(). */
+}
+
+static LJ_AINLINE int32_t hookcount_load(global_State *g)
+{
+  /* 03 section 3.6 global hooks. */
+  return (int32_t)la_load32_acq((uint32_t *)&g->hookcount);
+}
+
+static LJ_AINLINE int32_t hookcstart_load(global_State *g)
+{
+  /* 03 section 3.6 global hooks. */
+  return (int32_t)la_load32_acq((uint32_t *)&g->hookcstart);
+}
+
+static LJ_AINLINE void hookcount_store(global_State *g, int32_t count)
+{
+  /* 03 section 3.6 global hooks. */
+  la_store32_rel((uint32_t *)&g->hookcount, (uint32_t)count);
+}
+
+static LJ_AINLINE void hookcount_setstart(global_State *g, int32_t count)
+{
+  /* 03 section 3.6 global hooks. */
+  la_store32_rel((uint32_t *)&g->hookcstart, (uint32_t)count);
+  hookcount_store(g, count);
+}
+
+static LJ_AINLINE void hookcount_reset(global_State *g)
+{
+  hookcount_store(g, hookcstart_load(g));
+}
+
+/* One exact lua_State mutator claim. The low half remains the futex-visible
+** logical TG id/sentinel; the high half is the process-issued physical
+** OS-thread actor. A normal owner is authoritative only when both halves
+** match its TG. Protocol sentinels retain the exact scanner/reclaimer actor;
+** only the ownerless state is the all-zero word. */
+typedef uint64_t LJStateOwner;
+
+/* Per-thread state object. */
+struct lua_State {
+  GCHeader;
+  uint8_t dummy_ffid;	/* Fake FF_C for curr_funcisL() on dummy frames. */
+  uint8_t status;	/* Thread status. */
+  MRef glref;		/* Link to global state. */
+  GCRef gclist;		/* GC chain. */
+  TValue *base;		/* Base of currently executing function. */
+  TValue *top;		/* First free slot in the stack. */
+  MRef maxstack;	/* Last free slot in the stack. */
+  MRef stack;		/* Stack base. */
+  GCRef openupval;	/* List of open upvalues in the stack. */
+  GCRef env;		/* Thread environment (table of globals). */
+  GCRef mt_thread;	/* threading.thread userdata for this state. */
+  lua_State *thread_next;  /* Lockless shutdown registry link. */
+  lua_State *gcprep_next;  /* Terminal-preparation queue link. */
+  void *cframe;		/* End of C stack frame chain. */
+  MSize stacksize;	/* True stack size (incl. LJ_STACK_EXTRA). */
+  TGState *tg_hint;	/* Owning/running TG block, if attached. */
+  LJStateOwner thr_owner;  /* Atomic {actor32, TG tid32} claim. */
+  uint32_t grayagain_cycle;  /* Classic-GC grayagain membership cycle. */
+  uint64_t scan_epoch;	/* Last thread-snapshot generation scanned. */
+  uint64_t scan_dirty_epoch;  /* Owner stack-dirty stamp at last scan. */
+  uint64_t scan_handoff_epoch;  /* Thread generation requesting owner scan. */
+  uint32_t scan_needscan_counted;  /* Exact counted NEEDSCAN membership. */
+  uint32_t gcprep_state;  /* Terminal THREAD destructor handoff state. */
+};
+
+LJ_STATIC_ASSERT(sizeof(LJStateOwner) == 8);
+LJ_STATIC_ASSERT((offsetof(lua_State, thr_owner) & 7u) == 0);
+
+#define G(L)			(mref(L->glref, global_State))
+LJ_FUNC TGState *lj_thr_get_tg(void);
+LJ_FUNCA TGState *lj_thr_get_tg_fallback(global_State *g);
+LJ_FUNC uint32_t lj_thr_actor_current(void);
+#define G2TG(gl)		(lj_thr_get_tg_fallback((gl)))
+#define L2TG(L)			((L)->tg_hint ? (L)->tg_hint : G2TG(G(L)))
+static LJ_AINLINE TValue *lj_registry_ref(global_State *g)
+{
+  return &g->registrytv;
+}
+
+#define registry(L)		(lj_registry_ref(G(L)))
+
+static LJ_AINLINE LJStateOwner lj_state_owner_pack(uint32_t owner,
+						    uint32_t actor)
+{
+  return ((uint64_t)actor << 32) | (uint64_t)owner;
+}
+
+static LJ_AINLINE uint32_t lj_state_owner_tid(LJStateOwner owner)
+{
+  return (uint32_t)owner;
+}
+
+static LJ_AINLINE uint32_t lj_state_owner_actor(LJStateOwner owner)
+{
+  return (uint32_t)(owner >> 32);
+}
+
+static LJ_AINLINE LJStateOwner lj_state_owner_word_acq(const lua_State *L)
+{
+  return la_load64_acq((const uint64_t *)&L->thr_owner);
+}
+
+static LJ_AINLINE void lj_state_owner_word_rel(lua_State *L,
+					       LJStateOwner owner)
+{
+  la_store64_rel((uint64_t *)&L->thr_owner, owner);
+}
+
+static LJ_AINLINE int lj_state_owner_word_cas(lua_State *L,
+					      LJStateOwner *oldp,
+					      LJStateOwner owner)
+{
+  return la_cas64((uint64_t *)&L->thr_owner, (uint64_t *)oldp, owner,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t lj_state_owner_acq(const lua_State *L)
+{
+  return lj_state_owner_tid(lj_state_owner_word_acq(L));
+}
+
+static LJ_AINLINE uint32_t lj_state_owner_actor_acq(const lua_State *L)
+{
+  return lj_state_owner_actor(lj_state_owner_word_acq(L));
+}
+
+/* Internal white-box fixtures historically injected only the logical owner.
+** Keep that source-level helper while making its publication one atomic full
+** pair. Runtime ownership paths use the explicit word/CAS interfaces above. */
+static LJ_AINLINE void lj_state_owner_rel(lua_State *L, uint32_t owner)
+{
+  uint32_t actor = 0;
+  if (owner != 0) {
+    actor = lj_state_owner_actor_acq(L);
+    if (actor == 0)
+      actor = lj_thr_actor_current();
+  }
+  lj_state_owner_word_rel(L, lj_state_owner_pack(owner, actor));
+}
+
+static LJ_AINLINE uint32_t *lj_state_owner_futex_word(lua_State *L)
+{
+  /* thr_owner's numeric low half contains tid on every target. */
+  return (uint32_t *)((char *)&L->thr_owner + LJ_ENDIAN_SELECT(0, 4));
+}
+
+static LJ_AINLINE uint32_t lj_state_grayagain_cycle_acq(const lua_State *L)
+{
+  return la_load32_acq(&L->grayagain_cycle);
+}
+
+static LJ_AINLINE void lj_state_grayagain_cycle_store_rlx(lua_State *L,
+							  uint32_t cycle)
+{
+  la_store32_rlx(&L->grayagain_cycle, cycle);
+}
+
+static LJ_AINLINE int lj_state_grayagain_cycle_cas(lua_State *L,
+						   uint32_t *oldp,
+						   uint32_t cycle)
+{
+  return la_cas32(&L->grayagain_cycle, oldp, cycle, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE void lj_state_owner_futex_wait(lua_State *L,
+						 uint32_t owner,
+						 int64_t timeout_ns)
+{
+  (void)la_futex_wait(lj_state_owner_futex_word(L), owner, timeout_ns);
+}
+
+static LJ_AINLINE void lj_state_owner_futex_wake(lua_State *L, int n)
+{
+  la_futex_wake(lj_state_owner_futex_word(L), n);
+}
+
+static LJ_AINLINE uint64_t lj_state_scan_epoch_acq(const lua_State *L)
+{
+  return la_load64_acq((uint64_t *)&L->scan_epoch);
+}
+
+static LJ_AINLINE void lj_state_scan_epoch_rel(lua_State *L, uint64_t epoch)
+{
+  la_store64_rel(&L->scan_epoch, epoch);
+}
+
+static LJ_AINLINE uint64_t lj_state_scan_dirty_epoch_acq(const lua_State *L)
+{
+  return la_load64_acq((uint64_t *)&L->scan_dirty_epoch);
+}
+
+static LJ_AINLINE void lj_state_scan_dirty_epoch_rel(lua_State *L,
+						     uint64_t epoch)
+{
+  la_store64_rel(&L->scan_dirty_epoch, epoch);
+}
+
+static LJ_AINLINE uint64_t lj_state_scan_handoff_epoch_acq(const lua_State *L)
+{
+  return la_load64_acq((uint64_t *)&L->scan_handoff_epoch);
+}
+
+static LJ_AINLINE void lj_state_scan_handoff_epoch_rel(lua_State *L,
+						       uint64_t epoch)
+{
+  la_store64_rel(&L->scan_handoff_epoch, epoch);
+}
+
+static LJ_AINLINE uint32_t lj_state_scan_needscan_counted_acq(
+  const lua_State *L)
+{
+  return la_load32_acq((uint32_t *)&L->scan_needscan_counted);
+}
+
+static LJ_AINLINE void lj_state_scan_needscan_counted_store_rlx(
+  lua_State *L, uint32_t counted)
+{
+  la_store32_rlx(&L->scan_needscan_counted, counted);
+}
+
+static LJ_AINLINE void lj_state_scan_needscan_counted_rel(
+  lua_State *L, uint32_t counted)
+{
+  la_store32_rel(&L->scan_needscan_counted, counted);
+}
+
+static LJ_AINLINE int lj_state_scan_needscan_counted_cas(
+  lua_State *L, uint32_t *oldp, uint32_t counted)
+{
+  return la_cas32(&L->scan_needscan_counted, oldp, counted,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t lj_state_scan_needscan_counted_xchg(
+  lua_State *L, uint32_t counted)
+{
+  return la_xchg32_acqrel(&L->scan_needscan_counted, counted);
+}
+
+/* Macros to access the currently executing (Lua) function. */
+#define curr_func(L)		(&gcval(L->base-2)->fn)
+#define curr_funcisL(L)		(isluafunc(curr_func(L)))
+#define curr_proto(L)		(funcproto(curr_func(L)))
+#define curr_topL(L)		(L->base + curr_proto(L)->framesize)
+#define curr_top(L)		(curr_funcisL(L) ? curr_topL(L) : L->top)
+
+/* -- GC object definition and conversions -------------------------------- */
+
+/* GC header for generic access to common fields of GC objects. */
+typedef struct GChead {
+  GCHeader;
+  uint8_t unused1;
+  uint8_t unused2;
+  GCRef env;
+  GCRef gclist;
+  GCRef metatable;
+} GChead;
+
+/* The env field SHOULD be at the same offset for all GC objects. */
+LJ_STATIC_ASSERT(offsetof(GChead, env) == offsetof(GCfuncL, env));
+LJ_STATIC_ASSERT(offsetof(GChead, env) == offsetof(GCudata, env));
+
+/* The metatable field MUST be at the same offset for all GC objects. */
+LJ_STATIC_ASSERT(offsetof(GChead, metatable) == offsetof(GCtab, metatable));
+LJ_STATIC_ASSERT(offsetof(GChead, metatable) == offsetof(GCudata, metatable));
+
+/* The gclist field MUST be at the same offset for all GC objects. */
+LJ_STATIC_ASSERT(offsetof(GChead, gclist) == offsetof(lua_State, gclist));
+LJ_STATIC_ASSERT(offsetof(GChead, gclist) == offsetof(GCproto, gclist));
+LJ_STATIC_ASSERT(offsetof(GChead, gclist) == offsetof(GCfuncL, gclist));
+LJ_STATIC_ASSERT(offsetof(GChead, gclist) == offsetof(GCtab, gclist));
+
+typedef union GCobj {
+  GChead gch;
+  GCstr str;
+  GCupval uv;
+  lua_State th;
+  GCproto pt;
+  GCfunc fn;
+  GCcdata cd;
+  GCtab tab;
+  GCudata ud;
+} GCobj;
+
+static LJ_AINLINE GCRef *lj_obj_gcwref(GCobj *o)
+{
+  return &o->gch.nextgc;
+}
+
+static LJ_AINLINE GCobj *lj_obj_gcw(GCobj *o)
+{
+  return gcref(o->gch.nextgc);
+}
+
+static LJ_AINLINE GCobj *lj_obj_gcw_acq(GCobj *o)
+{
+  return gcref_acq(o->gch.nextgc);
+}
+
+static LJ_AINLINE void lj_obj_setgcw(GCobj *o, GCobj *next)
+{
+  setgcref(o->gch.nextgc, next);
+}
+
+static LJ_AINLINE void lj_obj_setgcwr(GCobj *o, GCRef next)
+{
+  setgcrefr(o->gch.nextgc, next);
+}
+
+static LJ_AINLINE void lj_obj_setgcwnull(GCobj *o)
+{
+  setgcrefnull(o->gch.nextgc);
+}
+
+static LJ_AINLINE uint32_t lj_func_nupvalues(const GCfunc *fn)
+{
+  return (uint32_t)la_load8_acq(&fn->c.nupvalues);
+}
+
+static LJ_AINLINE uint32_t lj_funcL_nupvalues(const GCfuncL *fn)
+{
+  return (uint32_t)la_load8_acq(&fn->nupvalues);
+}
+
+static LJ_AINLINE uint32_t lj_funcC_nupvalues(const GCfuncC *fn)
+{
+  return (uint32_t)la_load8_acq(&fn->nupvalues);
+}
+
+static LJ_AINLINE int lj_uv_immutable(const GCupval *uv)
+{
+  return (la_load8_acq(&uv->immutable) & LJ_UV_IMMUTABLE) != 0;
+}
+
+static LJ_AINLINE GCobj *func_uvptr_acq(const GCfuncL *fn, uint32_t idx)
+{
+  return gcref_acq(fn->uvptr[idx]);
+}
+
+static LJ_AINLINE GCupval *func_uv_acq(const GCfuncL *fn, uint32_t idx)
+{
+  return &func_uvptr_acq(fn, idx)->uv;
+}
+
+static LJ_AINLINE uint8_t lj_obj_gcflags(const GCobj *o)
+{
+  return la_load8_acq(&o->gch.marked);
+}
+
+static LJ_AINLINE uint8_t *lj_obj_gcflags_ref(GCobj *o)
+{
+  return &o->gch.marked;
+}
+
+static LJ_AINLINE void lj_obj_setgcflags(GCobj *o, uint8_t flags)
+{
+  /* Full replacement is construction/sole-owner only. It must never race a
+  ** bitwise updater, because a store intentionally replaces every flag. */
+  la_store8_rel(&o->gch.marked, flags);
+}
+
+static LJ_AINLINE void lj_obj_addgcflags(GCobj *o, uint8_t flags)
+{
+  (void)la_or8_rlx(&o->gch.marked, flags);
+}
+
+static LJ_AINLINE void lj_obj_addgcflags_atomic(GCobj *o, uint8_t flags)
+{
+  uint8_t old = la_load8_acq(&o->gch.marked);
+  for (;;) {
+    uint8_t next = (uint8_t)(old | flags);
+    if (la_cas8(&o->gch.marked, &old, next, LA_ACQ_REL, LA_ACQ))
+      return;
+  }
+}
+
+static LJ_AINLINE void lj_obj_cleargcflags(GCobj *o, uint8_t flags)
+{
+  (void)la_and8_rlx(&o->gch.marked, (uint8_t)~flags);
+}
+
+static LJ_AINLINE void lj_obj_cleargcflags_atomic(GCobj *o, uint8_t flags)
+{
+  uint8_t old = la_load8_acq(&o->gch.marked);
+  for (;;) {
+    uint8_t next = (uint8_t)(old & (uint8_t)~flags);
+    if (la_cas8(&o->gch.marked, &old, next, LA_ACQ_REL, LA_ACQ))
+      return;
+  }
+}
+
+static LJ_AINLINE void lj_obj_xorgcflags(GCobj *o, uint8_t flags)
+{
+  /* XOR is only safe when the caller owns the decision or toggles a disjoint
+  ** bit. GC2 never derives resurrection authority from header whites. */
+  uint8_t old = la_load8_acq(&o->gch.marked);
+  for (;;) {
+    uint8_t next = (uint8_t)(old ^ flags);
+    if (la_cas8(&o->gch.marked, &old, next, LA_ACQ_REL, LA_ACQ))
+      return;
+  }
+}
+
+static LJ_AINLINE void lj_obj_masksetgcflags(GCobj *o, uint8_t clear,
+						     uint8_t set)
+{
+  uint8_t old = la_load8_acq(&o->gch.marked);
+  for (;;) {
+    uint8_t next = (uint8_t)((old & (uint8_t)~clear) | set);
+    if (la_cas8(&o->gch.marked, &old, next, LA_ACQ_REL, LA_ACQ))
+      return;
+  }
+}
+
+LJ_STATIC_ASSERT(sizeof(GCRef) == 8u);
+LJ_STATIC_ASSERT(offsetof(GChead, nextgc) == 0u);
+LJ_STATIC_ASSERT(offsetof(GChead, marked) == sizeof(GCRef));
+LJ_STATIC_ASSERT(offsetof(GChead, gct) == sizeof(GCRef) + 1u);
+LJ_STATIC_ASSERT(offsetof(GChead, marked) == offsetof(GCstr, marked));
+LJ_STATIC_ASSERT((offsetof(GCstr, canon) & (sizeof(uintptr_t)-1u)) == 0u);
+LJ_STATIC_ASSERT(sizeof(GCstr) == offsetof(GCstr, canon) + sizeof(uintptr_t));
+#if LJ_64
+LJ_STATIC_ASSERT(offsetof(GCstr, sid) == 12u);
+LJ_STATIC_ASSERT(offsetof(GCstr, hash) == 16u);
+LJ_STATIC_ASSERT(offsetof(GCstr, len) == 20u);
+LJ_STATIC_ASSERT(offsetof(GCstr, canon) == 24u);
+LJ_STATIC_ASSERT(sizeof(GCstr) == 32u);
+LJ_STATIC_ASSERT(offsetof(global_State, stremptyz) ==
+		 offsetof(global_State, strempty) + sizeof(GCstr));
+#endif
+LJ_STATIC_ASSERT(offsetof(GChead, marked) == offsetof(GCtab, marked));
+LJ_STATIC_ASSERT(offsetof(GChead, marked) == offsetof(GCupval, marked));
+LJ_STATIC_ASSERT(((int)offsetof(GCupval, marked) -
+		  (int)offsetof(GCupval, tv)) == -8);
+
+/* Macros to convert a GCobj pointer into a specific value. */
+#define gco2str(o)	check_exp((o)->gch.gct == ~LJ_TSTR, &(o)->str)
+#define gco2uv(o)	check_exp((o)->gch.gct == ~LJ_TUPVAL, &(o)->uv)
+#define gco2th(o)	check_exp((o)->gch.gct == ~LJ_TTHREAD, &(o)->th)
+#define gco2pt(o)	check_exp((o)->gch.gct == ~LJ_TPROTO, &(o)->pt)
+#define gco2func(o)	check_exp((o)->gch.gct == ~LJ_TFUNC, &(o)->fn)
+#define gco2cd(o)	check_exp((o)->gch.gct == ~LJ_TCDATA, &(o)->cd)
+#define gco2tab(o)	check_exp((o)->gch.gct == ~LJ_TTAB, &(o)->tab)
+#define gco2ud(o)	check_exp((o)->gch.gct == ~LJ_TUDATA, &(o)->ud)
+
+/* Macro to convert any collectable object into a GCobj pointer. */
+#define obj2gco(v)	((GCobj *)(v))
+
+static LJ_AINLINE GCRef *mainthread_ref(global_State *g)
+{
+  return &g->mainthref;
+}
+
+static LJ_AINLINE lua_State *mainthread_acq(global_State *g)
+{
+  GCobj *o = gcref_acq(*mainthread_ref(g));
+  return o ? gco2th(o) : NULL;
+}
+
+static LJ_AINLINE GCRef *vmthread_ref(global_State *g)
+{
+  return &g->vmthref;
+}
+
+static LJ_AINLINE lua_State *vmthread_acq(global_State *g)
+{
+  GCobj *o = gcref_acq(*vmthread_ref(g));
+  return o ? gco2th(o) : NULL;
+}
+
+static LJ_AINLINE GCRef *lj_gc_root_ref(global_State *g)
+{
+  return &g->gc.root;
+}
+
+static LJ_AINLINE GCobj *lj_gc_root_acq(global_State *g)
+{
+  return gcref_acq(*lj_gc_root_ref(g));
+}
+
+static LJ_AINLINE uint32_t gc2_phase_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.phase);
+}
+
+static LJ_AINLINE void gc2_phase_store_rlx(global_State *g, uint32_t phase)
+{
+  la_store32_rlx(&g->gc2.phase, phase);
+}
+
+static LJ_AINLINE void gc2_phase_rel(global_State *g, uint32_t phase)
+{
+  la_store32_rel(&g->gc2.phase, phase);
+}
+
+static LJ_AINLINE int gc2_phase_cas(global_State *g, uint32_t *oldp,
+				    uint32_t phase)
+{
+  return la_cas32(&g->gc2.phase, oldp, phase, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t gc2_phase_xchg_acqrel(global_State *g,
+						 uint32_t phase)
+{
+  return la_xchg32_acqrel(&g->gc2.phase, phase);
+}
+
+static LJ_AINLINE uint32_t gc2_cycle_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.cycle);
+}
+
+static LJ_AINLINE void gc2_cycle_store_rlx(global_State *g, uint32_t cycle)
+{
+  la_store32_rlx(&g->gc2.cycle, cycle);
+}
+
+static LJ_AINLINE uint32_t gc2_cycle_inc_acqrel(global_State *g)
+{
+  uint32_t old = gc2_cycle_acq(g), next;
+  do {
+    /* Cycle zero is the unpublished/reset value and exact table scan proofs
+    ** retain this 32-bit identity. Never wrap a live authority through zero.
+    ** The cycle-start owner detects saturation before phase publication and
+    ** moves the typed activation token to sticky NO_RECLAIM. Keep this helper
+    ** saturating as a mechanical backstop for any future caller. */
+    if (old == ~(uint32_t)0)
+      return old;
+    next = old + 1u;
+  } while (!la_cas32(&g->gc2.cycle, &old, next, LA_ACQ_REL, LA_ACQ));
+  return next;
+}
+
+static LJ_AINLINE uint64_t gc2_thread_scan_cycle_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.thread_scan_cycle);
+}
+
+static LJ_AINLINE void gc2_thread_scan_cycle_store_rlx(global_State *g,
+						       uint64_t cycle)
+{
+  la_store64_rlx(&g->gc2.thread_scan_cycle, cycle);
+}
+
+static LJ_AINLINE uint64_t gc2_thread_scan_cycle_inc_acqrel(global_State *g)
+{
+  uint64_t old = gc2_thread_scan_cycle_acq(g), next;
+  do {
+    next = old + 1u;
+    if (next == 0)
+      next = 1;  /* Zero remains the permanent no-snapshot sentinel. */
+  } while (!la_cas64(&g->gc2.thread_scan_cycle, &old, next,
+		     LA_ACQ_REL, LA_ACQ));
+  return next;
+}
+
+#define LJ_GC2_COUNTER64_ACCESSORS(name, field) \
+static LJ_AINLINE uint64_t name##_acq(global_State *g) \
+{ \
+  return la_load64_acq(&g->gc2.field); \
+} \
+static LJ_AINLINE void name##_store_rlx(global_State *g, uint64_t n) \
+{ \
+  la_store64_rlx(&g->gc2.field, n); \
+} \
+static LJ_AINLINE void name##_add(global_State *g, uint64_t n) \
+{ \
+  la_add64_rlx(&g->gc2.field, n); \
+}
+
+LJ_GC2_COUNTER64_ACCESSORS(gc2_cycle_requests, cycle_requests)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_cycle_starts, cycle_starts)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_major_cycle_starts, major_cycle_starts)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_minor_cycle_requests, minor_cycle_requests)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_minor_cycle_starts, minor_cycle_starts)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_minor_sweep_deferred, minor_sweep_deferred)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_minor_sweep_arenas, minor_sweep_arenas)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_minor_roots_deferred, minor_roots_deferred)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_major_root_scans, major_root_scans)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_minor_root_scans, minor_root_scans)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_pending_root_flushes, pending_root_flushes)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_pending_root_flushed, pending_root_flushed)
+
+static LJ_AINLINE uint64_t gc2_pending_root_flush_max_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.pending_root_flush_max);
+}
+
+static LJ_AINLINE void gc2_pending_root_flush_max_store_rlx(global_State *g,
+							    uint64_t n)
+{
+  la_store64_rlx(&g->gc2.pending_root_flush_max, n);
+}
+
+static LJ_AINLINE int gc2_pending_root_flush_max_cas(global_State *g,
+						     uint64_t *oldp,
+						     uint64_t n)
+{
+  return la_cas64(&g->gc2.pending_root_flush_max, oldp, n,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE GCRef *gc2_grey_stack_acq(global_State *g)
+{
+  return (GCRef *)la_loadptr_acq((void *const *)&g->gc2.grey_stack);
+}
+
+static LJ_AINLINE void gc2_grey_stack_store_rlx(global_State *g, GCRef *stack)
+{
+  la_storeptr_rlx((void **)&g->gc2.grey_stack, stack);
+}
+
+static LJ_AINLINE void gc2_grey_stack_rel(global_State *g, GCRef *stack)
+{
+  la_storeptr_rel((void **)&g->gc2.grey_stack, stack);
+}
+
+static LJ_AINLINE MSize gc2_grey_capacity_acq(global_State *g)
+{
+  return (MSize)la_load32_acq(&g->gc2.grey_capacity);
+}
+
+static LJ_AINLINE void gc2_grey_capacity_store_rlx(global_State *g, MSize cap)
+{
+  la_store32_rlx(&g->gc2.grey_capacity, (uint32_t)cap);
+}
+
+static LJ_AINLINE void gc2_grey_capacity_rel(global_State *g, MSize cap)
+{
+  la_store32_rel(&g->gc2.grey_capacity, (uint32_t)cap);
+}
+
+static LJ_AINLINE uint64_t gc2_grey_top_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.grey_top);
+}
+
+static LJ_AINLINE void gc2_grey_top_store_rlx(global_State *g, uint64_t top)
+{
+  la_store64_rlx(&g->gc2.grey_top, top);
+}
+
+static LJ_AINLINE int gc2_grey_top_cas(global_State *g, uint64_t *oldp,
+				       uint64_t top)
+{
+  return la_cas64(&g->gc2.grey_top, oldp, top, LA_SEQ, LA_ACQ);
+}
+
+static LJ_AINLINE uint64_t gc2_grey_bottom_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.grey_bottom);
+}
+
+static LJ_AINLINE uint64_t gc2_grey_bottom_rlx(global_State *g)
+{
+  return la_load64_rlx(&g->gc2.grey_bottom);
+}
+
+static LJ_AINLINE void gc2_grey_bottom_store_rlx(global_State *g,
+						 uint64_t bottom)
+{
+  la_store64_rlx(&g->gc2.grey_bottom, bottom);
+}
+
+static LJ_AINLINE void gc2_grey_bottom_rel(global_State *g, uint64_t bottom)
+{
+  la_store64_rel(&g->gc2.grey_bottom, bottom);
+}
+
+LJ_GC2_COUNTER64_ACCESSORS(gc2_grey_pushed, grey_pushed)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_grey_drained, grey_drained)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_marks_this_round, marks_this_round)
+
+static LJ_AINLINE uint32_t gc2_mark_root_scanned_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.mark_root_scanned);
+}
+
+static LJ_AINLINE void gc2_mark_root_scanned_store_rlx(global_State *g,
+						uint32_t scanned)
+{
+  la_store32_rlx(&g->gc2.mark_root_scanned, scanned);
+}
+
+static LJ_AINLINE void gc2_mark_root_scanned_rel(global_State *g,
+						 uint32_t scanned)
+{
+  la_store32_rel(&g->gc2.mark_root_scanned, scanned);
+}
+
+static LJ_AINLINE int gc2_mark_root_scanned_cas(global_State *g,
+						uint32_t *oldp,
+						uint32_t scanned)
+{
+  return la_cas32(&g->gc2.mark_root_scanned, oldp, scanned,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE void *gc2_small_arena_tab_acq(global_State *g)
+{
+  return la_loadptr_acq((void *const *)&g->gc2.small_arena_tab);
+}
+
+static LJ_AINLINE void gc2_small_arena_tab_store_rlx(global_State *g,
+						     void *tab)
+{
+  la_storeptr_rlx((void **)&g->gc2.small_arena_tab, tab);
+}
+
+static LJ_AINLINE void gc2_small_arena_tab_rel(global_State *g, void *tab)
+{
+  la_storeptr_rel((void **)&g->gc2.small_arena_tab, tab);
+}
+
+static LJ_AINLINE uint64_t gc2_marks_this_round_xchg_acqrel(global_State *g,
+							    uint64_t n)
+{
+  return la_xchg64_acqrel(&g->gc2.marks_this_round, n);
+}
+
+static LJ_AINLINE uint64_t gc2_weak_count_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.weak_count);
+}
+
+static LJ_AINLINE void gc2_weak_count_store_rlx(global_State *g, uint64_t n)
+{
+  la_store64_rlx(&g->gc2.weak_count, n);
+}
+
+static LJ_AINLINE uint64_t gc2_weak_count_add(global_State *g, uint64_t n)
+{
+  return la_add64_rlx(&g->gc2.weak_count, n);
+}
+
+static LJ_AINLINE uint64_t gc2_weak_count_sub(global_State *g, uint64_t n)
+{
+  return la_sub64_rlx(&g->gc2.weak_count, n);
+}
+
+static LJ_AINLINE GCRef *gc2_weak_stack_acq(global_State *g)
+{
+  return (GCRef *)la_loadptr_acq((void *const *)&g->gc2.weak_stack);
+}
+
+static LJ_AINLINE void gc2_weak_stack_store_rlx(global_State *g,
+						GCRef *stack)
+{
+  la_storeptr_rlx((void **)&g->gc2.weak_stack, stack);
+}
+
+static LJ_AINLINE void gc2_weak_stack_rel(global_State *g, GCRef *stack)
+{
+  la_storeptr_rel((void **)&g->gc2.weak_stack, stack);
+}
+
+static LJ_AINLINE uint8_t *gc2_weak_ready_acq(global_State *g)
+{
+  return (uint8_t *)la_loadptr_acq((void *const *)&g->gc2.weak_ready);
+}
+
+static LJ_AINLINE void gc2_weak_ready_store_rlx(global_State *g,
+						uint8_t *ready)
+{
+  la_storeptr_rlx((void **)&g->gc2.weak_ready, ready);
+}
+
+static LJ_AINLINE void gc2_weak_ready_rel(global_State *g, uint8_t *ready)
+{
+  la_storeptr_rel((void **)&g->gc2.weak_ready, ready);
+}
+
+static LJ_AINLINE GC2WeakOverflow *gc2_weak_overflow_acq(global_State *g)
+{
+  return (GC2WeakOverflow *)la_loadptr_acq(
+    (void *const *)&g->gc2.weak_overflow);
+}
+
+static LJ_AINLINE void gc2_weak_overflow_store_rlx(global_State *g,
+						   GC2WeakOverflow *head)
+{
+  la_storeptr_rlx((void **)&g->gc2.weak_overflow, head);
+}
+
+static LJ_AINLINE GC2WeakOverflow *
+gc2_weak_overflow_xchg_acqrel(global_State *g, GC2WeakOverflow *head)
+{
+  return (GC2WeakOverflow *)la_xchgptr_acqrel(
+    (void **)&g->gc2.weak_overflow, head);
+}
+
+static LJ_AINLINE int gc2_weak_overflow_cas(global_State *g,
+					    GC2WeakOverflow **oldp,
+					    GC2WeakOverflow *head)
+{
+  return la_casptr((void **)&g->gc2.weak_overflow, (void **)oldp, head,
+		   LA_REL, LA_ACQ);
+}
+
+static LJ_AINLINE MSize gc2_weak_capacity_acq(global_State *g)
+{
+  return (MSize)la_load32_acq(&g->gc2.weak_capacity);
+}
+
+static LJ_AINLINE void gc2_weak_capacity_store_rlx(global_State *g,
+						   MSize cap)
+{
+  la_store32_rlx(&g->gc2.weak_capacity, (uint32_t)cap);
+}
+
+static LJ_AINLINE void gc2_weak_capacity_rel(global_State *g, MSize cap)
+{
+  la_store32_rel(&g->gc2.weak_capacity, (uint32_t)cap);
+}
+
+static LJ_AINLINE uint32_t gc2_weak_drain_active_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.weak_drain_active);
+}
+
+static LJ_AINLINE void gc2_weak_drain_active_store_rlx(global_State *g,
+						       uint32_t active)
+{
+  la_store32_rlx(&g->gc2.weak_drain_active, active);
+}
+
+static LJ_AINLINE void gc2_weak_drain_active_rel(global_State *g,
+						 uint32_t active)
+{
+  la_store32_rel(&g->gc2.weak_drain_active, active);
+}
+
+static LJ_AINLINE uint32_t gc2_weak_drain_active_add(global_State *g,
+						     uint32_t n)
+{
+  return la_add32_acqrel(&g->gc2.weak_drain_active, n);
+}
+
+static LJ_AINLINE uint32_t gc2_weak_drain_active_sub(global_State *g,
+						     uint32_t n)
+{
+  return la_sub32_acqrel(&g->gc2.weak_drain_active, n);
+}
+
+static LJ_AINLINE uint32_t gc2_weak_write_active_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.weak_write_active);
+}
+
+static LJ_AINLINE void gc2_weak_write_active_store_rlx(global_State *g,
+						       uint32_t active)
+{
+  la_store32_rlx(&g->gc2.weak_write_active, active);
+}
+
+static LJ_AINLINE uint32_t gc2_weak_write_active_add(global_State *g,
+						     uint32_t n)
+{
+  return la_add32_acqrel(&g->gc2.weak_write_active, n);
+}
+
+static LJ_AINLINE uint32_t gc2_weak_write_active_sub(global_State *g,
+						     uint32_t n)
+{
+  return la_sub32_acqrel(&g->gc2.weak_write_active, n);
+}
+
+static LJ_AINLINE uint32_t gc2_weak_mark_closed_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.weak_mark_closed);
+}
+
+static LJ_AINLINE void gc2_weak_mark_closed_store_rlx(global_State *g,
+						      uint32_t closed)
+{
+  la_store32_rlx(&g->gc2.weak_mark_closed, closed);
+}
+
+static LJ_AINLINE void gc2_weak_mark_closed_rel(global_State *g,
+						uint32_t closed)
+{
+  la_store32_rel(&g->gc2.weak_mark_closed, closed);
+}
+
+static LJ_AINLINE uint32_t gc2_weak_root_scanned_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.weak_root_scanned);
+}
+
+static LJ_AINLINE void gc2_weak_root_scanned_store_rlx(global_State *g,
+						uint32_t scanned)
+{
+  la_store32_rlx(&g->gc2.weak_root_scanned, scanned);
+}
+
+static LJ_AINLINE void gc2_weak_root_scanned_rel(global_State *g,
+					  uint32_t scanned)
+{
+  la_store32_rel(&g->gc2.weak_root_scanned, scanned);
+}
+
+static LJ_AINLINE int gc2_weak_root_scanned_cas(global_State *g,
+						 uint32_t *oldp,
+						 uint32_t scanned)
+{
+  return la_cas32(&g->gc2.weak_root_scanned, oldp, scanned,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_tables_seen, weak_tables_seen)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_tables_weakkey, weak_tables_weakkey)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_tables_weakval, weak_tables_weakval)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_tables_allweak, weak_tables_allweak)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_tables_queued, weak_tables_queued)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_tables_overflow, weak_tables_overflow)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_scan_runs, weak_scan_runs)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_scan_tables, weak_scan_tables)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_scan_slots, weak_scan_slots)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_scan_clearable, weak_scan_clearable)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_clear_runs, weak_clear_runs)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_clear_tables, weak_clear_tables)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_clear_slots, weak_clear_slots)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_clear_cleared, weak_clear_cleared)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_bridge_skipped, weak_bridge_skipped)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_bridge_fallbacks, weak_bridge_fallbacks)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_bridge_backfills, weak_bridge_backfills)
+
+static LJ_AINLINE uint64_t gc2_weak_bridge_backfill_tables_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.weak_bridge_backfill_tables);
+}
+
+static LJ_AINLINE void gc2_weak_bridge_backfill_tables_store_rlx(
+  global_State *g, uint64_t n)
+{
+  la_store64_rlx(&g->gc2.weak_bridge_backfill_tables, n);
+}
+
+static LJ_AINLINE void gc2_weak_bridge_backfill_tables_add(global_State *g,
+							   uint64_t n)
+{
+  la_add64_rlx(&g->gc2.weak_bridge_backfill_tables, n);
+}
+
+static LJ_AINLINE uint64_t gc2_weak_bridge_backfill_slots_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.weak_bridge_backfill_slots);
+}
+
+static LJ_AINLINE void gc2_weak_bridge_backfill_slots_store_rlx(
+  global_State *g, uint64_t n)
+{
+  la_store64_rlx(&g->gc2.weak_bridge_backfill_slots, n);
+}
+
+static LJ_AINLINE void gc2_weak_bridge_backfill_slots_add(global_State *g,
+							  uint64_t n)
+{
+  la_add64_rlx(&g->gc2.weak_bridge_backfill_slots, n);
+}
+
+static LJ_AINLINE uint64_t gc2_weak_bridge_backfill_cleared_acq(
+  global_State *g)
+{
+  return la_load64_acq(&g->gc2.weak_bridge_backfill_cleared);
+}
+
+static LJ_AINLINE void gc2_weak_bridge_backfill_cleared_store_rlx(
+  global_State *g, uint64_t n)
+{
+  la_store64_rlx(&g->gc2.weak_bridge_backfill_cleared, n);
+}
+
+static LJ_AINLINE void gc2_weak_bridge_backfill_cleared_add(global_State *g,
+							    uint64_t n)
+{
+  la_add64_rlx(&g->gc2.weak_bridge_backfill_cleared, n);
+}
+
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_keys_marked, weak_keys_marked)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_values_marked, weak_values_marked)
+
+static LJ_AINLINE LJTGRegistrySlot *gc2_tg_registry_head_acq(global_State *g)
+{
+  return (LJTGRegistrySlot *)la_loadptr_acq(
+    (void *const *)&g->gc2.tg_registry_head);
+}
+
+static LJ_AINLINE void gc2_tg_registry_head_store_rlx(global_State *g,
+					       LJTGRegistrySlot *head)
+{
+  la_storeptr_rlx((void **)&g->gc2.tg_registry_head, head);
+}
+
+static LJ_AINLINE int gc2_tg_registry_head_cas(global_State *g,
+					LJTGRegistrySlot **oldp,
+					LJTGRegistrySlot *head)
+{
+  return la_casptr((void **)&g->gc2.tg_registry_head, (void **)oldp, head,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE LJTGRegistrySlot *
+gc2_tg_registry_head_xchg_acqrel(global_State *g, LJTGRegistrySlot *head)
+{
+  return (LJTGRegistrySlot *)la_xchgptr_acqrel(
+    (void **)&g->gc2.tg_registry_head, head);
+}
+
+static LJ_AINLINE uint32_t gc2_tg_registry_nodes_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.tg_registry_nodes);
+}
+
+static LJ_AINLINE void gc2_tg_registry_nodes_store_rlx(global_State *g,
+						uint32_t nodes)
+{
+  la_store32_rlx(&g->gc2.tg_registry_nodes, nodes);
+}
+
+static LJ_AINLINE uint32_t gc2_tg_registry_nodes_add(global_State *g,
+					      uint32_t nodes)
+{
+  return la_add32_rlx(&g->gc2.tg_registry_nodes, nodes);
+}
+
+static LJ_AINLINE uint32_t gc2_tg_registry_alloc_failures_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.tg_registry_alloc_failures);
+}
+
+static LJ_AINLINE void gc2_tg_registry_alloc_failures_store_rlx(
+  global_State *g, uint32_t failures)
+{
+  la_store32_rlx(&g->gc2.tg_registry_alloc_failures, failures);
+}
+
+static LJ_AINLINE uint32_t gc2_tg_registry_alloc_failures_add(
+  global_State *g, uint32_t failures)
+{
+  return la_add32_rlx(&g->gc2.tg_registry_alloc_failures, failures);
+}
+
+static LJ_AINLINE uint32_t gc2_tg_registry_incomplete_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.tg_registry_incomplete);
+}
+
+static LJ_AINLINE void gc2_tg_registry_incomplete_store_rlx(global_State *g,
+						     uint32_t incomplete)
+{
+  la_store32_rlx(&g->gc2.tg_registry_incomplete, incomplete);
+}
+
+static LJ_AINLINE void gc2_tg_registry_incomplete_rel(global_State *g,
+					       uint32_t incomplete)
+{
+  la_store32_rel(&g->gc2.tg_registry_incomplete, incomplete);
+}
+
+#if defined(LJ_GC2_TEST_HELPERS)
+static LJ_AINLINE uint32_t gc2_tg_registry_test_fail_alloc_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.tg_registry_test_fail_alloc);
+}
+
+static LJ_AINLINE void gc2_tg_registry_test_fail_alloc_rel(global_State *g,
+						    uint32_t fail)
+{
+  la_store32_rel(&g->gc2.tg_registry_test_fail_alloc, fail);
+}
+
+static LJ_AINLINE uint32_t gc2_tg_registry_test_fail_alloc_xchg(
+  global_State *g, uint32_t fail)
+{
+  return la_xchg32_acqrel(&g->gc2.tg_registry_test_fail_alloc, fail);
+}
+#endif
+
+static LJ_AINLINE uint64_t gc2_weak_scan_cursor_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.weak_scan_cursor);
+}
+
+static LJ_AINLINE void gc2_weak_scan_cursor_store_rlx(global_State *g,
+						      uint64_t cursor)
+{
+  la_store64_rlx(&g->gc2.weak_scan_cursor, cursor);
+}
+
+static LJ_AINLINE int gc2_weak_scan_cursor_cas(global_State *g,
+					       uint64_t *oldp,
+					       uint64_t cursor)
+{
+  return la_cas64(&g->gc2.weak_scan_cursor, oldp, cursor,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint64_t gc2_weak_clear_cursor_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.weak_clear_cursor);
+}
+
+static LJ_AINLINE void gc2_weak_clear_cursor_store_rlx(global_State *g,
+						       uint64_t cursor)
+{
+  la_store64_rlx(&g->gc2.weak_clear_cursor, cursor);
+}
+
+static LJ_AINLINE int gc2_weak_clear_cursor_cas(global_State *g,
+						uint64_t *oldp,
+						uint64_t cursor)
+{
+  return la_cas64(&g->gc2.weak_clear_cursor, oldp, cursor,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE void gc2_cycle_leader_store_rlx(global_State *g,
+						  uint32_t leader)
+{
+  la_store32_rlx(&g->gc2.cycle_leader, leader);
+}
+
+static LJ_AINLINE uint32_t gc2_cycle_leader_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.cycle_leader);
+}
+
+static LJ_AINLINE void gc2_cycle_leader_rel(global_State *g, uint32_t leader)
+{
+  la_store32_rel(&g->gc2.cycle_leader, leader);
+}
+
+static LJ_AINLINE int gc2_cycle_leader_cas(global_State *g, uint32_t *oldp,
+					   uint32_t leader)
+{
+  return la_cas32(&g->gc2.cycle_leader, oldp, leader, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t gc2_cycle_leader_xchg_acqrel(global_State *g,
+							uint32_t leader)
+{
+  return la_xchg32_acqrel(&g->gc2.cycle_leader, leader);
+}
+
+static LJ_AINLINE uint32_t gc2_sweep_bridge_ready_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.sweep_bridge_ready);
+}
+
+static LJ_AINLINE int gc2_sweep_bridge_ready_cas(global_State *g,
+					  uint32_t *oldp, uint32_t ready)
+{
+  return la_cas32(&g->gc2.sweep_bridge_ready, oldp, ready,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t gc2_jit_phase_gate_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.jit_phase_gate);
+}
+
+static LJ_AINLINE void gc2_jit_phase_gate_store_rlx(global_State *g,
+					      uint32_t open)
+{
+  la_store32_rlx(&g->gc2.jit_phase_gate, open);
+}
+
+static LJ_AINLINE void gc2_jit_phase_gate_rel(global_State *g, uint32_t open)
+{
+  la_store32_rel(&g->gc2.jit_phase_gate, open);
+}
+
+static LJ_AINLINE int gc2_jit_phase_gate_cas(global_State *g,
+					      uint32_t *oldp, uint32_t open)
+{
+  return la_cas32(&g->gc2.jit_phase_gate, oldp, open,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t gc2_jit_mark_resume_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.jit_mark_resume);
+}
+
+static LJ_AINLINE void gc2_jit_mark_resume_store_rlx(global_State *g,
+					       uint32_t cycle)
+{
+  la_store32_rlx(&g->gc2.jit_mark_resume, cycle);
+}
+
+static LJ_AINLINE void gc2_jit_mark_resume_rel(global_State *g,
+					 uint32_t cycle)
+{
+  la_store32_rel(&g->gc2.jit_mark_resume, cycle);
+}
+
+static LJ_AINLINE void gc2_jit_mark_auto_yield_store_rlx(global_State *g,
+						   uint32_t pending)
+{
+  la_store32_rlx(&g->gc2.jit_mark_auto_yield, pending);
+}
+
+static LJ_AINLINE void gc2_jit_mark_auto_yield_rel(global_State *g,
+					     uint32_t pending)
+{
+  la_store32_rel(&g->gc2.jit_mark_auto_yield, pending);
+}
+
+static LJ_AINLINE uint32_t gc2_jit_mark_auto_yield_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.jit_mark_auto_yield);
+}
+
+static LJ_AINLINE int gc2_jit_mark_auto_yield_take(global_State *g)
+{
+  uint32_t old = la_load32_acq(&g->gc2.jit_mark_auto_yield);
+  while (old != 0) {
+    uint32_t expect = old;
+    if (la_cas32(&g->gc2.jit_mark_auto_yield, &expect, old - 1u,
+		 LA_ACQ_REL, LA_ACQ))
+      return 1;
+    old = expect;
+  }
+  return 0;
+}
+
+static LJ_AINLINE uint64_t gc2_jit_mark_yield_until_ns_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.jit_mark_yield_until_ns);
+}
+
+static LJ_AINLINE void gc2_jit_mark_yield_until_ns_store_rlx(
+  global_State *g, uint64_t deadline)
+{
+  la_store64_rlx(&g->gc2.jit_mark_yield_until_ns, deadline);
+}
+
+static LJ_AINLINE void gc2_jit_mark_yield_until_ns_rel(global_State *g,
+						 uint64_t deadline)
+{
+  la_store64_rel(&g->gc2.jit_mark_yield_until_ns, deadline);
+}
+
+static LJ_AINLINE uint32_t gc2_jit_sweep_displaced_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.jit_sweep_displaced);
+}
+
+static LJ_AINLINE void gc2_jit_sweep_displaced_store_rlx(global_State *g,
+						  uint32_t displaced)
+{
+  la_store32_rlx(&g->gc2.jit_sweep_displaced, displaced);
+}
+
+static LJ_AINLINE void gc2_jit_sweep_displaced_rel(global_State *g,
+					    uint32_t displaced)
+{
+  la_store32_rel(&g->gc2.jit_sweep_displaced, displaced);
+}
+
+static LJ_AINLINE uint32_t gc2_jit_sweep_displaced_xchg_acqrel(
+  global_State *g, uint32_t displaced)
+{
+  return la_xchg32_acqrel(&g->gc2.jit_sweep_displaced, displaced);
+}
+
+static LJ_AINLINE uint64_t gc2_jit_sweep_yield_until_ns_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.jit_sweep_yield_until_ns);
+}
+
+static LJ_AINLINE void gc2_jit_sweep_yield_until_ns_store_rlx(global_State *g,
+						       uint64_t deadline)
+{
+  la_store64_rlx(&g->gc2.jit_sweep_yield_until_ns, deadline);
+}
+
+static LJ_AINLINE void gc2_jit_sweep_yield_until_ns_rel(global_State *g,
+						 uint64_t deadline)
+{
+  la_store64_rel(&g->gc2.jit_sweep_yield_until_ns, deadline);
+}
+
+static LJ_AINLINE void gc2_sweep_bridge_ready_store_rlx(global_State *g,
+							uint32_t ready)
+{
+  la_store32_rlx(&g->gc2.sweep_bridge_ready, ready);
+}
+
+static LJ_AINLINE void gc2_sweep_bridge_ready_rel(global_State *g,
+						  uint32_t ready)
+{
+  la_store32_rel(&g->gc2.sweep_bridge_ready, ready);
+}
+
+static LJ_AINLINE uint32_t gc2_sweep_root_scanned_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.sweep_root_scanned);
+}
+
+static LJ_AINLINE void gc2_sweep_root_scanned_store_rlx(global_State *g,
+						 uint32_t scanned)
+{
+  la_store32_rlx(&g->gc2.sweep_root_scanned, scanned);
+}
+
+static LJ_AINLINE void gc2_sweep_root_scanned_rel(global_State *g,
+						  uint32_t scanned)
+{
+  la_store32_rel(&g->gc2.sweep_root_scanned, scanned);
+}
+
+static LJ_AINLINE int gc2_sweep_root_scanned_cas(global_State *g,
+						 uint32_t *oldp,
+						 uint32_t scanned)
+{
+  return la_cas32(&g->gc2.sweep_root_scanned, oldp, scanned,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE GCRef *gc2_sweep_root_cursor_acq(global_State *g)
+{
+  return (GCRef *)la_loadptr_acq((void *const *)&g->gc2.sweep_root_cursor);
+}
+
+static LJ_AINLINE void gc2_sweep_root_cursor_rel(global_State *g, GCRef *p)
+{
+  la_storeptr_rel((void **)&g->gc2.sweep_root_cursor, p);
+}
+
+static LJ_AINLINE uint32_t gc2_sweep_root_done_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.sweep_root_done);
+}
+
+static LJ_AINLINE void gc2_sweep_root_done_rel(global_State *g, uint32_t done)
+{
+  la_store32_rel(&g->gc2.sweep_root_done, done);
+}
+
+static LJ_AINLINE uint32_t gc2_sweep_grace_needed_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.sweep_grace_needed);
+}
+
+static LJ_AINLINE void gc2_sweep_grace_needed_rel(global_State *g,
+						   uint32_t needed)
+{
+  la_store32_rel(&g->gc2.sweep_grace_needed, needed);
+}
+
+LJ_GC2_COUNTER64_ACCESSORS(gc2_sweep_to_idle, sweep_to_idle)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_preserve_abort_to_idle, preserve_abort_to_idle)
+
+/* The worker token serializes this scalar hint. It never pins a TG body. */
+static LJ_AINLINE uint32_t gc2_sweep_owner_next_tid_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.sweep_owner_next_tid);
+}
+
+static LJ_AINLINE void gc2_sweep_owner_next_tid_store_rlx(global_State *g,
+                                                       uint32_t tid)
+{
+  la_store32_rlx(&g->gc2.sweep_owner_next_tid, tid);
+}
+
+static LJ_AINLINE TGState *gc2_tg_list_acq(global_State *g)
+{
+  return (TGState *)la_loadptr_acq((void *const *)&g->gc2.tg_list);
+}
+
+static LJ_AINLINE void gc2_tg_list_store_rlx(global_State *g, TGState *tg)
+{
+  la_storeptr_rlx((void **)&g->gc2.tg_list, tg);
+}
+
+static LJ_AINLINE int gc2_tg_list_cas(global_State *g, TGState **oldp,
+				      TGState *tg)
+{
+  return la_casptr((void **)&g->gc2.tg_list, (void **)oldp, tg,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t gc2_tg_reclaiming_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.tg_reclaiming);
+}
+
+static LJ_AINLINE void gc2_tg_reclaiming_store_rlx(global_State *g,
+						    uint32_t active)
+{
+  la_store32_rlx(&g->gc2.tg_reclaiming, active);
+}
+
+static LJ_AINLINE void gc2_tg_reclaiming_rel(global_State *g,
+					      uint32_t active)
+{
+  la_store32_rel(&g->gc2.tg_reclaiming, active);
+}
+
+static LJ_AINLINE int gc2_tg_reclaiming_cas(global_State *g,
+					     uint32_t *oldp,
+					     uint32_t active)
+{
+  return la_cas32(&g->gc2.tg_reclaiming, oldp, active,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE GC2SSBNode *gc2_ssb_head_acq(global_State *g)
+{
+  return (GC2SSBNode *)la_loadptr_acq(
+    (void *const *)&g->gc2.ssb_head);  /* 05 section 5.6.2 MPSC SSB. */
+}
+
+static LJ_AINLINE void gc2_ssb_head_store_rlx(global_State *g,
+					      GC2SSBNode *head)
+{
+  la_storeptr_rlx((void **)&g->gc2.ssb_head, head);
+}
+
+static LJ_AINLINE int gc2_ssb_head_cas(global_State *g, GC2SSBNode **oldp,
+				       GC2SSBNode *head)
+{
+  return la_casptr((void **)&g->gc2.ssb_head, (void **)oldp, head,
+		   LA_ACQ_REL, LA_ACQ);  /* 05 section 5.6.2 MPSC SSB. */
+}
+
+static LJ_AINLINE GC2SSBNode *gc2_ssb_head_xchg_acqrel(global_State *g,
+						       GC2SSBNode *head)
+{
+  return (GC2SSBNode *)la_xchgptr_acqrel((void **)&g->gc2.ssb_head,
+					 head);  /* 05 section 5.6.2. */
+}
+
+static LJ_AINLINE GC2SSBNode *gc2_ssb_drain_acq(global_State *g)
+{
+  return (GC2SSBNode *)la_loadptr_acq(
+    (void *const *)&g->gc2.ssb_drain);
+}
+
+static LJ_AINLINE void gc2_ssb_drain_rel(global_State *g,
+					 GC2SSBNode *head)
+{
+  la_storeptr_rel((void **)&g->gc2.ssb_drain, head);
+}
+
+static LJ_AINLINE GC2SSBNode *gc2_ssb_drain_xchg_acqrel(global_State *g,
+						 GC2SSBNode *head)
+{
+  return (GC2SSBNode *)la_xchgptr_acqrel((void **)&g->gc2.ssb_drain,
+					 head);
+}
+
+static LJ_AINLINE uint32_t gc2_ssb_consumer_active_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.ssb_consumer_active);
+}
+
+static LJ_AINLINE void gc2_ssb_consumer_active_store_rlx(global_State *g,
+						  uint32_t n)
+{
+  la_store32_rlx(&g->gc2.ssb_consumer_active, n);
+}
+
+static LJ_AINLINE uint32_t gc2_ssb_consumer_enter(global_State *g)
+{
+  return la_add32_acqrel(&g->gc2.ssb_consumer_active, 1);
+}
+
+static LJ_AINLINE uint32_t gc2_ssb_consumer_leave(global_State *g)
+{
+  return la_sub32_acqrel(&g->gc2.ssb_consumer_active, 1);
+}
+
+static LJ_AINLINE uint32_t gc2_ssb_published_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.ssb_published);
+}
+
+static LJ_AINLINE void gc2_ssb_published_store_rlx(global_State *g,
+						   uint32_t n)
+{
+  la_store32_rlx(&g->gc2.ssb_published, n);
+}
+
+static LJ_AINLINE void gc2_ssb_published_add(global_State *g, uint32_t n)
+{
+  la_add32_rlx(&g->gc2.ssb_published, n);
+}
+
+static LJ_AINLINE uint32_t gc2_ssb_drained_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.ssb_drained);
+}
+
+static LJ_AINLINE void gc2_ssb_drained_store_rlx(global_State *g, uint32_t n)
+{
+  la_store32_rlx(&g->gc2.ssb_drained, n);
+}
+
+static LJ_AINLINE void gc2_ssb_drained_add(global_State *g, uint32_t n)
+{
+  la_add32_rlx(&g->gc2.ssb_drained, n);
+}
+
+LJ_GC2_COUNTER64_ACCESSORS(gc2_ssb_items_published, ssb_items_published)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_ssb_items_drained, ssb_items_drained)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_recovery_published, recovery_published)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_recovery_redirtied, recovery_redirtied)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_recovery_drained, recovery_drained)
+
+static LJ_AINLINE uint64_t gc2_recovery_items_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.recovery_items);
+}
+
+static LJ_AINLINE void gc2_recovery_items_store_rlx(global_State *g,
+						      uint64_t n)
+{
+  la_store64_rlx(&g->gc2.recovery_items, n);
+}
+
+static LJ_AINLINE uint64_t gc2_recovery_items_add(global_State *g,
+						   uint64_t n)
+{
+  uint64_t old = la_load64_acq(&g->gc2.recovery_items);
+  for (;;) {
+    uint64_t next;
+    if (LJ_UNLIKELY(old > ~(uint64_t)0 - n))
+      return ~(uint64_t)0;
+    next = old + n;
+    if (la_cas64(&g->gc2.recovery_items, &old, next,
+		 LA_ACQ_REL, LA_ACQ))
+      return old;
+  }
+}
+
+static LJ_AINLINE int gc2_recovery_items_dec(global_State *g)
+{
+  uint64_t old = gc2_recovery_items_acq(g);
+  while (old != 0) {
+    uint64_t expect = old;
+    if (la_cas64(&g->gc2.recovery_items, &expect, old - 1u,
+		 LA_ACQ_REL, LA_ACQ))
+      return 1;
+    old = expect;
+  }
+  return 0;
+}
+
+static LJ_AINLINE uint64_t gc2_recovery_huge_items_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.recovery_huge_items);
+}
+
+static LJ_AINLINE void gc2_recovery_huge_items_store_rlx(global_State *g,
+							 uint64_t n)
+{
+  la_store64_rlx(&g->gc2.recovery_huge_items, n);
+}
+
+static LJ_AINLINE uint64_t gc2_recovery_huge_items_add(global_State *g,
+							uint64_t n)
+{
+  uint64_t old = la_load64_acq(&g->gc2.recovery_huge_items);
+  for (;;) {
+    uint64_t next;
+    if (LJ_UNLIKELY(old > ~(uint64_t)0 - n))
+      return ~(uint64_t)0;
+    next = old + n;
+    if (la_cas64(&g->gc2.recovery_huge_items, &old, next,
+		 LA_ACQ_REL, LA_ACQ))
+      return old;
+  }
+}
+
+static LJ_AINLINE int gc2_recovery_huge_items_dec(global_State *g)
+{
+  uint64_t old = gc2_recovery_huge_items_acq(g);
+  while (old != 0) {
+    uint64_t expect = old;
+    if (la_cas64(&g->gc2.recovery_huge_items, &expect, old - 1u,
+		 LA_ACQ_REL, LA_ACQ))
+      return 1;
+    old = expect;
+  }
+  return 0;
+}
+
+static LJ_AINLINE uint32_t gc2_recovery_main_state_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.recovery_main_state);
+}
+
+static LJ_AINLINE void gc2_recovery_main_state_store_rlx(global_State *g,
+							  uint32_t state)
+{
+  la_store32_rlx(&g->gc2.recovery_main_state, state);
+}
+
+static LJ_AINLINE int gc2_recovery_main_state_cas(global_State *g,
+						   uint32_t *oldp,
+						   uint32_t state)
+{
+  return la_cas32(&g->gc2.recovery_main_state, oldp, state,
+			  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t gc2_recovery_failed_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.recovery_failed);
+}
+
+static LJ_AINLINE void gc2_recovery_failed_store_rlx(global_State *g,
+						       uint32_t failed)
+{
+  la_store32_rlx(&g->gc2.recovery_failed, failed);
+}
+
+static LJ_AINLINE void gc2_recovery_failed_rel(global_State *g,
+						 uint32_t failed)
+{
+  la_store32_rel(&g->gc2.recovery_failed, failed);
+}
+
+static LJ_AINLINE uint32_t gc2_recovery_scan_lane_rlx(global_State *g)
+{
+  return la_load32_rlx(&g->gc2.recovery_scan_lane);
+}
+
+static LJ_AINLINE void gc2_recovery_scan_lane_store_rlx(global_State *g,
+							 uint32_t lane)
+{
+  la_store32_rlx(&g->gc2.recovery_scan_lane, lane);
+}
+
+static LJ_AINLINE uint32_t gc2_recovery_small_slot_rlx(global_State *g)
+{
+  return la_load32_rlx(&g->gc2.recovery_small_slot);
+}
+
+static LJ_AINLINE void gc2_recovery_small_slot_store_rlx(global_State *g,
+							  uint32_t slot)
+{
+  la_store32_rlx(&g->gc2.recovery_small_slot, slot);
+}
+
+static LJ_AINLINE uint32_t gc2_recovery_small_cell_rlx(global_State *g)
+{
+  return la_load32_rlx(&g->gc2.recovery_small_cell);
+}
+
+static LJ_AINLINE void gc2_recovery_small_cell_store_rlx(global_State *g,
+							  uint32_t cell)
+{
+  la_store32_rlx(&g->gc2.recovery_small_cell, cell);
+}
+
+static LJ_AINLINE uint32_t gc2_recovery_huge_slot_rlx(global_State *g)
+{
+  return la_load32_rlx(&g->gc2.recovery_huge_slot);
+}
+
+static LJ_AINLINE void gc2_recovery_huge_slot_store_rlx(global_State *g,
+							 uint32_t slot)
+{
+  la_store32_rlx(&g->gc2.recovery_huge_slot, slot);
+}
+
+LJ_GC2_COUNTER64_ACCESSORS(gc2_fixpoint_rounds, fixpoint_rounds)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_fixpoint_hits, fixpoint_hits)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_mark_complete_runs, mark_complete_runs)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_mark_complete_hits, mark_complete_hits)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_mark_complete_peer_waits, mark_complete_peer_waits)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_mark_to_weak, mark_to_weak)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_complete_runs, weak_complete_runs)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_complete_progress, weak_complete_progress)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_weak_to_sweep, weak_to_sweep)
+
+static LJ_AINLINE uint32_t gc2_n_threads_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.n_threads);
+}
+
+static LJ_AINLINE void gc2_n_threads_store_rlx(global_State *g, uint32_t n)
+{
+  la_store32_rlx(&g->gc2.n_threads, n);
+}
+
+static LJ_AINLINE uint32_t gc2_n_threads_add_rlx(global_State *g,
+						 uint32_t n)
+{
+  return la_add32_rlx(&g->gc2.n_threads, n);
+}
+
+static LJ_AINLINE uint32_t gc2_n_threads_sub_acqrel(global_State *g,
+						    uint32_t n)
+{
+  return la_sub32_acqrel(&g->gc2.n_threads, n);
+}
+
+static LJ_AINLINE uint32_t gc2_hs_leader_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.hs_leader);
+}
+
+static LJ_AINLINE void gc2_hs_leader_store_rlx(global_State *g,
+					       uint32_t leader)
+{
+  la_store32_rlx(&g->gc2.hs_leader, leader);
+}
+
+static LJ_AINLINE void gc2_hs_leader_rel(global_State *g, uint32_t leader)
+{
+  la_store32_rel(&g->gc2.hs_leader, leader);
+}
+
+static LJ_AINLINE int gc2_hs_leader_cas(global_State *g, uint32_t *oldp,
+					uint32_t leader)
+{
+  return la_cas32(&g->gc2.hs_leader, oldp, leader, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE void gc2_hs_leader_futex_wake(global_State *g, int n)
+{
+  la_futex_wake(&g->gc2.hs_leader, n);
+}
+
+static LJ_AINLINE void gc2_hs_leader_futex_wait(global_State *g,
+						uint32_t leader,
+						int timeout_ns)
+{
+  la_futex_wait(&g->gc2.hs_leader, leader, timeout_ns);
+}
+
+static LJ_AINLINE uint64_t gc2_hs_epoch_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.hs_epoch);
+}
+
+static LJ_AINLINE uint64_t gc2_hs_epoch_rlx(global_State *g)
+{
+  return la_load64_rlx(&g->gc2.hs_epoch);
+}
+
+static LJ_AINLINE void gc2_hs_epoch_store_rlx(global_State *g,
+					      uint64_t epoch)
+{
+  la_store64_rlx(&g->gc2.hs_epoch, epoch);
+}
+
+static LJ_AINLINE void gc2_hs_epoch_rel(global_State *g, uint64_t epoch)
+{
+  la_store64_rel(&g->gc2.hs_epoch, epoch);
+}
+
+static LJ_AINLINE uint32_t gc2_hs_pending_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.hs_pending);
+}
+
+static LJ_AINLINE uint32_t gc2_hs_pending_rlx(global_State *g)
+{
+  return la_load32_rlx(&g->gc2.hs_pending);
+}
+
+static LJ_AINLINE void gc2_hs_pending_store_rlx(global_State *g,
+						uint32_t pending)
+{
+  la_store32_rlx(&g->gc2.hs_pending, pending);
+}
+
+static LJ_AINLINE void gc2_hs_pending_rel(global_State *g, uint32_t pending)
+{
+  la_store32_rel(&g->gc2.hs_pending, pending);
+}
+
+static LJ_AINLINE uint32_t gc2_hs_pending_add_rlx(global_State *g,
+						  uint32_t n)
+{
+  return la_add32_rlx(&g->gc2.hs_pending, n);
+}
+
+static LJ_AINLINE uint32_t gc2_hs_pending_sub_acqrel(global_State *g,
+						     uint32_t n)
+{
+  return la_sub32_acqrel(&g->gc2.hs_pending, n);
+}
+
+static LJ_AINLINE void gc2_hs_pending_futex_wake(global_State *g, int n)
+{
+  la_futex_wake(&g->gc2.hs_pending, n);
+}
+
+static LJ_AINLINE void gc2_hs_pending_futex_wait(global_State *g,
+						 uint32_t pending,
+						 int timeout_ns)
+{
+  la_futex_wait(&g->gc2.hs_pending, pending, timeout_ns);
+}
+
+static LJ_AINLINE uint32_t gc2_hs_actions_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.hs_actions);
+}
+
+static LJ_AINLINE void gc2_hs_actions_store_rlx(global_State *g,
+						uint32_t actions)
+{
+  la_store32_rlx(&g->gc2.hs_actions, actions);
+}
+
+static LJ_AINLINE void gc2_hs_actions_rel(global_State *g, uint32_t actions)
+{
+  la_store32_rel(&g->gc2.hs_actions, actions);
+}
+
+static LJ_AINLINE uint64_t gc2_hs_signal_ns_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.hs_signal_ns);
+}
+
+static LJ_AINLINE void gc2_hs_signal_ns_store_rlx(global_State *g,
+						  uint64_t ns)
+{
+  la_store64_rlx(&g->gc2.hs_signal_ns, ns);
+}
+
+static LJ_AINLINE void gc2_hs_signal_ns_rel(global_State *g, uint64_t ns)
+{
+  la_store64_rel(&g->gc2.hs_signal_ns, ns);
+}
+
+LJ_GC2_COUNTER64_ACCESSORS(gc2_hs_ack_latency_samples, hs_ack_latency_samples)
+
+static LJ_AINLINE uint64_t gc2_hs_ack_latency_sum_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.hs_ack_latency_sum_ns);
+}
+
+static LJ_AINLINE void gc2_hs_ack_latency_sum_store_rlx(global_State *g,
+							uint64_t ns)
+{
+  la_store64_rlx(&g->gc2.hs_ack_latency_sum_ns, ns);
+}
+
+static LJ_AINLINE void gc2_hs_ack_latency_sum_add(global_State *g,
+						  uint64_t ns)
+{
+  la_add64_rlx(&g->gc2.hs_ack_latency_sum_ns, ns);
+}
+
+static LJ_AINLINE uint64_t gc2_hs_ack_latency_max_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.hs_ack_latency_max_ns);
+}
+
+static LJ_AINLINE void gc2_hs_ack_latency_max_store_rlx(global_State *g,
+							uint64_t ns)
+{
+  la_store64_rlx(&g->gc2.hs_ack_latency_max_ns, ns);
+}
+
+static LJ_AINLINE int gc2_hs_ack_latency_max_cas(global_State *g,
+						 uint64_t *oldp,
+						 uint64_t ns)
+{
+  return la_cas64(&g->gc2.hs_ack_latency_max_ns, oldp, ns,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint64_t gc2_hs_ack_latency_bucket_acq(global_State *g,
+							 uint32_t bucket)
+{
+  return la_load64_acq(&g->gc2.hs_ack_latency_buckets[bucket]);
+}
+
+static LJ_AINLINE void gc2_hs_ack_latency_bucket_store_rlx(global_State *g,
+							   uint32_t bucket,
+							   uint64_t n)
+{
+  la_store64_rlx(&g->gc2.hs_ack_latency_buckets[bucket], n);
+}
+
+static LJ_AINLINE void gc2_hs_ack_latency_bucket_add(global_State *g,
+						     uint32_t bucket,
+						     uint64_t n)
+{
+  la_add64_rlx(&g->gc2.hs_ack_latency_buckets[bucket], n);
+}
+
+LJ_GC2_COUNTER64_ACCESSORS(gc2_smr_reclaim_runs, smr_reclaim_runs)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_smr_reclaimed, smr_reclaimed)
+
+static LJ_AINLINE uint32_t gc2_smr_readers_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.smr_readers);
+}
+
+static LJ_AINLINE void gc2_smr_readers_store_rlx(global_State *g, uint32_t n)
+{
+  la_store32_rlx(&g->gc2.smr_readers, n);
+}
+
+static LJ_AINLINE uint32_t gc2_smr_readers_add(global_State *g, uint32_t n)
+{
+  return la_add32_acqrel(&g->gc2.smr_readers, n);
+}
+
+static LJ_AINLINE uint32_t gc2_smr_readers_sub(global_State *g, uint32_t n)
+{
+  return la_sub32_acqrel(&g->gc2.smr_readers, n);
+}
+
+static LJ_AINLINE uint32_t gc2_smr_reclaiming_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.smr_reclaiming);
+}
+
+static LJ_AINLINE void gc2_smr_reclaiming_store_rlx(global_State *g,
+						    uint32_t mode)
+{
+  la_store32_rlx(&g->gc2.smr_reclaiming, mode);
+}
+
+static LJ_AINLINE void gc2_smr_reclaiming_rel(global_State *g,
+					      uint32_t mode)
+{
+  la_store32_rel(&g->gc2.smr_reclaiming, mode);
+}
+
+static LJ_AINLINE int gc2_smr_reclaiming_cas(global_State *g,
+					     uint32_t *oldp,
+					     uint32_t mode)
+{
+  return la_cas32(&g->gc2.smr_reclaiming, oldp, mode,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t gc2_generational_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.generational);
+}
+
+static LJ_AINLINE void gc2_generational_store_rlx(global_State *g,
+						  uint32_t enabled)
+{
+  la_store32_rlx(&g->gc2.generational, enabled);
+}
+
+static LJ_AINLINE void gc2_generational_rel(global_State *g,
+					    uint32_t enabled)
+{
+  la_store32_rel(&g->gc2.generational, enabled);
+}
+
+static LJ_AINLINE void gc2_force_major_store_rlx(global_State *g,
+						 uint32_t force)
+{
+  la_store32_rlx(&g->gc2.force_major, force);
+}
+
+static LJ_AINLINE void gc2_force_major_rel(global_State *g, uint32_t force)
+{
+  la_store32_rel(&g->gc2.force_major, force);
+}
+
+static LJ_AINLINE uint32_t gc2_force_major_xchg_acqrel(global_State *g,
+						       uint32_t force)
+{
+  return la_xchg32_acqrel(&g->gc2.force_major, force);
+}
+
+LJ_GC2_COUNTER64_ACCESSORS(gc2_remembered_barriers, remembered_barriers)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_remembered_pushed, remembered_pushed)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_remembered_overflows, remembered_overflows)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_remembered_filtered, remembered_filtered)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_remembered_drained, remembered_drained)
+
+static LJ_AINLINE uint32_t gc2_cycle_minor_requested_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.cycle_minor_requested);
+}
+
+static LJ_AINLINE void gc2_cycle_minor_requested_store_rlx(global_State *g,
+							   uint32_t minor)
+{
+  la_store32_rlx(&g->gc2.cycle_minor_requested, minor);
+}
+
+static LJ_AINLINE void gc2_cycle_minor_requested_rel(global_State *g,
+						     uint32_t minor)
+{
+  la_store32_rel(&g->gc2.cycle_minor_requested, minor);
+}
+
+static LJ_AINLINE uint32_t gc2_cycle_sweep_minor_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.cycle_sweep_minor);
+}
+
+static LJ_AINLINE void gc2_cycle_sweep_minor_store_rlx(global_State *g,
+						       uint32_t minor)
+{
+  la_store32_rlx(&g->gc2.cycle_sweep_minor, minor);
+}
+
+static LJ_AINLINE void gc2_cycle_sweep_minor_rel(global_State *g,
+						 uint32_t minor)
+{
+  la_store32_rel(&g->gc2.cycle_sweep_minor, minor);
+}
+
+static LJ_AINLINE uint32_t gc2_minor_sweep_enabled_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.minor_sweep_enabled);
+}
+
+static LJ_AINLINE void gc2_minor_sweep_enabled_store_rlx(global_State *g,
+							 uint32_t enabled)
+{
+  la_store32_rlx(&g->gc2.minor_sweep_enabled, enabled);
+}
+
+static LJ_AINLINE void gc2_minor_sweep_enabled_rel(global_State *g,
+						   uint32_t enabled)
+{
+  la_store32_rel(&g->gc2.minor_sweep_enabled, enabled);
+}
+
+static LJ_AINLINE uint32_t gc2_cycle_roots_minor_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.cycle_roots_minor);
+}
+
+static LJ_AINLINE void gc2_cycle_roots_minor_store_rlx(global_State *g,
+						       uint32_t minor)
+{
+  la_store32_rlx(&g->gc2.cycle_roots_minor, minor);
+}
+
+static LJ_AINLINE void gc2_cycle_roots_minor_rel(global_State *g,
+						 uint32_t minor)
+{
+  la_store32_rel(&g->gc2.cycle_roots_minor, minor);
+}
+
+static LJ_AINLINE uint32_t gc2_minor_roots_enabled_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.minor_roots_enabled);
+}
+
+static LJ_AINLINE void gc2_minor_roots_enabled_store_rlx(global_State *g,
+							 uint32_t enabled)
+{
+  la_store32_rlx(&g->gc2.minor_roots_enabled, enabled);
+}
+
+static LJ_AINLINE void gc2_minor_roots_enabled_rel(global_State *g,
+						   uint32_t enabled)
+{
+  la_store32_rel(&g->gc2.minor_roots_enabled, enabled);
+}
+
+static LJ_AINLINE uint64_t gc2_minor_survival_base_live_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.minor_survival_base_live);
+}
+
+static LJ_AINLINE void gc2_minor_survival_base_live_store_rlx(global_State *g,
+							      uint64_t live)
+{
+  la_store64_rlx(&g->gc2.minor_survival_base_live, live);
+}
+
+static LJ_AINLINE void gc2_minor_survival_base_live_rel(global_State *g,
+							uint64_t live)
+{
+  la_store64_rel(&g->gc2.minor_survival_base_live, live);
+}
+
+static LJ_AINLINE uint64_t gc2_minor_survival_bytes_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.minor_survival_bytes);
+}
+
+static LJ_AINLINE void gc2_minor_survival_bytes_store_rlx(global_State *g,
+							  uint64_t bytes)
+{
+  la_store64_rlx(&g->gc2.minor_survival_bytes, bytes);
+}
+
+static LJ_AINLINE void gc2_minor_survival_bytes_rel(global_State *g,
+						    uint64_t bytes)
+{
+  la_store64_rel(&g->gc2.minor_survival_bytes, bytes);
+}
+
+static LJ_AINLINE uint32_t gc2_minor_survival_pct_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.minor_survival_pct);
+}
+
+static LJ_AINLINE void gc2_minor_survival_pct_store_rlx(global_State *g,
+							uint32_t pct)
+{
+  la_store32_rlx(&g->gc2.minor_survival_pct, pct);
+}
+
+static LJ_AINLINE void gc2_minor_survival_pct_rel(global_State *g,
+						  uint32_t pct)
+{
+  la_store32_rel(&g->gc2.minor_survival_pct, pct);
+}
+
+static LJ_AINLINE uint32_t gc2_minor_survival_threshold_pct_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.minor_survival_threshold_pct);
+}
+
+static LJ_AINLINE void gc2_minor_survival_threshold_pct_store_rlx(
+  global_State *g, uint32_t pct)
+{
+  la_store32_rlx(&g->gc2.minor_survival_threshold_pct, pct);
+}
+
+static LJ_AINLINE uint64_t gc2_minor_survival_major_requests_acq(
+  global_State *g)
+{
+  return la_load64_acq(&g->gc2.minor_survival_major_requests);
+}
+
+static LJ_AINLINE void gc2_minor_survival_major_requests_store_rlx(
+  global_State *g, uint64_t n)
+{
+  la_store64_rlx(&g->gc2.minor_survival_major_requests, n);
+}
+
+static LJ_AINLINE void gc2_minor_survival_major_requests_add(global_State *g,
+							     uint64_t n)
+{
+  la_add64_rlx(&g->gc2.minor_survival_major_requests, n);
+}
+
+LJ_GC2_COUNTER64_ACCESSORS(gc2_sweep_owner_runs, sweep_owner_runs)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_sweep_owner_arenas, sweep_owner_arenas)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_sweep_owner_live_cells, sweep_owner_live_cells)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_sweep_live_updates, sweep_live_updates)
+
+static LJ_AINLINE uint64_t gc2_sweep_live_huge_bytes_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.sweep_live_huge_bytes);
+}
+
+static LJ_AINLINE void gc2_sweep_live_huge_bytes_store_rlx(global_State *g,
+							   uint64_t bytes)
+{
+  la_store64_rlx(&g->gc2.sweep_live_huge_bytes, bytes);
+}
+
+static LJ_AINLINE void gc2_sweep_live_huge_bytes_rel(global_State *g,
+						     uint64_t bytes)
+{
+  la_store64_rel(&g->gc2.sweep_live_huge_bytes, bytes);
+}
+
+static LJ_AINLINE uint64_t gc2_live_estimate_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.live_estimate);
+}
+
+static LJ_AINLINE void gc2_live_estimate_store_rlx(global_State *g,
+						   uint64_t bytes)
+{
+  la_store64_rlx(&g->gc2.live_estimate, bytes);
+}
+
+static LJ_AINLINE void gc2_live_estimate_rel(global_State *g, uint64_t bytes)
+{
+  la_store64_rel(&g->gc2.live_estimate, bytes);
+}
+
+static LJ_AINLINE uint32_t gc2_n_workers_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.n_workers);
+}
+
+static LJ_AINLINE void gc2_n_workers_store_rlx(global_State *g, uint32_t n)
+{
+  la_store32_rlx(&g->gc2.n_workers, n);
+}
+
+static LJ_AINLINE void gc2_n_workers_rel(global_State *g, uint32_t n)
+{
+  la_store32_rel(&g->gc2.n_workers, n);
+}
+
+static LJ_AINLINE uint32_t gc2_worker_control_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.worker_control);
+}
+
+static LJ_AINLINE void gc2_worker_control_store_rlx(global_State *g,
+						    uint32_t owner)
+{
+  la_store32_rlx(&g->gc2.worker_control, owner);
+}
+
+static LJ_AINLINE void gc2_worker_control_rel(global_State *g, uint32_t owner)
+{
+  la_store32_rel(&g->gc2.worker_control, owner);
+}
+
+static LJ_AINLINE int gc2_worker_control_cas(global_State *g, uint32_t *oldp,
+					     uint32_t owner)
+{
+  return la_cas32(&g->gc2.worker_control, oldp, owner, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE void gc2_worker_control_futex_wake(global_State *g, int n)
+{
+  la_futex_wake(&g->gc2.worker_control, n);
+}
+
+static LJ_AINLINE void gc2_worker_control_futex_wait(global_State *g,
+						     uint32_t owner,
+						     int64_t timeout_ns)
+{
+  la_futex_wait(&g->gc2.worker_control, owner, timeout_ns);
+}
+
+static LJ_AINLINE void *gc2_worker_thread_acq(global_State *g, uint32_t i)
+{
+  return la_loadptr_acq((void *const *)&g->gc2.worker_thread[i]);
+}
+
+static LJ_AINLINE void gc2_worker_thread_store_rlx(global_State *g,
+						   uint32_t i, void *thr)
+{
+  la_storeptr_rlx((void **)&g->gc2.worker_thread[i], thr);
+}
+
+static LJ_AINLINE TGState *gc2_worker_tg_acq(global_State *g, uint32_t i)
+{
+  return (TGState *)la_loadptr_acq((void *const *)&g->gc2.worker_tg[i]);
+}
+
+static LJ_AINLINE void gc2_worker_tg_store_rlx(global_State *g, uint32_t i,
+					       TGState *tg)
+{
+  la_storeptr_rlx((void **)&g->gc2.worker_tg[i], tg);
+}
+
+static LJ_AINLINE void *gc2_worker_tg_retired_acq(global_State *g)
+{
+  return la_loadptr_acq((void *const *)&g->gc2.worker_tg_retired);
+}
+
+static LJ_AINLINE void gc2_worker_tg_retired_store_rlx(global_State *g,
+						       void *head)
+{
+  la_storeptr_rlx((void **)&g->gc2.worker_tg_retired, head);
+}
+
+static LJ_AINLINE void gc2_worker_tg_retired_rel(global_State *g, void *head)
+{
+  la_storeptr_rel((void **)&g->gc2.worker_tg_retired, head);
+}
+
+static LJ_AINLINE uint32_t gc2_worker_stop_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.worker_stop);
+}
+
+static LJ_AINLINE void gc2_worker_stop_store_rlx(global_State *g,
+						 uint32_t stop)
+{
+  la_store32_rlx(&g->gc2.worker_stop, stop);
+}
+
+static LJ_AINLINE void gc2_worker_stop_rel(global_State *g, uint32_t stop)
+{
+  la_store32_rel(&g->gc2.worker_stop, stop);
+}
+
+static LJ_AINLINE uint32_t gc2_worker_wake_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.worker_wake);
+}
+
+static LJ_AINLINE void gc2_worker_wake_store_rlx(global_State *g,
+						 uint32_t wake)
+{
+  la_store32_rlx(&g->gc2.worker_wake, wake);
+}
+
+static LJ_AINLINE uint32_t gc2_worker_wake_add(global_State *g,
+					       uint32_t n)
+{
+  return la_add32_rlx(&g->gc2.worker_wake, n);
+}
+
+static LJ_AINLINE void gc2_worker_wake_futex_wake(global_State *g, int n)
+{
+  la_futex_wake(&g->gc2.worker_wake, n);
+}
+
+static LJ_AINLINE void gc2_worker_wake_futex_wait(global_State *g,
+						  uint32_t wake,
+						  int timeout_ns)
+{
+  la_futex_wait(&g->gc2.worker_wake, wake, timeout_ns);
+}
+
+static LJ_AINLINE uint32_t gc2_worker_started_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.worker_started);
+}
+
+static LJ_AINLINE void gc2_worker_started_store_rlx(global_State *g,
+						    uint32_t started)
+{
+  la_store32_rlx(&g->gc2.worker_started, started);
+}
+
+static LJ_AINLINE void gc2_worker_started_rel(global_State *g,
+					      uint32_t started)
+{
+  la_store32_rel(&g->gc2.worker_started, started);
+}
+
+static LJ_AINLINE uint32_t gc2_worker_started_add(global_State *g,
+						  uint32_t n)
+{
+  return la_add32_rlx(&g->gc2.worker_started, n);
+}
+
+static LJ_AINLINE void gc2_worker_started_futex_wake(global_State *g, int n)
+{
+  la_futex_wake(&g->gc2.worker_started, n);
+}
+
+static LJ_AINLINE void gc2_worker_started_futex_wait(global_State *g,
+						     uint32_t started,
+						     int timeout_ns)
+{
+  la_futex_wait(&g->gc2.worker_started, started, timeout_ns);
+}
+
+static LJ_AINLINE void gc2_worker_exited_store_rlx(global_State *g,
+						   uint32_t exited)
+{
+  la_store32_rlx(&g->gc2.worker_exited, exited);
+}
+
+static LJ_AINLINE void gc2_worker_exited_rel(global_State *g, uint32_t exited)
+{
+  la_store32_rel(&g->gc2.worker_exited, exited);
+}
+
+static LJ_AINLINE uint32_t gc2_worker_exited_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.worker_exited);
+}
+
+static LJ_AINLINE uint32_t gc2_worker_exited_add(global_State *g, uint32_t n)
+{
+  return la_add32_rlx(&g->gc2.worker_exited, n);
+}
+
+static LJ_AINLINE void gc2_worker_exited_futex_wake(global_State *g, int n)
+{
+  la_futex_wake(&g->gc2.worker_exited, n);
+}
+
+LJ_GC2_COUNTER64_ACCESSORS(gc2_worker_runs, worker_runs)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_worker_grey_drained, worker_grey_drained)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_worker_ssb_converted, worker_ssb_converted)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_worker_weak_drained, worker_weak_drained)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_worker_idle_declares, worker_idle_declares)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_worker_busy_retries, worker_busy_retries)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_worker_wakes, worker_wakes)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_worker_parks, worker_parks)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_worker_async_progress, worker_async_progress)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_deferred_epoch, deferred_epoch)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_tg_thread_roots, tg_thread_roots)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_tg_cur_roots, tg_cur_roots)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_tg_trace_roots, tg_trace_roots)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_thread_scan_claims, thread_scan_claims)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_thread_scan_busy, thread_scan_busy)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_thread_scan_requeues, thread_scan_requeues)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_thread_scan_owner_scans, thread_scan_owner_scans)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_thread_scan_needscan, thread_scan_needscan)
+
+static LJ_AINLINE uint64_t gc2_thread_scan_owner_needscans_acq(
+  global_State *g)
+{
+  return la_load64_acq(&g->gc2.thread_scan_owner_needscans);
+}
+
+static LJ_AINLINE void gc2_thread_scan_owner_needscans_store_rlx(
+  global_State *g, uint64_t n)
+{
+  la_store64_rlx(&g->gc2.thread_scan_owner_needscans, n);
+}
+
+static LJ_AINLINE void gc2_thread_scan_owner_needscans_add(global_State *g,
+							   uint64_t n)
+{
+  la_add64_rlx(&g->gc2.thread_scan_owner_needscans, n);
+}
+
+static LJ_AINLINE uint32_t gc2_thread_scan_needscan_pending_acq(
+  global_State *g)
+{
+  return la_load32_acq(&g->gc2.thread_scan_needscan_pending);
+}
+
+static LJ_AINLINE void gc2_thread_scan_needscan_pending_store_rlx(
+  global_State *g, uint32_t n)
+{
+  la_store32_rlx(&g->gc2.thread_scan_needscan_pending, n);
+}
+
+static LJ_AINLINE void gc2_thread_scan_needscan_pending_inc(global_State *g)
+{
+  la_add32_rlx(&g->gc2.thread_scan_needscan_pending, 1);
+}
+
+static LJ_AINLINE void gc2_thread_scan_needscan_pending_dec(global_State *g)
+{
+  uint32_t old = la_sub32_rlx(&g->gc2.thread_scan_needscan_pending, 1);
+  lj_assertG(old > 0, "thread NEEDSCAN pending underflow");
+  UNUSED(old);
+}
+
+static LJ_AINLINE uint32_t gc2_table_rescan_pending_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.table_rescan_pending);
+}
+
+static LJ_AINLINE void gc2_table_rescan_pending_store_rlx(global_State *g,
+							  uint32_t n)
+{
+  la_store32_rlx(&g->gc2.table_rescan_pending, n);
+}
+
+static LJ_AINLINE void gc2_table_rescan_pending_inc(global_State *g)
+{
+  la_add32_rlx(&g->gc2.table_rescan_pending, 1);
+}
+
+static LJ_AINLINE void gc2_table_rescan_pending_dec(global_State *g)
+{
+  uint32_t old = la_sub32_rlx(&g->gc2.table_rescan_pending, 1);
+  lj_assertG(old > 0, "table NEEDSCAN pending underflow");
+  UNUSED(old);
+}
+
+static LJ_AINLINE uint64_t gc2_table_token_scan_requested_acq(global_State *g)
+{
+  return la_load64_acq(&g->gc2.table_token_scan_requested);
+}
+
+static LJ_AINLINE void gc2_table_token_scan_requested_store_rlx(
+  global_State *g, uint64_t generation)
+{
+  la_store64_rlx(&g->gc2.table_token_scan_requested, generation);
+}
+
+static LJ_AINLINE void gc2_table_token_scan_requested_max_rel(
+  global_State *g, uint64_t generation)
+{
+  uint64_t old = gc2_table_token_scan_requested_acq(g);
+  while (old < generation) {
+    uint64_t expect = old;
+    if (la_cas64(&g->gc2.table_token_scan_requested, &expect, generation,
+		 LA_ACQ_REL, LA_ACQ))
+      return;
+    old = expect;
+  }
+}
+
+static LJ_AINLINE LJGC2TableTopologySnap gc2_table_token_topology_snapshot(
+  global_State *g)
+{
+  return lj_gc2_table_topology_snapshot(&g->gc2.table_token_topology);
+}
+
+#define LJ_GC2_TABLE_PASS_U64_ACCESSORS(name, field) \
+static LJ_AINLINE uint64_t name##_acq(global_State *g) \
+{ return la_load64_acq(&g->gc2.field); } \
+static LJ_AINLINE void name##_store_rlx(global_State *g, uint64_t value) \
+{ la_store64_rlx(&g->gc2.field, value); } \
+static LJ_AINLINE void name##_rel(global_State *g, uint64_t value) \
+{ la_store64_rel(&g->gc2.field, value); }
+
+#define LJ_GC2_TABLE_PASS_U32_ACCESSORS(name, field) \
+static LJ_AINLINE uint32_t name##_acq(global_State *g) \
+{ return la_load32_acq(&g->gc2.field); } \
+static LJ_AINLINE void name##_store_rlx(global_State *g, uint32_t value) \
+{ la_store32_rlx(&g->gc2.field, value); } \
+static LJ_AINLINE void name##_rel(global_State *g, uint32_t value) \
+{ la_store32_rel(&g->gc2.field, value); }
+
+LJ_GC2_TABLE_PASS_U64_ACCESSORS(gc2_table_token_pass_epoch,
+				table_token_pass_epoch)
+LJ_GC2_TABLE_PASS_U64_ACCESSORS(gc2_table_token_pass_desc,
+				table_token_pass_desc)
+LJ_GC2_TABLE_PASS_U64_ACCESSORS(gc2_table_token_pass_ack_epoch,
+				table_token_pass_ack_epoch)
+LJ_GC2_TABLE_PASS_U64_ACCESSORS(gc2_table_token_pass_ack_desc,
+				table_token_pass_ack_desc)
+LJ_GC2_TABLE_PASS_U64_ACCESSORS(gc2_table_token_pass_act_epoch,
+				table_token_pass_act_epoch)
+LJ_GC2_TABLE_PASS_U64_ACCESSORS(gc2_table_token_pass_act_control,
+				table_token_pass_act_control)
+LJ_GC2_TABLE_PASS_U64_ACCESSORS(gc2_table_token_pass_ack_act_epoch,
+				table_token_pass_ack_act_epoch)
+LJ_GC2_TABLE_PASS_U64_ACCESSORS(gc2_table_token_pass_ack_act_control,
+				table_token_pass_ack_act_control)
+LJ_GC2_TABLE_PASS_U32_ACCESSORS(gc2_table_token_pass_cycle,
+				table_token_pass_cycle)
+LJ_GC2_TABLE_PASS_U32_ACCESSORS(gc2_table_token_pass_phase,
+				table_token_pass_phase)
+LJ_GC2_TABLE_PASS_U32_ACCESSORS(gc2_table_token_pass_lane,
+				table_token_pass_lane)
+LJ_GC2_TABLE_PASS_U32_ACCESSORS(gc2_table_token_pass_hazard,
+				table_token_pass_hazard)
+LJ_GC2_TABLE_PASS_U32_ACCESSORS(gc2_table_token_pass_ack_cycle,
+				table_token_pass_ack_cycle)
+LJ_GC2_TABLE_PASS_U32_ACCESSORS(gc2_table_token_pass_ack_phase,
+				table_token_pass_ack_phase)
+
+#undef LJ_GC2_TABLE_PASS_U64_ACCESSORS
+#undef LJ_GC2_TABLE_PASS_U32_ACCESSORS
+
+static LJ_AINLINE uint32_t gc2_table_token_small_slot_rlx(global_State *g)
+{
+  return la_load32_rlx(&g->gc2.table_token_small_slot);
+}
+
+static LJ_AINLINE void gc2_table_token_small_slot_store_rlx(global_State *g,
+						     uint32_t slot)
+{
+  la_store32_rlx(&g->gc2.table_token_small_slot, slot);
+}
+
+static LJ_AINLINE uint32_t gc2_table_token_small_cell_rlx(global_State *g)
+{
+  return la_load32_rlx(&g->gc2.table_token_small_cell);
+}
+
+static LJ_AINLINE void gc2_table_token_small_cell_store_rlx(global_State *g,
+						     uint32_t cell)
+{
+  la_store32_rlx(&g->gc2.table_token_small_cell, cell);
+}
+
+static LJ_AINLINE LJTGRegistrySlot *gc2_table_token_huge_node_acq(
+  global_State *g)
+{
+  return (LJTGRegistrySlot *)la_loadptr_acq(
+    (void *const *)&g->gc2.table_token_huge_node);
+}
+
+static LJ_AINLINE void gc2_table_token_huge_node_store_rlx(
+  global_State *g, LJTGRegistrySlot *node)
+{
+  la_storeptr_rlx((void **)&g->gc2.table_token_huge_node, node);
+}
+
+static LJ_AINLINE uint64_t gc2_table_token_huge_incarnation_acq(
+  global_State *g)
+{
+  return la_load64_acq(&g->gc2.table_token_huge_incarnation);
+}
+
+static LJ_AINLINE void gc2_table_token_huge_incarnation_store_rlx(
+  global_State *g, uint64_t incarnation)
+{
+  la_store64_rlx(&g->gc2.table_token_huge_incarnation, incarnation);
+}
+
+static LJ_AINLINE uint32_t gc2_table_token_huge_slot_rlx(global_State *g)
+{
+  return la_load32_rlx(&g->gc2.table_token_huge_slot);
+}
+
+static LJ_AINLINE void gc2_table_token_huge_slot_store_rlx(global_State *g,
+						    uint32_t slot)
+{
+  la_store32_rlx(&g->gc2.table_token_huge_slot, slot);
+}
+
+LJ_GC2_COUNTER64_ACCESSORS(gc2_table_token_scan_visited,
+			   table_token_scan_visited)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_table_token_scan_completed,
+			   table_token_scan_completed)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_table_token_scan_terminal,
+			   table_token_scan_terminal)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_table_token_scan_transient,
+			   table_token_scan_transient)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_table_token_scan_structural,
+			   table_token_scan_structural)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_table_token_scan_smr_skips,
+			   table_token_scan_smr_skips)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_table_token_scan_payloads,
+			   table_token_scan_payloads)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_table_token_pass_restarts,
+			   table_token_pass_restarts)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_table_token_pass_acks,
+			   table_token_pass_acks)
+
+LJ_GC2_COUNTER64_ACCESSORS(gc2_thread_scan_dirty_misses, thread_scan_dirty_misses)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_thread_scan_frame_fallbacks,
+			   thread_scan_frame_fallbacks)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_ffi_native_scan_attempts,
+			   ffi_native_scan_attempts)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_ffi_native_scan_stable_frames,
+			   ffi_native_scan_stable_frames)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_ffi_native_scan_retries,
+			   ffi_native_scan_retries)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_ffi_native_scan_invalid,
+			   ffi_native_scan_invalid)
+
+static LJ_AINLINE void *gc2_finalizer_mpsc_acq(global_State *g)
+{
+  return la_loadptr_acq((void *const *)&g->gc2.finalizer_mpsc);
+}
+
+static LJ_AINLINE void gc2_finalizer_mpsc_store_rlx(global_State *g,
+						    void *p)
+{
+  la_storeptr_rlx((void **)&g->gc2.finalizer_mpsc, p);
+}
+
+static LJ_AINLINE int gc2_finalizer_mpsc_cas(global_State *g, void **oldp,
+					     void *p)
+{
+  return la_casptr((void **)&g->gc2.finalizer_mpsc, oldp, p,
+		   LA_REL, LA_ACQ);
+}
+
+static LJ_AINLINE void *gc2_finalizer_mpsc_xchg_acqrel(global_State *g,
+						       void *p)
+{
+  return la_xchgptr_acqrel((void **)&g->gc2.finalizer_mpsc, p);
+}
+
+static LJ_AINLINE void *gc2_finalizer_tail_acq(global_State *g)
+{
+  return la_loadptr_acq((void *const *)&g->gc2.finalizer_tail);
+}
+
+static LJ_AINLINE void gc2_finalizer_tail_store_rlx(global_State *g,
+						    void *p)
+{
+  la_storeptr_rlx((void **)&g->gc2.finalizer_tail, p);
+}
+
+static LJ_AINLINE void gc2_finalizer_tail_rel(global_State *g, void *p)
+{
+  la_storeptr_rel((void **)&g->gc2.finalizer_tail, p);
+}
+
+static LJ_AINLINE uint32_t gc2_finalizer_active_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.finalizer_active);
+}
+
+static LJ_AINLINE void gc2_finalizer_active_store_rlx(global_State *g,
+						      uint32_t active)
+{
+  la_store32_rlx(&g->gc2.finalizer_active, active);
+}
+
+static LJ_AINLINE void gc2_finalizer_active_rel(global_State *g,
+						uint32_t active)
+{
+  la_store32_rel(&g->gc2.finalizer_active, active);
+}
+
+static LJ_AINLINE int gc2_finalizer_active_cas(global_State *g,
+					       uint32_t *oldp,
+					       uint32_t active)
+{
+  return la_cas32(&g->gc2.finalizer_active, oldp, active,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t gc2_finalizer_owner_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.finalizer_owner_actor);
+}
+
+static LJ_AINLINE void gc2_finalizer_owner_store_rlx(global_State *g,
+						     uint32_t owner)
+{
+  la_store32_rlx(&g->gc2.finalizer_owner_actor, owner);
+}
+
+static LJ_AINLINE void gc2_finalizer_owner_rel(global_State *g,
+					       uint32_t owner)
+{
+  la_store32_rel(&g->gc2.finalizer_owner_actor, owner);
+}
+
+#define LJ_GC2_FINSPAWN_CALLBACK_ACTIVE	0x00000001u
+#define LJ_GC2_FINSPAWN_DEFERRED		0x00000002u
+
+static LJ_AINLINE uint32_t gc2_finalizer_spawn_latch_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.finalizer_spawn_latch);
+}
+
+static LJ_AINLINE void gc2_finalizer_spawn_latch_store_rlx(global_State *g,
+						    uint32_t latched)
+{
+  la_store32_rlx(&g->gc2.finalizer_spawn_latch, latched);
+}
+
+static LJ_AINLINE uint32_t gc2_finalizer_spawn_latch_update(
+  global_State *g, uint32_t set, uint32_t clear)
+{
+  uint32_t old = gc2_finalizer_spawn_latch_acq(g);
+  for (;;) {
+    uint32_t next = (old | set) & ~clear;
+    if (next == old || la_cas32(&g->gc2.finalizer_spawn_latch, &old, next,
+				LA_ACQ_REL, LA_ACQ))
+      return old;
+  }
+}
+
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finalizer_queued, finalizer_queued)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finalizer_dequeued, finalizer_dequeued)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finalizer_mpsc_drained, finalizer_mpsc_drained)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finalizer_enters, finalizer_enters)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finalizer_leaves, finalizer_leaves)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finalizer_sweep_blocks, finalizer_sweep_blocks)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finalizer_spawn_deferrals, finalizer_spawn_deferrals)
+
+static LJ_AINLINE uint64_t gc2_finalizer_spawn_release_wakes_acq(
+  global_State *g)
+{
+  return la_load64_acq(&g->gc2.finalizer_spawn_release_wakes);
+}
+
+static LJ_AINLINE void gc2_finalizer_spawn_release_wakes_store_rlx(
+  global_State *g, uint64_t n)
+{
+  la_store64_rlx(&g->gc2.finalizer_spawn_release_wakes, n);
+}
+
+static LJ_AINLINE void gc2_finalizer_spawn_release_wakes_add(global_State *g,
+							     uint64_t n)
+{
+  la_add64_rlx(&g->gc2.finalizer_spawn_release_wakes, n);
+}
+
+#if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
+static LJ_AINLINE void gc2_finalizer_drain_test_pause_store_rlx(
+  global_State *g, uint32_t pause)
+{
+  la_store32_rlx(&g->gc2.finalizer_drain_test_pause, pause);
+}
+
+static LJ_AINLINE void gc2_finalizer_drain_test_pause_rel(global_State *g,
+							  uint32_t pause)
+{
+  la_store32_rel(&g->gc2.finalizer_drain_test_pause, pause);
+}
+
+static LJ_AINLINE uint32_t gc2_finalizer_drain_test_pause_xchg_acqrel(
+  global_State *g, uint32_t pause)
+{
+  return la_xchg32_acqrel(&g->gc2.finalizer_drain_test_pause, pause);
+}
+
+static LJ_AINLINE uint32_t gc2_finalizer_drain_test_paused_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.finalizer_drain_test_paused);
+}
+
+static LJ_AINLINE void gc2_finalizer_drain_test_paused_store_rlx(
+  global_State *g, uint32_t paused)
+{
+  la_store32_rlx(&g->gc2.finalizer_drain_test_paused, paused);
+}
+
+static LJ_AINLINE void gc2_finalizer_drain_test_paused_rel(global_State *g,
+							   uint32_t paused)
+{
+  la_store32_rel(&g->gc2.finalizer_drain_test_paused, paused);
+}
+
+static LJ_AINLINE uint32_t gc2_finalizer_drain_test_release_acq(
+  global_State *g)
+{
+  return la_load32_acq(&g->gc2.finalizer_drain_test_release);
+}
+
+static LJ_AINLINE void gc2_finalizer_drain_test_release_store_rlx(
+  global_State *g, uint32_t release)
+{
+  la_store32_rlx(&g->gc2.finalizer_drain_test_release, release);
+}
+
+static LJ_AINLINE void gc2_finalizer_drain_test_release_rel(global_State *g,
+							    uint32_t release)
+{
+  la_store32_rel(&g->gc2.finalizer_drain_test_release, release);
+}
+#endif
+
+static LJ_AINLINE uint32_t gc2_worker_active_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.worker_active);
+}
+
+static LJ_AINLINE void gc2_worker_active_store_rlx(global_State *g,
+						   uint32_t active)
+{
+  la_store32_rlx(&g->gc2.worker_active, active);
+}
+
+static LJ_AINLINE void gc2_worker_active_rel(global_State *g,
+					     uint32_t active)
+{
+  la_store32_rel(&g->gc2.worker_active, active);
+}
+
+static LJ_AINLINE int gc2_worker_active_cas(global_State *g, uint32_t *oldp,
+					    uint32_t active)
+{
+  return la_cas32(&g->gc2.worker_active, oldp, active, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t gc2_mark_close_intent_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.mark_close_intent);
+}
+
+static LJ_AINLINE void gc2_mark_close_intent_store_rlx(global_State *g,
+						uint32_t owner)
+{
+  la_store32_rlx(&g->gc2.mark_close_intent, owner);
+}
+
+static LJ_AINLINE void gc2_mark_close_intent_rel(global_State *g,
+					  uint32_t owner)
+{
+  la_store32_rel(&g->gc2.mark_close_intent, owner);
+}
+
+static LJ_AINLINE int gc2_mark_close_intent_cas(global_State *g,
+					 uint32_t *oldp, uint32_t owner)
+{
+  return la_cas32(&g->gc2.mark_close_intent, oldp, owner,
+		  LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE uint32_t gc2_gcpause_pct_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.gcpause_pct);
+}
+
+static LJ_AINLINE void gc2_gcpause_pct_store_rlx(global_State *g,
+						 uint32_t pct)
+{
+  la_store32_rlx(&g->gc2.gcpause_pct, pct);
+}
+
+static LJ_AINLINE void gc2_gcpause_pct_rel(global_State *g, uint32_t pct)
+{
+  la_store32_rel(&g->gc2.gcpause_pct, pct);
+}
+
+static LJ_AINLINE uint32_t gc2_assist_shift_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.assist_shift);
+}
+
+static LJ_AINLINE void gc2_assist_shift_store_rlx(global_State *g,
+						  uint32_t shift)
+{
+  la_store32_rlx(&g->gc2.assist_shift, shift);
+}
+
+static LJ_AINLINE void gc2_assist_shift_rel(global_State *g, uint32_t shift)
+{
+  la_store32_rel(&g->gc2.assist_shift, shift);
+}
+
+LJ_GC2_COUNTER64_ACCESSORS(gc2_alloc_total_bytes, alloc_total_bytes)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_assist_runs, assist_runs)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_assist_grey_drained, assist_grey_drained)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_assist_ssb_converted, assist_ssb_converted)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_assist_weak_drained, assist_weak_drained)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_jit_hard_checks, jit_hard_checks)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_interp_hard_checks, interp_hard_checks)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_jit_scoped_slots_retired, jit_scoped_slots_retired)
+
+static LJ_AINLINE void *gc2_clib_cache_retired_acq(global_State *g)
+{
+  return la_loadptr_acq((void *const *)&g->gc2.clib_cache_retired);
+}
+
+static LJ_AINLINE void gc2_clib_cache_retired_store_rlx(global_State *g,
+							void *head)
+{
+  la_storeptr_rlx((void **)&g->gc2.clib_cache_retired, head);
+}
+
+static LJ_AINLINE int gc2_clib_cache_retired_cas(global_State *g, void **oldp,
+						 void *head)
+{
+  return la_casptr((void **)&g->gc2.clib_cache_retired, oldp, head,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE void *gc2_clib_cache_retired_xchg_acqrel(global_State *g,
+							   void *head)
+{
+  return la_xchgptr_acqrel((void **)&g->gc2.clib_cache_retired, head);
+}
+
+static LJ_AINLINE void *gc2_clib_handle_retired_acq(global_State *g)
+{
+  return la_loadptr_acq((void *const *)&g->gc2.clib_handle_retired);
+}
+
+static LJ_AINLINE void gc2_clib_handle_retired_store_rlx(global_State *g,
+							  void *head)
+{
+  la_storeptr_rlx((void **)&g->gc2.clib_handle_retired, head);
+}
+
+static LJ_AINLINE int gc2_clib_handle_retired_cas(global_State *g,
+						   void **oldp, void *head)
+{
+  return la_casptr((void **)&g->gc2.clib_handle_retired, oldp, head,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE void *gc2_clib_handle_retired_xchg_acqrel(global_State *g,
+							    void *head)
+{
+  return la_xchgptr_acqrel((void **)&g->gc2.clib_handle_retired, head);
+}
+
+static LJ_AINLINE void gc2_assist_active_store_rlx(global_State *g,
+						   uint32_t active)
+{
+  la_store32_rlx(&g->gc2.assist_active, active);
+}
+
+static LJ_AINLINE uint32_t gc2_assist_active_acq(global_State *g)
+{
+  return la_load32_acq(&g->gc2.assist_active);
+}
+
+static LJ_AINLINE void gc2_assist_active_rel(global_State *g, uint32_t active)
+{
+  la_store32_rel(&g->gc2.assist_active, active);
+}
+
+static LJ_AINLINE int gc2_assist_active_cas(global_State *g, uint32_t *oldp,
+					    uint32_t active)
+{
+  return la_cas32(&g->gc2.assist_active, oldp, active, LA_ACQ_REL, LA_ACQ);
+}
+
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_cdata_sets, finreg_cdata_sets)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_cdata_clears, finreg_cdata_clears)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_cdata_queued, finreg_cdata_queued)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_cdata_sweep_queued, finreg_cdata_sweep_queued)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_cdata_pweak_queued, finreg_cdata_pweak_queued)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_cdata_pweak_claimed, finreg_cdata_pweak_claimed)
+
+static LJ_AINLINE uint64_t gc2_finreg_cdata_preclaim_overflow_acq(
+  global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_cdata_preclaim_overflow);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_overflow_store_rlx(
+  global_State *g, uint64_t n)
+{
+  la_store64_rlx(&g->gc2.finreg_cdata_preclaim_overflow, n);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_overflow_add(global_State *g,
+							      uint64_t n)
+{
+  la_add64_rlx(&g->gc2.finreg_cdata_preclaim_overflow, n);
+}
+
+static LJ_AINLINE uint64_t gc2_finreg_cdata_preclaim_dispatched_acq(
+  global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_cdata_preclaim_dispatched);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_dispatched_store_rlx(
+  global_State *g, uint64_t n)
+{
+  la_store64_rlx(&g->gc2.finreg_cdata_preclaim_dispatched, n);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_dispatched_add(
+  global_State *g, uint64_t n)
+{
+  la_add64_rlx(&g->gc2.finreg_cdata_preclaim_dispatched, n);
+}
+
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_cdata_order_seen, finreg_cdata_order_seen)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_cdata_order_claimed, finreg_cdata_order_claimed)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_cdata_order_unlinked, finreg_cdata_order_unlinked)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_cdata_order_queued, finreg_cdata_order_queued)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_cdata_order_retired, finreg_cdata_order_retired)
+
+static LJ_AINLINE uint64_t gc2_finreg_cdata_order_tombstones_acq(
+  global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_cdata_order_tombstones);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_order_tombstones_store_rlx(
+  global_State *g, uint64_t n)
+{
+  la_store64_rlx(&g->gc2.finreg_cdata_order_tombstones, n);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_order_tombstones_add(global_State *g,
+							     uint64_t n)
+{
+  la_add64_rlx(&g->gc2.finreg_cdata_order_tombstones, n);
+}
+
+static LJ_AINLINE uint64_t gc2_finreg_cdata_order_fallbacks_acq(
+  global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_cdata_order_fallbacks);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_order_fallbacks_store_rlx(
+  global_State *g, uint64_t n)
+{
+  la_store64_rlx(&g->gc2.finreg_cdata_order_fallbacks, n);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_order_fallbacks_add(global_State *g,
+							    uint64_t n)
+{
+  la_add64_rlx(&g->gc2.finreg_cdata_order_fallbacks, n);
+}
+
+static LJ_AINLINE uint64_t gc2_finreg_cdata_pending_order_hits_acq(
+  global_State *g)
+{
+  return la_load64_acq(&g->gc2.finreg_cdata_pending_order_hits);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_pending_order_hits_store_rlx(
+  global_State *g, uint64_t n)
+{
+  la_store64_rlx(&g->gc2.finreg_cdata_pending_order_hits, n);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_pending_order_hits_add(global_State *g,
+							       uint64_t n)
+{
+  la_add64_rlx(&g->gc2.finreg_cdata_pending_order_hits, n);
+}
+
+static LJ_AINLINE void setgcrefrel_(GCRef *r, const GCobj *gc)
+{
+  la_store64_rel(&r->gcptr64, (uint64_t)(uintptr_t)gc);
+}
+static LJ_AINLINE void setgcrefrrel_(GCRef *r, GCRef v)
+{
+  la_store64_rel(&r->gcptr64, v.gcptr64);
+}
+static LJ_AINLINE void setgcrefnullrel_(GCRef *r)
+{
+  la_store64_rel(&r->gcptr64, 0);
+}
+static LJ_AINLINE int gcref_cas(GCRef *r, GCobj **oldp, GCobj *obj)
+{
+  uint64_t old = (uint64_t)(uintptr_t)*oldp;
+  int ok = la_cas64(&r->gcptr64, &old, (uint64_t)(uintptr_t)obj,
+		    LA_ACQ_REL, LA_ACQ);
+  if (!ok)
+    *oldp = (GCobj *)(uintptr_t)old;
+  return ok;
+}
+static LJ_AINLINE GCobj *gcref_xchg_acqrel(GCRef *r, GCobj *obj)
+{
+  return (GCobj *)(uintptr_t)la_xchg64_acqrel(&r->gcptr64,
+					       (uint64_t)(uintptr_t)obj);
+}
+#define setgcrefrel(r, gc)	setgcrefrel_(&(r), (gc))
+#define setgcrefrrel(r, v)	setgcrefrrel_(&(r), (v))
+#define setgcrefnullrel(r)	setgcrefnullrel_(&(r))
+
+static LJ_AINLINE GCtab *lj_tab_metatable_acq(const GCtab *t)
+{
+  return tabref_acq(t->metatable);
+}
+
+static LJ_AINLINE void lj_tab_metatable_rel(GCtab *t, GCtab *mt)
+{
+  setgcrefrel(t->metatable, obj2gco(mt));
+}
+
+static LJ_AINLINE GCtab *lj_udata_metatable_acq(const GCudata *ud)
+{
+  return tabref_acq(ud->metatable);
+}
+
+static LJ_AINLINE void lj_udata_metatable_rel(GCudata *ud, GCtab *mt)
+{
+  setgcrefrel(ud->metatable, obj2gco(mt));
+}
+
+static LJ_AINLINE GCtab *lj_obj_metatable_acq(const GCobj *o)
+{
+  return tabref_acq(o->gch.metatable);
+}
+
+static LJ_AINLINE GCobj *lj_tab_gclist_acq(const GCtab *t)
+{
+  return gcref_acq(t->gclist);
+}
+
+static LJ_AINLINE GCtab *lj_func_env_acq(const GCfunc *fn)
+{
+  return tabref_acq(fn->c.env);
+}
+
+static LJ_AINLINE void lj_func_env_rel(GCfunc *fn, GCtab *env)
+{
+  setgcrefrel(fn->c.env, obj2gco(env));
+}
+
+static LJ_AINLINE GCtab *lj_funcL_env_acq(const GCfuncL *fn)
+{
+  return tabref_acq(fn->env);
+}
+
+static LJ_AINLINE GCtab *lj_state_env_acq(const lua_State *L)
+{
+  return tabref_acq(L->env);
+}
+
+static LJ_AINLINE void lj_state_env_rel(lua_State *L, GCtab *env)
+{
+  setgcrefrel(L->env, obj2gco(env));
+}
+
+static LJ_AINLINE void lj_state_env_copy_rel(lua_State *dst,
+					     const lua_State *src)
+{
+  lj_state_env_rel(dst, lj_state_env_acq(src));
+}
+
+static LJ_AINLINE GCRef *lj_state_openupval_ref(lua_State *L)
+{
+  return &L->openupval;
+}
+
+static LJ_AINLINE GCobj *lj_state_openupval_acq(const lua_State *L)
+{
+  return gcref_acq(L->openupval);
+}
+
+static LJ_AINLINE void lj_state_openupval_rel(lua_State *L, GCobj *head)
+{
+  setgcrefrel(L->openupval, head);
+}
+
+static LJ_AINLINE void lj_state_openupval_clear_rel(lua_State *L)
+{
+  setgcrefnullrel(L->openupval);
+}
+
+static LJ_AINLINE GCobj *lj_state_mt_thread_acq(const lua_State *L)
+{
+  return gcref_acq(L->mt_thread);
+}
+
+static LJ_AINLINE void lj_state_mt_thread_rel(lua_State *L, GCudata *ud)
+{
+  setgcrefrel(L->mt_thread, obj2gco(ud));
+}
+
+static LJ_AINLINE void lj_state_mt_thread_clear_rel(lua_State *L)
+{
+  setgcrefnullrel(L->mt_thread);
+}
+
+static LJ_AINLINE GCtab *lj_udata_env_acq(const GCudata *ud)
+{
+  return tabref_acq(ud->env);
+}
+
+static LJ_AINLINE void lj_udata_env_rel(GCudata *ud, GCtab *env)
+{
+  setgcrefrel(ud->env, obj2gco(env));
+}
+
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_udata_sets, finreg_udata_sets)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_udata_clears, finreg_udata_clears)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_udata_queued, finreg_udata_queued)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_udata_registered, finreg_udata_registered)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_udata_retired_nodes, finreg_udata_retired_nodes)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_udata_discovered, finreg_udata_discovered)
+LJ_GC2_COUNTER64_ACCESSORS(gc2_finreg_udata_forgets, finreg_udata_forgets)
+
+#undef LJ_GC2_COUNTER64_ACCESSORS
+
+static LJ_AINLINE GC2FinRegUDataNode *
+gc2_finreg_udata_head_acq(global_State *g)
+{
+  return (GC2FinRegUDataNode *)la_loadptr_acq(
+    (void *const *)&g->gc2.finreg_udata_head);
+}
+
+static LJ_AINLINE void
+gc2_finreg_udata_head_store_rlx(global_State *g, GC2FinRegUDataNode *head)
+{
+  la_storeptr_rlx((void **)&g->gc2.finreg_udata_head, head);
+}
+
+static LJ_AINLINE GC2FinRegUDataNode *
+gc2_finreg_udata_head_xchg_acqrel(global_State *g,
+				  GC2FinRegUDataNode *head)
+{
+  return (GC2FinRegUDataNode *)la_xchgptr_acqrel(
+    (void **)&g->gc2.finreg_udata_head, head);
+}
+
+static LJ_AINLINE int
+gc2_finreg_udata_head_cas(global_State *g, GC2FinRegUDataNode **oldp,
+			  GC2FinRegUDataNode *head)
+{
+  return la_casptr((void **)&g->gc2.finreg_udata_head, (void **)oldp,
+		   head, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE GC2FinRegUDataNode *
+gc2_finreg_udata_retired_acq(global_State *g)
+{
+  return (GC2FinRegUDataNode *)la_loadptr_acq(
+    (void *const *)&g->gc2.finreg_udata_retired);
+}
+
+static LJ_AINLINE void
+gc2_finreg_udata_retired_store_rlx(global_State *g,
+				   GC2FinRegUDataNode *head)
+{
+  la_storeptr_rlx((void **)&g->gc2.finreg_udata_retired, head);
+}
+
+static LJ_AINLINE GC2FinRegUDataNode *
+gc2_finreg_udata_retired_xchg_acqrel(global_State *g,
+				     GC2FinRegUDataNode *head)
+{
+  return (GC2FinRegUDataNode *)la_xchgptr_acqrel(
+    (void **)&g->gc2.finreg_udata_retired, head);
+}
+
+static LJ_AINLINE int
+gc2_finreg_udata_retired_cas(global_State *g, GC2FinRegUDataNode **oldp,
+			     GC2FinRegUDataNode *head)
+{
+  return la_casptr((void **)&g->gc2.finreg_udata_retired, (void **)oldp,
+		   head, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE GCobj *gc2_finreg_udata_obj_acq(GC2FinRegUDataNode *node)
+{
+  return gcref_acq(node->obj);
+}
+
+static LJ_AINLINE void gc2_finreg_udata_obj_rel(GC2FinRegUDataNode *node,
+						GCobj *o)
+{
+  setgcrefrel(node->obj, o);
+}
+
+static LJ_AINLINE void gc2_finreg_udata_obj_clear(GC2FinRegUDataNode *node)
+{
+  setgcrefnullrel(node->obj);
+}
+
+static LJ_AINLINE uint32_t
+gc2_finreg_udata_active_acq(const GC2FinRegUDataNode *node)
+{
+  return la_load32_acq(&node->active);
+}
+
+static LJ_AINLINE void gc2_finreg_udata_active_rel(GC2FinRegUDataNode *node,
+						   uint32_t active)
+{
+  la_store32_rel(&node->active, active);
+}
+
+static LJ_AINLINE int gc2_finreg_udata_active_retire(GC2FinRegUDataNode *node)
+{
+  uint32_t old = 1;
+  return la_cas32(&node->active, &old, 0, LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE GC2FinRegUDataNode *
+gc2_finreg_udata_next_acq(const GC2FinRegUDataNode *node)
+{
+  return (GC2FinRegUDataNode *)la_loadptr_acq((void *const *)&node->next);
+}
+
+static LJ_AINLINE void gc2_finreg_udata_next_rel(GC2FinRegUDataNode *node,
+						 GC2FinRegUDataNode *next)
+{
+  la_storeptr_rel((void **)&node->next, next);
+}
+
+static LJ_AINLINE int gc2_finreg_udata_next_cas(GC2FinRegUDataNode *node,
+						GC2FinRegUDataNode **oldp,
+						GC2FinRegUDataNode *next)
+{
+  return la_casptr((void **)&node->next, (void **)oldp, next,
+		   LA_ACQ_REL, LA_ACQ);
+}
+
+static LJ_AINLINE GC2FinRegUDataNode *
+gc2_finreg_udata_retired_next_acq(const GC2FinRegUDataNode *node)
+{
+  return (GC2FinRegUDataNode *)la_loadptr_acq(
+    (void *const *)&node->retired_next);
+}
+
+static LJ_AINLINE void
+gc2_finreg_udata_retired_next_rel(GC2FinRegUDataNode *node,
+				  GC2FinRegUDataNode *next)
+{
+  la_storeptr_rel((void **)&node->retired_next, next);
+}
+
+static LJ_AINLINE void lj_obj_setgcwrel(GCobj *o, const GCobj *next)
+{
+  setgcrefrel(o->gch.nextgc, next);
+}
+
+static LJ_AINLINE void lj_obj_setgcwrrel(GCobj *o, GCRef next)
+{
+  setgcrefrrel(o->gch.nextgc, next);
+}
+
+static LJ_AINLINE void lj_obj_setgcwnullrel(GCobj *o)
+{
+  setgcrefnullrel(o->gch.nextgc);
+}
+
+static LJ_AINLINE GCupval *lj_uv_prev_acq(const GCupval *uv)
+{
+  return &gcref_acq(uv->prev)->uv;
+}
+
+static LJ_AINLINE GCupval *lj_uv_next_acq(const GCupval *uv)
+{
+  return &gcref_acq(uv->next)->uv;
+}
+
+static LJ_AINLINE void lj_uv_setprev_rel(GCupval *uv, GCupval *prev)
+{
+  setgcrefrel(uv->prev, obj2gco(prev));
+}
+
+static LJ_AINLINE void lj_uv_setnext_rel(GCupval *uv, GCupval *next)
+{
+  setgcrefrel(uv->next, obj2gco(next));
+}
+
+/* -- TValue getters/setters ---------------------------------------------- */
+
+/* Macros to test types. */
+#define itype(o)	((uint32_t)((o)->it64 >> 47))
+#define tvisnil(o)	((o)->it64 == -1)
+#define tvisfalse(o)	(itype(o) == LJ_TFALSE)
+#define tvistrue(o)	(itype(o) == LJ_TTRUE)
+#define tvisbool(o)	(tvisfalse(o) || tvistrue(o))
+#define tvislightud(o)	(itype(o) == LJ_TLIGHTUD)
+#if LJ_64
+#define tvisforward(o)	((o)->u64 == LJ_TFORWARD_BITS)
+#define tviskeylock(o)	((o)->u64 == LJ_TKEYLOCK_BITS)
+static LJ_AINLINE int tvisresizemarker(cTValue *o)
+{
+  uint64_t bits = o->u64;
+  uint64_t kind = bits & LJ_TAB_RESIZE_MARK_KIND_MASK;
+  uint64_t id = (bits & LJ_LIGHTUD_INTERNAL_LO_MASK) >>
+		LJ_TAB_RESIZE_MARK_KIND_BITS;
+  return (bits & ~LJ_LIGHTUD_INTERNAL_LO_MASK) ==
+	   LJ_LIGHTUD_INTERNAL_BASE &&
+	 id != 0 && kind >= LJ_TAB_RESIZE_MARK_SRC &&
+	 kind <= LJ_TAB_RESIZE_MARK_NIL_DONE;
+}
+
+static LJ_AINLINE uint32_t lj_tab_resize_marker_kind(cTValue *o)
+{
+  return tvisresizemarker(o) ?
+    (uint32_t)(o->u64 & LJ_TAB_RESIZE_MARK_KIND_MASK) : 0;
+}
+
+static LJ_AINLINE uint64_t lj_tab_resize_marker_id(cTValue *o)
+{
+  return tvisresizemarker(o) ?
+    ((o->u64 & LJ_LIGHTUD_INTERNAL_LO_MASK) >>
+     LJ_TAB_RESIZE_MARK_KIND_BITS) : 0;
+}
+#else
+#define tvisforward(o)	0
+#define tviskeylock(o)	0
+#define tvisresizemarker(o)	0
+#define lj_tab_resize_marker_kind(o)	0
+#define lj_tab_resize_marker_id(o)	0
+#endif
+#define tvistabinternal(o) \
+  (tvisforward(o) || tviskeylock(o) || tvisresizemarker(o))
+#define tvisstr(o)	(itype(o) == LJ_TSTR)
+#define tvisfunc(o)	(itype(o) == LJ_TFUNC)
+#define tvisthread(o)	(itype(o) == LJ_TTHREAD)
+#define tvisproto(o)	(itype(o) == LJ_TPROTO)
+#define tviscdata(o)	(itype(o) == LJ_TCDATA)
+#define tvistab(o)	(itype(o) == LJ_TTAB)
+#define tvisudata(o)	(itype(o) == LJ_TUDATA)
+#define tvisnumber(o)	(itype(o) <= LJ_TISNUM)
+#define tvisint(o)	(LJ_DUALNUM && itype(o) == LJ_TISNUM)
+#define tvisnum(o)	(itype(o) < LJ_TISNUM)
+
+static LJ_AINLINE void lj_tv_load_acq(TValue *dst, const TValue *src)
+{
+  dst->u64 = tv_rawload_acq(src);
+}
+
+static LJ_AINLINE void proto_knumtv_load_acq(TValue *dst, const GCproto *pt,
+					     MSize idx)
+{
+  lj_assertX((uintptr_t)idx < (uintptr_t)pt->sizekn,
+	     "bad prototype numeric constant index");
+  lj_tv_load_acq(dst, &mref(pt->k, TValue)[idx]);
+}
+
+static LJ_AINLINE GCRef *gc2_finreg_cdata_preclaim_objvec_acq(global_State *g)
+{
+  return (GCRef *)la_loadptr_acq(
+    (void *const *)&g->gc2.finreg_cdata_preclaim_obj);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_objvec_store_rlx(
+  global_State *g, GCRef *obj)
+{
+  la_storeptr_rlx((void **)&g->gc2.finreg_cdata_preclaim_obj, obj);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_objvec_rel(global_State *g,
+							    GCRef *obj)
+{
+  la_storeptr_rel((void **)&g->gc2.finreg_cdata_preclaim_obj, obj);
+}
+
+static LJ_AINLINE TValue *gc2_finreg_cdata_preclaim_finvec_acq(
+  global_State *g)
+{
+  return (TValue *)la_loadptr_acq(
+    (void *const *)&g->gc2.finreg_cdata_preclaim_fin);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_finvec_store_rlx(
+  global_State *g, TValue *fin)
+{
+  la_storeptr_rlx((void **)&g->gc2.finreg_cdata_preclaim_fin, fin);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_finvec_rel(global_State *g,
+							    TValue *fin)
+{
+  la_storeptr_rel((void **)&g->gc2.finreg_cdata_preclaim_fin, fin);
+}
+
+static LJ_AINLINE MSize gc2_finreg_cdata_preclaim_capacity_acq(global_State *g)
+{
+  return (MSize)la_load32_acq(&g->gc2.finreg_cdata_preclaim_capacity);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_capacity_store_rlx(
+  global_State *g, MSize cap)
+{
+  la_store32_rlx(&g->gc2.finreg_cdata_preclaim_capacity, (uint32_t)cap);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_capacity_rel(global_State *g,
+							      MSize cap)
+{
+  la_store32_rel(&g->gc2.finreg_cdata_preclaim_capacity, (uint32_t)cap);
+}
+
+static LJ_AINLINE MSize gc2_finreg_cdata_preclaim_head_acq(global_State *g)
+{
+  return (MSize)la_load32_acq(&g->gc2.finreg_cdata_preclaim_head);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_head_store_rlx(global_State *g,
+								MSize head)
+{
+  la_store32_rlx(&g->gc2.finreg_cdata_preclaim_head, (uint32_t)head);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_head_rel(global_State *g,
+							  MSize head)
+{
+  la_store32_rel(&g->gc2.finreg_cdata_preclaim_head, (uint32_t)head);
+}
+
+static LJ_AINLINE MSize gc2_finreg_cdata_preclaim_count_acq(global_State *g)
+{
+  return (MSize)la_load32_acq(&g->gc2.finreg_cdata_preclaim_count);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_count_store_rlx(
+  global_State *g, MSize count)
+{
+  la_store32_rlx(&g->gc2.finreg_cdata_preclaim_count, (uint32_t)count);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_count_rel(global_State *g,
+							   MSize count)
+{
+  la_store32_rel(&g->gc2.finreg_cdata_preclaim_count, (uint32_t)count);
+}
+
+#if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
+static LJ_AINLINE uint32_t gc2_finreg_cdata_preclaim_test_fail_acq(
+  global_State *g)
+{
+  return la_load32_acq(&g->gc2.finreg_cdata_preclaim_test_fail);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_test_fail_store_rlx(
+  global_State *g, uint32_t n)
+{
+  la_store32_rlx(&g->gc2.finreg_cdata_preclaim_test_fail, n);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_test_fail_rel(
+  global_State *g, uint32_t n)
+{
+  la_store32_rel(&g->gc2.finreg_cdata_preclaim_test_fail, n);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_publish_pause_store_rlx(
+  global_State *g, uint32_t pause)
+{
+  la_store32_rlx(&g->gc2.finreg_cdata_preclaim_publish_pause, pause);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_publish_pause_rel(
+  global_State *g, uint32_t pause)
+{
+  la_store32_rel(&g->gc2.finreg_cdata_preclaim_publish_pause, pause);
+}
+
+static LJ_AINLINE uint32_t gc2_finreg_cdata_preclaim_publish_pause_xchg_acqrel(
+  global_State *g, uint32_t pause)
+{
+  return la_xchg32_acqrel(&g->gc2.finreg_cdata_preclaim_publish_pause, pause);
+}
+
+static LJ_AINLINE uint32_t gc2_finreg_cdata_preclaim_publish_paused_acq(
+  global_State *g)
+{
+  return la_load32_acq(&g->gc2.finreg_cdata_preclaim_publish_paused);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_publish_paused_store_rlx(
+  global_State *g, uint32_t paused)
+{
+  la_store32_rlx(&g->gc2.finreg_cdata_preclaim_publish_paused, paused);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_publish_paused_rel(
+  global_State *g, uint32_t paused)
+{
+  la_store32_rel(&g->gc2.finreg_cdata_preclaim_publish_paused, paused);
+}
+
+static LJ_AINLINE uint32_t gc2_finreg_cdata_preclaim_publish_release_acq(
+  global_State *g)
+{
+  return la_load32_acq(&g->gc2.finreg_cdata_preclaim_publish_release);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_publish_release_store_rlx(
+  global_State *g, uint32_t release)
+{
+  la_store32_rlx(&g->gc2.finreg_cdata_preclaim_publish_release, release);
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_publish_release_rel(
+  global_State *g, uint32_t release)
+{
+  la_store32_rel(&g->gc2.finreg_cdata_preclaim_publish_release, release);
+}
+#endif
+
+static LJ_AINLINE int gc2_finreg_cdata_preclaim_ready(global_State *g)
+{
+  return gc2_finreg_cdata_preclaim_objvec_acq(g) != NULL &&
+	 gc2_finreg_cdata_preclaim_finvec_acq(g) != NULL;
+}
+
+static LJ_AINLINE GCobj *gc2_finreg_cdata_preclaim_obj_acq(global_State *g,
+								   MSize i)
+{
+  GCRef *obj = gc2_finreg_cdata_preclaim_objvec_acq(g);
+  return obj ? gcref_acq(obj[i]) : NULL;
+}
+
+static LJ_AINLINE void gc2_finreg_cdata_preclaim_fin_acq(global_State *g,
+								 MSize i, TValue *fin)
+{
+  TValue *finv = gc2_finreg_cdata_preclaim_finvec_acq(g);
+  if (finv) {
+    lj_tv_load_acq(fin, &finv[i]);
+  } else {
+    fin->u64 = ~(uint64_t)0;
+  }
+}
+
+static LJ_AINLINE int lj_tv_isnil_acq(const TValue *src)
+{
+  TValue tv;
+  lj_tv_load_acq(&tv, src);
+  return tvisnil(&tv);
+}
+
+static LJ_AINLINE int lj_tv_cas(TValue *dst, TValue *expect,
+				const TValue *src)
+{
+  uint64_t old = tv_rawload(expect);
+  int ok = la_cas64(&dst->u64, &old, tv_rawload(src), LA_ACQ_REL, LA_ACQ);
+  if (!ok)
+    tv_rawstore(expect, old);
+  return ok;
+}
+
+#define tvistruecond(o)	(itype(o) < LJ_TISTRUECOND)
+#define tvispri(o)	(itype(o) >= LJ_TISPRI)
+#define tvistabud(o)	(itype(o) <= LJ_TISTABUD)  /* && !tvisnum() */
+#define tvisgcv(o)	((itype(o) - LJ_TISGCV) > (LJ_TNUMX - LJ_TISGCV))
+
+/* Special macros to test numbers for NaN, +0, -0, +1 and raw equality. */
+#define tvisnan(o)	((o)->n != (o)->n)
+#if LJ_64
+#define tviszero(o)	(((o)->u64 << 1) == 0)
+#else
+#define tviszero(o)	(((o)->u32.lo | ((o)->u32.hi << 1)) == 0)
+#endif
+#define tvispzero(o)	((o)->u64 == 0)
+#define tvismzero(o)	((o)->u64 == U64x(80000000,00000000))
+#define tvispone(o)	((o)->u64 == U64x(3ff00000,00000000))
+#define rawnumequal(o1, o2)	((o1)->u64 == (o2)->u64)
+
+/* Macros to convert type ids. */
+#define itypemap(o)	(tvisnumber(o) ? ~LJ_TNUMX : ~itype(o))
+
+static LJ_AINLINE void mainthread_rel(global_State *g, lua_State *L)
+{
+  setgcrefrel(*mainthread_ref(g), obj2gco(L));
+}
+
+static LJ_AINLINE void vmthread_rel(global_State *g, lua_State *L)
+{
+  setgcrefrel(*vmthread_ref(g), obj2gco(L));
+}
+
+static LJ_AINLINE void lj_gc_root_rel(global_State *g, const GCobj *o)
+{
+  setgcrefrel(*lj_gc_root_ref(g), o);
+}
+
+static LJ_AINLINE GCRef *lj_gcroot_ref(global_State *g, GCRootID id)
+{
+  return &g->gcroot[id];
+}
+
+static LJ_AINLINE GCobj *lj_gcroot_acq(global_State *g, GCRootID id)
+{
+  return gcref_acq(*lj_gcroot_ref(g, id));
+}
+
+static LJ_AINLINE void lj_gcroot_rel(global_State *g, GCRootID id,
+				     const GCobj *o)
+{
+  setgcrefrel(*lj_gcroot_ref(g, id), o);
+}
+
+static LJ_AINLINE GCtab *lj_basemt_it_acq(global_State *g, int it)
+{
+  GCobj *o = lj_gcroot_acq(g, (GCRootID)(GCROOT_BASEMT + ~it));
+  return o ? gco2tab(o) : NULL;
+}
+
+static LJ_AINLINE GCtab *lj_basemt_obj_acq(global_State *g, cTValue *o)
+{
+  GCobj *root = lj_gcroot_acq(g, (GCRootID)(GCROOT_BASEMT + itypemap(o)));
+  return root ? gco2tab(root) : NULL;
+}
+
+static LJ_AINLINE void lj_basemt_it_rel(global_State *g, int it, GCtab *mt)
+{
+  lj_gcroot_rel(g, (GCRootID)(GCROOT_BASEMT + ~it), obj2gco(mt));
+}
+
+static LJ_AINLINE void lj_basemt_obj_rel(global_State *g, cTValue *o,
+					 GCtab *mt)
+{
+  lj_gcroot_rel(g, (GCRootID)(GCROOT_BASEMT + itypemap(o)), obj2gco(mt));
+}
+
+static LJ_AINLINE GCstr *lj_mmname_str_acq(global_State *g, MMS mm)
+{
+  return gco2str(lj_gcroot_acq(g, (GCRootID)(GCROOT_MMNAME + mm)));
+}
+
+/* Macros to get tagged values. */
+#define gcval(o)	((GCobj *)(gcrefu((o)->gcr) & LJ_GCVMASK))
+#define boolV(o)	check_exp(tvisbool(o), (LJ_TFALSE - itype(o)))
+#if LJ_64
+#define lightudseg(u) \
+  (((u) >> LJ_LIGHTUD_BITS_LO) & ((1 << LJ_LIGHTUD_BITS_SEG)-1))
+#define lightudlo(u) \
+  ((u) & (((uint64_t)1 << LJ_LIGHTUD_BITS_LO) - 1))
+#define lightudup(p) \
+  ((uint32_t)(((p) >> LJ_LIGHTUD_BITS_LO) << (LJ_LIGHTUD_BITS_LO-32)))
+static LJ_AINLINE void *lightudV(global_State *g, cTValue *o)
+{
+  uint64_t u = o->u64;
+  uint64_t seg = lightudseg(u);
+  uint32_t *segmap = mref(g->gc.lightudseg, uint32_t);
+  lj_assertG(tvislightud(o), "lightuserdata expected");
+  if (seg == (1 << LJ_LIGHTUD_BITS_SEG)-1) return NULL;
+  lj_assertG(seg <= g->gc.lightudnum, "bad lightuserdata segment %d", seg);
+  return (void *)(((uint64_t)segmap[seg] << 32) | lightudlo(u));
+}
+#else
+#define lightudV(g, o)	check_exp(tvislightud(o), gcrefp((o)->gcr, void))
+#endif
+#define gcV(o)		check_exp(tvisgcv(o), gcval(o))
+#define strV(o)		check_exp(tvisstr(o), &gcval(o)->str)
+#define funcV(o)	check_exp(tvisfunc(o), &gcval(o)->fn)
+#define threadV(o)	check_exp(tvisthread(o), &gcval(o)->th)
+#define protoV(o)	check_exp(tvisproto(o), &gcval(o)->pt)
+#define cdataV(o)	check_exp(tviscdata(o), &gcval(o)->cd)
+#define tabV(o)		check_exp(tvistab(o), &gcval(o)->tab)
+#define udataV(o)	check_exp(tvisudata(o), &gcval(o)->ud)
+#define numV(o)		check_exp(tvisnum(o), (o)->n)
+#define intV(o)		check_exp(tvisint(o), (int32_t)(o)->i)
+
+static LJ_AINLINE int lj_tv_gcref_type_match(cTValue *tv)
+{
+  /*
+  ** Lock-free table/stack/upvalue scans work from acquired TValue snapshots.
+  ** A racing writer, weak clear, finalizer cleanup, or arena-body retirement
+  ** can leave a stale tagged pointer whose address has already been reused for
+  ** another GC type. Live publications initialize the object header before
+  ** publishing the TValue, so a tag/header mismatch is not a valid live edge.
+  ** GC64 encodes the tag and object pointer in one word; a torn or stale table
+  ** slot can retain a collectable tag with a zero payload. That is the nil/zero
+  ** payload pattern, not a live object, and must be rejected before reading the
+  ** object header.
+  */
+  if (tvisgcv(tv)) {
+    GCobj *o = gcval(tv);
+    if (o == NULL || !checkptrGC(o) ||
+	((uintptr_t)o & (sizeof(void *) - 1u)) != 0)
+      return 0;
+    return ~itype(tv) == o->gch.gct;
+  }
+  return 1;
+}
+
+/* Macros to set tagged values. */
+#define setitype(o, i)		((o)->it = ((i) << 15))
+#define setnilV(o)		tv_rawstore((o), ~(uint64_t)0)
+#define setpriV(o, x) \
+  tv_rawstore((o), (uint64_t)(int64_t)~((uint64_t)~(x)<<47))
+#define setboolV(o, x) \
+  tv_rawstore((o), (uint64_t)(int64_t)~((uint64_t)((x)+1)<<47))
+
+static LJ_AINLINE void setrawlightudV(TValue *o, void *p)
+{
+  TValue tv;
+  tv.u64 = (uint64_t)p | (((uint64_t)LJ_TLIGHTUD) << 47);
+  tv_rawstore(o, tv.u64);
+}
+
+static LJ_AINLINE void setforwardV(TValue *o)
+{
+#if LJ_64
+  tv_rawstore(o, LJ_TFORWARD_BITS);
+#else
+  setnilV(o);
+#endif
+}
+
+static LJ_AINLINE void setkeylockV(TValue *o)
+{
+#if LJ_64
+  tv_rawstore(o, LJ_TKEYLOCK_BITS);
+#else
+  setnilV(o);
+#endif
+}
+
+static LJ_AINLINE void setresizemarkerV(TValue *o, uint64_t id, uint32_t kind)
+{
+#if LJ_64
+  lj_assertX(id != 0 && id <= LJ_TAB_RESIZE_MARK_ID_MAX,
+	     "invalid resize descriptor marker id");
+  lj_assertX(kind >= LJ_TAB_RESIZE_MARK_SRC &&
+	     kind <= LJ_TAB_RESIZE_MARK_NIL_DONE,
+	     "invalid resize descriptor marker kind");
+  tv_rawstore(o, LJ_TAB_RESIZE_MARK_BITS(id, kind));
+#else
+  UNUSED(id);
+  UNUSED(kind);
+  setnilV(o);
+#endif
+}
+
+#define contptr(f)		((void *)(f))
+#define setcont(o, f)		((o)->u64 = (uint64_t)(uintptr_t)contptr(f))
+
+static LJ_AINLINE void checklivetv(lua_State *L, TValue *o, const char *msg)
+{
+  UNUSED(L); UNUSED(o); UNUSED(msg);
+#if LUA_USE_ASSERT
+  if (tvisgcv(o)) {
+    lj_assertL(~itype(o) == gcval(o)->gch.gct,
+	       "mismatch of TValue type %d vs GC type %d",
+	       ~itype(o), gcval(o)->gch.gct);
+  }
+#endif
+}
+
+static LJ_AINLINE void setgcVraw(TValue *o, GCobj *v, uint32_t itype)
+{
+  TValue tv;
+  setgcreft(tv.gcr, v, itype);
+  tv_rawstore(o, tv.u64);
+}
+
+static LJ_AINLINE void setgcV(lua_State *L, TValue *o, GCobj *v, uint32_t it)
+{
+  setgcVraw(o, v, it);
+  checklivetv(L, o, "store to dead GC object");
+}
+
+#define define_setV(name, type, tag) \
+static LJ_AINLINE void name(lua_State *L, TValue *o, const type *v) \
+{ \
+  setgcV(L, o, obj2gco(v), tag); \
+}
+define_setV(setstrV, GCstr, LJ_TSTR)
+define_setV(setthreadV, lua_State, LJ_TTHREAD)
+define_setV(setprotoV, GCproto, LJ_TPROTO)
+define_setV(setfuncV, GCfunc, LJ_TFUNC)
+define_setV(setcdataV, GCcdata, LJ_TCDATA)
+define_setV(settabV, GCtab, LJ_TTAB)
+define_setV(setudataV, GCudata, LJ_TUDATA)
+
+static LJ_AINLINE void setnumV(TValue *o, lua_Number x)
+{
+  TValue tv;
+  tv.n = x;
+  tv_rawstore(o, tv.u64);
+}
+#define setnanV(o)		tv_rawstore((o), U64x(fff80000,00000000))
+#define setpinfV(o)		tv_rawstore((o), U64x(7ff00000,00000000))
+#define setminfV(o)		tv_rawstore((o), U64x(fff00000,00000000))
+
+static LJ_AINLINE void setintV(TValue *o, int32_t i)
+{
+#if LJ_DUALNUM
+  TValue tv;
+  tv.i = (uint32_t)i; setitype(&tv, LJ_TISNUM);
+  tv_rawstore(o, tv.u64);
+#else
+  setnumV(o, (lua_Number)i);
+#endif
+}
+
+static LJ_AINLINE void setint64V(TValue *o, int64_t i)
+{
+  if (LJ_DUALNUM && LJ_LIKELY(i == (int64_t)(int32_t)i))
+    setintV(o, (int32_t)i);
+  else
+    setnumV(o, (lua_Number)i);
+}
+
+#if LJ_64
+#define setintptrV(o, i)	setint64V((o), (i))
+#else
+#define setintptrV(o, i)	setintV((o), (i))
+#endif
+
+/* Copy tagged values. */
+static LJ_AINLINE void copyTV(lua_State *L, TValue *o1, const TValue *o2)
+{
+  tv_rawstore(o1, tv_rawload(o2));
+  checklivetv(L, o1, "copy of dead GC object");
+}
+
+static LJ_AINLINE void copyTVrel(lua_State *L, TValue *o1, const TValue *o2)
+{
+  tv_rawstore_rel(o1, tv_rawload(o2));
+  checklivetv(L, o1, "copy of dead GC object");
+}
+
+static LJ_AINLINE void lj_registry_load_acq(global_State *g, TValue *out)
+{
+  lj_tv_load_acq(out, lj_registry_ref(g));
+}
+
+static LJ_AINLINE GCtab *lj_registry_tab_acq(global_State *g)
+{
+  TValue tv;
+  lj_registry_load_acq(g, &tv);
+  return tabV(&tv);
+}
+
+static LJ_AINLINE void lj_registry_store_rel(lua_State *L, const TValue *src)
+{
+  copyTVrel(L, lj_registry_ref(G(L)), src);
+}
+
+static LJ_AINLINE void lj_registry_settab_rel(lua_State *L, GCtab *t)
+{
+  TValue tv;
+  settabV(L, &tv, t);
+  lj_registry_store_rel(L, &tv);
+}
+
+static LJ_AINLINE void lj_registry_setnil_rel(lua_State *L)
+{
+  TValue tv;
+  setnilV(&tv);
+  lj_registry_store_rel(L, &tv);
+}
+
+/* -- Number to integer conversion ---------------------------------------- */
+
+/*
+** The C standard leaves many aspects of FP to integer conversions as
+** undefined behavior. Portability is a mess, hardware support varies,
+** and modern C compilers are like a box of chocolates -- you never know
+** what you're gonna get.
+**
+** However, we need 100% matching behavior between the interpreter (asm + C),
+** optimizations (C) and the code generated by the JIT compiler (asm).
+** Mixing Lua numbers with FFI numbers creates some extra requirements.
+**
+** These conversions have been moved to assembler code, even if they seem
+** trivial, to foil unanticipated C compiler 'optimizations' with the
+** surrounding code. Only the unchecked double to int32_t conversion
+** is still in C, because it ought to be pretty safe -- we'll see.
+**
+** These macros also serve to document all places where FP to integer
+** conversions happen.
+*/
+
+/* Unchecked double to int32_t conversion. */
+#define lj_num2int(n)		((int32_t)(n))
+
+/* Unchecked double to arch/os-dependent signed integer type conversion.
+** This assumes the 32/64-bit signed conversions are NOT range-extended.
+*/
+#define lj_num2int_type(n, tp)	((tp)(n))
+
+/* Convert a double to int32_t and check for exact conversion.
+** Returns the zero-extended int32_t on success. -0 is OK, too.
+** Returns 0x8000000080000000LL on failure (simplifies range checks).
+*/
+LJ_ASMF LJ_CONSTF int64_t lj_vm_num2int_check(double x);
+
+/* Check for exact conversion only, without storing the result. */
+#define lj_num2int_ok(x)	(lj_vm_num2int_check((x)) >= 0)
+
+/* Check for exact conversion and conditionally store result.
+** Note: conditions that fail for 0x80000000 may check only the lower
+** 32 bits. This generates good code for both 32 and 64 bit archs.
+*/
+#define lj_num2int_cond(x, i64, i, cond) \
+  (i64 = lj_vm_num2int_check((x)), cond ? (i = (int32_t)i64, 1) : 0)
+
+/* This is the generic check for a full-range int32_t result. */
+#define lj_num2int_check(x, i64, i) \
+  lj_num2int_cond((x), i64, i, i64 >= 0)
+
+/* Predictable conversion from double to int64_t or uint64_t.
+** Truncates towards zero. Out-of-range values, NaN and +-Inf return
+** an arch-dependent result, but do not cause C undefined behavior.
+** The uint64_t conversion accepts the union of the unsigned + signed range.
+*/
+LJ_ASMF LJ_CONSTF int64_t lj_vm_num2i64(double x);
+LJ_ASMF LJ_CONSTF int64_t lj_vm_num2u64(double x);
+
+#define lj_num2i64(x)		(lj_vm_num2i64((x)))
+#define lj_num2u64(x)		(lj_vm_num2u64((x)))
+
+/* Lua BitOp conversion semantics use the 2^52 + 2^51 trick. */
+LJ_ASMF LJ_CONSTF int32_t lj_vm_tobit(double x);
+
+#define lj_num2bit(x)	lj_vm_tobit((x))
+
+static LJ_AINLINE int32_t numberVint(cTValue *o)
+{
+  if (LJ_LIKELY(tvisint(o)))
+    return intV(o);
+  else
+    return lj_num2int(numV(o));
+}
+
+static LJ_AINLINE lua_Number numberVnum(cTValue *o)
+{
+  if (LJ_UNLIKELY(tvisint(o)))
+    return (lua_Number)intV(o);
+  else
+    return numV(o);
+}
+
+/* -- Miscellaneous object handling --------------------------------------- */
+
+/* Names and maps for internal and external object tags. */
+LJ_DATA const char *const lj_obj_typename[1+LUA_TCDATA+1];
+LJ_DATA const char *const lj_obj_itypename[~LJ_TNUMX+1];
+
+#define lj_typename(o)	(lj_obj_itypename[itypemap(o)])
+
+/* Compare two objects without calling metamethods. */
+LJ_FUNC int LJ_FASTCALL lj_obj_equal(cTValue *o1, cTValue *o2);
+LJ_FUNC const void * LJ_FASTCALL lj_obj_ptr(global_State *g, cTValue *o);
+
+#if LJ_ABI_PAUTH
+#if LJ_TARGET_ARM64
+#include <ptrauth.h>
+#define lj_ptr_sign(ptr, ctx) \
+  ptrauth_sign_unauthenticated((ptr), ptrauth_key_function_pointer, (ctx))
+#define lj_ptr_strip(ptr) ptrauth_strip((ptr), ptrauth_key_function_pointer)
+#else
+#error "No support for pointer authentication for this architecture"
+#endif
+#else
+#define lj_ptr_sign(ptr, ctx) (ptr)
+#define lj_ptr_strip(ptr) (ptr)
+#endif
+
+#endif

@@ -1,0 +1,18 @@
+{
+  "runtime_base": "79345529bd932e68f8159ec17224467a10cad09b",
+  "patch_sha256": "a62a8251ba8315f8ce07871635f1367659be3136895102776955c7204a4e018a",
+  "identities": {
+    "baseline": {
+      "luajit": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+      "libluajit.a": "1cc2bd3ba6f7350cc9b4306f4bbf7b00d8e0832e4323be5c4b59584b34a677dc"
+    },
+    "candidate": {
+      "luajit": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+      "libluajit.a": "e7e3beb9ff9f85ec932837f4162382f6c7a6701325b41b83f9642a761fd5a157"
+    }
+  },
+  "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+  "cpu": 30,
+  "pairs": 7,
+  "summary_method": "Per-process median of all five samples, then median paired ratio; all samples retained."
+}

@@ -1,0 +1,14 @@
+{
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaasan/src/libluajit.a": {
+    "sha256": "096fd0ba21c351798522cdd8e3813bd937d6bc3b2ba38d0c1730e9fac646783d",
+    "bytes": 27450682
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaasan/tests/t-gc2-sweep-table-coalescing.c": {
+    "sha256": "95b6a2097ad3e05bd64292a26b1bb765f502edacfec0a08b04cdafc9f9be3a32",
+    "bytes": 29311
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaasan-coalescing-checks/t-gc2-sweep-table-coalescing": {
+    "sha256": "bb65142b74f321c0b28cb80788664c804f4d28a0e4e69128aed1741e32490e9b",
+    "bytes": 20122472
+  }
+}

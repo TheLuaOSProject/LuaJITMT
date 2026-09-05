@@ -1,0 +1,4 @@
+mode=1 actual_kernel_wait=202 0x7f257b6935a8 0x80 0x1 0x0 0x0 0x0 0x7ffff47d0a58 0x7f257b7bd7b9
+held: native=0 reqmask=0 poll=1 pending=2 ack=19 epoch=20 returned=0 scan_calls=1
+release: leader completed, native return resumed, exact root still marked and source unchanged
+real consumed native acknowledgement probe PASS

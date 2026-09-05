@@ -1,0 +1,14 @@
+{
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-func-construction-anchor.c": {
+    "sha256": "42e9d47359fb27565565fe07678abbc8de7abf119226075cab3a1142768a6f0f",
+    "bytes": 9458
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/src/libluajit.a": {
+    "sha256": "e855aa21c230973e14d030ff6baeb8bf3540d54aba41fab0c4ddd4f2b79c3624",
+    "bytes": 2977110
+  },
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate-t-func-construction-anchor": {
+    "sha256": "168aae34bbac05823b4f004205894f5970848db940cefa8e8fe7c6a932c3a914",
+    "bytes": 2006472
+  }
+}

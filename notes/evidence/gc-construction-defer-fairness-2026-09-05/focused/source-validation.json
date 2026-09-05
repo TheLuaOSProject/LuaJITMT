@@ -1,0 +1,35 @@
+{
+  "input_count": 807,
+  "delta_from_rejected": [
+    "src/lj_gc2.c",
+    "src/lj_obj.h"
+  ],
+  "reverse_checks": [
+    {
+      "argv": [
+        "git",
+        "apply",
+        "--reverse",
+        "--check",
+        "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate.patch"
+      ],
+      "cwd": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "git",
+        "apply",
+        "--reverse",
+        "--check",
+        "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/fair-delta.patch"
+      ],
+      "cwd": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate",
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  ]
+}

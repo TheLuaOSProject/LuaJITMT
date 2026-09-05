@@ -1,0 +1,4 @@
+== m5_function_construction_anchors ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLUA_USE_ASSERT -DLJ_FUNC_TEST_HELPERS -I'/workspaces/lj-lockless/src' '/workspaces/lj-lockless/tests/t-func-construction-anchor.c' '/workspaces/lj-lockless/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/canonical-tmp/lj_t-func-construction-anchor'
++ timeout '20s' '/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/canonical-tmp/lj_t-func-construction-anchor'
+ok m5_function_construction_anchors

@@ -1,0 +1,22 @@
+{
+  "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/src/libluajit.a": {
+    "sha256": "e855aa21c230973e14d030ff6baeb8bf3540d54aba41fab0c4ddd4f2b79c3624",
+    "bytes": 2977110
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/accepted-fixtures/tests/t-gc2-alloc-account.c": {
+    "sha256": "931232437a4fa22103d3673dcf31f1ad5c2689ebbd70110ce1a743a786f5ddda",
+    "bytes": 48308
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert-accepted-fixture-checks/t-gc2-alloc-account": {
+    "sha256": "c97377653747ed2f82e6b70121d47bf73d5319afdb93d9bb0b32ee048def0c87",
+    "bytes": 2154672
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/accepted-fixtures/tests/t-gc2-interp-hard-check.c": {
+    "sha256": "6584c6cc748f3ae27b93409e24755296d20eaa5ecc1ef6e0576017194021943a",
+    "bytes": 7335
+  },
+  "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/assert-accepted-fixture-checks/t-gc2-interp-hard-check": {
+    "sha256": "2de2b67f0c2456db547ce12e1b21c9abfc0a63fb35a338e73c08be9466b0c4db",
+    "bytes": 2054296
+  }
+}

@@ -1,0 +1,16 @@
+old scanner huge=0 wide=0 exact=0 rejected
+old scanner huge=0 wide=0 exact=1 rejected
+old scanner huge=0 wide=1 exact=0 rejected
+old scanner huge=0 wide=1 exact=1 rejected
+mode pause huge=0 stage=6 peer completed
+mode pause huge=0 stage=7 peer completed
+huge=0 twelve rollover collections reached IDLE
+old scanner huge=1 wide=0 exact=0 rejected
+old scanner huge=1 wide=0 exact=1 rejected
+old scanner huge=1 wide=1 exact=0 rejected
+old scanner huge=1 wide=1 exact=1 rejected
+mode pause huge=1 stage=6 peer completed
+mode pause huge=1 stage=7 peer completed
+huge=1 twelve rollover collections reached IDLE
+reservation failure remains private; post-store promotion allocates nothing
+t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable

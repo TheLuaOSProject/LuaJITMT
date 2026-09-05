@@ -1,0 +1,72 @@
+[
+  {
+    "name": "candidate-build",
+    "argv": [
+      "make",
+      "-C",
+      "src",
+      "-j4",
+      "BUILDMODE=static",
+      "XCFLAGS=-DLUA_USE_ASSERT -DLUA_USE_APICHECK -DLJ_GC2_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_FUNC_TEST_HELPERS -DLJ_UDATA_TEST_HELPERS -DLJ_STR_TEST_HELPERS",
+      "TARGET_STRIP=:"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate",
+    "LUA_PATH": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/src/?.lua;/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/lib/?.lua;;",
+    "timeout_seconds": 120,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 8.387590400998306,
+    "stdout": "candidate-build.stdout",
+    "stderr": "candidate-build.stderr"
+  },
+  {
+    "name": "candidate-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-func-construction-anchor.c",
+      "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate-t-func-construction-anchor"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate",
+    "LUA_PATH": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/src/?.lua;/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/lib/?.lua;;",
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.1642043960018782,
+    "stdout": "candidate-compile.stdout",
+    "stderr": "candidate-compile.stderr"
+  },
+  {
+    "name": "candidate-fixture",
+    "argv": [
+      "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate-t-func-construction-anchor"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate",
+    "LUA_PATH": "/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/src/?.lua;/tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/lib/?.lua;;",
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.03160551299515646,
+    "stdout": "candidate-fixture.stdout",
+    "stderr": "candidate-fixture.stderr"
+  }
+]

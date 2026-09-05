@@ -1,0 +1,35 @@
+/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/broad-strict/t-gc2-jit-sweep-coop: \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/tests/t-gc2-jit-sweep-coop.c \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lua.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/luaconf.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lauxlib.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lua.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lualib.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_obj.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_def.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_arch.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_atomic.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_gc2token.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_tgregistry.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_tgslot.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_atomic.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_gc.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_obj.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_gc2.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_arena.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_jit.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_ir.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_target.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_target_x86.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_thr.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_tg.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_bc.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_ctype.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_gc.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_gc2.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_trace.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_jit.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_dispatch.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_tg.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/lj_traceerr.h \
+ /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/tests/lib/lua_fixture_helpers.h

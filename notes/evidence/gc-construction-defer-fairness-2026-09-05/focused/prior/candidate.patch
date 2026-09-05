@@ -1,0 +1,125 @@
+--- a/src/lj_gc.c
++++ b/src/lj_gc.c
+@@ -2970,14 +2970,17 @@
+   return end;
+ }
+ 
+-uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
+-				  uint32_t limit, int *donep)
++uint32_t lj_gc_reclaim_gc2_arena_ex(global_State *g, GCArena *a,
++				     uint32_t limit, int *donep,
++				     int *root_owner_blockedp)
+ {
+   /* scanned counts either one ordinary cell or one proven no-op bitmap word. */
+   uint32_t cell, scanned = 0, changed = 0;
+   int pending = 0;
+   if (donep)
+     *donep = 0;
++  if (root_owner_blockedp)
++    *root_owner_blockedp = 0;
+   if (!g || !a || limit == 0 ||
+       !(lj_arena_flags_acq(a) & LJ_AF_QUARANTINE))
+     return 0;
+@@ -3011,6 +3014,8 @@
+ 	rootmem == LJ_ARENA_ROOT_UNLINKING) {
+       /* A publisher/remover owns both the intrusive link and the allocation
+       ** reuse veto. Reclaim never waits for it or inspects a mutable header. */
++      if (root_owner_blockedp)
++	*root_owner_blockedp = 1;
+       pending = 1;
+       cell++;
+       scanned++;
+@@ -3311,6 +3316,12 @@
+   return cell < LJ_ARENA_CELLS && scanned != 0 ? 1u : 0u;
+ }
+ 
++uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
++				  uint32_t limit, int *donep)
++{
++  return lj_gc_reclaim_gc2_arena_ex(g, a, limit, donep, NULL);
++}
++
+ static void gc2_huge_sweep_reader_drop(LJHugeReader *reader, int *pendingp)
+ {
+   int released;
+@@ -4159,6 +4170,7 @@
+   if (running)
+     lj_gc2_check_trigger(g, L2TG(L));
+   while (running && step_limit-- != 0) {
++    uint64_t defer0 = gc2_deferred_epoch_acq(g);
+     uint32_t phase = gc2_phase_acq(g);
+     int sweep_step = phase == LJ_GC2_SWEEP;
+     if (phase == LJ_GC2_IDLE && gc2_cycle_leader_acq(g) == 0 &&
+@@ -4166,6 +4178,9 @@
+       break;
+     drove = 1;
+     done = lj_gc2_step_explicit(L, 1);
++    /* A retained owner ends this automatic batch as well as the inner step. */
++    if (gc2_deferred_epoch_acq(g) != defer0)
++      break;
+     if (gc2_phase_acq(g) == LJ_GC2_IDLE)
+       break;
+     /* Activation grants a bounded number of pre-dispatch opportunities. Each
+--- a/src/lj_gc.h
++++ b/src/lj_gc.h
+@@ -97,6 +97,10 @@
+ 						    GCArena *a);
+ LJ_FUNC uint32_t lj_gc_reclaim_gc2_arena(global_State *g, GCArena *a,
+ 					 uint32_t limit, int *donep);
++/* Report an exact intrusive owner without changing its reclaim retry state. */
++LJ_FUNC uint32_t lj_gc_reclaim_gc2_arena_ex(global_State *g, GCArena *a,
++					    uint32_t limit, int *donep,
++					    int *root_owner_blockedp);
+ LJ_FUNC uint32_t lj_gc_reclaim_gc2_huge(global_State *g, TGState *tg,
+ 					 void *p, const LJHugeInfo *hi,
+ 					 int *pendingp);
+--- a/src/lj_gc2.c
++++ b/src/lj_gc2.c
+@@ -5941,6 +5941,7 @@
+     if (qa) {
+       int done = 0;
+       int finished_arena = 0;
++      int root_owner_blocked = 0;
+       uint32_t step;
+       uint64_t retire_epoch = la_load64_acq(&qa->hdr.retire_epoch);
+       if (retire_epoch == ~(uint64_t)0) {
+@@ -5975,7 +5976,8 @@
+       }
+       step = lj_arena_remote_free_drain_sweep(&tg->alloc, qa);
+       {
+-	uint32_t reclaimed_step = lj_gc_reclaim_gc2_arena(g, qa, 64u, &done);
++	uint32_t reclaimed_step = lj_gc_reclaim_gc2_arena_ex(
++	  g, qa, 64u, &done, &root_owner_blocked);
+ 	step = reclaimed_step > ~(uint32_t)0 - step ?
+ 	       ~(uint32_t)0 : step + reclaimed_step;
+       }
+@@ -6020,6 +6022,11 @@
+ 	lj_arena_reclaim_unseal(qa, 1);
+       }
+       gc2_sweep_reclaim_leave(g);
++      /* Retain the exact arena/cursor and finish all writer cleanup before
++      ** ending this quantum. A suspended publisher cannot advance while a
++      ** nested full collector repeatedly consumes its cursor work. */
++      if (root_owner_blocked)
++	gc2_quantum_defer(g);
+       if (lj_state_gcprep_pending_acq(g) != 0)
+ 	break;
+       if (!step)
+@@ -6035,6 +6042,8 @@
+ 	break;
+       }
+       n++;
++      if (root_owner_blocked)
++	break;  /* Keep committed work counters, but do not retry this owner. */
+       continue;
+     }
+     if (lj_tg_flags_test_acq(tg, TGF_HUGETAB) &&
+@@ -22294,7 +22303,7 @@
+     if ((flags & (TGF_DEAD|TGF_ARENA_INTERNAL)) != TGF_ARENA_INTERNAL)
+       continue;
+     n += lj_gc2_sweep_owner_progress(g, tg, limit - n, &finished);
+-    if (finished)
++    if (finished || gc2_deferred_epoch_acq(g) != defer0)
+       break;
+   }
+   return n;  /* 05 section 5.6.3 worker-owned sweep bridge. */

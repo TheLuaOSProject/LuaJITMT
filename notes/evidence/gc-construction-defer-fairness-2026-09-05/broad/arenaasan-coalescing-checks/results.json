@@ -1,0 +1,63 @@
+[
+  {
+    "name": "t-gc2-sweep-table-coalescing-compile",
+    "kind": "compile",
+    "argv": [
+      "clang",
+      "-std=gnu11",
+      "-O1",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaasan/src",
+      "-I/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaasan/tests",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-DLJ_TEST_WRAP_CALLOC",
+      "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaasan/tests/t-gc2-sweep-table-coalescing.c",
+      "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaasan/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=calloc",
+      "-o",
+      "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaasan-coalescing-checks/t-gc2-sweep-table-coalescing"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaasan",
+    "LUA_PATH": "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaasan/src/?.lua;/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaasan/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.4147651199964457,
+    "stdout": "t-gc2-sweep-table-coalescing-compile.stdout",
+    "stderr": "t-gc2-sweep-table-coalescing-compile.stderr"
+  },
+  {
+    "name": "t-gc2-sweep-table-coalescing",
+    "kind": "runtime",
+    "argv": [
+      "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaasan-coalescing-checks/t-gc2-sweep-table-coalescing"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaasan",
+    "LUA_PATH": "/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaasan/src/?.lua;/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaasan/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.21427416700316826,
+    "stdout": "t-gc2-sweep-table-coalescing.stdout",
+    "stderr": "t-gc2-sweep-table-coalescing.stderr"
+  }
+]

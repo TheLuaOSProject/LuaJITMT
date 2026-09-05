@@ -1,0 +1,19 @@
+/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/broad-asan/t-arena-empty-reclaimed-runtime: \
+  /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/tests/t-arena-empty-reclaimed-runtime.c \
+  /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lua.h \
+  /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/luaconf.h \
+  /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lauxlib.h \
+  /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_obj.h \
+  /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_def.h \
+  /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_arch.h \
+  /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_atomic.h \
+  /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_gc2token.h \
+  /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_tgregistry.h \
+  /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_tgslot.h \
+  /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_arena.h \
+  /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_gc2.h \
+  /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_prng.h \
+  /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_tg.h \
+  /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_bc.h \
+  /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_ctype.h \
+  /tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/lj_gc.h

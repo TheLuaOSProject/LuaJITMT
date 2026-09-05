@@ -1,0 +1,200 @@
+{
+  "assert": {
+    "runtime_count": 43,
+    "runtime_passes": 40,
+    "runtime_failures": [
+      {
+        "name": "t-jit-idle-reclaim-entry",
+        "exit_code": 124,
+        "timed_out": true,
+        "seconds": 60.0008699490063,
+        "stderr": "t-jit-idle-reclaim-entry.stderr"
+      },
+      {
+        "name": "t-gc2-alloc-account",
+        "exit_code": -6,
+        "timed_out": false,
+        "seconds": 0.06385030099772848,
+        "stderr": "t-gc2-alloc-account.stderr"
+      },
+      {
+        "name": "t-gc2-interp-hard-check",
+        "exit_code": -6,
+        "timed_out": false,
+        "seconds": 0.06369052600348368,
+        "stderr": "t-gc2-interp-hard-check.stderr"
+      }
+    ],
+    "compile_attempts": 32,
+    "compile_failures": [
+      "t-arena-empty-reclaimed-compile",
+      "t-arena-empty-reclaimed-runtime-compile",
+      "t-gc2-sweep-table-coalescing-compile"
+    ]
+  },
+  "asan": {
+    "runtime_count": 54,
+    "runtime_passes": 49,
+    "runtime_failures": [
+      {
+        "name": "t-gc2-worker-scheduler",
+        "exit_code": -6,
+        "timed_out": false,
+        "seconds": 0.26463523900019936,
+        "stderr": "t-gc2-worker-scheduler.stderr"
+      },
+      {
+        "name": "t-jit-idle-reclaim-entry",
+        "exit_code": 124,
+        "timed_out": true,
+        "seconds": 60.00146412700269,
+        "stderr": "t-jit-idle-reclaim-entry.stderr"
+      },
+      {
+        "name": "t-gc2-alloc-account",
+        "exit_code": -6,
+        "timed_out": false,
+        "seconds": 0.06382270399626577,
+        "stderr": "t-gc2-alloc-account.stderr"
+      },
+      {
+        "name": "t-gc2-interp-hard-check",
+        "exit_code": -6,
+        "timed_out": false,
+        "seconds": 0.06380758799787145,
+        "stderr": "t-gc2-interp-hard-check.stderr"
+      },
+      {
+        "name": "t-gc2-worker-scheduler-publication",
+        "exit_code": -6,
+        "timed_out": false,
+        "seconds": 0.21408502100530313,
+        "stderr": "t-gc2-worker-scheduler-publication.stderr"
+      }
+    ],
+    "compile_attempts": 36,
+    "compile_failures": [
+      "t-arena-empty-reclaimed-compile",
+      "t-arena-empty-reclaimed-runtime-compile",
+      "t-gc2-sweep-table-coalescing-compile"
+    ]
+  },
+  "arenaassert-checks": {
+    "runtime_count": 2,
+    "runtime_passes": 2,
+    "runtime_failures": [],
+    "compile_attempts": 3,
+    "compile_failures": [
+      "t-gc2-sweep-table-coalescing-compile"
+    ]
+  },
+  "arenaasan-checks": {
+    "runtime_count": 2,
+    "runtime_passes": 2,
+    "runtime_failures": [],
+    "compile_attempts": 3,
+    "compile_failures": [
+      "t-gc2-sweep-table-coalescing-compile"
+    ]
+  },
+  "arenaassert-coalescing-checks": {
+    "runtime_count": 1,
+    "runtime_passes": 1,
+    "runtime_failures": [],
+    "compile_attempts": 1,
+    "compile_failures": []
+  },
+  "arenaasan-coalescing-checks": {
+    "runtime_count": 1,
+    "runtime_passes": 1,
+    "runtime_failures": [],
+    "compile_attempts": 1,
+    "compile_failures": []
+  },
+  "assert-accepted-fixture-checks": {
+    "runtime_count": 2,
+    "runtime_passes": 2,
+    "runtime_failures": [],
+    "compile_attempts": 2,
+    "compile_failures": []
+  },
+  "asan-accepted-fixture-checks": {
+    "runtime_count": 2,
+    "runtime_passes": 2,
+    "runtime_failures": [],
+    "compile_attempts": 2,
+    "compile_failures": []
+  },
+  "controlassert-checks": {
+    "runtime_count": 3,
+    "runtime_passes": 0,
+    "runtime_failures": [
+      {
+        "name": "t-jit-idle-reclaim-entry",
+        "exit_code": 124,
+        "timed_out": true,
+        "seconds": 60.000880630999745,
+        "stderr": "t-jit-idle-reclaim-entry.stderr"
+      },
+      {
+        "name": "t-gc2-alloc-account",
+        "exit_code": -6,
+        "timed_out": false,
+        "seconds": 0.06386357200244674,
+        "stderr": "t-gc2-alloc-account.stderr"
+      },
+      {
+        "name": "t-gc2-interp-hard-check",
+        "exit_code": -6,
+        "timed_out": false,
+        "seconds": 0.06391512500704266,
+        "stderr": "t-gc2-interp-hard-check.stderr"
+      }
+    ],
+    "compile_attempts": 3,
+    "compile_failures": []
+  },
+  "controlasan-checks": {
+    "runtime_count": 5,
+    "runtime_passes": 0,
+    "runtime_failures": [
+      {
+        "name": "t-gc2-worker-scheduler",
+        "exit_code": -6,
+        "timed_out": false,
+        "seconds": 1.1663589040035731,
+        "stderr": "t-gc2-worker-scheduler.stderr"
+      },
+      {
+        "name": "t-jit-idle-reclaim-entry",
+        "exit_code": 124,
+        "timed_out": true,
+        "seconds": 60.00170479199733,
+        "stderr": "t-jit-idle-reclaim-entry.stderr"
+      },
+      {
+        "name": "t-gc2-alloc-account",
+        "exit_code": -6,
+        "timed_out": false,
+        "seconds": 0.06424533799872734,
+        "stderr": "t-gc2-alloc-account.stderr"
+      },
+      {
+        "name": "t-gc2-interp-hard-check",
+        "exit_code": -6,
+        "timed_out": false,
+        "seconds": 0.06378119000146398,
+        "stderr": "t-gc2-interp-hard-check.stderr"
+      },
+      {
+        "name": "t-gc2-worker-scheduler-publication",
+        "exit_code": -6,
+        "timed_out": false,
+        "seconds": 0.2645606330042938,
+        "stderr": "t-gc2-worker-scheduler-publication.stderr"
+      }
+    ],
+    "compile_attempts": 5,
+    "compile_failures": []
+  }
+}

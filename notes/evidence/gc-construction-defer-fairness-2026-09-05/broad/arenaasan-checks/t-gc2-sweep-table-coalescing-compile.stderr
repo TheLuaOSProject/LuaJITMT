@@ -1,0 +1,9 @@
+/usr/bin/ld: /tmp/t-gc2-sweep-table-coalescing-3a3fe3.o: in function `main':
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaasan/tests/t-gc2-sweep-table-coalescing.c:474:(.text+0x5b1): undefined reference to `__wrap_calloc'
+/usr/bin/ld: /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaasan/src/libluajit.a(lj_arena.o): in function `lj_arena_map':
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaasan/src/lj_arena.c:1871:(.text+0x4282): undefined reference to `__wrap_calloc'
+/usr/bin/ld: /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaasan/src/libluajit.a(lj_arena.o): in function `arena_alloc_fresh':
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaasan/src/lj_arena.c:1871:(.text+0x3157f): undefined reference to `__wrap_calloc'
+/usr/bin/ld: /tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaasan/src/libluajit.a(lj_gc.o): in function `gc_shutdown_seen_grow':
+/tmp/lj-reclaim-fair-validation-20260905-c2edwuno/arenaasan/src/lj_gc.c:3733:(.text+0x22408): undefined reference to `__wrap_calloc'
+clang: error: linker command failed with exit code 1 (use -v to see invocation)

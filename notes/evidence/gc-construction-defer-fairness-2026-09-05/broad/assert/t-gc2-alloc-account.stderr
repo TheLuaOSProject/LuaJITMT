@@ -1,0 +1,1 @@
+t-gc2-alloc-account: /tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-gc2-alloc-account.c:929: main: Assertion `gc2_remembered_filtered_acq(g) == remembered_filtered0 + 4u' failed.

@@ -1,0 +1,2 @@
+interpreted hard-only TNEW did not run the GC2 hard assist
+t-gc2-interp-hard-check: /tmp/lj-reclaim-fair-pass-20260905-kw8kfdam/candidate/tests/t-gc2-interp-hard-check.c:230: main: Assertion `0' failed.
