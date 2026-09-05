@@ -1,0 +1,6 @@
+{
+  "shared_head": "aee88db569b82216b705408f00295a337a7393fe",
+  "cc_version": "cc (Debian 14.2.0-19) 14.2.0\nCopyright (C) 2024 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+  "uname": "Linux 7f3bd9b38fd8 7.2.1-ogc4.1.fc44.x86_64 #1 SMP PREEMPT_DYNAMIC Tue Sep  1 22:10:56 UTC 2026 x86_64 GNU/Linux\n",
+  "affinity": "pid 318034's current affinity list: 0-31\n"
+}

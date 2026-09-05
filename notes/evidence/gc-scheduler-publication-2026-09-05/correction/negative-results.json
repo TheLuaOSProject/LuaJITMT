@@ -1,0 +1,605 @@
+[
+  {
+    "name": "control-refuse-compile",
+    "variant": "control",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/refuse/tests/t-gc2-worker-scheduler.c",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-Wl,--wrap=lj_gc2_flush_ssb",
+      "-o",
+      "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-refuse"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.36492444699979387,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/refuse/tests/t-gc2-worker-scheduler.c",
+        "sha256": "012ed3087c88bc91a7d94de722d518a8525890f55c6a6c58b090c8980f72aa35",
+        "bytes": 50191
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-refuse-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-refuse-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "control-refuse",
+    "variant": "control",
+    "argv": [
+      "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-refuse"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": -6,
+    "seconds": 1.1654765249986667,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-refuse",
+        "sha256": "39de54019bcff532f7ebd69eb5c7578c9fac60ea142737d0bc3621ea57992ca8",
+        "bytes": 2240528
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/refuse/tests/t-gc2-worker-scheduler.c",
+        "sha256": "012ed3087c88bc91a7d94de722d518a8525890f55c6a6c58b090c8980f72aa35",
+        "bytes": 50191
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-refuse.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-refuse.stderr",
+      "sha256": "daed10d9f94e4ee8d7c13cb96e406d58d847d6079b8d56268365b62247fc719b",
+      "bytes": 252
+    }
+  },
+  {
+    "name": "candidate-refuse-compile",
+    "variant": "candidate",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/refuse/tests/t-gc2-worker-scheduler.c",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-Wl,--wrap=lj_gc2_flush_ssb",
+      "-o",
+      "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-refuse"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.41490813300333684,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/refuse/tests/t-gc2-worker-scheduler.c",
+        "sha256": "012ed3087c88bc91a7d94de722d518a8525890f55c6a6c58b090c8980f72aa35",
+        "bytes": 50191
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-refuse-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-refuse-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "candidate-refuse",
+    "variant": "candidate",
+    "argv": [
+      "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-refuse"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": -6,
+    "seconds": 1.1648877319967141,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-refuse",
+        "sha256": "38de8a137edd25fd1256847154561391690e1e097911d30cc1b70e151498356d",
+        "bytes": 2240608
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/refuse/tests/t-gc2-worker-scheduler.c",
+        "sha256": "012ed3087c88bc91a7d94de722d518a8525890f55c6a6c58b090c8980f72aa35",
+        "bytes": 50191
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-refuse.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-refuse.stderr",
+      "sha256": "555be5f1e11a76131de108a7257b59b30ba209bb36d0dea569fde8f3b48571d6",
+      "bytes": 254
+    }
+  },
+  {
+    "name": "veto-refuse-compile",
+    "variant": "veto",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/refuse/tests/t-gc2-worker-scheduler.c",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-Wl,--wrap=lj_gc2_flush_ssb",
+      "-o",
+      "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-refuse"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.4148399949990562,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/refuse/tests/t-gc2-worker-scheduler.c",
+        "sha256": "012ed3087c88bc91a7d94de722d518a8525890f55c6a6c58b090c8980f72aa35",
+        "bytes": 50191
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-refuse-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-refuse-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "veto-refuse",
+    "variant": "veto",
+    "argv": [
+      "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-refuse"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": -6,
+    "seconds": 1.1160316450041137,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-refuse",
+        "sha256": "8ca9931d01bdb76e356561076ed32b7bb1fa3db46d3a49f1f609059fa7a626ac",
+        "bytes": 2240624
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/refuse/tests/t-gc2-worker-scheduler.c",
+        "sha256": "012ed3087c88bc91a7d94de722d518a8525890f55c6a6c58b090c8980f72aa35",
+        "bytes": 50191
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-refuse.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-refuse.stderr",
+      "sha256": "dd51e979c07e9a3ff9f4d94f401c3bf03ea121298c9dba5ab6123017de1bd0ad",
+      "bytes": 249
+    }
+  },
+  {
+    "name": "control-false-success-compile",
+    "variant": "control",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/false-success/tests/t-gc2-worker-scheduler.c",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-o",
+      "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-false-success"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.3644568519957829,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/false-success/tests/t-gc2-worker-scheduler.c",
+        "sha256": "4fe4c448db0eaec8eb64dc983f25e0c0ed5907c400d68989b018a5cc9df18ed4",
+        "bytes": 49499
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-false-success-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-false-success-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "control-false-success",
+    "variant": "control",
+    "argv": [
+      "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-false-success"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": -6,
+    "seconds": 1.1156630689947633,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-false-success",
+        "sha256": "218b0d72771cabd44fa28ae3c23902318350eb0e3f130b7aae8473b96033a5f2",
+        "bytes": 2239240
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/false-success/tests/t-gc2-worker-scheduler.c",
+        "sha256": "4fe4c448db0eaec8eb64dc983f25e0c0ed5907c400d68989b018a5cc9df18ed4",
+        "bytes": 49499
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-false-success.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-false-success.stderr",
+      "sha256": "e849ceba0d0ae096dce58432a734ceba49beaeaa4eda87e115df71cc9bf4f0f1",
+      "bytes": 255
+    }
+  },
+  {
+    "name": "candidate-false-success-compile",
+    "variant": "candidate",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/false-success/tests/t-gc2-worker-scheduler.c",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-o",
+      "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-false-success"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.36473964500328293,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/false-success/tests/t-gc2-worker-scheduler.c",
+        "sha256": "4fe4c448db0eaec8eb64dc983f25e0c0ed5907c400d68989b018a5cc9df18ed4",
+        "bytes": 49499
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-false-success-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-false-success-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "candidate-false-success",
+    "variant": "candidate",
+    "argv": [
+      "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-false-success"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": -6,
+    "seconds": 1.1652029719989514,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-false-success",
+        "sha256": "42de30602665d0c25b925f94d5731e7a31069bc80ef8d10d5477bb36a3c42f66",
+        "bytes": 2239328
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/false-success/tests/t-gc2-worker-scheduler.c",
+        "sha256": "4fe4c448db0eaec8eb64dc983f25e0c0ed5907c400d68989b018a5cc9df18ed4",
+        "bytes": 49499
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-false-success.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-false-success.stderr",
+      "sha256": "988e41bc8ecd6e0d0cdd1004b5002dd59a23bca9b048a402a1fa8493b3bef18c",
+      "bytes": 257
+    }
+  },
+  {
+    "name": "veto-false-success-compile",
+    "variant": "veto",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/false-success/tests/t-gc2-worker-scheduler.c",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-o",
+      "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-false-success"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.3643096450032317,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/false-success/tests/t-gc2-worker-scheduler.c",
+        "sha256": "4fe4c448db0eaec8eb64dc983f25e0c0ed5907c400d68989b018a5cc9df18ed4",
+        "bytes": 49499
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-false-success-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-false-success-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "veto-false-success",
+    "variant": "veto",
+    "argv": [
+      "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-false-success"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": -6,
+    "seconds": 1.1659736720030196,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-false-success",
+        "sha256": "01b908b612a0b17eb114e655285bb3a78d766e02e9c01f5dd3be70a3a6280ac2",
+        "bytes": 2239344
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/false-success/tests/t-gc2-worker-scheduler.c",
+        "sha256": "4fe4c448db0eaec8eb64dc983f25e0c0ed5907c400d68989b018a5cc9df18ed4",
+        "bytes": 49499
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-false-success.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-false-success.stderr",
+      "sha256": "bb6b7d0f849e11c53ef36669f71df624fbd3eae6f72884aac3196e1149611105",
+      "bytes": 252
+    }
+  }
+]

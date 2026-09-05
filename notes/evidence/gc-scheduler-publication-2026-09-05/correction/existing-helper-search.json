@@ -1,0 +1,13 @@
+{
+  "argv": [
+    "rg",
+    "-n",
+    "flush_ssb|ssb_next_acq.*ssb_base_acq|ssb_base_acq.*ssb_next_acq",
+    "tests/lib"
+  ],
+  "cwd": "/workspaces/lj-lockless",
+  "exit_code": 1,
+  "stdout": "",
+  "stderr": "",
+  "note": "rg exit 1 means no matching shared helper"
+}

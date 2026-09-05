@@ -1,0 +1,52 @@
+SCHED_DIAG reason=wait_ssb_empty_expired
+SCHED_DIAG async_explicit_flush_return=0
+SCHED_DIAG phase=1
+SCHED_DIAG cycle=2
+SCHED_DIAG cycle_leader=0
+SCHED_DIAG jit_phase_gate=1
+SCHED_DIAG mark_close_intent=0
+SCHED_DIAG mark_root_scanned=0
+SCHED_DIAG jit_mark_resume=2
+SCHED_DIAG worker_active=0
+SCHED_DIAG assist_active=0
+SCHED_DIAG worker_stop=0
+SCHED_DIAG n_workers=2
+SCHED_DIAG worker_started=2
+SCHED_DIAG worker_exited=0
+SCHED_DIAG worker_wake=26
+SCHED_DIAG ssb_consumer_active=0
+SCHED_DIAG ssb_published=5
+SCHED_DIAG ssb_drained=70
+SCHED_DIAG recovery_failed=0
+SCHED_DIAG recovery_main_state=0
+SCHED_DIAG table_rescan_pending=0
+SCHED_DIAG thread_scan_needscan_pending=0
+SCHED_DIAG hs_pending=0
+SCHED_DIAG hs_actions=421
+SCHED_DIAG hs_epoch=19
+SCHED_DIAG grey_top=8
+SCHED_DIAG grey_bottom=8
+SCHED_DIAG grey_pushed=23
+SCHED_DIAG grey_drained=23
+SCHED_DIAG recovery_items=0
+SCHED_DIAG recovery_huge_items=0
+SCHED_DIAG recovery_published=0
+SCHED_DIAG recovery_redirtied=0
+SCHED_DIAG recovery_drained=0
+SCHED_DIAG ssb_items_published=12
+SCHED_DIAG ssb_items_drained=77
+SCHED_DIAG worker_runs=90
+SCHED_DIAG worker_grey_drained=13
+SCHED_DIAG worker_ssb_converted=71
+SCHED_DIAG worker_idle_declares=10539
+SCHED_DIAG worker_busy_retries=98
+SCHED_DIAG worker_wakes=26
+SCHED_DIAG worker_parks=15900
+SCHED_DIAG worker_async_progress=31
+SCHED_DIAG deferred_epoch=0
+SCHED_DIAG ssb_head=(nil) ssb_drain=(nil)
+SCHED_DIAG tg=main ptr=0x7f155b8e2d20 tid=1 flags=3 native=0 poll=0 reqmask=0 cur_L=0x7f155b8e0080 ssb_active=0x7f155b8e5960 ssb_base=0x7f155b8e5978 ssb_next=0x7f155b8e5980 ssb_end=0x7f155b8e7978 ssb_free=0x7f155b8e3948 ssb_refs=0
+SCHED_DIAG tg=list ptr=0x561f0866c7a0 tid=33 flags=3 native=1 poll=0 reqmask=0 cur_L=(nil) ssb_active=0x561f0866d3c8 ssb_base=0x561f0866d3e0 ssb_next=0x561f0866d3e0 ssb_end=0x561f0866f3e0 ssb_free=0x561f0866f3e0 ssb_refs=0
+SCHED_DIAG tg=list ptr=0x561f08664d80 tid=32 flags=3 native=1 poll=0 reqmask=0 cur_L=(nil) ssb_active=0x561f086659a8 ssb_base=0x561f086659c0 ssb_next=0x561f086659c0 ssb_end=0x561f086679c0 ssb_free=0x561f086679c0 ssb_refs=0
+SCHED_DIAG tg=list ptr=0x7f155b8e2d20 tid=1 flags=3 native=0 poll=0 reqmask=0 cur_L=0x7f155b8e0080 ssb_active=0x7f155b8e5960 ssb_base=0x7f155b8e5978 ssb_next=0x7f155b8e5980 ssb_end=0x7f155b8e7978 ssb_free=0x7f155b8e3948 ssb_refs=0
+veto-diagnostic: /tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/diagnostic/tests/t-gc2-worker-scheduler.c:1319: test_async_mark: Assertion `wait_ssb_empty(g)' failed.

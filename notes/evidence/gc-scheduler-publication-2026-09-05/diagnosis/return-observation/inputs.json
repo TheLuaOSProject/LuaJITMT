@@ -1,0 +1,404 @@
+{
+  "control": {
+    "src/lj_gc2.c": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/lj_gc2.c",
+      "sha256": "5557bc243f94f5d310287494cc3560d91931455eaa8338ba480f84a33edf45a1",
+      "bytes": 767682,
+      "storage": "text",
+      "copy": "control/src/lj_gc2.c"
+    },
+    "src/lj_gc2.h": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/lj_gc2.h",
+      "sha256": "244b10c49ad036b661a08adc178e6b8247d8ff1b18ed63bc035d3440df16a9f9",
+      "bytes": 37421,
+      "storage": "text",
+      "copy": "control/src/lj_gc2.h"
+    },
+    "src/lj_gc.c": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/lj_gc.c",
+      "sha256": "7ceb24d2c755325c7c3d4113330bbb4fce6d3c893dd22fc1ef8bf924590ab4cb",
+      "bytes": 194734,
+      "storage": "text",
+      "copy": "control/src/lj_gc.c"
+    },
+    "src/lj_gc.h": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/lj_gc.h",
+      "sha256": "3d52d352f6280ee308f9ae71a8edbe4dde6f41f9a00256a0d3d6a3924fddc0dd",
+      "bytes": 22198,
+      "storage": "text",
+      "copy": "control/src/lj_gc.h"
+    },
+    "src/lj_obj.h": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/lj_obj.h",
+      "sha256": "4dddf105f8b3006efb495259340ea4acaae9579e283b769ff9e683810beb435b",
+      "bytes": 220783,
+      "storage": "text",
+      "copy": "control/src/lj_obj.h"
+    },
+    "src/lj_tg.c": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/lj_tg.c",
+      "sha256": "16064ba7946becbbc5cc1be2ee00eae4be39f1496c6ab85c5f4cf60f64146406",
+      "bytes": 45600,
+      "storage": "text",
+      "copy": "control/src/lj_tg.c"
+    },
+    "src/lj_tg.h": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/lj_tg.h",
+      "sha256": "a5cb46bde2868512743795750b5a1da71cd1a581bc037da127e60b36cb994015",
+      "bytes": 50068,
+      "storage": "text",
+      "copy": "control/src/lj_tg.h"
+    },
+    "src/lj_safepoint.c": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/lj_safepoint.c",
+      "sha256": "9779c6607135ffd7e06d6c1834022ad77cf491d8a30df6b63f9e5516d045af03",
+      "bytes": 35523,
+      "storage": "text",
+      "copy": "control/src/lj_safepoint.c"
+    },
+    "src/lj_safepoint.h": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/lj_safepoint.h",
+      "sha256": "328aa2bc63d753257d8adca5a5417ccdda059b942138aecda20a3da53752d46c",
+      "bytes": 2894,
+      "storage": "text",
+      "copy": "control/src/lj_safepoint.h"
+    },
+    "src/lib_base.c": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/lib_base.c",
+      "sha256": "5aeff40a9022f5827530f80b944c84eb1dfb4eef2bc558fbc2503c55a3080aee",
+      "bytes": 21901,
+      "storage": "text",
+      "copy": "control/src/lib_base.c"
+    },
+    "src/lj_api.c": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/lj_api.c",
+      "sha256": "c2b43c2839509c8403c51729c72083be2701bdfc4b5efc9f116540d9c105d6af",
+      "bytes": 89412,
+      "storage": "text",
+      "copy": "control/src/lj_api.c"
+    },
+    "src/vm_x64.dasc": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/vm_x64.dasc",
+      "sha256": "ad48405b4793e8514307cd4efc15238dcd3a29b0d1970b452ee77952b921d64b",
+      "bytes": 192489,
+      "storage": "text",
+      "copy": "control/src/vm_x64.dasc"
+    },
+    "src/lj_thr.c": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/lj_thr.c",
+      "sha256": "93aed8d88e36795e6186323924f5d96e7edc897b15f491f422223844eb666bb7",
+      "bytes": 69350,
+      "storage": "text",
+      "copy": "control/src/lj_thr.c"
+    },
+    "src/lj_thr.h": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/lj_thr.h",
+      "sha256": "f39140aec08b622f0db5123fdf311e5e753075462b7a0f75c251c86a58985b28",
+      "bytes": 16065,
+      "storage": "text",
+      "copy": "control/src/lj_thr.h"
+    },
+    "src/lj_atomic.h": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/lj_atomic.h",
+      "sha256": "0a7bbdc91ae21c4dcbe09cd7de500e0aeb341173f5059f43659678e5be53fac1",
+      "bytes": 13030,
+      "storage": "text",
+      "copy": "control/src/lj_atomic.h"
+    },
+    "src/libluajit.a": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+      "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+      "bytes": 2976582,
+      "storage": "hash-only"
+    },
+    "tests/t-gc2-worker-scheduler.c": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/t-gc2-worker-scheduler.c",
+      "sha256": "e032c08598b035cf7982ebd71af87574edc9b8e99eff2b278d49cb860c98d978",
+      "bytes": 48916,
+      "storage": "text",
+      "copy": "control/tests/t-gc2-worker-scheduler.c"
+    },
+    "tests/lib/test_sleep.h": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/test_sleep.h",
+      "sha256": "773ab5c72a894c17f5b6c4fa1c398c8fc0e01604c2089d69097e92ea860f17cb",
+      "bytes": 503,
+      "storage": "text",
+      "copy": "control/tests/lib/test_sleep.h"
+    },
+    "tests/lib/tg_stopreq_fixture_helpers.h": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/tg_stopreq_fixture_helpers.h",
+      "sha256": "c6ac1fa39f76509178517babb5d557d1415213835ff9949c69cdf7640781d744",
+      "bytes": 560,
+      "storage": "text",
+      "copy": "control/tests/lib/tg_stopreq_fixture_helpers.h"
+    }
+  },
+  "candidate": {
+    "src/lj_gc2.c": {
+      "original": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/lj_gc2.c",
+      "sha256": "5557bc243f94f5d310287494cc3560d91931455eaa8338ba480f84a33edf45a1",
+      "bytes": 767682,
+      "storage": "text",
+      "copy": "candidate/src/lj_gc2.c"
+    },
+    "src/lj_gc2.h": {
+      "original": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/lj_gc2.h",
+      "sha256": "244b10c49ad036b661a08adc178e6b8247d8ff1b18ed63bc035d3440df16a9f9",
+      "bytes": 37421,
+      "storage": "text",
+      "copy": "candidate/src/lj_gc2.h"
+    },
+    "src/lj_gc.c": {
+      "original": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/lj_gc.c",
+      "sha256": "d0e8608a261b823f21b037aa73f4f29dac3059ee3e741286d836c686e7498e9d",
+      "bytes": 195228,
+      "storage": "text",
+      "copy": "candidate/src/lj_gc.c"
+    },
+    "src/lj_gc.h": {
+      "original": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/lj_gc.h",
+      "sha256": "f465a7706da2f3f7fc52f0b40054462d0a6368c3e5dec0abcd9d990c6680cfd5",
+      "bytes": 22325,
+      "storage": "text",
+      "copy": "candidate/src/lj_gc.h"
+    },
+    "src/lj_obj.h": {
+      "original": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/lj_obj.h",
+      "sha256": "4dddf105f8b3006efb495259340ea4acaae9579e283b769ff9e683810beb435b",
+      "bytes": 220783,
+      "storage": "text",
+      "copy": "candidate/src/lj_obj.h"
+    },
+    "src/lj_tg.c": {
+      "original": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/lj_tg.c",
+      "sha256": "16064ba7946becbbc5cc1be2ee00eae4be39f1496c6ab85c5f4cf60f64146406",
+      "bytes": 45600,
+      "storage": "text",
+      "copy": "candidate/src/lj_tg.c"
+    },
+    "src/lj_tg.h": {
+      "original": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/lj_tg.h",
+      "sha256": "a5cb46bde2868512743795750b5a1da71cd1a581bc037da127e60b36cb994015",
+      "bytes": 50068,
+      "storage": "text",
+      "copy": "candidate/src/lj_tg.h"
+    },
+    "src/lj_safepoint.c": {
+      "original": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/lj_safepoint.c",
+      "sha256": "9779c6607135ffd7e06d6c1834022ad77cf491d8a30df6b63f9e5516d045af03",
+      "bytes": 35523,
+      "storage": "text",
+      "copy": "candidate/src/lj_safepoint.c"
+    },
+    "src/lj_safepoint.h": {
+      "original": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/lj_safepoint.h",
+      "sha256": "328aa2bc63d753257d8adca5a5417ccdda059b942138aecda20a3da53752d46c",
+      "bytes": 2894,
+      "storage": "text",
+      "copy": "candidate/src/lj_safepoint.h"
+    },
+    "src/lib_base.c": {
+      "original": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/lib_base.c",
+      "sha256": "5aeff40a9022f5827530f80b944c84eb1dfb4eef2bc558fbc2503c55a3080aee",
+      "bytes": 21901,
+      "storage": "text",
+      "copy": "candidate/src/lib_base.c"
+    },
+    "src/lj_api.c": {
+      "original": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/lj_api.c",
+      "sha256": "c2b43c2839509c8403c51729c72083be2701bdfc4b5efc9f116540d9c105d6af",
+      "bytes": 89412,
+      "storage": "text",
+      "copy": "candidate/src/lj_api.c"
+    },
+    "src/vm_x64.dasc": {
+      "original": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/vm_x64.dasc",
+      "sha256": "d445a4ffa214242bd5efc753c3cb737e90509b66c9f52bd95eff4c358b6e77ab",
+      "bytes": 193119,
+      "storage": "text",
+      "copy": "candidate/src/vm_x64.dasc"
+    },
+    "src/lj_thr.c": {
+      "original": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/lj_thr.c",
+      "sha256": "93aed8d88e36795e6186323924f5d96e7edc897b15f491f422223844eb666bb7",
+      "bytes": 69350,
+      "storage": "text",
+      "copy": "candidate/src/lj_thr.c"
+    },
+    "src/lj_thr.h": {
+      "original": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/lj_thr.h",
+      "sha256": "f39140aec08b622f0db5123fdf311e5e753075462b7a0f75c251c86a58985b28",
+      "bytes": 16065,
+      "storage": "text",
+      "copy": "candidate/src/lj_thr.h"
+    },
+    "src/lj_atomic.h": {
+      "original": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/lj_atomic.h",
+      "sha256": "0a7bbdc91ae21c4dcbe09cd7de500e0aeb341173f5059f43659678e5be53fac1",
+      "bytes": 13030,
+      "storage": "text",
+      "copy": "candidate/src/lj_atomic.h"
+    },
+    "src/libluajit.a": {
+      "original": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+      "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+      "bytes": 2980350,
+      "storage": "hash-only"
+    },
+    "tests/t-gc2-worker-scheduler.c": {
+      "original": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/t-gc2-worker-scheduler.c",
+      "sha256": "e032c08598b035cf7982ebd71af87574edc9b8e99eff2b278d49cb860c98d978",
+      "bytes": 48916,
+      "storage": "text",
+      "copy": "candidate/tests/t-gc2-worker-scheduler.c"
+    },
+    "tests/lib/test_sleep.h": {
+      "original": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/test_sleep.h",
+      "sha256": "773ab5c72a894c17f5b6c4fa1c398c8fc0e01604c2089d69097e92ea860f17cb",
+      "bytes": 503,
+      "storage": "text",
+      "copy": "candidate/tests/lib/test_sleep.h"
+    },
+    "tests/lib/tg_stopreq_fixture_helpers.h": {
+      "original": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/tg_stopreq_fixture_helpers.h",
+      "sha256": "c6ac1fa39f76509178517babb5d557d1415213835ff9949c69cdf7640781d744",
+      "bytes": 560,
+      "storage": "text",
+      "copy": "candidate/tests/lib/tg_stopreq_fixture_helpers.h"
+    }
+  },
+  "veto": {
+    "src/lj_gc2.c": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/lj_gc2.c",
+      "sha256": "ce389dec47b431d6ba67cbb76ad15fd6e3c0aa061cd50dc4d10a0396b8cf9cf6",
+      "bytes": 767764,
+      "storage": "text",
+      "copy": "veto/src/lj_gc2.c"
+    },
+    "src/lj_gc2.h": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/lj_gc2.h",
+      "sha256": "244b10c49ad036b661a08adc178e6b8247d8ff1b18ed63bc035d3440df16a9f9",
+      "bytes": 37421,
+      "storage": "text",
+      "copy": "veto/src/lj_gc2.h"
+    },
+    "src/lj_gc.c": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/lj_gc.c",
+      "sha256": "3cd90fc9507153f4acda2b11cf79fb637636a22b42a580b10389138908f47aea",
+      "bytes": 195276,
+      "storage": "text",
+      "copy": "veto/src/lj_gc.c"
+    },
+    "src/lj_gc.h": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/lj_gc.h",
+      "sha256": "7e7d75d12c65e46f56492e4999b94a1d64318cef0bbb7d01352796fdc94b7fcf",
+      "bytes": 22575,
+      "storage": "text",
+      "copy": "veto/src/lj_gc.h"
+    },
+    "src/lj_obj.h": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/lj_obj.h",
+      "sha256": "591085dbd6f5a550412b4978cf1ad96850b87c59c41e5883e87b034bcaf62f3c",
+      "bytes": 220849,
+      "storage": "text",
+      "copy": "veto/src/lj_obj.h"
+    },
+    "src/lj_tg.c": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/lj_tg.c",
+      "sha256": "16064ba7946becbbc5cc1be2ee00eae4be39f1496c6ab85c5f4cf60f64146406",
+      "bytes": 45600,
+      "storage": "text",
+      "copy": "veto/src/lj_tg.c"
+    },
+    "src/lj_tg.h": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/lj_tg.h",
+      "sha256": "a5cb46bde2868512743795750b5a1da71cd1a581bc037da127e60b36cb994015",
+      "bytes": 50068,
+      "storage": "text",
+      "copy": "veto/src/lj_tg.h"
+    },
+    "src/lj_safepoint.c": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/lj_safepoint.c",
+      "sha256": "9779c6607135ffd7e06d6c1834022ad77cf491d8a30df6b63f9e5516d045af03",
+      "bytes": 35523,
+      "storage": "text",
+      "copy": "veto/src/lj_safepoint.c"
+    },
+    "src/lj_safepoint.h": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/lj_safepoint.h",
+      "sha256": "328aa2bc63d753257d8adca5a5417ccdda059b942138aecda20a3da53752d46c",
+      "bytes": 2894,
+      "storage": "text",
+      "copy": "veto/src/lj_safepoint.h"
+    },
+    "src/lib_base.c": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/lib_base.c",
+      "sha256": "5aeff40a9022f5827530f80b944c84eb1dfb4eef2bc558fbc2503c55a3080aee",
+      "bytes": 21901,
+      "storage": "text",
+      "copy": "veto/src/lib_base.c"
+    },
+    "src/lj_api.c": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/lj_api.c",
+      "sha256": "62cb91a4a382bca4ece810557008895ae9910171d7e74ff11314c00df470d53e",
+      "bytes": 89891,
+      "storage": "text",
+      "copy": "veto/src/lj_api.c"
+    },
+    "src/vm_x64.dasc": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/vm_x64.dasc",
+      "sha256": "3c1a5c9750ba851b400b580a8b2a80f5c215736bf71fc81112ea728eebdb39ae",
+      "bytes": 193172,
+      "storage": "text",
+      "copy": "veto/src/vm_x64.dasc"
+    },
+    "src/lj_thr.c": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/lj_thr.c",
+      "sha256": "93aed8d88e36795e6186323924f5d96e7edc897b15f491f422223844eb666bb7",
+      "bytes": 69350,
+      "storage": "text",
+      "copy": "veto/src/lj_thr.c"
+    },
+    "src/lj_thr.h": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/lj_thr.h",
+      "sha256": "f39140aec08b622f0db5123fdf311e5e753075462b7a0f75c251c86a58985b28",
+      "bytes": 16065,
+      "storage": "text",
+      "copy": "veto/src/lj_thr.h"
+    },
+    "src/lj_atomic.h": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/lj_atomic.h",
+      "sha256": "0a7bbdc91ae21c4dcbe09cd7de500e0aeb341173f5059f43659678e5be53fac1",
+      "bytes": 13030,
+      "storage": "text",
+      "copy": "veto/src/lj_atomic.h"
+    },
+    "src/libluajit.a": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+      "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+      "bytes": 2980502,
+      "storage": "hash-only"
+    },
+    "tests/t-gc2-worker-scheduler.c": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/t-gc2-worker-scheduler.c",
+      "sha256": "e032c08598b035cf7982ebd71af87574edc9b8e99eff2b278d49cb860c98d978",
+      "bytes": 48916,
+      "storage": "text",
+      "copy": "veto/tests/t-gc2-worker-scheduler.c"
+    },
+    "tests/lib/test_sleep.h": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/test_sleep.h",
+      "sha256": "773ab5c72a894c17f5b6c4fa1c398c8fc0e01604c2089d69097e92ea860f17cb",
+      "bytes": 503,
+      "storage": "text",
+      "copy": "veto/tests/lib/test_sleep.h"
+    },
+    "tests/lib/tg_stopreq_fixture_helpers.h": {
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/tg_stopreq_fixture_helpers.h",
+      "sha256": "c6ac1fa39f76509178517babb5d557d1415213835ff9949c69cdf7640781d744",
+      "bytes": 560,
+      "storage": "text",
+      "copy": "veto/tests/lib/tg_stopreq_fixture_helpers.h"
+    }
+  }
+}

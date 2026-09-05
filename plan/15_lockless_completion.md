@@ -539,6 +539,12 @@ completed RESTART on both baseline and prototype. Temporary finalizer suppressio
 must remain explicit before thresholds lose their control authority. Preserve
 the frozen negative schedules and the separate worker/safety observations in
 `notes/gc-auto-control-review-2026-09-05.md`; neither prototype is integrated.
+The scheduler SSB-empty assertion now reproduces on all three frozen variants:
+the fixture ignored a refused owner flush. It now establishes publication
+before the unchanged worker-drain checks; 60 corrected runs and six negative
+controls validate that precondition. See
+`notes/gc-scheduler-publication-2026-09-05.md`. The separate SWEEP completion
+failure and other recorded waits remain open.
 
 The real four-position consumed-ack probe and finite mode-0 attachment probe
 are recorded in `notes/native-progress-boundaries-2026-09-05.md`. The missing

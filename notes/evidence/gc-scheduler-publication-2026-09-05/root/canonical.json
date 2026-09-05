@@ -1,0 +1,40 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict/src/luajit",
+    "/workspaces/lj-lockless/tools/test.lua",
+    "m3_gc2_worker_scheduler"
+  ],
+  "cwd": "/workspaces/lj-lockless",
+  "environment": {
+    "LJ_TEST_ROOT": "/workspaces/lj-lockless",
+    "JOBS": "4",
+    "MAKE_JOBS": "4",
+    "TMPDIR": "/tmp/lj-gc-scheduler-root-20260905-l2j2b2ee/canonical-tmp",
+    "LUA_PATH": "/workspaces/lj-lockless/src/?.lua;;"
+  },
+  "runner_sha256": "0ca7eda5636b6176331df5781c04569ecac5a086933a2c2d2b1948179a3139d7",
+  "sources": {
+    "tests/t-gc2-worker-scheduler.c": "f476733106d7e2552c9e47757b35f1c1dc78cf8b3cb0d47c17f17ed58fe70dca",
+    "tests/suites/m3_gc.lua": "0f7d0aa2417d8f6feb16c1dcb183c0df8556f312e29d2faa2ef1e30a13cc0552",
+    "tests/t-gc-workers.lua": "cdfe55b4879aeb3398d5c2a2e12aec3fccb97670b8060026cc43f67ea35ebdb9",
+    "src/lj_gc2.c": "5557bc243f94f5d310287494cc3560d91931455eaa8338ba480f84a33edf45a1",
+    "src/lj_gc.c": "7ceb24d2c755325c7c3d4113330bbb4fce6d3c893dd22fc1ef8bf924590ab4cb",
+    "src/lj_tg.c": "16064ba7946becbbc5cc1be2ee00eae4be39f1496c6ab85c5f4cf60f64146406",
+    "src/lj_safepoint.c": "9779c6607135ffd7e06d6c1834022ad77cf491d8a30df6b63f9e5516d045af03",
+    "src/lj_obj.h": "4dddf105f8b3006efb495259340ea4acaae9579e283b769ff9e683810beb435b"
+  },
+  "exit": 0,
+  "seconds": 48.84043613199901,
+  "expected_runtime_processes": 3,
+  "default_binaries": {
+    "luajit": "acf07ae3282e45375cc7472bc2655636a43a05954bb02c1fa8800bc2c3c543ac",
+    "libluajit.a": "2417054ac2cff43e131826f5bdb593797802a9295a6f970e54d8144e62b3cf89",
+    "libluajit.so": "1161efec323f15dc03e51b34bbdc037071245dea32aa44cbbb06031f9b2c46d6"
+  },
+  "temporary_files": {
+    "canonical-tmp/lj_t-gc2-worker-scheduler": "512ad0ee807aac6307b7e5429ed2a6e58d87edfd14436d7905e76710088e0a7c"
+  }
+}

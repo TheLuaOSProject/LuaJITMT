@@ -1,0 +1,1293 @@
+{
+  "scope": "Frozen fixture correction and two intentional negative controls",
+  "artifacts": [
+    {
+      "path": "HANDOFF.md",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/HANDOFF.md",
+      "storage": "text",
+      "sha256": "4010d539fedf4883f27e59f3990899ce3505380f44690d6681893a8fdda2e9c9",
+      "bytes": 5212
+    },
+    {
+      "path": "candidate/tests/lib/test_sleep.h",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate/tests/lib/test_sleep.h",
+      "storage": "text",
+      "sha256": "773ab5c72a894c17f5b6c4fa1c398c8fc0e01604c2089d69097e92ea860f17cb",
+      "bytes": 503
+    },
+    {
+      "path": "candidate/tests/lib/tg_stopreq_fixture_helpers.h",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate/tests/lib/tg_stopreq_fixture_helpers.h",
+      "storage": "text",
+      "sha256": "c6ac1fa39f76509178517babb5d557d1415213835ff9949c69cdf7640781d744",
+      "bytes": 560
+    },
+    {
+      "path": "candidate/tests/t-gc2-worker-scheduler.c",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate/tests/t-gc2-worker-scheduler.c",
+      "storage": "text",
+      "sha256": "f476733106d7e2552c9e47757b35f1c1dc78cf8b3cb0d47c17f17ed58fe70dca",
+      "bytes": 49341
+    },
+    {
+      "path": "candidate-00.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-00.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-00.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-00.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-01.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-01.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-01.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-01.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-02.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-02.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-02.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-02.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-03.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-03.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-03.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-03.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-04.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-04.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-04.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-04.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-05.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-05.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-05.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-05.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-06.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-06.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-06.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-06.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-07.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-07.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-07.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-07.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-08.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-08.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-08.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-08.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-09.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-09.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-09.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-09.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-10.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-10.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-10.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-10.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-11.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-11.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-11.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-11.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-12.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-12.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-12.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-12.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-13.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-13.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-13.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-13.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-14.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-14.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-14.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-14.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-15.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-15.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-15.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-15.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-16.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-16.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-16.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-16.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-17.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-17.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-17.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-17.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-18.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-18.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-18.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-18.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-19.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-19.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-19.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-19.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-compile.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-compile.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-compile.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-compile.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-corrected",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-corrected",
+      "storage": "hash-only",
+      "sha256": "fc20ffc0f0f61a7849bc26431f6ffebf4d3cf92a7243604276c73280166ec149",
+      "bytes": 2239392
+    },
+    {
+      "path": "candidate-false-success",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-false-success",
+      "storage": "hash-only",
+      "sha256": "42de30602665d0c25b925f94d5731e7a31069bc80ef8d10d5477bb36a3c42f66",
+      "bytes": 2239328
+    },
+    {
+      "path": "candidate-false-success-compile.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-false-success-compile.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-false-success-compile.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-false-success-compile.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-false-success.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-false-success.stderr",
+      "storage": "text",
+      "sha256": "988e41bc8ecd6e0d0cdd1004b5002dd59a23bca9b048a402a1fa8493b3bef18c",
+      "bytes": 257
+    },
+    {
+      "path": "candidate-false-success.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-false-success.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-refuse",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-refuse",
+      "storage": "hash-only",
+      "sha256": "38de8a137edd25fd1256847154561391690e1e097911d30cc1b70e151498356d",
+      "bytes": 2240608
+    },
+    {
+      "path": "candidate-refuse-compile.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-refuse-compile.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-refuse-compile.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-refuse-compile.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-refuse.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-refuse.stderr",
+      "storage": "text",
+      "sha256": "555be5f1e11a76131de108a7257b59b30ba209bb36d0dea569fde8f3b48571d6",
+      "bytes": 254
+    },
+    {
+      "path": "candidate-refuse.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate-refuse.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate.patch",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate.patch",
+      "storage": "text",
+      "sha256": "9287362b11735cefe7f5a8d0af00bd9b0f208d41793efad809b776c3069d1774",
+      "bytes": 1302
+    },
+    {
+      "path": "control-00.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-00.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-00.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-00.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-01.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-01.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-01.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-01.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-02.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-02.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-02.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-02.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-03.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-03.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-03.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-03.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-04.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-04.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-04.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-04.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-05.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-05.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-05.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-05.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-06.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-06.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-06.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-06.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-07.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-07.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-07.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-07.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-08.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-08.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-08.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-08.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-09.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-09.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-09.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-09.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-10.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-10.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-10.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-10.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-11.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-11.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-11.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-11.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-12.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-12.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-12.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-12.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-13.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-13.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-13.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-13.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-14.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-14.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-14.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-14.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-15.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-15.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-15.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-15.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-16.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-16.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-16.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-16.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-17.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-17.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-17.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-17.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-18.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-18.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-18.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-18.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-19.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-19.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-19.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-19.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-compile.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-compile.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-compile.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-compile.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-corrected",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-corrected",
+      "storage": "hash-only",
+      "sha256": "4b24ebc3bf5b98d66ac7d33096191277c601ea652e8bbca410d7aa8a9d53e33b",
+      "bytes": 2239312
+    },
+    {
+      "path": "control-false-success",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-false-success",
+      "storage": "hash-only",
+      "sha256": "218b0d72771cabd44fa28ae3c23902318350eb0e3f130b7aae8473b96033a5f2",
+      "bytes": 2239240
+    },
+    {
+      "path": "control-false-success-compile.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-false-success-compile.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-false-success-compile.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-false-success-compile.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-false-success.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-false-success.stderr",
+      "storage": "text",
+      "sha256": "e849ceba0d0ae096dce58432a734ceba49beaeaa4eda87e115df71cc9bf4f0f1",
+      "bytes": 255
+    },
+    {
+      "path": "control-false-success.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-false-success.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-refuse",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-refuse",
+      "storage": "hash-only",
+      "sha256": "39de54019bcff532f7ebd69eb5c7578c9fac60ea142737d0bc3621ea57992ca8",
+      "bytes": 2240528
+    },
+    {
+      "path": "control-refuse-compile.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-refuse-compile.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-refuse-compile.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-refuse-compile.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-refuse.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-refuse.stderr",
+      "storage": "text",
+      "sha256": "daed10d9f94e4ee8d7c13cb96e406d58d847d6079b8d56268365b62247fc719b",
+      "bytes": 252
+    },
+    {
+      "path": "control-refuse.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/control-refuse.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "diagnosis-reference.json",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/diagnosis-reference.json",
+      "storage": "text",
+      "sha256": "59d95c41e22a158e60643c6b8a849d6ad6050a432c0e8a5a8322c695bf1a3ed9",
+      "bytes": 186
+    },
+    {
+      "path": "existing-helper-search.json",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/existing-helper-search.json",
+      "storage": "text",
+      "sha256": "b92aac55e7efd1b45da509fb6571051eef4df517ae060cd54efaa00d354578ba",
+      "bytes": 268
+    },
+    {
+      "path": "false-success/tests/lib/test_sleep.h",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/false-success/tests/lib/test_sleep.h",
+      "storage": "text",
+      "sha256": "773ab5c72a894c17f5b6c4fa1c398c8fc0e01604c2089d69097e92ea860f17cb",
+      "bytes": 503
+    },
+    {
+      "path": "false-success/tests/lib/tg_stopreq_fixture_helpers.h",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/false-success/tests/lib/tg_stopreq_fixture_helpers.h",
+      "storage": "text",
+      "sha256": "c6ac1fa39f76509178517babb5d557d1415213835ff9949c69cdf7640781d744",
+      "bytes": 560
+    },
+    {
+      "path": "false-success/tests/t-gc2-worker-scheduler.c",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/false-success/tests/t-gc2-worker-scheduler.c",
+      "storage": "text",
+      "sha256": "4fe4c448db0eaec8eb64dc983f25e0c0ed5907c400d68989b018a5cc9df18ed4",
+      "bytes": 49499
+    },
+    {
+      "path": "false-success.patch",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/false-success.patch",
+      "storage": "text",
+      "sha256": "25b2eb289765dd371025a72c3d6509017c05444adc77a6f7ed912cf88c8971ad",
+      "bytes": 1052
+    },
+    {
+      "path": "inputs.json",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/inputs.json",
+      "storage": "text",
+      "sha256": "7676bbe5d7ab1f54d6129b12faf2aead852e202c500a528ce708792fad6395c9",
+      "bytes": 17256
+    },
+    {
+      "path": "negative-results.json",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/negative-results.json",
+      "storage": "text",
+      "sha256": "9ec7214d5cfb2e21ba3f21c3bcfc6009dfd545ad58078efee8e330eea42c67c4",
+      "bytes": 23223
+    },
+    {
+      "path": "negative-run.py",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/negative-run.py",
+      "storage": "text",
+      "sha256": "8fd9b554edbce1d0396693adca2af07d36001375503472b71ffb42135686e6e0",
+      "bytes": 2488
+    },
+    {
+      "path": "refuse/simulated-refusal-unbuilt.c",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/refuse/simulated-refusal-unbuilt.c",
+      "storage": "text",
+      "sha256": "f6ac1eaf8547fca261b1be7185d7b5d7fa33b3c1f42dd09a6a917f98cef8095c",
+      "bytes": 49608
+    },
+    {
+      "path": "refuse/tests/lib/test_sleep.h",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/refuse/tests/lib/test_sleep.h",
+      "storage": "text",
+      "sha256": "773ab5c72a894c17f5b6c4fa1c398c8fc0e01604c2089d69097e92ea860f17cb",
+      "bytes": 503
+    },
+    {
+      "path": "refuse/tests/lib/tg_stopreq_fixture_helpers.h",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/refuse/tests/lib/tg_stopreq_fixture_helpers.h",
+      "storage": "text",
+      "sha256": "c6ac1fa39f76509178517babb5d557d1415213835ff9949c69cdf7640781d744",
+      "bytes": 560
+    },
+    {
+      "path": "refuse/tests/t-gc2-worker-scheduler.c",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/refuse/tests/t-gc2-worker-scheduler.c",
+      "storage": "text",
+      "sha256": "012ed3087c88bc91a7d94de722d518a8525890f55c6a6c58b090c8980f72aa35",
+      "bytes": 50191
+    },
+    {
+      "path": "refuse.patch",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/refuse.patch",
+      "storage": "text",
+      "sha256": "6b27bfa9d222508a8ece28f291d0a9cac257f294604e4d10ea874c0a80d8abcd",
+      "bytes": 1384
+    },
+    {
+      "path": "results.json",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/results.json",
+      "storage": "text",
+      "sha256": "7e0737c8c615c13d64d890fe3c6c12b26cd650fc2411efa20184d865a0c9fa72",
+      "bytes": 103712
+    },
+    {
+      "path": "run.py",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/run.py",
+      "storage": "text",
+      "sha256": "62a4a2ea83c68331f0ac300ce0175805ca3f12081f2cd18e4d937223fcb6183a",
+      "bytes": 2684
+    },
+    {
+      "path": "verification.json",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/verification.json",
+      "storage": "text",
+      "sha256": "a6ed1c322d69bfcd10054b9378d78a5af93eb7f32f8920efd9a74e447ef6d06a",
+      "bytes": 260605
+    },
+    {
+      "path": "veto-00.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-00.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-00.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-00.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-01.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-01.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-01.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-01.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-02.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-02.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-02.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-02.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-03.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-03.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-03.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-03.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-04.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-04.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-04.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-04.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-05.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-05.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-05.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-05.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-06.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-06.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-06.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-06.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-07.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-07.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-07.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-07.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-08.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-08.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-08.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-08.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-09.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-09.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-09.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-09.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-10.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-10.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-10.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-10.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-11.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-11.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-11.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-11.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-12.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-12.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-12.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-12.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-13.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-13.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-13.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-13.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-14.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-14.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-14.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-14.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-15.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-15.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-15.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-15.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-16.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-16.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-16.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-16.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-17.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-17.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-17.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-17.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-18.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-18.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-18.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-18.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-19.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-19.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-19.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-19.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-compile.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-compile.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-compile.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-compile.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-corrected",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-corrected",
+      "storage": "hash-only",
+      "sha256": "d01a6f537b04352ac0d1798d038b35dfb5f5ea592645a225608f593615ce2d7a",
+      "bytes": 2239408
+    },
+    {
+      "path": "veto-false-success",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-false-success",
+      "storage": "hash-only",
+      "sha256": "01b908b612a0b17eb114e655285bb3a78d766e02e9c01f5dd3be70a3a6280ac2",
+      "bytes": 2239344
+    },
+    {
+      "path": "veto-false-success-compile.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-false-success-compile.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-false-success-compile.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-false-success-compile.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-false-success.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-false-success.stderr",
+      "storage": "text",
+      "sha256": "bb6b7d0f849e11c53ef36669f71df624fbd3eae6f72884aac3196e1149611105",
+      "bytes": 252
+    },
+    {
+      "path": "veto-false-success.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-false-success.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-refuse",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-refuse",
+      "storage": "hash-only",
+      "sha256": "8ca9931d01bdb76e356561076ed32b7bb1fa3db46d3a49f1f609059fa7a626ac",
+      "bytes": 2240624
+    },
+    {
+      "path": "veto-refuse-compile.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-refuse-compile.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-refuse-compile.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-refuse-compile.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-refuse.stderr",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-refuse.stderr",
+      "storage": "text",
+      "sha256": "dd51e979c07e9a3ff9f4d94f401c3bf03ea121298c9dba5ab6123017de1bd0ad",
+      "bytes": 249
+    },
+    {
+      "path": "veto-refuse.stdout",
+      "original": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/veto-refuse.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control/src/libluajit.a",
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+      "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+      "bytes": 2976582,
+      "storage": "hash-only"
+    },
+    {
+      "path": "candidate/src/libluajit.a",
+      "original": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+      "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+      "bytes": 2980350,
+      "storage": "hash-only"
+    },
+    {
+      "path": "veto/src/libluajit.a",
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+      "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+      "bytes": 2980502,
+      "storage": "hash-only"
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+extrahelpers-safety-t-gc2-worker-scheduler: /tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/t-gc2-worker-scheduler.c:1265: test_async_mark: Assertion `wait_ssb_empty(g)' failed.

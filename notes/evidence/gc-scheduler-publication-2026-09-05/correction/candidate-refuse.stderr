@@ -1,0 +1,2 @@
+NEGATIVE_REFUSE calls=1000 owner_base=0x7f9a40f85978 owner_next=0x7f9a40f85980
+candidate-refuse: /tmp/lj-gc-scheduler-publication-20260905-2zckpem_/refuse/tests/t-gc2-worker-scheduler.c:1296: test_async_mark: Assertion `publish_owner_ssb(g, tg)' failed.

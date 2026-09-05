@@ -1,0 +1,6 @@
+== m3_gc2_worker_scheduler ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLJ_GC2_TEST_HELPERS -I'/workspaces/lj-lockless/src' '/workspaces/lj-lockless/tests/t-gc2-worker-scheduler.c' '/workspaces/lj-lockless/src/libluajit.a' -lm -ldl -pthread -Wl,--wrap=pthread_create -Wl,--wrap=pthread_join -o '/tmp/lj-gc-scheduler-root-20260905-l2j2b2ee/canonical-tmp/lj_t-gc2-worker-scheduler'
++ '/tmp/lj-gc-scheduler-root-20260905-l2j2b2ee/canonical-tmp/lj_t-gc2-worker-scheduler'
++ LUA_PATH='/workspaces/lj-lockless/tests/lib/?.lua;/workspaces/lj-lockless/src/?.lua;/workspaces/lj-lockless/src/jit/?.lua;;' '/workspaces/lj-lockless/src/luajit' '-joff' '/workspaces/lj-lockless/tests/t-gc-workers.lua'
++ LUA_PATH='/workspaces/lj-lockless/tests/lib/?.lua;/workspaces/lj-lockless/src/?.lua;/workspaces/lj-lockless/src/jit/?.lua;;' '/workspaces/lj-lockless/src/luajit' '/workspaces/lj-lockless/tests/t-gc-workers.lua'
+ok m3_gc2_worker_scheduler

@@ -1,0 +1,79 @@
+--- a/tests/t-gc2-worker-scheduler.c
++++ b/tests/t-gc2-worker-scheduler.c
+@@ -199,6 +199,59 @@
+   return 0;
+ }
+ 
++
++/* Diagnostic only: reached after the existing 1000 x 1 ms bound fails.
++** No polling predicate, schedule hook, GC publication, or timeout is changed.
++** These snapshots are independent observations, not an atomic global view.
++** The fixture still owns main and its two live workers here. */
++static uint32_t diag_async_flush_result;
++
++static void scheduler_dump_tg(const char *name, TGState *tg)
++{
++  if (!tg) return;
++  fprintf(stderr, "SCHED_DIAG tg=%s ptr=%p tid=%u flags=%u native=%u "
++          "poll=%u reqmask=%u cur_L=%p ssb_active=%p ssb_base=%p "
++          "ssb_next=%p ssb_end=%p ssb_free=%p ssb_refs=%u\n",
++          name, (void *)tg, lj_tg_tid_acq(tg), (unsigned)lj_tg_flags_acq(tg),
++          lj_tg_in_native_acq(tg), lj_tg_poll_acq(tg), lj_tg_reqmask_acq(tg),
++          (void *)lj_tg_load_cur_L(tg), (void *)lj_tg_ssb_active_acq(tg),
++          (void *)lj_tg_ssb_base_acq(tg), (void *)lj_tg_ssb_next_acq(tg),
++          (void *)lj_tg_ssb_end_acq(tg), (void *)lj_tg_ssb_free_acq(tg),
++          lj_tg_ssb_refs_acq(tg));
++}
++
++static void scheduler_dump_ssb_failure(global_State *g)
++{
++  TGState *tg;
++  unsigned i;
++#define D32(x) fprintf(stderr, "SCHED_DIAG " #x "=%u\n", (unsigned)la_load32_acq(&g->gc2.x))
++#define D64(x) fprintf(stderr, "SCHED_DIAG " #x "=%llu\n", (unsigned long long)la_load64_acq(&g->gc2.x))
++  fprintf(stderr, "SCHED_DIAG reason=wait_ssb_empty_expired\n");
++  fprintf(stderr, "SCHED_DIAG async_explicit_flush_return=%u\n", diag_async_flush_result);
++  D32(phase); D32(cycle); D32(cycle_leader); D32(jit_phase_gate);
++  D32(mark_close_intent); D32(mark_root_scanned); D32(jit_mark_resume);
++  D32(worker_active); D32(assist_active); D32(worker_stop); D32(n_workers);
++  D32(worker_started); D32(worker_exited); D32(worker_wake);
++  D32(ssb_consumer_active); D32(ssb_published); D32(ssb_drained);
++  D32(recovery_failed); D32(recovery_main_state); D32(table_rescan_pending);
++  D32(thread_scan_needscan_pending); D32(hs_pending); D32(hs_actions);
++  D64(hs_epoch); D64(grey_top); D64(grey_bottom); D64(grey_pushed);
++  D64(grey_drained); D64(recovery_items); D64(recovery_huge_items);
++  D64(recovery_published); D64(recovery_redirtied); D64(recovery_drained);
++  D64(ssb_items_published); D64(ssb_items_drained); D64(worker_runs);
++  D64(worker_grey_drained); D64(worker_ssb_converted); D64(worker_idle_declares);
++  D64(worker_busy_retries); D64(worker_wakes); D64(worker_parks);
++  D64(worker_async_progress); D64(deferred_epoch);
++  fprintf(stderr, "SCHED_DIAG ssb_head=%p ssb_drain=%p\n",
++          (void *)gc2_ssb_head_acq(g), (void *)gc2_ssb_drain_acq(g));
++  scheduler_dump_tg("main", g->main_tg);
++  for (tg = gc2_tg_list_acq(g), i = 0; tg && i < 16u;
++       tg = lj_tg_next_acq(tg), i++)
++    scheduler_dump_tg("list", tg);
++#undef D32
++#undef D64
++}
++
+ static int wait_ssb_empty(global_State *g)
+ {
+   int i;
+@@ -207,6 +260,7 @@
+       return 1;
+     sleep_ns(1000000L);
+   }
++  scheduler_dump_ssb_failure(g);
+   return 0;
+ }
+ 
+@@ -1260,7 +1314,7 @@
+   assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+   /* Setup/store rescans may share or fill this suffix and publish it before
+   ** the explicit flush. The semantic assertion is eventual graph progress. */
+-  (void)lj_gc2_flush_ssb(g, tg);
++  diag_async_flush_result = lj_gc2_flush_ssb(g, tg);
+   assert(wait_until_marked(g, obj2gco(grandchild)));
+   assert(wait_ssb_empty(g));
+   assert(gc2_worker_async_progress_acq(g) > async0);

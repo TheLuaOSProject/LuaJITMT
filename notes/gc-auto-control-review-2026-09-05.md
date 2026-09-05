@@ -80,7 +80,11 @@ combined-helper closure-construction timeout. Actual debugger stacks preserve
 the latter two waits; interrupted debugger exits are not counted as passes.
 One worker-scheduler SSB-empty assertion did not reproduce in the package's
 subsequent matched runs and remained unresolved at that freeze. A separate
-diagnostic investigation is required before classifying it. The 37 ASan
+diagnostic investigation subsequently reproduced that assertion on all three
+variants and identified an unpublished owner suffix; the fixture correction
+is recorded in [the scheduler publication review](gc-scheduler-publication-2026-09-05.md).
+The original run's unavailable internal state is not retroactively inferred.
+The 37 ASan
 production processes have empty stderr, including their deliberately retained
 progress failures; absence of sanitizer reports does not turn them into passes.
 

@@ -1,0 +1,9 @@
+{
+  "head": "43d86b3916f6900755bb835613799192eb05f74e",
+  "fixture": {
+    "source": "/tmp/lj-gc-scheduler-publication-20260905-2zckpem_/candidate/tests/t-gc2-worker-scheduler.c",
+    "destination": "/workspaces/lj-lockless/tests/t-gc2-worker-scheduler.c",
+    "sha256": "f476733106d7e2552c9e47757b35f1c1dc78cf8b3cb0d47c17f17ed58fe70dca"
+  },
+  "runtime_source_changed": false
+}

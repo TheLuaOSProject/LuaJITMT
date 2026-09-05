@@ -1,0 +1,2434 @@
+{
+  "scope": "Frozen diagnosis, before any separate fixture correction",
+  "artifacts": [
+    {
+      "path": "candidate/src/lib_base.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate/src/lib_base.c",
+      "storage": "text",
+      "sha256": "5aeff40a9022f5827530f80b944c84eb1dfb4eef2bc558fbc2503c55a3080aee",
+      "bytes": 21901
+    },
+    {
+      "path": "candidate/src/lj_api.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate/src/lj_api.c",
+      "storage": "text",
+      "sha256": "c2b43c2839509c8403c51729c72083be2701bdfc4b5efc9f116540d9c105d6af",
+      "bytes": 89412
+    },
+    {
+      "path": "candidate/src/lj_atomic.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate/src/lj_atomic.h",
+      "storage": "text",
+      "sha256": "0a7bbdc91ae21c4dcbe09cd7de500e0aeb341173f5059f43659678e5be53fac1",
+      "bytes": 13030
+    },
+    {
+      "path": "candidate/src/lj_gc.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate/src/lj_gc.c",
+      "storage": "text",
+      "sha256": "d0e8608a261b823f21b037aa73f4f29dac3059ee3e741286d836c686e7498e9d",
+      "bytes": 195228
+    },
+    {
+      "path": "candidate/src/lj_gc.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate/src/lj_gc.h",
+      "storage": "text",
+      "sha256": "f465a7706da2f3f7fc52f0b40054462d0a6368c3e5dec0abcd9d990c6680cfd5",
+      "bytes": 22325
+    },
+    {
+      "path": "candidate/src/lj_gc2.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate/src/lj_gc2.c",
+      "storage": "text",
+      "sha256": "5557bc243f94f5d310287494cc3560d91931455eaa8338ba480f84a33edf45a1",
+      "bytes": 767682
+    },
+    {
+      "path": "candidate/src/lj_gc2.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate/src/lj_gc2.h",
+      "storage": "text",
+      "sha256": "244b10c49ad036b661a08adc178e6b8247d8ff1b18ed63bc035d3440df16a9f9",
+      "bytes": 37421
+    },
+    {
+      "path": "candidate/src/lj_obj.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate/src/lj_obj.h",
+      "storage": "text",
+      "sha256": "4dddf105f8b3006efb495259340ea4acaae9579e283b769ff9e683810beb435b",
+      "bytes": 220783
+    },
+    {
+      "path": "candidate/src/lj_safepoint.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate/src/lj_safepoint.c",
+      "storage": "text",
+      "sha256": "9779c6607135ffd7e06d6c1834022ad77cf491d8a30df6b63f9e5516d045af03",
+      "bytes": 35523
+    },
+    {
+      "path": "candidate/src/lj_safepoint.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate/src/lj_safepoint.h",
+      "storage": "text",
+      "sha256": "328aa2bc63d753257d8adca5a5417ccdda059b942138aecda20a3da53752d46c",
+      "bytes": 2894
+    },
+    {
+      "path": "candidate/src/lj_tg.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate/src/lj_tg.c",
+      "storage": "text",
+      "sha256": "16064ba7946becbbc5cc1be2ee00eae4be39f1496c6ab85c5f4cf60f64146406",
+      "bytes": 45600
+    },
+    {
+      "path": "candidate/src/lj_tg.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate/src/lj_tg.h",
+      "storage": "text",
+      "sha256": "a5cb46bde2868512743795750b5a1da71cd1a581bc037da127e60b36cb994015",
+      "bytes": 50068
+    },
+    {
+      "path": "candidate/src/lj_thr.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate/src/lj_thr.c",
+      "storage": "text",
+      "sha256": "93aed8d88e36795e6186323924f5d96e7edc897b15f491f422223844eb666bb7",
+      "bytes": 69350
+    },
+    {
+      "path": "candidate/src/lj_thr.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate/src/lj_thr.h",
+      "storage": "text",
+      "sha256": "f39140aec08b622f0db5123fdf311e5e753075462b7a0f75c251c86a58985b28",
+      "bytes": 16065
+    },
+    {
+      "path": "candidate/src/vm_x64.dasc",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate/src/vm_x64.dasc",
+      "storage": "text",
+      "sha256": "d445a4ffa214242bd5efc753c3cb737e90509b66c9f52bd95eff4c358b6e77ab",
+      "bytes": 193119
+    },
+    {
+      "path": "candidate/tests/lib/test_sleep.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate/tests/lib/test_sleep.h",
+      "storage": "text",
+      "sha256": "773ab5c72a894c17f5b6c4fa1c398c8fc0e01604c2089d69097e92ea860f17cb",
+      "bytes": 503
+    },
+    {
+      "path": "candidate/tests/lib/tg_stopreq_fixture_helpers.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate/tests/lib/tg_stopreq_fixture_helpers.h",
+      "storage": "text",
+      "sha256": "c6ac1fa39f76509178517babb5d557d1415213835ff9949c69cdf7640781d744",
+      "bytes": 560
+    },
+    {
+      "path": "candidate/tests/t-gc2-worker-scheduler.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate/tests/t-gc2-worker-scheduler.c",
+      "storage": "text",
+      "sha256": "e032c08598b035cf7982ebd71af87574edc9b8e99eff2b278d49cb860c98d978",
+      "bytes": 48916
+    },
+    {
+      "path": "candidate-00.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-00.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-00.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-00.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-01.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-01.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-01.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-01.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-02.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-02.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-02.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-02.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-03.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-03.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-03.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-03.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-04.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-04.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-04.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-04.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-05.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-05.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-05.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-05.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-06.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-06.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-06.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-06.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-07.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-07.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-07.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-07.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-08.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-08.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-08.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-08.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-09.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-09.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-09.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-09.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-10.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-10.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-10.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-10.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-11.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-11.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-11.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-11.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-12.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-12.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-12.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-12.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-13.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-13.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-13.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-13.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-14.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-14.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-14.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-14.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-15.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-15.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-15.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-15.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-16.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-16.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-16.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-16.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-17.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-17.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-17.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-17.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-18.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-18.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-18.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-18.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-19.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-19.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-19.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-19.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "candidate-compile.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-compile.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-compile.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-compile.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "candidate-diagnostic",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic",
+      "storage": "hash-only",
+      "sha256": "4f7da168125025483e1ca467b500d830843c45aebd8507bdc8c6567973558965",
+      "bytes": 2254048
+    },
+    {
+      "path": "control/src/lib_base.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control/src/lib_base.c",
+      "storage": "text",
+      "sha256": "5aeff40a9022f5827530f80b944c84eb1dfb4eef2bc558fbc2503c55a3080aee",
+      "bytes": 21901
+    },
+    {
+      "path": "control/src/lj_api.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control/src/lj_api.c",
+      "storage": "text",
+      "sha256": "c2b43c2839509c8403c51729c72083be2701bdfc4b5efc9f116540d9c105d6af",
+      "bytes": 89412
+    },
+    {
+      "path": "control/src/lj_atomic.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control/src/lj_atomic.h",
+      "storage": "text",
+      "sha256": "0a7bbdc91ae21c4dcbe09cd7de500e0aeb341173f5059f43659678e5be53fac1",
+      "bytes": 13030
+    },
+    {
+      "path": "control/src/lj_gc.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control/src/lj_gc.c",
+      "storage": "text",
+      "sha256": "7ceb24d2c755325c7c3d4113330bbb4fce6d3c893dd22fc1ef8bf924590ab4cb",
+      "bytes": 194734
+    },
+    {
+      "path": "control/src/lj_gc.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control/src/lj_gc.h",
+      "storage": "text",
+      "sha256": "3d52d352f6280ee308f9ae71a8edbe4dde6f41f9a00256a0d3d6a3924fddc0dd",
+      "bytes": 22198
+    },
+    {
+      "path": "control/src/lj_gc2.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control/src/lj_gc2.c",
+      "storage": "text",
+      "sha256": "5557bc243f94f5d310287494cc3560d91931455eaa8338ba480f84a33edf45a1",
+      "bytes": 767682
+    },
+    {
+      "path": "control/src/lj_gc2.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control/src/lj_gc2.h",
+      "storage": "text",
+      "sha256": "244b10c49ad036b661a08adc178e6b8247d8ff1b18ed63bc035d3440df16a9f9",
+      "bytes": 37421
+    },
+    {
+      "path": "control/src/lj_obj.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control/src/lj_obj.h",
+      "storage": "text",
+      "sha256": "4dddf105f8b3006efb495259340ea4acaae9579e283b769ff9e683810beb435b",
+      "bytes": 220783
+    },
+    {
+      "path": "control/src/lj_safepoint.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control/src/lj_safepoint.c",
+      "storage": "text",
+      "sha256": "9779c6607135ffd7e06d6c1834022ad77cf491d8a30df6b63f9e5516d045af03",
+      "bytes": 35523
+    },
+    {
+      "path": "control/src/lj_safepoint.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control/src/lj_safepoint.h",
+      "storage": "text",
+      "sha256": "328aa2bc63d753257d8adca5a5417ccdda059b942138aecda20a3da53752d46c",
+      "bytes": 2894
+    },
+    {
+      "path": "control/src/lj_tg.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control/src/lj_tg.c",
+      "storage": "text",
+      "sha256": "16064ba7946becbbc5cc1be2ee00eae4be39f1496c6ab85c5f4cf60f64146406",
+      "bytes": 45600
+    },
+    {
+      "path": "control/src/lj_tg.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control/src/lj_tg.h",
+      "storage": "text",
+      "sha256": "a5cb46bde2868512743795750b5a1da71cd1a581bc037da127e60b36cb994015",
+      "bytes": 50068
+    },
+    {
+      "path": "control/src/lj_thr.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control/src/lj_thr.c",
+      "storage": "text",
+      "sha256": "93aed8d88e36795e6186323924f5d96e7edc897b15f491f422223844eb666bb7",
+      "bytes": 69350
+    },
+    {
+      "path": "control/src/lj_thr.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control/src/lj_thr.h",
+      "storage": "text",
+      "sha256": "f39140aec08b622f0db5123fdf311e5e753075462b7a0f75c251c86a58985b28",
+      "bytes": 16065
+    },
+    {
+      "path": "control/src/vm_x64.dasc",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control/src/vm_x64.dasc",
+      "storage": "text",
+      "sha256": "ad48405b4793e8514307cd4efc15238dcd3a29b0d1970b452ee77952b921d64b",
+      "bytes": 192489
+    },
+    {
+      "path": "control/tests/lib/test_sleep.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control/tests/lib/test_sleep.h",
+      "storage": "text",
+      "sha256": "773ab5c72a894c17f5b6c4fa1c398c8fc0e01604c2089d69097e92ea860f17cb",
+      "bytes": 503
+    },
+    {
+      "path": "control/tests/lib/tg_stopreq_fixture_helpers.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control/tests/lib/tg_stopreq_fixture_helpers.h",
+      "storage": "text",
+      "sha256": "c6ac1fa39f76509178517babb5d557d1415213835ff9949c69cdf7640781d744",
+      "bytes": 560
+    },
+    {
+      "path": "control/tests/t-gc2-worker-scheduler.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control/tests/t-gc2-worker-scheduler.c",
+      "storage": "text",
+      "sha256": "e032c08598b035cf7982ebd71af87574edc9b8e99eff2b278d49cb860c98d978",
+      "bytes": 48916
+    },
+    {
+      "path": "control-00.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-00.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-00.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-00.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-01.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-01.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-01.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-01.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-02.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-02.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-02.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-02.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-03.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-03.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-03.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-03.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-04.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-04.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-04.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-04.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-05.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-05.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-05.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-05.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-06.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-06.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-06.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-06.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-07.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-07.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-07.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-07.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-08.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-08.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-08.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-08.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-09.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-09.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-09.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-09.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-10.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-10.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-10.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-10.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-11.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-11.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-11.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-11.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-12.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-12.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-12.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-12.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-13.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-13.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-13.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-13.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-14.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-14.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-14.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-14.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-15.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-15.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-15.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-15.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-16.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-16.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-16.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-16.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-17.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-17.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-17.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-17.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-18.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-18.stderr",
+      "storage": "text",
+      "sha256": "5ce821418ecbe420c8613de14d30d3ffe7cf158b2c8d58cc132eb805b15d0b13",
+      "bytes": 2432
+    },
+    {
+      "path": "control-18.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-18.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-19.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-19.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-19.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-19.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "control-compile.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-compile.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-compile.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-compile.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "control-diagnostic",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic",
+      "storage": "hash-only",
+      "sha256": "a0432affa36da4f546c1d6a81ae101df69654c35cd2b77622eec2678ca94e2b7",
+      "bytes": 2249864
+    },
+    {
+      "path": "diagnostic/tests/lib/test_sleep.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/lib/test_sleep.h",
+      "storage": "text",
+      "sha256": "773ab5c72a894c17f5b6c4fa1c398c8fc0e01604c2089d69097e92ea860f17cb",
+      "bytes": 503
+    },
+    {
+      "path": "diagnostic/tests/lib/tg_stopreq_fixture_helpers.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/lib/tg_stopreq_fixture_helpers.h",
+      "storage": "text",
+      "sha256": "c6ac1fa39f76509178517babb5d557d1415213835ff9949c69cdf7640781d744",
+      "bytes": 560
+    },
+    {
+      "path": "diagnostic/tests/t-gc2-worker-scheduler.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+      "storage": "text",
+      "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+      "bytes": 51579
+    },
+    {
+      "path": "diagnostic-only.patch",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic-only.patch",
+      "storage": "text",
+      "sha256": "9e57c25e6d7b87d30b04714e04dd9d0a05b483e692041801d67721cae9d87721",
+      "bytes": 2969
+    },
+    {
+      "path": "environment.json",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/environment.json",
+      "storage": "text",
+      "sha256": "42640de9e02be8afa9bf05f6ab71e0b3ed1b0e167a06a9393cd340686dccc186",
+      "bytes": 509
+    },
+    {
+      "path": "inputs.json",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/inputs.json",
+      "storage": "text",
+      "sha256": "7676bbe5d7ab1f54d6129b12faf2aead852e202c500a528ce708792fad6395c9",
+      "bytes": 17256
+    },
+    {
+      "path": "prior/HANDOFF.md",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/prior/HANDOFF.md",
+      "storage": "text",
+      "sha256": "a24b77a19a3193534feabf3c047d2a581dbfdc1736fcb283cb797b500a1f23c7",
+      "bytes": 15117
+    },
+    {
+      "path": "prior/control-matched-safety-results.json",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/prior/control-matched-safety-results.json",
+      "storage": "text",
+      "sha256": "08e525ec9453d5be36190bd5ffbba56302b86f3d5387ed08b50a2291191f7672",
+      "bytes": 5304
+    },
+    {
+      "path": "prior/controlextrahelpers-build.json",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/prior/controlextrahelpers-build.json",
+      "storage": "text",
+      "sha256": "0f28f988fb91e2152ef6323f9fc828fef16a1a638249deb683ac81eb2594cb43",
+      "bytes": 711
+    },
+    {
+      "path": "prior/extrahelpers-build.json",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/prior/extrahelpers-build.json",
+      "storage": "text",
+      "sha256": "e6a4c03724a29e1675e7e034237626d6c0ca08bb7ad3435e66a1f3545e9b727c",
+      "bytes": 1105
+    },
+    {
+      "path": "prior/extrahelpers-safety-identities.json",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/prior/extrahelpers-safety-identities.json",
+      "storage": "text",
+      "sha256": "ba28f3999ab4093756d6f4f379e5127904ef46fa1b95c88cefb8571f6428cd38",
+      "bytes": 19747
+    },
+    {
+      "path": "prior/extrahelpers-safety-results.json",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/prior/extrahelpers-safety-results.json",
+      "storage": "text",
+      "sha256": "afb15ee553768924370c5b15a8b1bd925d3e74051e8e51709537b03be697ec32",
+      "bytes": 45788
+    },
+    {
+      "path": "prior/extrahelpers-safety-t-gc2-worker-scheduler.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/prior/extrahelpers-safety-t-gc2-worker-scheduler.stderr",
+      "storage": "text",
+      "sha256": "8716fe22a860bac063f43022fe9cb16f81ad61a91535acc0f8f39a14baf731f8",
+      "bytes": 196
+    },
+    {
+      "path": "prior/extrahelpers-safety-t-gc2-worker-scheduler.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/prior/extrahelpers-safety-t-gc2-worker-scheduler.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "prior/final-source-verification.json",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/prior/final-source-verification.json",
+      "storage": "text",
+      "sha256": "172b7cf39299e87dbd8fadd7632d062414cec21b69bcaa6180c4b3fbcf882e02",
+      "bytes": 4579
+    },
+    {
+      "path": "prior/matched-safety.py",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/prior/matched-safety.py",
+      "storage": "text",
+      "sha256": "3c1285d04e18ca72d8656d47afb438cbf18f881f1c56aef0ef719ba006fd9fe6",
+      "bytes": 2016
+    },
+    {
+      "path": "prior/oldcandidate-matched-safety-results.json",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/prior/oldcandidate-matched-safety-results.json",
+      "storage": "text",
+      "sha256": "7a3e73e0b88f64231924a240b62b211cfe415e4bcff12632491b7de9cc7fc1a0",
+      "bytes": 5206
+    },
+    {
+      "path": "prior/safety.py",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/prior/safety.py",
+      "storage": "text",
+      "sha256": "9663bb569680f1c23715b2d904c946b91fe07c1c98a949fe25b728a9be21d85f",
+      "bytes": 3799
+    },
+    {
+      "path": "prior/scheduler-isolation-results.json",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/prior/scheduler-isolation-results.json",
+      "storage": "text",
+      "sha256": "931c1c0b8f3b0f3d4d6698f3f50ab496abfb3a085793baceee9fbb9c1d65c6b9",
+      "bytes": 3496
+    },
+    {
+      "path": "prior/source-identity.json",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/prior/source-identity.json",
+      "storage": "text",
+      "sha256": "dd5bf50ff45b52e2c953d2dea48eb32cb247df901d3c9b6d7643596cb0a09717",
+      "bytes": 83759
+    },
+    {
+      "path": "prior/veto-full.patch",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/prior/veto-full.patch",
+      "storage": "text",
+      "sha256": "35e8abddecefe17ca842d96d4f2f237fd986303ca3eac8b45c1f60d2610f542b",
+      "bytes": 5430
+    },
+    {
+      "path": "prior/veto-matched-safety-results.json",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/prior/veto-matched-safety-results.json",
+      "storage": "text",
+      "sha256": "27cfc85ff4199234836407a90a9a1473b51cc715382a71795b58a09250575cba",
+      "bytes": 5081
+    },
+    {
+      "path": "results.json",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/results.json",
+      "storage": "text",
+      "sha256": "e37d8249d8afef952f08af2cc26963c0e3a184a677785bd41ecda94ec0a5fa52",
+      "bytes": 102019
+    },
+    {
+      "path": "return-observation/candidate-00.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-00.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/candidate-00.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-00.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/candidate-01.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-01.stderr",
+      "storage": "text",
+      "sha256": "a3ddf63ad8b6b74978f1c985fe1a7732b3bfdd06129f4f0f44b610e0adc4f134",
+      "bytes": 2494
+    },
+    {
+      "path": "return-observation/candidate-01.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-01.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/candidate-02.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-02.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/candidate-02.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-02.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/candidate-03.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-03.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/candidate-03.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-03.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/candidate-04.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-04.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/candidate-04.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-04.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/candidate-05.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-05.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/candidate-05.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-05.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/candidate-06.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-06.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/candidate-06.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-06.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/candidate-07.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-07.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/candidate-07.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-07.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/candidate-08.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-08.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/candidate-08.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-08.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/candidate-09.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-09.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/candidate-09.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-09.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/candidate-10.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-10.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/candidate-10.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-10.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/candidate-11.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-11.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/candidate-11.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-11.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/candidate-12.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-12.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/candidate-12.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-12.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/candidate-13.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-13.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/candidate-13.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-13.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/candidate-14.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-14.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/candidate-14.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-14.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/candidate-15.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-15.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/candidate-15.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-15.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/candidate-16.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-16.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/candidate-16.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-16.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/candidate-17.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-17.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/candidate-17.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-17.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/candidate-18.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-18.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/candidate-18.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-18.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/candidate-19.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-19.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/candidate-19.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-19.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/candidate-compile.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-compile.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/candidate-compile.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-compile.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/candidate-diagnostic",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/candidate-diagnostic",
+      "storage": "hash-only",
+      "sha256": "b1492b638a20d201bcf2761f57a3ae840736f0eda6bdb1d96a7c3149bcb76463",
+      "bytes": 2254064
+    },
+    {
+      "path": "return-observation/control-00.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-00.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/control-00.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-00.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/control-01.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-01.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/control-01.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-01.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/control-02.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-02.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/control-02.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-02.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/control-03.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-03.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/control-03.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-03.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/control-04.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-04.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/control-04.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-04.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/control-05.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-05.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/control-05.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-05.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/control-06.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-06.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/control-06.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-06.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/control-07.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-07.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/control-07.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-07.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/control-08.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-08.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/control-08.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-08.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/control-09.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-09.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/control-09.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-09.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/control-10.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-10.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/control-10.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-10.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/control-11.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-11.stderr",
+      "storage": "text",
+      "sha256": "ff20a5e6dd28da71b0e64debb79aac033ec2384766bfc42d51cc37a82529f453",
+      "bytes": 2493
+    },
+    {
+      "path": "return-observation/control-11.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-11.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/control-12.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-12.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/control-12.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-12.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/control-13.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-13.stderr",
+      "storage": "text",
+      "sha256": "3be0d9ba538280c2f0a1a42339a3efd3f420cfaf07792aefbfc3cf056b163153",
+      "bytes": 2493
+    },
+    {
+      "path": "return-observation/control-13.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-13.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/control-14.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-14.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/control-14.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-14.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/control-15.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-15.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/control-15.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-15.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/control-16.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-16.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/control-16.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-16.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/control-17.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-17.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/control-17.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-17.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/control-18.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-18.stderr",
+      "storage": "text",
+      "sha256": "4d1399e8c6b5abaa490d2ec8fd142edd8e52900c815ca810c894646de204dd3a",
+      "bytes": 2493
+    },
+    {
+      "path": "return-observation/control-18.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-18.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/control-19.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-19.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/control-19.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-19.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/control-compile.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-compile.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/control-compile.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-compile.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/control-diagnostic",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/control-diagnostic",
+      "storage": "hash-only",
+      "sha256": "4a88bec1fede7cf2edaaaaf226e339594da747ba6ca0e6b0f1c4526c32f5f445",
+      "bytes": 2249888
+    },
+    {
+      "path": "return-observation/diagnostic/tests/lib/test_sleep.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/diagnostic/tests/lib/test_sleep.h",
+      "storage": "text",
+      "sha256": "773ab5c72a894c17f5b6c4fa1c398c8fc0e01604c2089d69097e92ea860f17cb",
+      "bytes": 503
+    },
+    {
+      "path": "return-observation/diagnostic/tests/lib/tg_stopreq_fixture_helpers.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/diagnostic/tests/lib/tg_stopreq_fixture_helpers.h",
+      "storage": "text",
+      "sha256": "c6ac1fa39f76509178517babb5d557d1415213835ff9949c69cdf7640781d744",
+      "bytes": 560
+    },
+    {
+      "path": "return-observation/diagnostic/tests/t-gc2-worker-scheduler.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/diagnostic/tests/t-gc2-worker-scheduler.c",
+      "storage": "text",
+      "sha256": "e6192a3220bcfad7b1ed15341bdcd4d754268bcb6f26a09088532cde07bf128c",
+      "bytes": 51732
+    },
+    {
+      "path": "return-observation/diagnostic-only.patch",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/diagnostic-only.patch",
+      "storage": "text",
+      "sha256": "542dde0fceb55882a692515038cbe123ae2e9a8670d1a7b888843530eb442f04",
+      "bytes": 3563
+    },
+    {
+      "path": "return-observation/inputs.json",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/inputs.json",
+      "storage": "text",
+      "sha256": "7676bbe5d7ab1f54d6129b12faf2aead852e202c500a528ce708792fad6395c9",
+      "bytes": 17256
+    },
+    {
+      "path": "return-observation/results.json",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/results.json",
+      "storage": "text",
+      "sha256": "7b9ab36c41e5c4214e3bd7660a2e2c08f24e322ecafd4b43c5b4fa49cd76f23d",
+      "bytes": 109204
+    },
+    {
+      "path": "return-observation/run.py",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/run.py",
+      "storage": "text",
+      "sha256": "7902a15d918ce8c7fd0c64fce3a3b768fcc2f35024406148bb0541610863d628",
+      "bytes": 2762
+    },
+    {
+      "path": "return-observation/veto-00.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-00.stderr",
+      "storage": "text",
+      "sha256": "1dfe550def8bd8cfcf7175f93e08833559461ef73527bb1789e485141a9f399b",
+      "bytes": 2489
+    },
+    {
+      "path": "return-observation/veto-00.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-00.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/veto-01.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-01.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/veto-01.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-01.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/veto-02.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-02.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/veto-02.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-02.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/veto-03.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-03.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/veto-03.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-03.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/veto-04.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-04.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/veto-04.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-04.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/veto-05.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-05.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/veto-05.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-05.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/veto-06.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-06.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/veto-06.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-06.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/veto-07.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-07.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/veto-07.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-07.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/veto-08.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-08.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/veto-08.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-08.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/veto-09.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-09.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/veto-09.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-09.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/veto-10.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-10.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/veto-10.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-10.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/veto-11.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-11.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/veto-11.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-11.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/veto-12.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-12.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/veto-12.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-12.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/veto-13.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-13.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/veto-13.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-13.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/veto-14.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-14.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/veto-14.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-14.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/veto-15.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-15.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/veto-15.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-15.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/veto-16.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-16.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/veto-16.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-16.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/veto-17.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-17.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/veto-17.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-17.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/veto-18.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-18.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/veto-18.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-18.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/veto-19.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-19.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/veto-19.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-19.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "return-observation/veto-compile.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-compile.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/veto-compile.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-compile.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "return-observation/veto-diagnostic",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/return-observation/veto-diagnostic",
+      "storage": "hash-only",
+      "sha256": "b34155ff3d82fc60e99ea3395d27ceac283a1ec15454e557ca962bc55d528df9",
+      "bytes": 2254072
+    },
+    {
+      "path": "review.md",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/review.md",
+      "storage": "text",
+      "sha256": "8086f3315624ff8f8d801591d0b66f501aaa80ce755e1e8ad8ff50da2c0b0e64",
+      "bytes": 7193
+    },
+    {
+      "path": "run.py",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/run.py",
+      "storage": "text",
+      "sha256": "7902a15d918ce8c7fd0c64fce3a3b768fcc2f35024406148bb0541610863d628",
+      "bytes": 2762
+    },
+    {
+      "path": "veto/src/lib_base.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto/src/lib_base.c",
+      "storage": "text",
+      "sha256": "5aeff40a9022f5827530f80b944c84eb1dfb4eef2bc558fbc2503c55a3080aee",
+      "bytes": 21901
+    },
+    {
+      "path": "veto/src/lj_api.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto/src/lj_api.c",
+      "storage": "text",
+      "sha256": "62cb91a4a382bca4ece810557008895ae9910171d7e74ff11314c00df470d53e",
+      "bytes": 89891
+    },
+    {
+      "path": "veto/src/lj_atomic.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto/src/lj_atomic.h",
+      "storage": "text",
+      "sha256": "0a7bbdc91ae21c4dcbe09cd7de500e0aeb341173f5059f43659678e5be53fac1",
+      "bytes": 13030
+    },
+    {
+      "path": "veto/src/lj_gc.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto/src/lj_gc.c",
+      "storage": "text",
+      "sha256": "3cd90fc9507153f4acda2b11cf79fb637636a22b42a580b10389138908f47aea",
+      "bytes": 195276
+    },
+    {
+      "path": "veto/src/lj_gc.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto/src/lj_gc.h",
+      "storage": "text",
+      "sha256": "7e7d75d12c65e46f56492e4999b94a1d64318cef0bbb7d01352796fdc94b7fcf",
+      "bytes": 22575
+    },
+    {
+      "path": "veto/src/lj_gc2.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto/src/lj_gc2.c",
+      "storage": "text",
+      "sha256": "ce389dec47b431d6ba67cbb76ad15fd6e3c0aa061cd50dc4d10a0396b8cf9cf6",
+      "bytes": 767764
+    },
+    {
+      "path": "veto/src/lj_gc2.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto/src/lj_gc2.h",
+      "storage": "text",
+      "sha256": "244b10c49ad036b661a08adc178e6b8247d8ff1b18ed63bc035d3440df16a9f9",
+      "bytes": 37421
+    },
+    {
+      "path": "veto/src/lj_obj.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto/src/lj_obj.h",
+      "storage": "text",
+      "sha256": "591085dbd6f5a550412b4978cf1ad96850b87c59c41e5883e87b034bcaf62f3c",
+      "bytes": 220849
+    },
+    {
+      "path": "veto/src/lj_safepoint.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto/src/lj_safepoint.c",
+      "storage": "text",
+      "sha256": "9779c6607135ffd7e06d6c1834022ad77cf491d8a30df6b63f9e5516d045af03",
+      "bytes": 35523
+    },
+    {
+      "path": "veto/src/lj_safepoint.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto/src/lj_safepoint.h",
+      "storage": "text",
+      "sha256": "328aa2bc63d753257d8adca5a5417ccdda059b942138aecda20a3da53752d46c",
+      "bytes": 2894
+    },
+    {
+      "path": "veto/src/lj_tg.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto/src/lj_tg.c",
+      "storage": "text",
+      "sha256": "16064ba7946becbbc5cc1be2ee00eae4be39f1496c6ab85c5f4cf60f64146406",
+      "bytes": 45600
+    },
+    {
+      "path": "veto/src/lj_tg.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto/src/lj_tg.h",
+      "storage": "text",
+      "sha256": "a5cb46bde2868512743795750b5a1da71cd1a581bc037da127e60b36cb994015",
+      "bytes": 50068
+    },
+    {
+      "path": "veto/src/lj_thr.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto/src/lj_thr.c",
+      "storage": "text",
+      "sha256": "93aed8d88e36795e6186323924f5d96e7edc897b15f491f422223844eb666bb7",
+      "bytes": 69350
+    },
+    {
+      "path": "veto/src/lj_thr.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto/src/lj_thr.h",
+      "storage": "text",
+      "sha256": "f39140aec08b622f0db5123fdf311e5e753075462b7a0f75c251c86a58985b28",
+      "bytes": 16065
+    },
+    {
+      "path": "veto/src/vm_x64.dasc",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto/src/vm_x64.dasc",
+      "storage": "text",
+      "sha256": "3c1a5c9750ba851b400b580a8b2a80f5c215736bf71fc81112ea728eebdb39ae",
+      "bytes": 193172
+    },
+    {
+      "path": "veto/tests/lib/test_sleep.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto/tests/lib/test_sleep.h",
+      "storage": "text",
+      "sha256": "773ab5c72a894c17f5b6c4fa1c398c8fc0e01604c2089d69097e92ea860f17cb",
+      "bytes": 503
+    },
+    {
+      "path": "veto/tests/lib/tg_stopreq_fixture_helpers.h",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto/tests/lib/tg_stopreq_fixture_helpers.h",
+      "storage": "text",
+      "sha256": "c6ac1fa39f76509178517babb5d557d1415213835ff9949c69cdf7640781d744",
+      "bytes": 560
+    },
+    {
+      "path": "veto/tests/t-gc2-worker-scheduler.c",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto/tests/t-gc2-worker-scheduler.c",
+      "storage": "text",
+      "sha256": "e032c08598b035cf7982ebd71af87574edc9b8e99eff2b278d49cb860c98d978",
+      "bytes": 48916
+    },
+    {
+      "path": "veto-00.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-00.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-00.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-00.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-01.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-01.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-01.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-01.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-02.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-02.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-02.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-02.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-03.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-03.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-03.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-03.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-04.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-04.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-04.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-04.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-05.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-05.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-05.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-05.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-06.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-06.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-06.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-06.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-07.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-07.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-07.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-07.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-08.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-08.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-08.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-08.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-09.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-09.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-09.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-09.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-10.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-10.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-10.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-10.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-11.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-11.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-11.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-11.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-12.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-12.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-12.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-12.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-13.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-13.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-13.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-13.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-14.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-14.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-14.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-14.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-15.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-15.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-15.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-15.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-16.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-16.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-16.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-16.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-17.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-17.stderr",
+      "storage": "text",
+      "sha256": "ba25c49e840b9837e92818bb2f683b98f6a26762a148f9a75ec70431e089f634",
+      "bytes": 2429
+    },
+    {
+      "path": "veto-17.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-17.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-18.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-18.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-18.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-18.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-19.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-19.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-19.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-19.stdout",
+      "storage": "text",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    {
+      "path": "veto-compile.stderr",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-compile.stderr",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-compile.stdout",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-compile.stdout",
+      "storage": "text",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "veto-diagnostic",
+      "original": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic",
+      "storage": "hash-only",
+      "sha256": "aaf7026509ff8aa87efac9d8e17388b0ec116e2b3995b59fdc10c4ea9f291095",
+      "bytes": 2254064
+    },
+    {
+      "path": "control/src/libluajit.a",
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+      "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+      "bytes": 2976582,
+      "storage": "hash-only"
+    },
+    {
+      "path": "candidate/src/libluajit.a",
+      "original": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+      "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+      "bytes": 2980350,
+      "storage": "hash-only"
+    },
+    {
+      "path": "veto/src/libluajit.a",
+      "original": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+      "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+      "bytes": 2980502,
+      "storage": "hash-only"
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+--- candidate/tests/t-gc2-worker-scheduler.c
++++ refuse/tests/t-gc2-worker-scheduler.c
+@@ -38,6 +38,23 @@
+ #include "lj_thr.h"
+ #include "lj_trace.h"
+ 
++
++/* Negative control only: return the real flush's documented bounded miss
++** without changing any owner or queue state. Earlier fixture work calls the
++** real implementation. Arm only at the publication assertion being tested. */
++static uint32_t negative_refuse_armed, negative_refuse_calls;
++extern uint32_t __real_lj_gc2_flush_ssb(global_State *g, TGState *tg);
++uint32_t __wrap_lj_gc2_flush_ssb(global_State *g, TGState *tg)
++{
++  if (la_load32_acq(&negative_refuse_armed) && tg == g->main_tg) {
++    uint32_t old = la_add32_rlx(&negative_refuse_calls, 1);
++    if (old + 1u == 1000u)
++      fprintf(stderr, "NEGATIVE_REFUSE calls=1000 owner_base=%p owner_next=%p\n",
++              (void *)lj_tg_ssb_base_acq(tg), (void *)lj_tg_ssb_next_acq(tg));
++    return 0;
++  }
++  return __real_lj_gc2_flush_ssb(g, tg);
++}
+ 
+ static uint32_t worker_start_create_pause;
+ static uint32_t worker_start_create_paused;
+@@ -1275,6 +1292,7 @@
+ 
+   assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+   /* Setup/store rescans may already have published part of this graph. */
++  la_store32_rel(&negative_refuse_armed, 1);
+   assert(publish_owner_ssb(g, tg));
+   assert(wait_until_marked(g, obj2gco(grandchild)));
+   assert(wait_ssb_empty(g));

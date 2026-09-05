@@ -1,0 +1,2 @@
+NEGATIVE_FALSE_SUCCESS owner_base=0x7f666c915978 owner_next=0x7f666c915980
+candidate-false-success: /tmp/lj-gc-scheduler-publication-20260905-2zckpem_/false-success/tests/t-gc2-worker-scheduler.c:1278: test_async_mark: Assertion `wait_ssb_empty(g)' failed.

@@ -1,0 +1,2582 @@
+[
+  {
+    "name": "control-compile",
+    "variant": "control",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-o",
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.4154452150032739,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "candidate-compile",
+    "variant": "candidate",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-o",
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.4145816950040171,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "veto-compile",
+    "variant": "veto",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-o",
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.4143240900011733,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "control-00",
+    "variant": "control",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06404901100177085,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic",
+        "sha256": "a0432affa36da4f546c1d6a81ae101df69654c35cd2b77622eec2678ca94e2b7",
+        "bytes": 2249864
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-00.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-00.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "candidate-00",
+    "variant": "candidate",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06371706999925664,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic",
+        "sha256": "4f7da168125025483e1ca467b500d830843c45aebd8507bdc8c6567973558965",
+        "bytes": 2254048
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-00.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-00.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "veto-00",
+    "variant": "veto",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06356453600164969,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic",
+        "sha256": "aaf7026509ff8aa87efac9d8e17388b0ec116e2b3995b59fdc10c4ea9f291095",
+        "bytes": 2254064
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-00.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-00.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "control-01",
+    "variant": "control",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06355957799678436,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic",
+        "sha256": "a0432affa36da4f546c1d6a81ae101df69654c35cd2b77622eec2678ca94e2b7",
+        "bytes": 2249864
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-01.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-01.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "candidate-01",
+    "variant": "candidate",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06364285800373182,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic",
+        "sha256": "4f7da168125025483e1ca467b500d830843c45aebd8507bdc8c6567973558965",
+        "bytes": 2254048
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-01.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-01.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "veto-01",
+    "variant": "veto",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06357129399839323,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic",
+        "sha256": "aaf7026509ff8aa87efac9d8e17388b0ec116e2b3995b59fdc10c4ea9f291095",
+        "bytes": 2254064
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-01.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-01.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "control-02",
+    "variant": "control",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06367057099851081,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic",
+        "sha256": "a0432affa36da4f546c1d6a81ae101df69654c35cd2b77622eec2678ca94e2b7",
+        "bytes": 2249864
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-02.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-02.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "candidate-02",
+    "variant": "candidate",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06357626800308935,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic",
+        "sha256": "4f7da168125025483e1ca467b500d830843c45aebd8507bdc8c6567973558965",
+        "bytes": 2254048
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-02.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-02.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "veto-02",
+    "variant": "veto",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.0635206590013695,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic",
+        "sha256": "aaf7026509ff8aa87efac9d8e17388b0ec116e2b3995b59fdc10c4ea9f291095",
+        "bytes": 2254064
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-02.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-02.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "control-03",
+    "variant": "control",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06351041199377505,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic",
+        "sha256": "a0432affa36da4f546c1d6a81ae101df69654c35cd2b77622eec2678ca94e2b7",
+        "bytes": 2249864
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-03.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-03.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "candidate-03",
+    "variant": "candidate",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06351985399669502,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic",
+        "sha256": "4f7da168125025483e1ca467b500d830843c45aebd8507bdc8c6567973558965",
+        "bytes": 2254048
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-03.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-03.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "veto-03",
+    "variant": "veto",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06356703100027516,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic",
+        "sha256": "aaf7026509ff8aa87efac9d8e17388b0ec116e2b3995b59fdc10c4ea9f291095",
+        "bytes": 2254064
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-03.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-03.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "control-04",
+    "variant": "control",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06350837599893566,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic",
+        "sha256": "a0432affa36da4f546c1d6a81ae101df69654c35cd2b77622eec2678ca94e2b7",
+        "bytes": 2249864
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-04.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-04.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "candidate-04",
+    "variant": "candidate",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.0635718170015025,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic",
+        "sha256": "4f7da168125025483e1ca467b500d830843c45aebd8507bdc8c6567973558965",
+        "bytes": 2254048
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-04.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-04.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "veto-04",
+    "variant": "veto",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06357761500112247,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic",
+        "sha256": "aaf7026509ff8aa87efac9d8e17388b0ec116e2b3995b59fdc10c4ea9f291095",
+        "bytes": 2254064
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-04.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-04.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "control-05",
+    "variant": "control",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06368680599553045,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic",
+        "sha256": "a0432affa36da4f546c1d6a81ae101df69654c35cd2b77622eec2678ca94e2b7",
+        "bytes": 2249864
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-05.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-05.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "candidate-05",
+    "variant": "candidate",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06382110800041119,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic",
+        "sha256": "4f7da168125025483e1ca467b500d830843c45aebd8507bdc8c6567973558965",
+        "bytes": 2254048
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-05.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-05.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "veto-05",
+    "variant": "veto",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06360248399869306,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic",
+        "sha256": "aaf7026509ff8aa87efac9d8e17388b0ec116e2b3995b59fdc10c4ea9f291095",
+        "bytes": 2254064
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-05.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-05.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "control-06",
+    "variant": "control",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06372257500333944,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic",
+        "sha256": "a0432affa36da4f546c1d6a81ae101df69654c35cd2b77622eec2678ca94e2b7",
+        "bytes": 2249864
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-06.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-06.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "candidate-06",
+    "variant": "candidate",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06369451700447826,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic",
+        "sha256": "4f7da168125025483e1ca467b500d830843c45aebd8507bdc8c6567973558965",
+        "bytes": 2254048
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-06.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-06.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "veto-06",
+    "variant": "veto",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06357017200207338,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic",
+        "sha256": "aaf7026509ff8aa87efac9d8e17388b0ec116e2b3995b59fdc10c4ea9f291095",
+        "bytes": 2254064
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-06.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-06.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "control-07",
+    "variant": "control",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06356694300484378,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic",
+        "sha256": "a0432affa36da4f546c1d6a81ae101df69654c35cd2b77622eec2678ca94e2b7",
+        "bytes": 2249864
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-07.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-07.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "candidate-07",
+    "variant": "candidate",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06385813099768711,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic",
+        "sha256": "4f7da168125025483e1ca467b500d830843c45aebd8507bdc8c6567973558965",
+        "bytes": 2254048
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-07.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-07.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "veto-07",
+    "variant": "veto",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06366970599628985,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic",
+        "sha256": "aaf7026509ff8aa87efac9d8e17388b0ec116e2b3995b59fdc10c4ea9f291095",
+        "bytes": 2254064
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-07.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-07.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "control-08",
+    "variant": "control",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06360094599949662,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic",
+        "sha256": "a0432affa36da4f546c1d6a81ae101df69654c35cd2b77622eec2678ca94e2b7",
+        "bytes": 2249864
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-08.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-08.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "candidate-08",
+    "variant": "candidate",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.0636705049982993,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic",
+        "sha256": "4f7da168125025483e1ca467b500d830843c45aebd8507bdc8c6567973558965",
+        "bytes": 2254048
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-08.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-08.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "veto-08",
+    "variant": "veto",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06363290500303265,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic",
+        "sha256": "aaf7026509ff8aa87efac9d8e17388b0ec116e2b3995b59fdc10c4ea9f291095",
+        "bytes": 2254064
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-08.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-08.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "control-09",
+    "variant": "control",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.0636924549980904,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic",
+        "sha256": "a0432affa36da4f546c1d6a81ae101df69654c35cd2b77622eec2678ca94e2b7",
+        "bytes": 2249864
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-09.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-09.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "candidate-09",
+    "variant": "candidate",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06356435199995758,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic",
+        "sha256": "4f7da168125025483e1ca467b500d830843c45aebd8507bdc8c6567973558965",
+        "bytes": 2254048
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-09.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-09.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "veto-09",
+    "variant": "veto",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.0636294019932393,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic",
+        "sha256": "aaf7026509ff8aa87efac9d8e17388b0ec116e2b3995b59fdc10c4ea9f291095",
+        "bytes": 2254064
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-09.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-09.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "control-10",
+    "variant": "control",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06359174799581524,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic",
+        "sha256": "a0432affa36da4f546c1d6a81ae101df69654c35cd2b77622eec2678ca94e2b7",
+        "bytes": 2249864
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-10.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-10.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "candidate-10",
+    "variant": "candidate",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06355133499891963,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic",
+        "sha256": "4f7da168125025483e1ca467b500d830843c45aebd8507bdc8c6567973558965",
+        "bytes": 2254048
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-10.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-10.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "veto-10",
+    "variant": "veto",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06353169100475498,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic",
+        "sha256": "aaf7026509ff8aa87efac9d8e17388b0ec116e2b3995b59fdc10c4ea9f291095",
+        "bytes": 2254064
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-10.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-10.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "control-11",
+    "variant": "control",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06372031399951084,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic",
+        "sha256": "a0432affa36da4f546c1d6a81ae101df69654c35cd2b77622eec2678ca94e2b7",
+        "bytes": 2249864
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-11.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-11.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "candidate-11",
+    "variant": "candidate",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06363102899922524,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic",
+        "sha256": "4f7da168125025483e1ca467b500d830843c45aebd8507bdc8c6567973558965",
+        "bytes": 2254048
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-11.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-11.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "veto-11",
+    "variant": "veto",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.0635898700056714,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic",
+        "sha256": "aaf7026509ff8aa87efac9d8e17388b0ec116e2b3995b59fdc10c4ea9f291095",
+        "bytes": 2254064
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-11.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-11.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "control-12",
+    "variant": "control",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06351938699663151,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic",
+        "sha256": "a0432affa36da4f546c1d6a81ae101df69654c35cd2b77622eec2678ca94e2b7",
+        "bytes": 2249864
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-12.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-12.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "candidate-12",
+    "variant": "candidate",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06358220599940978,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic",
+        "sha256": "4f7da168125025483e1ca467b500d830843c45aebd8507bdc8c6567973558965",
+        "bytes": 2254048
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-12.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-12.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "veto-12",
+    "variant": "veto",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06359617300040554,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic",
+        "sha256": "aaf7026509ff8aa87efac9d8e17388b0ec116e2b3995b59fdc10c4ea9f291095",
+        "bytes": 2254064
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-12.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-12.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "control-13",
+    "variant": "control",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06361647800076753,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic",
+        "sha256": "a0432affa36da4f546c1d6a81ae101df69654c35cd2b77622eec2678ca94e2b7",
+        "bytes": 2249864
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-13.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-13.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "candidate-13",
+    "variant": "candidate",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06359162999433465,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic",
+        "sha256": "4f7da168125025483e1ca467b500d830843c45aebd8507bdc8c6567973558965",
+        "bytes": 2254048
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-13.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-13.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "veto-13",
+    "variant": "veto",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06352353200054495,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic",
+        "sha256": "aaf7026509ff8aa87efac9d8e17388b0ec116e2b3995b59fdc10c4ea9f291095",
+        "bytes": 2254064
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-13.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-13.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "control-14",
+    "variant": "control",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06369047600310296,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic",
+        "sha256": "a0432affa36da4f546c1d6a81ae101df69654c35cd2b77622eec2678ca94e2b7",
+        "bytes": 2249864
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-14.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-14.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "candidate-14",
+    "variant": "candidate",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06357191000279272,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic",
+        "sha256": "4f7da168125025483e1ca467b500d830843c45aebd8507bdc8c6567973558965",
+        "bytes": 2254048
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-14.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-14.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "veto-14",
+    "variant": "veto",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06418623100034893,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic",
+        "sha256": "aaf7026509ff8aa87efac9d8e17388b0ec116e2b3995b59fdc10c4ea9f291095",
+        "bytes": 2254064
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-14.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-14.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "control-15",
+    "variant": "control",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06364892900455743,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic",
+        "sha256": "a0432affa36da4f546c1d6a81ae101df69654c35cd2b77622eec2678ca94e2b7",
+        "bytes": 2249864
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-15.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-15.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "candidate-15",
+    "variant": "candidate",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06391810300556244,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic",
+        "sha256": "4f7da168125025483e1ca467b500d830843c45aebd8507bdc8c6567973558965",
+        "bytes": 2254048
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-15.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-15.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "veto-15",
+    "variant": "veto",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06391371700010495,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic",
+        "sha256": "aaf7026509ff8aa87efac9d8e17388b0ec116e2b3995b59fdc10c4ea9f291095",
+        "bytes": 2254064
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-15.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-15.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "control-16",
+    "variant": "control",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06362758999603102,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic",
+        "sha256": "a0432affa36da4f546c1d6a81ae101df69654c35cd2b77622eec2678ca94e2b7",
+        "bytes": 2249864
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-16.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-16.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "candidate-16",
+    "variant": "candidate",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06361043799552135,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic",
+        "sha256": "4f7da168125025483e1ca467b500d830843c45aebd8507bdc8c6567973558965",
+        "bytes": 2254048
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-16.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-16.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "veto-16",
+    "variant": "veto",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06371089399908669,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic",
+        "sha256": "aaf7026509ff8aa87efac9d8e17388b0ec116e2b3995b59fdc10c4ea9f291095",
+        "bytes": 2254064
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-16.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-16.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "control-17",
+    "variant": "control",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06366391200572252,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic",
+        "sha256": "a0432affa36da4f546c1d6a81ae101df69654c35cd2b77622eec2678ca94e2b7",
+        "bytes": 2249864
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-17.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-17.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "candidate-17",
+    "variant": "candidate",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06385840399889275,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic",
+        "sha256": "4f7da168125025483e1ca467b500d830843c45aebd8507bdc8c6567973558965",
+        "bytes": 2254048
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-17.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-17.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "veto-17",
+    "variant": "veto",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": -6,
+    "seconds": 1.1654163880011765,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic",
+        "sha256": "aaf7026509ff8aa87efac9d8e17388b0ec116e2b3995b59fdc10c4ea9f291095",
+        "bytes": 2254064
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-17.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-17.stderr",
+      "sha256": "ba25c49e840b9837e92818bb2f683b98f6a26762a148f9a75ec70431e089f634",
+      "bytes": 2429
+    }
+  },
+  {
+    "name": "control-18",
+    "variant": "control",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": -6,
+    "seconds": 1.1649741919973167,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic",
+        "sha256": "a0432affa36da4f546c1d6a81ae101df69654c35cd2b77622eec2678ca94e2b7",
+        "bytes": 2249864
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-18.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-18.stderr",
+      "sha256": "5ce821418ecbe420c8613de14d30d3ffe7cf158b2c8d58cc132eb805b15d0b13",
+      "bytes": 2432
+    }
+  },
+  {
+    "name": "candidate-18",
+    "variant": "candidate",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06373344500025269,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic",
+        "sha256": "4f7da168125025483e1ca467b500d830843c45aebd8507bdc8c6567973558965",
+        "bytes": 2254048
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-18.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-18.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "veto-18",
+    "variant": "veto",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06367150999722071,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic",
+        "sha256": "aaf7026509ff8aa87efac9d8e17388b0ec116e2b3995b59fdc10c4ea9f291095",
+        "bytes": 2254064
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-18.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-18.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "control-19",
+    "variant": "control",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06356833400059259,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-diagnostic",
+        "sha256": "a0432affa36da4f546c1d6a81ae101df69654c35cd2b77622eec2678ca94e2b7",
+        "bytes": 2249864
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a",
+        "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+        "bytes": 2976582
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-19.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/control-19.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "candidate-19",
+    "variant": "candidate",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06382702599512413,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-diagnostic",
+        "sha256": "4f7da168125025483e1ca467b500d830843c45aebd8507bdc8c6567973558965",
+        "bytes": 2254048
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+        "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+        "bytes": 2980350
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-19.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/candidate-19.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  },
+  {
+    "name": "veto-19",
+    "variant": "veto",
+    "argv": [
+      "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic"
+    ],
+    "cwd": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "seconds": 0.06354635699972278,
+    "inputs": [
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-diagnostic",
+        "sha256": "aaf7026509ff8aa87efac9d8e17388b0ec116e2b3995b59fdc10c4ea9f291095",
+        "bytes": 2254064
+      },
+      {
+        "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/diagnostic/tests/t-gc2-worker-scheduler.c",
+        "sha256": "ec7dac85cc125c9309ced3da26ad9b64864a43524801aec90153002039ae6e58",
+        "bytes": 51579
+      },
+      {
+        "path": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+        "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+        "bytes": 2980502
+      }
+    ],
+    "stdout": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-19.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "stderr": {
+      "path": "/tmp/lj-gc-scheduler-review-20260905-zuvqerrl/veto-19.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    }
+  }
+]

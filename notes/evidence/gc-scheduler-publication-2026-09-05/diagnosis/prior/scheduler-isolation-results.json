@@ -1,0 +1,100 @@
+[
+  {
+    "name": "oldcandidate-scheduler-isolation-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "-I/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/t-gc2-worker-scheduler.c",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-o",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-scheduler-isolation"
+    ],
+    "exit_code": 0,
+    "seconds": 0.3655561600025976,
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;;",
+    "stdout": "oldcandidate-scheduler-isolation-compile.stdout",
+    "stderr": "oldcandidate-scheduler-isolation-compile.stderr"
+  },
+  {
+    "name": "oldcandidate-scheduler-isolation-run",
+    "argv": [
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-scheduler-isolation"
+    ],
+    "exit_code": 0,
+    "seconds": 0.06439302400394809,
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;;",
+    "stdout": "oldcandidate-scheduler-isolation-run.stdout",
+    "stderr": "oldcandidate-scheduler-isolation-run.stderr"
+  },
+  {
+    "name": "veto-scheduler-isolation-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "-I/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/t-gc2-worker-scheduler.c",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-o",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-scheduler-isolation"
+    ],
+    "exit_code": 0,
+    "seconds": 0.36518833500304027,
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;;",
+    "stdout": "veto-scheduler-isolation-compile.stdout",
+    "stderr": "veto-scheduler-isolation-compile.stderr"
+  },
+  {
+    "name": "veto-scheduler-isolation-run",
+    "argv": [
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-scheduler-isolation"
+    ],
+    "exit_code": 0,
+    "seconds": 0.06414396299805958,
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;;",
+    "stdout": "veto-scheduler-isolation-run.stdout",
+    "stderr": "veto-scheduler-isolation-run.stderr"
+  }
+]
