@@ -1,0 +1,16 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "16-31",
+    "make",
+    "-C",
+    "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src",
+    "-j4"
+  ],
+  "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate",
+  "seconds": 1.966734629997518,
+  "exit": 0,
+  "stdout": "make: Entering directory '/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src'\nCC        lj_crecord.o\nAR        libluajit.a\nDYNCC     lj_crecord_dyn.o\nDYNLINK   libluajit.so\nLINK      luajit\nOK        Successfully built LuaJIT\nmake: Leaving directory '/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src'\n",
+  "stderr": ""
+}

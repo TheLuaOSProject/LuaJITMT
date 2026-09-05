@@ -1,0 +1,9 @@
+{
+  "owner": "/tmp/lj-special-udata-independent-20260905-75jums60",
+  "base": "9f68fa8d58e0f115764e5bba73406659ed82c274",
+  "fixtures": {
+    "t-ffi-clib-receiver.lua": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+    "t-ffi-clib-receiver-lib.c": "8ce51fb90a6c101f208886b5b0dd27a4f9bb19c33bcbde696afb3b101e1d38aa"
+  },
+  "patch_sha256": "77531ea3eb0977a53ff7413cbad718543bc8952f16b216269523e6ba57664837"
+}

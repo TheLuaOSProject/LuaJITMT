@@ -1,0 +1,39 @@
+{
+  "cases": 10,
+  "variants": {
+    "baseline": {
+      "commands": 22,
+      "runtime_processes": 20,
+      "successes": 10,
+      "expected_failures": 10
+    },
+    "method-only": {
+      "commands": 22,
+      "runtime_processes": 20,
+      "successes": 10,
+      "expected_failures": 10
+    },
+    "candidate": {
+      "commands": 22,
+      "runtime_processes": 20,
+      "successes": 20,
+      "expected_failures": 0
+    },
+    "strict": {
+      "commands": 22,
+      "runtime_processes": 20,
+      "successes": 20,
+      "expected_failures": 0
+    },
+    "asan": {
+      "commands": 22,
+      "runtime_processes": 20,
+      "successes": 20,
+      "expected_failures": 0
+    }
+  },
+  "fixed_runtime_processes": 60,
+  "all_fixed_runtime_processes_pass": true,
+  "final_fixture_sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+  "source_patch_sha256": "77531ea3eb0977a53ff7413cbad718543bc8952f16b216269523e6ba57664837"
+}

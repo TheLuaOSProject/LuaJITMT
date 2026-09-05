@@ -1,0 +1,676 @@
+[
+  {
+    "name": "stock-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit",
+      "-joff",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/tests/stock/test",
+    "test": true,
+    "seconds": 1.3969890670014138,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/?.lua;/workspaces/lj-lockless/tests/lib/?.lua;;"
+    },
+    "inputs": {
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit": "c752b687ea6e354c7ad4b9ef88363ebe08a0d75b618823be0f255521dd6a13f3"
+    },
+    "exit": 0,
+    "stdout": "387 passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "stock-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit",
+      "-jon",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/tests/stock/test",
+    "test": true,
+    "seconds": 1.8758904110000003,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/?.lua;/workspaces/lj-lockless/tests/lib/?.lua;;"
+    },
+    "inputs": {
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit": "c752b687ea6e354c7ad4b9ef88363ebe08a0d75b618823be0f255521dd6a13f3"
+    },
+    "exit": 0,
+    "stdout": "509 passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "clib-method function",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/tests/t-jit-special-udata-guards.lua",
+      "clib",
+      "function"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/strict",
+    "test": true,
+    "seconds": 0.00436697600162006,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/?.lua;/workspaces/lj-lockless/tests/lib/?.lua;;"
+    },
+    "inputs": {
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit": "c752b687ea6e354c7ad4b9ef88363ebe08a0d75b618823be0f255521dd6a13f3",
+      "/workspaces/lj-lockless/tests/t-jit-special-udata-guards.lua": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf"
+    },
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\tfunction\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "clib-method table",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/tests/t-jit-special-udata-guards.lua",
+      "clib",
+      "table"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/strict",
+    "test": true,
+    "seconds": 0.0040171070031647105,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/?.lua;/workspaces/lj-lockless/tests/lib/?.lua;;"
+    },
+    "inputs": {
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit": "c752b687ea6e354c7ad4b9ef88363ebe08a0d75b618823be0f255521dd6a13f3",
+      "/workspaces/lj-lockless/tests/t-jit-special-udata-guards.lua": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf"
+    },
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\ttable\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "clib-method missing",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/tests/t-jit-special-udata-guards.lua",
+      "clib",
+      "missing"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/strict",
+    "test": true,
+    "seconds": 0.0040318669998669066,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/?.lua;/workspaces/lj-lockless/tests/lib/?.lua;;"
+    },
+    "inputs": {
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit": "c752b687ea6e354c7ad4b9ef88363ebe08a0d75b618823be0f255521dd6a13f3",
+      "/workspaces/lj-lockless/tests/t-jit-special-udata-guards.lua": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf"
+    },
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\tmissing\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...kspaces/lj-lockless/tests/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "clib-method nonfunction",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/tests/t-jit-special-udata-guards.lua",
+      "clib",
+      "nonfunction"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/strict",
+    "test": true,
+    "seconds": 0.0040744639991316944,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/?.lua;/workspaces/lj-lockless/tests/lib/?.lua;;"
+    },
+    "inputs": {
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit": "c752b687ea6e354c7ad4b9ef88363ebe08a0d75b618823be0f255521dd6a13f3",
+      "/workspaces/lj-lockless/tests/t-jit-special-udata-guards.lua": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf"
+    },
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\tnonfunction\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...kspaces/lj-lockless/tests/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a number value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "clib-method replace",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/tests/t-jit-special-udata-guards.lua",
+      "clib",
+      "replace"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/strict",
+    "test": true,
+    "seconds": 0.004234788000758272,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/?.lua;/workspaces/lj-lockless/tests/lib/?.lua;;"
+    },
+    "inputs": {
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit": "c752b687ea6e354c7ad4b9ef88363ebe08a0d75b618823be0f255521dd6a13f3",
+      "/workspaces/lj-lockless/tests/t-jit-special-udata-guards.lua": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf"
+    },
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\treplace\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "clib-method replace_missing",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/tests/t-jit-special-udata-guards.lua",
+      "clib",
+      "replace_missing"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/strict",
+    "test": true,
+    "seconds": 0.004504969001573045,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/?.lua;/workspaces/lj-lockless/tests/lib/?.lua;;"
+    },
+    "inputs": {
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit": "c752b687ea6e354c7ad4b9ef88363ebe08a0d75b618823be0f255521dd6a13f3",
+      "/workspaces/lj-lockless/tests/t-jit-special-udata-guards.lua": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf"
+    },
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\treplace_missing\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...kspaces/lj-lockless/tests/t-jit-special-udata-guards.lua:31: attempt to index upvalue 'obj' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "clib-method resize",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/tests/t-jit-special-udata-guards.lua",
+      "clib",
+      "resize"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/strict",
+    "test": true,
+    "seconds": 0.005256123997241957,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/?.lua;/workspaces/lj-lockless/tests/lib/?.lua;;"
+    },
+    "inputs": {
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit": "c752b687ea6e354c7ad4b9ef88363ebe08a0d75b618823be0f255521dd6a13f3",
+      "/workspaces/lj-lockless/tests/t-jit-special-udata-guards.lua": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf"
+    },
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\tresize\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "clib-method methodlife",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/tests/t-jit-special-udata-guards.lua",
+      "clib",
+      "methodlife"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/strict",
+    "test": true,
+    "seconds": 0.004803953001101036,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/?.lua;/workspaces/lj-lockless/tests/lib/?.lua;;"
+    },
+    "inputs": {
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit": "c752b687ea6e354c7ad4b9ef88363ebe08a0d75b618823be0f255521dd6a13f3",
+      "/workspaces/lj-lockless/tests/t-jit-special-udata-guards.lua": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf"
+    },
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\tmethodlife\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "clib-method table_entry",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/tests/t-jit-special-udata-guards.lua",
+      "clib",
+      "table_entry"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/strict",
+    "test": true,
+    "seconds": 0.004272042999218684,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/?.lua;/workspaces/lj-lockless/tests/lib/?.lua;;"
+    },
+    "inputs": {
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit": "c752b687ea6e354c7ad4b9ef88363ebe08a0d75b618823be0f255521dd6a13f3",
+      "/workspaces/lj-lockless/tests/t-jit-special-udata-guards.lua": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf"
+    },
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\ttable_entry\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "clib-method newindex",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/tests/t-jit-special-udata-guards.lua",
+      "clib",
+      "newindex"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/strict",
+    "test": true,
+    "seconds": 0.00434600600056001,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/?.lua;/workspaces/lj-lockless/tests/lib/?.lua;;"
+    },
+    "inputs": {
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit": "c752b687ea6e354c7ad4b9ef88363ebe08a0d75b618823be0f255521dd6a13f3",
+      "/workspaces/lj-lockless/tests/t-jit-special-udata-guards.lua": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf"
+    },
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\tnewindex\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\tnil\tcalls\t0\twrites\t80000\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "clib-method newindex_table",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/tests/t-jit-special-udata-guards.lua",
+      "clib",
+      "newindex_table"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/strict",
+    "test": true,
+    "seconds": 0.004125463998207124,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/?.lua;/workspaces/lj-lockless/tests/lib/?.lua;;"
+    },
+    "inputs": {
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit": "c752b687ea6e354c7ad4b9ef88363ebe08a0d75b618823be0f255521dd6a13f3",
+      "/workspaces/lj-lockless/tests/t-jit-special-udata-guards.lua": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf"
+    },
+    "exit": 0,
+    "stdout": "special-userdata-guard\tclib\tnewindex_table\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\tnil\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-extern-library",
+    "command": [
+      "cc",
+      "-shared",
+      "-fPIC",
+      "-O2",
+      "/workspaces/lj-lockless/tests/t-ffi-clib-extern-snapshot-lib.c",
+      "-o",
+      "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-extern.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/strict",
+    "test": false,
+    "seconds": 0.016453489999548765,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/?.lua;/workspaces/lj-lockless/tests/lib/?.lua;;"
+    },
+    "inputs": {
+      "/workspaces/lj-lockless/tests/t-ffi-clib-extern-snapshot-lib.c": "3beb13ecb964c74085600b3ef6c5a60fa5764abe0e479ed982a1af695c052f32"
+    },
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "compile-t-ffi-recorder-libmeta-busy.c",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-I/tmp/lj-special-udata-independent-20260905-75jums60/strict/src",
+      "-I/workspaces/lj-lockless/tests",
+      "/workspaces/lj-lockless/tests/t-ffi-recorder-libmeta-busy.c",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-t-ffi-recorder-libmeta-busy"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/strict",
+    "test": false,
+    "seconds": 0.14339191099861637,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/?.lua;/workspaces/lj-lockless/tests/lib/?.lua;;",
+      "LJ_M7_FFI_CLIB_EXTERN_SO": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-extern.so"
+    },
+    "inputs": {
+      "/workspaces/lj-lockless/tests/t-ffi-recorder-libmeta-busy.c": "37137c6bdfd28ee9cd01237f45d4e710baaf86702d2c8a16f2057603c07a1d9e",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/libluajit.a": "bab18da8c70b854ed61a530f3215c56124ceb4519c39080c9eba3905858c18ba"
+    },
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "t-ffi-recorder-libmeta-busy.c",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-t-ffi-recorder-libmeta-busy"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/strict",
+    "test": true,
+    "seconds": 0.046985314998892136,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/?.lua;/workspaces/lj-lockless/tests/lib/?.lua;;",
+      "LJ_M7_FFI_CLIB_EXTERN_SO": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-extern.so"
+    },
+    "inputs": {
+      "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-t-ffi-recorder-libmeta-busy": "35168b7f9acf46708b3a1eba903f4ce47aec228db4e55f266cb579a1ba9f43fb",
+      "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-extern.so": "2993fb39e017fc1654a1934f61f22206d67663d61e7eee92a94a5012f44a63cf"
+    },
+    "exit": 0,
+    "stdout": "t-ffi-recorder-libmeta-busy OK: recorder FFI metadata reads avoid or abort instead of waiting\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-t-ffi-clib-extern-snapshot.c",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-I/tmp/lj-special-udata-independent-20260905-75jums60/strict/src",
+      "-I/workspaces/lj-lockless/tests",
+      "/workspaces/lj-lockless/tests/t-ffi-clib-extern-snapshot.c",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-t-ffi-clib-extern-snapshot"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/strict",
+    "test": false,
+    "seconds": 0.1742916189978132,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/?.lua;/workspaces/lj-lockless/tests/lib/?.lua;;",
+      "LJ_M7_FFI_CLIB_EXTERN_SO": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-extern.so"
+    },
+    "inputs": {
+      "/workspaces/lj-lockless/tests/t-ffi-clib-extern-snapshot.c": "a035c2d3f85421d8f3278061e7821673a541c99da83970e1912706032ef91c6e",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/libluajit.a": "bab18da8c70b854ed61a530f3215c56124ceb4519c39080c9eba3905858c18ba"
+    },
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "t-ffi-clib-extern-snapshot.c",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-t-ffi-clib-extern-snapshot"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/strict",
+    "test": true,
+    "seconds": 0.005359851998946397,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/?.lua;/workspaces/lj-lockless/tests/lib/?.lua;;",
+      "LJ_M7_FFI_CLIB_EXTERN_SO": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-extern.so"
+    },
+    "inputs": {
+      "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-t-ffi-clib-extern-snapshot": "476f28dced0a9370ede32ff3207f34213df6fc5438eae54cf862487096390ca3",
+      "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-extern.so": "2993fb39e017fc1654a1934f61f22206d67663d61e7eee92a94a5012f44a63cf"
+    },
+    "exit": 0,
+    "stdout": "t-ffi-clib-extern-snapshot OK: extern variables wait on ctype snapshots\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-t-ffi-clib-cache-retire.c",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-I/tmp/lj-special-udata-independent-20260905-75jums60/strict/src",
+      "-I/workspaces/lj-lockless/tests",
+      "/workspaces/lj-lockless/tests/t-ffi-clib-cache-retire.c",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-t-ffi-clib-cache-retire"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/strict",
+    "test": false,
+    "seconds": 0.11100491699835402,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/?.lua;/workspaces/lj-lockless/tests/lib/?.lua;;",
+      "LJ_M7_FFI_CLIB_EXTERN_SO": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-extern.so"
+    },
+    "inputs": {
+      "/workspaces/lj-lockless/tests/t-ffi-clib-cache-retire.c": "25ee344b97769df17bec372c99fd7c81edfc37df6e74c75f6376590f0b14f35a",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/libluajit.a": "bab18da8c70b854ed61a530f3215c56124ceb4519c39080c9eba3905858c18ba"
+    },
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "t-ffi-clib-cache-retire.c",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-t-ffi-clib-cache-retire"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/strict",
+    "test": true,
+    "seconds": 0.00231055699987337,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/?.lua;/workspaces/lj-lockless/tests/lib/?.lua;;",
+      "LJ_M7_FFI_CLIB_EXTERN_SO": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-extern.so"
+    },
+    "inputs": {
+      "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-t-ffi-clib-cache-retire": "0e57499dde09f4570df0959627ad2a1e57ff005749d0bf1e80ad5a2e7d9a95b9",
+      "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-extern.so": "2993fb39e017fc1654a1934f61f22206d67663d61e7eee92a94a5012f44a63cf"
+    },
+    "exit": 0,
+    "stdout": "t-ffi-clib-cache-retire OK: generic exact-owner drain retains and reclaims the full cache chain\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-t-ffi-callxs-callback-stack.c",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-I/tmp/lj-special-udata-independent-20260905-75jums60/strict/src",
+      "-I/workspaces/lj-lockless/tests",
+      "/workspaces/lj-lockless/tests/t-ffi-callxs-callback-stack.c",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-t-ffi-callxs-callback-stack"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/strict",
+    "test": false,
+    "seconds": 0.1527828819998831,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/?.lua;/workspaces/lj-lockless/tests/lib/?.lua;;",
+      "LJ_M7_FFI_CLIB_EXTERN_SO": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-extern.so"
+    },
+    "inputs": {
+      "/workspaces/lj-lockless/tests/t-ffi-callxs-callback-stack.c": "98a08d97ae821ef3db08ca0a4a3cb9af224dad9f341f49c48b562f8163d20f77",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/libluajit.a": "bab18da8c70b854ed61a530f3215c56124ceb4519c39080c9eba3905858c18ba"
+    },
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "t-ffi-callxs-callback-stack.c",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-t-ffi-callxs-callback-stack"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/strict",
+    "test": true,
+    "seconds": 0.009468580999964615,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/?.lua;/workspaces/lj-lockless/tests/lib/?.lua;;",
+      "LJ_M7_FFI_CLIB_EXTERN_SO": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-extern.so"
+    },
+    "inputs": {
+      "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-t-ffi-callxs-callback-stack": "4a636bb6c26b46525e022694698d546318d3435918c7b00c96f738fe88a9b5b0",
+      "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-extern.so": "2993fb39e017fc1654a1934f61f22206d67663d61e7eee92a94a5012f44a63cf"
+    },
+    "exit": 0,
+    "stdout": "callback stack mode=0 generated=80 callbacks=80 relocated=0 throws=0\ncallback stack mode=1 generated=80 callbacks=80 relocated=1 throws=0\ncallback stack mode=2 generated=1 callbacks=1 relocated=0 throws=1\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-remote-library",
+    "command": [
+      "cc",
+      "-shared",
+      "-fPIC",
+      "-O2",
+      "/workspaces/lj-lockless/tests/t-ffi-callxs-remote-flush-lib.c",
+      "-o",
+      "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-remote.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/strict",
+    "test": false,
+    "seconds": 0.03417972399984137,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/?.lua;/workspaces/lj-lockless/tests/lib/?.lua;;",
+      "LJ_M7_FFI_CLIB_EXTERN_SO": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-extern.so"
+    },
+    "inputs": {
+      "/workspaces/lj-lockless/tests/t-ffi-callxs-remote-flush-lib.c": "fc9eee70014373e5869998896fe930a7ad5cd30542fed32be42d103603f849f8"
+    },
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "generated-remote-flush",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/tests/t-ffi-callxs-remote-flush.lua"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/strict",
+    "test": true,
+    "seconds": 0.015762901999551104,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/?.lua;/workspaces/lj-lockless/tests/lib/?.lua;;",
+      "LJ_M7_FFI_CLIB_EXTERN_SO": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-extern.so",
+      "LJ_M7_FFI_CALLXS_FLUSH_SO": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-remote.so"
+    },
+    "inputs": {
+      "/workspaces/lj-lockless/tests/t-ffi-callxs-remote-flush.lua": "ad71b68c0a52c6651e24354a655b6fd8171ee1910dd457f2c213d1a33042d716",
+      "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-remote.so": "1d1346ed5a22f133d8c0fcd44bdf4565d5e526d11fe93c16c3b97258780db9c1",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit": "c752b687ea6e354c7ad4b9ef88363ebe08a0d75b618823be0f255521dd6a13f3"
+    },
+    "exit": 0,
+    "stdout": "t-ffi-callxs-remote-flush OK: boxed GC/flush 0.000/0.000s, bool GC/flush 0.000/0.000s, sret GC/flush 0.000/0.000s before release\n",
+    "stderr": ""
+  }
+]

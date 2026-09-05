@@ -1,0 +1,588 @@
+{
+  "base": "9f68fa8d58e0f115764e5bba73406659ed82c274",
+  "artifacts": [
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/additional-results.json",
+      "relative_path": "isolated/additional-results.json",
+      "sha256": "c9140f9b86a1ac18910fa30ec39b9a0f85bafbbc1caf8a79761fa11e305251ff",
+      "bytes": 15898,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/asan-instrumentation.json",
+      "relative_path": "isolated/asan-instrumentation.json",
+      "sha256": "44e5d61d909a0bbd44346aaac53c49f0d8be00dafb42ade2a43a132302cb288f",
+      "bytes": 688,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/asan-receiver-binaries.json",
+      "relative_path": "isolated/asan-receiver-binaries.json",
+      "sha256": "0592764a0566081c5c33c56579882ba21e3c61849af4905fbd5d5f1f9ffedf1d",
+      "bytes": 254,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/asan-receiver-build.json",
+      "relative_path": "isolated/asan-receiver-build.json",
+      "sha256": "6f53ea99ea6dbb2f807956014c405778165fbc9047deacac7c4628ee6b53eac9",
+      "bytes": 959,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/asan-receiver-results.json",
+      "relative_path": "isolated/asan-receiver-results.json",
+      "sha256": "ec16dd5451c0a19e75f610c7dd314b846d3c23092d0cfc98e485d29005589bc7",
+      "bytes": 32246,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/baseline-receiver-results.json",
+      "relative_path": "isolated/baseline-receiver-results.json",
+      "sha256": "3be83b1602d561a94ee6643cac47ea034fa64889dc4bf88604256c4b4fc03e52",
+      "bytes": 35301,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/build-receiver.py",
+      "relative_path": "isolated/build-receiver.py",
+      "sha256": "8fdbc30bb22305da19579c135c02608a346ac51d60c43fcc38e352df579082fd",
+      "bytes": 1133,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate-receiver-binaries.json",
+      "relative_path": "isolated/candidate-receiver-binaries.json",
+      "sha256": "85b7e36235858cf5af5c8963db598ff8bcbf900843f0090388885ab07b90b46b",
+      "bytes": 254,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate-receiver-build.json",
+      "relative_path": "isolated/candidate-receiver-build.json",
+      "sha256": "14405c92568c26a788dab10c9748885015ed8ddf3430064498c73c3050697ef4",
+      "bytes": 658,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate-receiver-results.json",
+      "relative_path": "isolated/candidate-receiver-results.json",
+      "sha256": "384af0480d5e1af61c7170d8894e56cef27805acf2f5ff9addb3eb97bafc3b3e",
+      "bytes": 31638,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-index-type-results.json",
+      "relative_path": "isolated/captured-clib-index-type-results.json",
+      "sha256": "8547bc696c1e929d40b8d4ad810e95f758e3d05529cb8649f033df6f8ced77e8",
+      "bytes": 7955,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-index-type.lua",
+      "relative_path": "isolated/captured-clib-index-type.lua",
+      "sha256": "5afcd46316cdb25182b4e7aec99a03a982907b91fa9cc2de0c75bb45ce413187",
+      "bytes": 849,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "relative_path": "isolated/captured-clib-receiver.lua",
+      "sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+      "bytes": 4597,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/clib-cache-lifecycle.lua",
+      "relative_path": "isolated/clib-cache-lifecycle.lua",
+      "sha256": "2375915500001c3da5ea9bf06c18d413fd6049014db4f567ec5d37fdd266c120",
+      "bytes": 1164,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/final-validation.json",
+      "relative_path": "isolated/final-validation.json",
+      "sha256": "baee2f546493424bb403c753eb0002a79bd8eef7b82027eacb3358c0a04943b7",
+      "bytes": 952,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/initial-receiver/baseline-receiver-results.json",
+      "relative_path": "isolated/initial-receiver/baseline-receiver-results.json",
+      "sha256": "d7546732ac9c498d1921f45bd2baffbf7e1d4115ee6fd7313dabc5ad34238422",
+      "bytes": 21466,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/initial-receiver/candidate-receiver-results.json",
+      "relative_path": "isolated/initial-receiver/candidate-receiver-results.json",
+      "sha256": "e8dce6f82c03c841761f164f99ed9dc4b154f52d07b96b32d2788322f448db33",
+      "bytes": 19226,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/initial-receiver/captured-clib-receiver.lua",
+      "relative_path": "isolated/initial-receiver/captured-clib-receiver.lua",
+      "sha256": "23a8bdfba565830080218509c37e6c12f5f5cf828cb43697ec993d63b809c800",
+      "bytes": 4027,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/initial-receiver/validate-receiver.py",
+      "relative_path": "isolated/initial-receiver/validate-receiver.py",
+      "sha256": "9ecc7db3c5866700e20d25fbeeea44e366ab9af5eb9d0dc52af049ce46c18497",
+      "bytes": 1895,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/method-guard-review.md",
+      "relative_path": "isolated/method-guard-review.md",
+      "sha256": "9eb7fd93d2f573035e566fe720dadb40ce679dbf7344e0d34d04427c2f2e6494",
+      "bytes": 3769,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/method-only-receiver-results.json",
+      "relative_path": "isolated/method-only-receiver-results.json",
+      "sha256": "0f5ab61b5105143ea793a6df4d96b4a5da668bae84df5eb87265bcfc94c2feef",
+      "bytes": 35521,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-asan-11.so",
+      "relative_path": "isolated/namespace-asan-11.so",
+      "sha256": "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "bytes": 15088,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-asan-29.so",
+      "relative_path": "isolated/namespace-asan-29.so",
+      "sha256": "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827",
+      "bytes": 15088,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-11.so",
+      "relative_path": "isolated/namespace-baseline-11.so",
+      "sha256": "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "bytes": 15088,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-29.so",
+      "relative_path": "isolated/namespace-baseline-29.so",
+      "sha256": "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827",
+      "bytes": 15088,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-11.so",
+      "relative_path": "isolated/namespace-candidate-11.so",
+      "sha256": "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "bytes": 15088,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-29.so",
+      "relative_path": "isolated/namespace-candidate-29.so",
+      "sha256": "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827",
+      "bytes": 15088,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-method-only-11.so",
+      "relative_path": "isolated/namespace-method-only-11.so",
+      "sha256": "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "bytes": 15088,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-method-only-29.so",
+      "relative_path": "isolated/namespace-method-only-29.so",
+      "sha256": "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827",
+      "bytes": 15088,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-strict-11.so",
+      "relative_path": "isolated/namespace-strict-11.so",
+      "sha256": "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "bytes": 15088,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-strict-29.so",
+      "relative_path": "isolated/namespace-strict-29.so",
+      "sha256": "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827",
+      "bytes": 15088,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-symbol-lib.c",
+      "relative_path": "isolated/namespace-symbol-lib.c",
+      "sha256": "8ce51fb90a6c101f208886b5b0dd27a4f9bb19c33bcbde696afb3b101e1d38aa",
+      "bytes": 155,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/receiver-handoff.md",
+      "relative_path": "isolated/receiver-handoff.md",
+      "sha256": "490f21cbcefdd11787c1b204b52879ad585935a150f9315145c540d5b9ce0750",
+      "bytes": 6628,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/receiver-setup.json",
+      "relative_path": "isolated/receiver-setup.json",
+      "sha256": "d1c373684a8ba43b6add51b13cae11d158e13c4ba85addb412d5bc5db4b82b26",
+      "bytes": 431,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/receiver-side-diagnostic-results.json",
+      "relative_path": "isolated/receiver-side-diagnostic-results.json",
+      "sha256": "a6586699c6c69b9c556739b09fa8ddf8781b38012fcb15d37575f9589898dd66",
+      "bytes": 3193,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/receiver-side-diagnostic.lua",
+      "relative_path": "isolated/receiver-side-diagnostic.lua",
+      "sha256": "52bc44e3b9cbd51defe9e76d4e0a536139e0271ff789ba3561be430320b65a82",
+      "bytes": 4680,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/receiver-specialization.patch",
+      "relative_path": "isolated/receiver-specialization.patch",
+      "sha256": "77531ea3eb0977a53ff7413cbad718543bc8952f16b216269523e6ba57664837",
+      "bytes": 601,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/run-additional.py",
+      "relative_path": "isolated/run-additional.py",
+      "sha256": "dd8bd3ea9744e5abd5837846c12a0b48204e3759dd150c9930b5a2526775cdd2",
+      "bytes": 1388,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/runtime-input-identity.json",
+      "relative_path": "isolated/runtime-input-identity.json",
+      "sha256": "f37e90cc0542b81cad0fa93849cf3e47833073c845ea59606a2687ce77d9c087",
+      "bytes": 93978,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/side-first-fixture/candidate-receiver-results.json",
+      "relative_path": "isolated/side-first-fixture/candidate-receiver-results.json",
+      "sha256": "8e03723e66ef0d6669e948a2bb4f45762db5166326ed8a7f9ae130737e64c3cf",
+      "bytes": 32462,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/side-first-fixture/captured-clib-receiver.lua",
+      "relative_path": "isolated/side-first-fixture/captured-clib-receiver.lua",
+      "sha256": "84004a4b4716e240109fe667c9370a5f0f2b3c2da177ec28612d9f5764368a00",
+      "bytes": 4418,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/side-first-fixture/validate-receiver.py",
+      "relative_path": "isolated/side-first-fixture/validate-receiver.py",
+      "sha256": "69a4f923131c23028266141b8ae1cd54388826fd37510e794e9a2c6c7e17ee14",
+      "bytes": 1975,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/strict-receiver-binaries.json",
+      "relative_path": "isolated/strict-receiver-binaries.json",
+      "sha256": "ae7f6e15bd32259135cac6f90aa7efd939c2401f2afdcd5b74be0ae405f194c8",
+      "bytes": 254,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/strict-receiver-build.json",
+      "relative_path": "isolated/strict-receiver-build.json",
+      "sha256": "339b52ed22c0296d45b50cd9671d646c797f68b90612000227af8050a56bfcaa",
+      "bytes": 830,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/strict-receiver-results.json",
+      "relative_path": "isolated/strict-receiver-results.json",
+      "sha256": "b125f0ec71e2059fac10b7639f567c76ce950002c6131f7fc16f1e9af060aa22",
+      "bytes": 31253,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/validate-receiver.py",
+      "relative_path": "isolated/validate-receiver.py",
+      "sha256": "3d118144999403908c4d42f8576ea89d0fa77383ae736fec61af7982781a1747",
+      "bytes": 2018,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/artifact-manifest.json",
+      "relative_path": "isolated/artifact-manifest.json",
+      "sha256": "d978f6e752ce58a2098568089270caca235b5d26725244036d95cb71dde89daf",
+      "bytes": 13855,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/archive.py",
+      "relative_path": "root/archive.py",
+      "sha256": "c63468380d469a2d6d9e08fa951f6c81f27428d848fa8c7c98a0a931c0b75056",
+      "bytes": 2919,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/asan-binaries.json",
+      "relative_path": "root/asan-binaries.json",
+      "sha256": "877a7b4aaca5778ee62ab67bc8bfef1e8004dcfb893ea00509e8ccbe1aa96f5a",
+      "bytes": 753,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/asan-extern.so",
+      "relative_path": "root/asan-extern.so",
+      "sha256": "8338cd9c57f0c8c9250c2ad61c031862c83a6d326ff16292a9bb3fa99cb9d642",
+      "bytes": 15496,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/asan-remote.so",
+      "relative_path": "root/asan-remote.so",
+      "sha256": "5a3133dee8397ad6869009cdba03914000db508a9da0773a555abdfb065bbc7d",
+      "bytes": 16608,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/asan-results.json",
+      "relative_path": "root/asan-results.json",
+      "sha256": "76bca911cea1884dc7d2dbee170c92464e85e90b5b0cfb8a9117686d203bfeee",
+      "bytes": 29292,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/asan-t-ffi-callxs-callback-stack",
+      "relative_path": "root/asan-t-ffi-callxs-callback-stack",
+      "sha256": "0a3780b4c408450257b646e15f7d331152daca597662cde8e9f9f5bb5d6c982c",
+      "bytes": 19955872,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/asan-t-ffi-clib-cache-retire",
+      "relative_path": "root/asan-t-ffi-clib-cache-retire",
+      "sha256": "bd29fc2f5d55e83d2f427e8e42907b829d53c438b6304ecfdcf8c38168ebf5c5",
+      "bytes": 18914936,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/asan-t-ffi-clib-extern-snapshot",
+      "relative_path": "root/asan-t-ffi-clib-extern-snapshot",
+      "sha256": "51950d1eff6253d331814db429ac499c9b890844da6f03abc5e76772135f5dbf",
+      "bytes": 19961048,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/asan-t-ffi-recorder-libmeta-busy",
+      "relative_path": "root/asan-t-ffi-recorder-libmeta-busy",
+      "sha256": "393c4be55ab10d402b12265aeaa83d0d7817db2ba444c26b90e0305aba22acd3",
+      "bytes": 19970528,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/candidate-binaries.json",
+      "relative_path": "root/candidate-binaries.json",
+      "sha256": "047393ce2ed2c882dfc7ad830045983973242503f40f4e89e6c079be38af4691",
+      "bytes": 773,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/candidate-extern.so",
+      "relative_path": "root/candidate-extern.so",
+      "sha256": "2993fb39e017fc1654a1934f61f22206d67663d61e7eee92a94a5012f44a63cf",
+      "bytes": 15288,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/candidate-remote.so",
+      "relative_path": "root/candidate-remote.so",
+      "sha256": "1d1346ed5a22f133d8c0fcd44bdf4565d5e526d11fe93c16c3b97258780db9c1",
+      "bytes": 16624,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/candidate-results.json",
+      "relative_path": "root/candidate-results.json",
+      "sha256": "993fe0094e9cd802e644fde396c9430540a55e391d501eeaaaea358caea9140d",
+      "bytes": 27383,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/candidate-t-ffi-callxs-callback-stack",
+      "relative_path": "root/candidate-t-ffi-callxs-callback-stack",
+      "sha256": "064a8dba8ee87e7281d80530e9836fb59285c19d5d5cbefbb555504cbdc23738",
+      "bytes": 1729712,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/candidate-t-ffi-clib-cache-retire",
+      "relative_path": "root/candidate-t-ffi-clib-cache-retire",
+      "sha256": "ba65b4363d821faa57cf7df4762deecf7f18850516369a301abf8c574940c16e",
+      "bytes": 1582992,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/candidate-t-ffi-clib-extern-snapshot",
+      "relative_path": "root/candidate-t-ffi-clib-extern-snapshot",
+      "sha256": "177133f09901672f12cacf10715e3f5b6cc7feb52b4b1d169ad507d153bba26a",
+      "bytes": 1732928,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/candidate-t-ffi-recorder-libmeta-busy",
+      "relative_path": "root/candidate-t-ffi-recorder-libmeta-busy",
+      "sha256": "bd3d7eeb6b87d445b83c092e9c33b953bf611d758d0e6f14531bb0db3b9bec76",
+      "bytes": 1735720,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/canonical.json",
+      "relative_path": "root/canonical.json",
+      "sha256": "5f1c71119214dd24f132b32d8831a0b939785474bb33caa54b5632642d16c458",
+      "bytes": 1242,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/canonical.py",
+      "relative_path": "root/canonical.py",
+      "sha256": "998a3798aed1a3ca78cfa405196308267aa26a52bd3243a312dfffd91b7aceda",
+      "bytes": 1279,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/canonical.stderr",
+      "relative_path": "root/canonical.stderr",
+      "sha256": "5295b0e5138422fad3d07674a52b560ca9783e98604552555499d095efcab3a5",
+      "bytes": 8979,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/canonical.stdout",
+      "relative_path": "root/canonical.stdout",
+      "sha256": "7a0c5a9a01aa39a7a1826e1cd5e64df319ad7559ae56cf7bf81614d3c4a73012",
+      "bytes": 6863,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/final-validation.json",
+      "relative_path": "root/final-validation.json",
+      "sha256": "786c8595a4cff28882b50bddc0fb136500d4910d128c1620c9f2f70a5a99c165",
+      "bytes": 1934,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/receiver-specialization.patch",
+      "relative_path": "root/receiver-specialization.patch",
+      "sha256": "77531ea3eb0977a53ff7413cbad718543bc8952f16b216269523e6ba57664837",
+      "bytes": 601,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/runtime-input-identity.json",
+      "relative_path": "root/runtime-input-identity.json",
+      "sha256": "6a2220893067056331160ccf43e8ad6cbfc47c88e66dbcc9400eb1bd88ac1af5",
+      "bytes": 20719,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/setup.json",
+      "relative_path": "root/setup.json",
+      "sha256": "030727df54ec22cc86fae13443fa40d8e744d8e684e727ec03db90cb0eb74a21",
+      "bytes": 429,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-binaries.json",
+      "relative_path": "root/strict-binaries.json",
+      "sha256": "6e10d20d1040b57e81d5af5b6b51e8f64ac3542a91d27170332d4a82c4b65afc",
+      "bytes": 761,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-extern.so",
+      "relative_path": "root/strict-extern.so",
+      "sha256": "2993fb39e017fc1654a1934f61f22206d67663d61e7eee92a94a5012f44a63cf",
+      "bytes": 15288,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-remote.so",
+      "relative_path": "root/strict-remote.so",
+      "sha256": "1d1346ed5a22f133d8c0fcd44bdf4565d5e526d11fe93c16c3b97258780db9c1",
+      "bytes": 16624,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-results.json",
+      "relative_path": "root/strict-results.json",
+      "sha256": "89c7d1bd97bd3271ecdc8cbc3c2f7a0c9e3197737fbbb30d613c2ad398e5eca5",
+      "bytes": 27905,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-t-ffi-callxs-callback-stack",
+      "relative_path": "root/strict-t-ffi-callxs-callback-stack",
+      "sha256": "4a636bb6c26b46525e022694698d546318d3435918c7b00c96f738fe88a9b5b0",
+      "bytes": 14058592,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-t-ffi-clib-cache-retire",
+      "relative_path": "root/strict-t-ffi-clib-cache-retire",
+      "sha256": "0e57499dde09f4570df0959627ad2a1e57ff005749d0bf1e80ad5a2e7d9a95b9",
+      "bytes": 13145336,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-t-ffi-clib-extern-snapshot",
+      "relative_path": "root/strict-t-ffi-clib-extern-snapshot",
+      "sha256": "476f28dced0a9370ede32ff3207f34213df6fc5438eae54cf862487096390ca3",
+      "bytes": 14065384,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/strict-t-ffi-recorder-libmeta-busy",
+      "relative_path": "root/strict-t-ffi-recorder-libmeta-busy",
+      "sha256": "35168b7f9acf46708b3a1eba903f4ce47aec228db4e55f266cb579a1ba9f43fb",
+      "bytes": 14068432,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/t-ffi-clib-receiver-lib.c",
+      "relative_path": "root/t-ffi-clib-receiver-lib.c",
+      "sha256": "8ce51fb90a6c101f208886b5b0dd27a4f9bb19c33bcbde696afb3b101e1d38aa",
+      "bytes": 155,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/t-ffi-clib-receiver.lua",
+      "relative_path": "root/t-ffi-clib-receiver.lua",
+      "sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+      "bytes": 4597,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/validate.py",
+      "relative_path": "root/validate.py",
+      "sha256": "ca4f887013b6ecbb7dd2314814c135c37b5acf9bb0061cd8d3b53394bafdd9ab",
+      "bytes": 3542,
+      "storage": "text"
+    }
+  ],
+  "text_count": 65,
+  "hash_only_count": 18
+}

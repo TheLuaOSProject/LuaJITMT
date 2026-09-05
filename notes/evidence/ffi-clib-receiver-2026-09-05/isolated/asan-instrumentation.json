@@ -1,0 +1,25 @@
+[
+  {
+    "label": "host",
+    "command": [
+      "nm",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/asan/src/host/minilua",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/asan/src/host/buildvm"
+    ],
+    "exit": 0,
+    "stdout_sha256": "45038dbac6a9f70758bc0dd695a2415ac391e53a4bac5e0cb6644a8db46a0385",
+    "stderr": "",
+    "has_asan_symbols": false
+  },
+  {
+    "label": "runtime",
+    "command": [
+      "nm",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/asan/src/lj_crecord.o"
+    ],
+    "exit": 0,
+    "stdout_sha256": "9d67e448db852d4de6d9520f25d971f1a96393dec63bfcf91838d225c0d34765",
+    "stderr": "",
+    "has_asan_symbols": true
+  }
+]

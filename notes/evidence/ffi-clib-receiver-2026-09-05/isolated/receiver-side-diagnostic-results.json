@@ -1,0 +1,28 @@
+[
+  {
+    "command": [
+      "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/receiver-side-diagnostic.lua",
+      "index-side-type",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-29.so"
+    ],
+    "exit": 1,
+    "stdout": "tracestart\t1\ttrue\t35\tnil\nEXIT\t1\t10\ntracestart\t2\ttrue\t27\t1\nEXIT\t1\t3\ntracestart\t3\ttrue\t27\t1\nEXIT\t3\t3\ntracestart\t4\ttrue\t36\t3\ntracestart\t4\ttrue\t0\tnil\nEXIT\t3\t3\ntracestart\t4\ttrue\t36\t3\nEXIT\t3\t3\ntracestart\t4\ttrue\t36\t3\nEXIT\t3\t3\ntracestart\t4\ttrue\t36\t3\nEXIT\t3\t3\ntracestart\t4\ttrue\t36\t3\nEXIT\t2\t2\ntracestart\t5\ttrue\t30\t2\ntraceinfo\t1\troot\ttrue\tparent\tnil\tlink\t1\tloop\texit\tnil\ntraceinfo\t2\troot\tnil\tparent\t1\tlink\t1\troot\texit\t1\ntraceinfo\t3\troot\tnil\tparent\t1\tlink\t1\troot\texit\tnil\ntraceinfo\t4\troot\ttrue\tparent\t3\tlink\t0\tinterpreter\texit\tnil\nindex-side-type\twarmexits\t2\tside\t3\tok\tfalse\tresult\t...dependent-20260905-75jums60/receiver-side-diagnostic.lua:30: bad argument #1 to 'index' (userdata expected, got userdata)\teffects\t40\ta\t-101\tb\t29\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit: ...dependent-20260905-75jums60/receiver-side-diagnostic.lua:120: ...dependent-20260905-75jums60/receiver-side-diagnostic.lua:113: changed receiver must reach the installed side trace\nstack traceback:\n\t[C]: in function 'assert'\n\t...dependent-20260905-75jums60/receiver-side-diagnostic.lua:120: in main chunk\n\t[C]: at 0x55d95ce10100\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/receiver-side-diagnostic.lua",
+      "index-side-other",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-29.so"
+    ],
+    "exit": 0,
+    "stdout": "tracestart\t1\ttrue\t35\tnil\nEXIT\t1\t10\ntracestart\t2\ttrue\t27\t1\nEXIT\t1\t3\ntracestart\t3\ttrue\t27\t1\nEXIT\t3\t3\ntracestart\t4\ttrue\t36\t3\ntracestart\t4\ttrue\t0\tnil\nEXIT\t3\t3\ntracestart\t4\ttrue\t36\t3\nEXIT\t3\t3\ntracestart\t4\ttrue\t36\t3\nEXIT\t3\t3\ntracestart\t4\ttrue\t36\t3\nEXIT\t3\t3\ntracestart\t4\ttrue\t36\t3\nEXIT\t2\t2\ntracestart\t5\ttrue\t30\t2\nEXIT\t3\t2\ntracestart\t6\ttrue\t30\t3\nEXIT\t6\t1\ntracestart\t7\ttrue\t36\t6\ntraceinfo\t1\troot\ttrue\tparent\tnil\tlink\t1\tloop\texit\tnil\ntraceinfo\t2\troot\tnil\tparent\t1\tlink\t1\troot\texit\t1\ntraceinfo\t3\troot\tnil\tparent\t1\tlink\t1\troot\texit\t1\ntraceinfo\t4\troot\ttrue\tparent\t3\tlink\t0\tinterpreter\texit\tnil\ntraceinfo\t5\troot\tnil\tparent\t2\tlink\t1\troot\texit\tnil\ntraceinfo\t6\troot\tnil\tparent\t3\tlink\t1\troot\texit\t1\nindex-side-other\twarmexits\t2\tside\t3\tok\ttrue\tresult\t1350\teffects\t80\ta\t-101\tb\t29\tnativeexits\t0\tsideexits\t1\n",
+    "stderr": ""
+  }
+]

@@ -1,0 +1,10 @@
+{
+  "asan-t-ffi-recorder-libmeta-busy": "393c4be55ab10d402b12265aeaa83d0d7817db2ba444c26b90e0305aba22acd3",
+  "asan-t-ffi-clib-extern-snapshot": "51950d1eff6253d331814db429ac499c9b890844da6f03abc5e76772135f5dbf",
+  "asan-t-ffi-clib-cache-retire": "bd29fc2f5d55e83d2f427e8e42907b829d53c438b6304ecfdcf8c38168ebf5c5",
+  "asan-t-ffi-callxs-callback-stack": "0a3780b4c408450257b646e15f7d331152daca597662cde8e9f9f5bb5d6c982c",
+  "luajit": "b1c29c5f046e4f4518daece54ca123cd94db89a01b830678d638e301d408daac",
+  "libluajit.a": "62bf0f1d27bda4b971a37dc8c639c3b89f7dc950ab29b3cef67adf747e91ceb1",
+  "extern.so": "8338cd9c57f0c8c9250c2ad61c031862c83a6d326ff16292a9bb3fa99cb9d642",
+  "remote.so": "5a3133dee8397ad6869009cdba03914000db508a9da0773a555abdfb065bbc7d"
+}

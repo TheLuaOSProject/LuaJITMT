@@ -1,0 +1,586 @@
+[
+  {
+    "name": "library-11",
+    "command": [
+      "cc",
+      "-shared",
+      "-fPIC",
+      "-O2",
+      "-DNAMESPACE_VALUE=11",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-symbol-lib.c",
+      "-o",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-11.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/tests/lib/?.lua;;"
+    },
+    "seconds": 0.01683187000162434,
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "library_source_sha256": "8ce51fb90a6c101f208886b5b0dd27a4f9bb19c33bcbde696afb3b101e1d38aa"
+  },
+  {
+    "name": "library-29",
+    "command": [
+      "cc",
+      "-shared",
+      "-fPIC",
+      "-O2",
+      "-DNAMESPACE_VALUE=29",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-symbol-lib.c",
+      "-o",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/tests/lib/?.lua;;"
+    },
+    "seconds": 0.01767039200058207,
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "library_source_sha256": "8ce51fb90a6c101f208886b5b0dd27a4f9bb19c33bcbde696afb3b101e1d38aa"
+  },
+  {
+    "name": "index-other-joff",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "index-other",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/tests/lib/?.lua;;"
+    },
+    "seconds": 0.004652539999369765,
+    "exit": 0,
+    "stdout": "index-other\twarmexits\t0\tside\tnil\tok\ttrue\tresult\t6420\teffects\t80\ta\t-101\tb\t29\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": "",
+    "fixture_sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "crecord_sha256": "395a3f97c119e013da3fef79ec885855147baac8241d7e113a041704c0212a9b"
+  },
+  {
+    "name": "index-type-joff",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "index-type",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/tests/lib/?.lua;;"
+    },
+    "seconds": 0.0050033789993904065,
+    "exit": 0,
+    "stdout": "index-type\twarmexits\t0\tside\tnil\tok\tfalse\tresult\t...independent-20260905-75jums60/captured-clib-receiver.lua:29: bad argument #1 to 'index' (userdata expected, got userdata)\teffects\t1\ta\t-101\tb\t29\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": "",
+    "fixture_sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "crecord_sha256": "395a3f97c119e013da3fef79ec885855147baac8241d7e113a041704c0212a9b"
+  },
+  {
+    "name": "newindex-other-joff",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "newindex-other",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/tests/lib/?.lua;;"
+    },
+    "seconds": 0.005673513001966057,
+    "exit": 0,
+    "stdout": "newindex-other\twarmexits\t0\tside\tnil\tok\ttrue\tresult\t3240\teffects\t80\ta\t-101\tb\t180\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": "",
+    "fixture_sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "crecord_sha256": "395a3f97c119e013da3fef79ec885855147baac8241d7e113a041704c0212a9b"
+  },
+  {
+    "name": "newindex-type-joff",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "newindex-type",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/tests/lib/?.lua;;"
+    },
+    "seconds": 0.004171707998466445,
+    "exit": 0,
+    "stdout": "newindex-type\twarmexits\t0\tside\tnil\tok\tfalse\tresult\t...independent-20260905-75jums60/captured-clib-receiver.lua:16: bad argument #1 to 'newindex' (userdata expected, got userdata)\teffects\t1\ta\t-101\tb\t29\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": "",
+    "fixture_sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "crecord_sha256": "395a3f97c119e013da3fef79ec885855147baac8241d7e113a041704c0212a9b"
+  },
+  {
+    "name": "index-life-joff",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "index-life",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/tests/lib/?.lua;;"
+    },
+    "seconds": 0.004527336001046933,
+    "exit": 0,
+    "stdout": "index-life\twarmexits\t0\tside\tnil\tretained\tfalse\n",
+    "stderr": "",
+    "fixture_sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "crecord_sha256": "395a3f97c119e013da3fef79ec885855147baac8241d7e113a041704c0212a9b"
+  },
+  {
+    "name": "newindex-life-joff",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "newindex-life",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/tests/lib/?.lua;;"
+    },
+    "seconds": 0.006853241997305304,
+    "exit": 0,
+    "stdout": "newindex-life\twarmexits\t0\tside\tnil\tretained\tfalse\n",
+    "stderr": "",
+    "fixture_sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "crecord_sha256": "395a3f97c119e013da3fef79ec885855147baac8241d7e113a041704c0212a9b"
+  },
+  {
+    "name": "index-side-other-joff",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "index-side-other",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/tests/lib/?.lua;;"
+    },
+    "seconds": 0.004004883001471171,
+    "exit": 0,
+    "stdout": "index-side-other\twarmexits\t0\tside\tnil\tok\ttrue\tresult\t1350\teffects\t80\ta\t-101\tb\t29\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": "",
+    "fixture_sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "crecord_sha256": "395a3f97c119e013da3fef79ec885855147baac8241d7e113a041704c0212a9b"
+  },
+  {
+    "name": "index-side-type-joff",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "index-side-type",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/tests/lib/?.lua;;"
+    },
+    "seconds": 0.005804921001981711,
+    "exit": 0,
+    "stdout": "index-side-type\twarmexits\t0\tside\tnil\tok\tfalse\tresult\t...independent-20260905-75jums60/captured-clib-receiver.lua:30: bad argument #1 to 'index' (userdata expected, got userdata)\teffects\t40\ta\t-101\tb\t29\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": "",
+    "fixture_sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "crecord_sha256": "395a3f97c119e013da3fef79ec885855147baac8241d7e113a041704c0212a9b"
+  },
+  {
+    "name": "newindex-side-other-joff",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "newindex-side-other",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/tests/lib/?.lua;;"
+    },
+    "seconds": 0.005790055001853034,
+    "exit": 0,
+    "stdout": "newindex-side-other\twarmexits\t0\tside\tnil\tok\ttrue\tresult\t3240\teffects\t80\ta\t39\tb\t180\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": "",
+    "fixture_sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "crecord_sha256": "395a3f97c119e013da3fef79ec885855147baac8241d7e113a041704c0212a9b"
+  },
+  {
+    "name": "newindex-side-type-joff",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "newindex-side-type",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/tests/lib/?.lua;;"
+    },
+    "seconds": 0.0036436720001802314,
+    "exit": 0,
+    "stdout": "newindex-side-type\twarmexits\t0\tside\tnil\tok\tfalse\tresult\t...independent-20260905-75jums60/captured-clib-receiver.lua:17: bad argument #1 to 'newindex' (userdata expected, got userdata)\teffects\t40\ta\t39\tb\t29\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": "",
+    "fixture_sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "crecord_sha256": "395a3f97c119e013da3fef79ec885855147baac8241d7e113a041704c0212a9b"
+  },
+  {
+    "name": "index-other-jon",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "index-other",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/tests/lib/?.lua;;"
+    },
+    "seconds": 0.00664200100072776,
+    "exit": 1,
+    "stdout": "index-other\twarmexits\t2\tside\t3\tok\ttrue\tresult\t-3980\teffects\t80\ta\t-101\tb\t29\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit: ...independent-20260905-75jums60/captured-clib-receiver.lua:124: ...independent-20260905-75jums60/captured-clib-receiver.lua:113: direct load used the wrong namespace\nstack traceback:\n\t[C]: in function 'assert'\n\t...independent-20260905-75jums60/captured-clib-receiver.lua:124: in main chunk\n\t[C]: at 0x559281eeb100\n",
+    "fixture_sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "crecord_sha256": "395a3f97c119e013da3fef79ec885855147baac8241d7e113a041704c0212a9b"
+  },
+  {
+    "name": "index-type-jon",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "index-type",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/tests/lib/?.lua;;"
+    },
+    "seconds": 0.006847176999144722,
+    "exit": 1,
+    "stdout": "index-type\twarmexits\t2\tside\t3\tok\ttrue\tresult\t-3980\teffects\t80\ta\t-101\tb\t29\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit: ...independent-20260905-75jums60/captured-clib-receiver.lua:124: ...independent-20260905-75jums60/captured-clib-receiver.lua:104: captured namespace method accepted a different userdata subtype\nstack traceback:\n\t[C]: in function 'assert'\n\t...independent-20260905-75jums60/captured-clib-receiver.lua:124: in main chunk\n\t[C]: at 0x564b2c549100\n",
+    "fixture_sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "crecord_sha256": "395a3f97c119e013da3fef79ec885855147baac8241d7e113a041704c0212a9b"
+  },
+  {
+    "name": "newindex-other-jon",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "newindex-other",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/tests/lib/?.lua;;"
+    },
+    "seconds": 0.006469612999353558,
+    "exit": 1,
+    "stdout": "newindex-other\twarmexits\t2\tside\t3\tok\ttrue\tresult\t3240\teffects\t80\ta\t180\tb\t29\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit: ...independent-20260905-75jums60/captured-clib-receiver.lua:124: ...independent-20260905-75jums60/captured-clib-receiver.lua:111: direct store used the wrong namespace\nstack traceback:\n\t[C]: in function 'assert'\n\t...independent-20260905-75jums60/captured-clib-receiver.lua:124: in main chunk\n\t[C]: at 0x55b19c1cc100\n",
+    "fixture_sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "crecord_sha256": "395a3f97c119e013da3fef79ec885855147baac8241d7e113a041704c0212a9b"
+  },
+  {
+    "name": "newindex-type-jon",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "newindex-type",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/tests/lib/?.lua;;"
+    },
+    "seconds": 0.006459694999648491,
+    "exit": 1,
+    "stdout": "newindex-type\twarmexits\t2\tside\t3\tok\ttrue\tresult\t3240\teffects\t80\ta\t180\tb\t29\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit: ...independent-20260905-75jums60/captured-clib-receiver.lua:124: ...independent-20260905-75jums60/captured-clib-receiver.lua:104: captured namespace method accepted a different userdata subtype\nstack traceback:\n\t[C]: in function 'assert'\n\t...independent-20260905-75jums60/captured-clib-receiver.lua:124: in main chunk\n\t[C]: at 0x557e5ad2c100\n",
+    "fixture_sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "crecord_sha256": "395a3f97c119e013da3fef79ec885855147baac8241d7e113a041704c0212a9b"
+  },
+  {
+    "name": "index-life-jon",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "index-life",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/tests/lib/?.lua;;"
+    },
+    "seconds": 0.005935055996815208,
+    "exit": 1,
+    "stdout": "index-life\twarmexits\t2\tside\t3\tretained\tfalse\n",
+    "stderr": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit: ...independent-20260905-75jums60/captured-clib-receiver.lua:124: ...independent-20260905-75jums60/captured-clib-receiver.lua:87: trace must retain its specialized namespace\nstack traceback:\n\t[C]: in function 'assert'\n\t...independent-20260905-75jums60/captured-clib-receiver.lua:124: in main chunk\n\t[C]: at 0x558d5dc19100\n",
+    "fixture_sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "crecord_sha256": "395a3f97c119e013da3fef79ec885855147baac8241d7e113a041704c0212a9b"
+  },
+  {
+    "name": "newindex-life-jon",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "newindex-life",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/tests/lib/?.lua;;"
+    },
+    "seconds": 0.006789613002183614,
+    "exit": 1,
+    "stdout": "newindex-life\twarmexits\t2\tside\t3\tretained\tfalse\n",
+    "stderr": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit: ...independent-20260905-75jums60/captured-clib-receiver.lua:124: ...independent-20260905-75jums60/captured-clib-receiver.lua:87: trace must retain its specialized namespace\nstack traceback:\n\t[C]: in function 'assert'\n\t...independent-20260905-75jums60/captured-clib-receiver.lua:124: in main chunk\n\t[C]: at 0x55f95c112100\n",
+    "fixture_sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "crecord_sha256": "395a3f97c119e013da3fef79ec885855147baac8241d7e113a041704c0212a9b"
+  },
+  {
+    "name": "index-side-other-jon",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "index-side-other",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/tests/lib/?.lua;;"
+    },
+    "seconds": 0.006582780999451643,
+    "exit": 1,
+    "stdout": "index-side-other\twarmexits\t2\tside\t3\tok\ttrue\tresult\t-3980\teffects\t80\ta\t-101\tb\t29\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit: ...independent-20260905-75jums60/captured-clib-receiver.lua:124: ...independent-20260905-75jums60/captured-clib-receiver.lua:113: direct load used the wrong namespace\nstack traceback:\n\t[C]: in function 'assert'\n\t...independent-20260905-75jums60/captured-clib-receiver.lua:124: in main chunk\n\t[C]: at 0x5581ecaec100\n",
+    "fixture_sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "crecord_sha256": "395a3f97c119e013da3fef79ec885855147baac8241d7e113a041704c0212a9b"
+  },
+  {
+    "name": "index-side-type-jon",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "index-side-type",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/tests/lib/?.lua;;"
+    },
+    "seconds": 0.006429107001167722,
+    "exit": 1,
+    "stdout": "index-side-type\twarmexits\t2\tside\t3\tok\ttrue\tresult\t-3980\teffects\t80\ta\t-101\tb\t29\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit: ...independent-20260905-75jums60/captured-clib-receiver.lua:124: ...independent-20260905-75jums60/captured-clib-receiver.lua:104: captured namespace method accepted a different userdata subtype\nstack traceback:\n\t[C]: in function 'assert'\n\t...independent-20260905-75jums60/captured-clib-receiver.lua:124: in main chunk\n\t[C]: at 0x559c910b4100\n",
+    "fixture_sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "crecord_sha256": "395a3f97c119e013da3fef79ec885855147baac8241d7e113a041704c0212a9b"
+  },
+  {
+    "name": "newindex-side-other-jon",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "newindex-side-other",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/tests/lib/?.lua;;"
+    },
+    "seconds": 0.006609978998312727,
+    "exit": 1,
+    "stdout": "newindex-side-other\twarmexits\t2\tside\t3\tok\ttrue\tresult\t3240\teffects\t80\ta\t180\tb\t29\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit: ...independent-20260905-75jums60/captured-clib-receiver.lua:124: ...independent-20260905-75jums60/captured-clib-receiver.lua:111: direct store used the wrong namespace\nstack traceback:\n\t[C]: in function 'assert'\n\t...independent-20260905-75jums60/captured-clib-receiver.lua:124: in main chunk\n\t[C]: at 0x564bf199e100\n",
+    "fixture_sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "crecord_sha256": "395a3f97c119e013da3fef79ec885855147baac8241d7e113a041704c0212a9b"
+  },
+  {
+    "name": "newindex-side-type-jon",
+    "command": [
+      "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "newindex-side-type",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/?.lua;/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/tests/lib/?.lua;;"
+    },
+    "seconds": 0.0068054369985475205,
+    "exit": 1,
+    "stdout": "newindex-side-type\twarmexits\t2\tside\t3\tok\ttrue\tresult\t3240\teffects\t80\ta\t180\tb\t29\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": "/tmp/lj-special-udata-method-review-20260905-djl20ksd/baseline/src/luajit: ...independent-20260905-75jums60/captured-clib-receiver.lua:124: ...independent-20260905-75jums60/captured-clib-receiver.lua:104: captured namespace method accepted a different userdata subtype\nstack traceback:\n\t[C]: in function 'assert'\n\t...independent-20260905-75jums60/captured-clib-receiver.lua:124: in main chunk\n\t[C]: at 0x5557fb0cd100\n",
+    "fixture_sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+    "exe_sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "crecord_sha256": "395a3f97c119e013da3fef79ec885855147baac8241d7e113a041704c0212a9b"
+  }
+]

@@ -1,0 +1,10 @@
+{
+  "candidate-t-ffi-recorder-libmeta-busy": "bd3d7eeb6b87d445b83c092e9c33b953bf611d758d0e6f14531bb0db3b9bec76",
+  "candidate-t-ffi-clib-extern-snapshot": "177133f09901672f12cacf10715e3f5b6cc7feb52b4b1d169ad507d153bba26a",
+  "candidate-t-ffi-clib-cache-retire": "ba65b4363d821faa57cf7df4762deecf7f18850516369a301abf8c574940c16e",
+  "candidate-t-ffi-callxs-callback-stack": "064a8dba8ee87e7281d80530e9836fb59285c19d5d5cbefbb555504cbdc23738",
+  "luajit": "a6155571220fb8f7af1e74c41631597d94ba4f645bbb8ed9ba9c1deb2aa903aa",
+  "libluajit.a": "18537ac359cbfc6015b93b38f30ade701a9fb29544802448f07f78214a5d805e",
+  "extern.so": "2993fb39e017fc1654a1934f61f22206d67663d61e7eee92a94a5012f44a63cf",
+  "remote.so": "1d1346ed5a22f133d8c0fcd44bdf4565d5e526d11fe93c16c3b97258780db9c1"
+}

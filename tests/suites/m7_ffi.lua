@@ -94,6 +94,7 @@ local m7_cases = {
   "m7_ffi_cdata_shared_hammer",
   "m7_ffi_carith_l",
   "m7_ffi_clib_cache",
+  "m7_ffi_clib_receiver",
   "m7_ffi_clib_ldscript",
   "m7_ffi_nested_state",
   "m7_ffi_callback_install",
@@ -483,6 +484,40 @@ print("bulk fill ok")
         })
       end)
       print("M7 FFI clib cache behavior passed")
+    end
+  })
+
+  add({
+    name = "m7_ffi_clib_receiver",
+    description = "captured namespace methods retain and guard their receiver",
+    run = function(t)
+      if jit.os ~= "Linux" or jit.arch ~= "x64" then
+        print("M7 captured namespace receiver fixtures require Linux/x64")
+        return
+      end
+      build.build_default(t)
+      local libraries = {}
+      for _, value in ipairs({ 11, 29 }) do
+        libraries[#libraries + 1] = build_shared_library(t,
+          t:tmp("lj_t-ffi-clib-receiver-" .. value .. ".so"),
+          "t-ffi-clib-receiver-lib.c", {
+            cflags = "-O2 -Wall -Wextra -Werror -DNAMESPACE_VALUE=" .. value
+          })
+      end
+      for _, mode in ipairs({
+        "index-other", "index-type", "newindex-other", "newindex-type",
+        "index-life", "newindex-life", "index-side-other", "index-side-type",
+        "newindex-side-other", "newindex-side-type"
+      }) do
+        local args = { mode, libraries[1], libraries[2] }
+        run_luajit_script(t, "t-ffi-clib-receiver.lua", args, {
+          joff = true, timeout = "20s"
+        })
+        run_luajit_script(t, "t-ffi-clib-receiver.lua", args, {
+          jon = true, timeout = "20s"
+        })
+      end
+      print("M7 captured namespace receiver guards passed")
     end
   })
 

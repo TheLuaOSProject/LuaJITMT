@@ -3043,6 +3043,11 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
     TValue *envtv, *tv;
     uint32_t envidx, tvidx;
     int cache_status, ok;
+    /* Captured namespace methods can be called directly, bypassing the
+    ** metamethod lookup's receiver guard. Specialize and retain this namespace
+    ** before exporting its cached constants or extern addresses. */
+    emitir(IRTG(IR_EQ, IRT_UDATA), J->base[0],
+           lj_ir_kgc(J, obj2gco(udataV(&rd->argv[0])), IRT_UDATA));
     rd->nres = rd->data;
     setnilV(&nilv);
     envtv = lj_tg_root_anchor_push(J->L, tg, &nilv, &envidx);

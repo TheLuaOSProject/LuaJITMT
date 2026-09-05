@@ -1,0 +1,370 @@
+[
+  {
+    "name": "library-11",
+    "command": [
+      "cc",
+      "-shared",
+      "-fPIC",
+      "-O2",
+      "-DNAMESPACE_VALUE=11",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-symbol-lib.c",
+      "-o",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-11.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/?.lua;/tmp/lj-special-udata-independent-20260905-75jums60/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.01624935300060315,
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "library_source_sha256": "8ce51fb90a6c101f208886b5b0dd27a4f9bb19c33bcbde696afb3b101e1d38aa"
+  },
+  {
+    "name": "library-29",
+    "command": [
+      "cc",
+      "-shared",
+      "-fPIC",
+      "-O2",
+      "-DNAMESPACE_VALUE=29",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-symbol-lib.c",
+      "-o",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/?.lua;/tmp/lj-special-udata-independent-20260905-75jums60/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.01695299399943906,
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "library_source_sha256": "8ce51fb90a6c101f208886b5b0dd27a4f9bb19c33bcbde696afb3b101e1d38aa"
+  },
+  {
+    "name": "index-other-joff",
+    "command": [
+      "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "index-other",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/?.lua;/tmp/lj-special-udata-independent-20260905-75jums60/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.005560528999922099,
+    "exit": 0,
+    "stdout": "index-other\twarmexits\t0\tside\tnil\tok\ttrue\tresult\t6420\teffects\t80\ta\t-101\tb\t29\tnativeexits\t0\n",
+    "stderr": "",
+    "fixture_sha256": "23a8bdfba565830080218509c37e6c12f5f5cf828cb43697ec993d63b809c800",
+    "exe_sha256": "a6155571220fb8f7af1e74c41631597d94ba4f645bbb8ed9ba9c1deb2aa903aa",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "07116bc933781976c91453a9ca89a46aef4a81d80bf71ab2f6e5269383fcce87",
+    "crecord_sha256": "d9117ff3214f258cc84648725effcd498f3d1e93a774a94efd65e81ed11f2bff"
+  },
+  {
+    "name": "index-type-joff",
+    "command": [
+      "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "index-type",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/?.lua;/tmp/lj-special-udata-independent-20260905-75jums60/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.00352755199855892,
+    "exit": 0,
+    "stdout": "index-type\twarmexits\t0\tside\tnil\tok\tfalse\tresult\t...independent-20260905-75jums60/captured-clib-receiver.lua:29: bad argument #1 to 'index' (userdata expected, got userdata)\teffects\t1\ta\t-101\tb\t29\tnativeexits\t0\n",
+    "stderr": "",
+    "fixture_sha256": "23a8bdfba565830080218509c37e6c12f5f5cf828cb43697ec993d63b809c800",
+    "exe_sha256": "a6155571220fb8f7af1e74c41631597d94ba4f645bbb8ed9ba9c1deb2aa903aa",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "07116bc933781976c91453a9ca89a46aef4a81d80bf71ab2f6e5269383fcce87",
+    "crecord_sha256": "d9117ff3214f258cc84648725effcd498f3d1e93a774a94efd65e81ed11f2bff"
+  },
+  {
+    "name": "newindex-other-joff",
+    "command": [
+      "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "newindex-other",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/?.lua;/tmp/lj-special-udata-independent-20260905-75jums60/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.005547366999962833,
+    "exit": 0,
+    "stdout": "newindex-other\twarmexits\t0\tside\tnil\tok\ttrue\tresult\t3240\teffects\t80\ta\t-101\tb\t180\tnativeexits\t0\n",
+    "stderr": "",
+    "fixture_sha256": "23a8bdfba565830080218509c37e6c12f5f5cf828cb43697ec993d63b809c800",
+    "exe_sha256": "a6155571220fb8f7af1e74c41631597d94ba4f645bbb8ed9ba9c1deb2aa903aa",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "07116bc933781976c91453a9ca89a46aef4a81d80bf71ab2f6e5269383fcce87",
+    "crecord_sha256": "d9117ff3214f258cc84648725effcd498f3d1e93a774a94efd65e81ed11f2bff"
+  },
+  {
+    "name": "newindex-type-joff",
+    "command": [
+      "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "newindex-type",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/?.lua;/tmp/lj-special-udata-independent-20260905-75jums60/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.004318040999351069,
+    "exit": 0,
+    "stdout": "newindex-type\twarmexits\t0\tside\tnil\tok\tfalse\tresult\t...independent-20260905-75jums60/captured-clib-receiver.lua:16: bad argument #1 to 'newindex' (userdata expected, got userdata)\teffects\t1\ta\t-101\tb\t29\tnativeexits\t0\n",
+    "stderr": "",
+    "fixture_sha256": "23a8bdfba565830080218509c37e6c12f5f5cf828cb43697ec993d63b809c800",
+    "exe_sha256": "a6155571220fb8f7af1e74c41631597d94ba4f645bbb8ed9ba9c1deb2aa903aa",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "07116bc933781976c91453a9ca89a46aef4a81d80bf71ab2f6e5269383fcce87",
+    "crecord_sha256": "d9117ff3214f258cc84648725effcd498f3d1e93a774a94efd65e81ed11f2bff"
+  },
+  {
+    "name": "index-life-joff",
+    "command": [
+      "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "index-life",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/?.lua;/tmp/lj-special-udata-independent-20260905-75jums60/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.006349757000862155,
+    "exit": 0,
+    "stdout": "index-life\twarmexits\t0\tside\tnil\tretained\tfalse\n",
+    "stderr": "",
+    "fixture_sha256": "23a8bdfba565830080218509c37e6c12f5f5cf828cb43697ec993d63b809c800",
+    "exe_sha256": "a6155571220fb8f7af1e74c41631597d94ba4f645bbb8ed9ba9c1deb2aa903aa",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "07116bc933781976c91453a9ca89a46aef4a81d80bf71ab2f6e5269383fcce87",
+    "crecord_sha256": "d9117ff3214f258cc84648725effcd498f3d1e93a774a94efd65e81ed11f2bff"
+  },
+  {
+    "name": "newindex-life-joff",
+    "command": [
+      "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "newindex-life",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/?.lua;/tmp/lj-special-udata-independent-20260905-75jums60/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.005340376999811269,
+    "exit": 0,
+    "stdout": "newindex-life\twarmexits\t0\tside\tnil\tretained\tfalse\n",
+    "stderr": "",
+    "fixture_sha256": "23a8bdfba565830080218509c37e6c12f5f5cf828cb43697ec993d63b809c800",
+    "exe_sha256": "a6155571220fb8f7af1e74c41631597d94ba4f645bbb8ed9ba9c1deb2aa903aa",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "07116bc933781976c91453a9ca89a46aef4a81d80bf71ab2f6e5269383fcce87",
+    "crecord_sha256": "d9117ff3214f258cc84648725effcd498f3d1e93a774a94efd65e81ed11f2bff"
+  },
+  {
+    "name": "index-other-jon",
+    "command": [
+      "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "index-other",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/?.lua;/tmp/lj-special-udata-independent-20260905-75jums60/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.0034322319988859817,
+    "exit": 0,
+    "stdout": "index-other\twarmexits\t2\tside\t3\tok\ttrue\tresult\t6420\teffects\t80\ta\t-101\tb\t29\tnativeexits\t1\n",
+    "stderr": "",
+    "fixture_sha256": "23a8bdfba565830080218509c37e6c12f5f5cf828cb43697ec993d63b809c800",
+    "exe_sha256": "a6155571220fb8f7af1e74c41631597d94ba4f645bbb8ed9ba9c1deb2aa903aa",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "07116bc933781976c91453a9ca89a46aef4a81d80bf71ab2f6e5269383fcce87",
+    "crecord_sha256": "d9117ff3214f258cc84648725effcd498f3d1e93a774a94efd65e81ed11f2bff"
+  },
+  {
+    "name": "index-type-jon",
+    "command": [
+      "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "index-type",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/?.lua;/tmp/lj-special-udata-independent-20260905-75jums60/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.004854700000578305,
+    "exit": 0,
+    "stdout": "index-type\twarmexits\t2\tside\t3\tok\tfalse\tresult\t...independent-20260905-75jums60/captured-clib-receiver.lua:29: bad argument #1 to 'index' (userdata expected, got userdata)\teffects\t1\ta\t-101\tb\t29\tnativeexits\t1\n",
+    "stderr": "",
+    "fixture_sha256": "23a8bdfba565830080218509c37e6c12f5f5cf828cb43697ec993d63b809c800",
+    "exe_sha256": "a6155571220fb8f7af1e74c41631597d94ba4f645bbb8ed9ba9c1deb2aa903aa",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "07116bc933781976c91453a9ca89a46aef4a81d80bf71ab2f6e5269383fcce87",
+    "crecord_sha256": "d9117ff3214f258cc84648725effcd498f3d1e93a774a94efd65e81ed11f2bff"
+  },
+  {
+    "name": "newindex-other-jon",
+    "command": [
+      "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "newindex-other",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/?.lua;/tmp/lj-special-udata-independent-20260905-75jums60/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.005437921001430368,
+    "exit": 0,
+    "stdout": "newindex-other\twarmexits\t2\tside\t3\tok\ttrue\tresult\t3240\teffects\t80\ta\t-101\tb\t180\tnativeexits\t1\n",
+    "stderr": "",
+    "fixture_sha256": "23a8bdfba565830080218509c37e6c12f5f5cf828cb43697ec993d63b809c800",
+    "exe_sha256": "a6155571220fb8f7af1e74c41631597d94ba4f645bbb8ed9ba9c1deb2aa903aa",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "07116bc933781976c91453a9ca89a46aef4a81d80bf71ab2f6e5269383fcce87",
+    "crecord_sha256": "d9117ff3214f258cc84648725effcd498f3d1e93a774a94efd65e81ed11f2bff"
+  },
+  {
+    "name": "newindex-type-jon",
+    "command": [
+      "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "newindex-type",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/?.lua;/tmp/lj-special-udata-independent-20260905-75jums60/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.005446457002108218,
+    "exit": 0,
+    "stdout": "newindex-type\twarmexits\t2\tside\t3\tok\tfalse\tresult\t...independent-20260905-75jums60/captured-clib-receiver.lua:16: bad argument #1 to 'newindex' (userdata expected, got userdata)\teffects\t1\ta\t-101\tb\t29\tnativeexits\t1\n",
+    "stderr": "",
+    "fixture_sha256": "23a8bdfba565830080218509c37e6c12f5f5cf828cb43697ec993d63b809c800",
+    "exe_sha256": "a6155571220fb8f7af1e74c41631597d94ba4f645bbb8ed9ba9c1deb2aa903aa",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "07116bc933781976c91453a9ca89a46aef4a81d80bf71ab2f6e5269383fcce87",
+    "crecord_sha256": "d9117ff3214f258cc84648725effcd498f3d1e93a774a94efd65e81ed11f2bff"
+  },
+  {
+    "name": "index-life-jon",
+    "command": [
+      "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "index-life",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/?.lua;/tmp/lj-special-udata-independent-20260905-75jums60/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.005450709999422543,
+    "exit": 0,
+    "stdout": "index-life\twarmexits\t2\tside\t3\tretained\ttrue\n",
+    "stderr": "",
+    "fixture_sha256": "23a8bdfba565830080218509c37e6c12f5f5cf828cb43697ec993d63b809c800",
+    "exe_sha256": "a6155571220fb8f7af1e74c41631597d94ba4f645bbb8ed9ba9c1deb2aa903aa",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "07116bc933781976c91453a9ca89a46aef4a81d80bf71ab2f6e5269383fcce87",
+    "crecord_sha256": "d9117ff3214f258cc84648725effcd498f3d1e93a774a94efd65e81ed11f2bff"
+  },
+  {
+    "name": "newindex-life-jon",
+    "command": [
+      "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "newindex-life",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-11.so",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-29.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/?.lua;/tmp/lj-special-udata-independent-20260905-75jums60/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.0040412470007140655,
+    "exit": 0,
+    "stdout": "newindex-life\twarmexits\t2\tside\t3\tretained\ttrue\n",
+    "stderr": "",
+    "fixture_sha256": "23a8bdfba565830080218509c37e6c12f5f5cf828cb43697ec993d63b809c800",
+    "exe_sha256": "a6155571220fb8f7af1e74c41631597d94ba4f645bbb8ed9ba9c1deb2aa903aa",
+    "library_sha256": [
+      "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827"
+    ],
+    "record_sha256": "07116bc933781976c91453a9ca89a46aef4a81d80bf71ab2f6e5269383fcce87",
+    "crecord_sha256": "d9117ff3214f258cc84648725effcd498f3d1e93a774a94efd65e81ed11f2bff"
+  }
+]

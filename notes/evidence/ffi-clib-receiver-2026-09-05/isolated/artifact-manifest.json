@@ -1,0 +1,327 @@
+{
+  "root": "/tmp/lj-special-udata-independent-20260905-75jums60",
+  "artifacts": [
+    {
+      "relative_path": "additional-results.json",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/additional-results.json",
+      "sha256": "c9140f9b86a1ac18910fa30ec39b9a0f85bafbbc1caf8a79761fa11e305251ff",
+      "bytes": 15898,
+      "storage": "text"
+    },
+    {
+      "relative_path": "asan-instrumentation.json",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/asan-instrumentation.json",
+      "sha256": "44e5d61d909a0bbd44346aaac53c49f0d8be00dafb42ade2a43a132302cb288f",
+      "bytes": 688,
+      "storage": "text"
+    },
+    {
+      "relative_path": "asan-receiver-binaries.json",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/asan-receiver-binaries.json",
+      "sha256": "0592764a0566081c5c33c56579882ba21e3c61849af4905fbd5d5f1f9ffedf1d",
+      "bytes": 254,
+      "storage": "text"
+    },
+    {
+      "relative_path": "asan-receiver-build.json",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/asan-receiver-build.json",
+      "sha256": "6f53ea99ea6dbb2f807956014c405778165fbc9047deacac7c4628ee6b53eac9",
+      "bytes": 959,
+      "storage": "text"
+    },
+    {
+      "relative_path": "asan-receiver-results.json",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/asan-receiver-results.json",
+      "sha256": "ec16dd5451c0a19e75f610c7dd314b846d3c23092d0cfc98e485d29005589bc7",
+      "bytes": 32246,
+      "storage": "text"
+    },
+    {
+      "relative_path": "baseline-receiver-results.json",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/baseline-receiver-results.json",
+      "sha256": "3be83b1602d561a94ee6643cac47ea034fa64889dc4bf88604256c4b4fc03e52",
+      "bytes": 35301,
+      "storage": "text"
+    },
+    {
+      "relative_path": "build-receiver.py",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/build-receiver.py",
+      "sha256": "8fdbc30bb22305da19579c135c02608a346ac51d60c43fcc38e352df579082fd",
+      "bytes": 1133,
+      "storage": "text"
+    },
+    {
+      "relative_path": "candidate-receiver-binaries.json",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate-receiver-binaries.json",
+      "sha256": "85b7e36235858cf5af5c8963db598ff8bcbf900843f0090388885ab07b90b46b",
+      "bytes": 254,
+      "storage": "text"
+    },
+    {
+      "relative_path": "candidate-receiver-build.json",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate-receiver-build.json",
+      "sha256": "14405c92568c26a788dab10c9748885015ed8ddf3430064498c73c3050697ef4",
+      "bytes": 658,
+      "storage": "text"
+    },
+    {
+      "relative_path": "candidate-receiver-results.json",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate-receiver-results.json",
+      "sha256": "384af0480d5e1af61c7170d8894e56cef27805acf2f5ff9addb3eb97bafc3b3e",
+      "bytes": 31638,
+      "storage": "text"
+    },
+    {
+      "relative_path": "captured-clib-index-type-results.json",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-index-type-results.json",
+      "sha256": "8547bc696c1e929d40b8d4ad810e95f758e3d05529cb8649f033df6f8ced77e8",
+      "bytes": 7955,
+      "storage": "text"
+    },
+    {
+      "relative_path": "captured-clib-index-type.lua",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-index-type.lua",
+      "sha256": "5afcd46316cdb25182b4e7aec99a03a982907b91fa9cc2de0c75bb45ce413187",
+      "bytes": 849,
+      "storage": "text"
+    },
+    {
+      "relative_path": "captured-clib-receiver.lua",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/captured-clib-receiver.lua",
+      "sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+      "bytes": 4597,
+      "storage": "text"
+    },
+    {
+      "relative_path": "clib-cache-lifecycle.lua",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/clib-cache-lifecycle.lua",
+      "sha256": "2375915500001c3da5ea9bf06c18d413fd6049014db4f567ec5d37fdd266c120",
+      "bytes": 1164,
+      "storage": "text"
+    },
+    {
+      "relative_path": "final-validation.json",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/final-validation.json",
+      "sha256": "baee2f546493424bb403c753eb0002a79bd8eef7b82027eacb3358c0a04943b7",
+      "bytes": 952,
+      "storage": "text"
+    },
+    {
+      "relative_path": "initial-receiver/baseline-receiver-results.json",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/initial-receiver/baseline-receiver-results.json",
+      "sha256": "d7546732ac9c498d1921f45bd2baffbf7e1d4115ee6fd7313dabc5ad34238422",
+      "bytes": 21466,
+      "storage": "text"
+    },
+    {
+      "relative_path": "initial-receiver/candidate-receiver-results.json",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/initial-receiver/candidate-receiver-results.json",
+      "sha256": "e8dce6f82c03c841761f164f99ed9dc4b154f52d07b96b32d2788322f448db33",
+      "bytes": 19226,
+      "storage": "text"
+    },
+    {
+      "relative_path": "initial-receiver/captured-clib-receiver.lua",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/initial-receiver/captured-clib-receiver.lua",
+      "sha256": "23a8bdfba565830080218509c37e6c12f5f5cf828cb43697ec993d63b809c800",
+      "bytes": 4027,
+      "storage": "text"
+    },
+    {
+      "relative_path": "initial-receiver/validate-receiver.py",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/initial-receiver/validate-receiver.py",
+      "sha256": "9ecc7db3c5866700e20d25fbeeea44e366ab9af5eb9d0dc52af049ce46c18497",
+      "bytes": 1895,
+      "storage": "text"
+    },
+    {
+      "relative_path": "method-guard-review.md",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/method-guard-review.md",
+      "sha256": "9eb7fd93d2f573035e566fe720dadb40ce679dbf7344e0d34d04427c2f2e6494",
+      "bytes": 3769,
+      "storage": "text"
+    },
+    {
+      "relative_path": "method-only-receiver-results.json",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/method-only-receiver-results.json",
+      "sha256": "0f5ab61b5105143ea793a6df4d96b4a5da668bae84df5eb87265bcfc94c2feef",
+      "bytes": 35521,
+      "storage": "text"
+    },
+    {
+      "relative_path": "namespace-asan-11.so",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-asan-11.so",
+      "sha256": "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "bytes": 15088,
+      "storage": "sha256-only"
+    },
+    {
+      "relative_path": "namespace-asan-29.so",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-asan-29.so",
+      "sha256": "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827",
+      "bytes": 15088,
+      "storage": "sha256-only"
+    },
+    {
+      "relative_path": "namespace-baseline-11.so",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-11.so",
+      "sha256": "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "bytes": 15088,
+      "storage": "sha256-only"
+    },
+    {
+      "relative_path": "namespace-baseline-29.so",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-29.so",
+      "sha256": "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827",
+      "bytes": 15088,
+      "storage": "sha256-only"
+    },
+    {
+      "relative_path": "namespace-candidate-11.so",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-11.so",
+      "sha256": "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "bytes": 15088,
+      "storage": "sha256-only"
+    },
+    {
+      "relative_path": "namespace-candidate-29.so",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-29.so",
+      "sha256": "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827",
+      "bytes": 15088,
+      "storage": "sha256-only"
+    },
+    {
+      "relative_path": "namespace-method-only-11.so",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-method-only-11.so",
+      "sha256": "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "bytes": 15088,
+      "storage": "sha256-only"
+    },
+    {
+      "relative_path": "namespace-method-only-29.so",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-method-only-29.so",
+      "sha256": "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827",
+      "bytes": 15088,
+      "storage": "sha256-only"
+    },
+    {
+      "relative_path": "namespace-strict-11.so",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-strict-11.so",
+      "sha256": "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
+      "bytes": 15088,
+      "storage": "sha256-only"
+    },
+    {
+      "relative_path": "namespace-strict-29.so",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-strict-29.so",
+      "sha256": "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827",
+      "bytes": 15088,
+      "storage": "sha256-only"
+    },
+    {
+      "relative_path": "namespace-symbol-lib.c",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-symbol-lib.c",
+      "sha256": "8ce51fb90a6c101f208886b5b0dd27a4f9bb19c33bcbde696afb3b101e1d38aa",
+      "bytes": 155,
+      "storage": "text"
+    },
+    {
+      "relative_path": "receiver-handoff.md",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/receiver-handoff.md",
+      "sha256": "490f21cbcefdd11787c1b204b52879ad585935a150f9315145c540d5b9ce0750",
+      "bytes": 6628,
+      "storage": "text"
+    },
+    {
+      "relative_path": "receiver-setup.json",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/receiver-setup.json",
+      "sha256": "d1c373684a8ba43b6add51b13cae11d158e13c4ba85addb412d5bc5db4b82b26",
+      "bytes": 431,
+      "storage": "text"
+    },
+    {
+      "relative_path": "receiver-side-diagnostic-results.json",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/receiver-side-diagnostic-results.json",
+      "sha256": "a6586699c6c69b9c556739b09fa8ddf8781b38012fcb15d37575f9589898dd66",
+      "bytes": 3193,
+      "storage": "text"
+    },
+    {
+      "relative_path": "receiver-side-diagnostic.lua",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/receiver-side-diagnostic.lua",
+      "sha256": "52bc44e3b9cbd51defe9e76d4e0a536139e0271ff789ba3561be430320b65a82",
+      "bytes": 4680,
+      "storage": "text"
+    },
+    {
+      "relative_path": "receiver-specialization.patch",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/receiver-specialization.patch",
+      "sha256": "77531ea3eb0977a53ff7413cbad718543bc8952f16b216269523e6ba57664837",
+      "bytes": 601,
+      "storage": "text"
+    },
+    {
+      "relative_path": "run-additional.py",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/run-additional.py",
+      "sha256": "dd8bd3ea9744e5abd5837846c12a0b48204e3759dd150c9930b5a2526775cdd2",
+      "bytes": 1388,
+      "storage": "text"
+    },
+    {
+      "relative_path": "runtime-input-identity.json",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/runtime-input-identity.json",
+      "sha256": "f37e90cc0542b81cad0fa93849cf3e47833073c845ea59606a2687ce77d9c087",
+      "bytes": 93978,
+      "storage": "text"
+    },
+    {
+      "relative_path": "side-first-fixture/candidate-receiver-results.json",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/side-first-fixture/candidate-receiver-results.json",
+      "sha256": "8e03723e66ef0d6669e948a2bb4f45762db5166326ed8a7f9ae130737e64c3cf",
+      "bytes": 32462,
+      "storage": "text"
+    },
+    {
+      "relative_path": "side-first-fixture/captured-clib-receiver.lua",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/side-first-fixture/captured-clib-receiver.lua",
+      "sha256": "84004a4b4716e240109fe667c9370a5f0f2b3c2da177ec28612d9f5764368a00",
+      "bytes": 4418,
+      "storage": "text"
+    },
+    {
+      "relative_path": "side-first-fixture/validate-receiver.py",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/side-first-fixture/validate-receiver.py",
+      "sha256": "69a4f923131c23028266141b8ae1cd54388826fd37510e794e9a2c6c7e17ee14",
+      "bytes": 1975,
+      "storage": "text"
+    },
+    {
+      "relative_path": "strict-receiver-binaries.json",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/strict-receiver-binaries.json",
+      "sha256": "ae7f6e15bd32259135cac6f90aa7efd939c2401f2afdcd5b74be0ae405f194c8",
+      "bytes": 254,
+      "storage": "text"
+    },
+    {
+      "relative_path": "strict-receiver-build.json",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/strict-receiver-build.json",
+      "sha256": "339b52ed22c0296d45b50cd9671d646c797f68b90612000227af8050a56bfcaa",
+      "bytes": 830,
+      "storage": "text"
+    },
+    {
+      "relative_path": "strict-receiver-results.json",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/strict-receiver-results.json",
+      "sha256": "b125f0ec71e2059fac10b7639f567c76ce950002c6131f7fc16f1e9af060aa22",
+      "bytes": 31253,
+      "storage": "text"
+    },
+    {
+      "relative_path": "validate-receiver.py",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/validate-receiver.py",
+      "sha256": "3d118144999403908c4d42f8576ea89d0fa77383ae736fec61af7982781a1747",
+      "bytes": 2018,
+      "storage": "text"
+    }
+  ]
+}

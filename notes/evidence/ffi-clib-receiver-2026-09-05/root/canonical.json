@@ -1,0 +1,31 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-special-udata-independent-20260905-75jums60/strict/src/luajit",
+    "/workspaces/lj-lockless/tools/test.lua",
+    "m7_ffi_clib_receiver"
+  ],
+  "cwd": "/workspaces/lj-lockless",
+  "environment": {
+    "LJ_TEST_ROOT": "/workspaces/lj-lockless",
+    "JOBS": "4",
+    "MAKE_JOBS": "4",
+    "TMPDIR": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/canonical-tmp",
+    "LUA_PATH": "/workspaces/lj-lockless/src/?.lua;;"
+  },
+  "exit": 0,
+  "seconds": 43.44000569199852,
+  "sources": {
+    "src/lj_crecord.c": "d9117ff3214f258cc84648725effcd498f3d1e93a774a94efd65e81ed11f2bff",
+    "tests/suites/m7_ffi.lua": "88ad98e873a68c5d96d0abf7ee44057782f9b2c6385e98bbcc7795ca36b7f5f3",
+    "tests/t-ffi-clib-receiver.lua": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+    "tests/t-ffi-clib-receiver-lib.c": "8ce51fb90a6c101f208886b5b0dd27a4f9bb19c33bcbde696afb3b101e1d38aa"
+  },
+  "default_binaries": {
+    "luajit": "4cbcae43398979c857366974fa95e5db483b5a7f5f8279fc6d8757c41d02cb13",
+    "libluajit.a": "b5b5dee1584d8161088d32cd5534c4eca1e756f877887df74bb2f1a73b81d933",
+    "libluajit.so": "8e104833408021bc195b0bb1b92cc42e21b0e5690cfce1e2ea7f43226c388d36"
+  }
+}

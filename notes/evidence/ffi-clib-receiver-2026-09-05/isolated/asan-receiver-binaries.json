@@ -1,0 +1,5 @@
+{
+  "luajit": "b1c29c5f046e4f4518daece54ca123cd94db89a01b830678d638e301d408daac",
+  "libluajit.a": "62bf0f1d27bda4b971a37dc8c639c3b89f7dc950ab29b3cef67adf747e91ceb1",
+  "lj_crecord.o": "2f85b9b8a1034dbc71fbbb4b8fe3bcfca967234b7d56a9d492be75975bd4fd90"
+}

@@ -97,7 +97,7 @@ are verified reasons the full goal is still open:
 | Generic FFI traces | CALLXS is live; first generated callbacks could overwrite loop slots through stale owner stack bounds | XSAVE owner geometry is repaired; continue aggregate ABI, caller topology and no-replay lifecycle work |
 | Cdata method recording | Pre-MT guards are repaired and restricted pure loops reuse entry checks; shared-MT constructor/field recording still refuses before trace-owned exceptions | Exact rooted recorder/native lookup and root-publication exclusion remain prerequisites for MT enablement |
 | Special userdata dispatch | Namespace/file/buffer methods were treated as immutable despite Lua mutation; common native guards now cover them | Keep exact method/root guards; measure and prove any pure-loop coalescing |
-| C-library lookup | Direct captured lookup omits its own receiver specialization; native cached lookups ignore environment writes and semantic close | Retained receiver identity plus authoritative runtime cache/lifecycle guards, including direct calls and installed side traces |
+| C-library lookup | Direct captured lookup now retains and guards its exact receiver; native cached lookups still ignore environment writes and semantic close | Authoritative runtime cache/lifecycle guards, including direct calls and installed side traces |
 | Win64 table traces | The recorder rejects ordinary HSTORE/ASTORE, including pre-MT stores | Complete Win64 helper ABI and require executed table-store traces under Wine and native CI |
 | Diagnostics | Remote allocator-list walks are replaced by scalar publication in `abf234ca`; other snapshot lifetime contracts still apply | Preserve owner/lifetime contracts and audit remaining diagnostic access |
 | Allocator API | The default internal-allocator gate ignores custom `lua_Alloc` callbacks and makes `lua_setallocf` a no-op | Restore exact allocation ownership and callback behavior as a separate tested milestone |
@@ -289,6 +289,13 @@ controls and post-fix completion tests:
   call case changes about 0.4% and `ffi_struct` is unchanged. Independent direct
   CLibrary receiver/cache/close defects remain separate. See
   `notes/jit-special-udata-guards-2026-09-05.md`.
+- Captured C-library lookup/store builtins now guard and retain their exact
+  namespace before exporting constants or extern addresses. Distinct-library,
+  wrong-userdata, installed-side, no-replay and lifetime cases pass 60 isolated
+  positives, 54 combined regressions and 20 shared canonical cases. The two
+  exact pre-fix controls fail all ten native cases each. Cache mutation and
+  semantic close remain separate defects. See
+  `notes/ffi-clib-receiver-2026-09-05.md`.
 - `1bce0fa5`: promote exhausted inline table dirty authority into pre-reserved
   persistent wide proof, retaining common stamp/token geometry. Small mappings
   use a dense sidecar plane and Huge mappings use checked tail reservation.
