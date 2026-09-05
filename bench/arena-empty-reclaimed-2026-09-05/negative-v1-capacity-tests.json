@@ -1,0 +1,57 @@
+{
+  "build_command": [
+    "taskset",
+    "-c",
+    "0",
+    "gcc",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-std=gnu11",
+    "-DLUAJIT_SECURITY_PRNG=0",
+    "-DLJ_ARENA_TEST_HELPERS",
+    "-Isrc",
+    "tests/t-arena-empty-reclaimed.c",
+    "tests/t-arena-tls-stub.c",
+    "src/lj_arena.c",
+    "src/lj_prng.c",
+    "-pthread",
+    "-o",
+    "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/t-arena-empty-reclaimed-capacity-v1"
+  ],
+  "runs": [
+    {
+      "mode": "reuse-generic",
+      "command": [
+        "taskset",
+        "-c",
+        "0",
+        "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/t-arena-empty-reclaimed-capacity-v1",
+        "reuse-generic"
+      ],
+      "exit_code": -6,
+      "wall_s": 0.044734133999554615,
+      "timeout_s": 30
+    },
+    {
+      "mode": "reuse-pair",
+      "command": [
+        "taskset",
+        "-c",
+        "0",
+        "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/t-arena-empty-reclaimed-capacity-v1",
+        "reuse-pair"
+      ],
+      "exit_code": -6,
+      "wall_s": 0.03357184899959975,
+      "timeout_s": 30
+    }
+  ],
+  "build_exit": 0,
+  "fixture_sha256": "621138f370466f92e34d27a05a037fe8b491640ae9b9f052e6a59c6c0aba8340",
+  "fixture_git_blob": "957f7bde772a0168c54b2506a89769e6ab216789",
+  "arena_c_git_blob": "8496230436ad64604312a73a58e2c07179028e77",
+  "arena_h_git_blob": "718f28bccc233acbf2b04f1b6c3f179165877032"
+}

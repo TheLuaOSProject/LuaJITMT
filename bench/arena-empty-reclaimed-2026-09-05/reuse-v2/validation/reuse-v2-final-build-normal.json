@@ -1,0 +1,16 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "8-11",
+    "make",
+    "-C",
+    "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/reuse-v2-normal/src",
+    "-j4",
+    "BUILDMODE=static"
+  ],
+  "exit_code": 0,
+  "wall_s": 9.033556979000423,
+  "executable_sha256": "8ab2f53b86e1737bdcc66afcc4718d5ec636f5b80b864d9446c57d7c3dfcb03e",
+  "library_sha256": "5583e57740d5b2478c541cf3bea6e411e206357e23677a657eec0e14bbcf1ab5"
+}

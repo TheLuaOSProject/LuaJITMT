@@ -1,0 +1,28 @@
+[
+  {
+    "kind": "before",
+    "command": [
+      "gcc",
+      "-O2",
+      "-I/tmp/lj-gc-jit-combined-20260905-6cxpl6mp/normal/src",
+      "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/layout-probe.c",
+      "-o",
+      "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/layout-probe-before"
+    ],
+    "exit_code": 0,
+    "output": "TGAlloc=688 TGState=30848 GG_State=42240 global_State=5584\n"
+  },
+  {
+    "kind": "after",
+    "command": [
+      "gcc",
+      "-O2",
+      "-I/tmp/lj-empty-reclaimed-20260905-9vnax2uo/reuse-v2-normal/src",
+      "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/layout-probe.c",
+      "-o",
+      "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/layout-probe-after"
+    ],
+    "exit_code": 0,
+    "output": "TGAlloc=696 TGState=30864 GG_State=42256 global_State=5584\n"
+  }
+]

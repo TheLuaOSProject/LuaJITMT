@@ -1,0 +1,102 @@
+[
+  {
+    "kind": "before",
+    "build_command": [
+      "taskset",
+      "-c",
+      "0",
+      "gcc",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-std=gnu11",
+      "-I/tmp/lj-gc-jit-combined-20260905-6cxpl6mp/normal/src",
+      "/workspaces/lj-lockless/bench/arena-empty-reclaimed-2026-09-05/gcdiag.c",
+      "/tmp/lj-gc-jit-combined-20260905-6cxpl6mp/normal/src/libluajit.a",
+      "-Wl,-E",
+      "-pthread",
+      "-lm",
+      "-ldl",
+      "-o",
+      "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/gcdiag-settled-before"
+    ],
+    "build_exit": 0,
+    "build_wall_s": 0.09272622899970884,
+    "executable_sha256": "80efa53fb0c23454c058c269c0a1081235a784a1344fac545e86f627c8099893",
+    "run_command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/gcdiag-settled-before",
+      "/workspaces/lj-lockless/bench/arena-empty-reclaimed-2026-09-05/sequence-settled.lua",
+      "tab_insert_newkey,closures_upval"
+    ],
+    "started_utc": "2026-09-05T00:46:57.872414+00:00",
+    "environment": {
+      "BENCH_SCALE": "1",
+      "CLOSURE_SCALE": "0.1",
+      "BENCH_GC_MODE": null,
+      "DIAG_STOP_AFTER": "closures_upval",
+      "LUA_PATH": "/tmp/lj-gc-jit-combined-20260905-6cxpl6mp/normal/src/?.lua;/tmp/lj-gc-jit-combined-20260905-6cxpl6mp/normal/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-gc-jit-combined-20260905-6cxpl6mp/normal/src/?.so;;"
+    },
+    "exit_code": 0,
+    "status": "complete",
+    "timeout_s": 45,
+    "wall_s": 13.014539391000653,
+    "user_s": 12.749145,
+    "system_s": 0.229344
+  },
+  {
+    "kind": "after",
+    "build_command": [
+      "taskset",
+      "-c",
+      "0",
+      "gcc",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-std=gnu11",
+      "-I/tmp/lj-empty-reclaimed-20260905-9vnax2uo/normal/src",
+      "/workspaces/lj-lockless/bench/arena-empty-reclaimed-2026-09-05/gcdiag.c",
+      "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/normal/src/libluajit.a",
+      "-Wl,-E",
+      "-pthread",
+      "-lm",
+      "-ldl",
+      "-o",
+      "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/gcdiag-settled-after"
+    ],
+    "build_exit": 0,
+    "build_wall_s": 0.09269403000052989,
+    "executable_sha256": "ed701bc64d86353f84cf4584ec7e926a124e52cb8684f8d6c7ca12ff6ba03608",
+    "run_command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/gcdiag-settled-after",
+      "/workspaces/lj-lockless/bench/arena-empty-reclaimed-2026-09-05/sequence-settled.lua",
+      "tab_insert_newkey,closures_upval"
+    ],
+    "started_utc": "2026-09-05T00:47:10.981415+00:00",
+    "environment": {
+      "BENCH_SCALE": "1",
+      "CLOSURE_SCALE": "0.1",
+      "BENCH_GC_MODE": null,
+      "DIAG_STOP_AFTER": "closures_upval",
+      "LUA_PATH": "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/normal/src/?.lua;/tmp/lj-empty-reclaimed-20260905-9vnax2uo/normal/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/normal/src/?.so;;"
+    },
+    "exit_code": 0,
+    "status": "complete",
+    "timeout_s": 45,
+    "wall_s": 6.742412467000577,
+    "user_s": 6.592532,
+    "system_s": 0.133612
+  }
+]

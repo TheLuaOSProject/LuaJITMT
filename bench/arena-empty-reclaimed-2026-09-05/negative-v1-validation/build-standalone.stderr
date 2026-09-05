@@ -1,0 +1,13 @@
+/usr/bin/ld: /tmp/ccB8RAc3.o: in function `arena_plain_mutation_abort_admit':
+/workspaces/lj-lockless/src/lj_arena.c:1088:(.text+0x1283): undefined reference to `lj_assert_fail'
+/usr/bin/ld: /tmp/ccB8RAc3.o: in function `arena_mutation_restore_live':
+/workspaces/lj-lockless/src/lj_arena.c:5199:(.text+0x13a4): undefined reference to `lj_assert_fail'
+/usr/bin/ld: /tmp/ccB8RAc3.o: in function `arena_alloc_claim_rollback':
+/workspaces/lj-lockless/src/lj_arena.c:5222:(.text+0x14ef): undefined reference to `lj_assert_fail'
+/usr/bin/ld: /workspaces/lj-lockless/src/lj_arena.c:5213:(.text+0x1517): undefined reference to `lj_assert_fail'
+/usr/bin/ld: /tmp/ccB8RAc3.o: in function `arena_progress_bind_rel':
+/workspaces/lj-lockless/src/lj_arena.c:174:(.text+0x157e): undefined reference to `lj_assert_fail'
+/usr/bin/ld: /tmp/ccB8RAc3.o:/workspaces/lj-lockless/src/lj_arena.c:7460: more undefined references to `lj_assert_fail' follow
+/usr/bin/ld: /tmp/lj-empty-reclaimed-20260905-9vnax2uo/empty-reclaimed: hidden symbol `lj_assert_fail' isn't defined
+/usr/bin/ld: final link failed: bad value
+collect2: error: ld returned 1 exit status

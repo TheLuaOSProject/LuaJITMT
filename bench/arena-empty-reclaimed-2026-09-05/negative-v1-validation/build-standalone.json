@@ -1,0 +1,26 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0",
+    "gcc",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-std=gnu11",
+    "-DLUA_USE_ASSERT",
+    "-DLUAJIT_SECURITY_PRNG=0",
+    "-DLJ_ARENA_TEST_HELPERS",
+    "-Isrc",
+    "tests/t-arena-empty-reclaimed.c",
+    "tests/t-arena-tls-stub.c",
+    "src/lj_arena.c",
+    "src/lj_prng.c",
+    "-pthread",
+    "-o",
+    "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/empty-reclaimed"
+  ],
+  "exit_code": 1
+}

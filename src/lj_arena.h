@@ -33,13 +33,17 @@
 #define LJ_AF_QUARANTINE	0x00000010u
 #define LJ_AF_RECLAIMED		0x00000020u
 #define LJ_AF_PREPSWEEP		0x00000040u
+/* Owner-published terminal-empty proof. Valid only on the CLOSED reclaimed
+** list until adoption or another gate-generation owner invalidates it. This
+** is never an allocation request and live_cells is not its authority. */
+#define LJ_AF_EMPTY_RECLAIMED	0x00000080u
 /* Allocation-request modifier. This bit is consumed by the allocator and is
 ** never persisted in GCAhdr.flags or ordinary HugeTab metadata. */
 #define LJ_AF_DTOR_CONSTRUCT	0x40000000u
 #define LJ_AF_ROOT_CONSTRUCT	0x80000000u
 #define LJ_AF_FLAG_MASK \
   (LJ_AF_TRAVERSABLE|LJ_AF_NEEDSWEEP|LJ_AF_FULL|LJ_AF_REGISTERED| \
-   LJ_AF_QUARANTINE|LJ_AF_RECLAIMED|LJ_AF_PREPSWEEP)
+   LJ_AF_QUARANTINE|LJ_AF_RECLAIMED|LJ_AF_PREPSWEEP|LJ_AF_EMPTY_RECLAIMED)
 #define LJ_AF_HUGE_MAGIC	0x4c4a4800u
 
 /* Arena-local lifetime publication gate. The low bits count admitted
@@ -416,6 +420,13 @@ struct TGAlloc {
   ** A 47-bit GC address space contains fewer than 2^32 64-KiB arenas. */
   uint32_t owned_count[LJ_ARENA_NKINDS];
   uint32_t needsweep_count[LJ_ARENA_NKINDS];
+  /* Concurrent GC producers publish traversable spares here only after a
+  ** terminal-empty proof. The owner prefers this head for one bounded
+  ** adoption. Nodes remain live_cells==0 until popped; terminal preflight may
+  ** discard their certificate but cannot create a live incarnation. This
+  ** head contributes no live bytes, but all lifetime/capacity walkers must
+  ** include it. No published interior list link may be rewritten. */
+  GCArena *empty_reclaimed;
 };
 
 /* Remote readers retain the allocator's lifetime and exclude its private
@@ -903,6 +914,10 @@ LJ_FUNC uint64_t lj_arena_test_adopt_whole_count(void);
 LJ_FUNC void lj_arena_test_gc2_sidecar_fail_alloc(int enabled);
 LJ_FUNC void lj_arena_test_open_sealed_pause(GCArena *a, int enabled);
 LJ_FUNC uint32_t lj_arena_test_open_sealed_paused(void);
+LJ_FUNC void lj_arena_test_empty_reclaimed_pause(GCArena *a, int enabled);
+LJ_FUNC uint32_t lj_arena_test_empty_reclaimed_paused(void);
+LJ_FUNC void lj_arena_test_reclaimed_publish_pause(GCArena *a, int enabled);
+LJ_FUNC uint32_t lj_arena_test_reclaimed_publish_paused(void);
 LJ_FUNC int lj_arena_test_set_free_run(GCArena *a, uint32_t start,
 					uint32_t len);
 LJ_FUNC int lj_arena_test_terminal_freeing_word(const GCArena *a,
@@ -935,7 +950,8 @@ LJ_FUNC int lj_arena_alloc_register_existing(TGAlloc *alloc);
 LJ_FUNC void lj_arena_alloc_init(TGAlloc *alloc);
 /* Exact-arena form for the immediate pre-destructor check after an earlier
 ** terminal destructor recreated a conservative gate intent. The caller owns
-** joined-world terminal authority. It accepts OPEN/CLOSED, CASes only exact
+** joined-world terminal and structural flag authority. It accepts OPEN/CLOSED,
+** discards any cached empty-spare proof, CASes only exact
 ** count-zero CLOSED|PENDING to CLOSED, and otherwise fails without inspecting
 ** or changing any allocation side plane. */
 LJ_FUNC int lj_arena_terminal_reconcile(GCArena *a);
@@ -965,6 +981,7 @@ LJ_FUNC GCArena *lj_arena_alloc_quarantine_head(const TGAlloc *alloc,
 						 uint32_t kind);
 LJ_FUNC GCArena *lj_arena_alloc_reclaimed_head(const TGAlloc *alloc,
 					      uint32_t kind);
+LJ_FUNC GCArena *lj_arena_alloc_empty_reclaimed_head(const TGAlloc *alloc);
 LJ_FUNC int lj_arena_alloc_quarantine_finish(TGAlloc *alloc, uint32_t kind,
 					      GCArena *a, uint32_t sweep_epoch,
 					      int preserve_marks,
@@ -1045,6 +1062,10 @@ LJ_FUNC int lj_arena_lifetime_empty(const GCArena *a);
 LJ_FUNC uint32_t lj_arena_lifetime_clear_terminal(GCArena *a,
 						    uint32_t cell);
 LJ_FUNC int lj_arena_reclaim_seal(GCArena *a);
+/* These are structural-owner operations after a successful SEALED claim.
+** Clearing gate intent also invalidates the cached empty-spare proof; callers
+** must not race another structural flags writer. Counted readers/producers
+** remain permitted by the existing gate protocol. */
 LJ_FUNC int lj_arena_reclaim_clear_pending(GCArena *a);
 LJ_FUNC void lj_arena_reclaim_unseal(GCArena *a, int keep_pending);
 LJ_FUNC int lj_arena_rescue_enter(GCArena *a);

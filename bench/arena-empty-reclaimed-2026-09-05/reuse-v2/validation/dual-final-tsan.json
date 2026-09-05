@@ -1,0 +1,40 @@
+{
+  "build_command": [
+    "taskset",
+    "-c",
+    "0",
+    "gcc",
+    "-O1",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-std=gnu11",
+    "-DLUAJIT_SECURITY_PRNG=0",
+    "-DLJ_ARENA_TEST_HELPERS",
+    "-Isrc",
+    "tests/t-arena-empty-reclaimed.c",
+    "tests/t-arena-tls-stub.c",
+    "src/lj_arena.c",
+    "src/lj_prng.c",
+    "-pthread",
+    "-o",
+    "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/t-arena-empty-reclaimed-dual-tsan-final",
+    "-fsanitize=thread",
+    "-fno-omit-frame-pointer",
+    "-Wno-error=tsan"
+  ],
+  "build_exit": 0,
+  "build_wall_s": 1.8916797590009082,
+  "run_command": [
+    "taskset",
+    "-c",
+    "0-3",
+    "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/t-arena-empty-reclaimed-dual-tsan-final"
+  ],
+  "run_exit": 0,
+  "run_status": "complete",
+  "timeout_s": 45,
+  "run_wall_s": 0.16275320000022475,
+  "TSAN_OPTIONS": "halt_on_error=1:abort_on_error=1"
+}

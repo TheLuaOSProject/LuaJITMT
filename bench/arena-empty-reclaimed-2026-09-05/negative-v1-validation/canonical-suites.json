@@ -1,0 +1,23 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "1-7",
+    "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/normal/src/luajit",
+    "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/suite/tools/test.lua",
+    "m2_arena_bitmap",
+    "m2_arena_map",
+    "m2_arena_alloc",
+    "m2_arena_sweep",
+    "m2_arena_empty_reclaimed",
+    "m2_arena_empty_reclaimed_runtime"
+  ],
+  "status": "complete",
+  "exit_code": 0,
+  "wall_s": 42.25971257999936,
+  "timeout_s": 180,
+  "environment": {
+    "LJ_TEST_ROOT": "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/suite",
+    "LUA_PATH": "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/suite/src/?.lua;/tmp/lj-empty-reclaimed-20260905-9vnax2uo/suite/src/?/init.lua;;"
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "baseline_tree": "/tmp/lj-gc-jit-combined-20260905-6cxpl6mp/normal",
+  "candidate_tree": "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/reuse-v2-normal",
+  "assert_tree": "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/reuse-v2-assert",
+  "qualification": "Only arena.c/h differ from the immutable baseline, which includes coalescing before the public MARK-scope repair and prior to the later scalar-read candidate.",
+  "binary_sha256": {
+    "before": "8b75419d1972794ab6287dc9be8a4aad7b8bdd14f581a0fb4a776e24602bbd75",
+    "after": "8ab2f53b86e1737bdcc66afcc4718d5ec636f5b80b864d9446c57d7c3dfcb03e",
+    "assert": "f71e8c8375c480843974e81fa50a1ccf9ae2a24acec22c8b16d72d89a10330f2"
+  },
+  "changed_files": {
+    "src/lj_arena.c": {
+      "git_blob": "4a55c2e5367cef0e4c5b774e36d2854bbb63672d",
+      "sha256": "98fc9a9af8f8949fe8259d278bb6308790755a06f8f6bcebdcc4a949ec8efbc5"
+    },
+    "src/lj_arena.h": {
+      "git_blob": "0971b02565feb93af0bfe6be8905f4e052b1a1f5",
+      "sha256": "6ab384112c74e400a9092ec38f491107b2c9b5510c18f84e4c7aa02e1c2231f2"
+    },
+    "tests/suites/m2_arena.lua": {
+      "git_blob": "f0aa0ee5bf72b3fc104b1d278f56c0c210742ba9",
+      "sha256": "29d73fb439be51689ca32f706c333a8d215c7bd7278580d76ee602cb71f4e28d"
+    },
+    "tests/t-arena-empty-reclaimed.c": {
+      "git_blob": "6716c2701f318c0a4cbd9e4866d7a4cc353c26d5",
+      "sha256": "ff8435cabe930c2b6231c5b496b1f108077d430b41006819d5e82c31276537b4"
+    },
+    "tests/t-arena-empty-reclaimed-runtime.c": {
+      "git_blob": "87add25f6e72e89e1406e8a3e208982a70e18668",
+      "sha256": "8a8760c7c0d556e8ddede289f584d6f45044a1f65b0924372cd2a331459c696c"
+    },
+    "tests/t-arena-sweep.c": {
+      "git_blob": "992e2eb3642d3e1c02989649bde53007dac88ac7",
+      "sha256": "f9fd8f1ca0cc483112720c2cf26be13b6e85e4f8b893d9ecd185fccb6ed7503f"
+    },
+    "tests/t-arena-gcsweep.c": {
+      "git_blob": "088b074f13d25ab0adb2b4f34f26f64c63406381",
+      "sha256": "d3ae9eba04c758f4c6f850e8a388fa9f820bc87181cdaebcc3c21ab6cc36e030"
+    },
+    "tests/t-arena-hugetab.c": {
+      "git_blob": "4c2a6b384c02a20a924617086eedbf506582a02d",
+      "sha256": "1e19b31f011689d255dd3480141e789ab24c0a6dc08a64c6dc8f9e14c2d646a3"
+    },
+    "tests/t-gc2-stats-arenas.c": {
+      "git_blob": "5f9e9e154ae83e4baa1e30d95395374cea0f5048",
+      "sha256": "59054a740c91d84683860aab53dd9ca59de9b8765c8d119e4c07fc3dd9876b89"
+    },
+    "tests/t-gc2-worker-scheduler.c": {
+      "git_blob": "5e9adc2fdea4fc00ab20ec92276fd5a07cba17f5",
+      "sha256": "e032c08598b035cf7982ebd71af87574edc9b8e99eff2b278d49cb860c98d978"
+    },
+    "tests/t-tg-terminal-orphan.c": {
+      "git_blob": "9b5d038786442890ca9ae226979f8c9475b39e36",
+      "sha256": "c532022e5a5863ea1893bb0c222ffed11401a4b8fb15285ca18fbf860ea9cb81"
+    }
+  },
+  "platform": "Linux-7.2.1-ogc4.1.fc44.x86_64-x86_64-with-glibc2.41",
+  "gcc": "gcc (Debian 14.2.0-19) 14.2.0",
+  "measurement": {
+    "gc_enabled": true,
+    "jit_mode": "on",
+    "cpu": 30,
+    "host_shared": true,
+    "frequency_fixed": false,
+    "governor": "performance",
+    "thread_siblings_list": "30",
+    "interference": "Other agents performed functional work on CPUs 0-15. Own validation used CPUs 0-11 during the settled diagnostic; primary performance pairs ran after own functional work ended."
+  },
+  "harness_sha256": "fcbb0b59803619d3949698d937df1a4f0476dc143f366e290ab6a8f33859ad30",
+  "created_utc": "2026-09-05T01:26:35.846339+00:00"
+}

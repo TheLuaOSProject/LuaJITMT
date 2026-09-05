@@ -1397,7 +1397,9 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
   /* Terminal commit keeps the arena CLOSED on the reclaimed stack. Owner
   ** allocation adopts it lazily only when reusable space is requested. */
   assert(arena_list_contains(lj_arena_alloc_reclaimed_head(
-	&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE), swept_a));
+	&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE), swept_a) ||
+         arena_list_contains(lj_arena_alloc_empty_reclaimed_head(
+           &extra_tg.alloc), swept_a));
   assert((lj_arena_flags_acq(swept_a) & LJ_AF_RECLAIMED) != 0);
   assert((extra_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert((swept_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);

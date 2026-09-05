@@ -1,0 +1,33 @@
+{
+  "build_command": [
+    "taskset",
+    "-c",
+    "0",
+    "gcc",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-std=gnu11",
+    "-DLUAJIT_SECURITY_PRNG=0",
+    "-DLJ_ARENA_TEST_HELPERS",
+    "-Isrc",
+    "tests/t-arena-empty-reclaimed.c",
+    "tests/t-arena-tls-stub.c",
+    "src/lj_arena.c",
+    "src/lj_prng.c",
+    "-pthread",
+    "-o",
+    "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/t-arena-empty-reclaimed-dual-final"
+  ],
+  "build_exit": 0,
+  "run_command": [
+    "taskset",
+    "-c",
+    "0-3",
+    "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/t-arena-empty-reclaimed-dual-final"
+  ],
+  "run_exit": -6,
+  "run_wall_s": 0.04008742699988943
+}

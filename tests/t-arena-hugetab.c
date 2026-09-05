@@ -2105,7 +2105,7 @@ static void test_terminal_reconcile(PRNGState *rs)
   const size_t size = 64u;
   const uint64_t stale = LJ_ARENA_REMOTE_CLOSED|LJ_ARENA_REMOTE_PENDING;
   TGAlloc lists, alloc;
-  GCArena *arena[5];
+  GCArena *arena[6];
   GCArena *a;
   void *p;
   uint32_t cell, i;
@@ -2114,8 +2114,8 @@ static void test_terminal_reconcile(PRNGState *rs)
   ** entry does not prevent safe later entries from being reconciled, and each
   ** ambiguous word remains byte-for-byte unchanged for diagnosis/retry. */
   lj_arena_alloc_init(&lists);
-  for (i = 0; i < 5u; i++) {
-    arena[i] = lj_arena_map(rs, 0);
+  for (i = 0; i < 6u; i++) {
+    arena[i] = lj_arena_map(rs, i == 5u ? LJ_AF_TRAVERSABLE : 0);
     assert(arena[i] != NULL);
     lj_arena_next_rel(arena[i], NULL);
     la_store64_rel(&arena[i]->hdr.remote_active, stale);
@@ -2128,6 +2128,9 @@ static void test_terminal_reconcile(PRNGState *rs)
   la_store32_rel(&lists.needsweep_count[0], 1u);
   lists.quarantine[0] = arena[3];
   la_storeptr_rel((void **)&lists.reclaimed[0], arena[4]);
+  /* This synthetic terminal-walker case injects an empty traversable mapping
+  ** on the additional head; no certificate or reusable body is fabricated. */
+  la_storeptr_rel((void **)&lists.empty_reclaimed, arena[5]);
 
   la_store64_rel(&arena[0]->hdr.remote_active,
 		 LJ_ARENA_REMOTE_SEALED|LJ_ARENA_REMOTE_PENDING);
@@ -2135,10 +2138,11 @@ static void test_terminal_reconcile(PRNGState *rs)
   assert(lists.owned[0] == arena[0] && lj_arena_next_acq(arena[0]) == arena[1]);
   assert(lists.needsweep[0] == arena[2] &&
 	 lists.quarantine[0] == arena[3] &&
-	 la_loadptr_acq((void *const *)&lists.reclaimed[0]) == arena[4]);
+	 la_loadptr_acq((void *const *)&lists.reclaimed[0]) == arena[4] &&
+         lj_arena_alloc_empty_reclaimed_head(&lists) == arena[5]);
   assert(lj_arena_remote_active_acq(arena[0]) ==
 	 (LJ_ARENA_REMOTE_SEALED|LJ_ARENA_REMOTE_PENDING));
-  for (i = 1; i < 5u; i++)
+  for (i = 1; i < 6u; i++)
     assert(lj_arena_remote_active_acq(arena[i]) == LJ_ARENA_REMOTE_CLOSED);
 
   la_store64_rel(&arena[0]->hdr.remote_active, stale);
@@ -2157,8 +2161,17 @@ static void test_terminal_reconcile(PRNGState *rs)
   assert(lj_arena_remote_active_acq(arena[4]) == LJ_ARENA_REMOTE_CLOSED);
   la_store32_rel(&arena[3]->hdr.terminal_closed, 0);
   assert(lj_arena_alloc_terminal_reconcile(&lists));
-  for (i = 0; i < 5u; i++)
+  for (i = 0; i < 6u; i++)
     assert(lj_arena_remote_active_acq(arena[i]) == LJ_ARENA_REMOTE_CLOSED);
+
+  la_store64_rel(&arena[5]->hdr.remote_active, stale | 1u);
+  assert(!lj_arena_alloc_terminal_ready(&lists));
+  assert(!lj_arena_alloc_terminal_certificate_ready(&lists));
+  assert(lj_arena_alloc_empty_reclaimed_head(&lists) == arena[5]);
+  assert(lj_arena_remote_active_acq(arena[5]) == (stale | 1u));
+  la_store64_rel(&arena[5]->hdr.remote_active, stale);
+  assert(lj_arena_alloc_terminal_ready(&lists));
+  assert(lj_arena_alloc_terminal_certificate_ready(&lists));
 
   /* Corrupt multi-node topology must fail closed rather than hanging the
   ** joined-world terminal pass. The read-only walker leaves the cycle intact
@@ -2176,7 +2189,8 @@ static void test_terminal_reconcile(PRNGState *rs)
   la_store32_rel(&lists.needsweep_count[0], 0);
   lists.quarantine[0] = NULL;
   la_storeptr_rel((void **)&lists.reclaimed[0], NULL);
-  for (i = 0; i < 5u; i++) {
+  la_storeptr_rel((void **)&lists.empty_reclaimed, NULL);
+  for (i = 0; i < 6u; i++) {
     lj_arena_next_rel(arena[i], NULL);
     lj_arena_unmap(arena[i]);
   }

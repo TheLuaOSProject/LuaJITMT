@@ -1,0 +1,68 @@
+{
+  "filtered": {
+    "samples_per_build": 3,
+    "before_ns": [
+      1742.82,
+      1740.43,
+      1740.75
+    ],
+    "after_ns": [
+      1522.56,
+      1524.48,
+      1523.25
+    ],
+    "median_before_ns": 1740.75,
+    "median_after_ns": 1523.25,
+    "ratio_of_medians": 0.8750538560965101,
+    "median_paired_ratio": 0.8750538560965101,
+    "percent_lower": 12.49461439034899,
+    "speedup": 1.1427868045297882,
+    "before_range_ns": [
+      1740.43,
+      1742.82
+    ],
+    "after_range_ns": [
+      1522.56,
+      1524.48
+    ]
+  },
+  "after-insertion": {
+    "samples_per_build": 7,
+    "before_ns": [
+      3997.53,
+      3972.96,
+      3976.11,
+      3993.39,
+      3970.63,
+      3977.67,
+      3960.22
+    ],
+    "after_ns": [
+      1531.15,
+      1534.71,
+      1530.41,
+      1530.13,
+      1529.83,
+      1529.38,
+      1531.23
+    ],
+    "median_before_ns": 3976.11,
+    "median_after_ns": 1530.41,
+    "ratio_of_medians": 0.3849013231525285,
+    "median_paired_ratio": 0.3849013231525285,
+    "percent_lower": 61.50986768474716,
+    "speedup": 2.5980684914500034,
+    "before_range_ns": [
+      3960.22,
+      3997.53
+    ],
+    "after_range_ns": [
+      1529.38,
+      1534.71
+    ]
+  },
+  "post_insertion_over_filtered": {
+    "before": 2.2841361482119775,
+    "after": 1.0047004759560152
+  }
+}

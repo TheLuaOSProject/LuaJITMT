@@ -376,6 +376,13 @@ static int arena_list_contains(GCArena *a, GCArena *needle)
   return 0;
 }
 
+static int arena_reclaimed_contains(TGAlloc *alloc, GCArena *needle)
+{
+  return arena_list_contains(lj_arena_alloc_reclaimed_head(
+           alloc, LJ_ARENAK_TRAVERSABLE), needle) ||
+         arena_list_contains(lj_arena_alloc_empty_reclaimed_head(alloc), needle);
+}
+
 static int gc_root_list_contains(global_State *g, GCobj *needle)
 {
   GCobj *o;
@@ -646,8 +653,7 @@ static GCSize typed_dtor_finish_target(TypedDtorFixture *fx, GCArena *other)
   uint32_t i;
 
   for (i = 0; i < 256u &&
-	 !arena_list_contains(lj_arena_alloc_reclaimed_head(
-	   alloc, LJ_ARENAK_TRAVERSABLE), fx->a); i++)
+	 !arena_reclaimed_contains(alloc, fx->a); i++)
     assert(lj_gc2_test_sweep_owner_progress(
 	fx->g, fx->tg, 1u) != 0);
   assert(i < 256u);
@@ -1906,8 +1912,7 @@ static void test_worker_owned_sweep_direct(void)
   assert(gc2_worker_active_acq(g) == 0);
   assert(!arena_list_contains(extra_tg.alloc.needsweep[LJ_ARENAK_TRAVERSABLE],
 			      swept_a));
-  assert(arena_list_contains(lj_arena_alloc_reclaimed_head(
-		&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE), swept_a));
+  assert(arena_reclaimed_contains(&extra_tg.alloc, swept_a));
   assert((extra_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert((swept_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert((swept_a->hdr.flags & LJ_AF_RECLAIMED) != 0);
@@ -2135,8 +2140,7 @@ static void test_boundary_lazy_sweep_extra_tg(void)
   assert(!lj_gc2_sweep_pending(g));
   assert(arena_list_contains(extra_tg.alloc.owned[LJ_ARENAK_PLAIN],
 			     extra_plain_a));
-  assert(arena_list_contains(lj_arena_alloc_reclaimed_head(
-		&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE), extra_trav_a));
+  assert(arena_reclaimed_contains(&extra_tg.alloc, extra_trav_a));
   assert((extra_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert((extra_trav_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
   assert(extra_trav_a->hdr.sweep_epoch == sweep_cycle);

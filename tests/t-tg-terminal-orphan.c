@@ -95,6 +95,8 @@ static GCArena *first_registered_arena(TGAlloc *alloc)
     if (!a)
       a = (GCArena *)la_loadptr_acq(
 	(void *const *)&alloc->reclaimed[k]);
+    if (!a && k == LJ_ARENAK_TRAVERSABLE)
+      a = lj_arena_alloc_empty_reclaimed_head(alloc);
     if (a && (lj_arena_flags_acq(a) & LJ_AF_REGISTERED))
       return a;
   }

@@ -371,8 +371,8 @@ static void test_terminal_freeing_word_fast_path(PRNGState *rs)
 	LJ_ARENAK_TRAVERSABLE, finished, 77u, 1, &reason));
   assert(reason == LJ_ARENA_FINISH_COMMITTED);
   assert(finished->hdr.live_cells == 0);
-  assert(lj_arena_alloc_reclaimed_head(
-	&finish_alloc, LJ_ARENAK_TRAVERSABLE) == finished);
+  assert(lj_arena_flags_acq(finished) & LJ_AF_EMPTY_RECLAIMED);
+  assert(lj_arena_alloc_empty_reclaimed_head(&finish_alloc) == finished);
   for (i = 0; i < 4u; i++) {
     assert(!lj_arena_bm_get(finished->block, terminal[i]));
     assert(!lj_arena_ready_get(finished, terminal[i]));
@@ -414,6 +414,7 @@ static void test_terminal_freeing_word_fast_path(PRNGState *rs)
 	LJ_ARENAK_TRAVERSABLE, fallback_finished, 78u, 1, &reason));
   assert(reason == LJ_ARENA_FINISH_COMMITTED);
   assert(fallback_finished->hdr.live_cells == 0);
+  assert(!(lj_arena_flags_acq(fallback_finished) & LJ_AF_EMPTY_RECLAIMED));
   assert(lj_arena_dtor_kind_acq(fallback_finished, outside) ==
 	 LJ_ARENA_DTOR_LFUNC1);
   whole_before = lj_arena_test_adopt_whole_count();

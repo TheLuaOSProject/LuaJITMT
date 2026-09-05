@@ -12,6 +12,8 @@ local M2_ORDER = {
   "m2_arena_alloc",
   "m2_arena_hugetab",
   "m2_arena_sweep",
+  "m2_arena_empty_reclaimed",
+  "m2_arena_empty_reclaimed_runtime",
   "m2_arena_state",
   "m2_arena_gcmark",
   "m2_arena_gcverify",
@@ -125,6 +127,34 @@ return function(add)
         link_luajit = false,
         libs = {}
       })
+    end
+  })
+
+  register({
+    name = "m2_arena_empty_reclaimed",
+    description = "terminal empty arena retention, races, and eventual reuse",
+    run = function(t)
+      local pthread = os.getenv("PTHREAD") or "-pthread"
+      compile_and_run_sources(t, t:tmp("lj_t_arena_empty_reclaimed"),
+        arena_sources(t, "t-arena-empty-reclaimed.c"), {
+        cflags = "-DLUAJIT_SECURITY_PRNG=0 -DLJ_ARENA_TEST_HELPERS " ..
+                 pthread,
+        link_luajit = false,
+        libs = { pthread }
+      })
+    end
+  })
+
+  register({
+    name = "m2_arena_empty_reclaimed_runtime",
+    description = "empty arena accounting and stale runtime publisher rejection",
+    run = function(t)
+      local flags = "-DLJ_GC2_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS " ..
+                    "-DLUA_USE_ASSERT"
+      run_luajit_fixture(t, t:tmp("lj_t_arena_empty_reclaimed_runtime"),
+        "t-arena-empty-reclaimed-runtime.c", {
+          clean = true, xcflags = flags, cflags = flags
+        })
     end
   })
 

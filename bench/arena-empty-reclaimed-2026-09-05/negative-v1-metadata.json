@@ -1,0 +1,40 @@
+{
+  "status": "REJECTED: faster but retained arena capacity grows with repeated closure rounds",
+  "baseline_tree": "/tmp/lj-gc-jit-combined-20260905-6cxpl6mp/normal",
+  "candidate_tree": "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/normal",
+  "qualification": "Both trees include coalescing before the public MARK-scope repair; do not compare as d680421c final binaries. Only arena.c/h differ.",
+  "binary_sha256": {
+    "before": "8b75419d1972794ab6287dc9be8a4aad7b8bdd14f581a0fb4a776e24602bbd75",
+    "after": "322876acbb79f546474e592070aa30695b6f99b1e899157be5a70695593f7412"
+  },
+  "candidate_source_git_blobs": {
+    "src/lj_arena.c": "8496230436ad64604312a73a58e2c07179028e77",
+    "src/lj_arena.h": "718f28bccc233acbf2b04f1b6c3f179165877032"
+  },
+  "measurement": {
+    "gc_enabled": true,
+    "jit_mode": "on",
+    "cpu": 30,
+    "host_shared": true,
+    "interference": "Other agents ran functional work on CPUs 0-15; own functional builds/tests ran on CPUs 0-11 during part of these timings. CPU frequency was not fixed.",
+    "thread_siblings_list": "30",
+    "core_cpus_list": "30",
+    "governor": "performance"
+  },
+  "baseline_metadata": {
+    "base": "f8faf8622191ffb86a6304d349c2c5e06a37715d",
+    "overlays": {
+      "src/lj_gc2.c": "661f96d24a80dafcd6e134307633475592e25997621e5faa7b566e78a8ad6634",
+      "src/lj_gc2.h": "6826e924e8a8c2821bcfb0f376f01641c6dc444b3c0d8653948c947b04254b44",
+      "src/lj_jit.h": "ff6304cc1a0a1e474c5a03c9ca5b7d2c7055e9610512c3a04ec2ce85f77d333c",
+      "src/lj_trace.c": "22727958fb2df4c3ed07126193a260f2243630ac4fc6d98d133712bd40503feb",
+      "tests/t-jit-root-abort-retire.c": "0bc2bc5aa8af037e7d31e5a3db69e559f29753c5ab23e5261ce364b6c92e0a28",
+      "tests/t-gc2-sweep-table-coalescing.c": "3c7024871fae148719b5258c6368a361b8c73fef3b56a3e1b2aa014f670cb1ca"
+    },
+    "purpose": "Combined final scalar-stats runtime plus pending semantic SWEEP coalescing and deferred root-abort retirement; test fixture snapshots may precede final agent refinements."
+  },
+  "platform": "Linux-7.2.1-ogc4.1.fc44.x86_64-x86_64-with-glibc2.41",
+  "gcc": "gcc (Debian 14.2.0-19) 14.2.0",
+  "harness_sha256": "fcbb0b59803619d3949698d937df1a4f0476dc143f366e290ab6a8f33859ad30",
+  "created_utc": "2026-09-05T00:54:39.737378+00:00"
+}

@@ -108,13 +108,14 @@ static void test_transitions(void)
   assert(lj_arena_alloc_quarantine_one(&src, LJ_ARENAK_TRAVERSABLE, 0));
   check_allocator(&src);
 
-  /* Carry all four list classes while the destination already owns arenas. */
+  /* Carry every populated list class while the destination owns arenas. */
   assert(lj_arena_alloc_prepare_sweep_kind(&src, LJ_ARENAK_PLAIN));
   assert(owner_count(src.owned[LJ_ARENAK_TRAVERSABLE]) == 1u);
   assert(owner_count(src.needsweep[LJ_ARENAK_PLAIN]) == 2u);
   assert(owner_count(src.quarantine[LJ_ARENAK_TRAVERSABLE]) == 1u);
   assert(owner_count(lj_arena_alloc_reclaimed_head(
-    &src, LJ_ARENAK_TRAVERSABLE)) == 1u);
+    &src, LJ_ARENAK_TRAVERSABLE)) +
+    owner_count(lj_arena_alloc_empty_reclaimed_head(&src)) == 1u);
   fill_arenas(&dst, &rs, LJ_ARENAK_TRAVERSABLE, 1u);
   fill_arenas(&dst, &rs, LJ_ARENAK_PLAIN, 1u);
   assert(lj_arena_alloc_prepare_sweep_kind(&dst, LJ_ARENAK_PLAIN));
@@ -123,6 +124,7 @@ static void test_transitions(void)
     moved += owner_count(src.owned[k]) + owner_count(src.needsweep[k]) +
       owner_count(src.quarantine[k]) +
       owner_count(lj_arena_alloc_reclaimed_head(&src, k));
+  moved += owner_count(lj_arena_alloc_empty_reclaimed_head(&src));
   assert(lj_arena_alloc_transfer(&dst, &src) == moved);
   check_allocator(&src);
   check_allocator(&dst);

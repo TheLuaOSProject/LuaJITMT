@@ -1,0 +1,17 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "8-11",
+    "make",
+    "-C",
+    "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/reuse-v2-assert/src",
+    "-j4",
+    "BUILDMODE=static",
+    "XCFLAGS=-DLUA_USE_ASSERT -DLJ_ARENA_TEST_HELPERS -DLJ_GC2_TEST_HELPERS"
+  ],
+  "exit_code": 0,
+  "wall_s": 9.875798858000053,
+  "executable_sha256": "f71e8c8375c480843974e81fa50a1ccf9ae2a24acec22c8b16d72d89a10330f2",
+  "library_sha256": "c11d7f1c299c304137d56a119f942319338b7db7271b7e6d005bd5b938d71b46"
+}

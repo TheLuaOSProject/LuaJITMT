@@ -1,0 +1,16 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "8-11",
+    "make",
+    "-C",
+    "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/assert/src",
+    "-j4",
+    "BUILDMODE=static",
+    "XCFLAGS=-DLUA_USE_ASSERT -DLJ_ARENA_TEST_HELPERS -DLJ_GC2_TEST_HELPERS"
+  ],
+  "exit_code": 0,
+  "wall_s": 9.894176984000296,
+  "executable_sha256": "e56f20cc50df81db50d08a9769b0021f94468cb6cee810a80ba83ff2555cc006"
+}

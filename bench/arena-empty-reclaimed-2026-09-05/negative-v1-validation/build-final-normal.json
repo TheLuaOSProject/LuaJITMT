@@ -1,0 +1,15 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "8-11",
+    "make",
+    "-C",
+    "/tmp/lj-empty-reclaimed-20260905-9vnax2uo/normal/src",
+    "-j4",
+    "BUILDMODE=static"
+  ],
+  "exit_code": 0,
+  "wall_s": 8.837782600000537,
+  "executable_sha256": "322876acbb79f546474e592070aa30695b6f99b1e899157be5a70695593f7412"
+}

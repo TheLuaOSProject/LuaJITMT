@@ -1,0 +1,1 @@
+t-arena-empty-reclaimed-dual-final: tests/t-arena-empty-reclaimed.c:562: test_register_empty_spare: Assertion `lj_arena_hugetab_init(&registry, 2)' failed.
