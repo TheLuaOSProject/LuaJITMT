@@ -1,0 +1,11 @@
+compile-t-gc2-sweep-table-coalescing 0
+t-gc2-sweep-table-coalescing 0
+compile-t-gc2-traverse 0
+t-gc2-traverse 0
+compile-t-x64-tnew-empty-inline 0
+t-x64-tnew-empty-inline 0
+compile-t-jit-fnew-bump 0
+t-jit-fnew-bump 0
+compile-t-arena-huge-tail 0
+t-arena-huge-tail 0
+Strict integration complete

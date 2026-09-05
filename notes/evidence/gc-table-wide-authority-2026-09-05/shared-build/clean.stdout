@@ -1,0 +1,3 @@
+make: Entering directory '/workspaces/lj-lockless/src'
+rm -f luajit libluajit.a libluajit.so host/minilua host/buildvm lj_vm.S lj_bcdef.h lj_ffdef.h lj_libdef.h lj_recdef.h lj_folddef.h host/buildvm_arch.h luajit.h luajit_relver.txt jit/vmdef.lua *.o host/*.o *.obj *.lib *.exp *.dll *.exe *.manifest *.pdb *.ilk
+make: Leaving directory '/workspaces/lj-lockless/src'

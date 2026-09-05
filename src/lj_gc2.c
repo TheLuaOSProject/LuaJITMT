@@ -15539,30 +15539,74 @@ static LJGC2TabStamp *gc2_table_stamp(global_State *g, GCtab *t)
   return lj_arena_gc2_stamp_acq(t);
 }
 
-static LJ_AINLINE uint32_t gc2_table_dirty_epoch(global_State *g, GCtab *t,
-						 int *stamped)
+/* Captured before payload loads. An old inline scan never adopts W after
+** promotion; an old wide scan must match both serial and era. */
+typedef struct GC2TabAuthority {
+  la_u128 proof;
+  uint8_t wide;
+  uint8_t stamped;
+} GC2TabAuthority;
+
+static LJ_AINLINE GC2TabAuthority gc2_table_authority(global_State *g, GCtab *t)
 {
+  GC2TabAuthority a = { { 0, 0 }, 0, 0 };
   LJGC2TabStamp *s = gc2_table_stamp(g, t);
-  if (stamped)
-    *stamped = s != NULL;
-  return s ? gc2_tabstamp_dirty(la_load64_acq(&s->state)) : 0;
+  if (s) {
+    a.stamped = 1;
+    a.proof.lo = la_load64_acq(&s->state);
+    if (gc2_tabstamp_dirty(a.proof.lo) == UINT32_MAX) {
+      LJGC2TabWideStamp *w = lj_arena_gc2_wide_acq(t);
+      a.wide = 1;
+      if (!w) {
+        a.stamped = 0;
+        gc2_activation_pin_no_reclaim(g);
+      } else {
+        a.proof = lj_arena_gc2_wide_snapshot(w);
+      }
+    }
+  }
+  return a;
+}
+
+static LJ_AINLINE int gc2_table_authority_terminal(GC2TabAuthority a)
+{
+  return a.wide && a.proof.hi == UINT64_MAX &&
+    gc2_tabstamp_dirty(a.proof.lo) == UINT32_MAX;
 }
 
 static LJ_AINLINE int gc2_table_scan_publish(global_State *g, GCtab *t,
-					     uint32_t cycle, uint32_t dirty)
+                                             uint32_t cycle,
+                                             GC2TabAuthority captured)
 {
   LJGC2TabStamp *s = gc2_table_stamp(g, t);
-  uint64_t old;
-  if (!s)
+  uint32_t dirty = gc2_tabstamp_dirty(captured.proof.lo);
+  if (!s || !captured.stamped)
     return 0;
-  old = la_load64_acq(&s->state);
-  for (;;) {
-    uint64_t next;
-    if (gc2_tabstamp_dirty(old) != dirty)
+  if (captured.wide) {
+    LJGC2TabWideStamp *w = lj_arena_gc2_wide_acq(t);
+    la_u128 old, next;
+    if (!w || gc2_tabstamp_dirty(la_load64_acq(&s->state)) != UINT32_MAX)
       return 0;
-    next = gc2_tabstamp_pack(cycle, dirty);
-    if (la_cas64(&s->state, &old, next, LA_ACQ_REL, LA_ACQ))
-      return 1;
+    old = lj_arena_gc2_wide_snapshot(w);
+    for (;;) {
+      if (old.hi != captured.proof.hi || gc2_tabstamp_dirty(old.lo) != dirty)
+        return 0;
+      next.lo = gc2_tabstamp_pack(cycle, dirty);
+      next.hi = old.hi;
+      if (la_cas128(&w->proof, &old, next))
+        return 1;
+    }
+  } else {
+    uint64_t old = la_load64_acq(&s->state);
+    for (;;) {
+      uint64_t next;
+      if (gc2_tabstamp_dirty(old) == UINT32_MAX ||
+          gc2_tabstamp_dirty(old) != dirty)
+        return 0;
+      next = gc2_tabstamp_pack(cycle, dirty);
+      if (la_cas64(&s->state, &old, next, LA_ACQ_REL, LA_ACQ))
+        return 1;
+    }
   }
 }
 
@@ -15574,30 +15618,47 @@ static LJ_AINLINE void gc2_table_dirty_bump(global_State *g, GCtab *t)
     return;
   old = la_load64_acq(&s->state);
   for (;;) {
-    uint32_t old_dirty = gc2_tabstamp_dirty(old);
-    uint32_t dirty;
-    uint64_t next;
-    if (old_dirty == ~(uint32_t)0) {
-      /* Dirty epochs share the scan-proof word and therefore must not ABA.
-      ** Clear the covered cycle while retaining the absorbing maximum, then
-      ** pin global reclamation. Mutator writes continue normally; only false
-      ** reclamation authority is forbidden after this practically unreachable
-      ** saturation edge. */
-      next = gc2_tabstamp_pack(0, old_dirty);
-      if (la_cas64(&s->state, &old, next, LA_ACQ_REL, LA_ACQ)) {
-	gc2_activation_pin_no_reclaim(g);
-	return;
+    uint32_t dirty = gc2_tabstamp_dirty(old);
+    if (dirty >= UINT32_MAX - 1u) {
+      LJGC2TabWideStamp *w = lj_arena_gc2_wide_acq(t);
+      la_u128 prior, next;
+      if (!w) {
+        gc2_activation_pin_no_reclaim(g);
+        return;  /* Reserved-storage invariant violation, never lazy OOM. */
       }
-      continue;
+      prior = lj_arena_gc2_wide_snapshot(w);
+      for (;;) {
+        uint32_t serial = gc2_tabstamp_dirty(prior.lo);
+        next.hi = prior.hi;
+        if (serial == UINT32_MAX) {
+          if (prior.hi == UINT64_MAX) {
+            next.lo = UINT32_MAX;
+          } else {
+            next.hi++;
+            next.lo = 1;
+          }
+        } else {
+          next.lo = (uint64_t)(serial + 1u);
+        }
+        if (la_cas128(&w->proof, &prior, next))
+          break;
+      }
+      if (next.hi == UINT64_MAX && (uint32_t)next.lo == UINT32_MAX)
+        gc2_activation_pin_no_reclaim(g);
+      /* W is monotone across cell reuse. Clear its previous-incarnation
+      ** coverage BEFORE the inline mode LP; no initializer/reset can race a
+      ** scanner that observes WIDE. A competing promoter needs no owner help. */
+      gc2_table_coalesce_test_at(g, t, LJ_GC2_TABLE_COALESCE_TEST_PRE_MODE);
+      while (gc2_tabstamp_dirty(old) != UINT32_MAX) {
+        if (la_cas64(&s->state, &old, (uint64_t)UINT32_MAX,
+                     LA_ACQ_REL, LA_ACQ))
+          break;
+      }
+      gc2_table_coalesce_test_at(g, t, LJ_GC2_TABLE_COALESCE_TEST_POST_MODE);
+      return;
     }
-    dirty = old_dirty + 1u;
-    /*
-    ** Dirtying a table invalidates its same-cycle scan proof in the same atomic
-    ** word used by the scanner. The scanner's post-clear check repairs the
-    ** remaining NEEDSCAN lost-clear race.
-    */
-    next = gc2_tabstamp_pack(0, dirty);
-    if (la_cas64(&s->state, &old, next, LA_ACQ_REL, LA_ACQ))
+    if (la_cas64(&s->state, &old, gc2_tabstamp_pack(0, dirty + 1u),
+                 LA_ACQ_REL, LA_ACQ))
       return;
   }
 }
@@ -15780,7 +15841,7 @@ static void gc2_barrier_tab_mark(global_State *g, GCtab *t)
   gc2_table_coalesce_test_at(g, t, LJ_GC2_TABLE_COALESCE_TEST_PRE_DIRTY);
   gc2_table_dirty_bump(g, t);
   gc2_table_coalesce_test_at(g, t, LJ_GC2_TABLE_COALESCE_TEST_POST_DIRTY);
-  if (gc2_table_dirty_epoch(g, t, NULL) == ~(uint32_t)0) {
+  if (gc2_table_authority_terminal(gc2_table_authority(g, t))) {
     /* An old scanner can republish the absorbing maximum after this write.
     ** Do not let the legacy rescan helper's current-stamp shortcut consume
     ** the request before it reaches the saturation-aware SSB converter. */
@@ -18416,27 +18477,23 @@ void lj_gc2_test_table_rescan_stale_hint_clear(global_State *g, GCtab *t)
 
 static LJ_AINLINE int gc2_table_scan_current(global_State *g, GCtab *t)
 {
-  LJGC2TabStamp *s;
+  GC2TabAuthority a;
   uint32_t cycle;
-  if (!g || !t)
+  if (!g || !t || (cycle = gc2_cycle_acq(g)) == 0)
     return 0;
-  cycle = gc2_cycle_acq(g);
-  if (cycle == 0)
-    return 0;
-  s = gc2_table_stamp(g, t);
-  return s && gc2_tabstamp_cycle(la_load64_acq(&s->state)) == cycle;
+  a = gc2_table_authority(g, t);
+  return a.stamped && gc2_tabstamp_cycle(a.proof.lo) == cycle;
 }
 
 static LJ_AINLINE int gc2_table_scan_coalescible(global_State *g, GCtab *t)
 {
-  LJGC2TabStamp *s = gc2_table_stamp(g, t);
-  uint32_t cycle = gc2_cycle_acq(g);
-  uint64_t state;
-  if (!s || cycle == 0)
+  GC2TabAuthority a;
+  uint32_t cycle;
+  if (!g || !t || (cycle = gc2_cycle_acq(g)) == 0)
     return 0;
-  state = la_load64_acq(&s->state);
-  return gc2_tabstamp_cycle(state) == cycle &&
-    gc2_tabstamp_dirty(state) != ~(uint32_t)0;
+  a = gc2_table_authority(g, t);
+  return a.stamped && gc2_tabstamp_cycle(a.proof.lo) == cycle &&
+    !gc2_table_authority_terminal(a);
 }
 
 #if defined(LJ_GC2_TEST_HELPERS)
@@ -18868,7 +18925,8 @@ static GC2TabProofResult gc2_traverse_tab_rec(
   MSize asize = 0, acap = 0, hmask = 0;
   Node *node = NULL;
   int array_status, node_status;
-  uint32_t cycle, dirty0;
+  uint32_t cycle;
+  GC2TabAuthority dirty0;
   int stamped, tabstatus, weak_retry = 0, weak_recorded = 1;
   GC2TabProofResult result = GC2_TAB_PROOF_RETRY;
   gc2_mark_scope_init(&scope);
@@ -18898,7 +18956,8 @@ static GC2TabProofResult gc2_traverse_tab_rec(
   cycle = gc2_cycle_acq(g);
   if (completion == GC2_TAB_COMPLETE_EXACT_PROOF && cycle == 0)
     goto retry_scan;
-  dirty0 = gc2_table_dirty_epoch(g, t, &stamped);
+  dirty0 = gc2_table_authority(g, t);
+  stamped = dirty0.stamped;
   gc2_table_coalesce_test_at(g, t, LJ_GC2_TABLE_COALESCE_TEST_SCAN_START);
   mt = lj_tab_metatable_acq(t);
   /*

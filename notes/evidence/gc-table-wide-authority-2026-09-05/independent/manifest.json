@@ -1,0 +1,15 @@
+{
+  "reviewed_tree": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/tree",
+  "base": "ff2a6ca0260c0b0c55e2fa708e4f603fd9d4070f",
+  "sha256": {
+    "source-and-tests.patch": "2a7f49960f70123898715bd6dc5445cdd776f54d62917a8d3e3890b21443fa49",
+    "source.patch": "dca24e13fdc47d886a1ffc07b42a604c4e430090fa5f2fd9b1f8111678a8ee4a",
+    "tests-integration.patch": "9fe099f7b2df7bb78513437f480193f9e7f16985bdc1ff57b8b21ca6a1991637",
+    "tree/src/lj_arena.c": "b90b713ca6183ec36ca594c16c37d110e87fcebd815aa3f207da3d3f4be83973",
+    "tree/src/lj_arena.h": "c1e19e04c5a65aa05f7f37a195864995988610f06b4fb9ec897405982a4cd1c8",
+    "tree/src/lj_gc2.c": "5557bc243f94f5d310287494cc3560d91931455eaa8338ba480f84a33edf45a1",
+    "tree/src/lj_gc2.h": "244b10c49ad036b661a08adc178e6b8247d8ff1b18ed63bc035d3440df16a9f9"
+  },
+  "new_runtime_executions": 0,
+  "shared_edits": false
+}

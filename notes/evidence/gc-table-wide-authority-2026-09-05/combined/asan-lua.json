@@ -1,0 +1,452 @@
+[
+  {
+    "name": "stock-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/luajit",
+      "-joff",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/stock/test",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/lib/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?/init.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 2.8745521639975777,
+    "stdout": "387 passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "cdata-capture-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/t-meta-cdata-capture.lua"
+    ],
+    "cwd": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/lib/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?/init.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.3417719669996586,
+    "stdout": "cdata method collection, callbacks, replacement and errors passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "cdata-native-guards-eight-modes-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/t-jit-cdata-basemt-guards.lua"
+    ],
+    "cwd": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/lib/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?/init.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.0278856109980552,
+    "stdout": "cdata-base-guard\tcall\twarm-exits\t0\tafter-exits\t0\tcalls\t80\texpected\t80\ncdata-base-guard\tindex\twarm-exits\t0\tafter-exits\t0\tcalls\t160\texpected\t160\ncdata-base-guard\tnewindex\twarm-exits\t0\tafter-exits\t0\tcalls\t160\texpected\t160\ncdata-base-guard\tmissing\twarm-exits\t0\tafter-exits\t0\tcalls\t0\texpected\t0\ncdata-base-guard\tnonfunction\twarm-exits\t0\tafter-exits\t0\tcalls\t0\texpected\t0\ncdata-base-guard\tresize\twarm-exits\t0\tafter-exits\t0\tcalls\t80\texpected\t80\ncdata-base-guard\tmethodlife\twarm-exits\t0\tafter-exits\t0\tcalls\t80\texpected\t80\ncdata-base-guard\treplace\twarm-exits\t0\tafter-exits\t0\tcalls\t80\texpected\t80\ncdata base-table native guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "weak-modes-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/t-weak-modes.lua"
+    ],
+    "cwd": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/lib/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?/init.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.13397813199844677,
+    "stdout": "t-weak-modes OK: weak modes, weak cycles, and current finalizer semantics verified\n",
+    "stderr": ""
+  },
+  {
+    "name": "weakmeta-bridge-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/t-gc2-weakmeta-bridge.lua"
+    ],
+    "cwd": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/lib/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?/init.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.1279423659980239,
+    "stdout": "t-gc2-weakmeta OK\n",
+    "stderr": ""
+  },
+  {
+    "name": "finalizer-peer-collect-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/t-gc2-finalizer-peer-collect.lua"
+    ],
+    "cwd": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/lib/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?/init.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.014797682000789791,
+    "stdout": "t-gc2-finalizer-peer-collect OK: peer full GC deferred during finalizer join\n",
+    "stderr": ""
+  },
+  {
+    "name": "finalizer-spawn-live-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/t-m8-finalizer-spawn-live.lua"
+    ],
+    "cwd": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/lib/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?/init.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.03137811799751944,
+    "stdout": "t-m8-finalizer-spawn-live OK: cdata/userdata finalizer-spawned worker can outlive callback\n",
+    "stderr": ""
+  },
+  {
+    "name": "ffi-finreg-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/t-ffi-gc-finreg.lua",
+      "3",
+      "72"
+    ],
+    "cwd": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/lib/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?/init.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.05970592900121119,
+    "stdout": "t-ffi-gc-finreg OK: 3 threads, 72 iterations, 162 worker registrations\n",
+    "stderr": ""
+  },
+  {
+    "name": "concurrent-table-meta-weak-finalizer-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/t-tab-resize-stress.lua"
+    ],
+    "cwd": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/lib/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?/init.lua;;",
+      "LJ_M5_TAB_RESIZE_STRESS_CASES": "weak,gcmark,gckey,weakkey,weakmeta,finalizer,metatable,len,traversal,nextchurn,nextinvalid,tableclear,tablelib,tablelibshift,metadispatch"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 9.092097929002193,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "name": "stock-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/luajit",
+      "-jon",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/stock/test",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/lib/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?/init.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 3.978269212999294,
+    "stdout": "509 passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "cdata-capture-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/t-meta-cdata-capture.lua"
+    ],
+    "cwd": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/lib/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?/init.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.32468568900003447,
+    "stdout": "cdata method collection, callbacks, replacement and errors passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "cdata-native-guards-eight-modes-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/t-jit-cdata-basemt-guards.lua"
+    ],
+    "cwd": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/lib/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?/init.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.026949032999254996,
+    "stdout": "cdata-base-guard\tcall\twarm-exits\t1\tafter-exits\t80\tcalls\t80\texpected\t80\ncdata-base-guard\tindex\twarm-exits\t1\tafter-exits\t159\tcalls\t160\texpected\t160\ncdata-base-guard\tnewindex\twarm-exits\t1\tafter-exits\t80\tcalls\t160\texpected\t160\ncdata-base-guard\tmissing\twarm-exits\t1\tafter-exits\t1\tcalls\t0\texpected\t0\ncdata-base-guard\tnonfunction\twarm-exits\t1\tafter-exits\t1\tcalls\t0\texpected\t0\ncdata-base-guard\tresize\twarm-exits\t1\tafter-exits\t80\tcalls\t80\texpected\t80\ncdata-base-guard\tmethodlife\twarm-exits\t1\tafter-exits\t80\tcalls\t80\texpected\t80\ncdata-base-guard\treplace\twarm-exits\t1\tafter-exits\t1\tcalls\t80\texpected\t80\ncdata base-table native guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "weak-modes-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/t-weak-modes.lua"
+    ],
+    "cwd": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/lib/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?/init.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.10912194199772784,
+    "stdout": "t-weak-modes OK: weak modes, weak cycles, and current finalizer semantics verified\n",
+    "stderr": ""
+  },
+  {
+    "name": "weakmeta-bridge-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/t-gc2-weakmeta-bridge.lua"
+    ],
+    "cwd": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/lib/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?/init.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.11428413400062709,
+    "stdout": "t-gc2-weakmeta OK\n",
+    "stderr": ""
+  },
+  {
+    "name": "finalizer-peer-collect-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/t-gc2-finalizer-peer-collect.lua"
+    ],
+    "cwd": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/lib/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?/init.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.014116567999735707,
+    "stdout": "t-gc2-finalizer-peer-collect OK: peer full GC deferred during finalizer join\n",
+    "stderr": ""
+  },
+  {
+    "name": "finalizer-spawn-live-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/t-m8-finalizer-spawn-live.lua"
+    ],
+    "cwd": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/lib/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?/init.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.031434380001883255,
+    "stdout": "t-m8-finalizer-spawn-live OK: cdata/userdata finalizer-spawned worker can outlive callback\n",
+    "stderr": ""
+  },
+  {
+    "name": "ffi-finreg-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/t-ffi-gc-finreg.lua",
+      "3",
+      "72"
+    ],
+    "cwd": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/lib/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?/init.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.07046767100109719,
+    "stdout": "t-ffi-gc-finreg OK: 3 threads, 72 iterations, 162 worker registrations\n",
+    "stderr": ""
+  },
+  {
+    "name": "concurrent-table-meta-weak-finalizer-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/t-tab-resize-stress.lua"
+    ],
+    "cwd": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/lib/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?/init.lua;;",
+      "LJ_M5_TAB_RESIZE_STRESS_CASES": "weak,gcmark,gckey,weakkey,weakmeta,finalizer,metatable,len,traversal,nextchurn,nextinvalid,tableclear,tablelib,tablelibshift,metadispatch"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 6.1701987520027615,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "name": "m6_jit_mt_activation_flush-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/m6_jit_mt_activation_flush.lua"
+    ],
+    "cwd": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/lib/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?/init.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.018936415999633027,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "m6_jit_gcworkers_activation_flush-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/m6_jit_gcworkers_activation_flush.lua"
+    ],
+    "cwd": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/lib/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?/init.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.012085004997061333,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "concurrent-table-jit-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/t-tab-resize-stress.lua"
+    ],
+    "cwd": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/tests/lib/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?.lua;/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src/?/init.lua;;",
+      "LJ_M5_TAB_RESIZE_STRESS_CASES": "jitstore,jitread,jititer,weakfinjit"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 4.364045238999097,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  }
+]

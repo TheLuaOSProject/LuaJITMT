@@ -1,0 +1,90 @@
+--- a/tests/t-jit-fnew-bump.c
++++ b/tests/t-jit-fnew-bump.c
+@@ -27,6 +27,9 @@
+ #include "lj_vm.h"
+ 
+ #include "lib/lua_fixture_helpers.h"
++#include "lib/gc2_wide_fixture_helpers.h"
++#include "lib/gc2_wide_reuse_helpers.h"
++static uint32_t wide_test_bump_start;
+ 
+ /* Built by the M6 harness with LJ_FUNC_TEST_HELPERS enabled. */
+ 
+@@ -1505,7 +1508,8 @@
+   lj_arena_next_rel(a, alloc->owned[LJ_ARENAK_TRAVERSABLE]);
+   alloc->owned[LJ_ARENAK_TRAVERSABLE] = a;
+   alloc->bump[LJ_ARENAK_TRAVERSABLE].a = a;
+-  alloc->bump[LJ_ARENAK_TRAVERSABLE].cell = LJ_AFIRST_CELL;
++  alloc->bump[LJ_ARENAK_TRAVERSABLE].cell =
++    wide_test_bump_start ? wide_test_bump_start : LJ_AFIRST_CELL;
+   alloc->bump[LJ_ARENAK_TRAVERSABLE].end = LJ_ARENA_CELLS;
+   assert(lj_arena_alloc_register_existing(alloc));
+ }
+@@ -1526,6 +1530,9 @@
+   assert(lj_gc2_table_token_state(control) == LJ_GC2_TABLE_TOKEN_NONE);
+   assert(lj_gc2_table_token_generation(control) != 0);
+   la_store64_rel(&stamp->state, state);
++  if (wide_test_bump_start)
++    ljt_gc2_wide_seed(lj_arena_cellptr(a, cell), UINT64_C(0xfedcba9876543210),
++                     (uint32_t)state, (uint32_t)(state >> 32), 1);
+   return control;
+ }
+ 
+@@ -1725,6 +1732,7 @@
+   uvstamp = lj_arena_gc2_stamp_acq(
+ 	lj_arena_cellptr(stamp_a, stamp_uvcell));
+   assert(fnstamp != NULL && uvstamp != NULL);
++  if (wide_test_bump_start) wide_guards_arm(stamp_a, stamp_fncell, fncells);
+   reset_gc1num_bump_counters();
+   helper0 = gc1num_bump_helper_calls();
+ 
+@@ -1748,6 +1756,15 @@
+ 	 lj_arena_cellof(first) == stamp_fncell);
+   assert(lj_arena_of(firstuv) == stamp_a &&
+ 	 lj_arena_cellof(firstuv) == stamp_uvcell);
++  if (wide_test_bump_start) {
++    wide_guards_check();
++    assert(ljt_gc2_wide_snapshot(first).hi == UINT64_C(0xfedcba9876543210));
++    assert(ljt_gc2_wide_snapshot(first).lo ==
++      ((UINT64_C(0x13572468) << 32) | UINT64_C(0x11111111)));
++    assert(ljt_gc2_wide_snapshot(firstuv).hi == UINT64_C(0xfedcba9876543210));
++    assert(ljt_gc2_wide_snapshot(firstuv).lo ==
++      ((UINT64_C(0x24681357) << 32) | UINT64_C(0x22222222)));
++  }
+   assert(la_load64_acq(&fnstamp->state) == 0);
+   assert(la_load64_acq(&uvstamp->state) == 0);
+   assert(la_load64_acq(&fnstamp->token.control) == fncontrol);
+@@ -3154,6 +3171,24 @@
+     }
+ }
+ 
++static void test_wide_pair_reuse(uint32_t cell)
++{
++  lua_State *L = luaL_newstate();
++  assert(L != NULL);
++  wide_test_bump_start = cell;
++  luaL_openlibs(L);
++  assert(lua_checkstack(L, 64));
++  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
++  lj_gc_threshold_store(G(L), UINT64_MAX / 2u);
++  lj_gc2_hard_store(G(L), UINT64_MAX / 2u);
++  lj_gc2_trigger_store(G(L), UINT64_MAX / 2u);
++  test_traced_immutable_numeric_inline(L, G(L));
++  assert_no_unfinished_owned_constructors(L2TG(L));
++  lua_close(L);
++  wide_test_bump_start = 0;
++  printf("FNEW cell %u: persistent W and both exact token guards passed\n", cell);
++}
++
+ int main(void)
+ {
+   lua_State *L = luaL_newstate();
+@@ -3203,6 +3238,8 @@
+   test_traced_active_mark_certificate(L, g, tg);
+ 
+   lua_close(L);
++  test_wide_pair_reuse(1536u);
++  test_wide_pair_reuse(1537u);
+   puts("t-jit-fnew-bump OK");
+   return 0;
+ }

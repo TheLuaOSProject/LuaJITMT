@@ -1,0 +1,19 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/normal/src",
+    "-j4",
+    "BUILDMODE=static",
+    "CCDEBUG=-g",
+    "TARGET_STRIP=:"
+  ],
+  "exit": 0,
+  "status": "complete",
+  "seconds": 13.11592053700224,
+  "ASAN_OPTIONS": "unset; host generators uninstrumented",
+  "target_only_sanitizer": false
+}

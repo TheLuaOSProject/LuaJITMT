@@ -199,19 +199,24 @@ return function(add)
 
   register({
     name = "m3_gc2_sweep_table_coalescing",
-    description = "admitted SWEEP requests coalesce behind complete table scans",
+    description = "SWEEP coalescing, persistent overflow proof and paused publisher progress",
     run = function(t)
       if jit.os ~= "Linux" then
         print("M3 SWEEP coalescing protected-memory fixture requires Linux")
         return
       end
-      local flags = gc2_test_cflags .. " -DLUA_USE_ASSERT"
+      local flags = gc2_test_cflags ..
+                    " -DLJ_ARENA_TEST_HELPERS -DLUA_USE_ASSERT"
       build.with_default_build_restore(t, function()
         build.clean_build(t, { quiet = true, xcflags = flags })
         compile_and_run_c(t, t:tmp("lj-t-gc2-sweep-table-coalescing"),
                           "t-gc2-sweep-table-coalescing.c", {
-          cflags = flags,
-          timeout = "40s"
+          cflags = flags .. " -DLJ_TEST_WRAP_CALLOC",
+          libs = {
+            "-lm", "-ldl", os.getenv("PTHREAD") or "-pthread",
+            "-Wl,--wrap=calloc"
+          },
+          timeout = "90s"
         })
       end)
       print("M3 SWEEP table coalescing regression passed")

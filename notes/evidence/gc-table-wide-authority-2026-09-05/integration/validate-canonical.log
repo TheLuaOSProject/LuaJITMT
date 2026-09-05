@@ -1,0 +1,5 @@
+m2_arena_huge_tail 0
+m3_gc2_sweep_table_coalescing 0
+m5_x64_tnew_empty_inline 0
+m6_jit_fnew_bump 0
+Canonical registrations complete

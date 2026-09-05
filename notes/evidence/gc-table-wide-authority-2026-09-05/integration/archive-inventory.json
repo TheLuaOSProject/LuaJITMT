@@ -1,0 +1,212 @@
+[
+  {
+    "path": "archive.py",
+    "bytes": 1996,
+    "sha256": "dd01044e5a62300e586e88557521a6c8d71bcdd5bae677048911571116e9b735",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/archive.py",
+    "archive": "notes/evidence/gc-table-wide-authority-2026-09-05/integration/archive.py"
+  },
+  {
+    "path": "base.tar",
+    "bytes": 25415680,
+    "sha256": "2d73ac5fadca5505c9659e14dacd87f9b41255992b308102769568ba98e51ed9",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/base.tar",
+    "local_binary_only": true
+  },
+  {
+    "path": "build-strict.log",
+    "bytes": 2317,
+    "sha256": "961bd8d28ea38cada00c9d9f1050c648e7fdb3c424075522ebd2be58d5c23f5a",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/build-strict.log",
+    "archive": "notes/evidence/gc-table-wide-authority-2026-09-05/integration/build-strict.log"
+  },
+  {
+    "path": "canonical-results.json",
+    "bytes": 36363,
+    "sha256": "d34d703ca5e98d19922c743f702f11a56a71505bdb511e14e35443b6b602af3c",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/canonical-results.json",
+    "archive": "notes/evidence/gc-table-wide-authority-2026-09-05/integration/canonical-results.json"
+  },
+  {
+    "path": "freeze.py",
+    "bytes": 3296,
+    "sha256": "1d7d465afcd4908808a7b5bf4e612f302ff8911990a562679c7b51af3a5dda50",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/freeze.py",
+    "archive": "notes/evidence/gc-table-wide-authority-2026-09-05/integration/freeze.py"
+  },
+  {
+    "path": "handoff.md",
+    "bytes": 7003,
+    "sha256": "bd6dabb7df7498a7cbf59fd61556c1dda5a2c4d508acd1b2501c7dcc6a9ab7c0",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/handoff.md",
+    "archive": "notes/evidence/gc-table-wide-authority-2026-09-05/integration/handoff.md"
+  },
+  {
+    "path": "m2_arena.lua.review.diff",
+    "bytes": 1349,
+    "sha256": "3fc7a5c214d501295ceba711c2fbb088bd138364fbd2f868a9780cfec94c60ae",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/m2_arena.lua.review.diff",
+    "archive": "notes/evidence/gc-table-wide-authority-2026-09-05/integration/m2_arena.lua.review.diff"
+  },
+  {
+    "path": "m3_gc.lua.review.diff",
+    "bytes": 1251,
+    "sha256": "061983a983b2ed8c82c959ac90ce4ef82cddf12f73cdb8d78c291d18646b383f",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/m3_gc.lua.review.diff",
+    "archive": "notes/evidence/gc-table-wide-authority-2026-09-05/integration/m3_gc.lua.review.diff"
+  },
+  {
+    "path": "m5_x64.lua.review.diff",
+    "bytes": 626,
+    "sha256": "daf263bddb6ddbbc1dc341cf1c6a543259f5696405784bd83bb817693b90d5c8",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/m5_x64.lua.review.diff",
+    "archive": "notes/evidence/gc-table-wide-authority-2026-09-05/integration/m5_x64.lua.review.diff"
+  },
+  {
+    "path": "prepare-tests.py",
+    "bytes": 12745,
+    "sha256": "41881e1a4a58b08561b314246700444cb136f045fa6c3aae5f5bf2e7c72af01a",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/prepare-tests.py",
+    "archive": "notes/evidence/gc-table-wide-authority-2026-09-05/integration/prepare-tests.py"
+  },
+  {
+    "path": "source-and-tests.patch",
+    "bytes": 58552,
+    "sha256": "2a7f49960f70123898715bd6dc5445cdd776f54d62917a8d3e3890b21443fa49",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/source-and-tests.patch",
+    "archive": "notes/evidence/gc-table-wide-authority-2026-09-05/integration/source-and-tests.patch"
+  },
+  {
+    "path": "source-apply.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/source-apply.log",
+    "archive": "notes/evidence/gc-table-wide-authority-2026-09-05/integration/source-apply.log"
+  },
+  {
+    "path": "source-test-manifest.json",
+    "bytes": 3388,
+    "sha256": "0b03d3417c9f30bfd4730d64da94841dcaa5dfbe167bfb997efdc825cad66b1f",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/source-test-manifest.json",
+    "archive": "notes/evidence/gc-table-wide-authority-2026-09-05/integration/source-test-manifest.json"
+  },
+  {
+    "path": "source.patch",
+    "bytes": 15387,
+    "sha256": "dca24e13fdc47d886a1ffc07b42a604c4e430090fa5f2fd9b1f8111678a8ee4a",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/source.patch",
+    "archive": "notes/evidence/gc-table-wide-authority-2026-09-05/integration/source.patch"
+  },
+  {
+    "path": "strict-results.json",
+    "bytes": 8329,
+    "sha256": "72309dcd366fed4673025108480f7dc38c9ea93930db905208487c8436a40b40",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/strict-results.json",
+    "archive": "notes/evidence/gc-table-wide-authority-2026-09-05/integration/strict-results.json"
+  },
+  {
+    "path": "strict-snapshot.json",
+    "bytes": 56293,
+    "sha256": "d212085817cc3770f8a942cdd1466b1a1cd05c9735e3f1bf365aced59e1a0521",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/strict-snapshot.json",
+    "archive": "notes/evidence/gc-table-wide-authority-2026-09-05/integration/strict-snapshot.json"
+  },
+  {
+    "path": "t-arena-huge-tail",
+    "bytes": 13170872,
+    "sha256": "d242bd1d7989dce7b6c2554d36cd72e651f7b51f665bfe18558dc79eb58d346a",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/t-arena-huge-tail",
+    "local_binary_only": true
+  },
+  {
+    "path": "t-gc2-sweep-table-coalescing",
+    "bytes": 14161808,
+    "sha256": "f70f010df647ec58dc8c0e5e155e3d9f224888dece32edaba1e89a3187b00722",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/t-gc2-sweep-table-coalescing",
+    "local_binary_only": true
+  },
+  {
+    "path": "t-gc2-sweep-table-coalescing.c.review.diff",
+    "bytes": 8991,
+    "sha256": "1e7a7a70d6dbd9dedc4812dced3e089d98a76487e07f70af61e4e9dd69d22953",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/t-gc2-sweep-table-coalescing.c.review.diff",
+    "archive": "notes/evidence/gc-table-wide-authority-2026-09-05/integration/t-gc2-sweep-table-coalescing.c.review.diff"
+  },
+  {
+    "path": "t-gc2-traverse",
+    "bytes": 15357920,
+    "sha256": "0b90d5c29a241f335726be60a9180794a58335a4d5b0ac586f1b241b1b8be8a3",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/t-gc2-traverse",
+    "local_binary_only": true
+  },
+  {
+    "path": "t-gc2-traverse.c.review.diff",
+    "bytes": 5539,
+    "sha256": "4f08617f25df4966ab094702cc3de2f3144d2782c28ac4281f3014221c761b43",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/t-gc2-traverse.c.review.diff",
+    "archive": "notes/evidence/gc-table-wide-authority-2026-09-05/integration/t-gc2-traverse.c.review.diff"
+  },
+  {
+    "path": "t-jit-fnew-bump",
+    "bytes": 14355384,
+    "sha256": "9e5cc249346e9b5d1c16d9e3882b7f96bb9ac5e2946135da2d9f74ba4c081201",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/t-jit-fnew-bump",
+    "local_binary_only": true
+  },
+  {
+    "path": "t-jit-fnew-bump.c.review.diff",
+    "bytes": 3161,
+    "sha256": "03915b563884ae7e06101a8d4c12d58a44b9041b1fdcc8a98c058085f5d06379",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/t-jit-fnew-bump.c.review.diff",
+    "archive": "notes/evidence/gc-table-wide-authority-2026-09-05/integration/t-jit-fnew-bump.c.review.diff"
+  },
+  {
+    "path": "t-x64-tnew-empty-inline",
+    "bytes": 14194832,
+    "sha256": "b0169684e9d769cf34bd75830cc57a11bc3a24d11b611cbc048964577d61a8ec",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/t-x64-tnew-empty-inline",
+    "local_binary_only": true
+  },
+  {
+    "path": "t-x64-tnew-empty-inline.c.review.diff",
+    "bytes": 3658,
+    "sha256": "499a01fb3eb219a3ca0faeeeb199826df03990b4cbebcc416bdfd2fc8f0d7801",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/t-x64-tnew-empty-inline.c.review.diff",
+    "archive": "notes/evidence/gc-table-wide-authority-2026-09-05/integration/t-x64-tnew-empty-inline.c.review.diff"
+  },
+  {
+    "path": "tests-integration.patch",
+    "bytes": 43165,
+    "sha256": "9fe099f7b2df7bb78513437f480193f9e7f16985bdc1ff57b8b21ca6a1991637",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/tests-integration.patch",
+    "archive": "notes/evidence/gc-table-wide-authority-2026-09-05/integration/tests-integration.patch"
+  },
+  {
+    "path": "validate-canonical.log",
+    "bytes": 132,
+    "sha256": "ba9908676026e4c33482bf03c68b205a4200b87f36b32d56c4218f45e326fcf8",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/validate-canonical.log",
+    "archive": "notes/evidence/gc-table-wide-authority-2026-09-05/integration/validate-canonical.log"
+  },
+  {
+    "path": "validate-canonical.py",
+    "bytes": 1189,
+    "sha256": "78d8b9df0faf51c0fefbcae45986c522c8a3a8a589a5b29eaa3a402df0c4f93a",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/validate-canonical.py",
+    "archive": "notes/evidence/gc-table-wide-authority-2026-09-05/integration/validate-canonical.py"
+  },
+  {
+    "path": "validate-strict.log",
+    "bytes": 292,
+    "sha256": "c3d67d66d8b5359e115b42961768ec738a5833d0d91ee19b4044a2fd9c21b1c5",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/validate-strict.log",
+    "archive": "notes/evidence/gc-table-wide-authority-2026-09-05/integration/validate-strict.log"
+  },
+  {
+    "path": "validate-strict.py",
+    "bytes": 1628,
+    "sha256": "725ad47ab1330fb349d527b9f809d5cecac5c3926c1b275350a263021eb87910",
+    "source": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/validate-strict.py",
+    "archive": "notes/evidence/gc-table-wide-authority-2026-09-05/integration/validate-strict.py"
+  }
+]

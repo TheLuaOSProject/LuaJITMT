@@ -11,6 +11,7 @@ local M2_ORDER = {
   "m2_arena_map",
   "m2_arena_alloc",
   "m2_arena_hugetab",
+  "m2_arena_huge_tail",
   "m2_arena_sweep",
   "m2_arena_empty_reclaimed",
   "m2_arena_empty_reclaimed_runtime",
@@ -99,6 +100,31 @@ return function(add)
       run_standalone_fixture(t, out .. ".alloc", "t-arena-alloc.c")
       run_standalone_fixture(t, out .. ".realloc", "t-arena-realloc.c")
       run_standalone_fixture(t, out .. ".allocf", "t-arena-allocf.c")
+    end
+  })
+
+  register({
+    name = "m2_arena_huge_tail",
+    description = "Huge overflow tail geometry, failure, reader and realloc lifetime",
+    run = function(t)
+      if jit.os ~= "Linux" then
+        print("M2 Huge-tail fixture requires Linux mmap64 and linker wrappers")
+        return
+      end
+      local flags = "-DLJ_ARENA_TEST_HELPERS -DLUA_USE_ASSERT"
+      build.with_default_build_restore(t, function()
+        build.clean_build(t, { quiet = true, xcflags = flags })
+        build.compile_and_run_c(t, t:tmp("lj-t-arena-huge-tail"),
+                               "t-arena-huge-tail.c", {
+          cflags = flags,
+          libs = {
+            "-lm", "-ldl", os.getenv("PTHREAD") or "-pthread",
+            "-Wl,--wrap=mmap", "-Wl,--wrap=mmap64", "-Wl,--wrap=munmap",
+            "-Wl,--wrap=calloc", "-Wl,--wrap=free"
+          },
+          timeout = "60s"
+        })
+      end)
     end
   })
 

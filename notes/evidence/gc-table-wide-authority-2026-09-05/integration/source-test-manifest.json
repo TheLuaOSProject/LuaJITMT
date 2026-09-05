@@ -1,0 +1,106 @@
+{
+  "base": "ff2a6ca0260c0b0c55e2fa708e4f603fd9d4070f",
+  "files": [
+    {
+      "path": "src/lj_arena.c",
+      "new_file": false,
+      "sha256": "b90b713ca6183ec36ca594c16c37d110e87fcebd815aa3f207da3d3f4be83973",
+      "group": "source"
+    },
+    {
+      "path": "src/lj_arena.h",
+      "new_file": false,
+      "sha256": "c1e19e04c5a65aa05f7f37a195864995988610f06b4fb9ec897405982a4cd1c8",
+      "group": "source"
+    },
+    {
+      "path": "src/lj_gc2.c",
+      "new_file": false,
+      "sha256": "5557bc243f94f5d310287494cc3560d91931455eaa8338ba480f84a33edf45a1",
+      "group": "source"
+    },
+    {
+      "path": "src/lj_gc2.h",
+      "new_file": false,
+      "sha256": "244b10c49ad036b661a08adc178e6b8247d8ff1b18ed63bc035d3440df16a9f9",
+      "group": "source"
+    },
+    {
+      "path": "tests/lib/gc2_wide_fixture_helpers.h",
+      "new_file": true,
+      "sha256": "7f95396eb8ba1503e02d4924ac6a0b4faa96faf992cef32394ec99589fa29eb2",
+      "group": "tests-integration"
+    },
+    {
+      "path": "tests/lib/gc2_wide_reuse_helpers.h",
+      "new_file": true,
+      "sha256": "c40c9b7304d242f04652ee34b86e03da3389c03047dcd50eb128212cfde33e65",
+      "group": "tests-integration"
+    },
+    {
+      "path": "tests/t-arena-huge-tail.c",
+      "new_file": true,
+      "sha256": "c5cbf2c036895ad80e2f22e06bea3613e2d324d19b5584917fdb24d6cbe46974",
+      "group": "tests-integration"
+    },
+    {
+      "path": "tests/t-gc2-sweep-table-coalescing.c",
+      "new_file": false,
+      "sha256": "95b6a2097ad3e05bd64292a26b1bb765f502edacfec0a08b04cdafc9f9be3a32",
+      "group": "tests-integration"
+    },
+    {
+      "path": "tests/t-gc2-traverse.c",
+      "new_file": false,
+      "sha256": "a58b77d512009f07d900cbf1e4f1c83588e970081c1d986e9446a84776dd6693",
+      "group": "tests-integration"
+    },
+    {
+      "path": "tests/t-x64-tnew-empty-inline.c",
+      "new_file": false,
+      "sha256": "72f55ef77dd0e95a08f1814b74691e576bfdd77f18cffd636ec92a88d2f5b6cb",
+      "group": "tests-integration"
+    },
+    {
+      "path": "tests/t-jit-fnew-bump.c",
+      "new_file": false,
+      "sha256": "7c56011496a50f2ca8a3df204497b630bd65452f63bd31f7c305984168520070",
+      "group": "tests-integration"
+    },
+    {
+      "path": "tests/suites/m2_arena.lua",
+      "new_file": false,
+      "sha256": "58dde3e63cbce9923c900bd503cffbe4513f238c1e5ec7109ef28cc3fdc13f4e",
+      "group": "tests-integration"
+    },
+    {
+      "path": "tests/suites/m3_gc.lua",
+      "new_file": false,
+      "sha256": "3a661ecc67fe823f25983e08cf08d9d511d7109bd101c66075c492ce1e29f769",
+      "group": "tests-integration"
+    },
+    {
+      "path": "tests/suites/m5_x64.lua",
+      "new_file": false,
+      "sha256": "b3064fc7a315cfd9bd504cbaee80db1024ac21c5d860d46da81706045f5b6c03",
+      "group": "tests-integration"
+    }
+  ],
+  "patches": {
+    "source": "dca24e13fdc47d886a1ffc07b42a604c4e430090fa5f2fd9b1f8111678a8ee4a",
+    "tests-integration": "9fe099f7b2df7bb78513437f480193f9e7f16985bdc1ff57b8b21ca6a1991637",
+    "source-and-tests": "2a7f49960f70123898715bd6dc5445cdd776f54d62917a8d3e3890b21443fa49"
+  },
+  "patch_check": {
+    "command": [
+      "git",
+      "apply",
+      "--check",
+      "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/source-and-tests.patch"
+    ],
+    "cwd": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/patch-check",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  }
+}

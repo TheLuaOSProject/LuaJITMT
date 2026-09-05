@@ -1,0 +1,5 @@
+{
+  "src/luajit": "de3f3a1c999b982ac893e1dad3610a68651eb487b16e4dedc5b3bcd81da591b7",
+  "src/libluajit.a": "ddc808df896675202dcdf5de4880808a77e76e860df778984f21975fa04c2190",
+  "src/libluajit.so": "eb06ab7cc7eda184109626e09b34bfcd267cdbd0dc11f0229cd14e726de46f29"
+}

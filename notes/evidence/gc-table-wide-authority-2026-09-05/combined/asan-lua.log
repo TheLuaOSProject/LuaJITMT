@@ -1,0 +1,22 @@
+stock-joff 0 2.875
+cdata-capture-joff 0 0.342
+cdata-native-guards-eight-modes-joff 0 0.028
+weak-modes-joff 0 0.134
+weakmeta-bridge-joff 0 0.128
+finalizer-peer-collect-joff 0 0.015
+finalizer-spawn-live-joff 0 0.031
+ffi-finreg-joff 0 0.06
+concurrent-table-meta-weak-finalizer-joff 0 9.092
+stock-jon 0 3.978
+cdata-capture-jon 0 0.325
+cdata-native-guards-eight-modes-jon 0 0.027
+weak-modes-jon 0 0.109
+weakmeta-bridge-jon 0 0.114
+finalizer-peer-collect-jon 0 0.014
+finalizer-spawn-live-jon 0 0.031
+ffi-finreg-jon 0 0.07
+concurrent-table-meta-weak-finalizer-jon 0 6.17
+m6_jit_mt_activation_flush-jon 0 0.019
+m6_jit_gcworkers_activation_flush-jon 0 0.012
+concurrent-table-jit-jon 0 4.364
+Lua run complete asan

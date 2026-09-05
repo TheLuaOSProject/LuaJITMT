@@ -1,0 +1,23 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/asan/src",
+    "-j4",
+    "BUILDMODE=static",
+    "CCDEBUG=-g",
+    "TARGET_STRIP=:",
+    "XCFLAGS=-DLJ_FUNC_TEST_HELPERS -DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLUA_USE_ASSERT",
+    "CC=clang",
+    "TARGET_CFLAGS=-O1 -fsanitize=address -fno-omit-frame-pointer",
+    "TARGET_LDFLAGS=-fsanitize=address"
+  ],
+  "exit": 0,
+  "status": "complete",
+  "seconds": 14.237236892997316,
+  "ASAN_OPTIONS": "unset; host generators uninstrumented",
+  "target_only_sanitizer": true
+}

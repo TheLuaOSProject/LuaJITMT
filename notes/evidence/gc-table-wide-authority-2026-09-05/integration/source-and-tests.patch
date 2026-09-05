@@ -1,0 +1,1639 @@
+--- a/src/lj_arena.c
++++ b/src/lj_arena.c
+@@ -1990,10 +1990,14 @@
+ 
+ size_t lj_arena_huge_mapsize(size_t size)
+ {
+-  size_t need = size + sizeof(GCAhdr);
++  const size_t overhead = sizeof(GCAhdr) + sizeof(LJGC2TabWideStamp);
++  size_t need;
++  /* Size-only physical geometry applies to both immutable mapping kinds.
++  ** HugeTab still publishes the exact logical payload size, never padding/W. */
+   if (size <= LJ_HUGE_THRESHOLD ||
+-      need < size || need > ~(size_t)LJ_ARENA_MASK)
+-    return 0;
++      size > ~(size_t)LJ_ARENA_MASK - overhead)
++    return 0;
++  need = size + overhead;
+   return (need + LJ_ARENA_MASK) & ~(size_t)LJ_ARENA_MASK;
+ }
+ 
+@@ -2010,6 +2014,15 @@
+   a->hdr.flags = LJ_AF_HUGE_MAGIC |
+     (flags & (LJ_AF_FLAG_MASK & ~LJ_AF_EMPTY_RECLAIMED));
+   a->hdr.live_cells = (uint32_t)(mapsize >> LJ_CELL_SHIFT);
++  if (flags & LJ_AF_TRAVERSABLE) {
++    LJGC2TabWideStamp *wide = (LJGC2TabWideStamp *)
++      ((char *)a + mapsize - sizeof(LJGC2TabWideStamp));
++    /* arena_map_aligned returns fresh anonymous zero-filled storage. This
++    ** initializes the whole W before publication without touching its page.
++    ** W stays at this physical tail across same-extent logical reallocs.
++    ** No recycled/dirty mapping may enter this private initialization path. */
++    la_storeptr_rel((void **)&a->hdr.gc2_huge_wide, wide);
++  }
+   return (void *)((char *)a + sizeof(GCAhdr));
+ }
+ 
+@@ -2023,8 +2036,9 @@
+     ** deleting the HugeTab locator; retain a violated mapping rather than
+     ** erasing a live scan owner if a terminal caller regresses. */
+     if (lj_arena_gc2_tokens_empty_acq(a) &&
+-	lj_arena_gc2_desc_mapping_clear_acq(a))
++	lj_arena_gc2_desc_mapping_clear_acq(a)) {
+       arena_unmap_aligned((void *)a, mapsize);
++    }
+   }
+   errno = olderr;
+ }
+@@ -2033,8 +2047,10 @@
+ {
+   int olderr = errno;
+   size_t mapsize = lj_arena_huge_mapsize(size);
+-  if (p && mapsize)
+-    arena_unmap_aligned((void *)lj_arena_of(p), mapsize);
++  if (p && mapsize) {
++    GCArena *a = lj_arena_of(p);
++    arena_unmap_aligned((void *)a, mapsize);
++  }
+   errno = olderr;
+ }
+ 
+--- a/src/lj_arena.h
++++ b/src/lj_arena.h
+@@ -102,9 +102,27 @@
+   LJGC2TableToken token;
+ } LJGC2TabStamp;
+ 
++/* The ordinary entry and token geometry remain unchanged. Overflow proof
++** storage is reserved before the mapping is published, never on a barrier. */
++typedef struct LJGC2TabWideStamp {
++  la_u128 proof;  /* lo={covered_cycle32,dirty32}, hi=nonwrapping era64. */
++} LJGC2TabWideStamp;
++
+ typedef struct LJGC2TabStampArena {
+   LJGC2TabStamp cell[LJ_ARENA_CELLS];
++  LJGC2TabWideStamp wide[LJ_ARENA_CELLS];
+ } LJGC2TabStampArena;
++
++LJ_STATIC_ASSERT(sizeof(LJGC2TabWideStamp) == 16u);
++LJ_STATIC_ASSERT(sizeof(LJGC2TabStamp) == 16u);
++LJ_STATIC_ASSERT(offsetof(LJGC2TabStamp, token) == 8u);
++
++static LJ_AINLINE la_u128 lj_arena_gc2_wide_snapshot(LJGC2TabWideStamp *w)
++{
++  la_u128 old = { 0, 0 }, same;
++  do { same = old; } while (!la_cas128(&w->proof, &old, same));
++  return old;
++}
+ 
+ struct HugeTab {
+   LJHugeTabHdr *h;
+@@ -147,7 +165,14 @@
+   GreyStack *grey;
+   uint32_t sweep_epoch;
+   uint32_t live_cells;
+-  LJGC2TabStampArena *gc2_tabstamp;
++  /* Immutable mapping kind selects this union. Small traversable mappings
++  ** own the full inline+wide cell sidecar; huge mappings own one reserved W
++  ** in their physical mapping tail.
++  ** Plain mappings leave the pointer NULL. Both arms live until final unmap. */
++  union {
++    LJGC2TabStampArena *gc2_tabstamp;
++    LJGC2TabWideStamp *gc2_huge_wide;
++  };
+   uint64_t retire_epoch;
+   uint32_t reclaim_cell;
+   uint32_t reclaim_deferred;
+@@ -360,6 +385,10 @@
+   la_storeptr_rel((void **)&a->hdr.next, next);
+ }
+ 
++/* Small-mapping-only accessor. The caller retains the exact non-Huge
++** mapping; immutable mapping kind selects this union arm. Plain small maps
++** return NULL. Huge body-proof users must use lj_arena_gc2_wide_acq after
++** their separate readable-body admission; header-only token users stay W-blind. */
+ static LJ_AINLINE LJGC2TabStampArena *
+ lj_arena_gc2_tabstamp_acq(const GCArena *a)
+ {
+@@ -598,6 +627,10 @@
+ LJ_FUNC int lj_arena_gc2_tokens_empty_acq(const GCArena *a);
+ LJ_FUNC GCArena *lj_arena_map(PRNGState *rs, uint32_t flags);
+ LJ_FUNC void lj_arena_unmap(GCArena *a);
++/* Physical extent for either Huge kind: header + exact logical payload +
++** one aligned 16-byte tail reservation, rounded to the arena quantum.
++** The plain kind leaves its W pointer NULL. Neither padding nor W belongs
++** to HugeTab logical lookup, vector bounds, copying or live-byte accounting. */
+ LJ_FUNC size_t lj_arena_huge_mapsize(size_t size);
+ LJ_FUNC void *lj_arena_huge_map(PRNGState *rs, size_t size, uint32_t flags);
+ LJ_FUNC void lj_arena_huge_unmap(void *p, size_t size);
+@@ -1128,6 +1161,31 @@
+   return side ? &side->cell[cell] : NULL;
+ }
+ 
++/* Body-proof lookup, deliberately separate from the header-only token APIs.
++** Exact mapping AND readable allocation admission must already be retained.
++** Wide serials persist across cell reuse; private construction resets inline
++** only. The promotion invalidation precedes exposing the inline sentinel. */
++static LJ_AINLINE LJGC2TabWideStamp *lj_arena_gc2_wide_acq(const void *p)
++{
++  GCArena *a;
++  LJGC2TabStampArena *side;
++  uint32_t flags, cell;
++  if (!p)
++    return NULL;
++  a = lj_arena_of(p);
++  flags = lj_arena_flags_acq(a);
++  if ((flags & LJ_AF_HUGE_MAGIC) == LJ_AF_HUGE_MAGIC)
++    return (LJGC2TabWideStamp *)la_loadptr_acq(
++      (void *const *)&a->hdr.gc2_huge_wide);
++  if (!(flags & LJ_AF_TRAVERSABLE))
++    return NULL;
++  cell = lj_arena_cellof(p);
++  if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS)
++    return NULL;
++  side = lj_arena_gc2_tabstamp_acq(a);
++  return side ? &side->wide[cell] : NULL;
++}
++
+ /* Physical table-rescan ownership for one retained small mapping. Logical
+ ** lifetime may already be FREE: only NONE permits body reuse or destruction.
+ ** A missing sidecar on a published traversable arena fails closed. */
+@@ -1609,7 +1667,8 @@
+ LJ_STATIC_ASSERT(sizeof(GCAhdr) == 128u);
+ LJ_STATIC_ASSERT(sizeof(LJGC2TabStamp) == 16u);
+ LJ_STATIC_ASSERT(offsetof(LJGC2TabStamp, token) == 8u);
+-LJ_STATIC_ASSERT(sizeof(LJGC2TabStampArena) == LJ_ARENA_SIZE);
++LJ_STATIC_ASSERT(sizeof(LJGC2TabStampArena) == 2u * LJ_ARENA_SIZE);
++LJ_STATIC_ASSERT(offsetof(LJGC2TabStampArena, wide) == LJ_ARENA_SIZE);
+ LJ_STATIC_ASSERT(offsetof(GCAhdr, huge_tabstamp) == 104u);
+ LJ_STATIC_ASSERT(offsetof(GCAhdr, gc2_tabledesc) == 120u);
+ LJ_STATIC_ASSERT(offsetof(GCAhdr, remote_active) == 56u);
+--- a/src/lj_gc2.c
++++ b/src/lj_gc2.c
+@@ -15539,65 +15539,126 @@
+   return lj_arena_gc2_stamp_acq(t);
+ }
+ 
+-static LJ_AINLINE uint32_t gc2_table_dirty_epoch(global_State *g, GCtab *t,
+-						 int *stamped)
+-{
++/* Captured before payload loads. An old inline scan never adopts W after
++** promotion; an old wide scan must match both serial and era. */
++typedef struct GC2TabAuthority {
++  la_u128 proof;
++  uint8_t wide;
++  uint8_t stamped;
++} GC2TabAuthority;
++
++static LJ_AINLINE GC2TabAuthority gc2_table_authority(global_State *g, GCtab *t)
++{
++  GC2TabAuthority a = { { 0, 0 }, 0, 0 };
+   LJGC2TabStamp *s = gc2_table_stamp(g, t);
+-  if (stamped)
+-    *stamped = s != NULL;
+-  return s ? gc2_tabstamp_dirty(la_load64_acq(&s->state)) : 0;
++  if (s) {
++    a.stamped = 1;
++    a.proof.lo = la_load64_acq(&s->state);
++    if (gc2_tabstamp_dirty(a.proof.lo) == UINT32_MAX) {
++      LJGC2TabWideStamp *w = lj_arena_gc2_wide_acq(t);
++      a.wide = 1;
++      if (!w) {
++        a.stamped = 0;
++        gc2_activation_pin_no_reclaim(g);
++      } else {
++        a.proof = lj_arena_gc2_wide_snapshot(w);
++      }
++    }
++  }
++  return a;
++}
++
++static LJ_AINLINE int gc2_table_authority_terminal(GC2TabAuthority a)
++{
++  return a.wide && a.proof.hi == UINT64_MAX &&
++    gc2_tabstamp_dirty(a.proof.lo) == UINT32_MAX;
+ }
+ 
+ static LJ_AINLINE int gc2_table_scan_publish(global_State *g, GCtab *t,
+-					     uint32_t cycle, uint32_t dirty)
++                                             uint32_t cycle,
++                                             GC2TabAuthority captured)
++{
++  LJGC2TabStamp *s = gc2_table_stamp(g, t);
++  uint32_t dirty = gc2_tabstamp_dirty(captured.proof.lo);
++  if (!s || !captured.stamped)
++    return 0;
++  if (captured.wide) {
++    LJGC2TabWideStamp *w = lj_arena_gc2_wide_acq(t);
++    la_u128 old, next;
++    if (!w || gc2_tabstamp_dirty(la_load64_acq(&s->state)) != UINT32_MAX)
++      return 0;
++    old = lj_arena_gc2_wide_snapshot(w);
++    for (;;) {
++      if (old.hi != captured.proof.hi || gc2_tabstamp_dirty(old.lo) != dirty)
++        return 0;
++      next.lo = gc2_tabstamp_pack(cycle, dirty);
++      next.hi = old.hi;
++      if (la_cas128(&w->proof, &old, next))
++        return 1;
++    }
++  } else {
++    uint64_t old = la_load64_acq(&s->state);
++    for (;;) {
++      uint64_t next;
++      if (gc2_tabstamp_dirty(old) == UINT32_MAX ||
++          gc2_tabstamp_dirty(old) != dirty)
++        return 0;
++      next = gc2_tabstamp_pack(cycle, dirty);
++      if (la_cas64(&s->state, &old, next, LA_ACQ_REL, LA_ACQ))
++        return 1;
++    }
++  }
++}
++
++static LJ_AINLINE void gc2_table_dirty_bump(global_State *g, GCtab *t)
+ {
+   LJGC2TabStamp *s = gc2_table_stamp(g, t);
+   uint64_t old;
+   if (!s)
+-    return 0;
++    return;
+   old = la_load64_acq(&s->state);
+   for (;;) {
+-    uint64_t next;
+-    if (gc2_tabstamp_dirty(old) != dirty)
+-      return 0;
+-    next = gc2_tabstamp_pack(cycle, dirty);
+-    if (la_cas64(&s->state, &old, next, LA_ACQ_REL, LA_ACQ))
+-      return 1;
+-  }
+-}
+-
+-static LJ_AINLINE void gc2_table_dirty_bump(global_State *g, GCtab *t)
+-{
+-  LJGC2TabStamp *s = gc2_table_stamp(g, t);
+-  uint64_t old;
+-  if (!s)
+-    return;
+-  old = la_load64_acq(&s->state);
+-  for (;;) {
+-    uint32_t old_dirty = gc2_tabstamp_dirty(old);
+-    uint32_t dirty;
+-    uint64_t next;
+-    if (old_dirty == ~(uint32_t)0) {
+-      /* Dirty epochs share the scan-proof word and therefore must not ABA.
+-      ** Clear the covered cycle while retaining the absorbing maximum, then
+-      ** pin global reclamation. Mutator writes continue normally; only false
+-      ** reclamation authority is forbidden after this practically unreachable
+-      ** saturation edge. */
+-      next = gc2_tabstamp_pack(0, old_dirty);
+-      if (la_cas64(&s->state, &old, next, LA_ACQ_REL, LA_ACQ)) {
+-	gc2_activation_pin_no_reclaim(g);
+-	return;
++    uint32_t dirty = gc2_tabstamp_dirty(old);
++    if (dirty >= UINT32_MAX - 1u) {
++      LJGC2TabWideStamp *w = lj_arena_gc2_wide_acq(t);
++      la_u128 prior, next;
++      if (!w) {
++        gc2_activation_pin_no_reclaim(g);
++        return;  /* Reserved-storage invariant violation, never lazy OOM. */
+       }
+-      continue;
+-    }
+-    dirty = old_dirty + 1u;
+-    /*
+-    ** Dirtying a table invalidates its same-cycle scan proof in the same atomic
+-    ** word used by the scanner. The scanner's post-clear check repairs the
+-    ** remaining NEEDSCAN lost-clear race.
+-    */
+-    next = gc2_tabstamp_pack(0, dirty);
+-    if (la_cas64(&s->state, &old, next, LA_ACQ_REL, LA_ACQ))
++      prior = lj_arena_gc2_wide_snapshot(w);
++      for (;;) {
++        uint32_t serial = gc2_tabstamp_dirty(prior.lo);
++        next.hi = prior.hi;
++        if (serial == UINT32_MAX) {
++          if (prior.hi == UINT64_MAX) {
++            next.lo = UINT32_MAX;
++          } else {
++            next.hi++;
++            next.lo = 1;
++          }
++        } else {
++          next.lo = (uint64_t)(serial + 1u);
++        }
++        if (la_cas128(&w->proof, &prior, next))
++          break;
++      }
++      if (next.hi == UINT64_MAX && (uint32_t)next.lo == UINT32_MAX)
++        gc2_activation_pin_no_reclaim(g);
++      /* W is monotone across cell reuse. Clear its previous-incarnation
++      ** coverage BEFORE the inline mode LP; no initializer/reset can race a
++      ** scanner that observes WIDE. A competing promoter needs no owner help. */
++      gc2_table_coalesce_test_at(g, t, LJ_GC2_TABLE_COALESCE_TEST_PRE_MODE);
++      while (gc2_tabstamp_dirty(old) != UINT32_MAX) {
++        if (la_cas64(&s->state, &old, (uint64_t)UINT32_MAX,
++                     LA_ACQ_REL, LA_ACQ))
++          break;
++      }
++      gc2_table_coalesce_test_at(g, t, LJ_GC2_TABLE_COALESCE_TEST_POST_MODE);
++      return;
++    }
++    if (la_cas64(&s->state, &old, gc2_tabstamp_pack(0, dirty + 1u),
++                 LA_ACQ_REL, LA_ACQ))
+       return;
+   }
+ }
+@@ -15780,7 +15841,7 @@
+   gc2_table_coalesce_test_at(g, t, LJ_GC2_TABLE_COALESCE_TEST_PRE_DIRTY);
+   gc2_table_dirty_bump(g, t);
+   gc2_table_coalesce_test_at(g, t, LJ_GC2_TABLE_COALESCE_TEST_POST_DIRTY);
+-  if (gc2_table_dirty_epoch(g, t, NULL) == ~(uint32_t)0) {
++  if (gc2_table_authority_terminal(gc2_table_authority(g, t))) {
+     /* An old scanner can republish the absorbing maximum after this write.
+     ** Do not let the legacy rescan helper's current-stamp shortcut consume
+     ** the request before it reaches the saturation-aware SSB converter. */
+@@ -18416,27 +18477,23 @@
+ 
+ static LJ_AINLINE int gc2_table_scan_current(global_State *g, GCtab *t)
+ {
+-  LJGC2TabStamp *s;
++  GC2TabAuthority a;
+   uint32_t cycle;
+-  if (!g || !t)
+-    return 0;
+-  cycle = gc2_cycle_acq(g);
+-  if (cycle == 0)
+-    return 0;
+-  s = gc2_table_stamp(g, t);
+-  return s && gc2_tabstamp_cycle(la_load64_acq(&s->state)) == cycle;
++  if (!g || !t || (cycle = gc2_cycle_acq(g)) == 0)
++    return 0;
++  a = gc2_table_authority(g, t);
++  return a.stamped && gc2_tabstamp_cycle(a.proof.lo) == cycle;
+ }
+ 
+ static LJ_AINLINE int gc2_table_scan_coalescible(global_State *g, GCtab *t)
+ {
+-  LJGC2TabStamp *s = gc2_table_stamp(g, t);
+-  uint32_t cycle = gc2_cycle_acq(g);
+-  uint64_t state;
+-  if (!s || cycle == 0)
+-    return 0;
+-  state = la_load64_acq(&s->state);
+-  return gc2_tabstamp_cycle(state) == cycle &&
+-    gc2_tabstamp_dirty(state) != ~(uint32_t)0;
++  GC2TabAuthority a;
++  uint32_t cycle;
++  if (!g || !t || (cycle = gc2_cycle_acq(g)) == 0)
++    return 0;
++  a = gc2_table_authority(g, t);
++  return a.stamped && gc2_tabstamp_cycle(a.proof.lo) == cycle &&
++    !gc2_table_authority_terminal(a);
+ }
+ 
+ #if defined(LJ_GC2_TEST_HELPERS)
+@@ -18868,7 +18925,8 @@
+   MSize asize = 0, acap = 0, hmask = 0;
+   Node *node = NULL;
+   int array_status, node_status;
+-  uint32_t cycle, dirty0;
++  uint32_t cycle;
++  GC2TabAuthority dirty0;
+   int stamped, tabstatus, weak_retry = 0, weak_recorded = 1;
+   GC2TabProofResult result = GC2_TAB_PROOF_RETRY;
+   gc2_mark_scope_init(&scope);
+@@ -18898,7 +18956,8 @@
+   cycle = gc2_cycle_acq(g);
+   if (completion == GC2_TAB_COMPLETE_EXACT_PROOF && cycle == 0)
+     goto retry_scan;
+-  dirty0 = gc2_table_dirty_epoch(g, t, &stamped);
++  dirty0 = gc2_table_authority(g, t);
++  stamped = dirty0.stamped;
+   gc2_table_coalesce_test_at(g, t, LJ_GC2_TABLE_COALESCE_TEST_SCAN_START);
+   mt = lj_tab_metatable_acq(t);
+   /*
+--- a/src/lj_gc2.h
++++ b/src/lj_gc2.h
+@@ -484,6 +484,8 @@
+ #define LJ_GC2_TABLE_COALESCE_TEST_SCAN_START	3u
+ #define LJ_GC2_TABLE_COALESCE_TEST_PRE_PROOF	4u
+ #define LJ_GC2_TABLE_COALESCE_TEST_MARK_ENTER	5u
++#define LJ_GC2_TABLE_COALESCE_TEST_PRE_MODE	6u
++#define LJ_GC2_TABLE_COALESCE_TEST_POST_MODE	7u
+ typedef void (*LJGC2TableCoalesceTestHook)(global_State *g, GCtab *t,
+ 					   uint32_t stage);
+ LJ_FUNC void lj_gc2_test_table_coalesce_hook(LJGC2TableCoalesceTestHook hook);
+--- /dev/null
++++ b/tests/lib/gc2_wide_fixture_helpers.h
+@@ -0,0 +1,25 @@
++#ifndef LJT_GC2_WIDE_FIXTURE_HELPERS_H
++#define LJT_GC2_WIDE_FIXTURE_HELPERS_H
++#include "lj_arena.h"
++/* Test-only namespace compression. Retain storage authority and exclude
++** concurrent proof updates through private ownership or a paused test schedule.
++** A sampled address or stamp alone is not permission to read a body. */
++static inline void ljt_gc2_wide_seed(const void *p, uint64_t era,
++                                     uint32_t serial, uint32_t cycle, int wide)
++{
++  LJGC2TabStamp *s = lj_arena_gc2_stamp_acq(p);
++  LJGC2TabWideStamp *w = lj_arena_gc2_wide_acq(p);
++  la_u128 old, next;
++  assert(s && w);
++  old = lj_arena_gc2_wide_snapshot(w);
++  next.lo = ((uint64_t)cycle << 32) | serial;
++  next.hi = era;
++  assert(la_cas128(&w->proof, &old, next));
++  la_store64_rel(&s->state,
++                 wide ? UINT32_MAX : ((uint64_t)cycle << 32) | serial);
++}
++static inline la_u128 ljt_gc2_wide_snapshot(const void *p)
++{
++  return lj_arena_gc2_wide_snapshot(lj_arena_gc2_wide_acq(p));
++}
++#endif
+--- /dev/null
++++ b/tests/lib/gc2_wide_reuse_helpers.h
+@@ -0,0 +1,65 @@
++#ifndef LJT_GC2_WIDE_REUSE_HELPERS_H
++#define LJT_GC2_WIDE_REUSE_HELPERS_H
++/* Private FREE cells model persisted authority after the previous lifetime
++** has ended. Guard entries are also FREE; their NONE generations must survive.
++* */
++typedef struct WideGuard {
++  LJGC2TabStamp *stamp;
++  LJGC2TabWideStamp *wide;
++  uint64_t inline_state;
++  la_u128 proof;
++  uint64_t token;
++} WideGuard;
++static WideGuard wide_guards[16];
++static uint32_t wide_guard_count;
++
++static void wide_guards_arm(GCArena *a, uint32_t cell, uint32_t delta)
++{
++  uint32_t first = cell / 2u - 1u, i;
++  assert(first >= LJ_AFIRST_CELL);
++  assert(delta + 3u <= 16u);
++  wide_guard_count = delta + 3u;
++  for (i = 0; i < wide_guard_count; i++) {
++    LJGC2TabStamp *s = lj_arena_gc2_stamp_acq(lj_arena_cellptr(a, first + i));
++    LJGC2TableTokenTicket ticket;
++    assert(lj_arena_lifetime_state_acq(a, first + i) == LJ_ARENA_LIFETIME_FREE);
++    assert(s);
++    assert(lj_gc2_table_token_refresh(&s->token, &ticket) ==
++           LJ_GC2_TABLE_TOKEN_RESULT_OK);
++    assert(lj_gc2_table_token_complete(&s->token, &ticket) ==
++           LJ_GC2_TABLE_TOKEN_RESULT_OK);
++    /* Low two bits zero allow the old misaddressed precheck to reach its
++    ** corrupting store, including when it confuses proof with token. */
++    la_store64_rel(&s->state, UINT64_C(0x3141592600000040) + 4u * i);
++    {
++      LJGC2TabWideStamp *w =
++          lj_arena_gc2_wide_acq(lj_arena_cellptr(a, first + i));
++      la_u128 old = lj_arena_gc2_wide_snapshot(w);
++      la_u128 next = {UINT64_C(0x55550000) + i,
++                      UINT64_C(0x2718281800000000) + i};
++      assert(la_cas128(&w->proof, &old, next));
++      wide_guards[i].wide = w;
++    }
++    wide_guards[i].stamp = s;
++    wide_guards[i].proof = lj_arena_gc2_wide_snapshot(wide_guards[i].wide);
++    wide_guards[i].inline_state = la_load64_acq(&s->state);
++    wide_guards[i].token = la_load64_acq(&s->token.control);
++    assert(wide_guards[i].token != 0);
++  }
++}
++
++static void wide_guards_check(void)
++{
++  uint32_t i;
++  for (i = 0; i < wide_guard_count; i++) {
++    la_u128 p = lj_arena_gc2_wide_snapshot(wide_guards[i].wide);
++    assert(la_load64_acq(&wide_guards[i].stamp->state) ==
++           wide_guards[i].inline_state);
++    assert(la_load64_acq(&wide_guards[i].stamp->token.control) ==
++           wide_guards[i].token);
++    assert(p.lo == wide_guards[i].proof.lo);
++    assert(p.hi == wide_guards[i].proof.hi);
++  }
++}
++
++#endif
+--- /dev/null
++++ b/tests/t-arena-huge-tail.c
+@@ -0,0 +1,439 @@
++#define _GNU_SOURCE
++#include <assert.h>
++#include <errno.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++#include <sys/mman.h>
++#include "lj_obj.h"
++#include "lj_arena.h"
++#include "lj_prng.h"
++
++struct Watch {
++  void *base, *wide;
++  size_t size;
++  unsigned active, unmaps;
++};
++static struct Watch watched[512];
++static unsigned nwatch, auto_watch, fail_map, mapcalls, calloc_calls,
++    free_calls;
++static struct Watch *watch_base(void *base, size_t size)
++{
++  struct Watch *w;
++  assert(nwatch < 512);
++  w = &watched[nwatch++];
++  w->base = base;
++  w->size = size;
++  w->wide = (char *)base + size - 16;
++  w->active = 1;
++  return w;
++}
++static struct Watch *watch(void *p, size_t size)
++{
++  return watch_base(lj_arena_of(p), lj_arena_huge_mapsize(size));
++}
++extern void *__real_mmap64(void *, size_t, int, int, int, off64_t);
++extern int __real_munmap(void *, size_t);
++extern void *__real_calloc(size_t, size_t);
++extern void __real_free(void *);
++void *__wrap_mmap64(void *p, size_t n, int prot, int flags, int fd, off64_t off)
++{
++  void *r;
++  mapcalls++;
++  if (fail_map) {
++    errno = ENOMEM;
++    return MAP_FAILED;
++  }
++  r = __real_mmap64(p, n, prot, flags, fd, off);
++  if (auto_watch && r != MAP_FAILED) {
++    uintptr_t a = ((uintptr_t)r + LJ_ARENA_MASK) & ~(uintptr_t)LJ_ARENA_MASK;
++    assert(n > LJ_ARENA_SIZE);
++    watch_base((void *)a, n - LJ_ARENA_SIZE);
++  }
++  return r;
++}
++void *__wrap_mmap(void *p, size_t n, int prot, int flags, int fd, off_t off)
++{
++  return __wrap_mmap64(p, n, prot, flags, fd, (off64_t)off);
++}
++int __wrap_munmap(void *p, size_t n)
++{
++  unsigned i;
++  for (i = 0; i < nwatch; i++)
++    if (watched[i].active && p == watched[i].base) {
++      assert(n == watched[i].size);
++      watched[i].active = 0;
++      watched[i].unmaps++;
++    }
++  return __real_munmap(p, n);
++}
++void *__wrap_calloc(size_t n, size_t s)
++{
++  calloc_calls++;
++  return __real_calloc(n, s);
++}
++void __wrap_free(void *p)
++{
++  unsigned i;
++  free_calls++;
++  for (i = 0; i < nwatch; i++)
++    assert(!watched[i].active || p != watched[i].wide);
++  __real_free(p);
++}
++static size_t want_size(size_t s)
++{
++  const size_t max = ~(size_t)LJ_ARENA_MASK;
++  if (s <= LJ_HUGE_THRESHOLD || s > max - sizeof(GCAhdr) - 16)
++    return 0;
++  return (s + sizeof(GCAhdr) + 16 + LJ_ARENA_MASK) & ~(size_t)LJ_ARENA_MASK;
++}
++static la_u128 wide_seed(void *p)
++{
++  LJGC2TabWideStamp *w = lj_arena_gc2_wide_acq(p);
++  la_u128 old,
++      next = {UINT64_C(0x1122334400000017), UINT64_C(0x8877665544332211)};
++  assert(w);
++  old = lj_arena_gc2_wide_snapshot(w);
++  assert(la_cas128(&w->proof, &old, next));
++  la_store64_rel(&lj_arena_gc2_stamp_acq(p)->state, UINT32_MAX);
++  return next;
++}
++static void wide_is(void *p, la_u128 expected)
++{
++  la_u128 actual = lj_arena_gc2_wide_snapshot(lj_arena_gc2_wide_acq(p));
++  assert(actual.lo == expected.lo && actual.hi == expected.hi);
++}
++static void bytes_are(void *p, size_t n, unsigned char c)
++{
++  size_t i;
++  for (i = 0; i < n; i++)
++    assert(((unsigned char *)p)[i] == c);
++}
++static void delete_map(HugeTab *ht, void *p)
++{
++  LJHugeInfo hi;
++  assert(lj_arena_hugetab_delete(ht, p, &hi) == 1);
++  lj_arena_huge_unmap(p, hi.size);
++}
++static void payload_tail_probe(PRNGState *rs)
++{
++  size_t size = 65393;
++  void *p = lj_arena_huge_map(rs, size, LJ_AF_TRAVERSABLE);
++  la_u128 proof;
++  assert(p);
++  watch(p, size);
++  proof = wide_seed(p);
++  memset(p, 0xa7, size);
++  /* Causal negative: the old mapping length lets the final user byte overwrite
++   * W. */
++  wide_is(p, proof);
++  bytes_are(p, size, 0xa7);
++  lj_arena_huge_unmap(p, size);
++  puts("final advertised payload byte leaves W intact");
++}
++static void geometry(PRNGState *rs)
++{
++  const int deltas[] = {-17, -16, -15, -1, 0, 1, 15, 16, 17};
++  unsigned k, j, kind;
++  const size_t max = ~(size_t)LJ_ARENA_MASK;
++  assert(sizeof(GCAhdr) == 128 && sizeof(LJGC2TabStamp) == 16 &&
++         offsetof(LJGC2TabStamp, token) == 8);
++  assert(lj_arena_huge_mapsize(LJ_HUGE_THRESHOLD) == 0);
++  assert(lj_arena_huge_mapsize(LJ_HUGE_THRESHOLD + 1) ==
++         want_size(LJ_HUGE_THRESHOLD + 1));
++  assert(lj_arena_huge_mapsize(max - 144) == max);
++  for (k = 0; k < 144; k++)
++    assert(lj_arena_huge_mapsize(max - k) == 0);
++  assert(lj_arena_huge_mapsize(SIZE_MAX) == 0);
++  errno = EDOM;
++  assert(lj_arena_huge_map(rs, max - 144, LJ_AF_TRAVERSABLE) == NULL);
++  assert(errno == EDOM);
++  for (k = 1; k <= 3; k++)
++    for (j = 0; j < sizeof(deltas) / sizeof(deltas[0]); j++)
++      for (kind = 0; kind < 2; kind++) {
++        size_t size =
++                   (size_t)k * LJ_ARENA_SIZE - sizeof(GCAhdr) - 16 + deltas[j],
++               m = lj_arena_huge_mapsize(size);
++        void *p;
++        GCArena *a;
++        struct Watch *watcher;
++        unsigned calls = calloc_calls, frees = free_calls;
++        LJGC2TabWideStamp *w;
++        assert(m == want_size(size));
++        errno = EDOM;
++        p = lj_arena_huge_map(rs, size, kind ? LJ_AF_TRAVERSABLE : 0);
++        assert(p && errno == EDOM);
++        watcher = watch(p, size);
++        a = lj_arena_of(p);
++        w = lj_arena_gc2_wide_acq(p);
++        assert((char *)p == (char *)a + 128);
++        assert(a->hdr.live_cells == (uint32_t)(m >> LJ_CELL_SHIFT));
++        if (kind)
++          assert((void *)w == (char *)a + m - 16 && ((uintptr_t)w & 15) == 0 &&
++                 (char *)p + size <= (char *)w);
++        else
++          assert(!w);
++        memset(p, 0xa7, size);
++        bytes_are(p, size, 0xa7);
++        if (w) {
++          la_u128 zero = {0, 0};
++          wide_is(p, zero);
++          (void)wide_seed(p);
++          bytes_are(p, size, 0xa7);
++        }
++        lj_arena_huge_unmap(p, size);
++        assert(errno == EDOM);
++        assert(watcher->unmaps == 1);
++        assert(calloc_calls == calls && free_calls == frees);
++      }
++  puts("checked physical geometry, full payload bytes, zero W, plain NULL and "
++       "zero calloc/free");
++}
++static void bounds_and_zero(PRNGState *rs)
++{
++  HugeTab ht = {0};
++  void *p, *base = NULL;
++  size_t s = 20000, m = lj_arena_huge_mapsize(s);
++  LJHugeReader r = {0};
++  LJHugeInfo hi;
++  LJGC2TabWideStamp *w;
++  unsigned char resident = 0;
++  long page = sysconf(_SC_PAGESIZE);
++  void *ends[4];
++  unsigned i;
++  assert(lj_arena_hugetab_init(&ht, 3));
++  p = lj_arena_huge_map(rs, s, LJ_AF_TRAVERSABLE);
++  assert(p);
++  watch(p, s);
++  w = lj_arena_gc2_wide_acq(p);
++  assert(mincore((void *)((uintptr_t)w & ~((uintptr_t)page - 1)), (size_t)page,
++                 &resident) == 0);
++  assert((resident & 1) == 0);
++  assert(lj_arena_hugetab_insert(&ht, p, s, LJ_HUGEF_TRAVERSABLE) == 1);
++  assert(lj_arena_hugetab_publish_interior_cdata(&ht, p));
++  assert(lj_arena_hugetab_reader_range_acquire(&ht, (char *)p + s - 1, &base,
++                                               &r, &hi) == 1);
++  assert(base == p && hi.size == s);
++  assert(lj_arena_hugetab_reader_covers(&r, (char *)p + s - 1));
++  assert(!lj_arena_hugetab_reader_covers(&r, (char *)p + s));
++  assert(lj_arena_hugetab_reader_covers_range(&r, (char *)p + s, 0));
++  assert(!lj_arena_hugetab_reader_covers_range(&r, (char *)p + s - 1, 2));
++  assert(lj_arena_hugetab_reader_release(&r, NULL) ==
++         LJ_ARENA_HUGE_READER_RELEASED);
++  ends[0] = (char *)p + s;
++  ends[1] = (char *)p + s + 1;
++  ends[2] = w;
++  ends[3] = (char *)lj_arena_of(p) + m - 1;
++  for (i = 0; i < 4; i++) {
++    base = (void *)1;
++    assert(!lj_arena_hugetab_range_lookup(&ht, ends[i], &base, &hi));
++    base = (void *)1;
++    assert(!lj_arena_hugetab_cdata_range_lookup(&ht, ends[i], &base, &hi));
++    base = (void *)1;
++    assert(lj_arena_hugetab_reader_range_acquire(
++               &ht, ends[i], &base, &r, &hi) == LJ_ARENA_HUGE_READER_MISSING);
++    assert(!r.h);
++    assert(lj_arena_hugetab_reader_cdata_range_acquire(
++               &ht, ends[i], &base, &r, &hi) == LJ_ARENA_HUGE_READER_MISSING);
++    assert(!r.h);
++  }
++  delete_map(&ht, p);
++  lj_arena_hugetab_fini(&ht);
++  puts("logical bounds exclude padding and W; initial tail page untouched");
++}
++static void direct_resize(PRNGState *rs)
++{
++  TGAlloc alloc;
++  void *p, *q;
++  LJGC2TabWideStamp *w;
++  la_u128 proof, zero = {0, 0};
++  struct Watch *old;
++  size_t s = 65000;
++  lj_arena_alloc_init(&alloc);
++  p = lj_arena_alloc(&alloc, rs, s, LJ_AF_TRAVERSABLE);
++  assert(p);
++  old = watch(p, s);
++  memset(p, 0x69, s);
++  proof = wide_seed(p);
++  w = lj_arena_gc2_wide_acq(p);
++  q = lj_arena_realloc(&alloc, rs, p, s, 65392, LJ_AF_TRAVERSABLE);
++  assert(q == p && lj_arena_gc2_wide_acq(q) == w);
++  wide_is(q, proof);
++  memset(q, 0x69, 65392);
++  q = lj_arena_realloc(&alloc, rs, p, 65392, 65200, LJ_AF_TRAVERSABLE);
++  assert(q == p);
++  wide_is(q, proof);
++  q = lj_arena_realloc(&alloc, rs, p, 65200, 65408, LJ_AF_TRAVERSABLE);
++  assert(q && q != p);
++  watch(q, 65408);
++  assert(old->unmaps == 1);
++  bytes_are(q, 65200, 0x69);
++  wide_is(q, zero);
++  memset(q, 0x79, 65408);
++  (void)wide_seed(q);
++  bytes_are(q, 65408, 0x79);
++  lj_arena_free(&alloc, q, 65408);
++  lj_arena_alloc_fini(&alloc);
++  puts("private direct same-extent W stationary; crossing tail boundary "
++       "moves/copies only payload");
++}
++static void shared_resize_and_reader(PRNGState *rs)
++{
++  HugeTab ht = {0};
++  TGAlloc alloc;
++  LJArenaAllocD ad;
++  void *p, *q;
++  LJHugeReader r = {0};
++  LJHugeInfo hi;
++  la_u128 proof;
++  struct Watch *old;
++  assert(lj_arena_hugetab_init(&ht, 4));
++  lj_arena_alloc_init(&alloc);
++  lj_arena_allocd_init(&ad, &alloc, rs, 0);
++  lj_arena_allocd_sethugetab(&ad, &ht);
++  p = lj_arena_allocd_alloc(&ad, 65000, LJ_AF_TRAVERSABLE);
++  assert(p);
++  old = watch(p, 65000);
++  assert(lj_arena_allocd_publish_gco(&ad, p));
++  proof = wide_seed(p);
++  assert(lj_arena_hugetab_reader_acquire(&ht, p, &r, &hi) == 1);
++  assert(lj_arena_allocf(&ad, p, 65000, 65392) == NULL);
++  assert(lj_arena_allocf(&ad, p, 65000, 65408) == NULL);
++  wide_is(p, proof);
++  assert(lj_arena_hugetab_lookup(&ht, p, &hi) && hi.size == 65000 &&
++         hi.readers == 1 && !(hi.flags & LJ_HUGEF_BUSY));
++  assert(!old->unmaps);
++  assert(lj_arena_hugetab_reader_release(&r, NULL) ==
++         LJ_ARENA_HUGE_READER_RELEASED);
++  assert(lj_arena_allocf(&ad, p, 65000, 0) == NULL);
++  assert(old->unmaps == 1);
++  p = lj_arena_allocd_alloc(&ad, 65000, 0);
++  assert(p);
++  old = watch(p, 65000);
++  memset(p, 0x41, 65000);
++  assert(lj_arena_allocf(&ad, p, 65000, 65392) == p);
++  assert(lj_arena_hugetab_lookup(&ht, p, &hi) && hi.size == 65392);
++  memset(p, 0x41, 65392);
++  assert(lj_arena_hugetab_reader_acquire(&ht, p, &r, &hi) == 1);
++  assert(lj_arena_allocf(&ad, p, 65392, SIZE_MAX) == NULL);
++  assert(lj_arena_hugetab_lookup(&ht, p, &hi) && hi.size == 65392 &&
++         hi.readers == 1 && !(hi.flags & LJ_HUGEF_BUSY));
++  q = lj_arena_allocf(&ad, p, 65392, 65200);
++  assert(q && q != p);
++  watch(q, 65200);
++  bytes_are(q, 65200, 0x41);
++  bytes_are(p, 65392, 0x41);
++  assert(!old->unmaps);
++  assert(lj_arena_hugetab_lookup(&ht, p, &hi) && hi.size == 65392 &&
++         (hi.flags & LJ_HUGEF_DEFER_FREE));
++  assert(lj_arena_hugetab_reader_release(&r, &hi) ==
++         LJ_ARENA_HUGE_READER_HANDOFF);
++  assert(!old->unmaps);
++  delete_map(&ht, p);
++  assert(old->unmaps == 1);
++  p = q;
++  old = &watched[nwatch - 1];
++  q = lj_arena_allocf(&ad, p, 65200, 65408);
++  assert(q && q != p);
++  watch(q, 65408);
++  assert(old->unmaps == 1);
++  bytes_are(q, 65200, 0x41);
++  assert(lj_arena_gc2_wide_acq(q) == NULL);
++  assert(lj_arena_allocf(&ad, q, 65408, 0) == NULL);
++  lj_arena_alloc_fini(&alloc);
++  lj_arena_hugetab_fini(&ht);
++  puts("published traversable resize refuses; plain readers preserve old "
++       "logical extent through deferred unmap");
++}
++static void failures_transfer(PRNGState *rs)
++{
++  HugeTab src = {0}, dst = {0};
++  TGAlloc alloc;
++  LJArenaAllocD ad;
++  void *p, *q;
++  struct Watch *old;
++  unsigned count, calls;
++  la_u128 proof;
++  calls = mapcalls;
++  fail_map = 1;
++  errno = ERANGE;
++  assert(lj_arena_huge_map(rs, 65393, LJ_AF_TRAVERSABLE) == NULL);
++  assert(errno == ERANGE && mapcalls == calls + 1);
++  fail_map = 0;
++  lj_arena_test_gc2_sidecar_fail_alloc(1);
++  assert(lj_arena_map(rs, LJ_AF_TRAVERSABLE) == NULL);
++  p = lj_arena_huge_map(rs, 65393, LJ_AF_TRAVERSABLE);
++  assert(p);
++  watch(p, 65393);
++  lj_arena_huge_unmap(p, 65393);
++  lj_arena_test_gc2_sidecar_fail_alloc(0);
++  assert(lj_arena_hugetab_init(&src, 0));
++  assert(lj_arena_hugetab_init(&dst, 1));
++  lj_arena_alloc_init(&alloc);
++  lj_arena_allocd_init(&ad, &alloc, rs, 0);
++  lj_arena_allocd_sethugetab(&ad, &src);
++  p = lj_arena_allocd_alloc(&ad, 65393, 0);
++  assert(p);
++  old = watch(p, 65393);
++  memset(p, 0x31, 65393);
++  count = nwatch;
++  auto_watch = 1;
++  q = lj_arena_allocd_alloc(&ad, 65408, LJ_AF_TRAVERSABLE);
++  auto_watch = 0;
++  assert(!q);
++  assert(nwatch == count + 1 && watched[count].unmaps == 1);
++  assert(!old->unmaps);
++  count = nwatch;
++  auto_watch = 1;
++  q = lj_arena_allocf(&ad, p, 65393, 130945);
++  auto_watch = 0;
++  assert(!q);
++  assert(nwatch == count + 1 && watched[count].unmaps == 1);
++  assert(!old->unmaps);
++  bytes_are(p, 65393, 0x31);
++  assert(lj_arena_allocf(&ad, p, 65393, 0) == NULL);
++  assert(old->unmaps == 1);
++  p = lj_arena_huge_map(rs, 65393, LJ_AF_TRAVERSABLE);
++  assert(p);
++  old = watch(p, 65393);
++  proof = wide_seed(p);
++  assert(lj_arena_hugetab_insert(&src, p, 65393,
++                                 LJ_HUGEF_TRAVERSABLE | LJ_HUGEF_READY));
++  assert(lj_arena_hugetab_transfer(&dst, &src, 77));
++  wide_is(p, proof);
++  assert(!old->unmaps && !lj_arena_hugetab_lookup(&src, p, NULL) &&
++         lj_arena_hugetab_lookup(&dst, p, NULL));
++  assert(lj_arena_hugetab_fini_all(&dst) == 1);
++  assert(old->unmaps == 1);
++  lj_arena_hugetab_fini(&src);
++  lj_arena_alloc_fini(&alloc);
++  puts("map/sidecar/insertion/replacement failures, transfer and terminal "
++       "whole-map cleanup verified");
++}
++int main(int argc, char **argv)
++{
++  PRNGState rs;
++  unsigned i;
++  const char *mode = argc > 1 ? argv[1] : "all";
++  alarm(40);
++  setvbuf(stdout, NULL, _IOLBF, 0);
++  lj_prng_seed_fixed(&rs);
++  if (!strcmp(mode, "all") || !strcmp(mode, "geometry"))
++    geometry(&rs);
++  if (!strcmp(mode, "all") || !strcmp(mode, "payload"))
++    payload_tail_probe(&rs);
++  if (!strcmp(mode, "all") || !strcmp(mode, "bounds"))
++    bounds_and_zero(&rs);
++  if (!strcmp(mode, "all") || !strcmp(mode, "resize")) {
++    direct_resize(&rs);
++    shared_resize_and_reader(&rs);
++  }
++  if (!strcmp(mode, "all") || !strcmp(mode, "failures"))
++    failures_transfer(&rs);
++  for (i = 0; i < nwatch; i++)
++    assert(!watched[i].active && watched[i].unmaps == 1);
++  puts("Huge-tail targeted controls passed");
++  return 0;
++}
+--- a/tests/t-gc2-sweep-table-coalescing.c
++++ b/tests/t-gc2-sweep-table-coalescing.c
+@@ -25,6 +25,8 @@
+ #include "lj_gc2.h"
+ #include "lj_tab.h"
+ #include "lj_tg.h"
++#include "lualib.h"
++#include "lib/gc2_wide_fixture_helpers.h"
+ 
+ typedef struct Fixture {
+   lua_State *L;
+@@ -342,7 +344,7 @@
+   pthread_t worker;
+   publish(&f, 0);
+   if (saturated)
+-    la_store64_rel(&f.stamp->state, UINT32_MAX);
++    ljt_gc2_wide_seed(f.parent, UINT64_MAX, UINT32_MAX, 0, 1);
+   assert(lj_gc2_flush_ssb(f.g, f.tg) == 1);
+   watch(&f, LJ_GC2_TABLE_COALESCE_TEST_PRE_PROOF);
+   assert(pthread_create(&worker, NULL, scan_to_proof, &f) == 0);
+@@ -559,7 +561,7 @@
+ {
+   Fixture f = open_fixture_phase(0, 1, 0);
+   lj_gc2_barrier_tab_g(f.g, f.parent);
+-  la_store64_rel(&f.stamp->state, UINT32_MAX);
++  ljt_gc2_wide_seed(f.parent, UINT64_MAX, UINT32_MAX, 0, 1);
+   assert(lj_gc2_flush_ssb(f.g, f.tg) == 1);
+   watch(&f, LJ_GC2_TABLE_COALESCE_TEST_PRE_PROOF);
+   assert(pthread_create(&old_scanner, NULL, scan_to_proof, &f) == 0);
+@@ -622,11 +624,200 @@
+   close_fixture(&f);
+ }
+ 
++static uint32_t exact_scan_result;
++static void *scan_exact(void *arg)
++{
++  Fixture *f = (Fixture *)arg;
++  la_store32_rel(&exact_scan_result,
++    (uint32_t)lj_gc2_test_table_token_scan_one(f->g, f->parent));
++  return NULL;
++}
++
++static void test_old_scanner(int huge, int wide, int exact)
++{
++  Fixture f = open_fixture_phase(huge, 1, !exact);
++  pthread_t scanner;
++  uint64_t ticket = 0;
++  ljt_gc2_wide_seed(f.parent, 17u, 1u, 0, wide);
++  if (exact) {
++    ticket = lj_gc2_test_table_token_request(f.g, f.parent);
++    assert(ticket != 0);
++  } else {
++    assert(lj_gc2_test_ssb_push(f.g, obj2gco(f.parent)) == 1);
++    assert(lj_gc2_flush_ssb(f.g, f.tg) == 1);
++  }
++  watch(&f, LJ_GC2_TABLE_COALESCE_TEST_PRE_PROOF);
++  assert(pthread_create(&scanner, NULL,
++    exact ? scan_exact : scan_to_proof, &f) == 0);
++  wait_value(&paused, LJ_GC2_TABLE_COALESCE_TEST_PRE_PROOF);
++  if (wide) {
++    ljt_gc2_wide_seed(f.parent, 17u, UINT32_MAX, 0, 1);
++  } else {
++    /* The new W serial equals the old inline serial: checking low bits
++    ** without checking the captured domain would accept a false proof. */
++    ljt_gc2_wide_seed(f.parent, 17u, 0u, 0, 0);
++    la_store64_rel(&f.stamp->state, UINT32_MAX - 1u);
++  }
++  store_child(&f);
++  if (exact)
++    lj_gc2_barrier_tab_g(f.g, f.parent);
++  else
++    publish(&f, 0);
++  assert(!lj_gc2_activation_reclaim_veto(f.g));
++  assert((uint32_t)la_load64_acq(&f.stamp->state) == UINT32_MAX);
++  assert(ljt_gc2_wide_snapshot(f.parent).hi == (wide ? 18u : 17u));
++  assert((uint32_t)ljt_gc2_wide_snapshot(f.parent).lo == 1u);
++  la_store32_rel(&released, 1);
++  assert(pthread_join(scanner, NULL) == 0);
++  if (exact) {
++    uint64_t control = la_load64_acq(&f.stamp->token.control);
++    assert(exact_scan_result == 0);
++    assert(lj_gc2_table_token_generation(control) == ticket);
++    assert(lj_gc2_table_token_state(control) == LJ_GC2_TABLE_TOKEN_PENDING);
++    assert(lj_gc2_test_table_token_scan_one(f.g, f.parent) == 1);
++    assert(lj_gc2_table_token_state(la_load64_acq(&f.stamp->token.control)) ==
++           LJ_GC2_TABLE_TOKEN_NONE);
++  }
++  drain(&f);
++  assert_graph(&f);
++  assert(scans >= 2);
++  close_fixture(&f);
++  printf("old scanner huge=%d wide=%d exact=%d rejected\n", huge, wide, exact);
++}
++
++static void *peer_promote(void *arg)
++{
++  Fixture *f = (Fixture *)arg;
++  uint32_t stage;
++  do { stage = la_load32_acq(&paused); } while (!stage);
++  assert((uint32_t)(ljt_gc2_wide_snapshot(f->parent).lo >> 32) == 0);
++  assert((uint32_t)la_load64_acq(&f->stamp->state) ==
++    (stage == LJ_GC2_TABLE_COALESCE_TEST_PRE_MODE ?
++     UINT32_MAX - 1u : UINT32_MAX));
++  publish(f, 0);  /* Completes while the first publisher remains paused. */
++  assert((uint32_t)la_load64_acq(&f->stamp->state) == UINT32_MAX);
++  la_store32_rel(&released, 1);
++  return NULL;
++}
++
++static void test_mode_pause(int huge, uint32_t stage)
++{
++  Fixture f = open_fixture(huge, 1);
++  pthread_t peer;
++  uint32_t cycle = gc2_cycle_acq(f.g);
++  ljt_gc2_wide_seed(f.parent, 73u, 5u, cycle, 0);
++  /* Simulate a reused cell's old current-cycle W, with a real completed
++  ** semantic request waiting in the new incarnation's ordinary queue. */
++  store_child(&f);
++  publish(&f, 0);
++  assert(lj_gc2_flush_ssb(f.g, f.tg) == 1);
++  la_store64_rel(&f.stamp->state, UINT32_MAX - 1u);
++  watch(&f, stage);
++  assert(pthread_create(&peer, NULL, peer_promote, &f) == 0);
++  publish(&f, 0);
++  assert(pthread_join(peer, NULL) == 0);
++  drain(&f);
++  assert_graph(&f);
++  assert(!lj_gc2_activation_reclaim_veto(f.g));
++  close_fixture(&f);
++  printf("mode pause huge=%d stage=%u peer completed\n", huge, stage);
++}
++
++static void lua_ok(lua_State *L, const char *s)
++{
++  if (luaL_dostring(L, s)) {
++    fprintf(stderr, "%s\n", lua_tostring(L, -1));
++    abort();
++  }
++}
++
++static void test_continued_collection(int huge)
++{
++  Fixture f;
++  uint32_t round;
++  memset(&f, 0, sizeof(f));
++  f.L = luaL_newstate(); assert(f.L); luaL_openlibs(f.L);
++  lua_gc(f.L, LUA_GCSTOP, 0);
++  f.g = G(f.L); f.tg = G2TG(f.g);
++  lua_newtable(f.L);
++  f.parent = huge ? huge_table(&f) : tabV(f.L->top - 1);
++  if (huge) settabV(f.L, f.L->top - 1, f.parent);
++  lua_setglobal(f.L, "p");
++  lua_ok(f.L, "weak = setmetatable({}, {__mode='v'})");
++  f.stamp = lj_arena_gc2_stamp_acq(f.parent);
++  for (round = 0; round < 12; round++) {
++    uint64_t era;
++    lua_ok(f.L, "p.keep = {n=2718, child={value=314}}; weak[1] = {}");
++    era = ljt_gc2_wide_snapshot(f.parent).hi;
++    ljt_gc2_wide_seed(f.parent, era, UINT32_MAX, 0, 1);
++    lj_gc2_test_table_dirty_bump(f.g, f.parent);
++    assert(ljt_gc2_wide_snapshot(f.parent).hi == era + 1);
++    assert(!lj_gc2_activation_reclaim_veto(f.g));
++    assert(lua_gc(f.L, LUA_GCCOLLECT, 0) == 0);
++    assert(gc2_phase_acq(f.g) == LJ_GC2_IDLE);
++    assert(gc2_recovery_items_acq(f.g) == 0);
++    assert(!lj_gc2_activation_reclaim_veto(f.g));
++    lua_ok(f.L, "assert(weak[1] == nil); assert(p.keep.n == 2718 and p.keep.child.value == 314)");
++  }
++  lua_ok(f.L, "p=nil; weak=nil");
++  lua_settop(f.L, 0);
++  close_fixture(&f);
++  printf("huge=%d twelve rollover collections reached IDLE\n", huge);
++}
++
++#if defined(LJ_TEST_WRAP_CALLOC)
++extern void *__real_calloc(size_t, size_t);
++static int deny_calloc;
++static uint32_t denied_calloc_calls;
++void *__wrap_calloc(size_t n, size_t size)
++{
++  if (deny_calloc) { denied_calloc_calls++; return NULL; }
++  return __real_calloc(n, size);
++}
++#endif
++
++static void test_reserved_failure(void)
++{
++  Fixture f = open_fixture(0, 0);
++  GCArena *plain;
++  lj_arena_test_gc2_sidecar_fail_alloc(1);
++  assert(lj_arena_map(&f.tg->prng, LJ_AF_TRAVERSABLE) == NULL);
++  /* Tail W has no separate sidecar allocation to fail. Map failure and
++  ** locator-insertion cleanup are exercised by the mmap64 wrapper fixture. */
++  {
++    size_t size = LJ_HUGE_THRESHOLD + 4096u;
++    void *huge = lj_arena_huge_map(&f.tg->prng, size, LJ_AF_TRAVERSABLE);
++    assert(huge && lj_arena_gc2_wide_acq(huge));
++    lj_arena_huge_unmap(huge, size);
++  }
++  plain = lj_arena_map(&f.tg->prng, 0); assert(plain);
++  assert(lj_arena_gc2_tabstamp_acq(plain) == NULL);
++  lj_arena_unmap(plain);
++  lj_arena_test_gc2_sidecar_fail_alloc(0);
++  ljt_gc2_wide_seed(f.parent, 0, 0, 0, 0);
++  la_store64_rel(&f.stamp->state, UINT32_MAX - 1u);
++  store_child(&f);
++#if defined(LJ_TEST_WRAP_CALLOC)
++  deny_calloc = 1;
++#endif
++  lj_gc2_test_table_dirty_bump(f.g, f.parent);
++#if defined(LJ_TEST_WRAP_CALLOC)
++  deny_calloc = 0;
++  assert(denied_calloc_calls == 0);
++#endif
++  assert(ljt_gc2_wide_snapshot(f.parent).lo == 1);
++  assert(!lj_gc2_activation_reclaim_veto(f.g));
++  publish(&f, 0); drain(&f); assert_graph(&f);
++  close_fixture(&f);
++  puts("reservation failure remains private; post-store promotion allocates nothing");
++}
++
++
+ int main(int argc, char **argv)
+ {
+-  int huge, api, cyclic;
++  int huge, api, cyclic, wide, exact;
+   const char *mode = argc > 1 ? argv[1] : "all";
+-  alarm(30);
++  alarm(60);
+   if (!strcmp(mode, "all") || !strcmp(mode, "duplicates"))
+     for (huge = 0; huge < 2; huge++)
+       for (api = 0; api < 4; api++)
+@@ -662,6 +853,17 @@
+   }
+   if (!strcmp(mode, "mark_barrier_denial")) test_mark_barrier_cutover(2);
+   if (!strcmp(mode, "mark_barrier_saturation")) test_mark_barrier_saturation();
++  if (!strcmp(mode, "all") || !strcmp(mode, "wide")) {
++    for (huge = 0; huge < 2; huge++) {
++      for (wide = 0; wide < 2; wide++)
++        for (exact = 0; exact < 2; exact++)
++          test_old_scanner(huge, wide, exact);
++      test_mode_pause(huge, LJ_GC2_TABLE_COALESCE_TEST_PRE_MODE);
++      test_mode_pause(huge, LJ_GC2_TABLE_COALESCE_TEST_POST_MODE);
++      test_continued_collection(huge);
++    }
++    test_reserved_failure();
++  }
+   puts("t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind "
+        "complete scans; unresolved and saturated requests remain durable");
+   return 0;
+--- a/tests/t-gc2-traverse.c
++++ b/tests/t-gc2-traverse.c
+@@ -14,6 +14,10 @@
+ #include "luajit.h"
+ 
+ #include "lj_obj.h"
++#if LJ_TARGET_LINUX
++#include <sys/mman.h>
++#include <unistd.h>
++#endif
+ #include "lj_atomic.h"
+ #include "lj_gc.h"
+ #include "lj_gc2.h"
+@@ -26,6 +30,7 @@
+ #include "lj_safepoint.h"
+ #include "lj_thr.h"
+ #include "lj_tg.h"
++#include "lib/gc2_wide_fixture_helpers.h"
+ #include "lj_lib.h"
+ #include "lj_meta.h"
+ #if LJ_HASFFI
+@@ -4773,30 +4778,28 @@
+   global_State *g;
+   TGState *tg;
+   GCtab *t;
+-  LJGC2TabStamp *stamp;
+   LJGC2ActivationSnap activation;
+   uint64_t state;
+ 
+-  /* Dirty saturation must invalidate the covered scan cycle without wrapping
+-  ** the persistent per-cell identity back to one. Use a private universe
+-  ** because NO_RECLAIM is intentionally absorbing. */
++  /* Only exhaustion of the full era/serial namespace is terminal. It must
++  ** invalidate coverage without reusing an old authority. Use a private
++  ** universe because NO_RECLAIM is intentionally absorbing. */
+   L = luaL_newstate();
+   assert(L != NULL);
+   lua_gc(L, LUA_GCSTOP, 0);
+   g = G(L);
+   lua_newtable(L);
+   t = tabV(L->top - 1);
+-  stamp = table_token_test_stamp(t);
+-  la_store64_rel(&stamp->state,
+-		 ((uint64_t)UINT32_C(17) << 32) | (UINT32_MAX - 1u));
++  assert(table_token_test_stamp(t));
++  ljt_gc2_wide_seed(t, UINT64_MAX, UINT32_MAX - 2u, 17u, 1);
+   lj_gc2_test_table_dirty_bump(g, t);
+-  state = la_load64_acq(&stamp->state);
+-  assert((uint32_t)state == UINT32_MAX);
++  state = ljt_gc2_wide_snapshot(t).lo;
++  assert((uint32_t)state == UINT32_MAX - 1u);
+   assert((uint32_t)(state >> 32) == 0u);
+   activation = lj_gc2_activation_snapshot(&g->gc2.activation);
+   assert(activation.state == LJ_GC2_ACT_IDLE);
+   lj_gc2_test_table_dirty_bump(g, t);
+-  state = la_load64_acq(&stamp->state);
++  state = ljt_gc2_wide_snapshot(t).lo;
+   assert((uint32_t)state == UINT32_MAX);
+   assert((uint32_t)(state >> 32) == 0u);
+   activation = lj_gc2_activation_snapshot(&g->gc2.activation);
+@@ -5719,9 +5722,18 @@
+     GCtab *t = table_token_huge_new(g, tg, size + n, NULL);
+     uint64_t payload0, terminal0;
+     uint8_t gct;
++#if LJ_TARGET_LINUX
++    LJGC2TabWideStamp *saved_wide;
++    long pagesize = sysconf(_SC_PAGESIZE);
++    void *poison = (char *)lj_arena_of(t) + pagesize;
++    size_t protected_bytes = lj_arena_huge_mapsize(size + n) -
++      (size_t)pagesize;
++    assert(pagesize > 0);
++#endif
+ 
+     assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+     stamp = table_token_test_stamp(t);
++    ljt_gc2_wide_seed(t, 9u, 1u, 0, 1);
+     lj_gc2_mark_begin(g);
+     (void)table_token_test_request_next(g, t);
+     if (phases[n] == LJ_GC2_WEAK)
+@@ -5754,11 +5766,26 @@
+     ** type byte, and the last token lease performs the FREEING handoff. */
+     gct = la_load8_acq(&t->gct);
+     la_store8_rel(&t->gct, 0);
++#if LJ_TARGET_LINUX
++    saved_wide = lj_arena_gc2_wide_acq(t);
++    assert(saved_wide != NULL);
++#endif
+     assert(!lj_arena_hugetab_claim_external_free(&tg->huge, t, &hi));
+     assert((hi.flags & LJ_HUGEF_DEFER_FREE) != 0 && hi.readers == 0u);
+     payload0 = gc2_table_token_scan_payloads_acq(g);
+     terminal0 = gc2_table_token_scan_terminal_acq(g);
++#if LJ_TARGET_LINUX
++    /* Protect every later payload/padding page, including the actual W
++    ** tail. The fixed header and deliberately poisoned gct stay readable. */
++    assert((void *)saved_wide == (char *)lj_arena_of(t) +
++      lj_arena_huge_mapsize(size + n) - sizeof(*saved_wide));
++    assert(mprotect(poison, protected_bytes, PROT_NONE) == 0);
++#endif
+     assert(lj_gc2_test_table_token_scan_one(g, t) == 1);
++#if LJ_TARGET_LINUX
++    assert(mprotect(poison, protected_bytes, PROT_READ|PROT_WRITE) == 0);
++    assert(lj_arena_of(t)->hdr.gc2_huge_wide == saved_wide);
++#endif
+     assert(gc2_table_token_scan_payloads_acq(g) == payload0);
+     assert(gc2_table_token_scan_terminal_acq(g) == terminal0 + 1u);
+     assert(lj_gc2_table_token_state(
+@@ -5854,6 +5881,12 @@
+   uint64_t payload0, terminal0;
+   uint32_t cell;
+   uint8_t gct;
++#if LJ_TARGET_LINUX
++  LJGC2TabWideStamp *wide;
++  long pagesize = sysconf(_SC_PAGESIZE);
++  void *page;
++  assert(pagesize > 0);
++#endif
+   int base = lua_gettop(L);
+ 
+   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+@@ -5865,6 +5898,14 @@
+   lj_gc2_mark_begin(g);
+   (void)table_token_test_request_next(g, t);
+   stamp = table_token_test_stamp(t);
++  ljt_gc2_wide_seed(t, 11u, 1u, 0, 1);
++#if LJ_TARGET_LINUX
++  wide = lj_arena_gc2_wide_acq(t);
++  assert(wide != NULL);
++  page = (void *)((uintptr_t)wide & ~((uintptr_t)pagesize - 1u));
++  assert((uintptr_t)page >= (uintptr_t)lj_arena_gc2_tabstamp_acq(a) +
++         offsetof(LJGC2TabStampArena, wide));
++#endif
+   payload0 = gc2_table_token_scan_payloads_acq(g);
+   terminal0 = gc2_table_token_scan_terminal_acq(g);
+   assert(lj_arena_lifetime_state_cas(a, cell, LJ_ARENA_LIFETIME_LIVE,
+@@ -5873,7 +5914,14 @@
+ 				     LJ_ARENA_LIFETIME_FREE));
+   gct = la_load8_acq(&o->gch.gct);
+   la_store8_rel(&o->gch.gct, 0);  /* Any body/header read must reject. */
++#if LJ_TARGET_LINUX
++  /* Inline token storage stays readable while W is inaccessible. */
++  assert(mprotect(page, (size_t)pagesize, PROT_NONE) == 0);
++#endif
+   assert(lj_gc2_test_table_token_scan_one(g, t) == 1);
++#if LJ_TARGET_LINUX
++  assert(mprotect(page, (size_t)pagesize, PROT_READ | PROT_WRITE) == 0);
++#endif
+   assert(gc2_table_token_scan_payloads_acq(g) == payload0);
+   assert(gc2_table_token_scan_terminal_acq(g) == terminal0 + 1u);
+   assert(lj_gc2_table_token_state(
+--- a/tests/t-x64-tnew-empty-inline.c
++++ b/tests/t-x64-tnew-empty-inline.c
+@@ -19,6 +19,8 @@
+ #include "lj_tg.h"
+ 
+ #include "lib/lua_fixture_helpers.h"
++#include "lib/gc2_wide_fixture_helpers.h"
++#include "lib/gc2_wide_reuse_helpers.h"
+ 
+ /* Built by the M6 harness with LJ_TAB_TEST_HELPERS enabled. */
+ 
+@@ -788,6 +790,75 @@
+   assert(root_chain_contains(g, obj2gco(t)));
+ }
+ 
++static void test_wide_cell_reuse(uint32_t cell, int pending)
++{
++  lua_State *L = luaL_newstate();
++  global_State *g;
++  TGState *tg;
++  GCArena *a;
++  LJGC2TabStamp *s;
++  LJGC2TableTokenTicket ticket = { 0 };
++  uint64_t token;
++  uint32_t calls;
++  GCtab *result;
++  assert(L);
++  luaL_openlibs(L);
++  ljt_lua_dostring(L, "jit.off(true, true)");
++  assert(lua_checkstack(L, 64));
++  g = G(L); tg = L2TG(L);
++  (void)lua_gc(L, LUA_GCCOLLECT, 0);
++  lj_gc_threshold_store(g, UINT64_MAX / 2u);
++  lj_gc2_hard_store(g, UINT64_MAX / 2u);
++  lj_gc2_trigger_store(g, UINT64_MAX / 2u);
++  load_empty_table_chunk(L);
++  prime_traversable_bump_window(tg);
++  tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].cell = cell;
++  a = tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].a;
++  la_store64_rel(&tg->local_total, 0);
++  token = poison_recycled_empty_table_fields(a, cell);
++  s = lj_arena_gc2_stamp_acq(lj_arena_cellptr(a, cell));
++  ljt_gc2_wide_seed(lj_arena_cellptr(a, cell), UINT64_C(0xfedcba9876543210),
++             2718u, gc2_cycle_acq(g), 1);
++  wide_guards_arm(a, cell, 1u);
++  if (pending) {
++    assert(lj_gc2_table_token_refresh(&s->token, &ticket) == LJ_GC2_TABLE_TOKEN_RESULT_OK);
++    token = ticket.control;
++  }
++  calls = lj_tab_test_new0_calls();
++  ljt_lua_pcall(L, 0, 1, "wide high-cell TNEW");
++  assert(tvistab(L->top - 1));
++  result = tabV(L->top - 1);
++  wide_guards_check();
++  assert(la_load64_acq(&s->token.control) == token);
++  if (!pending) {
++    assert(lj_tab_test_new0_calls() == calls);
++    assert((void *)result == lj_arena_cellptr(a, cell));
++    assert(la_load64_acq(&s->state) == 0);
++    assert(ljt_gc2_wide_snapshot(result).hi == UINT64_C(0xfedcba9876543210));
++    assert((uint32_t)ljt_gc2_wide_snapshot(result).lo == 2718u);
++    la_store64_rel(&s->state, UINT32_MAX - 1u);
++    lj_gc2_test_table_dirty_bump(g, result);
++    assert(la_load64_acq(&s->state) == UINT32_MAX);
++    assert(ljt_gc2_wide_snapshot(result).hi == UINT64_C(0xfedcba9876543210));
++    assert((uint32_t)ljt_gc2_wide_snapshot(result).lo == 2719u);
++    assert((uint32_t)(ljt_gc2_wide_snapshot(result).lo >> 32) == 0);
++  } else {
++    assert(lj_tab_test_new0_calls() == calls + 1u);
++    assert((void *)result != lj_arena_cellptr(a, cell));
++    assert(lj_arena_lifetime_state_acq(a, cell) == LJ_ARENA_LIFETIME_FREE);
++    assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
++    assert(!lj_arena_ready_get(a, cell));
++    assert(la_load64_acq(&s->state) != 0);
++    assert(ljt_gc2_wide_snapshot(lj_arena_cellptr(a, cell)).hi ==
++           UINT64_C(0xfedcba9876543210));
++    assert(lj_gc2_table_token_complete(&s->token, &ticket) == LJ_GC2_TABLE_TOKEN_RESULT_OK);
++  }
++  assert_empty_table_body(g, result);
++  lua_close(L);
++  printf("TNEW cell %u pending %d: inline reset/wide persistence and promotion/token preservation/neighbor guards passed\n", cell, pending);
++}
++
++
+ int main(void)
+ {
+   lua_State *L = luaL_newstate();
+@@ -827,6 +898,10 @@
+   test_plain_new0_uses_bump_with_free_run(L, g, tg);
+ 
+   lua_close(L);
++  test_wide_cell_reuse(1536u, 0);
++  test_wide_cell_reuse(1537u, 0);
++  test_wide_cell_reuse(1536u, 1);
++  test_wide_cell_reuse(1537u, 1);
+   puts("t-x64-tnew-empty-inline OK: interpreter empty TNEW inline/fallback paths verified");
+   return 0;
+ }
+--- a/tests/t-jit-fnew-bump.c
++++ b/tests/t-jit-fnew-bump.c
+@@ -27,6 +27,9 @@
+ #include "lj_vm.h"
+ 
+ #include "lib/lua_fixture_helpers.h"
++#include "lib/gc2_wide_fixture_helpers.h"
++#include "lib/gc2_wide_reuse_helpers.h"
++static uint32_t wide_test_bump_start;
+ 
+ /* Built by the M6 harness with LJ_FUNC_TEST_HELPERS enabled. */
+ 
+@@ -1505,7 +1508,8 @@
+   lj_arena_next_rel(a, alloc->owned[LJ_ARENAK_TRAVERSABLE]);
+   alloc->owned[LJ_ARENAK_TRAVERSABLE] = a;
+   alloc->bump[LJ_ARENAK_TRAVERSABLE].a = a;
+-  alloc->bump[LJ_ARENAK_TRAVERSABLE].cell = LJ_AFIRST_CELL;
++  alloc->bump[LJ_ARENAK_TRAVERSABLE].cell =
++    wide_test_bump_start ? wide_test_bump_start : LJ_AFIRST_CELL;
+   alloc->bump[LJ_ARENAK_TRAVERSABLE].end = LJ_ARENA_CELLS;
+   assert(lj_arena_alloc_register_existing(alloc));
+ }
+@@ -1526,6 +1530,9 @@
+   assert(lj_gc2_table_token_state(control) == LJ_GC2_TABLE_TOKEN_NONE);
+   assert(lj_gc2_table_token_generation(control) != 0);
+   la_store64_rel(&stamp->state, state);
++  if (wide_test_bump_start)
++    ljt_gc2_wide_seed(lj_arena_cellptr(a, cell), UINT64_C(0xfedcba9876543210),
++                     (uint32_t)state, (uint32_t)(state >> 32), 1);
+   return control;
+ }
+ 
+@@ -1725,6 +1732,7 @@
+   uvstamp = lj_arena_gc2_stamp_acq(
+ 	lj_arena_cellptr(stamp_a, stamp_uvcell));
+   assert(fnstamp != NULL && uvstamp != NULL);
++  if (wide_test_bump_start) wide_guards_arm(stamp_a, stamp_fncell, fncells);
+   reset_gc1num_bump_counters();
+   helper0 = gc1num_bump_helper_calls();
+ 
+@@ -1748,6 +1756,15 @@
+ 	 lj_arena_cellof(first) == stamp_fncell);
+   assert(lj_arena_of(firstuv) == stamp_a &&
+ 	 lj_arena_cellof(firstuv) == stamp_uvcell);
++  if (wide_test_bump_start) {
++    wide_guards_check();
++    assert(ljt_gc2_wide_snapshot(first).hi == UINT64_C(0xfedcba9876543210));
++    assert(ljt_gc2_wide_snapshot(first).lo ==
++      ((UINT64_C(0x13572468) << 32) | UINT64_C(0x11111111)));
++    assert(ljt_gc2_wide_snapshot(firstuv).hi == UINT64_C(0xfedcba9876543210));
++    assert(ljt_gc2_wide_snapshot(firstuv).lo ==
++      ((UINT64_C(0x24681357) << 32) | UINT64_C(0x22222222)));
++  }
+   assert(la_load64_acq(&fnstamp->state) == 0);
+   assert(la_load64_acq(&uvstamp->state) == 0);
+   assert(la_load64_acq(&fnstamp->token.control) == fncontrol);
+@@ -3154,6 +3171,24 @@
+     }
+ }
+ 
++static void test_wide_pair_reuse(uint32_t cell)
++{
++  lua_State *L = luaL_newstate();
++  assert(L != NULL);
++  wide_test_bump_start = cell;
++  luaL_openlibs(L);
++  assert(lua_checkstack(L, 64));
++  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
++  lj_gc_threshold_store(G(L), UINT64_MAX / 2u);
++  lj_gc2_hard_store(G(L), UINT64_MAX / 2u);
++  lj_gc2_trigger_store(G(L), UINT64_MAX / 2u);
++  test_traced_immutable_numeric_inline(L, G(L));
++  assert_no_unfinished_owned_constructors(L2TG(L));
++  lua_close(L);
++  wide_test_bump_start = 0;
++  printf("FNEW cell %u: persistent W and both exact token guards passed\n", cell);
++}
++
+ int main(void)
+ {
+   lua_State *L = luaL_newstate();
+@@ -3203,6 +3238,8 @@
+   test_traced_active_mark_certificate(L, g, tg);
+ 
+   lua_close(L);
++  test_wide_pair_reuse(1536u);
++  test_wide_pair_reuse(1537u);
+   puts("t-jit-fnew-bump OK");
+   return 0;
+ }
+--- a/tests/suites/m2_arena.lua
++++ b/tests/suites/m2_arena.lua
+@@ -11,6 +11,7 @@
+   "m2_arena_map",
+   "m2_arena_alloc",
+   "m2_arena_hugetab",
++  "m2_arena_huge_tail",
+   "m2_arena_sweep",
+   "m2_arena_empty_reclaimed",
+   "m2_arena_empty_reclaimed_runtime",
+@@ -103,6 +104,31 @@
+   })
+ 
+   register({
++    name = "m2_arena_huge_tail",
++    description = "Huge overflow tail geometry, failure, reader and realloc lifetime",
++    run = function(t)
++      if jit.os ~= "Linux" then
++        print("M2 Huge-tail fixture requires Linux mmap64 and linker wrappers")
++        return
++      end
++      local flags = "-DLJ_ARENA_TEST_HELPERS -DLUA_USE_ASSERT"
++      build.with_default_build_restore(t, function()
++        build.clean_build(t, { quiet = true, xcflags = flags })
++        build.compile_and_run_c(t, t:tmp("lj-t-arena-huge-tail"),
++                               "t-arena-huge-tail.c", {
++          cflags = flags,
++          libs = {
++            "-lm", "-ldl", os.getenv("PTHREAD") or "-pthread",
++            "-Wl,--wrap=mmap", "-Wl,--wrap=mmap64", "-Wl,--wrap=munmap",
++            "-Wl,--wrap=calloc", "-Wl,--wrap=free"
++          },
++          timeout = "60s"
++        })
++      end)
++    end
++  })
++
++  register({
+     name = "m2_arena_hugetab",
+     description = "huge-object side-table scaffold C fixture",
+     run = function(t)
+--- a/tests/suites/m3_gc.lua
++++ b/tests/suites/m3_gc.lua
+@@ -199,19 +199,24 @@
+ 
+   register({
+     name = "m3_gc2_sweep_table_coalescing",
+-    description = "admitted SWEEP requests coalesce behind complete table scans",
++    description = "SWEEP coalescing, persistent overflow proof and paused publisher progress",
+     run = function(t)
+       if jit.os ~= "Linux" then
+         print("M3 SWEEP coalescing protected-memory fixture requires Linux")
+         return
+       end
+-      local flags = gc2_test_cflags .. " -DLUA_USE_ASSERT"
++      local flags = gc2_test_cflags ..
++                    " -DLJ_ARENA_TEST_HELPERS -DLUA_USE_ASSERT"
+       build.with_default_build_restore(t, function()
+         build.clean_build(t, { quiet = true, xcflags = flags })
+         compile_and_run_c(t, t:tmp("lj-t-gc2-sweep-table-coalescing"),
+                           "t-gc2-sweep-table-coalescing.c", {
+-          cflags = flags,
+-          timeout = "40s"
++          cflags = flags .. " -DLJ_TEST_WRAP_CALLOC",
++          libs = {
++            "-lm", "-ldl", os.getenv("PTHREAD") or "-pthread",
++            "-Wl,--wrap=calloc"
++          },
++          timeout = "90s"
+         })
+       end)
+       print("M3 SWEEP table coalescing regression passed")
+--- a/tests/suites/m5_x64.lua
++++ b/tests/suites/m5_x64.lua
+@@ -98,7 +98,10 @@
+     run = function(t)
+       build.build_and_run_c(t, t:tmp("lj_t-x64-tnew-empty-inline"),
+                             "t-x64-tnew-empty-inline.c",
+-                            build.tab_helper_opts())
++                            build.tab_helper_opts({
++                              xcflags = "-DLJ_TAB_TEST_HELPERS -DLJ_GC2_TEST_HELPERS",
++                              cflags = "-DLJ_TAB_TEST_HELPERS -DLJ_GC2_TEST_HELPERS"
++                            }))
+       print("M5 x64 empty TNEW inline arena bump behavior passed")
+     end
+   })

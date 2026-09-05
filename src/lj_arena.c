@@ -1990,10 +1990,14 @@ void lj_arena_unmap(GCArena *a)
 
 size_t lj_arena_huge_mapsize(size_t size)
 {
-  size_t need = size + sizeof(GCAhdr);
+  const size_t overhead = sizeof(GCAhdr) + sizeof(LJGC2TabWideStamp);
+  size_t need;
+  /* Size-only physical geometry applies to both immutable mapping kinds.
+  ** HugeTab still publishes the exact logical payload size, never padding/W. */
   if (size <= LJ_HUGE_THRESHOLD ||
-      need < size || need > ~(size_t)LJ_ARENA_MASK)
+      size > ~(size_t)LJ_ARENA_MASK - overhead)
     return 0;
+  need = size + overhead;
   return (need + LJ_ARENA_MASK) & ~(size_t)LJ_ARENA_MASK;
 }
 
@@ -2010,6 +2014,15 @@ void *lj_arena_huge_map(PRNGState *rs, size_t size, uint32_t flags)
   a->hdr.flags = LJ_AF_HUGE_MAGIC |
     (flags & (LJ_AF_FLAG_MASK & ~LJ_AF_EMPTY_RECLAIMED));
   a->hdr.live_cells = (uint32_t)(mapsize >> LJ_CELL_SHIFT);
+  if (flags & LJ_AF_TRAVERSABLE) {
+    LJGC2TabWideStamp *wide = (LJGC2TabWideStamp *)
+      ((char *)a + mapsize - sizeof(LJGC2TabWideStamp));
+    /* arena_map_aligned returns fresh anonymous zero-filled storage. This
+    ** initializes the whole W before publication without touching its page.
+    ** W stays at this physical tail across same-extent logical reallocs.
+    ** No recycled/dirty mapping may enter this private initialization path. */
+    la_storeptr_rel((void **)&a->hdr.gc2_huge_wide, wide);
+  }
   return (void *)((char *)a + sizeof(GCAhdr));
 }
 
@@ -2023,8 +2036,9 @@ void lj_arena_huge_unmap(void *p, size_t size)
     ** deleting the HugeTab locator; retain a violated mapping rather than
     ** erasing a live scan owner if a terminal caller regresses. */
     if (lj_arena_gc2_tokens_empty_acq(a) &&
-	lj_arena_gc2_desc_mapping_clear_acq(a))
+	lj_arena_gc2_desc_mapping_clear_acq(a)) {
       arena_unmap_aligned((void *)a, mapsize);
+    }
   }
   errno = olderr;
 }
@@ -2033,8 +2047,10 @@ void lj_arena_huge_unmap_claimed(void *p, size_t size)
 {
   int olderr = errno;
   size_t mapsize = lj_arena_huge_mapsize(size);
-  if (p && mapsize)
-    arena_unmap_aligned((void *)lj_arena_of(p), mapsize);
+  if (p && mapsize) {
+    GCArena *a = lj_arena_of(p);
+    arena_unmap_aligned((void *)a, mapsize);
+  }
   errno = olderr;
 }
 

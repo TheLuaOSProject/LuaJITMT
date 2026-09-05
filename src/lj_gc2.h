@@ -484,6 +484,8 @@ LJ_FUNC void lj_gc2_test_sweep_reclaim_scope_leave(global_State *g);
 #define LJ_GC2_TABLE_COALESCE_TEST_SCAN_START	3u
 #define LJ_GC2_TABLE_COALESCE_TEST_PRE_PROOF	4u
 #define LJ_GC2_TABLE_COALESCE_TEST_MARK_ENTER	5u
+#define LJ_GC2_TABLE_COALESCE_TEST_PRE_MODE	6u
+#define LJ_GC2_TABLE_COALESCE_TEST_POST_MODE	7u
 typedef void (*LJGC2TableCoalesceTestHook)(global_State *g, GCtab *t,
 					   uint32_t stage);
 LJ_FUNC void lj_gc2_test_table_coalesce_hook(LJGC2TableCoalesceTestHook hook);

@@ -102,9 +102,27 @@ typedef struct LJGC2TabStamp {
   LJGC2TableToken token;
 } LJGC2TabStamp;
 
+/* The ordinary entry and token geometry remain unchanged. Overflow proof
+** storage is reserved before the mapping is published, never on a barrier. */
+typedef struct LJGC2TabWideStamp {
+  la_u128 proof;  /* lo={covered_cycle32,dirty32}, hi=nonwrapping era64. */
+} LJGC2TabWideStamp;
+
 typedef struct LJGC2TabStampArena {
   LJGC2TabStamp cell[LJ_ARENA_CELLS];
+  LJGC2TabWideStamp wide[LJ_ARENA_CELLS];
 } LJGC2TabStampArena;
+
+LJ_STATIC_ASSERT(sizeof(LJGC2TabWideStamp) == 16u);
+LJ_STATIC_ASSERT(sizeof(LJGC2TabStamp) == 16u);
+LJ_STATIC_ASSERT(offsetof(LJGC2TabStamp, token) == 8u);
+
+static LJ_AINLINE la_u128 lj_arena_gc2_wide_snapshot(LJGC2TabWideStamp *w)
+{
+  la_u128 old = { 0, 0 }, same;
+  do { same = old; } while (!la_cas128(&w->proof, &old, same));
+  return old;
+}
 
 struct HugeTab {
   LJHugeTabHdr *h;
@@ -147,7 +165,14 @@ typedef struct GCAhdr {
   GreyStack *grey;
   uint32_t sweep_epoch;
   uint32_t live_cells;
-  LJGC2TabStampArena *gc2_tabstamp;
+  /* Immutable mapping kind selects this union. Small traversable mappings
+  ** own the full inline+wide cell sidecar; huge mappings own one reserved W
+  ** in their physical mapping tail.
+  ** Plain mappings leave the pointer NULL. Both arms live until final unmap. */
+  union {
+    LJGC2TabStampArena *gc2_tabstamp;
+    LJGC2TabWideStamp *gc2_huge_wide;
+  };
   uint64_t retire_epoch;
   uint32_t reclaim_cell;
   uint32_t reclaim_deferred;
@@ -360,6 +385,10 @@ static LJ_AINLINE void lj_arena_next_rel(GCArena *a, GCArena *next)
   la_storeptr_rel((void **)&a->hdr.next, next);
 }
 
+/* Small-mapping-only accessor. The caller retains the exact non-Huge
+** mapping; immutable mapping kind selects this union arm. Plain small maps
+** return NULL. Huge body-proof users must use lj_arena_gc2_wide_acq after
+** their separate readable-body admission; header-only token users stay W-blind. */
 static LJ_AINLINE LJGC2TabStampArena *
 lj_arena_gc2_tabstamp_acq(const GCArena *a)
 {
@@ -598,6 +627,10 @@ LJ_FUNC uint32_t lj_arena_count_free_runs(const GCArena *a);
 LJ_FUNC int lj_arena_gc2_tokens_empty_acq(const GCArena *a);
 LJ_FUNC GCArena *lj_arena_map(PRNGState *rs, uint32_t flags);
 LJ_FUNC void lj_arena_unmap(GCArena *a);
+/* Physical extent for either Huge kind: header + exact logical payload +
+** one aligned 16-byte tail reservation, rounded to the arena quantum.
+** The plain kind leaves its W pointer NULL. Neither padding nor W belongs
+** to HugeTab logical lookup, vector bounds, copying or live-byte accounting. */
 LJ_FUNC size_t lj_arena_huge_mapsize(size_t size);
 LJ_FUNC void *lj_arena_huge_map(PRNGState *rs, size_t size, uint32_t flags);
 LJ_FUNC void lj_arena_huge_unmap(void *p, size_t size);
@@ -1128,6 +1161,31 @@ static LJ_AINLINE LJGC2TabStamp *lj_arena_gc2_stamp_acq(const void *p)
   return side ? &side->cell[cell] : NULL;
 }
 
+/* Body-proof lookup, deliberately separate from the header-only token APIs.
+** Exact mapping AND readable allocation admission must already be retained.
+** Wide serials persist across cell reuse; private construction resets inline
+** only. The promotion invalidation precedes exposing the inline sentinel. */
+static LJ_AINLINE LJGC2TabWideStamp *lj_arena_gc2_wide_acq(const void *p)
+{
+  GCArena *a;
+  LJGC2TabStampArena *side;
+  uint32_t flags, cell;
+  if (!p)
+    return NULL;
+  a = lj_arena_of(p);
+  flags = lj_arena_flags_acq(a);
+  if ((flags & LJ_AF_HUGE_MAGIC) == LJ_AF_HUGE_MAGIC)
+    return (LJGC2TabWideStamp *)la_loadptr_acq(
+      (void *const *)&a->hdr.gc2_huge_wide);
+  if (!(flags & LJ_AF_TRAVERSABLE))
+    return NULL;
+  cell = lj_arena_cellof(p);
+  if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS)
+    return NULL;
+  side = lj_arena_gc2_tabstamp_acq(a);
+  return side ? &side->wide[cell] : NULL;
+}
+
 /* Physical table-rescan ownership for one retained small mapping. Logical
 ** lifetime may already be FREE: only NONE permits body reuse or destruction.
 ** A missing sidecar on a published traversable arena fails closed. */
@@ -1609,7 +1667,8 @@ LJ_STATIC_ASSERT((LJ_AF_DTOR_CONSTRUCT & LJ_AF_FLAG_MASK) == 0);
 LJ_STATIC_ASSERT(sizeof(GCAhdr) == 128u);
 LJ_STATIC_ASSERT(sizeof(LJGC2TabStamp) == 16u);
 LJ_STATIC_ASSERT(offsetof(LJGC2TabStamp, token) == 8u);
-LJ_STATIC_ASSERT(sizeof(LJGC2TabStampArena) == LJ_ARENA_SIZE);
+LJ_STATIC_ASSERT(sizeof(LJGC2TabStampArena) == 2u * LJ_ARENA_SIZE);
+LJ_STATIC_ASSERT(offsetof(LJGC2TabStampArena, wide) == LJ_ARENA_SIZE);
 LJ_STATIC_ASSERT(offsetof(GCAhdr, huge_tabstamp) == 104u);
 LJ_STATIC_ASSERT(offsetof(GCAhdr, gc2_tabledesc) == 120u);
 LJ_STATIC_ASSERT(offsetof(GCAhdr, remote_active) == 56u);

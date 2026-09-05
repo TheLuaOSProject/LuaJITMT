@@ -1,0 +1,17 @@
+[
+  {
+    "variant": "normal",
+    "luajit_sha256": "cc26d38178a8efec278106d32abb0b7e193be68bd0683559d8c2b0258f879d52",
+    "archive_sha256": "9e491c5d64b1fea961c22c64d269586efa7fb2856023f373e3cb1ddb71ef7e9d"
+  },
+  {
+    "variant": "strict",
+    "luajit_sha256": "3dc892d9bf332e0488a91b87664f1a80a4b709b1a38a708a2e375c9bff1f85c3",
+    "archive_sha256": "5d404c4a30b19e7b2781caa797675b4b400e55fdba058f228ff6083664134225"
+  },
+  {
+    "variant": "asan",
+    "luajit_sha256": "2b59a74302f57cec23fda433c8c97233515472ac37fffaf4b71c9736b4f75a52",
+    "archive_sha256": "3b78d01177bdda0f69f955daf236f0b8fac1e57d864cc5c6943656963427c53c"
+  }
+]

@@ -1,0 +1,87 @@
+[
+  {
+    "name": "clean",
+    "command": [
+      "make",
+      "-C",
+      "src",
+      "clean"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "exit": 0,
+    "seconds": 0.06373558600171236,
+    "bound_seconds": 120
+  },
+  {
+    "name": "build",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-C",
+      "src",
+      "-j4"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "exit": 0,
+    "seconds": 13.100961350999569,
+    "bound_seconds": 120
+  },
+  {
+    "name": "t-meta-cdata-capture-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/workspaces/lj-lockless/src/luajit",
+      "-joff",
+      "tests/t-meta-cdata-capture.lua"
+    ],
+    "exit": 0,
+    "seconds": 0.16422220099775586,
+    "bound_seconds": 30
+  },
+  {
+    "name": "t-jit-cdata-basemt-guards-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/workspaces/lj-lockless/src/luajit",
+      "-joff",
+      "tests/t-jit-cdata-basemt-guards.lua"
+    ],
+    "exit": 0,
+    "seconds": 0.015719306000391953,
+    "bound_seconds": 30
+  },
+  {
+    "name": "t-meta-cdata-capture-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/workspaces/lj-lockless/src/luajit",
+      "-jon",
+      "tests/t-meta-cdata-capture.lua"
+    ],
+    "exit": 0,
+    "seconds": 0.16412121900066268,
+    "bound_seconds": 30
+  },
+  {
+    "name": "t-jit-cdata-basemt-guards-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/workspaces/lj-lockless/src/luajit",
+      "-jon",
+      "tests/t-jit-cdata-basemt-guards.lua"
+    ],
+    "exit": 0,
+    "seconds": 0.015611364997312194,
+    "bound_seconds": 30
+  }
+]

@@ -1,0 +1,21 @@
+{
+  "base": "4e7a270e7dd8b79ec4ad5611cd7bbd6226783b0d",
+  "patches": [
+    {
+      "path": "source-and-tests.patch",
+      "origin": "/tmp/lj-wide-tail-regressions-20260905-5upq5nqx/source-and-tests.patch",
+      "sha256": "2a7f49960f70123898715bd6dc5445cdd776f54d62917a8d3e3890b21443fa49",
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "path": "pre-mt-cdata-guards-review.patch",
+      "origin": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/pre-mt-cdata-guards-review.patch",
+      "sha256": "b99b514961dffca4f696cc9b1ba72586e1273f4a6cc367a7d4cdfcb40107b8a9",
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  ]
+}

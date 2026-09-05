@@ -1,0 +1,18 @@
+
+local threading = require("threading")
+local trace_count = require("jit_harness").trace_count
+
+assert(threading.gcworkers(0) >= 0)
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1")
+local function hot(n)
+  local s = 0
+  for i = 1, n do s = s + i end
+  return s
+end
+for _ = 1, 20 do assert(hot(80) == 3240) end
+assert(trace_count(200) > 0, "pre-worker loop did not trace")
+
+assert(threading.gcworkers(1) == 0)
+assert(trace_count(200) == 0, "GC worker activation did not flush traces")
+assert(threading.gcworkers(0) == 1)
