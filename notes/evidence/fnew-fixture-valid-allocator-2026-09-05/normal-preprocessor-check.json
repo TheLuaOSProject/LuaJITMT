@@ -1,0 +1,26 @@
+{
+  "command": [
+    "gcc",
+    "-E",
+    "-P",
+    "-x",
+    "c",
+    "-",
+    "-I/tmp/lj-fnew-fixture-repair-20260905-yq9sbh2w/strict/src"
+  ],
+  "results": [
+    {
+      "label": "base",
+      "rc": 0,
+      "sha256": "b6dc8768ef86ea2306df17e0aa9120bb1cef3233fbca145ec8082f08bedab2b2",
+      "stderr": ""
+    },
+    {
+      "label": "repair",
+      "rc": 0,
+      "sha256": "b6dc8768ef86ea2306df17e0aa9120bb1cef3233fbca145ec8082f08bedab2b2",
+      "stderr": ""
+    }
+  ],
+  "identical": true
+}

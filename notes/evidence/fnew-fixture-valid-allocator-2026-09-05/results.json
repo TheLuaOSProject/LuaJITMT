@@ -1,0 +1,148 @@
+[
+  {
+    "name": "canonical",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/baseline-strict/src/luajit",
+      "/tmp/lj-fnew-fixture-repair-20260905-yq9sbh2w/canonical/tools/test.lua",
+      "m6_jit_fnew_bump"
+    ],
+    "env": {
+      "LJ_TEST_ROOT": "/tmp/lj-fnew-fixture-repair-20260905-yq9sbh2w/canonical",
+      "TMPDIR": "/tmp/lj-fnew-fixture-repair-20260905-yq9sbh2w/tmp",
+      "JOBS": "4",
+      "LJ_TEST_DISABLE_BUILD_CACHE": "1"
+    },
+    "cwd": "/tmp/lj-fnew-fixture-repair-20260905-yq9sbh2w/canonical",
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 13.699651149001511,
+    "stdout": "canonical.stdout",
+    "stderr": "canonical.stderr"
+  },
+  {
+    "name": "strict-build",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-C",
+      "/tmp/lj-fnew-fixture-repair-20260905-yq9sbh2w/strict/src",
+      "-j4",
+      "BUILDMODE=static",
+      "XCFLAGS=-DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_FUNC_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLUA_USE_ASSERT"
+    ],
+    "env": {},
+    "cwd": null,
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 8.098416467999414,
+    "stdout": "strict-build.stdout",
+    "stderr": "strict-build.stderr"
+  },
+  {
+    "name": "strict-fixture-compile",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-fnew-fixture-repair-20260905-yq9sbh2w/strict/src",
+      "-I/tmp/lj-fnew-fixture-repair-20260905-yq9sbh2w/strict/tests",
+      "/tmp/lj-fnew-fixture-repair-20260905-yq9sbh2w/strict/tests/t-jit-fnew-bump.c",
+      "/tmp/lj-fnew-fixture-repair-20260905-yq9sbh2w/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-fnew-fixture-repair-20260905-yq9sbh2w/strict-fixture"
+    ],
+    "env": {},
+    "cwd": null,
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.6564742219998152,
+    "stdout": "strict-fixture-compile.stdout",
+    "stderr": "strict-fixture-compile.stderr"
+  },
+  {
+    "name": "strict-fixture",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-fnew-fixture-repair-20260905-yq9sbh2w/strict-fixture"
+    ],
+    "env": {},
+    "cwd": null,
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.05728117600119731,
+    "stdout": "strict-fixture.stdout",
+    "stderr": "strict-fixture.stderr"
+  },
+  {
+    "name": "strict-forged-control-compile",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-fnew-fixture-repair-20260905-yq9sbh2w/strict/src",
+      "-I/tmp/lj-fnew-fixture-repair-20260905-yq9sbh2w/strict/tests",
+      "/tmp/lj-fnew-fixture-repair-20260905-yq9sbh2w/forged-identity-control.c",
+      "/tmp/lj-fnew-fixture-repair-20260905-yq9sbh2w/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-fnew-fixture-repair-20260905-yq9sbh2w/strict-forged-control"
+    ],
+    "env": {},
+    "cwd": null,
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.6342980669996905,
+    "stdout": "strict-forged-control-compile.stdout",
+    "stderr": "strict-forged-control-compile.stderr"
+  },
+  {
+    "name": "strict-forged-control",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-fnew-fixture-repair-20260905-yq9sbh2w/strict-forged-control"
+    ],
+    "env": {},
+    "cwd": null,
+    "rc": -6,
+    "status": "complete",
+    "elapsed": 0.08478763899984187,
+    "stdout": "strict-forged-control.stdout",
+    "stderr": "strict-forged-control.stderr"
+  }
+]

@@ -1,0 +1,32 @@
+{
+  "hash": "sha256",
+  "note": {
+    "path": "../../fnew-fixture-valid-allocator-2026-09-05.md",
+    "sha256": "c2d399f442b51a32e96fddecb7508e62f0b52f72b9ce6a5d8cc0dd0a0d3df963"
+  },
+  "files": {
+    "README.md": "069c5f89e55340114d9393afbb70ddc6ff64e88c41cb2ea501f25b3a69760494",
+    "canonical.stderr": "e339a24a070541d5de64d71ec80af3408d08df94a59502ab031faeac5bc3b3d5",
+    "canonical.stdout": "29186b541ab7e402eb1f12136c9c11d56a0e5ba92953d1a574479eec9a43aaaf",
+    "earlier-boundary-evidence.json": "de1af143f42086cb7f1654665e140a94653f2087c81959473ec527aff2d85c6b",
+    "final-validation.json": "b20d354cc377e3f23e2d9dd25cb8e1c6a2e20222513ab105b6f31d0aebc3b512",
+    "fnew-fixture-repair.patch": "e55b189fdcb762aa731ab862f692d6c71ed3aaaeda484d111fb088863cc91031",
+    "forged-identity-control.c": "ccbf22027dae94e368187dd2dde8fbbb04ef93fd379f92e91456a767da4017aa",
+    "forged-identity-control.patch": "e217be72179948c50e56d2e4ac855c1e185df0dc8daa0c50c897e5ef0194eece",
+    "normal-preprocessor-check.json": "35125c3ded65c825d18cfb1fc75894329e24d536e8adbf307776360d87233816",
+    "packaging-validation.json": "9bc55be932790470450171392b3bd8fecd4a37bb5df6559cc4e6e02d274de3c4",
+    "results.json": "464f839d7ca29c692f2d7e5710444604f91889296b7195a3dbbd3c1b417b00d9",
+    "setup.json": "032b124a7dd71ef98eb22ce09a6900197b30a29d5325e1758f03b23d28e8ff2a",
+    "strict-build.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "strict-build.stdout": "71f1903846a92ecee597853b5794dbc17afa0cb3ee8e2a4d3158580f48bfaf42",
+    "strict-fixture-compile.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "strict-fixture-compile.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "strict-fixture.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "strict-fixture.stdout": "d8a41159202216581c380037daf162dab1e87fb353efe512e12100bf6b16309c",
+    "strict-forged-control-compile.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "strict-forged-control-compile.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "strict-forged-control.stderr": "f83600819b08474e1da63106536442f8642c1225adc6d6c55c310b0e8862c531",
+    "strict-forged-control.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "validate.py": "b099fbac4fbc66ec493bd65ad17cb680453c97bd29f57f1fa1f3d64999c6b4f3"
+  }
+}

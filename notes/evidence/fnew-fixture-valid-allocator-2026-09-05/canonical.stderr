@@ -1,0 +1,4 @@
+== m6_jit_fnew_bump ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLJ_FUNC_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -I'/tmp/lj-fnew-fixture-repair-20260905-yq9sbh2w/canonical/src' '/tmp/lj-fnew-fixture-repair-20260905-yq9sbh2w/canonical/tests/t-jit-fnew-bump.c' '/tmp/lj-fnew-fixture-repair-20260905-yq9sbh2w/canonical/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj-fnew-fixture-repair-20260905-yq9sbh2w/tmp/lj_t-jit-fnew-bump'
++ timeout '20s' '/tmp/lj-fnew-fixture-repair-20260905-yq9sbh2w/tmp/lj_t-jit-fnew-bump'
+ok m6_jit_fnew_bump

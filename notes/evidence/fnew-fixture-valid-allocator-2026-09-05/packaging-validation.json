@@ -1,0 +1,13 @@
+{
+  "base": "28de50a622e489019fa22845d6454e029b210582",
+  "patch_sha256": "e55b189fdcb762aa731ab862f692d6c71ed3aaaeda484d111fb088863cc91031",
+  "source_files_verified": 4,
+  "patch_applied_and_hashes_matched": true,
+  "shared_source_hashes_unchanged": true,
+  "earlier_crosslinks_verified": 8,
+  "canonical_and_strict_pass": true,
+  "forged_identity_sigabrt_preserved": true,
+  "normal_preprocessor_record_verified_against_both_retained_outputs": true,
+  "retained_binaries_verified": true,
+  "runtime_reexecuted_during_packaging": false
+}

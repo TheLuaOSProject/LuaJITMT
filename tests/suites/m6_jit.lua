@@ -938,10 +938,14 @@ assert(util.traceinfo(1), "Lua tailcall loop did not trace")
     name = "m6_jit_fnew_bump",
     description = "local-cell CNEW/FNEW allocation and publication behavior",
     run = function(t)
-      clean_build(t, build.func_helper_build_opts({ quiet = true }))
+      clean_build(t, build.func_helper_build_opts({
+        quiet = true,
+        xcflags = "-DLJ_FUNC_TEST_HELPERS -DLJ_TAB_TEST_HELPERS"
+      }))
       build_and_run_c(t, t:tmp("lj_t-jit-fnew-bump"),
                       "t-jit-fnew-bump.c", build.func_helper_c_opts({
         build = false,
+        cflags = "-DLJ_FUNC_TEST_HELPERS -DLJ_TAB_TEST_HELPERS",
         timeout = "20s"
       }))
       print("M6 local-cell CNEW/FNEW allocation behavior passed")

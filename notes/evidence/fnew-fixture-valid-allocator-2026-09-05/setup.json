@@ -1,0 +1,12 @@
+{
+  "base": "28de50a622e489019fa22845d6454e029b210582",
+  "root": "/tmp/lj-fnew-fixture-repair-20260905-yq9sbh2w",
+  "files": {
+    "src/lj_func.c": "22da14a6b0c18320def39ac8d82e551c33f806c4c5231afb21918ae8b63deaf1",
+    "src/lj_func.h": "c5f3c6e41e05d21e9727416116ba55a9d4d8e854e7f972921477ae4b189338b9",
+    "tests/t-jit-fnew-bump.c": "a39860f262492c5cce08e543f2fd27bbf7b4319c6b57f41beb0aa1164967e504",
+    "tests/suites/m6_jit.lua": "6044ebe269e90b684205ef4a0239b8bbe851d2dac84fecf1587572aea2bc016c"
+  },
+  "forged_control_sha256": "ccbf22027dae94e368187dd2dde8fbbb04ef93fd379f92e91456a767da4017aa",
+  "source_intent": "Current integrated production plus four-file FNEW fixture/test-helper repair; no wide prototype code."
+}

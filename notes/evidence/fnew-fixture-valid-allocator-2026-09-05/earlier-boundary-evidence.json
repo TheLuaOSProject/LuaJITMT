@@ -1,0 +1,14 @@
+{
+  "scope": "Earlier d680 baseline/corrected-AoS diagnostics, distinct from final 28de50a6 repair validation",
+  "note": "../../gc-table-authority-wide-corrected-prototype-2026-09-05.md",
+  "files": {
+    "../gc-table-authority-wide-corrected-prototype-2026-09-05/fnew-original-results.json": "a3afc18c822929729019d3e3157ea892046c5bcbd92688ddac608bf63da0131c",
+    "../gc-table-authority-wide-corrected-prototype-2026-09-05/fnew-capacity-results.json": "b9a78761c23619e0ad37eb550ce9c50614b3992f652ec419dfe50b5cd3acaeeb",
+    "../gc-table-authority-wide-corrected-prototype-2026-09-05/fnew-scheduled-results.json": "99b79ef29d4c92a7cfc900cdc2442130c634d42994bcb2dff5292252fdce8f1b",
+    "../gc-table-authority-wide-corrected-prototype-2026-09-05/fnew-prerequisites-results.json": "3f8f7cf8c91ad7bc6c6fa08725cfe3a051dcad5992e8330af8f5b0a67ab74aee",
+    "../gc-table-authority-wide-corrected-prototype-2026-09-05/fnew-construct-results.json": "592a9a5d02044f229fc2f594fac71ae9c12f8e1804e412e0a54e94ae17ec56ea",
+    "../gc-table-authority-wide-corrected-prototype-2026-09-05/fnew-quarantine.json": "5c27901f0d5f292d7a74bf4e22b1d5f7da0474e10584c19b890948aa346d9742",
+    "../gc-table-authority-wide-corrected-prototype-2026-09-05/fnew-quarantine.gdb": "c3e4dcaaed5b3bde79abd69212a18be3b7b4f69d459d6b279731339c52ea83ec",
+    "../gc-table-authority-wide-corrected-prototype-2026-09-05/fnew-consistent-results.json": "be6f934549b05ef482cce7ed5809ea11a45f37e5f5f82cfe30447df7df4cffa0"
+  }
+}

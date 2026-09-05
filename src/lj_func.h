@@ -50,6 +50,10 @@ LJ_FUNCA GCfunc *lj_func_newL_gc1num_forjit(lua_State *L, TValue *base,
 LJ_FUNC GCupval *lj_func_test_openuv(lua_State *L, TValue *slot);
 #endif
 #ifdef LJ_FUNC_TEST_HELPERS
+#if LJ_HASJIT
+/* Read the actual eligibility predicate without allocation or publication. */
+LJ_FUNC int lj_func_test_bump_alloc_ready(global_State *g, TGState *tg);
+#endif
 LJ_FUNC uint32_t lj_func_test_gc1num_bump_fast_calls(void);
 LJ_FUNC void lj_func_test_reset_gc1num_bump_fast_calls(void);
 LJ_FUNC uint32_t lj_func_test_gc1num_bump_fallback_calls(void);

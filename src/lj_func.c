@@ -622,6 +622,13 @@ static LJ_AINLINE int func_bump_alloc_ready(global_State *g, TGState *tg)
 	 (!lj_tg_mark_active_acq(tg) || lj_tg_alloc_black_acq(tg));
 }
 
+#ifdef LJ_FUNC_TEST_HELPERS
+int lj_func_test_bump_alloc_ready(global_State *g, TGState *tg)
+{
+  return func_bump_alloc_ready(g, tg);
+}
+#endif
+
 static LJ_AINLINE void func_bump_publish_obj(global_State *g, GCArena *a,
 					      GCobj *o, uint32_t cell)
 {
