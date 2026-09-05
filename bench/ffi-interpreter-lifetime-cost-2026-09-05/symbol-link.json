@@ -1,0 +1,18 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "cc",
+    "-Wl,-E",
+    "-o",
+    "/tmp/lj-ffi-struct-interpreter-diagnosis-20260905-37q0CuAo/candidate-symbols",
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit.o",
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/libluajit.a",
+    "-lm",
+    "-ldl",
+    "-pthread"
+  ],
+  "exit": 0,
+  "purpose": "symbols only; runtime measurements use frozen stripped CLI"
+}

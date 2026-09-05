@@ -1,0 +1,17 @@
+{
+  "roots": {
+    "candidate": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal",
+    "control": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal",
+    "stock": "/tmp/lj-runtime-performance-review-2026-09-04/stock"
+  },
+  "source_harness": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+  "harness_sha256": "ebd0b8d53b6e7a340c90c45ad33d9bdd47acbd5418890d593d6aae127ef926a9",
+  "binary_sha256": {
+    "candidate": "cfd0a47e14be6de5f1a3fde057abb88752ee7aeb516990b2884ae77acf01db17",
+    "control": "4914c147ac254179610c3aeb8ba847fdc215febcbb96af81afb365487b2a1c37",
+    "stock": "d399449cc8cee4b0c600104a4a66fd44eeeac276c0f8571ce8204744041b5e34"
+  },
+  "cpu": 29,
+  "interference": "root full interpreter CPU30; dense W study CPU31; no host/frequency isolation",
+  "protocol": "unmodified frozen harness, filtered ffi_struct, JIT off, GC mode unset and GC enabled; each reported row minimum of five in-process rounds"
+}

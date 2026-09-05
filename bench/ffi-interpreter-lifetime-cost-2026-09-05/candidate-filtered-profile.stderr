@@ -1,0 +1,2 @@
+[ perf record: Woken up 93 times to write data ]
+[ perf record: Captured and wrote 23.213 MB /tmp/lj-ffi-struct-interpreter-diagnosis-20260905-37q0CuAo/candidate-filtered.perf.data (1462 samples) ]

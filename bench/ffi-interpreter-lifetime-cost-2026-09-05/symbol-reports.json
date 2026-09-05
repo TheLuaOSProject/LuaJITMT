@@ -1,0 +1,47 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "perf",
+      "report",
+      "--stdio",
+      "--symfs",
+      "/tmp/lj-ffi-struct-interpreter-diagnosis-20260905-37q0CuAo/symfs",
+      "-i",
+      "/tmp/lj-ffi-struct-interpreter-diagnosis-20260905-37q0CuAo/candidate-filtered.perf.data",
+      "--percent-limit",
+      "0.5",
+      "--no-children",
+      "--call-graph",
+      "none",
+      "--sort",
+      "symbol",
+      "-n"
+    ],
+    "exit": 0
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "perf",
+      "report",
+      "--stdio",
+      "--symfs",
+      "/tmp/lj-ffi-struct-interpreter-diagnosis-20260905-37q0CuAo/symfs",
+      "-i",
+      "/tmp/lj-ffi-struct-interpreter-diagnosis-20260905-37q0CuAo/candidate-filtered.perf.data",
+      "--percent-limit",
+      "0.5",
+      "--children",
+      "--sort",
+      "symbol",
+      "--call-graph",
+      "graph,1,caller"
+    ],
+    "exit": 0
+  }
+]

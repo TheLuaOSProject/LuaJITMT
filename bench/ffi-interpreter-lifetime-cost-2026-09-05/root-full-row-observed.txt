@@ -1,0 +1,2 @@
+/tmp/lj-rooted-hit-full-benchmark-20260905-96tl6pn9/extended-interpreter/fork-joff.stdout
+ffi_struct              47.6172    1587.24

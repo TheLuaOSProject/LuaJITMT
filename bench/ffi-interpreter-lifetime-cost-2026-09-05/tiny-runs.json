@@ -1,0 +1,74 @@
+[
+  {
+    "label": "tiny-stock",
+    "command": [
+      "taskset",
+      "-c",
+      "29",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/luajit",
+      "-joff",
+      "/tmp/lj-ffi-struct-interpreter-diagnosis-20260905-37q0CuAo/bench.lua",
+      "ffi_struct"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.0001",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.0074556790004862705,
+    "timeout_seconds": 10
+  },
+  {
+    "label": "tiny-control",
+    "command": [
+      "taskset",
+      "-c",
+      "29",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-ffi-struct-interpreter-diagnosis-20260905-37q0CuAo/bench.lua",
+      "ffi_struct"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.0001",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.11362441699930059,
+    "timeout_seconds": 10
+  },
+  {
+    "label": "tiny-candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "29",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-ffi-struct-interpreter-diagnosis-20260905-37q0CuAo/bench.lua",
+      "ffi_struct"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.0001",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.1139302179999504,
+    "timeout_seconds": 10
+  }
+]

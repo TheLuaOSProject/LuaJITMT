@@ -1,0 +1,30 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "29",
+    "perf",
+    "record",
+    "-e",
+    "cycles:u",
+    "-F",
+    "499",
+    "--call-graph",
+    "dwarf,16384",
+    "-o",
+    "/tmp/lj-ffi-struct-interpreter-diagnosis-20260905-37q0CuAo/candidate-filtered.perf.data",
+    "--",
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+    "-joff",
+    "/tmp/lj-ffi-struct-interpreter-diagnosis-20260905-37q0CuAo/bench.lua",
+    "ffi_struct"
+  ],
+  "exit": 0,
+  "status": "complete",
+  "seconds": 3.0171006720011064,
+  "timeout_seconds": 15,
+  "instrumented": true,
+  "scale": "0.01",
+  "jit": "off",
+  "gc": "enabled"
+}

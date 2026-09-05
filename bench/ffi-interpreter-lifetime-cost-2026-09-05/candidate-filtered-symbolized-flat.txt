@@ -1,0 +1,56 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'cpu_atom/cycles/u'
+# Event count (approx.): 12750200346
+#
+# Overhead       Samples  Symbol                                            IPC   [IPC Coverage]
+# ........  ............  ................................................  ....................
+#
+    11.43%           167  [.] hugetab_reader_entry                          -      -            
+    10.55%           154  [.] hugetab_counted_lease_release.part.0          -      -            
+    10.49%           153  [.] gc2_small_candidate_admit                     -      -            
+     9.21%           135  [.] hugetab_search                                -      -            
+     5.83%            85  [.] arena_publish_leave                           -      -            
+     5.15%            75  [.] lj_arena_rescue_enter                         -      -            
+     2.88%            42  [.] lj_gc2_smr_read_try                           -      -            
+     2.61%            38  [.] lj_gc2_smr_read_leave                         -      -            
+     2.33%            34  [.] gc2_retained_candidate_valid                  -      -            
+     2.32%            34  [.] gc2_observed_obj_status_scoped_impl           -      -            
+     1.99%            29  [.] lj_state_stack_pubtv                          -      -            
+     1.85%            27  [.] lj_arena_hugetab_rescue_enter                 -      -            
+     1.72%            25  [.] gc2_tv_admit_scoped_impl                      -      -            
+     1.51%            22  [.] gc2_small_containing_start                    -      -            
+     1.23%            18  [.] tab_keyed_slot_owner_snapshot                 -      -            
+     1.18%            18  [.] gc2_mark_small_cell_admitted                  -      -            
+     1.17%            17  [.] lj_arena_hugetab_lookup                       -      -            
+     1.10%            16  [.] tab_gettv_rooted_try_impl                     -      -            
+     1.10%            16  [.] meta_chain_capture_inputs.constprop.0         -      -            
+     1.03%            15  [.] lj_gc2_tv_lease_acquire                       -      -            
+     1.03%            15  [.] ctype_getfieldq_snapshot_rec                  -      -            
+     0.96%            14  [.] gc2_retain_candidate_status                   -      -            
+     0.89%            13  [.] lj_tab_getscalar_rooted_try                   -      -            
+     0.82%            12  [.] lj_tg_root_anchor_slot_acq                    -      -            
+     0.82%            12  [.] lj_cdata_index_l                              -      -            
+     0.82%            12  [.] gc2_small_registered_rescue_enter             -      -            
+     0.76%            11  [.] lj_tab_getstr_held_try                        -      -            
+     0.76%            11  [.] gc2_small_cdata_span_exact                    -      -            
+     0.75%            11  [.] lj_gc2_lease_release                          -      -            
+     0.69%            10  [.] gc2_markobj_preserve_status_impl.constprop.0  -      -            
+     0.69%            10  [.] gc2_markobj_expected_scoped_status_mode       -      -            
+     0.69%            10  [.] lj_cdata_validate                             -      -            
+     0.69%            10  [.] lj_gc2_barrier_tv_g                           -      -            
+     0.69%            10  [.] lj_gc_pubroot                                 -      -            
+     0.69%            10  [.] gc2_small_lifetime_nearest                    -      -            
+     0.62%             9  [.] lj_meta_lookuptv                              -      -            
+     0.62%             9  [.] gc2_small_arena_known                         -      -            
+     0.55%             8  [.] ctype_snapshot_copy                           -      -            
+     0.55%             8  [.] lj_cconv_ct_ct_l                              -      -            
+     0.55%             8  [.] meta_tget_rooted_mode                         -      -            
+
+
+#
+# (Tip: When collecting LBR backtraces use --stitch-lbr to handle more than 32 deep entries: perf record --call-graph lbr ; perf report --stitch-lbr)
+#
