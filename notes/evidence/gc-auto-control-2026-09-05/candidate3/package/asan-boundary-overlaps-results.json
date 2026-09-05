@@ -1,0 +1,139 @@
+[
+  {
+    "name": "asan-boundary-overlaps-t-stop-first-attach-compile",
+    "argv": [
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-I/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/t-stop-first-attach.c",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_vm_cpcall",
+      "-o",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan-boundary-overlaps-t-stop-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.4145584610014339,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "stdout": "asan-boundary-overlaps-t-stop-first-attach-compile.stdout",
+    "stderr": "asan-boundary-overlaps-t-stop-first-attach-compile.stderr"
+  },
+  {
+    "name": "asan-boundary-overlaps-t-stop-first-attach-run",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan-boundary-overlaps-t-stop-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.06372994099365314,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "stdout": "asan-boundary-overlaps-t-stop-first-attach-run.stdout",
+    "stderr": "asan-boundary-overlaps-t-stop-first-attach-run.stderr"
+  },
+  {
+    "name": "asan-boundary-overlaps-t-stop-first-attach-restart-v2-compile",
+    "argv": [
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-I/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/t-stop-first-attach-restart-v2.c",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_vm_cpcall",
+      "-o",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan-boundary-overlaps-t-stop-first-attach-restart-v2"
+    ],
+    "exit_code": 0,
+    "seconds": 0.36456690399791114,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "stdout": "asan-boundary-overlaps-t-stop-first-attach-restart-v2-compile.stdout",
+    "stderr": "asan-boundary-overlaps-t-stop-first-attach-restart-v2-compile.stderr"
+  },
+  {
+    "name": "asan-boundary-overlaps-t-stop-first-attach-restart-v2-run",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan-boundary-overlaps-t-stop-first-attach-restart-v2"
+    ],
+    "exit_code": 0,
+    "seconds": 0.06388948800304206,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "stdout": "asan-boundary-overlaps-t-stop-first-attach-restart-v2-run.stdout",
+    "stderr": "asan-boundary-overlaps-t-stop-first-attach-restart-v2-run.stderr"
+  },
+  {
+    "name": "asan-boundary-overlaps-t-auto-restart-numeric-max-compile",
+    "argv": [
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-I/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/t-auto-restart-numeric-max.c",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan-boundary-overlaps-t-auto-restart-numeric-max"
+    ],
+    "exit_code": 0,
+    "seconds": 0.21447298999555642,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "stdout": "asan-boundary-overlaps-t-auto-restart-numeric-max-compile.stdout",
+    "stderr": "asan-boundary-overlaps-t-auto-restart-numeric-max-compile.stderr"
+  },
+  {
+    "name": "asan-boundary-overlaps-t-auto-restart-numeric-max-run",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan-boundary-overlaps-t-auto-restart-numeric-max"
+    ],
+    "exit_code": 0,
+    "seconds": 0.06383999399986351,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "stdout": "asan-boundary-overlaps-t-auto-restart-numeric-max-run.stdout",
+    "stderr": "asan-boundary-overlaps-t-auto-restart-numeric-max-run.stderr"
+  }
+]

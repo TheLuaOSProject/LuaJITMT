@@ -1,0 +1,651 @@
+{
+  "name": "m3_gc2_auto_control",
+  "status": "proposed registration only; no shared suite edits",
+  "path_variables": {
+    "SRC": "absolute path to matched runtime src",
+    "TESTS": "absolute path containing all promoted fixtures plus existing tests",
+    "BIN": "temporary compiled fixture directory",
+    "CC": "cc for verified GCC runtime; clang for ASan runtime",
+    "MATCHING_RUNTIME_FLAGS": "expand as zero argv tokens for normal, -DLUA_USE_ASSERT -DLUA_USE_APICHECK for strict, plus -fsanitize=address -fno-omit-frame-pointer for ASan"
+  },
+  "environment": {
+    "LUA_PATH": "${SRC}/?.lua;${TESTS}/lib/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  "asan_environment": {
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  "fixtures": {
+    "t-stop-first-attach.c": {
+      "sha256": "3ae6ce71c2cfa62f09bd3752f3736266a8606983a72928d2ef5476d1c16ab640",
+      "bytes": 6461,
+      "absolute_package_path": false
+    },
+    "t-restart-first-attach.c": {
+      "sha256": "f5f1fad1d435d828e92728726c7157a534c9b664fa4a4f576b075392444632d9",
+      "bytes": 6967,
+      "absolute_package_path": false
+    },
+    "t-restart-last-detach.c": {
+      "sha256": "b97030a42e75652ac78236acba51bc36823f2be83c367e129ce3cf96132acb38",
+      "bytes": 5924,
+      "absolute_package_path": false
+    },
+    "t-auto-restart-numeric-max.c": {
+      "sha256": "f12ed44cd991b2fd76fe0342630ea26b0c5820fb7c2660d61e707b5d5c02b024",
+      "bytes": 2625,
+      "absolute_package_path": false
+    },
+    "t-auto-finalizer-controls-v3.c": {
+      "sha256": "79eab244e3947538ffbb4ea7ea003b8730410f26940d8b566a20fc5430bf6b37",
+      "bytes": 6913,
+      "absolute_package_path": false
+    },
+    "t-auto-controls-v2.c": {
+      "sha256": "e0a5445e48151078870dde0043c7a2c0bb95a50452a0e8cbde7dc6146fbebfc6",
+      "bytes": 7355,
+      "absolute_package_path": false
+    },
+    "t-string-retention.c": {
+      "sha256": "2e8e840fb4ba3a3b09168c06d828ff10ebafd41e9ff555b9737f34384fea3cf9",
+      "bytes": 12128,
+      "absolute_package_path": false
+    },
+    "peer-control.lua": {
+      "sha256": "519ebf714b0a33b9a436d3452a153a1bc3eea3322ebf0bf74d8e76fea4ab8cb2",
+      "bytes": 1756,
+      "absolute_package_path": false
+    },
+    "control-boundaries.lua": {
+      "sha256": "fc17679e2035924294a7003184e085b0437ea6ddf8cfcb0664dee3ccd8521460",
+      "bytes": 766,
+      "absolute_package_path": false
+    },
+    "t-finalizer-spawn-query-enabled.lua": {
+      "sha256": "cd678020fed1c825e064f3f3aed2f7e2695ed9f4d19615ca0e1cd3ab591ef97a",
+      "bytes": 2043,
+      "absolute_package_path": false
+    },
+    "t-m8-finalizer-spawn-live.lua": {
+      "sha256": "063a889fe0a69c75e1be16e65cf0f6a3a9ec4c896f13aa5b7afaf6dad1cfc2d2",
+      "existing_unchanged": true,
+      "absolute_package_path": false
+    }
+  },
+  "compile_commands": [
+    {
+      "source": "t-stop-first-attach.c",
+      "argv": [
+        "${CC}",
+        "-std=gnu11",
+        "-O2",
+        "-g",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "${MATCHING_RUNTIME_FLAGS}",
+        "-I${SRC}",
+        "${TESTS}/t-stop-first-attach.c",
+        "${SRC}/libluajit.a",
+        "-Wl,-E",
+        "-lm",
+        "-ldl",
+        "-pthread",
+        "-Wl,--wrap=lj_vm_cpcall",
+        "-o",
+        "${BIN}/t-stop-first-attach"
+      ],
+      "gcc_runtime_only": false
+    },
+    {
+      "source": "t-restart-first-attach.c",
+      "argv": [
+        "${CC}",
+        "-std=gnu11",
+        "-O2",
+        "-g",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "${MATCHING_RUNTIME_FLAGS}",
+        "-I${SRC}",
+        "${TESTS}/t-restart-first-attach.c",
+        "${SRC}/libluajit.a",
+        "-Wl,-E",
+        "-lm",
+        "-ldl",
+        "-pthread",
+        "-Wl,--wrap=lj_vm_cpcall",
+        "-o",
+        "${BIN}/t-restart-first-attach"
+      ],
+      "gcc_runtime_only": true
+    },
+    {
+      "source": "t-restart-last-detach.c",
+      "argv": [
+        "${CC}",
+        "-std=gnu11",
+        "-O2",
+        "-g",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "${MATCHING_RUNTIME_FLAGS}",
+        "-I${SRC}",
+        "${TESTS}/t-restart-last-detach.c",
+        "${SRC}/libluajit.a",
+        "-Wl,-E",
+        "-lm",
+        "-ldl",
+        "-pthread",
+        "-o",
+        "${BIN}/t-restart-last-detach"
+      ],
+      "gcc_runtime_only": true
+    },
+    {
+      "source": "t-auto-restart-numeric-max.c",
+      "argv": [
+        "${CC}",
+        "-std=gnu11",
+        "-O2",
+        "-g",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "${MATCHING_RUNTIME_FLAGS}",
+        "-I${SRC}",
+        "${TESTS}/t-auto-restart-numeric-max.c",
+        "${SRC}/libluajit.a",
+        "-Wl,-E",
+        "-lm",
+        "-ldl",
+        "-pthread",
+        "-o",
+        "${BIN}/t-auto-restart-numeric-max"
+      ],
+      "gcc_runtime_only": false
+    },
+    {
+      "source": "t-auto-finalizer-controls-v3.c",
+      "argv": [
+        "${CC}",
+        "-std=gnu11",
+        "-O2",
+        "-g",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "${MATCHING_RUNTIME_FLAGS}",
+        "-I${SRC}",
+        "${TESTS}/t-auto-finalizer-controls-v3.c",
+        "${SRC}/libluajit.a",
+        "-Wl,-E",
+        "-lm",
+        "-ldl",
+        "-pthread",
+        "-o",
+        "${BIN}/t-auto-finalizer-controls-v3"
+      ],
+      "gcc_runtime_only": false
+    },
+    {
+      "source": "t-auto-controls-v2.c",
+      "argv": [
+        "${CC}",
+        "-std=gnu11",
+        "-O2",
+        "-g",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "${MATCHING_RUNTIME_FLAGS}",
+        "-I${SRC}",
+        "${TESTS}/t-auto-controls-v2.c",
+        "${SRC}/libluajit.a",
+        "-Wl,-E",
+        "-lm",
+        "-ldl",
+        "-pthread",
+        "-Wl,--wrap=lj_native_enter",
+        "-o",
+        "${BIN}/t-auto-controls-v2"
+      ],
+      "gcc_runtime_only": false
+    }
+  ],
+  "runtime_cases": [
+    {
+      "name": "t-stop-first-attach",
+      "argv": [
+        "${BIN}/t-stop-first-attach"
+      ],
+      "timeout_seconds": 25,
+      "gcc_runtime_only": false
+    },
+    {
+      "name": "t-restart-first-attach",
+      "argv": [
+        "${BIN}/t-restart-first-attach"
+      ],
+      "timeout_seconds": 25,
+      "gcc_runtime_only": true
+    },
+    {
+      "name": "t-restart-last-detach",
+      "argv": [
+        "${BIN}/t-restart-last-detach"
+      ],
+      "timeout_seconds": 25,
+      "gcc_runtime_only": true
+    },
+    {
+      "name": "t-auto-restart-numeric-max",
+      "argv": [
+        "${BIN}/t-auto-restart-numeric-max"
+      ],
+      "timeout_seconds": 25,
+      "gcc_runtime_only": false
+    },
+    {
+      "name": "finalizer-0-0-0-0",
+      "argv": [
+        "${BIN}/t-auto-finalizer-controls-v3",
+        "0",
+        "0",
+        "0",
+        "0",
+        "1"
+      ],
+      "timeout_seconds": 25
+    },
+    {
+      "name": "finalizer-0-0-0-1",
+      "argv": [
+        "${BIN}/t-auto-finalizer-controls-v3",
+        "0",
+        "0",
+        "0",
+        "1",
+        "1"
+      ],
+      "timeout_seconds": 25
+    },
+    {
+      "name": "finalizer-0-0-1-0",
+      "argv": [
+        "${BIN}/t-auto-finalizer-controls-v3",
+        "0",
+        "0",
+        "1",
+        "0",
+        "1"
+      ],
+      "timeout_seconds": 25
+    },
+    {
+      "name": "finalizer-0-0-1-1",
+      "argv": [
+        "${BIN}/t-auto-finalizer-controls-v3",
+        "0",
+        "0",
+        "1",
+        "1",
+        "1"
+      ],
+      "timeout_seconds": 25
+    },
+    {
+      "name": "finalizer-0-1-0-0",
+      "argv": [
+        "${BIN}/t-auto-finalizer-controls-v3",
+        "0",
+        "1",
+        "0",
+        "0",
+        "1"
+      ],
+      "timeout_seconds": 25
+    },
+    {
+      "name": "finalizer-0-1-0-1",
+      "argv": [
+        "${BIN}/t-auto-finalizer-controls-v3",
+        "0",
+        "1",
+        "0",
+        "1",
+        "1"
+      ],
+      "timeout_seconds": 25
+    },
+    {
+      "name": "finalizer-0-1-1-0",
+      "argv": [
+        "${BIN}/t-auto-finalizer-controls-v3",
+        "0",
+        "1",
+        "1",
+        "0",
+        "1"
+      ],
+      "timeout_seconds": 25
+    },
+    {
+      "name": "finalizer-0-1-1-1",
+      "argv": [
+        "${BIN}/t-auto-finalizer-controls-v3",
+        "0",
+        "1",
+        "1",
+        "1",
+        "1"
+      ],
+      "timeout_seconds": 25
+    },
+    {
+      "name": "finalizer-1-0-0-0",
+      "argv": [
+        "${BIN}/t-auto-finalizer-controls-v3",
+        "1",
+        "0",
+        "0",
+        "0",
+        "1"
+      ],
+      "timeout_seconds": 25
+    },
+    {
+      "name": "finalizer-1-0-0-1",
+      "argv": [
+        "${BIN}/t-auto-finalizer-controls-v3",
+        "1",
+        "0",
+        "0",
+        "1",
+        "1"
+      ],
+      "timeout_seconds": 25
+    },
+    {
+      "name": "finalizer-1-0-1-0",
+      "argv": [
+        "${BIN}/t-auto-finalizer-controls-v3",
+        "1",
+        "0",
+        "1",
+        "0",
+        "1"
+      ],
+      "timeout_seconds": 25
+    },
+    {
+      "name": "finalizer-1-0-1-1",
+      "argv": [
+        "${BIN}/t-auto-finalizer-controls-v3",
+        "1",
+        "0",
+        "1",
+        "1",
+        "1"
+      ],
+      "timeout_seconds": 25
+    },
+    {
+      "name": "finalizer-1-1-0-0",
+      "argv": [
+        "${BIN}/t-auto-finalizer-controls-v3",
+        "1",
+        "1",
+        "0",
+        "0",
+        "1"
+      ],
+      "timeout_seconds": 25
+    },
+    {
+      "name": "finalizer-1-1-0-1",
+      "argv": [
+        "${BIN}/t-auto-finalizer-controls-v3",
+        "1",
+        "1",
+        "0",
+        "1",
+        "1"
+      ],
+      "timeout_seconds": 25
+    },
+    {
+      "name": "finalizer-1-1-1-0",
+      "argv": [
+        "${BIN}/t-auto-finalizer-controls-v3",
+        "1",
+        "1",
+        "1",
+        "0",
+        "1"
+      ],
+      "timeout_seconds": 25
+    },
+    {
+      "name": "finalizer-1-1-1-1",
+      "argv": [
+        "${BIN}/t-auto-finalizer-controls-v3",
+        "1",
+        "1",
+        "1",
+        "1",
+        "1"
+      ],
+      "timeout_seconds": 25
+    },
+    {
+      "name": "t-m8-finalizer-spawn-live.lua-joff",
+      "argv": [
+        "${SRC}/luajit",
+        "-joff",
+        "${TESTS}/t-m8-finalizer-spawn-live.lua"
+      ],
+      "timeout_seconds": 40
+    },
+    {
+      "name": "t-m8-finalizer-spawn-live.lua-jit",
+      "argv": [
+        "${SRC}/luajit",
+        "${TESTS}/t-m8-finalizer-spawn-live.lua"
+      ],
+      "timeout_seconds": 40
+    },
+    {
+      "name": "t-finalizer-spawn-query-enabled.lua-joff",
+      "argv": [
+        "${SRC}/luajit",
+        "-joff",
+        "${TESTS}/t-finalizer-spawn-query-enabled.lua"
+      ],
+      "timeout_seconds": 40
+    },
+    {
+      "name": "t-finalizer-spawn-query-enabled.lua-jit",
+      "argv": [
+        "${SRC}/luajit",
+        "${TESTS}/t-finalizer-spawn-query-enabled.lua"
+      ],
+      "timeout_seconds": 40
+    },
+    {
+      "name": "automatic-control-0-0-1-0",
+      "argv": [
+        "${BIN}/t-auto-controls-v2",
+        "0",
+        "0",
+        "1",
+        "0",
+        "${TESTS}/peer-control.lua",
+        "${TESTS}/control-boundaries.lua"
+      ],
+      "timeout_seconds": 50
+    },
+    {
+      "name": "automatic-control-0-1-1-0",
+      "argv": [
+        "${BIN}/t-auto-controls-v2",
+        "0",
+        "1",
+        "1",
+        "0",
+        "${TESTS}/peer-control.lua",
+        "${TESTS}/control-boundaries.lua"
+      ],
+      "timeout_seconds": 50
+    },
+    {
+      "name": "automatic-control-0-2-1-0",
+      "argv": [
+        "${BIN}/t-auto-controls-v2",
+        "0",
+        "2",
+        "1",
+        "0",
+        "${TESTS}/peer-control.lua",
+        "${TESTS}/control-boundaries.lua"
+      ],
+      "timeout_seconds": 50
+    },
+    {
+      "name": "automatic-control-0-3-1-0",
+      "argv": [
+        "${BIN}/t-auto-controls-v2",
+        "0",
+        "3",
+        "1",
+        "0",
+        "${TESTS}/peer-control.lua",
+        "${TESTS}/control-boundaries.lua"
+      ],
+      "timeout_seconds": 50
+    },
+    {
+      "name": "automatic-control-0-4-1-0",
+      "argv": [
+        "${BIN}/t-auto-controls-v2",
+        "0",
+        "4",
+        "1",
+        "0",
+        "${TESTS}/peer-control.lua",
+        "${TESTS}/control-boundaries.lua"
+      ],
+      "timeout_seconds": 50
+    },
+    {
+      "name": "automatic-control-0-5-1-0",
+      "argv": [
+        "${BIN}/t-auto-controls-v2",
+        "0",
+        "5",
+        "1",
+        "0",
+        "${TESTS}/peer-control.lua",
+        "${TESTS}/control-boundaries.lua"
+      ],
+      "timeout_seconds": 50
+    },
+    {
+      "name": "automatic-control-1-0-0-0",
+      "argv": [
+        "${BIN}/t-auto-controls-v2",
+        "1",
+        "0",
+        "0",
+        "0",
+        "${TESTS}/peer-control.lua",
+        "${TESTS}/control-boundaries.lua"
+      ],
+      "timeout_seconds": 50
+    },
+    {
+      "name": "automatic-control-1-0-1-0",
+      "argv": [
+        "${BIN}/t-auto-controls-v2",
+        "1",
+        "0",
+        "1",
+        "0",
+        "${TESTS}/peer-control.lua",
+        "${TESTS}/control-boundaries.lua"
+      ],
+      "timeout_seconds": 50
+    },
+    {
+      "name": "automatic-control-2-0-1-0",
+      "argv": [
+        "${BIN}/t-auto-controls-v2",
+        "2",
+        "0",
+        "1",
+        "0",
+        "${TESTS}/peer-control.lua",
+        "${TESTS}/control-boundaries.lua"
+      ],
+      "timeout_seconds": 50
+    },
+    {
+      "name": "automatic-control-3-0-0-0",
+      "argv": [
+        "${BIN}/t-auto-controls-v2",
+        "3",
+        "0",
+        "0",
+        "0",
+        "${TESTS}/peer-control.lua",
+        "${TESTS}/control-boundaries.lua"
+      ],
+      "timeout_seconds": 50
+    },
+    {
+      "name": "automatic-control-3-0-1-0",
+      "argv": [
+        "${BIN}/t-auto-controls-v2",
+        "3",
+        "0",
+        "1",
+        "0",
+        "${TESTS}/peer-control.lua",
+        "${TESTS}/control-boundaries.lua"
+      ],
+      "timeout_seconds": 50
+    },
+    {
+      "name": "automatic-control-4-0-0-0",
+      "argv": [
+        "${BIN}/t-auto-controls-v2",
+        "4",
+        "0",
+        "0",
+        "0",
+        "${TESTS}/peer-control.lua",
+        "${TESTS}/control-boundaries.lua"
+      ],
+      "timeout_seconds": 50
+    },
+    {
+      "name": "automatic-control-4-0-1-0",
+      "argv": [
+        "${BIN}/t-auto-controls-v2",
+        "4",
+        "0",
+        "1",
+        "0",
+        "${TESTS}/peer-control.lua",
+        "${TESTS}/control-boundaries.lua"
+      ],
+      "timeout_seconds": 50
+    }
+  ],
+  "gcc_runtime_count": 37,
+  "clang_runtime_count": 35,
+  "expected_exit_code": 0,
+  "excluded": "Configured-worker-two completion failures are evidence and must not become expected passing gate outcomes."
+}

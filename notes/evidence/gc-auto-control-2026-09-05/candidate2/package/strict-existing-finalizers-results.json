@@ -1,0 +1,146 @@
+[
+  {
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/tests/t-m8-finalizer-state.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict-existing-finalizers-t-m8-finalizer-state"
+    ],
+    "name": "t-m8-finalizer-state-compile",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/?.lua;/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.1142218560053152,
+    "stdout": "strict-existing-finalizers-t-m8-finalizer-state-compile.stdout",
+    "stderr": "strict-existing-finalizers-t-m8-finalizer-state-compile.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict-existing-finalizers-t-m8-finalizer-state"
+    ],
+    "name": "t-m8-finalizer-state",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/?.lua;/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.015841202999581583,
+    "stdout": "strict-existing-finalizers-t-m8-finalizer-state.stdout",
+    "stderr": "strict-existing-finalizers-t-m8-finalizer-state.stderr"
+  },
+  {
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/tests/t-m8-close-finalizers.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict-existing-finalizers-t-m8-close-finalizers"
+    ],
+    "name": "t-m8-close-finalizers-compile",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/?.lua;/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.11410240199620603,
+    "stdout": "strict-existing-finalizers-t-m8-close-finalizers-compile.stdout",
+    "stderr": "strict-existing-finalizers-t-m8-close-finalizers-compile.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict-existing-finalizers-t-m8-close-finalizers"
+    ],
+    "name": "t-m8-close-finalizers",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/?.lua;/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.007765116999507882,
+    "stdout": "strict-existing-finalizers-t-m8-close-finalizers.stdout",
+    "stderr": "strict-existing-finalizers-t-m8-close-finalizers.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/tests/t-ffi-gc-finreg.lua"
+    ],
+    "name": "t-ffi-gc-finreg-joff",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/?.lua;/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.31428981800127076,
+    "stdout": "strict-existing-finalizers-t-ffi-gc-finreg-joff.stdout",
+    "stderr": "strict-existing-finalizers-t-ffi-gc-finreg-joff.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/luajit",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/tests/t-ffi-gc-finreg.lua"
+    ],
+    "name": "t-ffi-gc-finreg-jit",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/?.lua;/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.2146392869981355,
+    "stdout": "strict-existing-finalizers-t-ffi-gc-finreg-jit.stdout",
+    "stderr": "strict-existing-finalizers-t-ffi-gc-finreg-jit.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/tests/t-m8-finalizer-spawn-live.lua"
+    ],
+    "name": "t-m8-finalizer-spawn-live-joff",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/?.lua;/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 1,
+    "seconds": 0.008130416994390544,
+    "stdout": "strict-existing-finalizers-t-m8-finalizer-spawn-live-joff.stdout",
+    "stderr": "strict-existing-finalizers-t-m8-finalizer-spawn-live-joff.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/luajit",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/tests/t-m8-finalizer-spawn-live.lua"
+    ],
+    "name": "t-m8-finalizer-spawn-live-jit",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/?.lua;/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.01597677799873054,
+    "stdout": "strict-existing-finalizers-t-m8-finalizer-spawn-live-jit.stdout",
+    "stderr": "strict-existing-finalizers-t-m8-finalizer-spawn-live-jit.stderr"
+  }
+]

@@ -1,0 +1,256 @@
+--- a/src/lj_obj.h
++++ b/src/lj_obj.h
+@@ -1755,7 +1755,7 @@
+   GCSize threshold;	/* Memory threshold. */
+   uint8_t currentwhite;	/* Current white color. */
+   uint8_t state;	/* GC state. */
+-  uint8_t unused0;
++  uint8_t auto_flags;  /* Automatic-GC control, independent of pacing thresholds. */
+ #if LJ_64
+   uint8_t lightudnum;	/* Number of lightuserdata segments - 1. */
+ #else
+--- a/src/lj_gc.h
++++ b/src/lj_gc.h
+@@ -276,6 +276,55 @@
+   lj_gcsize_store_rel(&g->gc.threshold, threshold);
+ }
+ 
++#define LJ_GC_AUTO_STOPPED	0x01u
++#define LJ_GC_AUTO_FINPAUSE	0x02u
++
++static LJ_AINLINE uint8_t lj_gc_auto_flags_load(global_State *g)
++{
++  return la_load8_acq(&g->gc.auto_flags);
++}
++
++static LJ_AINLINE void lj_gc_auto_init(global_State *g)
++{
++  la_store8_rel(&g->gc.auto_flags, 0);
++}
++
++/* Public logical control is independent of temporary finalizer suppression. */
++static LJ_AINLINE int lj_gc_auto_enabled(global_State *g)
++{
++  return !(lj_gc_auto_flags_load(g) & LJ_GC_AUTO_STOPPED);
++}
++
++/* Automatic admission also honors the pause owned by an active finalizer. */
++static LJ_AINLINE int lj_gc_auto_running(global_State *g)
++{
++  return lj_gc_auto_flags_load(g) == 0;
++}
++
++static LJ_AINLINE void lj_gc_auto_stop(global_State *g)
++{
++  (void)la_or8_acqrel(&g->gc.auto_flags, LJ_GC_AUTO_STOPPED);
++}
++
++static LJ_AINLINE void lj_gc_auto_restart(global_State *g)
++{
++  (void)la_and8_acqrel(&g->gc.auto_flags, (uint8_t)~LJ_GC_AUTO_STOPPED);
++}
++
++/* Finalizer ownership serializes foreign callbacks and permits same-owner
++** recursion. Only the outer scope clears its pause, retaining any public STOP
++** that was published by the callback or another mutator in the meantime. */
++static LJ_AINLINE uint8_t lj_gc_auto_finalizer_pause(global_State *g)
++{
++  return la_or8_acqrel(&g->gc.auto_flags, LJ_GC_AUTO_FINPAUSE);
++}
++
++static LJ_AINLINE void lj_gc_auto_finalizer_resume(global_State *g, uint8_t old)
++{
++  if (!(old & LJ_GC_AUTO_FINPAUSE))
++    (void)la_and8_acqrel(&g->gc.auto_flags, (uint8_t)~LJ_GC_AUTO_FINPAUSE);
++}
++
+ static LJ_AINLINE MSize lj_gc_pause_load(global_State *g)
+ {
+   return (MSize)la_load32_acq(&g->gc.pause);
+@@ -406,10 +455,13 @@
+   return lj_gc2_alloc_since_load(g) > lj_gc2_hard_load(g);
+ }
+ 
++LJ_FUNC int lj_gc_pending_auto_request(global_State *g);
++
+ static LJ_AINLINE int lj_gc_should_step(global_State *g)
+ {
+   return lj_gc_total_load(g) >= lj_gc_threshold_load(g) ||
+-	 lj_gc2_hard_limit_reached(g);
++	 lj_gc2_hard_limit_reached(g) ||
++	 (gc2_cycle_leader_acq(g) != 0 && lj_gc_pending_auto_request(g));
+ }
+ 
+ /* GC check: drive collector forward if color GC or GC2 pacing asks for work. */
+--- a/src/lj_gc.c
++++ b/src/lj_gc.c
+@@ -65,15 +65,17 @@
+ 
+ static int gc_logical_running(global_State *g)
+ {
+-  GCSize threshold;
+-  if (mt_live_acq(g) != 0) {
+-    threshold = lj_gc_mt_threshold_load(g);
+-    if (mt_live_acq(g) == 0)
+-      threshold = lj_gc_threshold_load(g);
+-  } else {
+-    threshold = lj_gc_threshold_load(g);
+-  }
+-  return threshold != LJ_MAX_MEM;
++  return lj_gc_auto_running(g);
++}
++
++/* Allocation checkpoints can publish a request and consume the local debt
++** before an interpreter GC check. The MT threshold bridge must not hide that
++** durable request. Only a normal GC-safe caller may admit it to the existing
++** driver; raw allocation accounting does not have a complete Lua stack. */
++int lj_gc_pending_auto_request(global_State *g)
++{
++  return gc2_cycle_leader_acq(g) != 0 &&
++	 gc2_phase_acq(g) == LJ_GC2_IDLE && gc_logical_running(g);
+ }
+ 
+ #if LJ_HASJIT
+@@ -4288,7 +4290,7 @@
+     gc2_interp_hard_checks_add(g, 1);
+     lj_gc2_assist(g, tg);  /* 05 section 5.11 interpreter assist bridge. */
+   }
+-  if (threshold_step)
++  if (threshold_step || lj_gc_pending_auto_request(g))
+     gc2_step_auto(L, threshold_step, GCACTIVEAUTOSTEPS);
+ }
+ 
+--- a/src/lj_gc2.c
++++ b/src/lj_gc2.c
+@@ -1651,6 +1651,7 @@
+ void lj_gc2_init(global_State *g)
+ {
+   uint32_t i;
++  lj_gc_auto_init(g);
+   gc2_gcpause_pct_store_rlx(g, (uint32_t)lj_gc_pause_load(g));
+   gc2_assist_shift_store_rlx(g,
+     lj_gc2_assist_shift_from_stepmul(lj_gc_stepmul_load(g)));
+@@ -2836,13 +2837,7 @@
+ 
+ static int gc2_logical_stopped(global_State *g)
+ {
+-  if (mt_live_acq(g) != 0) {
+-    GCSize threshold = lj_gc_mt_threshold_load(g);
+-    if (mt_live_acq(g) == 0)
+-      threshold = lj_gc_threshold_load(g);
+-    return threshold == LJ_MAX_MEM;
+-  }
+-  return lj_gc_threshold_load(g) == LJ_MAX_MEM;
++  return !lj_gc_auto_running(g);
+ }
+ 
+ static void gc2_request_threshold(global_State *g)
+@@ -5377,6 +5372,7 @@
+   lua_State *cbL = L;
+   lua_State *oldL;
+   uint8_t oldh;
++  uint8_t oldauto;
+   GCSize oldt;
+   int continue_gc = 1;
+   int errcode;
+@@ -5394,6 +5390,9 @@
+     return 1;
+   oldL = lj_tg_cur_L(g);
+   oldh = hook_save(g);
++  lj_assertG(lj_gc2_finalizer_owned_by_current(g),
++	     "automatic GC pause requires finalizer owner");
++  oldauto = lj_gc_auto_finalizer_pause(g);
+   oldt = gc2_finalizer_pause_threshold(g);
+   lj_trace_abort(g);
+   hook_entergc(g);  /* Disable hooks and new traces during __gc. */
+@@ -5413,6 +5412,7 @@
+   hook_restore(g, oldh);
+   if (LJ_HASPROFILE && (oldh & HOOK_PROFILE)) lj_dispatch_update(g, 0);
+   gc2_finalizer_restore_threshold(g, oldt);
++  lj_gc_auto_finalizer_resume(g, oldauto);
+   if (errcode) {
+     ptrdiff_t errslot = savestack(cbL, cbL->top-1);
+     cbL->base = restorestack(cbL, oldbase);
+--- a/src/lj_api.c
++++ b/src/lj_api.c
+@@ -2960,10 +2960,15 @@
+ 
+ /* -- GC and memory management -------------------------------------------- */
+ 
+-static void api_gc_setlogical(global_State *g, GCSize threshold)
++static void api_gc_setlogical(global_State *g, GCSize threshold, int stopped)
+ {
+   uint64_t soft = ~(uint64_t)0;
+-  if (threshold != LJ_MAX_MEM) {
++  /* Public control is authoritative. Delayed attachment/detachment and
++  ** finalizer threshold stores only affect pacing; they cannot undo STOP or
++  ** RESTART. Change only the public bit, retaining an owned finalizer pause. */
++  if (stopped)
++    lj_gc_auto_stop(g);
++  if (!stopped) {
+     GCSize total = lj_gc_total_load(g);
+     soft = (uint64_t)total > soft - LJ_GC2_HELPER_IDLE_STEP ?
+ 	   soft : (uint64_t)total + LJ_GC2_HELPER_IDLE_STEP;
+@@ -2976,6 +2981,8 @@
+   } else {
+     lj_gc_threshold_store(g, threshold);
+   }
++  if (!stopped)
++    lj_gc_auto_restart(g);
+ }
+ 
+ static GCSize api_gc_restart_threshold(global_State *g)
+@@ -2998,12 +3005,12 @@
+   int res = 0;
+   switch (what) {
+   case LUA_GCSTOP:
+-    api_gc_setlogical(g, LJ_MAX_MEM);
++    api_gc_setlogical(g, LJ_MAX_MEM, 1);
+     break;
+   case LUA_GCRESTART:
+     {
+       api_gc_setlogical(g, data == -1 ? api_gc_restart_threshold(g) :
+-			lj_gc_total_load(g));
++			lj_gc_total_load(g), 0);
+     }
+     break;
+   case LUA_GCCOLLECT:
+@@ -3024,7 +3031,7 @@
+ 	lj_err_throw(L, errcode);
+       UNUSED(collected);
+     }
+-    api_gc_setlogical(g, api_gc_restart_threshold(g));
++    api_gc_setlogical(g, api_gc_restart_threshold(g), 0);
+     break;
+   case LUA_GCCOUNT:
+     res = (int)(lj_gc_total_load(g) >> 10);
+@@ -3046,8 +3053,7 @@
+     gc2_assist_shift_rel(g, lj_gc2_assist_shift_from_stepmul((uint32_t)data));
+     break;
+   case LUA_GCISRUNNING:
+-    res = ((mt_live_acq(g) != 0 ? lj_gc_mt_threshold_load(g) :
+-	    lj_gc_threshold_load(g)) != LJ_MAX_MEM);
++    res = lj_gc_auto_enabled(g);
+     break;
+   default:
+     res = -1;  /* Invalid option. */
+--- a/src/vm_x64.dasc
++++ b/src/vm_x64.dasc
+@@ -420,6 +420,17 @@
+ |  mov tmp, [g+GL_OFS(gc.total)]	// TSO acquire load: lj_gc_total_load().
+ |  cmp tmp, [g+GL_OFS(gc.threshold)]	// TSO acquire load: lj_gc_threshold_load().
+ |  jae target
++|  // A published IDLE request survives the accounting flush below the local
++|  // hard-assist cadence. Mirror lj_gc_pending_auto_request(), including the
++|  // authoritative public stop and owned finalizer pause state.
++|  cmp dword [g+GL_OFS(gc2.cycle_leader)], 0
++|  je >6
++|  cmp dword [g+GL_OFS(gc2.phase)], LJ_GC2_IDLE
++|  jne >6
++|  cmp byte [g+GL_OFS(gc.auto_flags)], 0
++|  jne >6
++|  jmp target
++|6:
+ |  mov tmp, [g+GL_OFS(gc2.alloc_since_trigger)]  // TSO acquire load.
+ |  cmp tmp, [g+GL_OFS(gc2.hard_bytes)]  // lj_gc2_hard_limit_reached().
+ |  jbe >7

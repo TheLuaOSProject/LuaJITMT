@@ -1,0 +1,38 @@
+
+/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-last-detach-fixture:     file format elf64-x86-64
+
+
+Disassembly of section .init:
+
+Disassembly of section .plt:
+
+Disassembly of section .plt.got:
+
+Disassembly of section .text:
+
+0000000000077170 <threading_gc_leave>:
+   77170:	53                   	push   %rbx
+   77171:	48 8d 9f a4 15 00 00 	lea    0x15a4(%rdi),%rbx
+   77178:	f0 83 2b 01          	lock subl $0x1,(%rbx)
+   7717c:	74 02                	je     77180 <threading_gc_leave+0x10>
+   7717e:	5b                   	pop    %rbx
+   7717f:	c3                   	ret
+   77180:	48 8b 87 b8 15 00 00 	mov    0x15b8(%rdi),%rax
+   77187:	48 89 47 50          	mov    %rax,0x50(%rdi)
+   7718b:	e8 80 26 02 00       	call   99810 <lj_gc2_finalizer_spawn_release>
+   77190:	48 83 ec 08          	sub    $0x8,%rsp
+   77194:	ba 81 00 00 00       	mov    $0x81,%edx
+   77199:	31 c0                	xor    %eax,%eax
+   7719b:	6a 00                	push   $0x0
+   7719d:	48 89 de             	mov    %rbx,%rsi
+   771a0:	45 31 c9             	xor    %r9d,%r9d
+   771a3:	45 31 c0             	xor    %r8d,%r8d
+   771a6:	b9 ff ff ff 7f       	mov    $0x7fffffff,%ecx
+   771ab:	bf ca 00 00 00       	mov    $0xca,%edi
+   771b0:	e8 fb 21 f9 ff       	call   93b0 <syscall@plt>
+   771b5:	58                   	pop    %rax
+   771b6:	5a                   	pop    %rdx
+   771b7:	5b                   	pop    %rbx
+   771b8:	c3                   	ret
+
+Disassembly of section .fini:

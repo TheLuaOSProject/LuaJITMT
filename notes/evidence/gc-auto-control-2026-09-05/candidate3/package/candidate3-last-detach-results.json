@@ -1,0 +1,56 @@
+[
+  {
+    "name": "compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/t-restart-last-detach.c",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-last-detach-fixture"
+    ],
+    "exit_code": 0,
+    "seconds": 0.16428493900457397,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "stdout": "candidate3-last-detach-compile.stdout",
+    "stderr": "candidate3-last-detach-compile.stderr"
+  },
+  {
+    "name": "disassembly",
+    "argv": [
+      "objdump",
+      "-d",
+      "--disassemble=threading_gc_leave",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-last-detach-fixture"
+    ],
+    "exit_code": 0,
+    "seconds": 0.003620971998316236,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "stdout": "candidate3-last-detach-disassembly.stdout",
+    "stderr": "candidate3-last-detach-disassembly.stderr"
+  },
+  {
+    "name": "run",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-last-detach-fixture"
+    ],
+    "exit_code": 0,
+    "seconds": 0.03165178700146498,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "stdout": "candidate3-last-detach-run.stdout",
+    "stderr": "candidate3-last-detach-run.stderr"
+  }
+]

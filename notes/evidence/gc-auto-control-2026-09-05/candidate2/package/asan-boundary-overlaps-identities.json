@@ -1,0 +1,30 @@
+{
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan-boundary-overlaps-t-stop-first-attach": {
+    "sha256": "7a4d06636a78286ccba485f715caad23b3ceda2a5f42330aef138bd716e8f810",
+    "bytes": 19471112
+  },
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-stop-first-attach.c": {
+    "sha256": "3ae6ce71c2cfa62f09bd3752f3736266a8606983a72928d2ef5476d1c16ab640",
+    "bytes": 6461
+  },
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/src/libluajit.a": {
+    "sha256": "35050687976cef2d13026bf68abf38130af00cbad22709079d12ca1fa2fdbe7c",
+    "bytes": 26682454
+  },
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan-boundary-overlaps-t-stop-first-attach-restart-v2": {
+    "sha256": "9cffa671ebf42ef7865eeab91283ec1891c0387995e9b7be954d9bc684f0c8fc",
+    "bytes": 19477352
+  },
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-stop-first-attach-restart-v2.c": {
+    "sha256": "1a8453a8fa2d105dbd6ecc38d5432f0dda999f342952141508a5d46567c91683",
+    "bytes": 7280
+  },
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan-boundary-overlaps-t-auto-restart-numeric-max": {
+    "sha256": "8b89aa40850dd73bd474043006fcbbdca68593eacf4e0ee3e0d02831eb9cc00f",
+    "bytes": 19451688
+  },
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-auto-restart-numeric-max.c": {
+    "sha256": "f12ed44cd991b2fd76fe0342630ea26b0c5820fb7c2660d61e707b5d5c02b024",
+    "bytes": 2625
+  }
+}

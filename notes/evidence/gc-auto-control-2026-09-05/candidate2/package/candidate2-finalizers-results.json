@@ -1,0 +1,318 @@
+[
+  {
+    "case": "compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-auto-finalizer-controls.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-finalizers-fixture"
+    ],
+    "exit_code": 0,
+    "seconds": 0.16411152100045,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-finalizers-compile.stdout",
+    "stderr": "candidate2-finalizers-compile.stderr"
+  },
+  {
+    "case": "0-0-0-0",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-finalizers-fixture",
+      "0",
+      "0",
+      "0",
+      "0",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007468452000466641,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-finalizers-0-0-0-0.stdout",
+    "stderr": "candidate2-finalizers-0-0-0-0.stderr"
+  },
+  {
+    "case": "0-0-0-1",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-finalizers-fixture",
+      "0",
+      "0",
+      "0",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007567682005173992,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-finalizers-0-0-0-1.stdout",
+    "stderr": "candidate2-finalizers-0-0-0-1.stderr"
+  },
+  {
+    "case": "0-0-1-0",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-finalizers-fixture",
+      "0",
+      "0",
+      "1",
+      "0",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007439401000738144,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-finalizers-0-0-1-0.stdout",
+    "stderr": "candidate2-finalizers-0-0-1-0.stderr"
+  },
+  {
+    "case": "0-0-1-1",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-finalizers-fixture",
+      "0",
+      "0",
+      "1",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007369596001808532,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-finalizers-0-0-1-1.stdout",
+    "stderr": "candidate2-finalizers-0-0-1-1.stderr"
+  },
+  {
+    "case": "0-1-0-0",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-finalizers-fixture",
+      "0",
+      "1",
+      "0",
+      "0",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007358782000665087,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-finalizers-0-1-0-0.stdout",
+    "stderr": "candidate2-finalizers-0-1-0-0.stderr"
+  },
+  {
+    "case": "0-1-0-1",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-finalizers-fixture",
+      "0",
+      "1",
+      "0",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007378797003184445,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-finalizers-0-1-0-1.stdout",
+    "stderr": "candidate2-finalizers-0-1-0-1.stderr"
+  },
+  {
+    "case": "0-1-1-0",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-finalizers-fixture",
+      "0",
+      "1",
+      "1",
+      "0",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007426280004438013,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-finalizers-0-1-1-0.stdout",
+    "stderr": "candidate2-finalizers-0-1-1-0.stderr"
+  },
+  {
+    "case": "0-1-1-1",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-finalizers-fixture",
+      "0",
+      "1",
+      "1",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007464403002813924,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-finalizers-0-1-1-1.stdout",
+    "stderr": "candidate2-finalizers-0-1-1-1.stderr"
+  },
+  {
+    "case": "1-0-0-0",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-finalizers-fixture",
+      "1",
+      "0",
+      "0",
+      "0",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007382390002021566,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-finalizers-1-0-0-0.stdout",
+    "stderr": "candidate2-finalizers-1-0-0-0.stderr"
+  },
+  {
+    "case": "1-0-0-1",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-finalizers-fixture",
+      "1",
+      "0",
+      "0",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007393977997708134,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-finalizers-1-0-0-1.stdout",
+    "stderr": "candidate2-finalizers-1-0-0-1.stderr"
+  },
+  {
+    "case": "1-0-1-0",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-finalizers-fixture",
+      "1",
+      "0",
+      "1",
+      "0",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007366191995970439,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-finalizers-1-0-1-0.stdout",
+    "stderr": "candidate2-finalizers-1-0-1-0.stderr"
+  },
+  {
+    "case": "1-0-1-1",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-finalizers-fixture",
+      "1",
+      "0",
+      "1",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007399840003927238,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-finalizers-1-0-1-1.stdout",
+    "stderr": "candidate2-finalizers-1-0-1-1.stderr"
+  },
+  {
+    "case": "1-1-0-0",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-finalizers-fixture",
+      "1",
+      "1",
+      "0",
+      "0",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007474194004316814,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-finalizers-1-1-0-0.stdout",
+    "stderr": "candidate2-finalizers-1-1-0-0.stderr"
+  },
+  {
+    "case": "1-1-0-1",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-finalizers-fixture",
+      "1",
+      "1",
+      "0",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007539840997196734,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-finalizers-1-1-0-1.stdout",
+    "stderr": "candidate2-finalizers-1-1-0-1.stderr"
+  },
+  {
+    "case": "1-1-1-0",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-finalizers-fixture",
+      "1",
+      "1",
+      "1",
+      "0",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007371286999841686,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-finalizers-1-1-1-0.stdout",
+    "stderr": "candidate2-finalizers-1-1-1-0.stderr"
+  },
+  {
+    "case": "1-1-1-1",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-finalizers-fixture",
+      "1",
+      "1",
+      "1",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007455490995198488,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-finalizers-1-1-1-1.stdout",
+    "stderr": "candidate2-finalizers-1-1-1-1.stderr"
+  }
+]

@@ -1,0 +1,223 @@
+[
+  {
+    "exit_code": 0,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/t-auto-controls.c",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_native_enter",
+      "-o",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-controls-retention"
+    ],
+    "case": "compile",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "seconds": 0.21409938699798658,
+    "stdout": "strict-controls-compile.stdout",
+    "stderr": "strict-controls-compile.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-controls-retention",
+      "1",
+      "0",
+      "0",
+      "0",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/peer-control.lua",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/control-boundaries.lua"
+    ],
+    "case": "1-0-0-0",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "seconds": 0.06389688399940496,
+    "stdout": "strict-controls-1-0-0-0.stdout",
+    "stderr": "strict-controls-1-0-0-0.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 2,
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-controls-retention",
+      "1",
+      "0",
+      "0",
+      "2",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/peer-control.lua",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/control-boundaries.lua"
+    ],
+    "case": "1-0-0-2",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "seconds": 3.569841885000642,
+    "stdout": "strict-controls-1-0-0-2.stdout",
+    "stderr": "strict-controls-1-0-0-2.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-controls-retention",
+      "1",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/peer-control.lua",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/control-boundaries.lua"
+    ],
+    "case": "1-0-1-0",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "seconds": 0.06410849600069923,
+    "stdout": "strict-controls-1-0-1-0.stdout",
+    "stderr": "strict-controls-1-0-1-0.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 2,
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-controls-retention",
+      "1",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/peer-control.lua",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/control-boundaries.lua"
+    ],
+    "case": "1-0-1-2",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "seconds": 3.819651489997341,
+    "stdout": "strict-controls-1-0-1-2.stdout",
+    "stderr": "strict-controls-1-0-1-2.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-controls-retention",
+      "2",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/peer-control.lua",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/control-boundaries.lua"
+    ],
+    "case": "2-0-1-0",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "seconds": 0.06401248300244333,
+    "stdout": "strict-controls-2-0-1-0.stdout",
+    "stderr": "strict-controls-2-0-1-0.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 2,
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-controls-retention",
+      "2",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/peer-control.lua",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/control-boundaries.lua"
+    ],
+    "case": "2-0-1-2",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "seconds": 4.022309854997729,
+    "stdout": "strict-controls-2-0-1-2.stdout",
+    "stderr": "strict-controls-2-0-1-2.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-controls-retention",
+      "3",
+      "0",
+      "0",
+      "0",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/peer-control.lua",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/control-boundaries.lua"
+    ],
+    "case": "3-0-0-0",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "seconds": 0.06375949700304773,
+    "stdout": "strict-controls-3-0-0-0.stdout",
+    "stderr": "strict-controls-3-0-0-0.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 2,
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-controls-retention",
+      "3",
+      "0",
+      "0",
+      "2",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/peer-control.lua",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/control-boundaries.lua"
+    ],
+    "case": "3-0-0-2",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "seconds": 3.4235719040007098,
+    "stdout": "strict-controls-3-0-0-2.stdout",
+    "stderr": "strict-controls-3-0-0-2.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-controls-retention",
+      "3",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/peer-control.lua",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/control-boundaries.lua"
+    ],
+    "case": "3-0-1-0",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "seconds": 0.06418919400312006,
+    "stdout": "strict-controls-3-0-1-0.stdout",
+    "stderr": "strict-controls-3-0-1-0.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 2,
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-controls-retention",
+      "3",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/peer-control.lua",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/control-boundaries.lua"
+    ],
+    "case": "3-0-1-2",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "seconds": 3.2219271499998285,
+    "stdout": "strict-controls-3-0-1-2.stdout",
+    "stderr": "strict-controls-3-0-1-2.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  }
+]

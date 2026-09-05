@@ -1,0 +1,9 @@
+{"stage":"before_explicit_step","flags":0,"running":1,"owner":0,"current":1,"active":0,"depth":0,"calls":0,"phase":0,"starts":2,"completed":2,"live":0,"hook":0}
+{"stage":"outer_enter","flags":2,"running":0,"owner":1,"current":1,"active":1,"depth":1,"calls":1,"phase":3,"starts":3,"completed":2,"live":0,"hook":80}
+{"stage":"inner_enter","flags":2,"running":0,"owner":1,"current":1,"active":2,"depth":2,"calls":2,"phase":3,"starts":3,"completed":2,"live":0,"hook":80}
+{"stage":"inner_stop_before_return_or_throw","flags":3,"running":0,"owner":1,"current":1,"active":2,"depth":2,"calls":2,"phase":3,"starts":3,"completed":2,"live":0,"hook":80}
+{"stage":"outer_after_inner_stop_and_return","flags":3,"running":0,"owner":1,"current":1,"active":1,"depth":1,"calls":2,"phase":3,"starts":3,"completed":2,"live":0,"hook":80}
+{"stage":"outer_after_restart_and_nested_collect","flags":2,"running":0,"owner":1,"current":1,"active":1,"depth":1,"calls":2,"phase":3,"starts":3,"completed":2,"live":0,"hook":80}
+{"stage":"after_owned_pause_cleanup","flags":1,"running":0,"owner":0,"current":1,"active":0,"depth":0,"calls":2,"phase":3,"starts":3,"completed":2,"live":0,"hook":0}
+{"stage":"cleaned_up","flags":0,"running":1,"owner":0,"current":1,"active":0,"depth":0,"calls":2,"phase":0,"starts":5,"completed":5,"live":0,"hook":0}
+FINALIZER_CONTROL passed

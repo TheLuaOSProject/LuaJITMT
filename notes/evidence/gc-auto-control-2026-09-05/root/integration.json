@@ -1,0 +1,25 @@
+{
+  "base": "0e2119e4a36a7034f1f6e1115849677a4ce4359e",
+  "runtime_files": {
+    "src/lj_api.c": "4e3a0d46077684381ff568667793c0fc252d5aaa7e0b4301a606fb3e67292fdd",
+    "src/lj_gc.c": "2b70a2e1add35cca9aef3fd2c20b3bc6346d9ac77d80faaffe7fa60c5086810d",
+    "src/lj_gc.h": "56b9e71567ffca558f06be0a844da3389faca8a8ede1da1d3cf0a614e7beddf6",
+    "src/lj_gc2.c": "6d96637a8a676afcd4208c08397d7fe79a29122bd05b02ca7d8889fa4dc79218",
+    "src/lj_obj.h": "a8962fcc16e961ad29275cffc993ff368c229dc435f5794babbbacd8214557bc",
+    "src/vm_x64.dasc": "1ad1cd789886fb72d7c2a0befa58d33996f1cdf95cdfb40ea321d764d22ccac7"
+  },
+  "promoted_fixtures": [
+    "tests/t-stop-first-attach.c",
+    "tests/t-restart-first-attach.c",
+    "tests/t-restart-last-detach.c",
+    "tests/t-auto-restart-numeric-max.c",
+    "tests/t-auto-finalizer-controls-v3.c",
+    "tests/t-auto-controls-v2.c",
+    "tests/t-string-retention.c",
+    "tests/peer-control.lua",
+    "tests/control-boundaries.lua",
+    "tests/t-finalizer-spawn-query-enabled.lua"
+  ],
+  "existing_fixture_unchanged": "tests/t-m8-finalizer-spawn-live.lua",
+  "runtime_inputs_equal": true
+}

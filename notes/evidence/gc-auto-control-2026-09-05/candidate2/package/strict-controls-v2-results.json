@@ -1,0 +1,109 @@
+[
+  {
+    "exit_code": 0,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-auto-controls-v2.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_native_enter",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict-controls-v2-retention"
+    ],
+    "case": "compile",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "seconds": 0.21411132300272584,
+    "stdout": "strict-controls-v2-compile.stdout",
+    "stderr": "strict-controls-v2-compile.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict-controls-v2-retention",
+      "4",
+      "0",
+      "0",
+      "0",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/peer-control.lua",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/control-boundaries.lua"
+    ],
+    "case": "4-0-0-0",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "seconds": 0.06385410899383714,
+    "stdout": "strict-controls-v2-4-0-0-0.stdout",
+    "stderr": "strict-controls-v2-4-0-0-0.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 2,
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict-controls-v2-retention",
+      "4",
+      "0",
+      "0",
+      "2",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/peer-control.lua",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/control-boundaries.lua"
+    ],
+    "case": "4-0-0-2",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "seconds": 3.2699793040010263,
+    "stdout": "strict-controls-v2-4-0-0-2.stdout",
+    "stderr": "strict-controls-v2-4-0-0-2.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict-controls-v2-retention",
+      "4",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/peer-control.lua",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/control-boundaries.lua"
+    ],
+    "case": "4-0-1-0",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "seconds": 0.11427709499548655,
+    "stdout": "strict-controls-v2-4-0-1-0.stdout",
+    "stderr": "strict-controls-v2-4-0-1-0.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 2,
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict-controls-v2-retention",
+      "4",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/peer-control.lua",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/control-boundaries.lua"
+    ],
+    "case": "4-0-1-2",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "seconds": 3.3202864979975857,
+    "stdout": "strict-controls-v2-4-0-1-2.stdout",
+    "stderr": "strict-controls-v2-4-0-1-2.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  }
+]

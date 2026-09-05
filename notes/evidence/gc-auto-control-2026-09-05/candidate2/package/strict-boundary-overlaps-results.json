@@ -1,0 +1,177 @@
+[
+  {
+    "name": "strict-boundary-overlaps-t-stop-first-attach-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-stop-first-attach.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_vm_cpcall",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict-boundary-overlaps-t-stop-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.16413105199899292,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-boundary-overlaps-t-stop-first-attach-compile.stdout",
+    "stderr": "strict-boundary-overlaps-t-stop-first-attach-compile.stderr"
+  },
+  {
+    "name": "strict-boundary-overlaps-t-stop-first-attach-run",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict-boundary-overlaps-t-stop-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.015805344002728816,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-boundary-overlaps-t-stop-first-attach-run.stdout",
+    "stderr": "strict-boundary-overlaps-t-stop-first-attach-run.stderr"
+  },
+  {
+    "name": "strict-boundary-overlaps-t-stop-first-attach-restart-v2-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-stop-first-attach-restart-v2.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_vm_cpcall",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict-boundary-overlaps-t-stop-first-attach-restart-v2"
+    ],
+    "exit_code": 0,
+    "seconds": 0.16445859399391338,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-boundary-overlaps-t-stop-first-attach-restart-v2-compile.stdout",
+    "stderr": "strict-boundary-overlaps-t-stop-first-attach-restart-v2-compile.stderr"
+  },
+  {
+    "name": "strict-boundary-overlaps-t-stop-first-attach-restart-v2-run",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict-boundary-overlaps-t-stop-first-attach-restart-v2"
+    ],
+    "exit_code": 0,
+    "seconds": 0.031689201001427136,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-boundary-overlaps-t-stop-first-attach-restart-v2-run.stdout",
+    "stderr": "strict-boundary-overlaps-t-stop-first-attach-restart-v2-run.stderr"
+  },
+  {
+    "name": "strict-boundary-overlaps-t-auto-restart-numeric-max-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-auto-restart-numeric-max.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict-boundary-overlaps-t-auto-restart-numeric-max"
+    ],
+    "exit_code": 0,
+    "seconds": 0.11381099199934397,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-boundary-overlaps-t-auto-restart-numeric-max-compile.stdout",
+    "stderr": "strict-boundary-overlaps-t-auto-restart-numeric-max-compile.stderr"
+  },
+  {
+    "name": "strict-boundary-overlaps-t-auto-restart-numeric-max-run",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict-boundary-overlaps-t-auto-restart-numeric-max"
+    ],
+    "exit_code": 0,
+    "seconds": 0.03165213200554717,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-boundary-overlaps-t-auto-restart-numeric-max-run.stdout",
+    "stderr": "strict-boundary-overlaps-t-auto-restart-numeric-max-run.stderr"
+  },
+  {
+    "name": "strict-boundary-overlaps-t-restart-first-attach-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-restart-first-attach.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_vm_cpcall",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict-boundary-overlaps-t-restart-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.1641124040033901,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-boundary-overlaps-t-restart-first-attach-compile.stdout",
+    "stderr": "strict-boundary-overlaps-t-restart-first-attach-compile.stderr"
+  },
+  {
+    "name": "strict-boundary-overlaps-t-restart-first-attach-run",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict-boundary-overlaps-t-restart-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.03196476000448456,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-boundary-overlaps-t-restart-first-attach-run.stdout",
+    "stderr": "strict-boundary-overlaps-t-restart-first-attach-run.stderr"
+  }
+]

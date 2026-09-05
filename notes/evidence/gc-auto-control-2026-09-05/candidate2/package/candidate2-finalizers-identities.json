@@ -1,0 +1,14 @@
+{
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-finalizers-fixture": {
+    "sha256": "343802302c8d2222d3463b9a2693264195bc1a396dfccb9e18e804b4b2ad8c79",
+    "bytes": 1745408
+  },
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-auto-finalizer-controls.c": {
+    "sha256": "7744314de98809cac623d91c20dc88ee9916e655d4c6abe507f7eb61749010ab",
+    "bytes": 6842
+  },
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/libluajit.a": {
+    "sha256": "c4d299474e7f2e3707ac46ac9641e1741d105d33d480d8a28a15a8e80aee8ed6",
+    "bytes": 2357538
+  }
+}

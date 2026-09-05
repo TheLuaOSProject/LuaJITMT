@@ -1,0 +1,38 @@
+
+/tmp/lj-gc-auto-control-20260905-qs673ryl/control-restart-last-detach:     file format elf64-x86-64
+
+
+Disassembly of section .init:
+
+Disassembly of section .plt:
+
+Disassembly of section .plt.got:
+
+Disassembly of section .text:
+
+00000000000771f0 <threading_gc_leave>:
+   771f0:	53                   	push   %rbx
+   771f1:	48 8d 9f a4 15 00 00 	lea    0x15a4(%rdi),%rbx
+   771f8:	f0 83 2b 01          	lock subl $0x1,(%rbx)
+   771fc:	74 02                	je     77200 <threading_gc_leave+0x10>
+   771fe:	5b                   	pop    %rbx
+   771ff:	c3                   	ret
+   77200:	48 8b 87 b8 15 00 00 	mov    0x15b8(%rdi),%rax
+   77207:	48 89 47 50          	mov    %rax,0x50(%rdi)
+   7720b:	e8 00 29 02 00       	call   99b10 <lj_gc2_finalizer_spawn_release>
+   77210:	48 83 ec 08          	sub    $0x8,%rsp
+   77214:	ba 81 00 00 00       	mov    $0x81,%edx
+   77219:	31 c0                	xor    %eax,%eax
+   7721b:	6a 00                	push   $0x0
+   7721d:	48 89 de             	mov    %rbx,%rsi
+   77220:	45 31 c9             	xor    %r9d,%r9d
+   77223:	45 31 c0             	xor    %r8d,%r8d
+   77226:	b9 ff ff ff 7f       	mov    $0x7fffffff,%ecx
+   7722b:	bf ca 00 00 00       	mov    $0xca,%edi
+   77230:	e8 7b 21 f9 ff       	call   93b0 <syscall@plt>
+   77235:	58                   	pop    %rax
+   77236:	5a                   	pop    %rdx
+   77237:	5b                   	pop    %rbx
+   77238:	c3                   	ret
+
+Disassembly of section .fini:

@@ -1,0 +1,18 @@
+{
+  "candidate2-retention": {
+    "sha256": "e38bff5bbd9c4052b25ebccd9e87be647209918c6538c81570eb02e94506424f",
+    "bytes": 1747944
+  },
+  "t-string-retention.c": {
+    "sha256": "2e8e840fb4ba3a3b09168c06d828ff10ebafd41e9ff555b9737f34384fea3cf9",
+    "bytes": 12128
+  },
+  "peer-control.lua": {
+    "sha256": "519ebf714b0a33b9a436d3452a153a1bc3eea3322ebf0bf74d8e76fea4ab8cb2",
+    "bytes": 1756
+  },
+  "libluajit.a": {
+    "sha256": "c4d299474e7f2e3707ac46ac9641e1741d105d33d480d8a28a15a8e80aee8ed6",
+    "bytes": 2357538
+  }
+}

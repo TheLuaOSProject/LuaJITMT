@@ -1,0 +1,1 @@
+t-m8-finalizer-spawn-live OK: cdata/userdata finalizer-spawned worker can outlive callback

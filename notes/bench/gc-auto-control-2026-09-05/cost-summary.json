@@ -1,0 +1,177 @@
+{
+  "protocol": "Seven alternating paired fresh processes per workload, CPU 30 on a shared host; minimum of five CPU-clock passes per process, GC enabled. TNEW/TDUP escape through a fixed live ring. JIT-enabled denotes configuration, not proof of every iteration being native. Arithmetic/FFI use the existing filtered harness, whose rounded total_s is divided by exact iteration count. Six pilot processes are retained separately and excluded from these medians. This is a matching fork before/after cost check, not a stock-parity or scaling result.",
+  "runtime_processes": 70,
+  "pilot_processes": 6,
+  "workloads": [
+    {
+      "workload": "tnew",
+      "mode": "-joff",
+      "baseline_ns": [
+        7941.09,
+        7886.199999999999,
+        7932.08,
+        7951.96,
+        7893.079999999999,
+        7936.13,
+        7941.070000000001
+      ],
+      "candidate_ns": [
+        7826.800000000001,
+        7879.96,
+        7852.590000000001,
+        7812.299999999999,
+        7880.57,
+        7870.83,
+        7784.24
+      ],
+      "baseline_median_ns": 7936.13,
+      "candidate_median_ns": 7852.590000000001,
+      "median_change_percent": -1.0526541273895296,
+      "paired_changes_percent": [
+        -1.4392230789475935,
+        -0.07912556110672986,
+        -1.0021331101047748,
+        -1.756296560847903,
+        -0.1584932624526747,
+        -0.8228191826494813,
+        -1.974922774890553
+      ]
+    },
+    {
+      "workload": "tdup",
+      "mode": "-joff",
+      "baseline_ns": [
+        7104.25,
+        7103.18,
+        7109.4800000000005,
+        7109.45,
+        7153.7300000000005,
+        7058.21,
+        7151.6900000000005
+      ],
+      "candidate_ns": [
+        7107.329999999999,
+        7132.13,
+        7106.090000000001,
+        6993.970000000001,
+        7035.3,
+        7035.869999999999,
+        7105.4
+      ],
+      "baseline_median_ns": 7109.45,
+      "candidate_median_ns": 7105.4,
+      "median_change_percent": -0.05696643200248097,
+      "paired_changes_percent": [
+        0.04335433015447698,
+        0.40756393615253295,
+        -0.04768281224505344,
+        -1.6243169302829097,
+        -1.6554999979031981,
+        -0.31651084340081903,
+        -0.6472595987801588
+      ]
+    },
+    {
+      "workload": "tnew",
+      "mode": "-jon",
+      "baseline_ns": [
+        7572.57,
+        7580.37,
+        7573.900000000001,
+        7557.17,
+        7559.719999999999,
+        7573.71,
+        7572.56
+      ],
+      "candidate_ns": [
+        7590.54,
+        7532.53,
+        7538.249999999999,
+        7525.889999999999,
+        7582.330000000001,
+        7510.900000000001,
+        7559.91
+      ],
+      "baseline_median_ns": 7572.57,
+      "candidate_median_ns": 7538.249999999999,
+      "median_change_percent": -0.4532146946149118,
+      "paired_changes_percent": [
+        0.23730384796707416,
+        -0.631103758787499,
+        -0.4706954145156539,
+        -0.41391155683940806,
+        0.2990851513019255,
+        -0.8293161475683597,
+        -0.16705050867871218
+      ]
+    },
+    {
+      "workload": "arith_loop",
+      "mode": "-jon",
+      "baseline_ns": [
+        0.684,
+        0.684,
+        0.684,
+        0.684,
+        0.684,
+        0.684,
+        0.684
+      ],
+      "candidate_ns": [
+        0.684,
+        0.684,
+        0.684,
+        0.684,
+        0.684,
+        0.684,
+        0.684
+      ],
+      "baseline_median_ns": 0.684,
+      "candidate_median_ns": 0.684,
+      "median_change_percent": 0.0,
+      "paired_changes_percent": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "workload": "ffi_struct",
+      "mode": "-jon",
+      "baseline_ns": [
+        0.6866666666666666,
+        0.6866666666666666,
+        0.6866666666666666,
+        0.6866666666666666,
+        0.6866666666666666,
+        0.6866666666666666,
+        0.6866666666666666
+      ],
+      "candidate_ns": [
+        0.6866666666666666,
+        0.6866666666666666,
+        0.6866666666666666,
+        0.6866666666666666,
+        0.6866666666666666,
+        0.6866666666666666,
+        0.6866666666666666
+      ],
+      "baseline_median_ns": 0.6866666666666666,
+      "candidate_median_ns": 0.6866666666666666,
+      "median_change_percent": 0.0,
+      "paired_changes_percent": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  ]
+}

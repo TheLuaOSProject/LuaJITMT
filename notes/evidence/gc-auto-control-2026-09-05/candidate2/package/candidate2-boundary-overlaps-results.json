@@ -1,0 +1,169 @@
+[
+  {
+    "name": "candidate2-boundary-overlaps-t-stop-first-attach-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-stop-first-attach.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_vm_cpcall",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-boundary-overlaps-t-stop-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.16417243199975928,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-boundary-overlaps-t-stop-first-attach-compile.stdout",
+    "stderr": "candidate2-boundary-overlaps-t-stop-first-attach-compile.stderr"
+  },
+  {
+    "name": "candidate2-boundary-overlaps-t-stop-first-attach-run",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-boundary-overlaps-t-stop-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.015498649998335168,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-boundary-overlaps-t-stop-first-attach-run.stdout",
+    "stderr": "candidate2-boundary-overlaps-t-stop-first-attach-run.stderr"
+  },
+  {
+    "name": "candidate2-boundary-overlaps-t-stop-first-attach-restart-v2-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-stop-first-attach-restart-v2.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_vm_cpcall",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-boundary-overlaps-t-stop-first-attach-restart-v2"
+    ],
+    "exit_code": 0,
+    "seconds": 0.16415968700312078,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-boundary-overlaps-t-stop-first-attach-restart-v2-compile.stdout",
+    "stderr": "candidate2-boundary-overlaps-t-stop-first-attach-restart-v2-compile.stderr"
+  },
+  {
+    "name": "candidate2-boundary-overlaps-t-stop-first-attach-restart-v2-run",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-boundary-overlaps-t-stop-first-attach-restart-v2"
+    ],
+    "exit_code": 0,
+    "seconds": 0.031801406999875326,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-boundary-overlaps-t-stop-first-attach-restart-v2-run.stdout",
+    "stderr": "candidate2-boundary-overlaps-t-stop-first-attach-restart-v2-run.stderr"
+  },
+  {
+    "name": "candidate2-boundary-overlaps-t-auto-restart-numeric-max-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-auto-restart-numeric-max.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-boundary-overlaps-t-auto-restart-numeric-max"
+    ],
+    "exit_code": 0,
+    "seconds": 0.11394321300031152,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-boundary-overlaps-t-auto-restart-numeric-max-compile.stdout",
+    "stderr": "candidate2-boundary-overlaps-t-auto-restart-numeric-max-compile.stderr"
+  },
+  {
+    "name": "candidate2-boundary-overlaps-t-auto-restart-numeric-max-run",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-boundary-overlaps-t-auto-restart-numeric-max"
+    ],
+    "exit_code": 0,
+    "seconds": 0.015932775000692345,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-boundary-overlaps-t-auto-restart-numeric-max-run.stdout",
+    "stderr": "candidate2-boundary-overlaps-t-auto-restart-numeric-max-run.stderr"
+  },
+  {
+    "name": "candidate2-boundary-overlaps-t-restart-first-attach-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-restart-first-attach.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_vm_cpcall",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-boundary-overlaps-t-restart-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.1639756730000954,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-boundary-overlaps-t-restart-first-attach-compile.stdout",
+    "stderr": "candidate2-boundary-overlaps-t-restart-first-attach-compile.stderr"
+  },
+  {
+    "name": "candidate2-boundary-overlaps-t-restart-first-attach-run",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-boundary-overlaps-t-restart-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.03177276600035839,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate2-boundary-overlaps-t-restart-first-attach-run.stdout",
+    "stderr": "candidate2-boundary-overlaps-t-restart-first-attach-run.stderr"
+  }
+]

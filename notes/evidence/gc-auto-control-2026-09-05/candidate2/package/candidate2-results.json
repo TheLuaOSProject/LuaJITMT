@@ -1,0 +1,166 @@
+[
+  {
+    "exit_code": 0,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-string-retention.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-retention"
+    ],
+    "case": "compile",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "seconds": 0.16428264800197212,
+    "stdout": "candidate2-compile.stdout",
+    "stderr": "candidate2-compile.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-retention",
+      "1",
+      "0",
+      "0",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/peer-control.lua"
+    ],
+    "case": "1-0-0",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "seconds": 0.0636931349945371,
+    "stdout": "candidate2-1-0-0.stdout",
+    "stderr": "candidate2-1-0-0.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-retention",
+      "1",
+      "0",
+      "2",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/peer-control.lua"
+    ],
+    "case": "1-0-2",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "seconds": 0.06384066800092114,
+    "stdout": "candidate2-1-0-2.stdout",
+    "stderr": "candidate2-1-0-2.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-retention",
+      "1",
+      "1",
+      "0",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/peer-control.lua"
+    ],
+    "case": "1-1-0",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "seconds": 0.06382229099835968,
+    "stdout": "candidate2-1-1-0.stdout",
+    "stderr": "candidate2-1-1-0.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-retention",
+      "1",
+      "1",
+      "2",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/peer-control.lua"
+    ],
+    "case": "1-1-2",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "seconds": 0.11386771199613577,
+    "stdout": "candidate2-1-1-2.stdout",
+    "stderr": "candidate2-1-1-2.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-retention",
+      "0",
+      "0",
+      "0",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/peer-control.lua"
+    ],
+    "case": "0-0-0",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "seconds": 0.21421634299622383,
+    "stdout": "candidate2-0-0-0.stdout",
+    "stderr": "candidate2-0-0-0.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 2,
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-retention",
+      "0",
+      "0",
+      "2",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/peer-control.lua"
+    ],
+    "case": "0-0-2",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "seconds": 3.519894919998478,
+    "stdout": "candidate2-0-0-2.stdout",
+    "stderr": "candidate2-0-0-2.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-retention",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/peer-control.lua"
+    ],
+    "case": "0-1-0",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "seconds": 0.3141737429978093,
+    "stdout": "candidate2-0-1-0.stdout",
+    "stderr": "candidate2-0-1-0.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 2,
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-retention",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/peer-control.lua"
+    ],
+    "case": "0-1-2",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "seconds": 4.170883337996202,
+    "stdout": "candidate2-0-1-2.stdout",
+    "stderr": "candidate2-0-1-2.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  }
+]

@@ -1,0 +1,14 @@
+{
+  "t-finalizer-spawn-query-overlap.lua": {
+    "sha256": "4736ba434c9b34a260bf31dcf93c1bab34bbd3291eb629912869531225c38eda",
+    "bytes": 2118
+  },
+  "control/src/luajit": {
+    "sha256": "10edabd882deae71c3156da70588e4ffc1f8b019c8084d994f28e1b0e97a8cfb",
+    "bytes": 1518832
+  },
+  "control/src/libluajit.a": {
+    "sha256": "c1696d313312ae5e60d871ab776052704959b614985cffc00ef21018fbe5e42c",
+    "bytes": 2358274
+  }
+}

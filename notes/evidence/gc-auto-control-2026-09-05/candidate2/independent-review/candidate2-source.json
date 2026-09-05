@@ -1,0 +1,14 @@
+{
+  "base": "aee88db569b82216b705408f00295a337a7393fe",
+  "archive_sha256": "158b4e6c572515bb0f175ea7db54521f036f39e60e882de3196c86cd20939282",
+  "files": {
+    "src/lj_obj.h": "a8962fcc16e961ad29275cffc993ff368c229dc435f5794babbbacd8214557bc",
+    "src/lj_gc.h": "82c00b7652bb61e2ed9e594f3c4600c5be122ed6ccc215ad4e6fbcf3bf6f3655",
+    "src/lj_gc.c": "2b70a2e1add35cca9aef3fd2c20b3bc6346d9ac77d80faaffe7fa60c5086810d",
+    "src/lj_gc2.c": "6d96637a8a676afcd4208c08397d7fe79a29122bd05b02ca7d8889fa4dc79218",
+    "src/lj_api.c": "554e616d5d37edc775c4fba95edc6d494c5c6db9e97d014a39ebf52411049d58",
+    "src/vm_x64.dasc": "1ad1cd789886fb72d7c2a0befa58d33996f1cdf95cdfb40ea321d764d22ccac7",
+    "automatic-control-full.patch": "60b9c725d89b50daf06f89aab8582dffa62f84277f4fe23ec5fb780a18b568a5",
+    "automatic-control-v2.patch": "13f32a17375b92dcbc7d44bd2fc22a686505ae591cdd2ba3260f4fd582caf6a2"
+  }
+}

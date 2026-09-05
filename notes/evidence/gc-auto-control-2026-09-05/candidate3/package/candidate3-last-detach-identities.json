@@ -1,0 +1,14 @@
+{
+  "candidate3-last-detach-fixture": {
+    "sha256": "351f15747181f1df5ed1fea5d390af19081a7a9317f067fc2461ee460c43da80",
+    "bytes": 1733936
+  },
+  "t-restart-last-detach.c": {
+    "sha256": "b97030a42e75652ac78236acba51bc36823f2be83c367e129ce3cf96132acb38",
+    "bytes": 5924
+  },
+  "candidate3/src/libluajit.a": {
+    "sha256": "abd9ede84ae1399adfd27c11a5079f69d5060a6fd45e7cc9f80cf01b7438eb97",
+    "bytes": 2357522
+  }
+}

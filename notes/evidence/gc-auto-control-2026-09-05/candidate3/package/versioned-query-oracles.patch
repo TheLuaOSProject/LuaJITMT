@@ -1,0 +1,36 @@
+--- a/t-auto-finalizer-controls.c
++++ b/t-auto-finalizer-controls-v3.c
+@@ -60,7 +60,8 @@
+   assert(gc2_finalizer_active_acq(G(L)) != 0);
+   if (probe.exact) {
+     assert(auto_flags(G(L)) == flags);
+-    assert(!lua_gc(L, LUA_GCISRUNNING, 0));
++    assert(!lj_gc_auto_running(G(L)));
++    assert(lua_gc(L, LUA_GCISRUNNING, 0) == !(flags & LJ_GC_AUTO_STOPPED));
+   }
+ }
+ 
+--- a/t-finalizer-spawn-query-overlap.lua
++++ b/t-finalizer-spawn-query-enabled.lua
+@@ -1,6 +1,5 @@
+ local ffi = require("ffi")
+ local th = require("threading")
+-local expect_paused = assert(tonumber(arg[1])) ~= 0
+ ffi.cdef[[typedef struct { int x; } lj_gc_query_overlap_t;]]
+ 
+ local function setup_cdata(fin)
+@@ -34,7 +33,7 @@
+   local joined, child_after = worker:join(10)
+   assert(joined, tostring(child_after))
+   print(label .. " during=" .. tostring(during) .. " after=" .. tostring(after) .. " child_after=" .. tostring(child_after))
+-  assert(during == (expect_paused and "stopped" or "running"), label .. ": unexpected callback query")
++  assert(during == "running", label .. ": unexpected callback query")
+   assert(after == true and child_after == true, label .. ": callback pause leaked")
+   worker = nil
+   collectgarbage("collect")
+@@ -45,4 +44,4 @@
+ run("cdata explicit step", setup_cdata, function() return collectgarbage("step", 1000000) end)
+ run("userdata full collect", setup_udata, function() collectgarbage("collect") end)
+ run("userdata explicit step", setup_udata, function() return collectgarbage("step", 1000000) end)
+-print("FINALIZER_SPAWN_QUERY_OVERLAP passed")
++print("FINALIZER_SPAWN_QUERY_LOGICALLY_ENABLED passed")

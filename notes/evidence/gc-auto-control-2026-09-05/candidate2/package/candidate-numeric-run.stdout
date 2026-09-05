@@ -1,0 +1,5 @@
+{"stage":"anchored_allocation_before_restart","running":0,"total":13107200,"threshold":140737488355328,"pause":200,"leader":0,"phase":0,"starts":2,"completed":2}
+{"stage":"public_restart_with_numeric_max","running":0,"total":13107200,"threshold":140737488355328,"pause":1073741824,"leader":0,"phase":0,"starts":2,"completed":2}
+{"stage":"after_8192_automatic_tnew","running":0,"total":13762560,"threshold":140737488355328,"pause":1073741824,"leader":0,"phase":0,"starts":2,"completed":2}
+{"stage":"cleaned_up","running":1,"total":145300,"threshold":290600,"pause":200,"leader":0,"phase":0,"starts":4,"completed":4}
+NUMERIC_MAX_RESTART missed=1

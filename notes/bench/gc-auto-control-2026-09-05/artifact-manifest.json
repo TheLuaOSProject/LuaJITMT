@@ -1,0 +1,34 @@
+{
+  "artifacts": [
+    {
+      "file": "allocation-cost.lua",
+      "sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+      "bytes": 1185,
+      "storage": "text"
+    },
+    {
+      "file": "benchmark.py",
+      "sha256": "0909cc0ef8e54a2ec4df20ff9a04cfb7890af98b37d2105cf70d5ba3f9ad6517",
+      "bytes": 2547,
+      "storage": "text"
+    },
+    {
+      "file": "cost-pilot.json",
+      "sha256": "1c65292d5fc49a3577153a1ae6712cd0ac32efe4320e59e0912c178ad34c8ebb",
+      "bytes": 5715,
+      "storage": "text"
+    },
+    {
+      "file": "cost-results.json",
+      "sha256": "295ceb803775192d23a5d897830fece9f6ccdd71a386a2f895199daa506d6787",
+      "bytes": 64025,
+      "storage": "text"
+    },
+    {
+      "file": "cost-summary.json",
+      "sha256": "d573f157c881d1b3964533c1078631999e7c86093f326b25018f638fa01f341f",
+      "bytes": 4404,
+      "storage": "text"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan-boundary-overlaps-t-stop-first-attach": {
+    "sha256": "7506eb1e0b856bf00ffd876f4fcb7a9f66bf1750ccde7d19614c171beb9c4082",
+    "bytes": 19471144
+  },
+  "/tmp/lj-gc-auto-query-20260905-k7a7wved/t-stop-first-attach.c": {
+    "sha256": "3ae6ce71c2cfa62f09bd3752f3736266a8606983a72928d2ef5476d1c16ab640",
+    "bytes": 6461
+  },
+  "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/libluajit.a": {
+    "sha256": "4e66f9d450ad2585fbcab6d90ec671fb5c4914bfca4db1a3d748a490e4441cd3",
+    "bytes": 26682190
+  },
+  "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan-boundary-overlaps-t-stop-first-attach-restart-v2": {
+    "sha256": "17bcf809802c2f31ff625644a5075c5f7b08e45d5ba1a18c6e55e040bd126498",
+    "bytes": 19477368
+  },
+  "/tmp/lj-gc-auto-query-20260905-k7a7wved/t-stop-first-attach-restart-v2.c": {
+    "sha256": "1a8453a8fa2d105dbd6ecc38d5432f0dda999f342952141508a5d46567c91683",
+    "bytes": 7280
+  },
+  "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan-boundary-overlaps-t-auto-restart-numeric-max": {
+    "sha256": "1d6be7258ac0ebbadf3a5599e88e78bfd7fc3f35624c942c9badc81cf898697f",
+    "bytes": 19451704
+  },
+  "/tmp/lj-gc-auto-query-20260905-k7a7wved/t-auto-restart-numeric-max.c": {
+    "sha256": "f12ed44cd991b2fd76fe0342630ea26b0c5820fb7c2660d61e707b5d5c02b024",
+    "bytes": 2625
+  }
+}

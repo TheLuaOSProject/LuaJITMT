@@ -1,0 +1,46 @@
+[
+  {
+    "name": "candidate-fin-calibration-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate/src",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-auto-finalizer-controls.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate-finalizer-controls"
+    ],
+    "exit_code": 0,
+    "seconds": 0.16383814599976176,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate/src/?.lua;;",
+    "stdout": "candidate-fin-calibration-compile.stdout",
+    "stderr": "candidate-fin-calibration-compile.stderr"
+  },
+  {
+    "name": "candidate-fin-calibration-run",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate-finalizer-controls",
+      "1",
+      "1",
+      "1",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007542869003373198,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate/src/?.lua;;",
+    "stdout": "candidate-fin-calibration-run.stdout",
+    "stderr": "candidate-fin-calibration-run.stderr"
+  }
+]

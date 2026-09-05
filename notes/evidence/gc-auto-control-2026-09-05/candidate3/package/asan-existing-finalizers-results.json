@@ -1,0 +1,150 @@
+[
+  {
+    "argv": [
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/tests/t-m8-finalizer-state.c",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan-existing-finalizers-t-m8-finalizer-state"
+    ],
+    "name": "t-m8-finalizer-state-compile",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/?.lua;/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "exit_code": 0,
+    "seconds": 0.16420183800073573,
+    "stdout": "asan-existing-finalizers-t-m8-finalizer-state-compile.stdout",
+    "stderr": "asan-existing-finalizers-t-m8-finalizer-state-compile.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan-existing-finalizers-t-m8-finalizer-state"
+    ],
+    "name": "t-m8-finalizer-state",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/?.lua;/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "exit_code": 0,
+    "seconds": 0.031768494001880754,
+    "stdout": "asan-existing-finalizers-t-m8-finalizer-state.stdout",
+    "stderr": "asan-existing-finalizers-t-m8-finalizer-state.stderr"
+  },
+  {
+    "argv": [
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/tests/t-m8-close-finalizers.c",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan-existing-finalizers-t-m8-close-finalizers"
+    ],
+    "name": "t-m8-close-finalizers-compile",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/?.lua;/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "exit_code": 0,
+    "seconds": 0.26403387900063535,
+    "stdout": "asan-existing-finalizers-t-m8-close-finalizers-compile.stdout",
+    "stderr": "asan-existing-finalizers-t-m8-close-finalizers-compile.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan-existing-finalizers-t-m8-close-finalizers"
+    ],
+    "name": "t-m8-close-finalizers",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/?.lua;/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "exit_code": 0,
+    "seconds": 0.031734664997202344,
+    "stdout": "asan-existing-finalizers-t-m8-close-finalizers.stdout",
+    "stderr": "asan-existing-finalizers-t-m8-close-finalizers.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/tests/t-ffi-gc-finreg.lua"
+    ],
+    "name": "t-ffi-gc-finreg-joff",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/?.lua;/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "exit_code": 0,
+    "seconds": 0.514681054999528,
+    "stdout": "asan-existing-finalizers-t-ffi-gc-finreg-joff.stdout",
+    "stderr": "asan-existing-finalizers-t-ffi-gc-finreg-joff.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/luajit",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/tests/t-ffi-gc-finreg.lua"
+    ],
+    "name": "t-ffi-gc-finreg-jit",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/?.lua;/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "exit_code": 0,
+    "seconds": 0.5153378009999869,
+    "stdout": "asan-existing-finalizers-t-ffi-gc-finreg-jit.stdout",
+    "stderr": "asan-existing-finalizers-t-ffi-gc-finreg-jit.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/tests/t-m8-finalizer-spawn-live.lua"
+    ],
+    "name": "t-m8-finalizer-spawn-live-joff",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/?.lua;/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "exit_code": 0,
+    "seconds": 0.06399235600110842,
+    "stdout": "asan-existing-finalizers-t-m8-finalizer-spawn-live-joff.stdout",
+    "stderr": "asan-existing-finalizers-t-m8-finalizer-spawn-live-joff.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/luajit",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/tests/t-m8-finalizer-spawn-live.lua"
+    ],
+    "name": "t-m8-finalizer-spawn-live-jit",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/?.lua;/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "exit_code": 0,
+    "seconds": 0.06399920300464146,
+    "stdout": "asan-existing-finalizers-t-m8-finalizer-spawn-live-jit.stdout",
+    "stderr": "asan-existing-finalizers-t-m8-finalizer-spawn-live-jit.stderr"
+  }
+]

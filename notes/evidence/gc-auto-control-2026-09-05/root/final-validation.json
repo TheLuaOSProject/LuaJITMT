@@ -1,0 +1,54 @@
+{
+  "shared_base": "0e2119e4a36a7034f1f6e1115849677a4ce4359e",
+  "runtime_inputs_verified": 224,
+  "broad": {
+    "candidate": {
+      "runtime_processes": 98,
+      "failed_commands": 0
+    },
+    "strict": {
+      "runtime_processes": 98,
+      "failed_commands": 0
+    },
+    "asan": {
+      "runtime_processes": 98,
+      "failed_commands": 0
+    }
+  },
+  "canonical": [
+    {
+      "name": "m3_gc2_auto_control",
+      "exit": 0,
+      "seconds": 46.548470025001734,
+      "expected_runtime_processes": 37,
+      "default_binaries": {
+        "luajit": "a399c29f009c8deecc04de97cb0310205be2c9d1cc305e0a66c70eeb41757013",
+        "libluajit.a": "abd9ede84ae1399adfd27c11a5079f69d5060a6fd45e7cc9f80cf01b7438eb97",
+        "libluajit.so": "c999f2044a7745375c620d894452d3f983b354972f2e8444daf32488abf4d0c9"
+      }
+    },
+    {
+      "name": "m7_ffi_clib_cache_authority",
+      "exit": 0,
+      "seconds": 2.681278504001966,
+      "expected_runtime_processes": 153,
+      "default_binaries": {
+        "luajit": "a399c29f009c8deecc04de97cb0310205be2c9d1cc305e0a66c70eeb41757013",
+        "libluajit.a": "abd9ede84ae1399adfd27c11a5079f69d5060a6fd45e7cc9f80cf01b7438eb97",
+        "libluajit.so": "c999f2044a7745375c620d894452d3f983b354972f2e8444daf32488abf4d0c9"
+      }
+    }
+  ],
+  "current_candidate_owner_runtimes": 151,
+  "current_candidate_owner_passes": 124,
+  "current_candidate_owner_worker_two_incompletions": 27,
+  "total_current_positive_functional_runtimes": 608,
+  "benchmark_processes": 70,
+  "calibration_processes": 6,
+  "known_open": [
+    "synchronous GC driver and phase ownership",
+    "worker-two SWEEP completion",
+    "concurrent string reclamation",
+    "earlier helper assertions and constructor/IDLE waits"
+  ]
+}

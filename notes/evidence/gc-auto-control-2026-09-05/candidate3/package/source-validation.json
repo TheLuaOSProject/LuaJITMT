@@ -1,0 +1,109 @@
+{
+  "candidate3": {
+    "tracked_inputs": 815,
+    "changed": [
+      {
+        "path": "src/lj_api.c",
+        "sha256": "4e3a0d46077684381ff568667793c0fc252d5aaa7e0b4301a606fb3e67292fdd"
+      },
+      {
+        "path": "src/lj_gc.c",
+        "sha256": "2b70a2e1add35cca9aef3fd2c20b3bc6346d9ac77d80faaffe7fa60c5086810d"
+      },
+      {
+        "path": "src/lj_gc.h",
+        "sha256": "56b9e71567ffca558f06be0a844da3389faca8a8ede1da1d3cf0a614e7beddf6"
+      },
+      {
+        "path": "src/lj_gc2.c",
+        "sha256": "6d96637a8a676afcd4208c08397d7fe79a29122bd05b02ca7d8889fa4dc79218"
+      },
+      {
+        "path": "src/lj_obj.h",
+        "sha256": "a8962fcc16e961ad29275cffc993ff368c229dc435f5794babbbacd8214557bc"
+      },
+      {
+        "path": "src/vm_x64.dasc",
+        "sha256": "1ad1cd789886fb72d7c2a0befa58d33996f1cdf95cdfb40ea321d764d22ccac7"
+      }
+    ]
+  },
+  "strict": {
+    "tracked_inputs": 815,
+    "changed": [
+      {
+        "path": "src/lj_api.c",
+        "sha256": "4e3a0d46077684381ff568667793c0fc252d5aaa7e0b4301a606fb3e67292fdd"
+      },
+      {
+        "path": "src/lj_gc.c",
+        "sha256": "2b70a2e1add35cca9aef3fd2c20b3bc6346d9ac77d80faaffe7fa60c5086810d"
+      },
+      {
+        "path": "src/lj_gc.h",
+        "sha256": "56b9e71567ffca558f06be0a844da3389faca8a8ede1da1d3cf0a614e7beddf6"
+      },
+      {
+        "path": "src/lj_gc2.c",
+        "sha256": "6d96637a8a676afcd4208c08397d7fe79a29122bd05b02ca7d8889fa4dc79218"
+      },
+      {
+        "path": "src/lj_obj.h",
+        "sha256": "a8962fcc16e961ad29275cffc993ff368c229dc435f5794babbbacd8214557bc"
+      },
+      {
+        "path": "src/vm_x64.dasc",
+        "sha256": "1ad1cd789886fb72d7c2a0befa58d33996f1cdf95cdfb40ea321d764d22ccac7"
+      }
+    ]
+  },
+  "asan": {
+    "tracked_inputs": 815,
+    "changed": [
+      {
+        "path": "src/lj_api.c",
+        "sha256": "4e3a0d46077684381ff568667793c0fc252d5aaa7e0b4301a606fb3e67292fdd"
+      },
+      {
+        "path": "src/lj_gc.c",
+        "sha256": "2b70a2e1add35cca9aef3fd2c20b3bc6346d9ac77d80faaffe7fa60c5086810d"
+      },
+      {
+        "path": "src/lj_gc.h",
+        "sha256": "56b9e71567ffca558f06be0a844da3389faca8a8ede1da1d3cf0a614e7beddf6"
+      },
+      {
+        "path": "src/lj_gc2.c",
+        "sha256": "6d96637a8a676afcd4208c08397d7fe79a29122bd05b02ca7d8889fa4dc79218"
+      },
+      {
+        "path": "src/lj_obj.h",
+        "sha256": "a8962fcc16e961ad29275cffc993ff368c229dc435f5794babbbacd8214557bc"
+      },
+      {
+        "path": "src/vm_x64.dasc",
+        "sha256": "1ad1cd789886fb72d7c2a0befa58d33996f1cdf95cdfb40ea321d764d22ccac7"
+      }
+    ]
+  },
+  "unchanged_fixtures": {
+    "t-stop-first-attach.c": "3ae6ce71c2cfa62f09bd3752f3736266a8606983a72928d2ef5476d1c16ab640",
+    "t-stop-first-attach-restart-v2.c": "1a8453a8fa2d105dbd6ecc38d5432f0dda999f342952141508a5d46567c91683",
+    "t-restart-first-attach.c": "f5f1fad1d435d828e92728726c7157a534c9b664fa4a4f576b075392444632d9",
+    "t-restart-last-detach.c": "b97030a42e75652ac78236acba51bc36823f2be83c367e129ce3cf96132acb38",
+    "t-auto-restart-numeric-max.c": "f12ed44cd991b2fd76fe0342630ea26b0c5820fb7c2660d61e707b5d5c02b024",
+    "t-string-retention.c": "2e8e840fb4ba3a3b09168c06d828ff10ebafd41e9ff555b9737f34384fea3cf9",
+    "t-auto-controls.c": "34d3aecdab7c3295c8a970284f678945a0b330b1a021cae148d5b3621104a141",
+    "t-auto-controls-v2.c": "e0a5445e48151078870dde0043c7a2c0bb95a50452a0e8cbde7dc6146fbebfc6",
+    "peer-control.lua": "519ebf714b0a33b9a436d3452a153a1bc3eea3322ebf0bf74d8e76fea4ab8cb2",
+    "control-boundaries.lua": "fc17679e2035924294a7003184e085b0437ea6ddf8cfcb0664dee3ccd8521460",
+    "t-auto-finalizer-controls.c": "7744314de98809cac623d91c20dc88ee9916e655d4c6abe507f7eb61749010ab",
+    "t-finalizer-spawn-query-overlap.lua": "4736ba434c9b34a260bf31dcf93c1bab34bbd3291eb629912869531225c38eda"
+  },
+  "unchanged_existing_finalizers": {
+    "t-m8-finalizer-state.c": "efe26c6727bb91fdce5bfc3c19b4afc7bfdcbf6b8ae82dfb1164fb17167372d3",
+    "t-m8-close-finalizers.c": "25ada6b7b208e527cdd59dc726f2768772ebaa6d5509dd31252125d1259a690d",
+    "t-ffi-gc-finreg.lua": "563b946882fbb88042f724255858ba6ddfa4ed5e8609a13f2984069ffda52cac",
+    "t-m8-finalizer-spawn-live.lua": "063a889fe0a69c75e1be16e65cf0f6a3a9ec4c896f13aa5b7afaf6dad1cfc2d2"
+  }
+}

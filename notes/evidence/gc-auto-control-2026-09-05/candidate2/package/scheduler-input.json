@@ -1,0 +1,7 @@
+{
+  "commit": "0e2119e4a36a7034f1f6e1115849677a4ce4359e",
+  "path": "tests/t-gc2-worker-scheduler.c",
+  "copy": "t-gc2-worker-scheduler-repaired.c",
+  "sha256": "f476733106d7e2552c9e47757b35f1c1dc78cf8b3cb0d47c17f17ed58fe70dca",
+  "bytes": 49341
+}

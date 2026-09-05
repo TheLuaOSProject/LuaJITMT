@@ -1,0 +1,38 @@
+{
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-boundary-overlaps-t-stop-first-attach": {
+    "sha256": "afa1fbda468e3fe7494f3bcc8c782930f560291dcb34d0975464958a27003a75",
+    "bytes": 1737352
+  },
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-stop-first-attach.c": {
+    "sha256": "3ae6ce71c2cfa62f09bd3752f3736266a8606983a72928d2ef5476d1c16ab640",
+    "bytes": 6461
+  },
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/libluajit.a": {
+    "sha256": "c4d299474e7f2e3707ac46ac9641e1741d105d33d480d8a28a15a8e80aee8ed6",
+    "bytes": 2357538
+  },
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-boundary-overlaps-t-stop-first-attach-restart-v2": {
+    "sha256": "f6ec6da7401a9792b21620d30d9043a345ffd96d06e70a1a254aa7b2f1cf03b3",
+    "bytes": 1743280
+  },
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-stop-first-attach-restart-v2.c": {
+    "sha256": "1a8453a8fa2d105dbd6ecc38d5432f0dda999f342952141508a5d46567c91683",
+    "bytes": 7280
+  },
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-boundary-overlaps-t-auto-restart-numeric-max": {
+    "sha256": "2a277c63d853f83ed5df5159332c0f63c0fc26d8ac13b7e1ccd9bce4562248a6",
+    "bytes": 1708120
+  },
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-auto-restart-numeric-max.c": {
+    "sha256": "f12ed44cd991b2fd76fe0342630ea26b0c5820fb7c2660d61e707b5d5c02b024",
+    "bytes": 2625
+  },
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-boundary-overlaps-t-restart-first-attach": {
+    "sha256": "0f90b439108c094b8e32ed915b207bcd1c23b8ca0468818caa77328cb37480ea",
+    "bytes": 1736688
+  },
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-restart-first-attach.c": {
+    "sha256": "f5f1fad1d435d828e92728726c7157a534c9b664fa4a4f576b075392444632d9",
+    "bytes": 6967
+  }
+}

@@ -1,0 +1,49 @@
+[
+  {
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/controlhelpers/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/controlhelpers/tests/t-func-construction-anchor.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/controlhelpers/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/controlhelpers-safety-t-func-construction-anchor"
+    ],
+    "name": "t-func-construction-anchor-compile",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/controlhelpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/controlhelpers/src/?.lua;/tmp/lj-gc-auto-control-20260905-qs673ryl/controlhelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.1646016660015448,
+    "stdout": "controlhelpers-safety-t-func-construction-anchor-compile.stdout",
+    "stderr": "controlhelpers-safety-t-func-construction-anchor-compile.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/controlhelpers-safety-t-func-construction-anchor"
+    ],
+    "name": "t-func-construction-anchor",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/controlhelpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/controlhelpers/src/?.lua;/tmp/lj-gc-auto-control-20260905-qs673ryl/controlhelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": "timeout",
+    "seconds": 60.00077739900007,
+    "stdout": "controlhelpers-safety-t-func-construction-anchor.stdout",
+    "stderr": "controlhelpers-safety-t-func-construction-anchor.stderr"
+  }
+]

@@ -1,0 +1,320 @@
+[
+  {
+    "case": "compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-I/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/t-auto-finalizer-controls-v3.c",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-finalizers-v3-fixture"
+    ],
+    "exit_code": 0,
+    "seconds": 0.1640884670050582,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-finalizers-v3-compile.stdout",
+    "stderr": "strict-finalizers-v3-compile.stderr"
+  },
+  {
+    "case": "0-0-0-0",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-finalizers-v3-fixture",
+      "0",
+      "0",
+      "0",
+      "0",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.0076614320059889,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-finalizers-v3-0-0-0-0.stdout",
+    "stderr": "strict-finalizers-v3-0-0-0-0.stderr"
+  },
+  {
+    "case": "0-0-0-1",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-finalizers-v3-fixture",
+      "0",
+      "0",
+      "0",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007670752005651593,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-finalizers-v3-0-0-0-1.stdout",
+    "stderr": "strict-finalizers-v3-0-0-0-1.stderr"
+  },
+  {
+    "case": "0-0-1-0",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-finalizers-v3-fixture",
+      "0",
+      "0",
+      "1",
+      "0",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007664817996555939,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-finalizers-v3-0-0-1-0.stdout",
+    "stderr": "strict-finalizers-v3-0-0-1-0.stderr"
+  },
+  {
+    "case": "0-0-1-1",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-finalizers-v3-fixture",
+      "0",
+      "0",
+      "1",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.0076397169978008606,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-finalizers-v3-0-0-1-1.stdout",
+    "stderr": "strict-finalizers-v3-0-0-1-1.stderr"
+  },
+  {
+    "case": "0-1-0-0",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-finalizers-v3-fixture",
+      "0",
+      "1",
+      "0",
+      "0",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007728257995040622,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-finalizers-v3-0-1-0-0.stdout",
+    "stderr": "strict-finalizers-v3-0-1-0-0.stderr"
+  },
+  {
+    "case": "0-1-0-1",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-finalizers-v3-fixture",
+      "0",
+      "1",
+      "0",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007694412997807376,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-finalizers-v3-0-1-0-1.stdout",
+    "stderr": "strict-finalizers-v3-0-1-0-1.stderr"
+  },
+  {
+    "case": "0-1-1-0",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-finalizers-v3-fixture",
+      "0",
+      "1",
+      "1",
+      "0",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007731890000286512,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-finalizers-v3-0-1-1-0.stdout",
+    "stderr": "strict-finalizers-v3-0-1-1-0.stderr"
+  },
+  {
+    "case": "0-1-1-1",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-finalizers-v3-fixture",
+      "0",
+      "1",
+      "1",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007792743999743834,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-finalizers-v3-0-1-1-1.stdout",
+    "stderr": "strict-finalizers-v3-0-1-1-1.stderr"
+  },
+  {
+    "case": "1-0-0-0",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-finalizers-v3-fixture",
+      "1",
+      "0",
+      "0",
+      "0",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007715603998803999,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-finalizers-v3-1-0-0-0.stdout",
+    "stderr": "strict-finalizers-v3-1-0-0-0.stderr"
+  },
+  {
+    "case": "1-0-0-1",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-finalizers-v3-fixture",
+      "1",
+      "0",
+      "0",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007590476001496427,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-finalizers-v3-1-0-0-1.stdout",
+    "stderr": "strict-finalizers-v3-1-0-0-1.stderr"
+  },
+  {
+    "case": "1-0-1-0",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-finalizers-v3-fixture",
+      "1",
+      "0",
+      "1",
+      "0",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007663244003197178,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-finalizers-v3-1-0-1-0.stdout",
+    "stderr": "strict-finalizers-v3-1-0-1-0.stderr"
+  },
+  {
+    "case": "1-0-1-1",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-finalizers-v3-fixture",
+      "1",
+      "0",
+      "1",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007778404004056938,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-finalizers-v3-1-0-1-1.stdout",
+    "stderr": "strict-finalizers-v3-1-0-1-1.stderr"
+  },
+  {
+    "case": "1-1-0-0",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-finalizers-v3-fixture",
+      "1",
+      "1",
+      "0",
+      "0",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007632678993104491,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-finalizers-v3-1-1-0-0.stdout",
+    "stderr": "strict-finalizers-v3-1-1-0-0.stderr"
+  },
+  {
+    "case": "1-1-0-1",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-finalizers-v3-fixture",
+      "1",
+      "1",
+      "0",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007713841005170252,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-finalizers-v3-1-1-0-1.stdout",
+    "stderr": "strict-finalizers-v3-1-1-0-1.stderr"
+  },
+  {
+    "case": "1-1-1-0",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-finalizers-v3-fixture",
+      "1",
+      "1",
+      "1",
+      "0",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.00777885800198419,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-finalizers-v3-1-1-1-0.stdout",
+    "stderr": "strict-finalizers-v3-1-1-1-0.stderr"
+  },
+  {
+    "case": "1-1-1-1",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-finalizers-v3-fixture",
+      "1",
+      "1",
+      "1",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007661516996449791,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-finalizers-v3-1-1-1-1.stdout",
+    "stderr": "strict-finalizers-v3-1-1-1-1.stderr"
+  }
+]

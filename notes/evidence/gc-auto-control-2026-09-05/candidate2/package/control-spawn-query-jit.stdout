@@ -1,0 +1,5 @@
+cdata full collect during=running after=true child_after=true
+cdata explicit step during=running after=true child_after=true
+userdata full collect during=running after=true child_after=true
+userdata explicit step during=running after=true child_after=true
+FINALIZER_SPAWN_QUERY_OVERLAP passed

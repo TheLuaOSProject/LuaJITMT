@@ -1,0 +1,34 @@
+{
+  "control/src/luajit": {
+    "sha256": "10edabd882deae71c3156da70588e4ffc1f8b019c8084d994f28e1b0e97a8cfb",
+    "bytes": 1518832
+  },
+  "control/src/libluajit.a": {
+    "sha256": "c1696d313312ae5e60d871ab776052704959b614985cffc00ef21018fbe5e42c",
+    "bytes": 2358274
+  },
+  "control/tests/t-m8-finalizer-state.c": {
+    "sha256": "efe26c6727bb91fdce5bfc3c19b4afc7bfdcbf6b8ae82dfb1164fb17167372d3",
+    "bytes": 1848
+  },
+  "control-existing-finalizers-t-m8-finalizer-state": {
+    "sha256": "289a115bb4e4ba5ce7c0e67d4e898bd0e529ab2900916705cdecfe8a0fca37be",
+    "bytes": 1687880
+  },
+  "control/tests/t-m8-close-finalizers.c": {
+    "sha256": "25ada6b7b208e527cdd59dc726f2768772ebaa6d5509dd31252125d1259a690d",
+    "bytes": 11668
+  },
+  "control-existing-finalizers-t-m8-close-finalizers": {
+    "sha256": "3a38264f637ff10582053e615e55c87edf5e0f9294f7a9f8aa7210d63198ad9d",
+    "bytes": 1712024
+  },
+  "control/tests/t-ffi-gc-finreg.lua": {
+    "sha256": "563b946882fbb88042f724255858ba6ddfa4ed5e8609a13f2984069ffda52cac",
+    "bytes": 4725
+  },
+  "control/tests/t-m8-finalizer-spawn-live.lua": {
+    "sha256": "063a889fe0a69c75e1be16e65cf0f6a3a9ec4c896f13aa5b7afaf6dad1cfc2d2",
+    "bytes": 2121
+  }
+}

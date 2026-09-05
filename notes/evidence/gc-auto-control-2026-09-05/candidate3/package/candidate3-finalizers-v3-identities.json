@@ -1,0 +1,14 @@
+{
+  "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-finalizers-v3-fixture": {
+    "sha256": "dcc174c876a66ac8d7e90676b50ede287202d1b44a876f3850f911611bc6d0a8",
+    "bytes": 1745920
+  },
+  "/tmp/lj-gc-auto-query-20260905-k7a7wved/t-auto-finalizer-controls-v3.c": {
+    "sha256": "79eab244e3947538ffbb4ea7ea003b8730410f26940d8b566a20fc5430bf6b37",
+    "bytes": 6913
+  },
+  "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/libluajit.a": {
+    "sha256": "abd9ede84ae1399adfd27c11a5079f69d5060a6fd45e7cc9f80cf01b7438eb97",
+    "bytes": 2357522
+  }
+}

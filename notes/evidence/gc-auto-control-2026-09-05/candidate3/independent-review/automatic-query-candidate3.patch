@@ -1,0 +1,27 @@
+--- a/src/lj_gc.h
++++ b/src/lj_gc.h
+@@ -289,6 +289,13 @@
+   la_store8_rel(&g->gc.auto_flags, 0);
+ }
+ 
++/* Public logical control is independent of temporary finalizer suppression. */
++static LJ_AINLINE int lj_gc_auto_enabled(global_State *g)
++{
++  return !(lj_gc_auto_flags_load(g) & LJ_GC_AUTO_STOPPED);
++}
++
++/* Automatic admission also honors the pause owned by an active finalizer. */
+ static LJ_AINLINE int lj_gc_auto_running(global_State *g)
+ {
+   return lj_gc_auto_flags_load(g) == 0;
+--- a/src/lj_api.c
++++ b/src/lj_api.c
+@@ -3053,7 +3053,7 @@
+     gc2_assist_shift_rel(g, lj_gc2_assist_shift_from_stepmul((uint32_t)data));
+     break;
+   case LUA_GCISRUNNING:
+-    res = lj_gc_auto_running(g);
++    res = lj_gc_auto_enabled(g);
+     break;
+   default:
+     res = -1;  /* Invalid option. */

@@ -1,0 +1,7 @@
+{
+  "package": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+  "manifest_sha256": "5bdc2b9431e12a3d769d579b2ab09da3e68074b72258650b9c1fe81274351300",
+  "full_patch_sha256": "60b9c725d89b50daf06f89aab8582dffa62f84277f4fe23ec5fb780a18b568a5",
+  "frozen_runtimes": 247,
+  "refinement": "Public ISRUNNING reads STOPPED only; automatic entry still checks STOPPED and FINPAUSE"
+}

@@ -1,5 +1,9 @@
 # Automatic GC admission and control-state review, 2026-09-05
 
+The later [integrated control repair](gc-auto-control-2026-09-05.md) resolves
+the demonstrated STOP/RESTART and request-admission defects. This earlier
+review and its frozen prototype outcomes remain unchanged evidence.
+
 The automatic-GC experiments expose a control-state race that must be resolved
 before the new admission path is integrated. A completed public STOP can be
 misread during first attachment, and a completed RESTART can be undone by a

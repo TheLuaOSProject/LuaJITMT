@@ -1,0 +1,30 @@
+{
+  "control-restart-last-detach": {
+    "sha256": "cff32e51418241c7e21f8aee7cfd243ff8b2cddac56635350acb83cf00c03f9c",
+    "bytes": 1738088
+  },
+  "control/src/libluajit.a": {
+    "sha256": "c1696d313312ae5e60d871ab776052704959b614985cffc00ef21018fbe5e42c",
+    "bytes": 2358274
+  },
+  "t-restart-last-detach.c": {
+    "sha256": "b97030a42e75652ac78236acba51bc36823f2be83c367e129ce3cf96132acb38",
+    "bytes": 5924
+  },
+  "candidate2-restart-last-detach": {
+    "sha256": "504bd5aef716ed979f8b4e2d10ad5278699749fd6b15c93e4e5a140dad4fa302",
+    "bytes": 1733944
+  },
+  "candidate2/src/libluajit.a": {
+    "sha256": "c4d299474e7f2e3707ac46ac9641e1741d105d33d480d8a28a15a8e80aee8ed6",
+    "bytes": 2357538
+  },
+  "strict-restart-last-detach": {
+    "sha256": "72e71957df95034ba0223f474f51453df3cfd1668436979b3b85347a6f27062e",
+    "bytes": 1986128
+  },
+  "strict/src/libluajit.a": {
+    "sha256": "48e8f1d0c09bc5257ce801b460bcd52f4e468cd00c6da80a2f72b12f7f9491e8",
+    "bytes": 2868516
+  }
+}

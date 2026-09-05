@@ -1,0 +1,18 @@
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+
+Program received signal SIGINT, Interrupt.
+0x000055555556554b in lj_gc_reclaim_gc2_arena ()
+
+Thread 1 (Thread 0x7ffff7ca21c0 (LWP 342859) "helpers-safety-"):
+#0  0x000055555556554b in lj_gc_reclaim_gc2_arena ()
+#1  0x0000555555576557 in lj_gc2_sweep_owner_progress ()
+#2  0x000055555559a38e in gc2_worker_drain_inner ()
+#3  0x000055555559e348 in lj_gc2_collect_active ()
+#4  0x00005555555c2dbc in func_finduv_nothrow ()
+#5  0x00005555555c47d2 in func_newL_gc_base ()
+#6  0x000055555555e85f in construct_inherit_cp (L=<optimized out>, dummy=<optimized out>, ud=0x7fffffffdfb0) at /tmp/lj-gc-auto-control-20260905-qs673ryl/helpers/tests/t-func-construction-anchor.c:81
+#7  0x000055555564bbd4 in lj_vm_cpcall_asm ()
+#8  0x00005555555cf320 in lj_vm_cpcall ()
+#9  0x000055555555e47c in test_open_upvalue_handoff_then_oom (L=0x7ffff7c90080) at /tmp/lj-gc-auto-control-20260905-qs673ryl/helpers/tests/t-func-construction-anchor.c:193
+#10 main () at /tmp/lj-gc-auto-control-20260905-qs673ryl/helpers/tests/t-func-construction-anchor.c:332

@@ -1,0 +1,50 @@
+[
+  {
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/helpers/src",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/helpers/tests",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-gc2-worker-scheduler-repaired.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/helpers/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/helpers-repaired-scheduler-v2"
+    ],
+    "name": "compile",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/helpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/helpers/src/?.lua;/tmp/lj-gc-auto-control-20260905-qs673ryl/helpers/tests/lib/?.lua;;",
+    "exit_code": 0,
+    "seconds": 0.365243863001524,
+    "stdout": "helpers-repaired-scheduler-v2-compile.stdout",
+    "stderr": "helpers-repaired-scheduler-v2-compile.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/helpers-repaired-scheduler-v2"
+    ],
+    "name": "run",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/helpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/helpers/src/?.lua;/tmp/lj-gc-auto-control-20260905-qs673ryl/helpers/tests/lib/?.lua;;",
+    "exit_code": 0,
+    "seconds": 0.06380550999892876,
+    "stdout": "helpers-repaired-scheduler-v2-run.stdout",
+    "stderr": "helpers-repaired-scheduler-v2-run.stderr"
+  }
+]

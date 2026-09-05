@@ -1,0 +1,23 @@
+{
+  "source": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2",
+  "base": "aee88db569b82216b705408f00295a337a7393fe",
+  "integration_head_at_review": "0e2119e4a36a7034f1f6e1115849677a4ce4359e",
+  "inputs": {
+    "src/lj_atomic.h": "0a7bbdc91ae21c4dcbe09cd7de500e0aeb341173f5059f43659678e5be53fac1",
+    "src/lj_state.c": "80d2fa440b4b81e0d460d485dcbe2fc478e2f158c2f79504e44b1a89ffc2bf64",
+    "src/lj_trace.c": "22727958fb2df4c3ed07126193a260f2243630ac4fc6d98d133712bd40503feb",
+    "src/lj_dispatch.c": "d55f4e42a77e9f3ebe4a4381506cf5056b8359272557f977b87d0b5e55e6e38b",
+    "src/lj_gc2.h": "244b10c49ad036b661a08adc178e6b8247d8ff1b18ed63bc035d3440df16a9f9",
+    "src/lib_threading.c": "0c68ad63cf688543cf6f8ecf4e9fa6092fa8492176ec6c13356c6bf31aa4b4be",
+    "src/lib_base.c": "5aeff40a9022f5827530f80b944c84eb1dfb4eef2bc558fbc2503c55a3080aee",
+    "src/lj_asm_x86.h": "24895bdd88f7c416295a0d85d11d1e283fc8d3223987b9c26c0e4f0b7161dd4d",
+    "src/lj_tg.c": "16064ba7946becbbc5cc1be2ee00eae4be39f1496c6ab85c5f4cf60f64146406",
+    "src/lj_obj.h": "a8962fcc16e961ad29275cffc993ff368c229dc435f5794babbbacd8214557bc",
+    "src/lj_api.c": "554e616d5d37edc775c4fba95edc6d494c5c6db9e97d014a39ebf52411049d58",
+    "src/lj_gc.c": "2b70a2e1add35cca9aef3fd2c20b3bc6346d9ac77d80faaffe7fa60c5086810d",
+    "src/lj_gc.h": "82c00b7652bb61e2ed9e594f3c4600c5be122ed6ccc215ad4e6fbcf3bf6f3655",
+    "src/lj_gc2.c": "6d96637a8a676afcd4208c08397d7fe79a29122bd05b02ca7d8889fa4dc79218",
+    "src/vm_x64.dasc": "1ad1cd789886fb72d7c2a0befa58d33996f1cdf95cdfb40ea321d764d22ccac7"
+  },
+  "scope": "Source-only ROOT review; no builds or runtime tests performed by this proof package."
+}

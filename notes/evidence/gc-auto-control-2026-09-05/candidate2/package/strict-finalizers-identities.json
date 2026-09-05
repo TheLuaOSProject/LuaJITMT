@@ -1,0 +1,14 @@
+{
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict-finalizers-fixture": {
+    "sha256": "da4eef26f8299698d647bb6d1108e2ced7ed3152d72bdda1c0247bbeb73ece67",
+    "bytes": 1993496
+  },
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-auto-finalizer-controls.c": {
+    "sha256": "7744314de98809cac623d91c20dc88ee9916e655d4c6abe507f7eb61749010ab",
+    "bytes": 6842
+  },
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/libluajit.a": {
+    "sha256": "48e8f1d0c09bc5257ce801b460bcd52f4e468cd00c6da80a2f72b12f7f9491e8",
+    "bytes": 2868516
+  }
+}

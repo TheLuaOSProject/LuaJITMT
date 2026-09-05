@@ -1,0 +1,82 @@
+[
+  {
+    "name": "control-restart-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/control/src",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-restart-first-attach.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/control/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_vm_cpcall",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/control-restart-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.16403948300285265,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/control/src/?.lua;;",
+    "stdout": "control-restart-compile.stdout",
+    "stderr": "control-restart-compile.stderr"
+  },
+  {
+    "name": "control-restart-run",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/control-restart-first-attach"
+    ],
+    "exit_code": 43,
+    "seconds": 0.015905003005173057,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/control/src/?.lua;;",
+    "stdout": "control-restart-run.stdout",
+    "stderr": "control-restart-run.stderr"
+  },
+  {
+    "name": "candidate-restart-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate/src",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-restart-first-attach.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_vm_cpcall",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate-restart-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.16390854799828958,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate/src/?.lua;;",
+    "stdout": "candidate-restart-compile.stdout",
+    "stderr": "candidate-restart-compile.stderr"
+  },
+  {
+    "name": "candidate-restart-run",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate-restart-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.03176686599908862,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate/src/?.lua;;",
+    "stdout": "candidate-restart-run.stdout",
+    "stderr": "candidate-restart-run.stderr"
+  }
+]

@@ -1,0 +1,22 @@
+{
+  "candidate-numeric-max": {
+    "sha256": "cd0dec3e756864e1284e3593c4f233b8d4fa2e304d201c860f880525ce7cddc3",
+    "bytes": 1708120
+  },
+  "candidate/src/libluajit.a": {
+    "sha256": "6e4158b5009b2ac19e58be279d0724746d2d2a915d8ce4228426ce6736ec2558",
+    "bytes": 2357554
+  },
+  "t-auto-restart-numeric-max.c": {
+    "sha256": "f12ed44cd991b2fd76fe0342630ea26b0c5820fb7c2660d61e707b5d5c02b024",
+    "bytes": 2625
+  },
+  "candidate2-numeric-max": {
+    "sha256": "2a277c63d853f83ed5df5159332c0f63c0fc26d8ac13b7e1ccd9bce4562248a6",
+    "bytes": 1708120
+  },
+  "candidate2/src/libluajit.a": {
+    "sha256": "c4d299474e7f2e3707ac46ac9641e1741d105d33d480d8a28a15a8e80aee8ed6",
+    "bytes": 2357538
+  }
+}

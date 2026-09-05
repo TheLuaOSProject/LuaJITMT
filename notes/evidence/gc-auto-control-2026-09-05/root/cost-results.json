@@ -1,0 +1,1864 @@
+[
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 0,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.084553292996134,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.794109000\nsample\t2\t1.042251000\nsample\t3\t1.034054000\nsample\t4\t1.040011000\nsample\t5\t1.038401000\nresult\ttnew\t100000\t0.794109000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 0,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.0273237630026415,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "sample\t1\t0.782680000\nsample\t2\t1.029196000\nsample\t3\t1.025206000\nsample\t4\t1.028173000\nsample\t5\t1.026934000\nresult\ttnew\t100000\t0.782680000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.074445321995881,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "sample\t1\t0.787996000\nsample\t2\t1.039078000\nsample\t3\t1.035698000\nsample\t4\t1.039164000\nsample\t5\t1.036377000\nresult\ttnew\t100000\t0.787996000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 1,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.0575635630011675,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.788620000\nsample\t2\t1.034588000\nsample\t3\t1.031066000\nsample\t4\t1.034540000\nsample\t5\t1.033705000\nresult\ttnew\t100000\t0.788620000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 2,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.081240653002169,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.793208000\nsample\t2\t1.040147000\nsample\t3\t1.035329000\nsample\t4\t1.038802000\nsample\t5\t1.038688000\nresult\ttnew\t100000\t0.793208000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 2,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.047737330998643,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "sample\t1\t0.785259000\nsample\t2\t1.034169000\nsample\t3\t1.028233000\nsample\t4\t1.031609000\nsample\t5\t1.032734000\nresult\ttnew\t100000\t0.785259000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.016744720000133,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "sample\t1\t0.781230000\nsample\t2\t1.022421000\nsample\t3\t1.024312000\nsample\t4\t1.027400000\nsample\t5\t1.026507000\nresult\ttnew\t100000\t0.781230000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 3,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.102431785002409,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.795196000\nsample\t2\t1.044722000\nsample\t3\t1.041362000\nsample\t4\t1.042919000\nsample\t5\t1.041870000\nresult\ttnew\t100000\t0.795196000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 4,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.060195209996891,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.789308000\nsample\t2\t1.035239000\nsample\t3\t1.032065000\nsample\t4\t1.034504000\nsample\t5\t1.033351000\nresult\ttnew\t100000\t0.789308000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 4,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.064701290000812,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "sample\t1\t0.788057000\nsample\t2\t1.036852000\nsample\t3\t1.034443000\nsample\t4\t1.036037000\nsample\t5\t1.034429000\nresult\ttnew\t100000\t0.788057000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.062952125997981,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "sample\t1\t0.787083000\nsample\t2\t1.036162000\nsample\t3\t1.032952000\nsample\t4\t1.036767000\nsample\t5\t1.035359000\nresult\ttnew\t100000\t0.787083000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 5,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.092665668002155,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.793613000\nsample\t2\t1.042918000\nsample\t3\t1.038357000\nsample\t4\t1.040892000\nsample\t5\t1.041285000\nresult\ttnew\t100000\t0.793613000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 6,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.095049724004639,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.794107000\nsample\t2\t1.043551000\nsample\t3\t1.038907000\nsample\t4\t1.042303000\nsample\t5\t1.040997000\nresult\ttnew\t100000\t0.794107000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 6,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.018880228999478,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "sample\t1\t0.778424000\nsample\t2\t1.028180000\nsample\t3\t1.024617000\nsample\t4\t1.027260000\nsample\t5\t1.026466000\nresult\ttnew\t100000\t0.778424000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 0,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.904941519998829,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.710425000\nsample\t2\t0.997978000\nsample\t3\t1.022389000\nsample\t4\t1.040178000\nsample\t5\t1.056209000\nresult\ttdup\t100000\t0.710425000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 0,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.93325646899757,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "sample\t1\t0.710733000\nsample\t2\t1.002231000\nsample\t3\t1.030462000\nsample\t4\t1.047296000\nsample\t5\t1.063983000\nresult\ttdup\t100000\t0.710733000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.920729353005299,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "sample\t1\t0.713213000\nsample\t2\t1.002605000\nsample\t3\t1.024868000\nsample\t4\t1.043138000\nsample\t5\t1.058724000\nresult\ttdup\t100000\t0.713213000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 1,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.906645488001232,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.710318000\nsample\t2\t0.997351000\nsample\t3\t1.022720000\nsample\t4\t1.041042000\nsample\t5\t1.057034000\nresult\ttdup\t100000\t0.710318000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 2,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.915445441001793,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.710948000\nsample\t2\t1.000792000\nsample\t3\t1.024325000\nsample\t4\t1.042201000\nsample\t5\t1.058762000\nresult\ttdup\t100000\t0.710948000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 2,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.913418730997364,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "sample\t1\t0.710609000\nsample\t2\t1.002361000\nsample\t3\t1.023311000\nsample\t4\t1.040478000\nsample\t5\t1.057696000\nresult\ttdup\t100000\t0.710609000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.902429870002379,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "sample\t1\t0.699397000\nsample\t2\t0.998598000\nsample\t3\t1.024799000\nsample\t4\t1.042431000\nsample\t5\t1.058926000\nresult\ttdup\t100000\t0.699397000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 3,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.917868247997831,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.710945000\nsample\t2\t1.000142000\nsample\t3\t1.024461000\nsample\t4\t1.043089000\nsample\t5\t1.059730000\nresult\ttdup\t100000\t0.710945000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 4,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.9351014839994605,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.715373000\nsample\t2\t1.004020000\nsample\t3\t1.028455000\nsample\t4\t1.045537000\nsample\t5\t1.062441000\nresult\ttdup\t100000\t0.715373000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 4,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.904090458003338,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "sample\t1\t0.703530000\nsample\t2\t0.999037000\nsample\t3\t1.023307000\nsample\t4\t1.041082000\nsample\t5\t1.058214000\nresult\ttdup\t100000\t0.703530000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.891638770997815,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "sample\t1\t0.703587000\nsample\t2\t0.981097000\nsample\t3\t1.024898000\nsample\t4\t1.043579000\nsample\t5\t1.059505000\nresult\ttdup\t100000\t0.703587000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 5,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.8009612999958335,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.705821000\nsample\t2\t0.994481000\nsample\t3\t1.019400000\nsample\t4\t0.979343000\nsample\t5\t1.024432000\nresult\ttdup\t100000\t0.705821000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 6,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.93897980699694,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.715169000\nsample\t2\t1.005024000\nsample\t3\t1.028057000\nsample\t4\t1.047494000\nsample\t5\t1.063173000\nresult\ttdup\t100000\t0.715169000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 6,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.910463976993924,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "sample\t1\t0.710540000\nsample\t2\t1.000491000\nsample\t3\t1.023346000\nsample\t4\t1.040866000\nsample\t5\t1.056022000\nresult\ttdup\t100000\t0.710540000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 0,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.092136201004905,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.763430000\nsample\t2\t0.758587000\nsample\t3\t0.757257000\nsample\t4\t0.758607000\nsample\t5\t0.758454000\nresult\ttnew\t100000\t0.757257000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 0,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.156129057002545,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "sample\t1\t0.764993000\nsample\t2\t0.759103000\nsample\t3\t0.759467000\nsample\t4\t0.759054000\nsample\t5\t0.759856000\nresult\ttnew\t100000\t0.759054000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.081450263001898,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "sample\t1\t0.759770000\nsample\t2\t0.754080000\nsample\t3\t0.754682000\nsample\t4\t0.753253000\nsample\t5\t0.753594000\nresult\ttnew\t100000\t0.753253000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 1,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.147602511002333,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.763318000\nsample\t2\t0.758724000\nsample\t3\t0.758037000\nsample\t4\t0.758787000\nsample\t5\t0.758241000\nresult\ttnew\t100000\t0.758037000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 2,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.055808208002418,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.764867000\nsample\t2\t0.757428000\nsample\t3\t0.758004000\nsample\t4\t0.758143000\nsample\t5\t0.757390000\nresult\ttnew\t100000\t0.757390000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 2,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.030547237001883,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "sample\t1\t0.758855000\nsample\t2\t0.753825000\nsample\t3\t0.754572000\nsample\t4\t0.754961000\nsample\t5\t0.755445000\nresult\ttnew\t100000\t0.753825000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.08590202999767,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "sample\t1\t0.757819000\nsample\t2\t0.752589000\nsample\t3\t0.753341000\nsample\t4\t0.752902000\nsample\t5\t0.753265000\nresult\ttnew\t100000\t0.752589000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 3,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.043700863003323,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.761679000\nsample\t2\t0.755717000\nsample\t3\t0.756691000\nsample\t4\t0.756849000\nsample\t5\t0.756023000\nresult\ttnew\t100000\t0.755717000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 4,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.130921257004957,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.763276000\nsample\t2\t0.755972000\nsample\t3\t0.756592000\nsample\t4\t0.756701000\nsample\t5\t0.757475000\nresult\ttnew\t100000\t0.755972000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 4,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.11476955699618,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "sample\t1\t0.765400000\nsample\t2\t0.759687000\nsample\t3\t0.758979000\nsample\t4\t0.758233000\nsample\t5\t0.758286000\nresult\ttnew\t100000\t0.758233000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.014462912004092,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "sample\t1\t0.756692000\nsample\t2\t0.751090000\nsample\t3\t0.751469000\nsample\t4\t0.751716000\nsample\t5\t0.751437000\nresult\ttnew\t100000\t0.751090000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 5,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.14555983000173,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.762661000\nsample\t2\t0.757820000\nsample\t3\t0.757371000\nsample\t4\t0.757871000\nsample\t5\t0.757637000\nresult\ttnew\t100000\t0.757371000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 6,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.098647560000245,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.763814000\nsample\t2\t0.757256000\nsample\t3\t0.757992000\nsample\t4\t0.758190000\nsample\t5\t0.758094000\nresult\ttnew\t100000\t0.757256000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 6,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.047634936992836,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "sample\t1\t0.762554000\nsample\t2\t0.756460000\nsample\t3\t0.755991000\nsample\t4\t0.756525000\nsample\t5\t0.756141000\nresult\ttnew\t100000\t0.755991000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "arith_loop",
+    "mode": "-jon",
+    "pair": 0,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "arith_loop"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.18065002300136257,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\narith_loop               0.0342       0.68\n",
+    "stderr": ""
+  },
+  {
+    "workload": "arith_loop",
+    "mode": "-jon",
+    "pair": 0,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "arith_loop"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.1802366339979926,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\narith_loop               0.0342       0.68\n",
+    "stderr": ""
+  },
+  {
+    "workload": "arith_loop",
+    "mode": "-jon",
+    "pair": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "arith_loop"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.18020770300063305,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\narith_loop               0.0342       0.68\n",
+    "stderr": ""
+  },
+  {
+    "workload": "arith_loop",
+    "mode": "-jon",
+    "pair": 1,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "arith_loop"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.18012255499343155,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\narith_loop               0.0342       0.68\n",
+    "stderr": ""
+  },
+  {
+    "workload": "arith_loop",
+    "mode": "-jon",
+    "pair": 2,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "arith_loop"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.18016329099918948,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\narith_loop               0.0342       0.68\n",
+    "stderr": ""
+  },
+  {
+    "workload": "arith_loop",
+    "mode": "-jon",
+    "pair": 2,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "arith_loop"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.1800597769979504,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\narith_loop               0.0342       0.68\n",
+    "stderr": ""
+  },
+  {
+    "workload": "arith_loop",
+    "mode": "-jon",
+    "pair": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "arith_loop"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.18011370099702617,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\narith_loop               0.0342       0.68\n",
+    "stderr": ""
+  },
+  {
+    "workload": "arith_loop",
+    "mode": "-jon",
+    "pair": 3,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "arith_loop"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.1802443230044446,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\narith_loop               0.0342       0.68\n",
+    "stderr": ""
+  },
+  {
+    "workload": "arith_loop",
+    "mode": "-jon",
+    "pair": 4,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "arith_loop"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.1802069589975872,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\narith_loop               0.0342       0.68\n",
+    "stderr": ""
+  },
+  {
+    "workload": "arith_loop",
+    "mode": "-jon",
+    "pair": 4,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "arith_loop"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.1803395789975184,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\narith_loop               0.0342       0.68\n",
+    "stderr": ""
+  },
+  {
+    "workload": "arith_loop",
+    "mode": "-jon",
+    "pair": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "arith_loop"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.1803552019991912,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\narith_loop               0.0342       0.68\n",
+    "stderr": ""
+  },
+  {
+    "workload": "arith_loop",
+    "mode": "-jon",
+    "pair": 5,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "arith_loop"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.18051271099830046,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\narith_loop               0.0342       0.68\n",
+    "stderr": ""
+  },
+  {
+    "workload": "arith_loop",
+    "mode": "-jon",
+    "pair": 6,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "arith_loop"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.18033970200485783,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\narith_loop               0.0342       0.68\n",
+    "stderr": ""
+  },
+  {
+    "workload": "arith_loop",
+    "mode": "-jon",
+    "pair": 6,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "arith_loop"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.18050670700176852,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\narith_loop               0.0342       0.68\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "mode": "-jon",
+    "pair": 0,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11406010299833724,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "mode": "-jon",
+    "pair": 0,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11382175899780123,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "mode": "-jon",
+    "pair": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11366360900137806,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "mode": "-jon",
+    "pair": 1,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11391165699751582,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "mode": "-jon",
+    "pair": 2,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11402159799763467,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "mode": "-jon",
+    "pair": 2,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11395590499887476,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "mode": "-jon",
+    "pair": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11407398599840235,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "mode": "-jon",
+    "pair": 3,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11368234999827109,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "mode": "-jon",
+    "pair": 4,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11367407700163312,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "mode": "-jon",
+    "pair": 4,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11410655800136738,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "mode": "-jon",
+    "pair": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11398488299892051,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "mode": "-jon",
+    "pair": 5,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11398896500031697,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "mode": "-jon",
+    "pair": 6,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11398139599623391,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "mode": "-jon",
+    "pair": 6,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11405478199594654,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "8dd1f232fbb1ba59dcee54ecffa5fee0a5c3ca2f6bbbd02099cf5151ce135cbc",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  }
+]

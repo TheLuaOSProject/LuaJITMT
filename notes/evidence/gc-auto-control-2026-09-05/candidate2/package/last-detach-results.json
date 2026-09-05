@@ -1,0 +1,166 @@
+[
+  {
+    "name": "control-last-detach-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/control/src",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-restart-last-detach.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/control/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/control-restart-last-detach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.1146603290035273,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/control/src/?.lua;;",
+    "stdout": "control-last-detach-compile.stdout",
+    "stderr": "control-last-detach-compile.stderr"
+  },
+  {
+    "name": "control-last-detach-disassembly",
+    "argv": [
+      "objdump",
+      "-d",
+      "--disassemble=threading_gc_leave",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/control-restart-last-detach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.003812369002844207,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/control/src/?.lua;;",
+    "stdout": "control-last-detach-disassembly.stdout",
+    "stderr": "control-last-detach-disassembly.stderr"
+  },
+  {
+    "name": "control-last-detach-run",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/control-restart-last-detach"
+    ],
+    "exit_code": 43,
+    "seconds": 0.0317835030000424,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/control/src/?.lua;;",
+    "stdout": "control-last-detach-run.stdout",
+    "stderr": "control-last-detach-run.stderr"
+  },
+  {
+    "name": "candidate2-last-detach-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-restart-last-detach.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-restart-last-detach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.1641701769985957,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "stdout": "candidate2-last-detach-compile.stdout",
+    "stderr": "candidate2-last-detach-compile.stderr"
+  },
+  {
+    "name": "candidate2-last-detach-disassembly",
+    "argv": [
+      "objdump",
+      "-d",
+      "--disassemble=threading_gc_leave",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-restart-last-detach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.003619445997173898,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "stdout": "candidate2-last-detach-disassembly.stdout",
+    "stderr": "candidate2-last-detach-disassembly.stderr"
+  },
+  {
+    "name": "candidate2-last-detach-run",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-restart-last-detach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.0315589799938607,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "stdout": "candidate2-last-detach-run.stdout",
+    "stderr": "candidate2-last-detach-run.stderr"
+  },
+  {
+    "name": "strict-last-detach-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-restart-last-detach.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict-restart-last-detach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.16417256400018232,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/?.lua;;",
+    "stdout": "strict-last-detach-compile.stdout",
+    "stderr": "strict-last-detach-compile.stderr"
+  },
+  {
+    "name": "strict-last-detach-disassembly",
+    "argv": [
+      "objdump",
+      "-d",
+      "--disassemble=threading_gc_leave",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict-restart-last-detach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.003789925998717081,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/?.lua;;",
+    "stdout": "strict-last-detach-disassembly.stdout",
+    "stderr": "strict-last-detach-disassembly.stderr"
+  },
+  {
+    "name": "strict-last-detach-run",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict-restart-last-detach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.03150296300009359,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/strict/src/?.lua;;",
+    "stdout": "strict-last-detach-run.stdout",
+    "stderr": "strict-last-detach-run.stderr"
+  }
+]

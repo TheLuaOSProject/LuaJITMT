@@ -1,0 +1,4 @@
+/tmp/lj-gc-auto-control-20260905-qs673ryl/t-gc2-worker-scheduler-repaired.c:25:10: fatal error: lib/test_sleep.h: No such file or directory
+   25 | #include "lib/test_sleep.h"
+      |          ^~~~~~~~~~~~~~~~~~
+compilation terminated.

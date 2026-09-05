@@ -1,0 +1,1 @@
+helpers-safety-t-gc2-alloc-account: /tmp/lj-gc-auto-control-20260905-qs673ryl/helpers/tests/t-gc2-alloc-account.c:929: main: Assertion `gc2_remembered_filtered_acq(g) == remembered_filtered0 + 4u' failed.

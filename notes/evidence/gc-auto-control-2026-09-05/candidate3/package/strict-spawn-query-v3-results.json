@@ -1,0 +1,31 @@
+[
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/t-finalizer-spawn-query-enabled.lua"
+    ],
+    "name": "joff",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.0316613699978916,
+    "stdout": "strict-spawn-query-v3-joff.stdout",
+    "stderr": "strict-spawn-query-v3-joff.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/luajit",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/t-finalizer-spawn-query-enabled.lua"
+    ],
+    "name": "jit",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.015596564000588842,
+    "stdout": "strict-spawn-query-v3-jit.stdout",
+    "stderr": "strict-spawn-query-v3-jit.stderr"
+  }
+]

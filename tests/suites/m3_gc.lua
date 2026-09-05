@@ -46,6 +46,7 @@ local m3_scaffold_deps = {
   "m3_gc2_recovery",
   "m3_gc2_sweep_edge_lease",
   "m3_gc2_worker_scheduler",
+  "m3_gc2_auto_control",
   "m3_gc2_mark_close_progress",
   "m3_gc_active_thread_roots",
   "m3_safepoint_handshake",
@@ -372,6 +373,87 @@ return function(add)
       run_luajit_script_jit_modes(t, "t-gc-workers.lua")
 
       print("M3 GC2 worker scheduler test passed")
+    end
+  })
+
+  register({
+    name = "m3_gc2_auto_control",
+    description = "automatic requests and public STOP/RESTART survive attachment and finalizers",
+    run = function(t)
+      if jit.os ~= "Linux" or jit.arch ~= "x64" then
+        print("M3 automatic-control overlap fixtures require Linux x64")
+        return
+      end
+      make_clean(t)
+      make_default(t, { jobs = false })
+      local pthread = os.getenv("PTHREAD") or "-pthread"
+      local env = {
+        LUA_PATH = t:path("src", "?.lua") .. ";" ..
+                   t:path("tests", "lib", "?.lua") .. ";;",
+        RETENTION_JIT = "0"
+      }
+      local function compile(name, wrapper)
+        local out = t:tmp("lj_" .. name)
+        local libs = { "-Wl,-E", "-lm", "-ldl", pthread }
+        if wrapper then libs[#libs + 1] = "-Wl,--wrap=" .. wrapper end
+        t:cc(out, { t:path("tests", name .. ".c") }, {
+          cflags = "-g", link_luajit = true, libs = libs
+        })
+        return out
+      end
+      local stop = compile("t-stop-first-attach", "lj_vm_cpcall")
+      t:run({ stop }, { env = env, timeout = "25s" })
+      local numeric = compile("t-auto-restart-numeric-max")
+      t:run({ numeric }, { env = env, timeout = "25s" })
+
+      -- These two schedules recognize the actual GCC MOV/register geometry.
+      -- Clang retains the first-live STOP and sequential attachment coverage.
+      local macros = t:tmp("lj_auto-control-compiler-macros.txt")
+      t:run(t.compiler .. " -dM -E -x c /dev/null > " ..
+            utils.shell_quote(macros), { quiet = true, timeout = "25s" })
+      local definitions = utils.read_file(macros)
+      if definitions:find("#define __GNUC__ ", 1, true) and
+         not definitions:find("#define __clang__ ", 1, true) then
+        local first = compile("t-restart-first-attach", "lj_vm_cpcall")
+        local last = compile("t-restart-last-detach")
+        t:run({ first }, { env = env, timeout = "25s" })
+        t:run({ last }, { env = env, timeout = "25s" })
+      end
+
+      local finalizers = compile("t-auto-finalizer-controls-v3")
+      for peer = 0, 1 do
+        for inner_error = 0, 1 do
+          for outer_error = 0, 1 do
+            for outer_stop = 0, 1 do
+              t:run({ finalizers, tostring(peer), tostring(inner_error),
+                      tostring(outer_error), tostring(outer_stop), "1" }, {
+                env = env, timeout = "25s"
+              })
+            end
+          end
+        end
+      end
+      for _, script in ipairs({ "t-m8-finalizer-spawn-live.lua",
+                                "t-finalizer-spawn-query-enabled.lua" }) do
+        run_luajit_script_jit_modes(t, script, nil, {
+          env = env, timeout = "40s"
+        })
+      end
+
+      local control = compile("t-auto-controls-v2", "lj_native_enter")
+      local function run_control(mode, boundary, peer)
+        t:run({ control, tostring(mode), tostring(boundary), tostring(peer),
+                "0", t:path("tests", "peer-control.lua"),
+                t:path("tests", "control-boundaries.lua") }, {
+          env = env, timeout = "50s"
+        })
+      end
+      for boundary = 0, 5 do run_control(0, boundary, 1) end
+      for _, mode in ipairs({ 1, 3, 4 }) do
+        for peer = 0, 1 do run_control(mode, 0, peer) end
+      end
+      run_control(2, 0, 1)
+      print("M3 automatic GC control and finalizer query passed")
     end
   })
 

@@ -1,0 +1,150 @@
+[
+  {
+    "argv": [
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/tests/t-m8-finalizer-state.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan-existing-finalizers-t-m8-finalizer-state"
+    ],
+    "name": "t-m8-finalizer-state-compile",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/src/?.lua;/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "exit_code": 0,
+    "seconds": 0.16435204000299564,
+    "stdout": "asan-existing-finalizers-t-m8-finalizer-state-compile.stdout",
+    "stderr": "asan-existing-finalizers-t-m8-finalizer-state-compile.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan-existing-finalizers-t-m8-finalizer-state"
+    ],
+    "name": "t-m8-finalizer-state",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/src/?.lua;/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "exit_code": 0,
+    "seconds": 0.031895792999421246,
+    "stdout": "asan-existing-finalizers-t-m8-finalizer-state.stdout",
+    "stderr": "asan-existing-finalizers-t-m8-finalizer-state.stderr"
+  },
+  {
+    "argv": [
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/tests/t-m8-close-finalizers.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan-existing-finalizers-t-m8-close-finalizers"
+    ],
+    "name": "t-m8-close-finalizers-compile",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/src/?.lua;/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "exit_code": 0,
+    "seconds": 0.16411080100078834,
+    "stdout": "asan-existing-finalizers-t-m8-close-finalizers-compile.stdout",
+    "stderr": "asan-existing-finalizers-t-m8-close-finalizers-compile.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan-existing-finalizers-t-m8-close-finalizers"
+    ],
+    "name": "t-m8-close-finalizers",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/src/?.lua;/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "exit_code": 0,
+    "seconds": 0.031917748994601425,
+    "stdout": "asan-existing-finalizers-t-m8-close-finalizers.stdout",
+    "stderr": "asan-existing-finalizers-t-m8-close-finalizers.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/tests/t-ffi-gc-finreg.lua"
+    ],
+    "name": "t-ffi-gc-finreg-joff",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/src/?.lua;/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "exit_code": 0,
+    "seconds": 0.514439788996242,
+    "stdout": "asan-existing-finalizers-t-ffi-gc-finreg-joff.stdout",
+    "stderr": "asan-existing-finalizers-t-ffi-gc-finreg-joff.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/src/luajit",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/tests/t-ffi-gc-finreg.lua"
+    ],
+    "name": "t-ffi-gc-finreg-jit",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/src/?.lua;/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "exit_code": 0,
+    "seconds": 0.5144728369996301,
+    "stdout": "asan-existing-finalizers-t-ffi-gc-finreg-jit.stdout",
+    "stderr": "asan-existing-finalizers-t-ffi-gc-finreg-jit.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/tests/t-m8-finalizer-spawn-live.lua"
+    ],
+    "name": "t-m8-finalizer-spawn-live-joff",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/src/?.lua;/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "exit_code": 1,
+    "seconds": 0.03174300299724564,
+    "stdout": "asan-existing-finalizers-t-m8-finalizer-spawn-live-joff.stdout",
+    "stderr": "asan-existing-finalizers-t-m8-finalizer-spawn-live-joff.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/src/luajit",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/tests/t-m8-finalizer-spawn-live.lua"
+    ],
+    "name": "t-m8-finalizer-spawn-live-jit",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/src/?.lua;/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "exit_code": 0,
+    "seconds": 0.06357156900048722,
+    "stdout": "asan-existing-finalizers-t-m8-finalizer-spawn-live-jit.stdout",
+    "stderr": "asan-existing-finalizers-t-m8-finalizer-spawn-live-jit.stderr"
+  }
+]

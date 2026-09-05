@@ -1,0 +1,82 @@
+{
+  "scope": "ROOT source-only review of frozen candidate2; no reviewer runtime validation",
+  "artifacts": [
+    {
+      "relative_path": "automatic-control-full.patch",
+      "source": "/tmp/lj-gc-auto-control-proof-20260905-31ki7iox/automatic-control-full.patch",
+      "sha256": "60b9c725d89b50daf06f89aab8582dffa62f84277f4fe23ec5fb780a18b568a5",
+      "bytes": 7897,
+      "storage": "text"
+    },
+    {
+      "relative_path": "automatic-control-v2.patch",
+      "source": "/tmp/lj-gc-auto-control-proof-20260905-31ki7iox/automatic-control-v2.patch",
+      "sha256": "13f32a17375b92dcbc7d44bd2fc22a686505ae591cdd2ba3260f4fd582caf6a2",
+      "bytes": 7856,
+      "storage": "text"
+    },
+    {
+      "relative_path": "candidate2-source.json",
+      "source": "/tmp/lj-gc-auto-control-proof-20260905-31ki7iox/candidate2-source.json",
+      "sha256": "aadd9a6e1877cc85e67a1ac7c92e0dc8e7e1723322b275812875faecb94fc3a2",
+      "bytes": 897,
+      "storage": "text"
+    },
+    {
+      "relative_path": "review.md",
+      "source": "/tmp/lj-gc-auto-control-proof-20260905-31ki7iox/review.md",
+      "sha256": "1c1c459e5b1db917baa058b680fd24064097c7aa1254bfb9014923ce0395ac8c",
+      "bytes": 7870,
+      "storage": "text"
+    },
+    {
+      "relative_path": "reviewed-inputs.json",
+      "source": "/tmp/lj-gc-auto-control-proof-20260905-31ki7iox/reviewed-inputs.json",
+      "sha256": "e8ae48cc981e87d793ccf8994567bffe74124ff0da5cfe641b52afbb96c8ac49",
+      "bytes": 1663,
+      "storage": "text"
+    },
+    {
+      "relative_path": "src/lj_api.c",
+      "source": "/tmp/lj-gc-auto-control-proof-20260905-31ki7iox/src/lj_api.c",
+      "sha256": "554e616d5d37edc775c4fba95edc6d494c5c6db9e97d014a39ebf52411049d58",
+      "bytes": 89655,
+      "storage": "text"
+    },
+    {
+      "relative_path": "src/lj_gc.c",
+      "source": "/tmp/lj-gc-auto-control-proof-20260905-31ki7iox/src/lj_gc.c",
+      "sha256": "2b70a2e1add35cca9aef3fd2c20b3bc6346d9ac77d80faaffe7fa60c5086810d",
+      "bytes": 195005,
+      "storage": "text"
+    },
+    {
+      "relative_path": "src/lj_gc.h",
+      "source": "/tmp/lj-gc-auto-control-proof-20260905-31ki7iox/src/lj_gc.h",
+      "sha256": "82c00b7652bb61e2ed9e594f3c4600c5be122ed6ccc215ad4e6fbcf3bf6f3655",
+      "bytes": 23536,
+      "storage": "text"
+    },
+    {
+      "relative_path": "src/lj_gc2.c",
+      "source": "/tmp/lj-gc-auto-control-proof-20260905-31ki7iox/src/lj_gc2.c",
+      "sha256": "6d96637a8a676afcd4208c08397d7fe79a29122bd05b02ca7d8889fa4dc79218",
+      "bytes": 767707,
+      "storage": "text"
+    },
+    {
+      "relative_path": "src/lj_obj.h",
+      "source": "/tmp/lj-gc-auto-control-proof-20260905-31ki7iox/src/lj_obj.h",
+      "sha256": "a8962fcc16e961ad29275cffc993ff368c229dc435f5794babbbacd8214557bc",
+      "bytes": 220849,
+      "storage": "text"
+    },
+    {
+      "relative_path": "src/vm_x64.dasc",
+      "source": "/tmp/lj-gc-auto-control-proof-20260905-31ki7iox/src/vm_x64.dasc",
+      "sha256": "1ad1cd789886fb72d7c2a0befa58d33996f1cdf95cdfb40ea321d764d22ccac7",
+      "bytes": 192890,
+      "storage": "text"
+    }
+  ]
+}

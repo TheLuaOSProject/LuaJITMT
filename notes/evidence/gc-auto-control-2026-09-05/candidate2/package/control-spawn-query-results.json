@@ -1,0 +1,33 @@
+[
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/control/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-finalizer-spawn-query-overlap.lua",
+      "0"
+    ],
+    "name": "joff",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/control",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/control/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.01562180900509702,
+    "stdout": "control-spawn-query-joff.stdout",
+    "stderr": "control-spawn-query-joff.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/control/src/luajit",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-finalizer-spawn-query-overlap.lua",
+      "0"
+    ],
+    "name": "jit",
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/control",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/control/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.015499567001825199,
+    "stdout": "control-spawn-query-jit.stdout",
+    "stderr": "control-spawn-query-jit.stderr"
+  }
+]

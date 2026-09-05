@@ -1,0 +1,38 @@
+{
+  "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-boundary-overlaps-t-stop-first-attach": {
+    "sha256": "300b00f79b259844b65bece898d554fbf653fa86b9614fecbcf46424dd7212a6",
+    "bytes": 1989536
+  },
+  "/tmp/lj-gc-auto-query-20260905-k7a7wved/t-stop-first-attach.c": {
+    "sha256": "3ae6ce71c2cfa62f09bd3752f3736266a8606983a72928d2ef5476d1c16ab640",
+    "bytes": 6461
+  },
+  "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/libluajit.a": {
+    "sha256": "80e8552e12423b6371007fcdadeefc4119b144bb202eab86421777dcb10cbfc8",
+    "bytes": 2868500
+  },
+  "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-boundary-overlaps-t-stop-first-attach-restart-v2": {
+    "sha256": "8005bc9bba88acc3289a4ef3f02ed227f72303635a0776f2ef1555cb1005aae2",
+    "bytes": 1991360
+  },
+  "/tmp/lj-gc-auto-query-20260905-k7a7wved/t-stop-first-attach-restart-v2.c": {
+    "sha256": "1a8453a8fa2d105dbd6ecc38d5432f0dda999f342952141508a5d46567c91683",
+    "bytes": 7280
+  },
+  "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-boundary-overlaps-t-auto-restart-numeric-max": {
+    "sha256": "c04b6d9fe5df8c688660f6138332be199f2a91933dbc13ae0ba4977bede389bf",
+    "bytes": 1956184
+  },
+  "/tmp/lj-gc-auto-query-20260905-k7a7wved/t-auto-restart-numeric-max.c": {
+    "sha256": "f12ed44cd991b2fd76fe0342630ea26b0c5820fb7c2660d61e707b5d5c02b024",
+    "bytes": 2625
+  },
+  "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-boundary-overlaps-t-restart-first-attach": {
+    "sha256": "357ea02328b1fd3b73794b350bafa636bf4c3d95c55904432865871d1ce63714",
+    "bytes": 1988864
+  },
+  "/tmp/lj-gc-auto-query-20260905-k7a7wved/t-restart-first-attach.c": {
+    "sha256": "f5f1fad1d435d828e92728726c7157a534c9b664fa4a4f576b075392444632d9",
+    "bytes": 6967
+  }
+}

@@ -1,0 +1,245 @@
+make: Entering directory '/workspaces/lj-lockless/src'
+make: Nothing to be done for 'default'.
+make: Leaving directory '/workspaces/lj-lockless/src'
+cache-authority	function	false	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+cache-authority	function	false	root	warm	2	6	helpers	2	old-exits	39	0	ok	true	effects	39	slots	17	41	73
+cache-authority	function	false	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+cache-authority	function	false	side	warm	2	6	helpers	2	old-exits	0	41	ok	true	effects	80	slots	17	41	73
+cache-authority	function	nil	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+cache-authority	function	nil	root	warm	2	6	helpers	2	old-exits	2	0	ok	true	effects	39	slots	17	41	73
+cache-authority	function	nil	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+cache-authority	function	nil	side	warm	2	6	helpers	2	old-exits	0	2	ok	true	effects	80	slots	17	41	73
+cache-authority	function	other	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+cache-authority	function	other	root	warm	2	6	helpers	2	old-exits	39	0	ok	true	effects	39	slots	17	41	73
+cache-authority	function	other	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+cache-authority	function	other	side	warm	2	6	helpers	2	old-exits	0	41	ok	true	effects	80	slots	17	41	73
+cache-authority	function	fenv	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+cache-authority	function	fenv	root	warm	2	6	helpers	2	old-exits	1	0	ok	true	effects	39	slots	17	41	73
+cache-authority	function	fenv	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+cache-authority	function	fenv	side	warm	2	6	helpers	2	old-exits	0	1	ok	true	effects	80	slots	17	41	73
+cache-authority	function	close	root	warm	0	0	helpers	0	old-exits	0	0	ok	false	effects	1	slots	17	41	73
+cache-authority	function	close	root	warm	2	6	helpers	2	old-exits	1	0	ok	false	effects	1	slots	17	41	73
+cache-authority	function	close	side	warm	0	0	helpers	0	old-exits	0	0	ok	false	effects	40	slots	17	41	73
+cache-authority	function	close	side	warm	2	6	helpers	2	old-exits	0	1	ok	false	effects	40	slots	17	41	73
+cache-authority	read	false	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+cache-authority	read	false	root	warm	2	6	helpers	2	old-exits	39	0	ok	true	effects	39	slots	17	41	73
+cache-authority	read	false	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+cache-authority	read	false	side	warm	2	6	helpers	2	old-exits	0	41	ok	true	effects	80	slots	17	41	73
+cache-authority	read	nil	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+cache-authority	read	nil	root	warm	2	6	helpers	2	old-exits	2	0	ok	true	effects	39	slots	17	41	73
+cache-authority	read	nil	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+cache-authority	read	nil	side	warm	2	6	helpers	2	old-exits	0	2	ok	true	effects	80	slots	17	41	73
+cache-authority	read	other	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+cache-authority	read	other	root	warm	2	6	helpers	2	old-exits	39	0	ok	true	effects	39	slots	17	41	73
+cache-authority	read	other	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+cache-authority	read	other	side	warm	2	6	helpers	2	old-exits	0	41	ok	true	effects	80	slots	17	41	73
+cache-authority	read	close	root	warm	0	0	helpers	0	old-exits	0	0	ok	false	effects	1	slots	17	41	73
+cache-authority	read	close	root	warm	2	6	helpers	2	old-exits	1	0	ok	false	effects	1	slots	17	41	73
+cache-authority	read	close	side	warm	0	0	helpers	0	old-exits	0	0	ok	false	effects	40	slots	17	41	73
+cache-authority	read	close	side	warm	2	6	helpers	2	old-exits	0	1	ok	false	effects	40	slots	17	41	73
+cache-authority	write	false	root	warm	0	0	helpers	0	old-exits	0	0	ok	false	effects	1	slots	17	41	73
+cache-authority	write	false	root	warm	2	6	helpers	2	old-exits	1	0	ok	false	effects	1	slots	17	41	73
+cache-authority	write	false	side	warm	0	0	helpers	0	old-exits	0	0	ok	false	effects	40	slots	39	41	73
+cache-authority	write	false	side	warm	2	6	helpers	2	old-exits	0	1	ok	false	effects	40	slots	39	41	73
+cache-authority	write	nil	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	39	41	73
+cache-authority	write	nil	root	warm	2	6	helpers	2	old-exits	2	0	ok	true	effects	39	slots	39	41	73
+cache-authority	write	nil	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	39	180	73
+cache-authority	write	nil	side	warm	2	6	helpers	2	old-exits	0	2	ok	true	effects	80	slots	39	180	73
+cache-authority	write	other	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	39
+cache-authority	write	other	root	warm	2	6	helpers	2	old-exits	39	0	ok	true	effects	39	slots	17	41	39
+cache-authority	write	other	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	39	41	180
+cache-authority	write	other	side	warm	2	6	helpers	2	old-exits	0	41	ok	true	effects	80	slots	39	41	180
+cache-authority	write	close	root	warm	0	0	helpers	0	old-exits	0	0	ok	false	effects	1	slots	17	41	73
+cache-authority	write	close	root	warm	2	6	helpers	2	old-exits	1	0	ok	false	effects	1	slots	17	41	73
+cache-authority	write	close	side	warm	0	0	helpers	0	old-exits	0	0	ok	false	effects	40	slots	39	41	73
+cache-authority	write	close	side	warm	2	6	helpers	2	old-exits	0	1	ok	false	effects	40	slots	39	41	73
+cache-authority	zero	negative-zero	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+cache-authority	zero	negative-zero	root	warm	2	6	helpers	2	old-exits	1	0	ok	true	effects	39	slots	17	41	73
+cache-authority	zero	negative-zero	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+cache-authority	zero	negative-zero	side	warm	2	6	helpers	2	old-exits	0	1	ok	true	effects	80	slots	17	41	73
+cache-authority	zero	positive-zero	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+cache-authority	zero	positive-zero	root	warm	2	6	helpers	2	old-exits	1	0	ok	true	effects	39	slots	17	41	73
+cache-authority	zero	positive-zero	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+cache-authority	zero	positive-zero	side	warm	2	6	helpers	2	old-exits	0	1	ok	true	effects	80	slots	17	41	73
+cache-authority	zero	false	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+cache-authority	zero	false	root	warm	2	6	helpers	2	old-exits	39	0	ok	true	effects	39	slots	17	41	73
+cache-authority	zero	false	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+cache-authority	zero	false	side	warm	2	6	helpers	2	old-exits	0	41	ok	true	effects	80	slots	17	41	73
+cache-authority	zero	nil	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+cache-authority	zero	nil	root	warm	2	6	helpers	2	old-exits	2	0	ok	true	effects	39	slots	17	41	73
+cache-authority	zero	nil	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+cache-authority	zero	nil	side	warm	2	6	helpers	2	old-exits	0	2	ok	true	effects	80	slots	17	41	73
+cache-authority	big	number	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+cache-authority	big	number	root	warm	2	6	helpers	2	old-exits	1	0	ok	true	effects	39	slots	17	41	73
+cache-authority	big	number	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+cache-authority	big	number	side	warm	2	6	helpers	2	old-exits	0	1	ok	true	effects	80	slots	17	41	73
+cache-authority	big	false	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+cache-authority	big	false	root	warm	2	6	helpers	2	old-exits	39	0	ok	true	effects	39	slots	17	41	73
+cache-authority	big	false	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+cache-authority	big	false	side	warm	2	6	helpers	2	old-exits	0	41	ok	true	effects	80	slots	17	41	73
+cache-authority	big	nil	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+cache-authority	big	nil	root	warm	2	6	helpers	2	old-exits	2	0	ok	true	effects	39	slots	17	41	73
+cache-authority	big	nil	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+cache-authority	big	nil	side	warm	2	6	helpers	2	old-exits	0	2	ok	true	effects	80	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	function	nil	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	function	nil	root	warm	2	6	helpers	2	old-exits	2	0	ok	true	effects	39	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	function	nil	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	function	nil	side	warm	2	6	helpers	2	old-exits	0	2	ok	true	effects	80	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	function	other	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	function	other	root	warm	2	6	helpers	2	old-exits	39	0	ok	true	effects	39	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	function	other	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	function	other	side	warm	2	6	helpers	2	old-exits	0	41	ok	true	effects	80	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	function	fenv	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	function	fenv	root	warm	2	6	helpers	2	old-exits	1	0	ok	true	effects	39	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	function	fenv	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	function	fenv	side	warm	2	6	helpers	2	old-exits	0	1	ok	true	effects	80	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	read	close	root	warm	0	0	helpers	0	old-exits	0	0	ok	false	effects	1	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	read	close	root	warm	2	6	helpers	2	old-exits	1	0	ok	false	effects	1	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	read	close	side	warm	0	0	helpers	0	old-exits	0	0	ok	false	effects	40	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	read	close	side	warm	2	6	helpers	2	old-exits	0	1	ok	false	effects	40	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	write	close	root	warm	0	0	helpers	0	old-exits	0	0	ok	false	effects	1	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	write	close	root	warm	2	6	helpers	2	old-exits	1	0	ok	false	effects	1	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	write	close	side	warm	0	0	helpers	0	old-exits	0	0	ok	false	effects	40	slots	39	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	write	close	side	warm	2	6	helpers	2	old-exits	0	1	ok	false	effects	40	slots	39	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	zero	nan	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	zero	nan	root	warm	3	5	helpers	0	old-exits	1	0	ok	true	effects	39	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	zero	nan	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	zero	nan	root	warm	2	6	helpers	2	old-exits	1	0	ok	true	effects	39	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	zero	nan	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	zero	nan	side	warm	3	5	helpers	0	old-exits	0	1	ok	true	effects	80	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	zero	nan	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	zero	nan	side	warm	2	6	helpers	2	old-exits	0	2	ok	true	effects	80	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	zero	pos-inf	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	zero	pos-inf	root	warm	3	5	helpers	0	old-exits	1	0	ok	true	effects	39	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	zero	pos-inf	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	zero	pos-inf	root	warm	2	6	helpers	2	old-exits	1	0	ok	true	effects	39	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	zero	pos-inf	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	zero	pos-inf	side	warm	3	5	helpers	0	old-exits	0	1	ok	true	effects	80	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	zero	pos-inf	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	zero	pos-inf	side	warm	2	6	helpers	2	old-exits	0	2	ok	true	effects	80	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	zero	neg-inf	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	zero	neg-inf	root	warm	3	5	helpers	0	old-exits	1	0	ok	true	effects	39	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	zero	neg-inf	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	zero	neg-inf	root	warm	2	6	helpers	2	old-exits	1	0	ok	true	effects	39	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	zero	neg-inf	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	zero	neg-inf	side	warm	3	5	helpers	0	old-exits	0	1	ok	true	effects	80	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	zero	neg-inf	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	zero	neg-inf	side	warm	2	6	helpers	2	old-exits	0	2	ok	true	effects	80	slots	17	41	73
+cache-resize	1	16383	true
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	read	resize-other	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+cache-resize	1	16383	true
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	read	resize-other	root	warm	3	5	helpers	0	old-exits	5	0	ok	true	effects	39	slots	17	41	73
+cache-resize	1	16383	true
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	read	resize-other	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	73
+cache-resize	1	16383	true
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	read	resize-other	root	warm	2	6	helpers	2	old-exits	39	0	ok	true	effects	39	slots	17	41	73
+cache-resize	1	16383	true
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	read	resize-other	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+cache-resize	1	16383	true
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	read	resize-other	side	warm	3	5	helpers	0	old-exits	0	6	ok	true	effects	80	slots	17	41	73
+cache-resize	1	16383	true
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	read	resize-other	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	17	41	73
+cache-resize	1	16383	true
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	read	resize-other	side	warm	2	6	helpers	2	old-exits	0	41	ok	true	effects	80	slots	17	41	73
+cache-resize	1	16383	true
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	write	resize-other	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	39
+cache-resize	1	16383	true
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	write	resize-other	root	warm	3	5	helpers	0	old-exits	5	0	ok	true	effects	39	slots	17	41	39
+cache-resize	1	16383	true
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	write	resize-other	root	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	39	slots	17	41	39
+cache-resize	1	16383	true
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	write	resize-other	root	warm	2	6	helpers	2	old-exits	39	0	ok	true	effects	39	slots	17	41	39
+cache-resize	1	16383	true
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	write	resize-other	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	39	41	180
+cache-resize	1	16383	true
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	write	resize-other	side	warm	3	5	helpers	0	old-exits	0	6	ok	true	effects	80	slots	39	41	180
+cache-resize	1	16383	true
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	write	resize-other	side	warm	0	0	helpers	0	old-exits	0	0	ok	true	effects	80	slots	39	41	180
+cache-resize	1	16383	true
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	write	resize-other	side	warm	2	6	helpers	2	old-exits	0	41	ok	true	effects	80	slots	39	41	180
+cache-authority	read	between-close	root	warm	2	6	helpers	2	old-exits	1	0	ok	false	effects	1	slots	17	41	73
+close-witness	1	1	1
+cache-authority	read	between-close	side	warm	2	6	helpers	2	old-exits	0	1	ok	false	effects	40	slots	17	41	73
+close-witness	1	1	1
+cache-authority	write	between-close	root	warm	2	6	helpers	2	old-exits	1	0	ok	false	effects	1	slots	17	41	73
+close-witness	1	1	1
+cache-authority	write	between-close	side	warm	2	6	helpers	2	old-exits	0	1	ok	false	effects	40	slots	39	41	73
+close-witness	1	1	1
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	read	between-close	root	warm	2	6	helpers	2	old-exits	1	0	ok	false	effects	1	slots	17	41	73
+close-witness	1	1	1
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	read	between-close	side	warm	2	6	helpers	2	old-exits	0	1	ok	false	effects	40	slots	17	41	73
+close-witness	1	1	1
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	write	between-close	root	warm	2	6	helpers	2	old-exits	1	0	ok	false	effects	1	slots	17	41	73
+close-witness	1	1	1
+gc-lifetime	after-warm	after-mutation	original-env-alive
+cache-authority	write	between-close	side	warm	2	6	helpers	2	old-exits	0	1	ok	false	effects	40	slots	39	41	73
+close-witness	1	1	1
+clib-recorder-roots mode=1 stage=1 status=4 injected=1 refused=0 hit=0 anchors=0
+clib-recorder-roots mode=2 stage=2 status=4 injected=1 refused=0 hit=0 anchors=0
+clib-recorder-roots mode=3 stage=3 status=4 injected=1 refused=0 hit=0 anchors=0
+clib-recorder-roots mode=refuse stage=3 status=0 injected=0 refused=1 hit=0 anchors=0
+clib-recorder-roots mode=hit stage=3 status=0 injected=0 refused=0 hit=1 anchors=0
+M7 namespace cache authority and lifecycle passed

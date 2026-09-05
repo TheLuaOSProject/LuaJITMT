@@ -1,0 +1,318 @@
+[
+  {
+    "case": "compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/t-auto-finalizer-controls-v3.c",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-finalizers-v3-fixture"
+    ],
+    "exit_code": 0,
+    "seconds": 0.163983559999906,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-finalizers-v3-compile.stdout",
+    "stderr": "candidate3-finalizers-v3-compile.stderr"
+  },
+  {
+    "case": "0-0-0-0",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-finalizers-v3-fixture",
+      "0",
+      "0",
+      "0",
+      "0",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.0074842239991994575,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-finalizers-v3-0-0-0-0.stdout",
+    "stderr": "candidate3-finalizers-v3-0-0-0-0.stderr"
+  },
+  {
+    "case": "0-0-0-1",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-finalizers-v3-fixture",
+      "0",
+      "0",
+      "0",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007643552002264187,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-finalizers-v3-0-0-0-1.stdout",
+    "stderr": "candidate3-finalizers-v3-0-0-0-1.stderr"
+  },
+  {
+    "case": "0-0-1-0",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-finalizers-v3-fixture",
+      "0",
+      "0",
+      "1",
+      "0",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007691587998124305,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-finalizers-v3-0-0-1-0.stdout",
+    "stderr": "candidate3-finalizers-v3-0-0-1-0.stderr"
+  },
+  {
+    "case": "0-0-1-1",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-finalizers-v3-fixture",
+      "0",
+      "0",
+      "1",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007447583004250191,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-finalizers-v3-0-0-1-1.stdout",
+    "stderr": "candidate3-finalizers-v3-0-0-1-1.stderr"
+  },
+  {
+    "case": "0-1-0-0",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-finalizers-v3-fixture",
+      "0",
+      "1",
+      "0",
+      "0",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007505514993681572,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-finalizers-v3-0-1-0-0.stdout",
+    "stderr": "candidate3-finalizers-v3-0-1-0-0.stderr"
+  },
+  {
+    "case": "0-1-0-1",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-finalizers-v3-fixture",
+      "0",
+      "1",
+      "0",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007527125999331474,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-finalizers-v3-0-1-0-1.stdout",
+    "stderr": "candidate3-finalizers-v3-0-1-0-1.stderr"
+  },
+  {
+    "case": "0-1-1-0",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-finalizers-v3-fixture",
+      "0",
+      "1",
+      "1",
+      "0",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.0074647000001277775,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-finalizers-v3-0-1-1-0.stdout",
+    "stderr": "candidate3-finalizers-v3-0-1-1-0.stderr"
+  },
+  {
+    "case": "0-1-1-1",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-finalizers-v3-fixture",
+      "0",
+      "1",
+      "1",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007615091999468859,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-finalizers-v3-0-1-1-1.stdout",
+    "stderr": "candidate3-finalizers-v3-0-1-1-1.stderr"
+  },
+  {
+    "case": "1-0-0-0",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-finalizers-v3-fixture",
+      "1",
+      "0",
+      "0",
+      "0",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007571207999717444,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-finalizers-v3-1-0-0-0.stdout",
+    "stderr": "candidate3-finalizers-v3-1-0-0-0.stderr"
+  },
+  {
+    "case": "1-0-0-1",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-finalizers-v3-fixture",
+      "1",
+      "0",
+      "0",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007598637996125035,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-finalizers-v3-1-0-0-1.stdout",
+    "stderr": "candidate3-finalizers-v3-1-0-0-1.stderr"
+  },
+  {
+    "case": "1-0-1-0",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-finalizers-v3-fixture",
+      "1",
+      "0",
+      "1",
+      "0",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007645138000953011,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-finalizers-v3-1-0-1-0.stdout",
+    "stderr": "candidate3-finalizers-v3-1-0-1-0.stderr"
+  },
+  {
+    "case": "1-0-1-1",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-finalizers-v3-fixture",
+      "1",
+      "0",
+      "1",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.00759755299804965,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-finalizers-v3-1-0-1-1.stdout",
+    "stderr": "candidate3-finalizers-v3-1-0-1-1.stderr"
+  },
+  {
+    "case": "1-1-0-0",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-finalizers-v3-fixture",
+      "1",
+      "1",
+      "0",
+      "0",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007590273002278991,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-finalizers-v3-1-1-0-0.stdout",
+    "stderr": "candidate3-finalizers-v3-1-1-0-0.stderr"
+  },
+  {
+    "case": "1-1-0-1",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-finalizers-v3-fixture",
+      "1",
+      "1",
+      "0",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007695827996940352,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-finalizers-v3-1-1-0-1.stdout",
+    "stderr": "candidate3-finalizers-v3-1-1-0-1.stderr"
+  },
+  {
+    "case": "1-1-1-0",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-finalizers-v3-fixture",
+      "1",
+      "1",
+      "1",
+      "0",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007559087003755849,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-finalizers-v3-1-1-1-0.stdout",
+    "stderr": "candidate3-finalizers-v3-1-1-1-0.stderr"
+  },
+  {
+    "case": "1-1-1-1",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-finalizers-v3-fixture",
+      "1",
+      "1",
+      "1",
+      "1",
+      "1"
+    ],
+    "exit_code": 0,
+    "seconds": 0.0077146819967310876,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-finalizers-v3-1-1-1-1.stdout",
+    "stderr": "candidate3-finalizers-v3-1-1-1-1.stderr"
+  }
+]

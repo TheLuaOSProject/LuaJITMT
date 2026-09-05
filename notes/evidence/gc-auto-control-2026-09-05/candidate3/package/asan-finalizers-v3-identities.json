@@ -1,0 +1,14 @@
+{
+  "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan-finalizers-v3-fixture": {
+    "sha256": "050b0e3f3f92695441b50e9dc66913dc5ae1448a3a2eaf833df6fe8eda63dd37",
+    "bytes": 19492024
+  },
+  "/tmp/lj-gc-auto-query-20260905-k7a7wved/t-auto-finalizer-controls-v3.c": {
+    "sha256": "79eab244e3947538ffbb4ea7ea003b8730410f26940d8b566a20fc5430bf6b37",
+    "bytes": 6913
+  },
+  "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan/src/libluajit.a": {
+    "sha256": "4e66f9d450ad2585fbcab6d90ec671fb5c4914bfca4db1a3d748a490e4441cd3",
+    "bytes": 26682190
+  }
+}

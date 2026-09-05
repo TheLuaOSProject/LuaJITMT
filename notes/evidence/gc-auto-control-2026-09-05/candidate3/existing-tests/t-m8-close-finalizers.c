@@ -1,0 +1,355 @@
+/*
+** M8 close-time finalizer drain coverage.
+*/
+
+#include <assert.h>
+#include <stdio.h>
+
+#include "lua.h"
+#include "lauxlib.h"
+#include "lualib.h"
+
+static int cdata_finalized;
+static int udata_finalized;
+static int alternating_cdata_finalized;
+static int alternating_udata_finalized;
+static int order_cdata_finalized[3];
+static int order_cdata_count;
+static int growth_triggered;
+static int growth_cdata_finalized;
+static int error_cdata_finalized;
+static int after_error_cdata_finalized;
+static int error_udata_finalized;
+static int after_error_udata_finalized;
+static int clear_suppressed_cdata_finalized;
+static int suppressed_cdata_finalized;
+static int nested_gc_cdata_finalized;
+static int nested_gc_udata_finalized;
+static int shutdown_spawn_cdata_finalized;
+static int shutdown_spawn_udata_finalized;
+
+static int close_udata_finalizer(lua_State *L);
+static int close_alternating_udata_finalizer(lua_State *L);
+static void push_close_udata(lua_State *L);
+static void push_alternating_udata(lua_State *L);
+static void push_close_udata_with_finalizer(lua_State *L, lua_CFunction fin);
+
+static void run_nested_collect(lua_State *L)
+{
+  lua_getglobal(L, "collectgarbage");
+  assert(lua_isfunction(L, -1));
+  lua_pushliteral(L, "collect");
+  assert(lua_pcall(L, 1, 0, 0) == LUA_OK);
+}
+
+#define ALTERNATING_CLOSE_CHAIN 6
+#define CLOSE_FINREG_GROWTH_BATCH 96
+
+static int close_cdata_finalizer(lua_State *L)
+{
+  cdata_finalized++;
+  if (cdata_finalized == 1) {
+    push_close_udata(L);
+    lua_getglobal(L, "m8_close_chain_cdata");
+    assert(lua_isfunction(L, -1));
+    assert(lua_pcall(L, 0, 0, 0) == LUA_OK);
+  }
+  return 0;
+}
+
+static int close_order_cdata_finalizer(lua_State *L, int id)
+{
+  (void)L;
+  assert(order_cdata_count < 3);
+  order_cdata_finalized[order_cdata_count++] = id;
+  return 0;
+}
+
+static int close_order_cdata_finalizer_1(lua_State *L)
+{
+  return close_order_cdata_finalizer(L, 1);
+}
+
+static int close_order_cdata_finalizer_2(lua_State *L)
+{
+  return close_order_cdata_finalizer(L, 2);
+}
+
+static int close_order_cdata_finalizer_3(lua_State *L)
+{
+  return close_order_cdata_finalizer(L, 3);
+}
+
+static int close_growth_trigger_finalizer(lua_State *L)
+{
+  growth_triggered++;
+  assert(growth_triggered == 1);
+  lua_getglobal(L, "m8_close_register_growth_cdata");
+  assert(lua_isfunction(L, -1));
+  lua_pushinteger(L, CLOSE_FINREG_GROWTH_BATCH);
+  assert(lua_pcall(L, 1, 0, 0) == LUA_OK);
+  return 0;
+}
+
+static int close_growth_cdata_finalizer(lua_State *L)
+{
+  (void)L;
+  growth_cdata_finalized++;
+  return 0;
+}
+
+static int close_error_cdata_finalizer(lua_State *L)
+{
+  error_cdata_finalized++;
+  lua_pushliteral(L, "close cdata finalizer error");
+  return lua_error(L);
+}
+
+static int close_after_error_cdata_finalizer(lua_State *L)
+{
+  (void)L;
+  after_error_cdata_finalized++;
+  return 0;
+}
+
+static int close_clear_suppressed_cdata_finalizer(lua_State *L)
+{
+  clear_suppressed_cdata_finalized++;
+  assert(clear_suppressed_cdata_finalized == 1);
+  lua_getglobal(L, "m8_close_clear_suppressed_cdata");
+  assert(lua_isfunction(L, -1));
+  assert(lua_pcall(L, 0, 0, 0) == LUA_OK);
+  return 0;
+}
+
+static int close_suppressed_cdata_finalizer(lua_State *L)
+{
+  (void)L;
+  suppressed_cdata_finalized++;
+  return 0;
+}
+
+static int close_nested_gc_cdata_finalizer(lua_State *L)
+{
+  nested_gc_cdata_finalized++;
+  assert(nested_gc_cdata_finalized == 1);
+  run_nested_collect(L);
+  return 0;
+}
+
+static void run_shutdown_spawn_probe(lua_State *L)
+{
+  lua_getglobal(L, "m8_close_probe_shutdown_spawn");
+  assert(lua_isfunction(L, -1));
+  assert(lua_pcall(L, 0, 0, 0) == LUA_OK);
+}
+
+static int close_shutdown_spawn_cdata_finalizer(lua_State *L)
+{
+  shutdown_spawn_cdata_finalized++;
+  assert(shutdown_spawn_cdata_finalized == 1);
+  run_shutdown_spawn_probe(L);
+  return 0;
+}
+
+static int close_udata_finalizer(lua_State *L)
+{
+  udata_finalized++;
+  if (udata_finalized == 1) {
+    lua_newuserdata(L, 1);
+    lua_newtable(L);
+    lua_pushcfunction(L, close_udata_finalizer);
+    lua_setfield(L, -2, "__gc");
+    lua_setmetatable(L, -2);
+    lua_pop(L, 1);
+  }
+  return 0;
+}
+
+static int close_error_udata_finalizer(lua_State *L)
+{
+  error_udata_finalized++;
+  lua_pushliteral(L, "close userdata finalizer error");
+  return lua_error(L);
+}
+
+static int close_after_error_udata_finalizer(lua_State *L)
+{
+  (void)L;
+  after_error_udata_finalized++;
+  return 0;
+}
+
+static int close_nested_gc_udata_finalizer(lua_State *L)
+{
+  nested_gc_udata_finalized++;
+  assert(nested_gc_udata_finalized == 1);
+  run_nested_collect(L);
+  return 0;
+}
+
+static int close_shutdown_spawn_udata_finalizer(lua_State *L)
+{
+  shutdown_spawn_udata_finalized++;
+  assert(shutdown_spawn_udata_finalized == 1);
+  run_shutdown_spawn_probe(L);
+  return 0;
+}
+
+static int close_alternating_cdata_finalizer(lua_State *L)
+{
+  alternating_cdata_finalized++;
+  if (alternating_cdata_finalized <= ALTERNATING_CLOSE_CHAIN)
+    push_alternating_udata(L);
+  return 0;
+}
+
+static int close_alternating_udata_finalizer(lua_State *L)
+{
+  alternating_udata_finalized++;
+  if (alternating_udata_finalized < ALTERNATING_CLOSE_CHAIN) {
+    lua_getglobal(L, "m8_close_chain_alternating_cdata");
+    assert(lua_isfunction(L, -1));
+    assert(lua_pcall(L, 0, 0, 0) == LUA_OK);
+  }
+  return 0;
+}
+
+static void push_close_udata(lua_State *L)
+{
+  push_close_udata_with_finalizer(L, close_udata_finalizer);
+}
+
+static void push_close_udata_with_finalizer(lua_State *L, lua_CFunction fin)
+{
+  lua_newuserdata(L, 1);
+  lua_newtable(L);
+  lua_pushcfunction(L, fin);
+  lua_setfield(L, -2, "__gc");
+  lua_setmetatable(L, -2);
+  lua_pop(L, 1);
+}
+
+static void push_alternating_udata(lua_State *L)
+{
+  lua_newuserdata(L, 1);
+  lua_newtable(L);
+  lua_pushcfunction(L, close_alternating_udata_finalizer);
+  lua_setfield(L, -2, "__gc");
+  lua_setmetatable(L, -2);
+  lua_pop(L, 1);
+}
+
+int main(void)
+{
+  lua_State *L = luaL_newstate();
+  assert(L != NULL);
+  luaL_openlibs(L);
+
+  lua_pushcfunction(L, close_cdata_finalizer);
+  lua_setglobal(L, "m8_close_cdata_finalizer");
+  lua_pushcfunction(L, close_alternating_cdata_finalizer);
+  lua_setglobal(L, "m8_close_alternating_cdata_finalizer");
+  lua_pushcfunction(L, close_order_cdata_finalizer_1);
+  lua_setglobal(L, "m8_close_order_cdata_finalizer_1");
+  lua_pushcfunction(L, close_order_cdata_finalizer_2);
+  lua_setglobal(L, "m8_close_order_cdata_finalizer_2");
+  lua_pushcfunction(L, close_order_cdata_finalizer_3);
+  lua_setglobal(L, "m8_close_order_cdata_finalizer_3");
+  lua_pushcfunction(L, close_growth_trigger_finalizer);
+  lua_setglobal(L, "m8_close_growth_trigger_finalizer");
+  lua_pushcfunction(L, close_growth_cdata_finalizer);
+  lua_setglobal(L, "m8_close_growth_cdata_finalizer");
+  lua_pushcfunction(L, close_error_cdata_finalizer);
+  lua_setglobal(L, "m8_close_error_cdata_finalizer");
+  lua_pushcfunction(L, close_after_error_cdata_finalizer);
+  lua_setglobal(L, "m8_close_after_error_cdata_finalizer");
+  lua_pushcfunction(L, close_clear_suppressed_cdata_finalizer);
+  lua_setglobal(L, "m8_close_clear_suppressed_cdata_finalizer");
+  lua_pushcfunction(L, close_suppressed_cdata_finalizer);
+  lua_setglobal(L, "m8_close_suppressed_cdata_finalizer");
+  lua_pushcfunction(L, close_nested_gc_cdata_finalizer);
+  lua_setglobal(L, "m8_close_nested_gc_cdata_finalizer");
+  lua_pushcfunction(L, close_shutdown_spawn_cdata_finalizer);
+  lua_setglobal(L, "m8_close_shutdown_spawn_cdata_finalizer");
+  assert(luaL_dostring(L,
+    "local ffi = require('ffi')\n"
+    "ffi.cdef[[\n"
+    "typedef struct { int x; } lj_m8_close_fin_t;\n"
+    "typedef struct { int x; } lj_m8_close_alt_fin_t;\n"
+    "typedef struct { int x; } lj_m8_close_order_fin_t;\n"
+    "typedef struct { int x; } lj_m8_close_growth_trigger_fin_t;\n"
+    "typedef struct { int x; } lj_m8_close_growth_fin_t;\n"
+    "typedef struct { int x; } lj_m8_close_error_fin_t;\n"
+    "typedef struct { int x; } lj_m8_close_clear_suppressed_fin_t;\n"
+    "typedef struct { int x; } lj_m8_close_suppressed_fin_t;\n"
+    "typedef struct { int x; } lj_m8_close_nested_gc_fin_t;\n"
+    "typedef struct { int x; } lj_m8_close_shutdown_spawn_fin_t;\n"
+    "]]\n"
+    "local keep = {}\n"
+    "function m8_close_probe_shutdown_spawn()\n"
+    "  local th = require('threading')\n"
+    "  local ok, err = pcall(function()\n"
+    "    th.spawn(function() return true end)\n"
+    "  end)\n"
+    "  assert(ok == false, 'close-time threading.spawn unexpectedly succeeded')\n"
+    "  assert(tostring(err):find('VM shutdown in progress', 1, true), tostring(err))\n"
+    "end\n"
+    "function m8_close_chain_cdata()\n"
+    "  ffi.gc(ffi.new('lj_m8_close_fin_t'), m8_close_cdata_finalizer)\n"
+    "end\n"
+    "function m8_close_chain_alternating_cdata()\n"
+    "  ffi.gc(ffi.new('lj_m8_close_alt_fin_t'), m8_close_alternating_cdata_finalizer)\n"
+    "end\n"
+    "function m8_close_register_growth_cdata(n)\n"
+    "  for i = 1, n do\n"
+    "    ffi.gc(ffi.new('lj_m8_close_growth_fin_t'), m8_close_growth_cdata_finalizer)\n"
+    "  end\n"
+    "end\n"
+    "function m8_close_clear_suppressed_cdata()\n"
+    "  ffi.gc(keep.suppressed, nil)\n"
+    "end\n"
+    "for i = 1, 3 do\n"
+    "  keep[i] = ffi.gc(ffi.new('lj_m8_close_fin_t'), m8_close_cdata_finalizer)\n"
+    "end\n"
+    "keep.order1 = ffi.gc(ffi.new('lj_m8_close_order_fin_t'), m8_close_order_cdata_finalizer_1)\n"
+    "keep.order2 = ffi.gc(ffi.new('lj_m8_close_order_fin_t'), m8_close_order_cdata_finalizer_2)\n"
+    "keep.order3 = ffi.gc(ffi.new('lj_m8_close_order_fin_t'), m8_close_order_cdata_finalizer_3)\n"
+    "keep.growth = ffi.gc(ffi.new('lj_m8_close_growth_trigger_fin_t'), m8_close_growth_trigger_finalizer)\n"
+    "keep.after_error = ffi.gc(ffi.new('lj_m8_close_error_fin_t'), m8_close_after_error_cdata_finalizer)\n"
+    "keep.error = ffi.gc(ffi.new('lj_m8_close_error_fin_t'), m8_close_error_cdata_finalizer)\n"
+    "keep.suppressed = ffi.gc(ffi.new('lj_m8_close_suppressed_fin_t'), m8_close_suppressed_cdata_finalizer)\n"
+    "keep.clear_suppressed = ffi.gc(ffi.new('lj_m8_close_clear_suppressed_fin_t'), m8_close_clear_suppressed_cdata_finalizer)\n"
+    "keep.nested_gc = ffi.gc(ffi.new('lj_m8_close_nested_gc_fin_t'), m8_close_nested_gc_cdata_finalizer)\n"
+    "keep.shutdown_spawn = ffi.gc(ffi.new('lj_m8_close_shutdown_spawn_fin_t'), m8_close_shutdown_spawn_cdata_finalizer)\n"
+    "m8_close_chain_alternating_cdata()\n") == LUA_OK);
+  push_close_udata(L);
+  push_close_udata_with_finalizer(L, close_after_error_udata_finalizer);
+  push_close_udata_with_finalizer(L, close_error_udata_finalizer);
+  push_close_udata_with_finalizer(L, close_nested_gc_udata_finalizer);
+  push_close_udata_with_finalizer(L, close_shutdown_spawn_udata_finalizer);
+
+  lua_close(L);
+  assert(cdata_finalized == 4);
+  assert(udata_finalized == 3);
+  assert(alternating_cdata_finalized == ALTERNATING_CLOSE_CHAIN);
+  assert(alternating_udata_finalized == ALTERNATING_CLOSE_CHAIN);
+  assert(order_cdata_count == 3);
+  assert(order_cdata_finalized[0] == 3);
+  assert(order_cdata_finalized[1] == 2);
+  assert(order_cdata_finalized[2] == 1);
+  assert(growth_triggered == 1);
+  assert(growth_cdata_finalized == CLOSE_FINREG_GROWTH_BATCH);
+  assert(error_cdata_finalized == 1);
+  assert(after_error_cdata_finalized == 1);
+  assert(error_udata_finalized == 1);
+  assert(after_error_udata_finalized == 1);
+  assert(clear_suppressed_cdata_finalized == 1);
+  assert(suppressed_cdata_finalized == 0);
+  assert(nested_gc_cdata_finalized == 1);
+  assert(nested_gc_udata_finalized == 1);
+  assert(shutdown_spawn_cdata_finalized == 1);
+  assert(shutdown_spawn_udata_finalized == 1);
+  printf("t-m8-close-finalizers OK: lua_close drains alternating cdata/userdata finalizers to fixed point\n");
+  return 0;
+}

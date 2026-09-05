@@ -1,0 +1,14 @@
+{
+  "t-finalizer-spawn-query-enabled.lua": {
+    "sha256": "cd678020fed1c825e064f3f3aed2f7e2695ed9f4d19615ca0e1cd3ab591ef97a",
+    "bytes": 2043
+  },
+  "asan/src/luajit": {
+    "sha256": "e5ae2312d7f90a1d5761e6d5f6d7c099052be26345379fe6a846288b2385c583",
+    "bytes": 19496360
+  },
+  "asan/src/libluajit.a": {
+    "sha256": "4e66f9d450ad2585fbcab6d90ec671fb5c4914bfca4db1a3d748a490e4441cd3",
+    "bytes": 26682190
+  }
+}

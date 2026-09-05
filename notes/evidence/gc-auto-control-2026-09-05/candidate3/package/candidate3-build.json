@@ -1,0 +1,37 @@
+{
+  "argv": [
+    "make",
+    "-C",
+    "src",
+    "-j4"
+  ],
+  "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3",
+  "exit_code": 0,
+  "seconds": 14.850411964005616,
+  "binaries": {
+    "luajit": {
+      "sha256": "a399c29f009c8deecc04de97cb0310205be2c9d1cc305e0a66c70eeb41757013",
+      "bytes": 1514736
+    },
+    "libluajit.a": {
+      "sha256": "abd9ede84ae1399adfd27c11a5079f69d5060a6fd45e7cc9f80cf01b7438eb97",
+      "bytes": 2357522
+    },
+    "libluajit.so": {
+      "sha256": "c999f2044a7745375c620d894452d3f983b354972f2e8444daf32488abf4d0c9",
+      "bytes": 1511160
+    },
+    "host/minilua": {
+      "sha256": "8ab7d5a14b0525e3759effc570de0f02965b5618600fbfe15499924a399f1538",
+      "bytes": 154760
+    },
+    "host/buildvm": {
+      "sha256": "2b9687278f97eb9dc0d7c38e5ab6b98ce2bbac635fa7be9672b3b62799e60901",
+      "bytes": 122336
+    },
+    "lj_str.o": {
+      "sha256": "b163f488d802afe43613dcf7477e38a175680b5888e251f91cd9cd21eade5b39",
+      "bytes": 26200
+    }
+  }
+}

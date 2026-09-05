@@ -1,0 +1,37 @@
+{
+  "argv": [
+    "make",
+    "-C",
+    "src",
+    "-j4"
+  ],
+  "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/control",
+  "exit_code": 0,
+  "seconds": 13.408032687999366,
+  "binaries": {
+    "luajit": {
+      "sha256": "10edabd882deae71c3156da70588e4ffc1f8b019c8084d994f28e1b0e97a8cfb",
+      "bytes": 1518832
+    },
+    "libluajit.a": {
+      "sha256": "c1696d313312ae5e60d871ab776052704959b614985cffc00ef21018fbe5e42c",
+      "bytes": 2358274
+    },
+    "libluajit.so": {
+      "sha256": "e819bbb7b53f3829673260b3aa687733803c284d4d5f19ed41faa06948f4f16c",
+      "bytes": 1511160
+    },
+    "host/minilua": {
+      "sha256": "8ab7d5a14b0525e3759effc570de0f02965b5618600fbfe15499924a399f1538",
+      "bytes": 154760
+    },
+    "host/buildvm": {
+      "sha256": "53eecca5b7b8ccc876ac991c53740c17fa88fc56081542edeca859a499eb2529",
+      "bytes": 122336
+    },
+    "lj_str.o": {
+      "sha256": "b163f488d802afe43613dcf7477e38a175680b5888e251f91cd9cd21eade5b39",
+      "bytes": 26200
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "argv": [
+    "make",
+    "-C",
+    "src",
+    "-j4",
+    "BUILDMODE=static",
+    "CC=clang",
+    "HOST_CC=clang",
+    "CCOPT=-O1",
+    "CCDEBUG=-g",
+    "XCFLAGS=-DLUA_USE_ASSERT -DLUA_USE_APICHECK",
+    "TARGET_CFLAGS=-fsanitize=address -fno-omit-frame-pointer",
+    "TARGET_LDFLAGS=-fsanitize=address",
+    "TARGET_STRIP=:"
+  ],
+  "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved/asan",
+  "exit_code": 0,
+  "seconds": 11.789293929999985,
+  "binaries": {
+    "luajit": {
+      "sha256": "e5ae2312d7f90a1d5761e6d5f6d7c099052be26345379fe6a846288b2385c583",
+      "bytes": 19496360
+    },
+    "libluajit.a": {
+      "sha256": "4e66f9d450ad2585fbcab6d90ec671fb5c4914bfca4db1a3d748a490e4441cd3",
+      "bytes": 26682190
+    },
+    "host/minilua": {
+      "sha256": "2bd82d480e50803c9a6be5317b3d2e3bebb3a87ac6e0d4ec50b9fe6252dcfc6f",
+      "bytes": 550912
+    },
+    "host/buildvm": {
+      "sha256": "db3cd1d5f010eb1ab6781921246b1890999d70d25a3f882649b39bf9cb78a24b",
+      "bytes": 247216
+    },
+    "lj_str.o": {
+      "sha256": "18bce61d24e9b309c4a19a11351e162ef8994a37dab85e06476e2d22a2ae0515",
+      "bytes": 381656
+    }
+  }
+}

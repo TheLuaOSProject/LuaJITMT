@@ -1,0 +1,169 @@
+[
+  {
+    "name": "candidate3-boundary-overlaps-t-stop-first-attach-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/t-stop-first-attach.c",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_vm_cpcall",
+      "-o",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-boundary-overlaps-t-stop-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.16398770399973728,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-boundary-overlaps-t-stop-first-attach-compile.stdout",
+    "stderr": "candidate3-boundary-overlaps-t-stop-first-attach-compile.stderr"
+  },
+  {
+    "name": "candidate3-boundary-overlaps-t-stop-first-attach-run",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-boundary-overlaps-t-stop-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.015536274993792176,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-boundary-overlaps-t-stop-first-attach-run.stdout",
+    "stderr": "candidate3-boundary-overlaps-t-stop-first-attach-run.stderr"
+  },
+  {
+    "name": "candidate3-boundary-overlaps-t-stop-first-attach-restart-v2-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/t-stop-first-attach-restart-v2.c",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_vm_cpcall",
+      "-o",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-boundary-overlaps-t-stop-first-attach-restart-v2"
+    ],
+    "exit_code": 0,
+    "seconds": 0.16411480199894868,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-boundary-overlaps-t-stop-first-attach-restart-v2-compile.stdout",
+    "stderr": "candidate3-boundary-overlaps-t-stop-first-attach-restart-v2-compile.stderr"
+  },
+  {
+    "name": "candidate3-boundary-overlaps-t-stop-first-attach-restart-v2-run",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-boundary-overlaps-t-stop-first-attach-restart-v2"
+    ],
+    "exit_code": 0,
+    "seconds": 0.031837000999075826,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-boundary-overlaps-t-stop-first-attach-restart-v2-run.stdout",
+    "stderr": "candidate3-boundary-overlaps-t-stop-first-attach-restart-v2-run.stderr"
+  },
+  {
+    "name": "candidate3-boundary-overlaps-t-auto-restart-numeric-max-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/t-auto-restart-numeric-max.c",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-boundary-overlaps-t-auto-restart-numeric-max"
+    ],
+    "exit_code": 0,
+    "seconds": 0.11399142599839251,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-boundary-overlaps-t-auto-restart-numeric-max-compile.stdout",
+    "stderr": "candidate3-boundary-overlaps-t-auto-restart-numeric-max-compile.stderr"
+  },
+  {
+    "name": "candidate3-boundary-overlaps-t-auto-restart-numeric-max-run",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-boundary-overlaps-t-auto-restart-numeric-max"
+    ],
+    "exit_code": 0,
+    "seconds": 0.015600753999024164,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-boundary-overlaps-t-auto-restart-numeric-max-run.stdout",
+    "stderr": "candidate3-boundary-overlaps-t-auto-restart-numeric-max-run.stderr"
+  },
+  {
+    "name": "candidate3-boundary-overlaps-t-restart-first-attach-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/t-restart-first-attach.c",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_vm_cpcall",
+      "-o",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-boundary-overlaps-t-restart-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.16406938200088916,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-boundary-overlaps-t-restart-first-attach-compile.stdout",
+    "stderr": "candidate3-boundary-overlaps-t-restart-first-attach-compile.stderr"
+  },
+  {
+    "name": "candidate3-boundary-overlaps-t-restart-first-attach-run",
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3-boundary-overlaps-t-restart-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.03183031300432049,
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/candidate3/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "candidate3-boundary-overlaps-t-restart-first-attach-run.stdout",
+    "stderr": "candidate3-boundary-overlaps-t-restart-first-attach-run.stderr"
+  }
+]

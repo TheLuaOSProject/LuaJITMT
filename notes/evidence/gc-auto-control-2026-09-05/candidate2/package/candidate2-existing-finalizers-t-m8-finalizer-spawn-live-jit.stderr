@@ -1,0 +1,6 @@
+/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/luajit: ...-qs673ryl/candidate2/tests/t-m8-finalizer-spawn-live.lua:33: userdata full collect: finalizer-spawned worker lost logical GC state
+stack traceback:
+	[C]: in function 'assert'
+	...-qs673ryl/candidate2/tests/t-m8-finalizer-spawn-live.lua:33: in function 'run_spawn_live'
+	...-qs673ryl/candidate2/tests/t-m8-finalizer-spawn-live.lua:59: in main chunk
+	[C]: at 0x5639c9ba7100

@@ -1,0 +1,14 @@
+{
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan-finalizers-fixture": {
+    "sha256": "166b0c83a932b63e70f35add2b6e301d82a149c195c2db05b1b2af4dbc288d53",
+    "bytes": 19495704
+  },
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-auto-finalizer-controls.c": {
+    "sha256": "7744314de98809cac623d91c20dc88ee9916e655d4c6abe507f7eb61749010ab",
+    "bytes": 6842
+  },
+  "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan/src/libluajit.a": {
+    "sha256": "35050687976cef2d13026bf68abf38130af00cbad22709079d12ca1fa2fdbe7c",
+    "bytes": 26682454
+  }
+}

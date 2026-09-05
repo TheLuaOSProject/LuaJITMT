@@ -1,0 +1,42 @@
+{
+  "argv": [
+    "make",
+    "-C",
+    "src",
+    "-j4",
+    "BUILDMODE=static",
+    "CC=clang",
+    "HOST_CC=clang",
+    "CCOPT=-O1",
+    "CCDEBUG=-g",
+    "XCFLAGS=-DLUA_USE_ASSERT -DLUA_USE_APICHECK",
+    "TARGET_CFLAGS=-fsanitize=address -fno-omit-frame-pointer",
+    "TARGET_LDFLAGS=-fsanitize=address",
+    "TARGET_STRIP=:"
+  ],
+  "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl/asan",
+  "exit_code": 0,
+  "seconds": 12.94397218600352,
+  "binaries": {
+    "luajit": {
+      "sha256": "98d56481fe9870bb76fdcb2da83c0ab3bbdff05854fe5ce5156c40a8752df3c7",
+      "bytes": 19496336
+    },
+    "libluajit.a": {
+      "sha256": "35050687976cef2d13026bf68abf38130af00cbad22709079d12ca1fa2fdbe7c",
+      "bytes": 26682454
+    },
+    "host/minilua": {
+      "sha256": "ef19e53fe64c1b2f4a172b7ce456fb3ceb39e21928e05d82a9a8ed43289e24bd",
+      "bytes": 550912
+    },
+    "host/buildvm": {
+      "sha256": "4e1dbbb009d8190dc5869c4bd838b7c7a80e8be0582202fd60690106decdf5cd",
+      "bytes": 247224
+    },
+    "lj_str.o": {
+      "sha256": "31451a65b0198af8b1c6349d870d7bd13662d2ff7db3b688560f614bea4d5764",
+      "bytes": 381664
+    }
+  }
+}

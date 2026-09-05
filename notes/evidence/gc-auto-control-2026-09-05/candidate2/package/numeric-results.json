@@ -1,0 +1,80 @@
+[
+  {
+    "name": "candidate-numeric-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate/src",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-auto-restart-numeric-max.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate-numeric-max"
+    ],
+    "exit_code": 0,
+    "seconds": 0.11380830199777847,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate/src/?.lua;;",
+    "stdout": "candidate-numeric-compile.stdout",
+    "stderr": "candidate-numeric-compile.stderr"
+  },
+  {
+    "name": "candidate-numeric-run",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate-numeric-max"
+    ],
+    "exit_code": 45,
+    "seconds": 0.01554829200176755,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate/src/?.lua;;",
+    "stdout": "candidate-numeric-run.stdout",
+    "stderr": "candidate-numeric-run.stderr"
+  },
+  {
+    "name": "candidate2-numeric-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/t-auto-restart-numeric-max.c",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-numeric-max"
+    ],
+    "exit_code": 0,
+    "seconds": 0.11386163099814439,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "stdout": "candidate2-numeric-compile.stdout",
+    "stderr": "candidate2-numeric-compile.stderr"
+  },
+  {
+    "name": "candidate2-numeric-run",
+    "argv": [
+      "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2-numeric-max"
+    ],
+    "exit_code": 0,
+    "seconds": 0.015639288001693785,
+    "cwd": "/tmp/lj-gc-auto-control-20260905-qs673ryl",
+    "LUA_PATH": "/tmp/lj-gc-auto-control-20260905-qs673ryl/candidate2/src/?.lua;;",
+    "stdout": "candidate2-numeric-run.stdout",
+    "stderr": "candidate2-numeric-run.stderr"
+  }
+]

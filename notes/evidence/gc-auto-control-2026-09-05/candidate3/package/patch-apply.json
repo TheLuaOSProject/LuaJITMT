@@ -1,0 +1,15 @@
+{
+  "argv": [
+    "patch",
+    "-p1",
+    "--batch",
+    "--fuzz=0",
+    "-i",
+    "/tmp/lj-gc-auto-query-20260905-k7a7wved/automatic-control-candidate3-full.patch"
+  ],
+  "cwd": "/tmp/lj-gc-query-patch-verify-urs2gk79",
+  "exit_code": 0,
+  "matched_source_files": 6,
+  "stdout": "patch-apply.stdout",
+  "stderr": "patch-apply.stderr"
+}

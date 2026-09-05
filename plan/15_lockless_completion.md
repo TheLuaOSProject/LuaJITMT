@@ -1,7 +1,7 @@
 # Lockless completion plan
 
 Reviewed: 2026-09-04, starting at `a649f737`.
-Updated: 2026-09-05 after C-library cache/lifecycle guards and GC admission review.
+Updated: 2026-09-05 after C-library cache/lifecycle guards and GC control repair.
 
 This is the operative continuation of the original plan. It preserves the
 requested end state: one shared Lua heap, safe ordinary racy Lua programs,
@@ -79,7 +79,8 @@ are verified reasons the full goal is still open:
 | --- | --- | --- |
 | Table resize | Structural owner plus source `FORWARD` can strand the only value in an owner's local variable; descriptor migration is dormant | Durable exact payloads, helpable migration/publication, GC and native grace |
 | Descriptor installation | Separate capacity-shadow store can corrupt a winning descriptor before the losing ownership CAS | Publish control and capacity in one atomic pair; deterministic competing-generation test |
-| Automatic GC | Live-peer IDLE requests can remain unconsumed; first attachment can misread completed STOP or undo RESTART; worker-enabled cycles miss SWEEP completion bounds | Separate public control from derived thresholds, preserve finalizer suppression, consume durable requests at safe boundaries, then complete asynchronous phase ownership |
+| Automatic GC | Durable IDLE requests now enter at safe boundaries; public control survives delayed attachment stores; worker-enabled cycles still miss SWEEP completion bounds | Resolve worker completion and unfinished-owner deferral, then complete asynchronous phase ownership; retain independent finalizer suppression |
+| Closure construction | A test-only nested full collect repeatedly revisits a real unfinished closure whose constructor cannot resume until that call returns | Return deferred with exact allocation/retry authority preserved, then prove completion after publication/cancellation and useful progress for other owners |
 | Native acknowledgement | Completed exact owner-root actions can release through the unique remote executor; local/duplicate and broader actions still hold | Replace mutable-root borrowing and retain exact completion authority; local native-depth polls can overlap a remote pre-claim scan |
 | First MT attachment | Mode-0 traces omitted the TG request poll and real attachment waited for natural exit | Every XPOLL now observes the TG request; the larger attachment/flush ownership dependencies still require asynchronous completion |
 | Worker scheduling | MARK-close ownership loss can be reported as progress and cause repeated drain-loop execution | Return/defer without false progress or peer sleep; preserve durable retry |
@@ -322,6 +323,15 @@ controls and post-fix completion tests:
   different entrance. Worker-enabled SWEEP completion remains separately open.
   All incomplete cases and counterexamples are preserved. See
   `notes/gc-string-retention-baseline-2026-09-05.md`.
+- Public automatic-GC control now uses independent STOPPED and finalizer-pause
+  bits. First/last attachment pacing stores cannot reverse STOP/RESTART, and
+  safe VM/C boundaries consume durable IDLE requests. Public ISRUNNING reports
+  the explicit setting while internal admission retains finalizer suppression.
+  Candidate2's query regression is preserved; the final source passes 608
+  functional processes including 37 new canonical cases. Another 27 worker-two
+  processes still miss SWEEP completion. Seventy matched cost processes show
+  no measured increase in selected allocation/arithmetic/FFI cases. See
+  `notes/gc-auto-control-2026-09-05.md`.
 - `1bce0fa5`: promote exhausted inline table dirty authority into pre-reserved
   persistent wide proof, retaining common stamp/token geometry. Small mappings
   use a dense sidecar plane and Huge mappings use checked tail reservation.
@@ -531,14 +541,16 @@ Do not remove consumed-ack waits until the scanner's stack access has a safe
 replacement. Then remove global trace exclusion from marking using the exact
 native/trace frame evidence, and distribute marking work among real workers.
 
-Before expanding automatic admission, repair logical control publication across
-first/last attachment and public STOP/restart. The initial admission prototype
-starts MARK after a completed STOP in a real first-child overlap. An independent
-STOP byte prevents that regression, but a delayed threshold MOV still loses a
-completed RESTART on both baseline and prototype. Temporary finalizer suppression
-must remain explicit before thresholds lose their control authority. Preserve
-the frozen negative schedules and the separate worker/safety observations in
-`notes/gc-auto-control-review-2026-09-05.md`; neither prototype is integrated.
+The integrated automatic-control repair separates public STOP/RESTART from
+derived first/last attachment thresholds and retains an independent finalizer
+pause. Safe VM/C boundaries now consume pending IDLE requests. The earlier
+unsafe admission and STOP-veto prototypes, lost-RESTART schedules, and the
+later rejected finalizer query remain immutable evidence. Public ISRUNNING
+now reports the explicit setting consistently across actors; internal automatic
+admission still observes the pause. See `notes/gc-auto-control-2026-09-05.md`.
+Next resolve worker-two SWEEP completion and unfinished-owner deferral while
+preserving eventual reclamation and useful progress for other owners, then
+replace the synchronous driver and borrowed root/action completion protocols.
 The scheduler SSB-empty assertion now reproduces on all three frozen variants:
 the fixture ignored a refused owner flush. It now establishes publication
 before the unchanged worker-drain checks; 60 corrected runs and six negative

@@ -1,0 +1,146 @@
+[
+  {
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/tests/t-m8-finalizer-state.c",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-existing-finalizers-t-m8-finalizer-state"
+    ],
+    "name": "t-m8-finalizer-state-compile",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.06397088600351708,
+    "stdout": "strict-existing-finalizers-t-m8-finalizer-state-compile.stdout",
+    "stderr": "strict-existing-finalizers-t-m8-finalizer-state-compile.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-existing-finalizers-t-m8-finalizer-state"
+    ],
+    "name": "t-m8-finalizer-state",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.00745654300408205,
+    "stdout": "strict-existing-finalizers-t-m8-finalizer-state.stdout",
+    "stderr": "strict-existing-finalizers-t-m8-finalizer-state.stderr"
+  },
+  {
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/tests/t-m8-close-finalizers.c",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-existing-finalizers-t-m8-close-finalizers"
+    ],
+    "name": "t-m8-close-finalizers-compile",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.11400998799945228,
+    "stdout": "strict-existing-finalizers-t-m8-close-finalizers-compile.stdout",
+    "stderr": "strict-existing-finalizers-t-m8-close-finalizers-compile.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict-existing-finalizers-t-m8-close-finalizers"
+    ],
+    "name": "t-m8-close-finalizers",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.007588934997329488,
+    "stdout": "strict-existing-finalizers-t-m8-close-finalizers.stdout",
+    "stderr": "strict-existing-finalizers-t-m8-close-finalizers.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/tests/t-ffi-gc-finreg.lua"
+    ],
+    "name": "t-ffi-gc-finreg-joff",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.21397825500025647,
+    "stdout": "strict-existing-finalizers-t-ffi-gc-finreg-joff.stdout",
+    "stderr": "strict-existing-finalizers-t-ffi-gc-finreg-joff.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/luajit",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/tests/t-ffi-gc-finreg.lua"
+    ],
+    "name": "t-ffi-gc-finreg-jit",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.21439155000553,
+    "stdout": "strict-existing-finalizers-t-ffi-gc-finreg-jit.stdout",
+    "stderr": "strict-existing-finalizers-t-ffi-gc-finreg-jit.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/tests/t-m8-finalizer-spawn-live.lua"
+    ],
+    "name": "t-m8-finalizer-spawn-live-joff",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.015664322003431153,
+    "stdout": "strict-existing-finalizers-t-m8-finalizer-spawn-live-joff.stdout",
+    "stderr": "strict-existing-finalizers-t-m8-finalizer-spawn-live-joff.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/luajit",
+      "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/tests/t-m8-finalizer-spawn-live.lua"
+    ],
+    "name": "t-m8-finalizer-spawn-live-jit",
+    "cwd": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict",
+    "LUA_PATH": "/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/src/?.lua;/tmp/lj-gc-auto-query-20260905-k7a7wved/strict/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.015630898997187614,
+    "stdout": "strict-existing-finalizers-t-m8-finalizer-spawn-live-jit.stdout",
+    "stderr": "strict-existing-finalizers-t-m8-finalizer-spawn-live-jit.stderr"
+  }
+]

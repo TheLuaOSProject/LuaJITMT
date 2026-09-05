@@ -1,0 +1,22 @@
+{
+  "control-restart-first-attach": {
+    "sha256": "b83bb0a2a66c71be6e0669219db69d2ff4ea841dedcd2ac43a0d2bc6f079b0a6",
+    "bytes": 1740832
+  },
+  "control/src/libluajit.a": {
+    "sha256": "c1696d313312ae5e60d871ab776052704959b614985cffc00ef21018fbe5e42c",
+    "bytes": 2358274
+  },
+  "candidate-restart-first-attach": {
+    "sha256": "3858727c4c6411bbcc57f015205f064641d62c1eb2c09bd154e78580d668c180",
+    "bytes": 1736688
+  },
+  "candidate/src/libluajit.a": {
+    "sha256": "6e4158b5009b2ac19e58be279d0724746d2d2a915d8ce4228426ce6736ec2558",
+    "bytes": 2357554
+  },
+  "t-restart-first-attach.c": {
+    "sha256": "f5f1fad1d435d828e92728726c7157a534c9b664fa4a4f576b075392444632d9",
+    "bytes": 6967
+  }
+}

@@ -1,0 +1,1 @@
+t-m8-close-finalizers OK: lua_close drains alternating cdata/userdata finalizers to fixed point

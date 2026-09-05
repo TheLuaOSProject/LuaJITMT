@@ -1,0 +1,71 @@
+{
+  "root": "/tmp/lj-gc-auto-query-proof-20260905-a8tkbct0",
+  "artifacts": [
+    {
+      "relative_path": "automatic-control-candidate3-full.patch",
+      "sha256": "5f8a22b6bc1ae8956f63844cc0ad8bd63b093db98070078eeb391ee5e48ed9a1",
+      "bytes": 8184,
+      "storage": "text"
+    },
+    {
+      "relative_path": "automatic-query-candidate3.patch",
+      "sha256": "c82c6a22f327b6259dd877390fda8f771463a7d3278df84121e6c7640f02df5e",
+      "bytes": 799,
+      "storage": "text"
+    },
+    {
+      "relative_path": "candidate3-source.json",
+      "sha256": "9d48b5671c9a44b78a8f7b4b83ec5cbe971d35696c2863be107be5a1dad1cd03",
+      "bytes": 914,
+      "storage": "text"
+    },
+    {
+      "relative_path": "review.md",
+      "sha256": "2deb4c50ac696f607213fb89210fe3eff239bf9261f4750912d168a547f11385",
+      "bytes": 4816,
+      "storage": "text"
+    },
+    {
+      "relative_path": "src/lj_api.c",
+      "sha256": "4e3a0d46077684381ff568667793c0fc252d5aaa7e0b4301a606fb3e67292fdd",
+      "bytes": 89655,
+      "storage": "text"
+    },
+    {
+      "relative_path": "src/lj_gc.c",
+      "sha256": "2b70a2e1add35cca9aef3fd2c20b3bc6346d9ac77d80faaffe7fa60c5086810d",
+      "bytes": 195005,
+      "storage": "text"
+    },
+    {
+      "relative_path": "src/lj_gc.h",
+      "sha256": "56b9e71567ffca558f06be0a844da3389faca8a8ede1da1d3cf0a614e7beddf6",
+      "bytes": 23816,
+      "storage": "text"
+    },
+    {
+      "relative_path": "src/lj_gc2.c",
+      "sha256": "6d96637a8a676afcd4208c08397d7fe79a29122bd05b02ca7d8889fa4dc79218",
+      "bytes": 767707,
+      "storage": "text"
+    },
+    {
+      "relative_path": "src/lj_obj.h",
+      "sha256": "a8962fcc16e961ad29275cffc993ff368c229dc435f5794babbbacd8214557bc",
+      "bytes": 220849,
+      "storage": "text"
+    },
+    {
+      "relative_path": "src/vm_x64.dasc",
+      "sha256": "1ad1cd789886fb72d7c2a0befa58d33996f1cdf95cdfb40ea321d764d22ccac7",
+      "bytes": 192890,
+      "storage": "text"
+    },
+    {
+      "relative_path": "verification.json",
+      "sha256": "76ec88cb24ce974b13d1c2a420cfe72b799e6c5a29bba7de57a79d5b02a2310b",
+      "bytes": 1909,
+      "storage": "text"
+    }
+  ]
+}
