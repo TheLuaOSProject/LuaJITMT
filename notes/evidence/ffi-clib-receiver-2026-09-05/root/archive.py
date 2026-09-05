@@ -23,7 +23,7 @@ def add(p, rel, expected=None, binary=False):
 manifest = json.loads((owner / 'artifact-manifest.json').read_text())
 for e in manifest['artifacts']:
     add(pathlib.Path(e['source']), pathlib.Path('isolated') / e['relative_path'],
-        e['sha256'], e['storage'] == 'hash_only')
+        e['sha256'], e['storage'] != 'text')
 add(owner / 'artifact-manifest.json', pathlib.Path('isolated/artifact-manifest.json'))
 
 source_manifest = json.loads((pkg / 'runtime-input-identity.json').read_text())
@@ -54,6 +54,6 @@ for p in sorted(pkg.iterdir()):
 
 out = {'base': validation['base'], 'artifacts': entries,
        'text_count': sum(e['storage'] == 'text' for e in entries),
-       'hash_only_count': sum(e['storage'] == 'hash_only' for e in entries)}
+       'hash_only_count': sum(e['storage'] != 'text' for e in entries)}
 (dest / 'artifact-manifest.json').write_text(json.dumps(out, indent=2) + '\n')
 print(json.dumps({k:v for k,v in out.items() if k != 'artifacts'}))

@@ -153,70 +153,70 @@
       "relative_path": "isolated/namespace-asan-11.so",
       "sha256": "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
       "bytes": 15088,
-      "storage": "text"
+      "storage": "hash_only"
     },
     {
       "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-asan-29.so",
       "relative_path": "isolated/namespace-asan-29.so",
       "sha256": "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827",
       "bytes": 15088,
-      "storage": "text"
+      "storage": "hash_only"
     },
     {
       "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-11.so",
       "relative_path": "isolated/namespace-baseline-11.so",
       "sha256": "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
       "bytes": 15088,
-      "storage": "text"
+      "storage": "hash_only"
     },
     {
       "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-baseline-29.so",
       "relative_path": "isolated/namespace-baseline-29.so",
       "sha256": "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827",
       "bytes": 15088,
-      "storage": "text"
+      "storage": "hash_only"
     },
     {
       "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-11.so",
       "relative_path": "isolated/namespace-candidate-11.so",
       "sha256": "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
       "bytes": 15088,
-      "storage": "text"
+      "storage": "hash_only"
     },
     {
       "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-candidate-29.so",
       "relative_path": "isolated/namespace-candidate-29.so",
       "sha256": "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827",
       "bytes": 15088,
-      "storage": "text"
+      "storage": "hash_only"
     },
     {
       "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-method-only-11.so",
       "relative_path": "isolated/namespace-method-only-11.so",
       "sha256": "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
       "bytes": 15088,
-      "storage": "text"
+      "storage": "hash_only"
     },
     {
       "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-method-only-29.so",
       "relative_path": "isolated/namespace-method-only-29.so",
       "sha256": "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827",
       "bytes": 15088,
-      "storage": "text"
+      "storage": "hash_only"
     },
     {
       "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-strict-11.so",
       "relative_path": "isolated/namespace-strict-11.so",
       "sha256": "1652a5d6e2492f661f62b37bbb97382608f1987e38cd2856d2f5ff67ba8d4c0d",
       "bytes": 15088,
-      "storage": "text"
+      "storage": "hash_only"
     },
     {
       "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-strict-29.so",
       "relative_path": "isolated/namespace-strict-29.so",
       "sha256": "b0e9f5d7ad008440a0b1384724c61d3a1c8485ce41b05bc6a8d22cf900b3a827",
       "bytes": 15088,
-      "storage": "text"
+      "storage": "hash_only"
     },
     {
       "source": "/tmp/lj-special-udata-independent-20260905-75jums60/namespace-symbol-lib.c",
@@ -333,8 +333,8 @@
     {
       "source": "/tmp/lj-clib-receiver-combined-20260905-6zudl4k6/archive.py",
       "relative_path": "root/archive.py",
-      "sha256": "c63468380d469a2d6d9e08fa951f6c81f27428d848fa8c7c98a0a931c0b75056",
-      "bytes": 2919,
+      "sha256": "017bbc6717b2a37c2c449579b1d67270042e1b2227ea653420ed2e9b7f84bbb6",
+      "bytes": 2909,
       "storage": "text"
     },
     {
@@ -583,6 +583,7 @@
       "storage": "text"
     }
   ],
-  "text_count": 65,
-  "hash_only_count": 18
+  "text_count": 55,
+  "hash_only_count": 28,
+  "archive_correction": "The owner manifest spells hash-only storage sha256-only. The first archive script misclassified ten ELF fixture libraries as text; keep their exact hashes and source/build instructions and remove the redundant copied binaries."
 }
