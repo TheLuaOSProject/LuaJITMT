@@ -1,0 +1,12 @@
+{
+  "-jon": {
+    "complete": true,
+    "geometric_mean_fork_over_stock": 1.425195179473632,
+    "reported_fork_rows": 15
+  },
+  "-joff": {
+    "complete": false,
+    "geometric_mean_fork_over_stock": null,
+    "reported_fork_rows": 6
+  }
+}

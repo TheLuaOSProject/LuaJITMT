@@ -1,0 +1,398 @@
+--- a/src/lj_gc2.c
++++ b/src/lj_gc2.c
+@@ -307,0 +308,13 @@
++static LJGC2TableCoalesceTestHook gc2_table_coalesce_test_hook;
++
++void lj_gc2_test_table_coalesce_hook(LJGC2TableCoalesceTestHook hook)
++{
++  gc2_table_coalesce_test_hook = hook;
++}
++
++static void gc2_table_coalesce_test_at(global_State *g, GCtab *t,
++				     uint32_t stage)
++{
++  if (gc2_table_coalesce_test_hook)
++    gc2_table_coalesce_test_hook(g, t, stage);
++}
+@@ -725,0 +739 @@
++#define gc2_table_coalesce_test_at(g, t, stage) ((void)0)
+@@ -1300,0 +1315,2 @@
++static LJ_AINLINE int gc2_table_scan_coalescible(global_State *g, GCtab *t);
++static LJ_AINLINE void gc2_table_dirty_bump(global_State *g, GCtab *t);
+@@ -1351,0 +1368,6 @@
++static int gc2_markobj_preserve_status_impl(global_State *g, GCobj *o,
++					    void **basep, uint32_t *gctp,
++					    int *traversablep,
++					    uint32_t expected_gct,
++					    GC2MarkScope *holdp,
++					    int *retryp);
+@@ -1416 +1438,4 @@
+-static int gc2_publish_mutator_nodrain(global_State *g, GCobj *o);
++static int gc2_publish_semantic_scoped(global_State *g, GCobj *o,
++				       uint32_t gct,
++				       const GC2MarkScope *scope);
++static int gc2_publish_unresolved(global_State *g, GCobj *o);
+@@ -7395,0 +7421 @@
++  GC2MarkScope scope;
+@@ -7412 +7438,2 @@
+-  status = gc2_markobj_preserve_status(g, o, NULL, &gct, &traversable);
++  status = gc2_markobj_preserve_status_impl(
++    g, o, NULL, &gct, &traversable, 0, &scope, NULL);
+@@ -7418,2 +7445,3 @@
+-      (void)gc2_publish_mutator(g, o);
+-    }
++      (void)gc2_publish_semantic_scoped(g, o, gct, &scope);
++    }
++    gc2_mark_scope_leave(&scope);
+@@ -7423,0 +7452 @@
++  gc2_mark_scope_leave(&scope);
+@@ -11418 +11447 @@
+-	    (void)gc2_publish_mutator_scoped(g, o, scope);
++	    (void)gc2_publish_semantic_scoped(g, o, expected_gct, scope);
+@@ -11430 +11459 @@
+-	  (void)gc2_publish_mutator_scoped(g, o, scope);
++	  (void)gc2_publish_semantic_scoped(g, o, expected_gct, scope);
+@@ -14530,3 +14559,32 @@
+-static int gc2_publish_mutator_nodrain(global_State *g, GCobj *o)
+-{
+-  return gc2_publish_mutator_(g, o, NULL, 0);
++/* Only an admitted exact header/type may use this suppressible semantic
++** publication. Invalidate table scan proof after the caller's payload stores
++** and before exposing the SSB cursor. Do this independently of an earlier
++** phase sample: a MARK/IDLE publisher may be delayed until SWEEP. The retained
++** scope pins the same allocation through invalidation and queue/recovery LP.
++** Worker discovery uses gc2_publish_mutator_scoped directly and must not
++** manufacture a new dirty epoch while closing a cyclic graph. */
++static int gc2_publish_semantic_scoped(global_State *g, GCobj *o,
++				       uint32_t gct,
++				       const GC2MarkScope *scope)
++{
++  if (gct == (uint32_t)~LJ_TTAB) {
++    gc2_table_coalesce_test_at(g, gco2tab(o),
++			      LJ_GC2_TABLE_COALESCE_TEST_PRE_DIRTY);
++    gc2_table_dirty_bump(g, gco2tab(o));
++    gc2_table_coalesce_test_at(g, gco2tab(o),
++			      LJ_GC2_TABLE_COALESCE_TEST_POST_DIRTY);
++  }
++  return gc2_publish_mutator_scoped(g, o, scope);
++}
++
++/* A failed admission supplies no authority to inspect a table or invalidate
++** its stamp. Such an identity cannot enter the suppressible SSB lane: retain
++** the allocation-side obligation, which the recovery owner always traverses.
++** Its existing REDIRTY/count protocol or sticky veto also covers a transient
++** registry/lifetime owner without waiting on that owner. */
++static int gc2_publish_unresolved(global_State *g, GCobj *o)
++{
++  if (gc2_recovery_publish(g, o))
++    return 1;
++  gc2_recovery_fail_closed(g);
++  return 0;
+@@ -14605,2 +14663 @@
+-    if (gc2_phase_acq(g) != LJ_GC2_SWEEP &&
+-	gct == (uint32_t)~LJ_TTAB &&
++    if (gct == (uint32_t)~LJ_TTAB &&
+@@ -14608 +14665 @@
+-	gc2_table_scan_current(g, gco2tab(o))) {
++	gc2_table_scan_coalescible(g, gco2tab(o))) {
+@@ -14619,6 +14676,6 @@
+-      ** SWEEP public root/table barriers can follow raw payload writes without
+-      ** changing that stamp or reserving a rescan token. Their SSB slots are
+-      ** explicit requests to cover the new payload, so no prior scan can
+-      ** discharge them. Private SWEEP graph discovery suppresses current
+-      ** tables before publication in gc2_trace_sweep_edge; consuming every
+-      ** published slot here therefore still lets cyclic graphs reach fixpoint.
++      ** Semantic table publishers invalidate the stamp under exact admission
++      ** before queueing, including public SWEEP requests after raw stores.
++      ** A current unsaturated stamp therefore covers this request or a later
++      ** one. Unadmitted requests use recovery, never this suppressible lane.
++      ** Saturated epochs cannot distinguish intervening writes and supply no
++      ** coalescing authority even while the existing reclaim veto is sticky.
+@@ -15190,0 +15248,3 @@
++  GC2MarkScope scope;
++  uint32_t gct;
++  int pushed;
+@@ -15193 +15253,16 @@
+-  if (gc2_publish_mutator_nodrain(g, o)) {
++  if (gc2_observed_obj_valid_scoped(g, o, &gct, &scope)) {
++    /* An IDLE observation may precede activation and a delayed publication.
++    ** Keep the exact body admission through the unconditional invalidation. */
++    if (gct == (uint32_t)~LJ_TTAB) {
++      gc2_table_coalesce_test_at(g, gco2tab(o),
++				LJ_GC2_TABLE_COALESCE_TEST_PRE_DIRTY);
++      gc2_table_dirty_bump(g, gco2tab(o));
++      gc2_table_coalesce_test_at(g, gco2tab(o),
++				LJ_GC2_TABLE_COALESCE_TEST_POST_DIRTY);
++    }
++    pushed = gc2_publish_mutator_(g, o, &scope, 0);
++  } else {
++    pushed = gc2_publish_unresolved(g, o);
++  }
++  gc2_mark_scope_leave(&scope);
++  if (pushed) {
+@@ -16364 +16439 @@
+-      (void)gc2_publish_mutator_scoped(g, o, scope);
++      (void)gc2_publish_semantic_scoped(g, o, gct, scope);
+@@ -17164,4 +17239,3 @@
+-  /* Saturation publishes MARK but no body token. Queue this identity
+-  ** unconditionally: an old MARK may come from raw-memory preservation and is
+-  ** not proof that the object's graph was ever scheduled. The future drain
+-  ** re-enters this reader protocol before touching the header. */
++  /* Saturation publishes MARK but no body token. An old MARK or table stamp
++  ** is not proof that this request's graph was covered. Recovery retains this
++  ** unresolved identity without touching its body or using SSB suppression. */
+@@ -17176 +17250 @@
+-  if (!gc2_publish_mutator(g, o))
++  if (!gc2_publish_unresolved(g, o))
+@@ -17188 +17262 @@
+-  if (!gc2_publish_mutator(g, o))
++  if (!gc2_publish_unresolved(g, o))
+@@ -17314 +17388 @@
+-	(void)gc2_publish_mutator_scoped(g, actual, &scope);
++	(void)gc2_publish_semantic_scoped(g, actual, actual_gct, &scope);
+@@ -17667 +17741 @@
+-	(void)gc2_publish_mutator_scoped(g, o, &scope);
++	(void)gc2_publish_semantic_scoped(g, o, gct, &scope);
+@@ -17804 +17878 @@
+-      (void)gc2_publish_mutator_scoped(g, o, scope);  /* 05 section 5.6.1. */
++      (void)gc2_publish_semantic_scoped(g, o, gct, scope);
+@@ -18244,0 +18319,12 @@
++}
++
++static LJ_AINLINE int gc2_table_scan_coalescible(global_State *g, GCtab *t)
++{
++  LJGC2TabStamp *s = gc2_table_stamp(g, t);
++  uint32_t cycle = gc2_cycle_acq(g);
++  uint64_t state;
++  if (!s || cycle == 0)
++    return 0;
++  state = la_load64_acq(&s->state);
++  return gc2_tabstamp_cycle(state) == cycle &&
++    gc2_tabstamp_dirty(state) != ~(uint32_t)0;
+@@ -18476,2 +18562,13 @@
+-static void gc2_mark_table_child_tv_worker(global_State *g, cTValue *tv)
+-{
++static void gc2_mark_table_child_tv_worker(global_State *g, GCtab *parent,
++					 cTValue *tv)
++{
++  /* The caller is already scanning this exact admitted table. A semantic
++  ** writer may have invalidated its previous stamp, but a self-edge cannot
++  ** add another payload. Republishing it would REDIRTY the caller's CLAIMED
++  ** recovery work solely because its new scan proof is not published yet. */
++  if (tvistab(tv) && tabV(tv) == parent) {
++#if defined(LJ_GC2_TEST_HELPERS)
++    la_add32_rlx(&gc2_recovery_test_worker_table_skips, 1);
++#endif
++    return;
++  }
+@@ -18695,0 +18793 @@
++  gc2_table_coalesce_test_at(g, t, LJ_GC2_TABLE_COALESCE_TEST_SCAN_START);
+@@ -18749 +18847,6 @@
+-  gc2_mark_table_child_obj_worker(g, mt);
++  if (mt != t)
++    gc2_mark_table_child_obj_worker(g, mt);
++#if defined(LJ_GC2_TEST_HELPERS)
++  else
++    la_add32_rlx(&gc2_recovery_test_worker_table_skips, 1);
++#endif
+@@ -18759 +18862 @@
+-      gc2_mark_table_child_tv_worker(g, &val);
++      gc2_mark_table_child_tv_worker(g, t, &val);
+@@ -18799 +18902 @@
+-	    gc2_mark_table_child_tv_worker(g, &key);
++	    gc2_mark_table_child_tv_worker(g, t, &key);
+@@ -18801 +18904 @@
+-	    gc2_mark_table_child_tv_worker(g, &val);
++	    gc2_mark_table_child_tv_worker(g, t, &val);
+@@ -18806,0 +18910 @@
++  gc2_table_coalesce_test_at(g, t, LJ_GC2_TABLE_COALESCE_TEST_PRE_PROOF);
+@@ -21801,0 +21906,2 @@
++  GC2MarkScope owned;
++  uint32_t result = 0;
+@@ -21818,3 +21924,9 @@
+-  status = scope ?
+-    gc2_markobj_preserve_admitted_status(g, o, start, gct, scope, &traversable) :
+-    gc2_markobj_preserve_status(g, o, NULL, &gct, &traversable);
++  gc2_mark_scope_init(&owned);
++  if (scope) {
++    status = gc2_markobj_preserve_admitted_status(
++      g, o, start, gct, scope, &traversable);
++  } else {
++    status = gc2_markobj_preserve_status_impl(
++      g, o, NULL, &gct, &traversable, 0, &owned, NULL);
++    scope = &owned;
++  }
+@@ -21830 +21942,2 @@
+-    return 1;
++    result = 1;
++    goto out;
+@@ -21841 +21954 @@
+-    return 0;
++    goto out;
+@@ -21850,2 +21963,2 @@
+-    ** barriers retain the public path below and therefore still force a scan
+-    ** even if they race a raw payload mutation without a dirty-epoch update. */
++    ** barriers invalidate the scan proof below before their explicit request
++    ** becomes visible, including after a raw payload mutation. */
+@@ -21855 +21968 @@
+-    return 0;
++    goto out;
+@@ -21865 +21978 @@
+-    return 0;
++    goto out;
+@@ -21880,3 +21993,7 @@
+-    return (uint32_t)gc2_publish_mutator_scoped(g, o, scope);
+-  }
+-  return 0;
++    result = (uint32_t)(worker_edge ?
++      gc2_publish_mutator_scoped(g, o, scope) :
++      gc2_publish_semantic_scoped(g, o, gct, scope));
++  }
++out:
++  gc2_mark_scope_leave(&owned);
++  return result;
+--- a/src/lj_gc2.h
++++ b/src/lj_gc2.h
+@@ -481,0 +482,7 @@
++#define LJ_GC2_TABLE_COALESCE_TEST_PRE_DIRTY	1u
++#define LJ_GC2_TABLE_COALESCE_TEST_POST_DIRTY	2u
++#define LJ_GC2_TABLE_COALESCE_TEST_SCAN_START	3u
++#define LJ_GC2_TABLE_COALESCE_TEST_PRE_PROOF	4u
++typedef void (*LJGC2TableCoalesceTestHook)(global_State *g, GCtab *t,
++					   uint32_t stage);
++LJ_FUNC void lj_gc2_test_table_coalesce_hook(LJGC2TableCoalesceTestHook hook);
+--- a/src/lj_jit.h
++++ b/src/lj_jit.h
+@@ -408,0 +409 @@
++#define TRACE_RETIRE_PENDING		0x10
+@@ -410,0 +412,9 @@
++
++/* A committed root which lost its bytecode CAS remains inspectable in its
++** exact public slot until an IDLE recorder-token owner consumes this request.
++** The slot is a semantic GC root while pending; it is not a retire-list node
++** until ordinary preserved retirement claims a nonzero epoch. */
++static LJ_AINLINE int trace_retire_pending_acq(const GCtrace *T)
++{
++  return (la_load8_acq(&T->unused1) & TRACE_RETIRE_PENDING) != 0;
++}
+--- a/src/lj_trace.c
++++ b/src/lj_trace.c
+@@ -296,0 +297,2 @@
++static void trace_scope_clear_slot(jit_State *J, TraceNo traceno, GCtrace *T,
++				  uint64_t epoch);
+@@ -2805,0 +2808,3 @@
++  /* The nonzero epoch takes over the pending slot's semantic-root duty.
++  ** Root readers load the pending flag before rechecking the epoch. */
++  (void)la_and8_acqrel(&T->unused1, (uint8_t)~TRACE_RETIRE_PENDING);
+@@ -3961,0 +3967,36 @@
++/* The caller retains an outer SMR reader through this complete transaction.
++** Normal preservation/disconnection may nest readers, but a nested reader
++** reuses that admitted thread depth and cannot wait behind a later closer.
++** A pending ABORT must remain inspectable until its active recorder finishes;
++** token/recorder refusal preserves the graph and asks the root pass to retry. */
++static int trace_retire_pending_consume(jit_State *J, TraceNo traceno,
++					GCtrace *T)
++{
++  int token = 0;
++  if (lj_trace_state_load(J) != LJ_TRACE_IDLE)
++    return 0;
++  if (!lj_jit_token_held(J)) {
++    if (!lj_jit_token_try(J))
++      return 0;
++    token = 1;
++  }
++  if (lj_trace_state_load(J) != LJ_TRACE_IDLE) {
++    if (token)
++      lj_jit_token_release(J);
++    return 0;
++  }
++  /* A peer flush may have completed the request before token admission.
++  ** Neither a stale body nor a replacement at the same number is ours. */
++  if (traceref_safe(J, traceno) == T && trace_retire_pending_acq(T)) {
++    lj_assertJ(trace_traceno_acq(T) == traceno &&
++	       trace_root_acq(T) == 0 &&
++	       !trace_runnable_acq(T, traceno) &&
++	       la_load64_acq(&T->retire_epoch) == 0,
++	       "invalid deferred root-abort retirement");
++    trace_scope_clear_slot(J, traceno, T, lj_gc2_retire_epoch(J2G(J)));
++  }
++  if (token)
++    lj_jit_token_release(J);
++  return 1;
++}
++
+@@ -3965 +4006 @@
+-  TraceVec *tv = tracevec_acq(J);
++  TraceVec *tv;
+@@ -3968,0 +4010 @@
++  int complete = 1;
+@@ -3969,0 +4012,6 @@
++  /* Production root scans already own a reader. Require tracked same-universe
++  ** depth as well: an independent-universe fallback count does not authorize
++  ** the nested reader elision used by preservation and disconnection. */
++  if (!lj_gc2_smr_read_tracked_try(g))
++    return 0;
++  tv = tracevec_acq(J);
+@@ -3989,2 +4037,9 @@
+-	if (T && la_load64_acq(&T->retire_epoch) != 0)
+-	  trace_preserve_retired_body(g, T);
++	if (T) {
++	  /* Pending loads precede epoch loads: clearing the request after its
++	  ** epoch claim must not leave a root-preservation handoff gap. */
++	  int pending = trace_retire_pending_acq(T);
++	  if (pending || la_load64_acq(&T->retire_epoch) != 0)
++	    trace_preserve_retired_body(g, T);
++	  if (pending && !trace_retire_pending_consume(J, i, T))
++	    complete = 0;
++	}
+@@ -4001 +4056 @@
+-      return 0;
++      goto incomplete;
+@@ -4004 +4059 @@
+-    return 0;
++    goto incomplete;
+@@ -4012,3 +4067,9 @@
+-      return 0;
+-  }
+-  return rt == NULL;
++      goto incomplete;
++  }
++  if (rt != NULL)
++    goto incomplete;
++  lj_gc2_smr_read_leave(g);
++  return complete;
++incomplete:
++  lj_gc2_smr_read_leave(g);
++  return 0;
+@@ -5825 +5885,0 @@
+-  global_State *g = J2G(J);
+@@ -5921,0 +5982,11 @@
++	if (LJ_UNLIKELY(root_patch_lost)) {
++	  /* Publish the exact reserved-slot cleanup request before optional
++	  ** metadata or Lua can reenter. This newly committed body has never
++	  ** enabled entry, and this uninterrupted recorder token excludes peer
++	  ** retirement until the descriptor is visible. IDLE/MARK recording
++	  ** and current-trace root retry exclude sweep before publication;
++	  ** future root scans preserve pending slots until ordinary retirement
++	  ** transfers ownership to the existing epoch/list protocol. */
++	  (void)la_or8_acqrel(&T->unused1,
++	    TRACE_ENTRY_INVALIDATED|TRACE_RETIRE_PENDING);
++	}
+@@ -5960,6 +6031,3 @@
+-    /* trace_save() already published the body and prototype root. Preserve it
+-    ** for abort-event inspection, but gate native entry before invoking user
+-    ** code. Ordinary abort consumers (notably jit.dump's aborted-IR mode) expect
+-    ** jit.util.trace* to resolve the trace during the callback. The callback may
+-    ** reentrantly flush it, so resolve the exact slot again before cleanup. */
+-    (void)trace_entry_mark_invalidated(T);
++    /* Keep ordinary abort inspection while the recorder is active. Cleanup is
++    ** already a durable reserved-slot request, so this callback may flush,
++    ** collect or reuse the number without any later raw T access here. */
+@@ -5974,7 +6041,0 @@
+-    lj_gc2_smr_read_enter(g);
+-    {
+-      GCtrace *live = traceref_safe(J, traceno);
+-      if (live == T && trace_traceno_acq(live) == traceno)
+-	trace_scope_clear_slot(J, traceno, live, lj_gc2_retire_epoch(g));
+-    }
+-    lj_gc2_smr_read_leave(g);

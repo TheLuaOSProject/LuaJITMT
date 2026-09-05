@@ -224,6 +224,16 @@ interpreter aggregate from that incomplete run. Commands, frozen sources,
 raw samples, and measurement limits are in
 `notes/gc-sweep-leaf-performance-2026-09-04.md`.
 
+The initial coalescing plus deferred JIT retirement full pilot completes all
+15 JIT rows with a 1.425195179 fork/stock geometric mean. Insertion reports
+1,827.49 ns/op versus 120.05 for stock, while closures remain 55.44 times
+stock. The interpreter reaches six rows before its 180-second limit; existing
+stores still cost 662.66 versus 13.05 ns/op, and no interpreter aggregate is
+computed. This source predates the subsequently identified MARK table-barrier
+repair and empty-arena optimization. Preserve that boundary when comparing
+later changes. Commands, source overlays, raw output, and missing rows are in
+`notes/gc-coalescing-performance-pilot-2026-09-05.md`.
+
 The closure follow-up separates live-graph work from retained capacity.
 Filtered closures remain about 28 times stock with the harness's permanent
 8,192-key graph, while an insertion prefix doubles fork closure time. Weak

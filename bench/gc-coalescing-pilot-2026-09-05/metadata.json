@@ -1,0 +1,37 @@
+{
+  "runtime_metadata": {
+    "base": "f8faf8622191ffb86a6304d349c2c5e06a37715d",
+    "overlays": {
+      "src/lj_gc2.c": "661f96d24a80dafcd6e134307633475592e25997621e5faa7b566e78a8ad6634",
+      "src/lj_gc2.h": "6826e924e8a8c2821bcfb0f376f01641c6dc444b3c0d8653948c947b04254b44",
+      "src/lj_jit.h": "ff6304cc1a0a1e474c5a03c9ca5b7d2c7055e9610512c3a04ec2ce85f77d333c",
+      "src/lj_trace.c": "22727958fb2df4c3ed07126193a260f2243630ac4fc6d98d133712bd40503feb",
+      "tests/t-jit-root-abort-retire.c": "0bc2bc5aa8af037e7d31e5a3db69e559f29753c5ab23e5261ce364b6c92e0a28",
+      "tests/t-gc2-sweep-table-coalescing.c": "3c7024871fae148719b5258c6368a361b8c73fef3b56a3e1b2aa014f670cb1ca"
+    },
+    "purpose": "Combined final scalar-stats runtime plus pending semantic SWEEP coalescing and deferred root-abort retirement; test fixture snapshots may precede final agent refinements."
+  },
+  "build": {
+    "kind": "normal",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-C",
+      "/tmp/lj-gc-jit-combined-20260905-6cxpl6mp/normal/src",
+      "-j8",
+      "BUILDMODE=static"
+    ],
+    "exit": 0,
+    "seconds": 7.303822296000362,
+    "executable_sha256": "8b75419d1972794ab6287dc9be8a4aad7b8bdd14f581a0fb4a776e24602bbd75"
+  },
+  "harness_sha256": "ebd0b8d53b6e7a340c90c45ad33d9bdd47acbd5418890d593d6aae127ef926a9",
+  "stock_ref": "b925b3e3fc6771171602323b45fbe9fb8fc90369",
+  "binary_sha256": {
+    "stock": "d399449cc8cee4b0c600104a4a66fd44eeeac276c0f8571ce8204744041b5e34",
+    "fork": "8b75419d1972794ab6287dc9be8a4aad7b8bdd14f581a0fb4a776e24602bbd75"
+  },
+  "protocol": "Fresh stock JIT, fork JIT, stock interpreter, fork interpreter; BENCH_SCALE=1, GC mode unset, unmodified full harness, 180s per process. Each row is minimum of five in-process rounds, not independent process repetitions. CPU 30; other functional work on CPUs 0-15; no full host/frequency isolation."
+}
