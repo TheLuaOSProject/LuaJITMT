@@ -1,0 +1,26 @@
+{
+  "helpers-safety-lua-path-t-gc-active-thread-roots-joff.stdout": {
+    "sha256": "4064f28fc860483db3937543d4f05191bc308869b99e050d389cb32d41ffd16a",
+    "bytes": 28
+  },
+  "helpers-safety-lua-path-t-gc-active-thread-roots-jit.stdout": {
+    "sha256": "4064f28fc860483db3937543d4f05191bc308869b99e050d389cb32d41ffd16a",
+    "bytes": 28
+  },
+  "helpers-safety-lua-path-t-gc-active-thread-roots-joff.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-lua-path-t-gc-active-thread-roots-jit.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers/src/libluajit.a": {
+    "sha256": "89b9ecfc5e7b4ea489d530ba6a887f98e846eb5d3ad8bd43851705674a499cef",
+    "bytes": 2974962
+  },
+  "helpers/src/luajit": {
+    "sha256": "3202a6504ec666fc96dde70bdf2a1ecb96c1d189c2d928df2bb68d51c8c66674",
+    "bytes": 2005008
+  }
+}

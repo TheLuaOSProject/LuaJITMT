@@ -1,0 +1,82 @@
+[
+  {
+    "name": "control-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/t-stop-first-attach.c",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_vm_cpcall",
+      "-o",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-stop-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.16462536199833266,
+    "stdout": "control-compile.stdout",
+    "stderr": "control-compile.stderr",
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;"
+  },
+  {
+    "name": "control-run",
+    "argv": [
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-stop-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007935401001304854,
+    "stdout": "control-run.stdout",
+    "stderr": "control-run.stderr",
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;"
+  },
+  {
+    "name": "candidate-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-admission-20260905-h7ntx71p/candidate/src",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/t-stop-first-attach.c",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_vm_cpcall",
+      "-o",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/candidate-stop-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.16453058399929432,
+    "stdout": "candidate-compile.stdout",
+    "stderr": "candidate-compile.stderr",
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/candidate/src/?.lua;;"
+  },
+  {
+    "name": "candidate-run",
+    "argv": [
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/candidate-stop-first-attach"
+    ],
+    "exit_code": 42,
+    "seconds": 0.016006491001462564,
+    "stdout": "candidate-run.stdout",
+    "stderr": "candidate-run.stderr",
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/candidate/src/?.lua;;"
+  }
+]

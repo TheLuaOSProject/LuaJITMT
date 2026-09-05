@@ -1,0 +1,115 @@
+{
+  "scope": "Independent source review; runtime results are owner-produced and inspected, not executed by this reviewer. No shared edits. Frozen v1 is blocked by the reproduced first-child STOP race.",
+  "files": [
+    {
+      "path": "baseline-HANDOFF.md",
+      "bytes": 14826,
+      "sha256": "935ff4167334f768f23e9f7e09d995958bfa72dda513e9ac8faa343acb087526"
+    },
+    {
+      "path": "candidate.patch",
+      "bytes": 2485,
+      "sha256": "f632c7f26051ffebb55fde65291a304b91a46df0371cf47f86aa1783efdf5cd9"
+    },
+    {
+      "path": "control/src/lj_gc.c",
+      "bytes": 194734,
+      "sha256": "7ceb24d2c755325c7c3d4113330bbb4fce6d3c893dd22fc1ef8bf924590ab4cb"
+    },
+    {
+      "path": "control/src/lj_gc.h",
+      "bytes": 22198,
+      "sha256": "3d52d352f6280ee308f9ae71a8edbe4dde6f41f9a00256a0d3d6a3924fddc0dd"
+    },
+    {
+      "path": "control/src/vm_x64.dasc",
+      "bytes": 192489,
+      "sha256": "ad48405b4793e8514307cd4efc15238dcd3a29b0d1970b452ee77952b921d64b"
+    },
+    {
+      "path": "control-boundaries.lua",
+      "bytes": 766,
+      "sha256": "fc17679e2035924294a7003184e085b0437ea6ddf8cfcb0664dee3ccd8521460"
+    },
+    {
+      "path": "final-source-verification.json",
+      "bytes": 1118,
+      "sha256": "097682f26503cd455202510713e2e981818d46d9d216c1c91d63d3c929ca755b"
+    },
+    {
+      "path": "overlap/candidate-run.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "overlap/candidate-run.stdout",
+      "bytes": 924,
+      "sha256": "1aaa83a06673d89d4feb6650803ab2907f133bf83168f0e58f3c2ded28c77a50"
+    },
+    {
+      "path": "overlap/control-run.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "overlap/control-run.stdout",
+      "bytes": 938,
+      "sha256": "4a205a3976b7ce845f93d5bc3c8c5d1be5bdf4e4f1d4114ad7be111463b1dece"
+    },
+    {
+      "path": "overlap/inputs.json",
+      "bytes": 222,
+      "sha256": "365f839e2144c12a72314452c77e4f0fbf6054b0cc1a028449701afac5e8b5ac"
+    },
+    {
+      "path": "overlap/overlap-identities.json",
+      "bytes": 723,
+      "sha256": "622f4481a796bae26646661c121fa91739db10ab0fd1af5a123972d27f1fd0e3"
+    },
+    {
+      "path": "overlap/overlap-results.json",
+      "bytes": 2558,
+      "sha256": "663cd4378530a03d5034e74e2e00c0025a9c019bb54b604eb904fa2e8450a51f"
+    },
+    {
+      "path": "overlap/t-stop-first-attach.c",
+      "bytes": 6461,
+      "sha256": "3ae6ce71c2cfa62f09bd3752f3736266a8606983a72928d2ef5476d1c16ab640"
+    },
+    {
+      "path": "review.md",
+      "bytes": 14983,
+      "sha256": "9d9b998d10fb7adb16ac19630830ac988dc7eb6be0d58dcd6649fc53a9b98918"
+    },
+    {
+      "path": "reviewed-inputs.json",
+      "bytes": 5067,
+      "sha256": "d99569e76a50505cbfb3b82079733dca6f3e729a2eab3a894c06a3c6fd800c99"
+    },
+    {
+      "path": "src/lj_gc.c",
+      "bytes": 195228,
+      "sha256": "d0e8608a261b823f21b037aa73f4f29dac3059ee3e741286d836c686e7498e9d"
+    },
+    {
+      "path": "src/lj_gc.h",
+      "bytes": 22325,
+      "sha256": "f465a7706da2f3f7fc52f0b40054462d0a6368c3e5dec0abcd9d990c6680cfd5"
+    },
+    {
+      "path": "src/vm_x64.dasc",
+      "bytes": 193119,
+      "sha256": "d445a4ffa214242bd5efc753c3cb737e90509b66c9f52bd95eff4c358b6e77ab"
+    },
+    {
+      "path": "summary.json",
+      "bytes": 202723,
+      "sha256": "2203a08ebc590522f32c57f490ab216b64392637f258476ec6e30fb61ff0fbb8"
+    },
+    {
+      "path": "t-auto-controls-v2.c",
+      "bytes": 7355,
+      "sha256": "e0a5445e48151078870dde0043c7a2c0bb95a50452a0e8cbde7dc6146fbebfc6"
+    }
+  ]
+}

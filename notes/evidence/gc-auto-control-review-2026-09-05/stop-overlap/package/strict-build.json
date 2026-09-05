@@ -1,0 +1,36 @@
+{
+  "argv": [
+    "make",
+    "-C",
+    "src",
+    "-j4",
+    "BUILDMODE=static",
+    "XCFLAGS=-DLUA_USE_ASSERT -DLUA_USE_APICHECK",
+    "TARGET_STRIP=:"
+  ],
+  "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict",
+  "exit_code": 0,
+  "seconds": 9.732397628999024,
+  "binaries": {
+    "luajit": {
+      "sha256": "b5fe2c844b4dd844d129ac15232b4091c523032093e79eff862f8e97ed958b89",
+      "bytes": 1936936
+    },
+    "libluajit.a": {
+      "sha256": "63e56469d34c5aa1363ad65a96bc7a6f4ca8ecf05bbbbd5253c50c1a71baeae1",
+      "bytes": 2867108
+    },
+    "host/minilua": {
+      "sha256": "8ab7d5a14b0525e3759effc570de0f02965b5618600fbfe15499924a399f1538",
+      "bytes": 154760
+    },
+    "host/buildvm": {
+      "sha256": "258c018f674b0a398495989c36510c6f62010672888a6d460c377aa8ae8840a3",
+      "bytes": 122336
+    },
+    "lj_str.o": {
+      "sha256": "d284d30823c6e0f3821d496dbdd740c295fd582602a1f656619435bbb77fa5b7",
+      "bytes": 38448
+    }
+  }
+}

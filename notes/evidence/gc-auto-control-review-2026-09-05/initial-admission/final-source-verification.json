@@ -1,0 +1,56 @@
+{
+  "control": {
+    "source_differences": [],
+    "binary_hashes_match": true
+  },
+  "candidate": {
+    "source_differences": [
+      "src/lj_gc.c",
+      "src/lj_gc.h",
+      "src/vm_x64.dasc"
+    ],
+    "binary_hashes_match": true
+  },
+  "strict": {
+    "source_differences": [
+      "src/lj_gc.c",
+      "src/lj_gc.h",
+      "src/vm_x64.dasc"
+    ],
+    "binary_hashes_match": true
+  },
+  "asan": {
+    "source_differences": [
+      "src/lj_gc.c",
+      "src/lj_gc.h",
+      "src/vm_x64.dasc"
+    ],
+    "binary_hashes_match": true
+  },
+  "helpers": {
+    "source_differences": [
+      "src/lj_gc.c",
+      "src/lj_gc.h",
+      "src/vm_x64.dasc"
+    ],
+    "binary_hashes_match": true
+  },
+  "controlhelpers": {
+    "source_differences": [],
+    "binary_hashes_match": true
+  },
+  "extrahelpers": {
+    "source_differences": [
+      "src/lj_gc.c",
+      "src/lj_gc.h",
+      "src/vm_x64.dasc"
+    ],
+    "binary_hashes_match": true
+  },
+  "asan_symbols": {
+    "host/minilua": 0,
+    "host/buildvm": 0,
+    "lj_str.o": 19
+  },
+  "observed_shared_head_at_verification": "5c455f20e2cc9be74920e9139a9b4002d4ac430b"
+}

@@ -1,0 +1,17 @@
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+
+Program received signal SIGINT, Interrupt.
+0x00007ffff7db17b9 in syscall () from /lib/x86_64-linux-gnu/libc.so.6
+
+Thread 1 (Thread 0x7ffff7ca21c0 (LWP 309447) "oldcandidate-ma"):
+#0  0x00007ffff7db17b9 in syscall () from /lib/x86_64-linux-gnu/libc.so.6
+#1  0x0000555555599b0e in gc2_worker_drain_inner ()
+#2  0x000055555559e348 in lj_gc2_collect_active ()
+#3  0x00005555555c347c in func_finduv_nothrow ()
+#4  0x00005555555c4e92 in func_newL_gc_base ()
+#5  0x000055555555e85f in construct_inherit_cp (L=<optimized out>, dummy=<optimized out>, ud=0x7fffffffdf80) at /tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/t-func-construction-anchor.c:81
+#6  0x000055555564c33d in lj_vm_cpcall_asm ()
+#7  0x00005555555cfa20 in lj_vm_cpcall ()
+#8  0x000055555555e47c in test_open_upvalue_handoff_then_oom (L=0x7ffff7c90080) at /tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/t-func-construction-anchor.c:193
+#9  main () at /tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/t-func-construction-anchor.c:332

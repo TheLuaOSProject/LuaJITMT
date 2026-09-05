@@ -1,0 +1,22 @@
+{
+  "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/t-stop-first-attach-restart-v2.c": {
+    "sha256": "1a8453a8fa2d105dbd6ecc38d5432f0dda999f342952141508a5d46567c91683",
+    "bytes": 7280
+  },
+  "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-stop-overlap-restart-v2": {
+    "sha256": "55b0be069c621d2e84c0011bb93a3c8b89535944c9e72c4ffd86082d5e0cbe8a",
+    "bytes": 1739136
+  },
+  "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-stop-overlap-restart-v2": {
+    "sha256": "bf1ae47387dc5a35fbe9fd02f86a000fe013449313c484404a78272432020162",
+    "bytes": 1743336
+  },
+  "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-stop-overlap-restart-v2": {
+    "sha256": "d11caffc5e3ec0aaf4a44b111a89c66fd96061f084f5d4ce8fd2cdc55c565034",
+    "bytes": 1991432
+  },
+  "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-stop-overlap-restart-v2": {
+    "sha256": "25bc6a99734d40c4d76760b0b5a680ecad3c29c9c94515a9793d18d9601d6892",
+    "bytes": 19469112
+  }
+}

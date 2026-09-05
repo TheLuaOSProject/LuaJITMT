@@ -1,0 +1,22 @@
+{
+  "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-matched-t-gc2-worker-scheduler": {
+    "sha256": "9b650b2516a92a25ad7a291da437d18b41108c78ad6006fec531b70c0733d01e",
+    "bytes": 2238984
+  },
+  "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/t-gc2-worker-scheduler.c": {
+    "sha256": "e032c08598b035cf7982ebd71af87574edc9b8e99eff2b278d49cb860c98d978",
+    "bytes": 48916
+  },
+  "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a": {
+    "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+    "bytes": 2980502
+  },
+  "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-matched-t-func-construction-anchor": {
+    "sha256": "fd846ca8a7f42306c31c6c6ab73759e6f92bfee297c4858408de30bfb4ca7f96",
+    "bytes": 2073448
+  },
+  "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/t-func-construction-anchor.c": {
+    "sha256": "42e9d47359fb27565565fe07678abbc8de7abf119226075cab3a1142768a6f0f",
+    "bytes": 9458
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "scope": "Independent source-only veto review; no reviewer runtime; completed-before-call STOP guarantee only.",
+  "files": [
+    {
+      "path": "review.md",
+      "bytes": 6676,
+      "sha256": "eb90f485d2ba5de9dde4a5d92b3b3e3d50c830a1d3b77e692d78b1587d24170d"
+    },
+    {
+      "path": "reviewed-inputs.json",
+      "bytes": 2744,
+      "sha256": "230f501f99c49972f1b4aa79c99fe667134a3bccde73095748d28ede930fc30c"
+    },
+    {
+      "path": "src/lj_api.c",
+      "bytes": 89891,
+      "sha256": "62cb91a4a382bca4ece810557008895ae9910171d7e74ff11314c00df470d53e"
+    },
+    {
+      "path": "src/lj_gc.c",
+      "bytes": 195276,
+      "sha256": "3cd90fc9507153f4acda2b11cf79fb637636a22b42a580b10389138908f47aea"
+    },
+    {
+      "path": "src/lj_gc.h",
+      "bytes": 22575,
+      "sha256": "7e7d75d12c65e46f56492e4999b94a1d64318cef0bbb7d01352796fdc94b7fcf"
+    },
+    {
+      "path": "src/lj_gc2.c",
+      "bytes": 767764,
+      "sha256": "ce389dec47b431d6ba67cbb76ad15fd6e3c0aa061cd50dc4d10a0396b8cf9cf6"
+    },
+    {
+      "path": "src/lj_obj.h",
+      "bytes": 220849,
+      "sha256": "591085dbd6f5a550412b4978cf1ad96850b87c59c41e5883e87b034bcaf62f3c"
+    },
+    {
+      "path": "src/vm_x64.dasc",
+      "bytes": 193172,
+      "sha256": "3c1a5c9750ba851b400b580a8b2a80f5c215736bf71fc81112ea728eebdb39ae"
+    },
+    {
+      "path": "veto-build.json",
+      "bytes": 914,
+      "sha256": "7f2fab763d35149bc7122de4f9efa8fcbc3c01b1e352402fd11c856099cebed1"
+    },
+    {
+      "path": "veto-full.patch",
+      "bytes": 5430,
+      "sha256": "35e8abddecefe17ca842d96d4f2f237fd986303ca3eac8b45c1f60d2610f542b"
+    },
+    {
+      "path": "veto-only.patch",
+      "bytes": 3260,
+      "sha256": "4808e3c7b435db176df4e5c4c33ce3bf8729cd3bfa6d5d2f1efd0a7f7c967048"
+    }
+  ]
+}

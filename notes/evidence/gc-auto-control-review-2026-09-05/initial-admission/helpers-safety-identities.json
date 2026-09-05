@@ -1,0 +1,450 @@
+{
+  "helpers-safety-t-gc2-pacing-atomic-compile.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-pacing-atomic.stdout": {
+    "sha256": "04d314c592ed666d3684897fb0c9306f338fbbc3f389d648715bb2611f3e5476",
+    "bytes": 58
+  },
+  "helpers-safety-t-gc2-interp-hard-check-compile.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-interp-hard-check.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-jit-hard-check-compile.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-jit-hard-check.stdout": {
+    "sha256": "bd57992d5588e8f878cf1e689d4faf6f201977a46920f9a19193dc36fd4143e4",
+    "bytes": 124
+  },
+  "helpers-safety-t-gc2-alloc-account-compile.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-alloc-account.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-activation-veto-compile.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-activation-veto.stdout": {
+    "sha256": "00664e20c5c4e7f2d4f02afa91c36675f24283d89ffdf9a07eea15be2a1d85fe",
+    "bytes": 81
+  },
+  "helpers-safety-t-gc2-worker-scheduler-compile.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-worker-scheduler.stdout": {
+    "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+    "bytes": 79
+  },
+  "helpers-safety-t-gc2-mark-close-progress-compile.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-mark-close-progress.stdout": {
+    "sha256": "b09b5fd141c389b66015f8a1f69b9a5b1749af2a3fb6d6163f96b40da8cbfbd5",
+    "bytes": 78
+  },
+  "helpers-safety-t-gc2-jit-mark-coop-compile.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-jit-mark-coop.stdout": {
+    "sha256": "e0afaa5e0a7a5801908b375d4a44355fa2f27b72185852fc63f950d75c9df7c6",
+    "bytes": 66
+  },
+  "helpers-safety-t-gc2-jit-sweep-coop-compile.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-jit-sweep-coop.stdout": {
+    "sha256": "5e58d75e329ddd7129570233e71c1bf4bee6c6484e1fe9c37477ec7fa6572439",
+    "bytes": 96
+  },
+  "helpers-safety-t-jit-idle-reclaim-entry-compile.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-jit-idle-reclaim-entry.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc-root-pending-race-compile.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc-root-pending-race.stdout": {
+    "sha256": "429605383acdf16d5fe2e3c7a1aa1c694e8e2bc89db71e0cb7168f35ab40cb40",
+    "bytes": 113
+  },
+  "helpers-safety-t-udata-construction-roots-compile.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-func-construction-anchor-compile.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-func-construction-anchor.stdout": {
+    "sha256": "ca4f3984a265b2a4e4f01499e99c8b05517784d8c0d6f323aceba22f342b4f0a",
+    "bytes": 30
+  },
+  "helpers-safety-t-threading-spawn-native-compile.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-threading-spawn-native.stdout": {
+    "sha256": "04eb23954420859a1669ef53b0a35d3b561095c99ca167c07b5e9b0a0ac9e78f",
+    "bytes": 65
+  },
+  "helpers-safety-t-safepoint-native-root-hold-compile.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-safepoint-native-root-hold-0.stdout": {
+    "sha256": "a22a8b57c4c1ac47f70e98a75114b9b6d313f7308c36b831eb6f661aeb6d27dc",
+    "bytes": 321
+  },
+  "helpers-safety-t-safepoint-native-root-hold-1.stdout": {
+    "sha256": "57437449b29689a6871adaee271a1cdaf556bf16dfd5dcdc6c9bd6fea528b537",
+    "bytes": 321
+  },
+  "helpers-safety-t-safepoint-native-root-hold-2.stdout": {
+    "sha256": "2546a72ce0ed04d02ab76b2f1794a9d6e226e0a9e49205e8f147ddb12042747e",
+    "bytes": 321
+  },
+  "helpers-safety-t-safepoint-native-root-hold-3.stdout": {
+    "sha256": "2b5fcb892bf1df1d84290ff54b8e66fedbe527ea73ca028be78f1c60e596e1a2",
+    "bytes": 321
+  },
+  "helpers-safety-t-safepoint-remote-root-completion-compile.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-safepoint-remote-root-completion-0.stdout": {
+    "sha256": "5016da24bd575da4667913c6cd3f9ec5c82a7c956534a90e6b96ebfb9bf83d10",
+    "bytes": 121
+  },
+  "helpers-safety-t-safepoint-remote-root-completion-1.stdout": {
+    "sha256": "22659e3e8d5c5b5b9c4b6f6a6d5c6ff7c138e426a8ba05f2c62c16b6e820e28d",
+    "bytes": 229
+  },
+  "helpers-safety-t-safepoint-remote-root-completion-2.stdout": {
+    "sha256": "0d6d7b4a51c50627d6b73089385c1374cb72bec18953d9e91a69179919857388",
+    "bytes": 121
+  },
+  "helpers-safety-t-safepoint-remote-root-completion-3.stdout": {
+    "sha256": "8207f8323104765f18c6a2f98a8f3ee7196ae7f1e3c8a8b26a7216260b44c37c",
+    "bytes": 121
+  },
+  "helpers-safety-t-safepoint-remote-root-completion-4.stdout": {
+    "sha256": "101b4570a3e8b3d54bc076f86ffd213eba65b7a1bbc762902c44487d500e8fe4",
+    "bytes": 121
+  },
+  "helpers-safety-t-safepoint-remote-root-completion-5.stdout": {
+    "sha256": "20d6847cbf16245a4761ef2986194ab3ba9ad909007ad9b940e195b0db964415",
+    "bytes": 121
+  },
+  "helpers-safety-t-safepoint-local-native-duplicate-compile.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-safepoint-local-native-duplicate.stdout": {
+    "sha256": "03ab514a64b49d945cffda9d4aeca1ffb154355b41b3d5a70dfcff979e212724",
+    "bytes": 274
+  },
+  "helpers-safety-t-gc-active-thread-roots-joff.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc-active-thread-roots-jit.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc-workers-joff.stdout": {
+    "sha256": "33661d54c1d147e67572409e94fa87172e95a565e7608ff7bb14fb33e704456b",
+    "bytes": 16
+  },
+  "helpers-safety-t-gc-workers-jit.stdout": {
+    "sha256": "33661d54c1d147e67572409e94fa87172e95a565e7608ff7bb14fb33e704456b",
+    "bytes": 16
+  },
+  "helpers-safety-t-gc2-finalizer-peer-collect-joff.stdout": {
+    "sha256": "79a75783c6560cb072ffb7dcdd44c4c0ce0cc42efd8895de0530a57039abc747",
+    "bytes": 77
+  },
+  "helpers-safety-t-gc2-finalizer-peer-collect-jit.stdout": {
+    "sha256": "79a75783c6560cb072ffb7dcdd44c4c0ce0cc42efd8895de0530a57039abc747",
+    "bytes": 77
+  },
+  "helpers-safety-t-gc2-pacing-atomic-compile.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-pacing-atomic.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-interp-hard-check-compile.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-interp-hard-check.stderr": {
+    "sha256": "3e0e79f610e5c72936441526aa130cd786d61f9930aba35fe9ae5a9ad8b9c6a0",
+    "bytes": 216
+  },
+  "helpers-safety-t-gc2-jit-hard-check-compile.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-jit-hard-check.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-alloc-account-compile.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-alloc-account.stderr": {
+    "sha256": "a8f3dc875f1ceeafed09749eab633baf32f4c76d318dfb6d743252f32d3a048d",
+    "bytes": 207
+  },
+  "helpers-safety-t-gc2-activation-veto-compile.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-activation-veto.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-worker-scheduler-compile.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-worker-scheduler.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-mark-close-progress-compile.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-mark-close-progress.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-jit-mark-coop-compile.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-jit-mark-coop.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-jit-sweep-coop-compile.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-jit-sweep-coop.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-jit-idle-reclaim-entry-compile.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-jit-idle-reclaim-entry.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc-root-pending-race-compile.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc-root-pending-race.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-udata-construction-roots-compile.stderr": {
+    "sha256": "9b753d7ef55f4bf652071a700d2148f9bf09591f41227518abe2d2d6eb24adf4",
+    "bytes": 680
+  },
+  "helpers-safety-t-func-construction-anchor-compile.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-func-construction-anchor.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-threading-spawn-native-compile.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-threading-spawn-native.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-safepoint-native-root-hold-compile.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-safepoint-native-root-hold-0.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-safepoint-native-root-hold-1.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-safepoint-native-root-hold-2.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-safepoint-native-root-hold-3.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-safepoint-remote-root-completion-compile.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-safepoint-remote-root-completion-0.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-safepoint-remote-root-completion-1.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-safepoint-remote-root-completion-2.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-safepoint-remote-root-completion-3.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-safepoint-remote-root-completion-4.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-safepoint-remote-root-completion-5.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-safepoint-local-native-duplicate-compile.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-safepoint-local-native-duplicate.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc-active-thread-roots-joff.stderr": {
+    "sha256": "c96af5b92781948c414a959152e86193cd1e4eb9797d2f3dfddb49160d1e0390",
+    "bytes": 772
+  },
+  "helpers-safety-t-gc-active-thread-roots-jit.stderr": {
+    "sha256": "b14d05c52903726abc5377edbc1c3cb98a0d1a879858a5ad7312cfef35b6cc3b",
+    "bytes": 772
+  },
+  "helpers-safety-t-gc-workers-joff.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc-workers-jit.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-finalizer-peer-collect-joff.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers-safety-t-gc2-finalizer-peer-collect-jit.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "helpers/src/libluajit.a": {
+    "sha256": "89b9ecfc5e7b4ea489d530ba6a887f98e846eb5d3ad8bd43851705674a499cef",
+    "bytes": 2974962
+  },
+  "helpers-safety-t-gc2-pacing-atomic": {
+    "sha256": "0ded9f06443a1c4ce349a64d928c10317e02e77a0dbfbba47651c66992a80a94",
+    "bytes": 1915656
+  },
+  "helpers-safety-t-gc2-interp-hard-check": {
+    "sha256": "f1b16a1d0509e3e769cbc9d7f5337eeecee741d524155683569c5aa59a04a85f",
+    "bytes": 2051312
+  },
+  "helpers-safety-t-gc2-jit-hard-check": {
+    "sha256": "bb7fe5aafb17b09f4e5f3e73af91ac2f79ff2458e07add25af7575fdba0ff701",
+    "bytes": 2038168
+  },
+  "helpers-safety-t-gc2-alloc-account": {
+    "sha256": "4c911c25ee1114732e97e0a5082a2c50fb6398016355e85802dfbbfe0021c76b",
+    "bytes": 2113024
+  },
+  "helpers-safety-t-gc2-activation-veto": {
+    "sha256": "ab41d1b59db8c94b12df3b02adaba0671a41c8e913ab503988668e300404850f",
+    "bytes": 2024760
+  },
+  "helpers-safety-t-gc2-worker-scheduler": {
+    "sha256": "52f452c58e05eb77aaa1763a923c1aa883357801853229fadd7f9f8757a80ea1",
+    "bytes": 2233856
+  },
+  "helpers-safety-t-gc2-mark-close-progress": {
+    "sha256": "1db88bb905ae475adf9669f99edc1679c81f9cabb50d72ac9a90dc79f8b9d3d2",
+    "bytes": 1940208
+  },
+  "helpers-safety-t-gc2-jit-mark-coop": {
+    "sha256": "0fc7810f0c3286d01f84e8f87b674c9efdfbb02699626f9ed95034a00ec46f35",
+    "bytes": 2110616
+  },
+  "helpers-safety-t-gc2-jit-sweep-coop": {
+    "sha256": "339c8c769cbf0744cf378cd312a3a4d5c3c7b6e0b6fb57e242a2373b6232c3b7",
+    "bytes": 2077512
+  },
+  "helpers-safety-t-jit-idle-reclaim-entry": {
+    "sha256": "fa29190e46100817c2b12f984f7f5cb32c8c80bbb4df36112e229e17976e7f96",
+    "bytes": 2081664
+  },
+  "helpers-safety-t-gc-root-pending-race": {
+    "sha256": "f4bf247a7d0e0a39a7640bce68b4962e7799bb21c9501dc239050b5cd98a6357",
+    "bytes": 2152648
+  },
+  "helpers-safety-t-func-construction-anchor": {
+    "sha256": "1a2e8252bc2b5656da9a002263c83b4e20f1bfdb1a6962495f979802c61eea5c",
+    "bytes": 2072424
+  },
+  "helpers-safety-t-threading-spawn-native": {
+    "sha256": "fbf09cd4f5c8133b858014afe22a6927853223ac51d79bd3edb1bf33c82e0a46",
+    "bytes": 2069520
+  },
+  "helpers-safety-t-safepoint-native-root-hold": {
+    "sha256": "4841808329787991b49460844b5eef6094f86c20a27483875c57b4830e5fc991",
+    "bytes": 2065792
+  },
+  "helpers-safety-t-safepoint-remote-root-completion": {
+    "sha256": "026f157e70ff952bbad80cdd681c9cba8e91308e77d903257488dad0ade292d7",
+    "bytes": 2088152
+  },
+  "helpers-safety-t-safepoint-local-native-duplicate": {
+    "sha256": "bb57a5e61ab04f8e5b8d0214883481aebeab0df4849f18018c45c355001e1145",
+    "bytes": 2056864
+  },
+  "helpers/src/luajit": {
+    "sha256": "3202a6504ec666fc96dde70bdf2a1ecb96c1d189c2d928df2bb68d51c8c66674",
+    "bytes": 2005008
+  }
+}

@@ -1,0 +1,9 @@
+{"stage":"stopped_before_attach","running_query":0,"starts":4,"completed":4,"phase":0,"leader":1,"live":0,"entering":0,"threshold":140737488355328,"mt_threshold":291600,"local_total":0,"since":302340,"hard":583440,"steps":0}
+{"stage":"first_live_before_threshold_copy","running_query":1,"starts":4,"completed":4,"phase":0,"leader":1,"live":1,"entering":1,"threshold":140737488355328,"mt_threshold":291600,"local_total":0,"since":302340,"hard":583440,"steps":365}
+{"stage":"after_stopped_tnew","running_query":0,"starts":4,"completed":4,"phase":0,"leader":1,"live":1,"entering":0,"threshold":140737488355328,"mt_threshold":140737488355328,"local_total":80,"since":302340,"hard":583440,"steps":365}
+{"stage":"public_restart_completed","running_query":1,"starts":4,"completed":4,"phase":0,"leader":1,"live":1,"entering":0,"threshold":140737488355328,"mt_threshold":448280,"local_total":80,"since":302340,"hard":583440,"steps":365}
+{"stage":"after_restarted_tnew","running_query":1,"starts":4,"completed":4,"phase":0,"leader":1,"live":1,"entering":0,"threshold":140737488355328,"mt_threshold":448280,"local_total":160,"since":302340,"hard":583440,"steps":365}
+{"stage":"after_restarted_automatic_completion_bound","running_query":1,"starts":4,"completed":4,"phase":0,"leader":1,"live":1,"entering":0,"threshold":140737488355328,"mt_threshold":448280,"local_total":31680,"since":1581540,"hard":583440,"steps":365}
+{"stage":"cleaned_up","running_query":1,"starts":6,"completed":6,"phase":0,"leader":0,"live":0,"entering":0,"threshold":349000,"mt_threshold":448280,"local_total":0,"since":0,"hard":698128,"steps":365}
+STOP_FIRST_ATTACH violation=0
+RESTART_AFTER_STOP missing=1

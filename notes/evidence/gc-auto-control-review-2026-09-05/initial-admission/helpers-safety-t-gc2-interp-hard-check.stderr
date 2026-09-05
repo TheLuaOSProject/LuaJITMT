@@ -1,0 +1,2 @@
+interpreted hard-only TNEW did not run the GC2 hard assist
+helpers-safety-t-gc2-interp-hard-check: /tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers/tests/t-gc2-interp-hard-check.c:230: main: Assertion `0' failed.

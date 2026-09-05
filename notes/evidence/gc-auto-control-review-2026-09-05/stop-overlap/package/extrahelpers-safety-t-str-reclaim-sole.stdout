@@ -1,0 +1,1 @@
+t-str-reclaim-sole OK: exact count/memory shrink, batch drain, attach-race backout, and terminal request cleanup

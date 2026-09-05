@@ -1,0 +1,100 @@
+[
+  {
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/t-udata-construction-roots.c",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers-safety-t-udata-construction-roots"
+    ],
+    "name": "t-udata-construction-roots-compile",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.11411251499885111,
+    "stdout": "extrahelpers-safety-t-udata-construction-roots-compile.stdout",
+    "stderr": "extrahelpers-safety-t-udata-construction-roots-compile.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers-safety-t-udata-construction-roots"
+    ],
+    "name": "t-udata-construction-roots",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.06362531400009175,
+    "stdout": "extrahelpers-safety-t-udata-construction-roots.stdout",
+    "stderr": "extrahelpers-safety-t-udata-construction-roots.stderr"
+  },
+  {
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/t-str-reclaim-sole.c",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers-safety-t-str-reclaim-sole"
+    ],
+    "name": "t-str-reclaim-sole-compile",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.11370079100015573,
+    "stdout": "extrahelpers-safety-t-str-reclaim-sole-compile.stdout",
+    "stderr": "extrahelpers-safety-t-str-reclaim-sole-compile.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers-safety-t-str-reclaim-sole"
+    ],
+    "name": "t-str-reclaim-sole",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.015662114001315786,
+    "stdout": "extrahelpers-safety-t-str-reclaim-sole.stdout",
+    "stderr": "extrahelpers-safety-t-str-reclaim-sole.stderr"
+  }
+]

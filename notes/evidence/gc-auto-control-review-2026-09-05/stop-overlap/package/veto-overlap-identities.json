@@ -1,0 +1,14 @@
+{
+  "veto-stop-first-attach": {
+    "sha256": "8a8ec0a684255df7dc90561bd9eb2e82f924f324a83c3baf9cb7152f9c70d911",
+    "bytes": 1737424
+  },
+  "t-stop-first-attach.c": {
+    "sha256": "3ae6ce71c2cfa62f09bd3752f3736266a8606983a72928d2ef5476d1c16ab640",
+    "bytes": 6461
+  },
+  "veto/src/libluajit.a": {
+    "sha256": "6e564bbe00a132cbc171dd03a4b9dd9fc7b97b44f4d26b662b681c6f8f463a63",
+    "bytes": 2356682
+  }
+}

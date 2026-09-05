@@ -1,0 +1,7 @@
+/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers/tests/t-udata-construction-roots.c:21:2: error: #error "t-udata-construction-roots requires LJ_UDATA_TEST_HELPERS"
+   21 | #error "t-udata-construction-roots requires LJ_UDATA_TEST_HELPERS"
+      |  ^~~~~
+/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers/tests/t-udata-construction-roots.c: In function ‘c_pcall_finreg_failure’:
+/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers/tests/t-udata-construction-roots.c:56:3: error: implicit declaration of function ‘lj_udata_test_fail_finreg_after’ [-Wimplicit-function-declaration]
+   56 |   lj_udata_test_fail_finreg_after(1);
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

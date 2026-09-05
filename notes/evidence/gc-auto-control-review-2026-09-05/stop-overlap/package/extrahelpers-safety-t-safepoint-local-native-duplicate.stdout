@@ -1,0 +1,3 @@
+local native winner remains in exact consumed-poll wait: 202 0x55aead82ad18 0x80 0x1 0x0 0x0 0x0 0x7f8d86eeed28 0x7f8d872987b9
+signaled=3 real-remote-scan=1 owner-scan=1 local-clear=0 teardown-during-scan=0 exact-owner-wait=1 pending=0
+local native duplicate scan hold PASS

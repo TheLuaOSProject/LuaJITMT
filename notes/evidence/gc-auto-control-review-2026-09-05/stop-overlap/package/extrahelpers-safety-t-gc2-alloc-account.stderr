@@ -1,0 +1,1 @@
+extrahelpers-safety-t-gc2-alloc-account: /tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/t-gc2-alloc-account.c:929: main: Assertion `gc2_remembered_filtered_acq(g) == remembered_filtered0 + 4u' failed.

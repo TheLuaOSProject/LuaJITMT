@@ -1,0 +1,1 @@
+t-gc2-jit-hard-check OK: idle-stopped hard check is passive and TNEW/CNEW/CELL_CNEW/SNEW x64 GC checks advance hard cadence

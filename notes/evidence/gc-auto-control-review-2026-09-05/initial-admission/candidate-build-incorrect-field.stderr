@@ -1,0 +1,55 @@
+In file included from /usr/include/time.h:29,
+                 from ./lj_atomic.h:154,
+                 from ./lj_obj.h:15,
+                 from host/buildvm.c:18:
+vm_x64.dasc: In function ‘build_subroutines’:
+vm_x64.dasc:1766:183: error: ‘GCState’ has no member named ‘mt_threshold’; did you mean ‘threshold’?
+ 1766 |   |  mov L:RB->base, BASE               // Add frame since C call can throw.
+      |                                                                                                                                                                                       ^           
+vm_x64.dasc:1766:173: note: in expansion of macro ‘GL_OFS’
+ 1766 |   |  mov L:RB->base, BASE               // Add frame since C call can throw.
+      |                                                                                                                                                                             ^     
+vm_x64.dasc:2433:192: error: ‘GCState’ has no member named ‘mt_threshold’; did you mean ‘threshold’?
+ 2433 |   |.if DUALNUM
+      |                                                                                                                                                                                                ^           
+vm_x64.dasc:2433:182: note: in expansion of macro ‘GL_OFS’
+ 2433 |   |.if DUALNUM
+      |                                                                                                                                                                                      ^     
+vm_x64.dasc:2463:144: error: ‘GCState’ has no member named ‘mt_threshold’; did you mean ‘threshold’?
+ 2463 |   |  cmp NARGS:RDd, 1+2;  jb ->fff_fallback
+      |                                                                                                                                                ^           
+vm_x64.dasc:2463:134: note: in expansion of macro ‘GL_OFS’
+ 2463 |   |  cmp NARGS:RDd, 1+2;  jb ->fff_fallback
+      |                                                                                                                                      ^     
+vm_x64.dasc:2548:192: error: ‘GCState’ has no member named ‘mt_threshold’; did you mean ‘threshold’?
+ 2548 |   |ffstring_op upper
+      |                                                                                                                                                                                                ^           
+vm_x64.dasc:2548:182: note: in expansion of macro ‘GL_OFS’
+ 2548 |   |ffstring_op upper
+      |                                                                                                                                                                                      ^     
+vm_x64.dasc:2549:50: error: ‘GCState’ has no member named ‘mt_threshold’; did you mean ‘threshold’?
+ 2549 |   |
+      |                                                  ^           
+vm_x64.dasc:2549:40: note: in expansion of macro ‘GL_OFS’
+ 2549 |   |
+      |                                        ^     
+vm_x64.dasc:2550:170: error: ‘GCState’ has no member named ‘mt_threshold’; did you mean ‘threshold’?
+ 2550 |   |//-- Bit library --------------------------------------------------------
+      |                                                                                                                                                                          ^           
+vm_x64.dasc:2550:160: note: in expansion of macro ‘GL_OFS’
+ 2550 |   |//-- Bit library --------------------------------------------------------
+      |                                                                                                                                                                ^     
+vm_x64.dasc: In function ‘build_ins’:
+vm_x64.dasc:4525:243: error: ‘GCState’ has no member named ‘mt_threshold’; did you mean ‘threshold’?
+ 4525 |     |1:
+      |                                                                                                                                                                                                                                                   ^           
+vm_x64.dasc:4525:233: note: in expansion of macro ‘GL_OFS’
+ 4525 |     |1:
+      |                                                                                                                                                                                                                                         ^     
+vm_x64.dasc:5036:243: error: ‘GCState’ has no member named ‘mt_threshold’; did you mean ‘threshold’?
+ 5036 |     |2:
+      |                                                                                                                                                                                                                                                   ^           
+vm_x64.dasc:5036:233: note: in expansion of macro ‘GL_OFS’
+ 5036 |     |2:
+      |                                                                                                                                                                                                                                         ^     
+make: *** [Makefile:732: host/buildvm.o] Error 1

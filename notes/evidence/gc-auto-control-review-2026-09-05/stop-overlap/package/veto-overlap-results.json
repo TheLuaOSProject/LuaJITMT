@@ -1,0 +1,42 @@
+[
+  {
+    "name": "veto-overlap-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto/src",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/t-stop-first-attach.c",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_vm_cpcall",
+      "-o",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-stop-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.16411024799890583,
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto/src/?.lua;;",
+    "stdout": "veto-overlap-compile.stdout",
+    "stderr": "veto-overlap-compile.stderr"
+  },
+  {
+    "name": "veto-overlap-run",
+    "argv": [
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-stop-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.007888426996942144,
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto/src/?.lua;;",
+    "stdout": "veto-overlap-run.stdout",
+    "stderr": "veto-overlap-run.stderr"
+  }
+]

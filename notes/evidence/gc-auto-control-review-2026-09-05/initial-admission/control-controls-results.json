@@ -1,0 +1,449 @@
+[
+  {
+    "exit_code": 0,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/t-auto-controls.c",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_native_enter",
+      "-o",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-controls-retention"
+    ],
+    "case": "compile",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p",
+    "seconds": 0.21420440300062182,
+    "stdout": "control-controls-compile.stdout",
+    "stderr": "control-controls-compile.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 3,
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-controls-retention",
+      "0",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/peer-control.lua",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-boundaries.lua"
+    ],
+    "case": "0-0-1-0",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p",
+    "seconds": 0.015601279999827966,
+    "stdout": "control-controls-0-0-1-0.stdout",
+    "stderr": "control-controls-0-0-1-0.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 3,
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-controls-retention",
+      "0",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/peer-control.lua",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-boundaries.lua"
+    ],
+    "case": "0-0-1-2",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p",
+    "seconds": 0.015599465001287172,
+    "stdout": "control-controls-0-0-1-2.stdout",
+    "stderr": "control-controls-0-0-1-2.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 3,
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-controls-retention",
+      "0",
+      "1",
+      "1",
+      "0",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/peer-control.lua",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-boundaries.lua"
+    ],
+    "case": "0-1-1-0",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p",
+    "seconds": 0.015710823001427343,
+    "stdout": "control-controls-0-1-1-0.stdout",
+    "stderr": "control-controls-0-1-1-0.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 3,
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-controls-retention",
+      "0",
+      "1",
+      "1",
+      "2",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/peer-control.lua",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-boundaries.lua"
+    ],
+    "case": "0-1-1-2",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p",
+    "seconds": 0.015518503998464439,
+    "stdout": "control-controls-0-1-1-2.stdout",
+    "stderr": "control-controls-0-1-1-2.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 3,
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-controls-retention",
+      "0",
+      "2",
+      "1",
+      "0",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/peer-control.lua",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-boundaries.lua"
+    ],
+    "case": "0-2-1-0",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p",
+    "seconds": 0.01550384700021823,
+    "stdout": "control-controls-0-2-1-0.stdout",
+    "stderr": "control-controls-0-2-1-0.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 3,
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-controls-retention",
+      "0",
+      "2",
+      "1",
+      "2",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/peer-control.lua",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-boundaries.lua"
+    ],
+    "case": "0-2-1-2",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p",
+    "seconds": 0.015442216998053482,
+    "stdout": "control-controls-0-2-1-2.stdout",
+    "stderr": "control-controls-0-2-1-2.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 3,
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-controls-retention",
+      "0",
+      "3",
+      "1",
+      "0",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/peer-control.lua",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-boundaries.lua"
+    ],
+    "case": "0-3-1-0",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p",
+    "seconds": 0.015716064001026098,
+    "stdout": "control-controls-0-3-1-0.stdout",
+    "stderr": "control-controls-0-3-1-0.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 3,
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-controls-retention",
+      "0",
+      "3",
+      "1",
+      "2",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/peer-control.lua",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-boundaries.lua"
+    ],
+    "case": "0-3-1-2",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p",
+    "seconds": 0.015651459998480277,
+    "stdout": "control-controls-0-3-1-2.stdout",
+    "stderr": "control-controls-0-3-1-2.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 3,
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-controls-retention",
+      "0",
+      "4",
+      "1",
+      "0",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/peer-control.lua",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-boundaries.lua"
+    ],
+    "case": "0-4-1-0",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p",
+    "seconds": 0.015533429999777582,
+    "stdout": "control-controls-0-4-1-0.stdout",
+    "stderr": "control-controls-0-4-1-0.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 3,
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-controls-retention",
+      "0",
+      "4",
+      "1",
+      "2",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/peer-control.lua",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-boundaries.lua"
+    ],
+    "case": "0-4-1-2",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p",
+    "seconds": 0.015505881001445232,
+    "stdout": "control-controls-0-4-1-2.stdout",
+    "stderr": "control-controls-0-4-1-2.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 3,
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-controls-retention",
+      "0",
+      "5",
+      "1",
+      "0",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/peer-control.lua",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-boundaries.lua"
+    ],
+    "case": "0-5-1-0",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p",
+    "seconds": 0.015483803999813972,
+    "stdout": "control-controls-0-5-1-0.stdout",
+    "stderr": "control-controls-0-5-1-0.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 3,
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-controls-retention",
+      "0",
+      "5",
+      "1",
+      "2",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/peer-control.lua",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-boundaries.lua"
+    ],
+    "case": "0-5-1-2",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p",
+    "seconds": 0.015512704998400295,
+    "stdout": "control-controls-0-5-1-2.stdout",
+    "stderr": "control-controls-0-5-1-2.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-controls-retention",
+      "1",
+      "0",
+      "0",
+      "0",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/peer-control.lua",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-boundaries.lua"
+    ],
+    "case": "1-0-0-0",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p",
+    "seconds": 0.06374220499856165,
+    "stdout": "control-controls-1-0-0-0.stdout",
+    "stderr": "control-controls-1-0-0-0.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 2,
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-controls-retention",
+      "1",
+      "0",
+      "0",
+      "2",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/peer-control.lua",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-boundaries.lua"
+    ],
+    "case": "1-0-0-2",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p",
+    "seconds": 3.219490636001865,
+    "stdout": "control-controls-1-0-0-2.stdout",
+    "stderr": "control-controls-1-0-0-2.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 3,
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-controls-retention",
+      "1",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/peer-control.lua",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-boundaries.lua"
+    ],
+    "case": "1-0-1-0",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p",
+    "seconds": 0.015701036998507334,
+    "stdout": "control-controls-1-0-1-0.stdout",
+    "stderr": "control-controls-1-0-1-0.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 3,
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-controls-retention",
+      "1",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/peer-control.lua",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-boundaries.lua"
+    ],
+    "case": "1-0-1-2",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p",
+    "seconds": 0.03160014199966099,
+    "stdout": "control-controls-1-0-1-2.stdout",
+    "stderr": "control-controls-1-0-1-2.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-controls-retention",
+      "3",
+      "0",
+      "0",
+      "0",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/peer-control.lua",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-boundaries.lua"
+    ],
+    "case": "3-0-0-0",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p",
+    "seconds": 0.06402282999988529,
+    "stdout": "control-controls-3-0-0-0.stdout",
+    "stderr": "control-controls-3-0-0-0.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 2,
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-controls-retention",
+      "3",
+      "0",
+      "0",
+      "2",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/peer-control.lua",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-boundaries.lua"
+    ],
+    "case": "3-0-0-2",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p",
+    "seconds": 3.220286488001875,
+    "stdout": "control-controls-3-0-0-2.stdout",
+    "stderr": "control-controls-3-0-0-2.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 3,
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-controls-retention",
+      "3",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/peer-control.lua",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-boundaries.lua"
+    ],
+    "case": "3-0-1-0",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p",
+    "seconds": 0.03199395599949639,
+    "stdout": "control-controls-3-0-1-0.stdout",
+    "stderr": "control-controls-3-0-1-0.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 3,
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-controls-retention",
+      "3",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/peer-control.lua",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-boundaries.lua"
+    ],
+    "case": "3-0-1-2",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p",
+    "seconds": 0.03175537399874884,
+    "stdout": "control-controls-3-0-1-2.stdout",
+    "stderr": "control-controls-3-0-1-2.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 3,
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-controls-retention",
+      "2",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/peer-control.lua",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-boundaries.lua"
+    ],
+    "case": "2-0-1-0",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p",
+    "seconds": 0.015669956999772694,
+    "stdout": "control-controls-2-0-1-0.stdout",
+    "stderr": "control-controls-2-0-1-0.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 3,
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-controls-retention",
+      "2",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/peer-control.lua",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-boundaries.lua"
+    ],
+    "case": "2-0-1-2",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p",
+    "seconds": 0.015595688000757946,
+    "stdout": "control-controls-2-0-1-2.stdout",
+    "stderr": "control-controls-2-0-1-2.stderr",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  }
+]

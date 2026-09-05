@@ -1,0 +1,74 @@
+[
+  {
+    "name": "control-function-timeout-gdb",
+    "argv": [
+      "gdb",
+      "--batch",
+      "-ex",
+      "set pagination off",
+      "-ex",
+      "set confirm off",
+      "-ex",
+      "run",
+      "-ex",
+      "thread apply all bt",
+      "--args",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-matched-t-func-construction-anchor"
+    ],
+    "exit_code": 0,
+    "seconds": 3.0161807609983953,
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/tests/lib/?.lua;;",
+    "interrupted_after_seconds": 3,
+    "stdout": "control-function-timeout-gdb.stdout",
+    "stderr": "control-function-timeout-gdb.stderr"
+  },
+  {
+    "name": "oldcandidate-function-timeout-gdb",
+    "argv": [
+      "gdb",
+      "--batch",
+      "-ex",
+      "set pagination off",
+      "-ex",
+      "set confirm off",
+      "-ex",
+      "run",
+      "-ex",
+      "thread apply all bt",
+      "--args",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-matched-t-func-construction-anchor"
+    ],
+    "exit_code": 0,
+    "seconds": 3.0162072140010423,
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/tests/lib/?.lua;;",
+    "interrupted_after_seconds": 3,
+    "stdout": "oldcandidate-function-timeout-gdb.stdout",
+    "stderr": "oldcandidate-function-timeout-gdb.stderr"
+  },
+  {
+    "name": "veto-function-timeout-gdb",
+    "argv": [
+      "gdb",
+      "--batch",
+      "-ex",
+      "set pagination off",
+      "-ex",
+      "set confirm off",
+      "-ex",
+      "run",
+      "-ex",
+      "thread apply all bt",
+      "--args",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-matched-t-func-construction-anchor"
+    ],
+    "exit_code": 0,
+    "seconds": 3.0161192740051774,
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/?.lua;/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/tests/lib/?.lua;;",
+    "interrupted_after_seconds": 3,
+    "stdout": "veto-function-timeout-gdb.stdout",
+    "stderr": "veto-function-timeout-gdb.stderr"
+  }
+]

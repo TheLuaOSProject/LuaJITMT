@@ -1,0 +1,110 @@
+{
+  "veto": {
+    "source_files": 807,
+    "differences": {
+      "src/lj_api.c": "62cb91a4a382bca4ece810557008895ae9910171d7e74ff11314c00df470d53e",
+      "src/lj_gc.c": "3cd90fc9507153f4acda2b11cf79fb637636a22b42a580b10389138908f47aea",
+      "src/lj_gc.h": "7e7d75d12c65e46f56492e4999b94a1d64318cef0bbb7d01352796fdc94b7fcf",
+      "src/lj_gc2.c": "ce389dec47b431d6ba67cbb76ad15fd6e3c0aa061cd50dc4d10a0396b8cf9cf6",
+      "src/lj_obj.h": "591085dbd6f5a550412b4978cf1ad96850b87c59c41e5883e87b034bcaf62f3c",
+      "src/vm_x64.dasc": "3c1a5c9750ba851b400b580a8b2a80f5c215736bf71fc81112ea728eebdb39ae"
+    },
+    "unexpected_files": [],
+    "luajit": {
+      "sha256": "4201ddd18286ff7a03bb81dcfd208ec151c68834c7ddfb77b43aaf7aeab5222a",
+      "matches_build": true
+    },
+    "libluajit.a": {
+      "sha256": "6e564bbe00a132cbc171dd03a4b9dd9fc7b97b44f4d26b662b681c6f8f463a63",
+      "matches_build": true
+    },
+    "src/host/minilua_asan_refs": 0,
+    "src/host/buildvm_asan_refs": 0,
+    "src/lj_str.o_asan_refs": 0
+  },
+  "strict": {
+    "source_files": 807,
+    "differences": {
+      "src/lj_api.c": "62cb91a4a382bca4ece810557008895ae9910171d7e74ff11314c00df470d53e",
+      "src/lj_gc.c": "3cd90fc9507153f4acda2b11cf79fb637636a22b42a580b10389138908f47aea",
+      "src/lj_gc.h": "7e7d75d12c65e46f56492e4999b94a1d64318cef0bbb7d01352796fdc94b7fcf",
+      "src/lj_gc2.c": "ce389dec47b431d6ba67cbb76ad15fd6e3c0aa061cd50dc4d10a0396b8cf9cf6",
+      "src/lj_obj.h": "591085dbd6f5a550412b4978cf1ad96850b87c59c41e5883e87b034bcaf62f3c",
+      "src/vm_x64.dasc": "3c1a5c9750ba851b400b580a8b2a80f5c215736bf71fc81112ea728eebdb39ae"
+    },
+    "unexpected_files": [],
+    "luajit": {
+      "sha256": "b5fe2c844b4dd844d129ac15232b4091c523032093e79eff862f8e97ed958b89",
+      "matches_build": true
+    },
+    "libluajit.a": {
+      "sha256": "63e56469d34c5aa1363ad65a96bc7a6f4ca8ecf05bbbbd5253c50c1a71baeae1",
+      "matches_build": true
+    },
+    "src/host/minilua_asan_refs": 0,
+    "src/host/buildvm_asan_refs": 0,
+    "src/lj_str.o_asan_refs": 0
+  },
+  "asan": {
+    "source_files": 807,
+    "differences": {
+      "src/lj_api.c": "62cb91a4a382bca4ece810557008895ae9910171d7e74ff11314c00df470d53e",
+      "src/lj_gc.c": "3cd90fc9507153f4acda2b11cf79fb637636a22b42a580b10389138908f47aea",
+      "src/lj_gc.h": "7e7d75d12c65e46f56492e4999b94a1d64318cef0bbb7d01352796fdc94b7fcf",
+      "src/lj_gc2.c": "ce389dec47b431d6ba67cbb76ad15fd6e3c0aa061cd50dc4d10a0396b8cf9cf6",
+      "src/lj_obj.h": "591085dbd6f5a550412b4978cf1ad96850b87c59c41e5883e87b034bcaf62f3c",
+      "src/vm_x64.dasc": "3c1a5c9750ba851b400b580a8b2a80f5c215736bf71fc81112ea728eebdb39ae"
+    },
+    "unexpected_files": [],
+    "luajit": {
+      "sha256": "a72fd3f7c9af6e1eb8f9167a0eef015ec83c211dd9c0f23811bf87017202f05f",
+      "matches_build": true
+    },
+    "libluajit.a": {
+      "sha256": "d6ab609ea8d81157d77642cca8c68201c66bc4e155c0d5a250549ce3887c5eac",
+      "matches_build": true
+    },
+    "src/host/minilua_asan_refs": 0,
+    "src/host/buildvm_asan_refs": 0,
+    "src/lj_str.o_asan_refs": 16
+  },
+  "extrahelpers": {
+    "source_files": 807,
+    "differences": {
+      "src/lj_api.c": "62cb91a4a382bca4ece810557008895ae9910171d7e74ff11314c00df470d53e",
+      "src/lj_gc.c": "3cd90fc9507153f4acda2b11cf79fb637636a22b42a580b10389138908f47aea",
+      "src/lj_gc.h": "7e7d75d12c65e46f56492e4999b94a1d64318cef0bbb7d01352796fdc94b7fcf",
+      "src/lj_gc2.c": "ce389dec47b431d6ba67cbb76ad15fd6e3c0aa061cd50dc4d10a0396b8cf9cf6",
+      "src/lj_obj.h": "591085dbd6f5a550412b4978cf1ad96850b87c59c41e5883e87b034bcaf62f3c",
+      "src/vm_x64.dasc": "3c1a5c9750ba851b400b580a8b2a80f5c215736bf71fc81112ea728eebdb39ae"
+    },
+    "unexpected_files": [],
+    "luajit": {
+      "sha256": "98ea9eb4ababb99a9e9d7bb24c302ff4d96d81fe403fdc98396f3ae167ab6a49",
+      "matches_build": true
+    },
+    "libluajit.a": {
+      "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+      "matches_build": true
+    },
+    "src/host/minilua_asan_refs": 0,
+    "src/host/buildvm_asan_refs": 0,
+    "src/lj_str.o_asan_refs": 0
+  },
+  "controlextrahelpers": {
+    "source_files": 807,
+    "differences": {},
+    "unexpected_files": [],
+    "luajit": {
+      "sha256": "d30d6b89d555dc69eab8a5156c705136830d6a24fb4b3927bc46ebf778c12206",
+      "matches_build": true
+    },
+    "libluajit.a": {
+      "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+      "matches_build": true
+    },
+    "src/host/minilua_asan_refs": 0,
+    "src/host/buildvm_asan_refs": 0,
+    "src/lj_str.o_asan_refs": 0
+  }
+}

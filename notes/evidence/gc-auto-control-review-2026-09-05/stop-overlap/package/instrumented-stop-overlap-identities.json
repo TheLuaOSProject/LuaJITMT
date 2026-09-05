@@ -1,0 +1,22 @@
+{
+  "strict-stop-first-attach": {
+    "sha256": "ccfdb9827e07c12078376e5e8a179ccb93702f6a3b0bbe900d4e3c8c2e3d09f4",
+    "bytes": 1989616
+  },
+  "strict/src/libluajit.a": {
+    "sha256": "63e56469d34c5aa1363ad65a96bc7a6f4ca8ecf05bbbbd5253c50c1a71baeae1",
+    "bytes": 2867108
+  },
+  "asan-stop-first-attach": {
+    "sha256": "915a11152df611ba4763bd8fc1d5ff213bf485321d2f6d33e1a1ac7e7e59391f",
+    "bytes": 19462896
+  },
+  "asan/src/libluajit.a": {
+    "sha256": "d6ab609ea8d81157d77642cca8c68201c66bc4e155c0d5a250549ce3887c5eac",
+    "bytes": 26672262
+  },
+  "t-stop-first-attach.c": {
+    "sha256": "3ae6ce71c2cfa62f09bd3752f3736266a8606983a72928d2ef5476d1c16ab640",
+    "bytes": 6461
+  }
+}

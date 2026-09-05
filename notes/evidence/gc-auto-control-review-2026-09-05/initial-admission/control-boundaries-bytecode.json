@@ -1,0 +1,10 @@
+{
+  "argv": [
+    "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/candidate/src/luajit",
+    "-bl",
+    "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control-boundaries.lua"
+  ],
+  "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p",
+  "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/candidate/src/?.lua;;",
+  "exit_code": 0
+}

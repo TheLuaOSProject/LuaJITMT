@@ -1,0 +1,24 @@
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+[New Thread 0x7ffff792e6c0 (LWP 292161)]
+
+Thread 1 "controlhelpers-" received signal SIGINT, Interrupt.
+0x00005555555cb0e2 in lj_thr_retry_yield ()
+
+Thread 2 (Thread 0x7ffff792e6c0 (LWP 292161) "controlhelpers-"):
+#0  0x0000555555568cb5 in gc2_idle_reclaim_enter ()
+#1  0x0000555555579ead in lj_gc2_reclaim_retired ()
+#2  0x000055555555f120 in idle_reclaim_main (arg=0x7fffffffdfd0) at /tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers/tests/t-jit-idle-reclaim-entry.c:47
+#3  0x00007ffff7d35b7b in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#4  0x00007ffff7db37f8 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+
+Thread 1 (Thread 0x7ffff7ca21c0 (LWP 292158) "controlhelpers-"):
+#0  0x00005555555cb0e2 in lj_thr_retry_yield ()
+#1  0x00005555555a1a8f in lj_tab_wait_l ()
+#2  0x00005555555b1c50 in lj_tab_next_rooted ()
+#3  0x00005555555b2ad3 in lj_tab_itern_rooted ()
+#4  0x000055555563bb51 in lj_vm_IITERN ()
+#5  0x00005555555c0a67 in lj_vm_pcall_unwind ()
+#6  0x00005555555f45b0 in lua_pcall ()
+#7  0x000055555555f2da in ljt_lua_pcall (L=L@entry=0x7ffff7c90080, nresults=nresults@entry=2, what=what@entry=0x5555556b8273 "closed IDLE ITERN shadow", nargs=1) at /tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers/tests/lib/lua_fixture_helpers.h:50
+#8  0x000055555555e978 in main () at /tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers/tests/t-jit-idle-reclaim-entry.c:318

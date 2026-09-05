@@ -1,0 +1,26 @@
+{
+  "veto-controls-v2-retention": {
+    "sha256": "22d915dd83cfca01f887c23adaf03ec9cb11d525422b14189589aebe5ef8f296",
+    "bytes": 1776384
+  },
+  "t-string-retention.c": {
+    "sha256": "2e8e840fb4ba3a3b09168c06d828ff10ebafd41e9ff555b9737f34384fea3cf9",
+    "bytes": 12128
+  },
+  "t-auto-controls-v2.c": {
+    "sha256": "e0a5445e48151078870dde0043c7a2c0bb95a50452a0e8cbde7dc6146fbebfc6",
+    "bytes": 7355
+  },
+  "control-boundaries.lua": {
+    "sha256": "fc17679e2035924294a7003184e085b0437ea6ddf8cfcb0664dee3ccd8521460",
+    "bytes": 766
+  },
+  "peer-control.lua": {
+    "sha256": "519ebf714b0a33b9a436d3452a153a1bc3eea3322ebf0bf74d8e76fea4ab8cb2",
+    "bytes": 1756
+  },
+  "libluajit.a": {
+    "sha256": "6e564bbe00a132cbc171dd03a4b9dd9fc7b97b44f4d26b662b681c6f8f463a63",
+    "bytes": 2356682
+  }
+}

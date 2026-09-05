@@ -1,0 +1,143 @@
+[
+  {
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers/tests/t-gc2-interp-hard-check.c",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers-safety-t-gc2-interp-hard-check"
+    ],
+    "name": "t-gc2-interp-hard-check-compile",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.11395701599758468,
+    "stdout": "controlhelpers-safety-t-gc2-interp-hard-check-compile.stdout",
+    "stderr": "controlhelpers-safety-t-gc2-interp-hard-check-compile.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers-safety-t-gc2-interp-hard-check"
+    ],
+    "name": "t-gc2-interp-hard-check",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": -6,
+    "seconds": 0.11378078699999605,
+    "stdout": "controlhelpers-safety-t-gc2-interp-hard-check.stdout",
+    "stderr": "controlhelpers-safety-t-gc2-interp-hard-check.stderr"
+  },
+  {
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers/tests/t-gc2-alloc-account.c",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers-safety-t-gc2-alloc-account"
+    ],
+    "name": "t-gc2-alloc-account-compile",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.3647771809992264,
+    "stdout": "controlhelpers-safety-t-gc2-alloc-account-compile.stdout",
+    "stderr": "controlhelpers-safety-t-gc2-alloc-account-compile.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers-safety-t-gc2-alloc-account"
+    ],
+    "name": "t-gc2-alloc-account",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": -6,
+    "seconds": 0.06388465800046106,
+    "stdout": "controlhelpers-safety-t-gc2-alloc-account.stdout",
+    "stderr": "controlhelpers-safety-t-gc2-alloc-account.stderr"
+  },
+  {
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers/tests/t-jit-idle-reclaim-entry.c",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers-safety-t-jit-idle-reclaim-entry"
+    ],
+    "name": "t-jit-idle-reclaim-entry-compile",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.1640734339998744,
+    "stdout": "controlhelpers-safety-t-jit-idle-reclaim-entry-compile.stdout",
+    "stderr": "controlhelpers-safety-t-jit-idle-reclaim-entry-compile.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers-safety-t-jit-idle-reclaim-entry"
+    ],
+    "name": "t-jit-idle-reclaim-entry",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": "timeout",
+    "seconds": 60.00092595800015,
+    "stdout": "controlhelpers-safety-t-jit-idle-reclaim-entry.stdout",
+    "stderr": "controlhelpers-safety-t-jit-idle-reclaim-entry.stderr"
+  }
+]

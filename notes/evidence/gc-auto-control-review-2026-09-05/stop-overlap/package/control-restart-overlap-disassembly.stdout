@@ -1,0 +1,214 @@
+
+/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-restart-first-attach:     file format elf64-x86-64
+
+
+Disassembly of section .init:
+
+Disassembly of section .plt:
+
+Disassembly of section .plt.got:
+
+Disassembly of section .text:
+
+00000000000799e0 <threading_gc_enter_counted>:
+   799e0:	41 57                	push   %r15
+   799e2:	41 56                	push   %r14
+   799e4:	49 89 f6             	mov    %rsi,%r14
+   799e7:	41 55                	push   %r13
+   799e9:	49 89 fd             	mov    %rdi,%r13
+   799ec:	41 54                	push   %r12
+   799ee:	55                   	push   %rbp
+   799ef:	53                   	push   %rbx
+   799f0:	48 83 ec 38          	sub    $0x38,%rsp
+   799f4:	48 8b 5f 10          	mov    0x10(%rdi),%rbx
+   799f8:	48 8d 44 24 20       	lea    0x20(%rsp),%rax
+   799fd:	89 54 24 1c          	mov    %edx,0x1c(%rsp)
+   79a01:	48 89 44 24 08       	mov    %rax,0x8(%rsp)
+   79a06:	48 8d ab ac 15 00 00 	lea    0x15ac(%rbx),%rbp
+   79a0d:	4c 8d a3 a0 15 00 00 	lea    0x15a0(%rbx),%r12
+   79a14:	66 66 2e 0f 1f 84 00 	data16 cs nopw 0x0(%rax,%rax,1)
+   79a1b:	00 00 00 00 
+   79a1f:	90                   	nop
+   79a20:	8b 4d 00             	mov    0x0(%rbp),%ecx
+   79a23:	8b 83 b0 15 00 00    	mov    0x15b0(%rbx),%eax
+   79a29:	85 c9                	test   %ecx,%ecx
+   79a2b:	0f 85 e5 00 00 00    	jne    79b16 <threading_gc_enter_counted+0x136>
+   79a31:	85 c0                	test   %eax,%eax
+   79a33:	0f 85 a7 01 00 00    	jne    79be0 <threading_gc_enter_counted+0x200>
+   79a39:	41 8b 04 24          	mov    (%r12),%eax
+   79a3d:	a8 01                	test   $0x1,%al
+   79a3f:	0f 85 1b 01 00 00    	jne    79b60 <threading_gc_enter_counted+0x180>
+   79a45:	4d 8b 7d 10          	mov    0x10(%r13),%r15
+   79a49:	49 8b 87 f0 03 00 00 	mov    0x3f0(%r15),%rax
+   79a50:	48 89 c7             	mov    %rax,%rdi
+   79a53:	48 89 44 24 10       	mov    %rax,0x10(%rsp)
+   79a58:	e8 a3 ab fd ff       	call   54600 <lj_jit_token_acquire_wait>
+   79a5d:	4c 89 ff             	mov    %r15,%rdi
+   79a60:	89 44 24 18          	mov    %eax,0x18(%rsp)
+   79a64:	e8 f7 22 fe ff       	call   5bd60 <lj_trace_hasany>
+   79a69:	85 c0                	test   %eax,%eax
+   79a6b:	74 20                	je     79a8d <threading_gc_enter_counted+0xad>
+   79a6d:	41 0f b6 87 c9 00 00 	movzbl 0xc9(%r15),%eax
+   79a74:	00 
+   79a75:	a8 40                	test   $0x40,%al
+   79a77:	0f 85 4b 01 00 00    	jne    79bc8 <threading_gc_enter_counted+0x1e8>
+   79a7d:	4c 89 ef             	mov    %r13,%rdi
+   79a80:	e8 bb 23 fe ff       	call   5be40 <lj_trace_flushall_hs>
+   79a85:	85 c0                	test   %eax,%eax
+   79a87:	0f 85 1c 02 00 00    	jne    79ca9 <threading_gc_enter_counted+0x2c9>
+   79a8d:	41 8b 04 24          	mov    (%r12),%eax
+   79a91:	a8 01                	test   $0x1,%al
+   79a93:	75 0d                	jne    79aa2 <threading_gc_enter_counted+0xc2>
+   79a95:	89 c2                	mov    %eax,%edx
+   79a97:	83 ca 01             	or     $0x1,%edx
+   79a9a:	f0 41 0f b1 14 24    	lock cmpxchg %edx,(%r12)
+   79aa0:	75 ef                	jne    79a91 <threading_gc_enter_counted+0xb1>
+   79aa2:	8b 74 24 18          	mov    0x18(%rsp),%esi
+   79aa6:	85 f6                	test   %esi,%esi
+   79aa8:	0f 85 02 01 00 00    	jne    79bb0 <threading_gc_enter_counted+0x1d0>
+   79aae:	4d 85 f6             	test   %r14,%r14
+   79ab1:	74 1a                	je     79acd <threading_gc_enter_counted+0xed>
+   79ab3:	4d 8b 7d 10          	mov    0x10(%r13),%r15
+   79ab7:	4c 89 f6             	mov    %r14,%rsi
+   79aba:	4c 89 ef             	mov    %r13,%rdi
+   79abd:	e8 3e 17 01 00       	call   8b200 <lj_gc_pubobjroot>
+   79ac2:	4c 89 f6             	mov    %r14,%rsi
+   79ac5:	4c 89 ff             	mov    %r15,%rdi
+   79ac8:	e8 13 18 03 00       	call   ab2e0 <lj_gc2_preserve_root>
+   79acd:	b8 01 00 00 00       	mov    $0x1,%eax
+   79ad2:	f0 0f c1 83 a4 15 00 	lock xadd %eax,0x15a4(%rbx)
+   79ad9:	00 
+   79ada:	85 c0                	test   %eax,%eax
+   79adc:	0f 84 9e 00 00 00    	je     79b80 <threading_gc_enter_counted+0x1a0>
+   79ae2:	f0 48 83 0c 24 00    	lock orq $0x0,(%rsp)
+   79ae8:	8b 45 00             	mov    0x0(%rbp),%eax
+   79aeb:	85 c0                	test   %eax,%eax
+   79aed:	75 0e                	jne    79afd <threading_gc_enter_counted+0x11d>
+   79aef:	8b 83 74 01 00 00    	mov    0x174(%rbx),%eax
+   79af5:	85 c0                	test   %eax,%eax
+   79af7:	0f 84 57 01 00 00    	je     79c54 <threading_gc_enter_counted+0x274>
+   79afd:	48 89 df             	mov    %rbx,%rdi
+   79b00:	e8 4b d6 ff ff       	call   77150 <threading_gc_leave>
+   79b05:	8b 4d 00             	mov    0x0(%rbp),%ecx
+   79b08:	8b 83 b0 15 00 00    	mov    0x15b0(%rbx),%eax
+   79b0e:	85 c9                	test   %ecx,%ecx
+   79b10:	0f 84 1b ff ff ff    	je     79a31 <threading_gc_enter_counted+0x51>
+   79b16:	85 c0                	test   %eax,%eax
+   79b18:	0f 85 c2 00 00 00    	jne    79be0 <threading_gc_enter_counted+0x200>
+   79b1e:	66 0f 6f 05 ba f7 0b 	movdqa 0xbf7ba(%rip),%xmm0        # 1392e0 <__PRETTY_FUNCTION__.2+0x20>
+   79b25:	00 
+   79b26:	45 31 c9             	xor    %r9d,%r9d
+   79b29:	48 89 ee             	mov    %rbp,%rsi
+   79b2c:	31 c0                	xor    %eax,%eax
+   79b2e:	48 83 ec 08          	sub    $0x8,%rsp
+   79b32:	ba 80 00 00 00       	mov    $0x80,%edx
+   79b37:	bf ca 00 00 00       	mov    $0xca,%edi
+   79b3c:	0f 29 44 24 28       	movaps %xmm0,0x28(%rsp)
+   79b41:	6a 00                	push   $0x0
+   79b43:	4c 8b 44 24 18       	mov    0x18(%rsp),%r8
+   79b48:	e8 63 f8 f8 ff       	call   93b0 <syscall@plt>
+   79b4d:	41 5a                	pop    %r10
+   79b4f:	41 5b                	pop    %r11
+   79b51:	e9 ca fe ff ff       	jmp    79a20 <threading_gc_enter_counted+0x40>
+   79b56:	66 2e 0f 1f 84 00 00 	cs nopw 0x0(%rax,%rax,1)
+   79b5d:	00 00 00 
+   79b60:	41 8b 04 24          	mov    (%r12),%eax
+   79b64:	a8 01                	test   $0x1,%al
+   79b66:	0f 85 42 ff ff ff    	jne    79aae <threading_gc_enter_counted+0xce>
+   79b6c:	89 c2                	mov    %eax,%edx
+   79b6e:	83 ca 01             	or     $0x1,%edx
+   79b71:	f0 41 0f b1 14 24    	lock cmpxchg %edx,(%r12)
+   79b77:	0f 84 31 ff ff ff    	je     79aae <threading_gc_enter_counted+0xce>
+   79b7d:	eb e5                	jmp    79b64 <threading_gc_enter_counted+0x184>
+   79b7f:	90                   	nop
+   79b80:	48 be 00 00 00 00 00 	movabs $0x800000000000,%rsi
+   79b87:	80 00 00 
+   79b8a:	48 8b 43 50          	mov    0x50(%rbx),%rax
+   79b8e:	48 39 f0             	cmp    %rsi,%rax
+   79b91:	74 6d                	je     79c00 <threading_gc_enter_counted+0x220>
+   79b93:	48 89 83 b8 15 00 00 	mov    %rax,0x15b8(%rbx)
+   79b9a:	48 b8 00 00 00 00 00 	movabs $0x800000000000,%rax
+   79ba1:	80 00 00 
+   79ba4:	48 89 43 50          	mov    %rax,0x50(%rbx)
+   79ba8:	e9 35 ff ff ff       	jmp    79ae2 <threading_gc_enter_counted+0x102>
+   79bad:	0f 1f 00             	nopl   (%rax)
+   79bb0:	49 8b 45 10          	mov    0x10(%r13),%rax
+   79bb4:	48 8b b8 f0 03 00 00 	mov    0x3f0(%rax),%rdi
+   79bbb:	e8 d0 9d fd ff       	call   53990 <lj_jit_token_release>
+   79bc0:	e9 e9 fe ff ff       	jmp    79aae <threading_gc_enter_counted+0xce>
+   79bc5:	0f 1f 00             	nopl   (%rax)
+   79bc8:	4c 89 ff             	mov    %r15,%rdi
+   79bcb:	e8 40 b0 fd ff       	call   54c10 <lj_trace_abort>
+   79bd0:	4c 89 ef             	mov    %r13,%rdi
+   79bd3:	e8 58 22 fe ff       	call   5be30 <lj_trace_flushall_gc>
+   79bd8:	e9 b0 fe ff ff       	jmp    79a8d <threading_gc_enter_counted+0xad>
+   79bdd:	0f 1f 00             	nopl   (%rax)
+   79be0:	44 8b 4c 24 1c       	mov    0x1c(%rsp),%r9d
+   79be5:	45 85 c9             	test   %r9d,%r9d
+   79be8:	74 36                	je     79c20 <threading_gc_enter_counted+0x240>
+   79bea:	31 c0                	xor    %eax,%eax
+   79bec:	48 83 c4 38          	add    $0x38,%rsp
+   79bf0:	5b                   	pop    %rbx
+   79bf1:	5d                   	pop    %rbp
+   79bf2:	41 5c                	pop    %r12
+   79bf4:	41 5d                	pop    %r13
+   79bf6:	41 5e                	pop    %r14
+   79bf8:	41 5f                	pop    %r15
+   79bfa:	c3                   	ret
+   79bfb:	0f 1f 44 00 00       	nopl   0x0(%rax,%rax,1)
+   79c00:	8b 93 18 15 00 00    	mov    0x1518(%rbx),%edx
+   79c06:	83 e2 01             	and    $0x1,%edx
+   79c09:	74 88                	je     79b93 <threading_gc_enter_counted+0x1b3>
+   79c0b:	48 8b 83 b8 15 00 00 	mov    0x15b8(%rbx),%rax
+   79c12:	e9 7c ff ff ff       	jmp    79b93 <threading_gc_enter_counted+0x1b3>
+   79c17:	66 0f 1f 84 00 00 00 	nopw   0x0(%rax,%rax,1)
+   79c1e:	00 00 
+   79c20:	48 8d b3 a8 15 00 00 	lea    0x15a8(%rbx),%rsi
+   79c27:	f0 83 2e 01          	lock subl $0x1,(%rsi)
+   79c2b:	75 bd                	jne    79bea <threading_gc_enter_counted+0x20a>
+   79c2d:	48 83 ec 08          	sub    $0x8,%rsp
+   79c31:	45 31 c0             	xor    %r8d,%r8d
+   79c34:	bf ca 00 00 00       	mov    $0xca,%edi
+   79c39:	45 31 c9             	xor    %r9d,%r9d
+   79c3c:	6a 00                	push   $0x0
+   79c3e:	b9 ff ff ff 7f       	mov    $0x7fffffff,%ecx
+   79c43:	ba 81 00 00 00       	mov    $0x81,%edx
+   79c48:	31 c0                	xor    %eax,%eax
+   79c4a:	e8 61 f7 f8 ff       	call   93b0 <syscall@plt>
+   79c4f:	5f                   	pop    %rdi
+   79c50:	41 58                	pop    %r8
+   79c52:	eb 96                	jmp    79bea <threading_gc_enter_counted+0x20a>
+   79c54:	8b 4c 24 1c          	mov    0x1c(%rsp),%ecx
+   79c58:	85 c9                	test   %ecx,%ecx
+   79c5a:	74 1c                	je     79c78 <threading_gc_enter_counted+0x298>
+   79c5c:	8b 93 b0 15 00 00    	mov    0x15b0(%rbx),%edx
+   79c62:	b8 01 00 00 00       	mov    $0x1,%eax
+   79c67:	85 d2                	test   %edx,%edx
+   79c69:	74 81                	je     79bec <threading_gc_enter_counted+0x20c>
+   79c6b:	48 89 df             	mov    %rbx,%rdi
+   79c6e:	e8 dd d4 ff ff       	call   77150 <threading_gc_leave>
+   79c73:	e9 72 ff ff ff       	jmp    79bea <threading_gc_enter_counted+0x20a>
+   79c78:	48 8d b3 a8 15 00 00 	lea    0x15a8(%rbx),%rsi
+   79c7f:	f0 83 2e 01          	lock subl $0x1,(%rsi)
+   79c83:	75 d7                	jne    79c5c <threading_gc_enter_counted+0x27c>
+   79c85:	48 83 ec 08          	sub    $0x8,%rsp
+   79c89:	ba 81 00 00 00       	mov    $0x81,%edx
+   79c8e:	45 31 c9             	xor    %r9d,%r9d
+   79c91:	45 31 c0             	xor    %r8d,%r8d
+   79c94:	6a 00                	push   $0x0
+   79c96:	b9 ff ff ff 7f       	mov    $0x7fffffff,%ecx
+   79c9b:	bf ca 00 00 00       	mov    $0xca,%edi
+   79ca0:	e8 0b f7 f8 ff       	call   93b0 <syscall@plt>
+   79ca5:	58                   	pop    %rax
+   79ca6:	5a                   	pop    %rdx
+   79ca7:	eb b3                	jmp    79c5c <threading_gc_enter_counted+0x27c>
+   79ca9:	83 7c 24 18 00       	cmpl   $0x0,0x18(%rsp)
+   79cae:	75 0f                	jne    79cbf <threading_gc_enter_counted+0x2df>
+   79cb0:	48 8d 35 a1 d8 0b 00 	lea    0xbd8a1(%rip),%rsi        # 137558 <_IO_stdin_used+0x558>
+   79cb7:	4c 89 ef             	mov    %r13,%rdi
+   79cba:	e8 11 3a f9 ff       	call   d6d0 <lj_err_callermsg>
+   79cbf:	48 8b 7c 24 10       	mov    0x10(%rsp),%rdi
+   79cc4:	e8 c7 9c fd ff       	call   53990 <lj_jit_token_release>
+   79cc9:	eb e5                	jmp    79cb0 <threading_gc_enter_counted+0x2d0>
+
+Disassembly of section .fini:

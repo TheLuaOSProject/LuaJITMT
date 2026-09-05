@@ -1,0 +1,37 @@
+{
+  "argv": [
+    "make",
+    "-C",
+    "src",
+    "-j4"
+  ],
+  "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/candidate",
+  "exit_code": 0,
+  "seconds": 12.099216677001095,
+  "binaries": {
+    "luajit": {
+      "sha256": "6d9667c57b13f6afe090c4b1dfb9f5c0c52617b72efd0453ecef69d8fef2a0f1",
+      "bytes": 1514736
+    },
+    "libluajit.a": {
+      "sha256": "b882fcd410b1cdb9382abbab210b2e62f94347434fa5dd7c220164bd690c9842",
+      "bytes": 2356530
+    },
+    "libluajit.so": {
+      "sha256": "71cb2b7ad22d91d0fc3101b4d2e9e7ccc02ae6949cfb0117d39b0c9ae66da43a",
+      "bytes": 1511160
+    },
+    "host/minilua": {
+      "sha256": "8ab7d5a14b0525e3759effc570de0f02965b5618600fbfe15499924a399f1538",
+      "bytes": 154760
+    },
+    "host/buildvm": {
+      "sha256": "35aedeba32c27e1e134b598adb134de37b984394f613ca19e78cf530e0f8dd22",
+      "bytes": 122336
+    },
+    "lj_str.o": {
+      "sha256": "b163f488d802afe43613dcf7477e38a175680b5888e251f91cd9cd21eade5b39",
+      "bytes": 26200
+    }
+  }
+}

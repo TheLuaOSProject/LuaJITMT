@@ -1,0 +1,18 @@
+{
+  "shared_head": "aee88db569b82216b705408f00295a337a7393fe",
+  "frozen_gc_base": "597b8705208957ade8465416da30976ab9b52195",
+  "unchanged_shared_gc_threading_string_inputs": {
+    "src/lj_api.c": "c2b43c2839509c8403c51729c72083be2701bdfc4b5efc9f116540d9c105d6af",
+    "src/lj_gc.c": "7ceb24d2c755325c7c3d4113330bbb4fce6d3c893dd22fc1ef8bf924590ab4cb",
+    "src/lj_gc.h": "3d52d352f6280ee308f9ae71a8edbe4dde6f41f9a00256a0d3d6a3924fddc0dd",
+    "src/lj_gc2.c": "5557bc243f94f5d310287494cc3560d91931455eaa8338ba480f84a33edf45a1",
+    "src/lj_obj.h": "4dddf105f8b3006efb495259340ea4acaae9579e283b769ff9e683810beb435b",
+    "src/vm_x64.dasc": "ad48405b4793e8514307cd4efc15238dcd3a29b0d1970b452ee77952b921d64b",
+    "src/lib_threading.c": "0c68ad63cf688543cf6f8ecf4e9fa6092fa8492176ec6c13356c6bf31aa4b4be",
+    "src/lj_str.c": "a256c39e9f2f05e6c6d96e2aa140d0f6e04bad5e1e7966cbff15ba08d4959975"
+  },
+  "production_change_integrated": false,
+  "original_three_file_admission_candidate": "Unsafe: reproduced completed-before-call STOP violation.",
+  "six_file_stop_veto": "Source-reviewed bounded STOP repair; RESTART/attachment loss remains reproduced and scheduler failure remains unresolved. No integration approval.",
+  "subsequent_work": "A separate isolated authoritative-control repair and scheduler diagnosis are in progress; their future results do not replace these frozen observations."
+}

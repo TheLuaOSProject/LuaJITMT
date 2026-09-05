@@ -1,0 +1,7 @@
+{
+  "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/t-stop-first-attach.c": "3ae6ce71c2cfa62f09bd3752f3736266a8606983a72928d2ef5476d1c16ab640",
+  "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-stop-first-attach": "c039da5df4b73d4e288cd3746cb6cc6db945c2243c864e4a242266021829d65f",
+  "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/candidate-stop-first-attach": "d55f8bfd2371a983ca4a3dc67d24b847b42e8c5bbb607e7ad54da1547a53dcba",
+  "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/libluajit.a": "da2308594747fcbff96dbf18753c4e980b5592669c686493e40401db6b5557ed",
+  "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/candidate/src/libluajit.a": "b882fcd410b1cdb9382abbab210b2e62f94347434fa5dd7c220164bd690c9842"
+}

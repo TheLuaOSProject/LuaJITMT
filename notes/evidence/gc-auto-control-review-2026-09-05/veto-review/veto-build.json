@@ -1,0 +1,23 @@
+{
+  "argv": [
+    "make",
+    "-C",
+    "src",
+    "-j4"
+  ],
+  "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto",
+  "exit_code": 0,
+  "seconds": 13.551652517002367,
+  "inputs": {
+    "src/lj_obj.h": "591085dbd6f5a550412b4978cf1ad96850b87c59c41e5883e87b034bcaf62f3c",
+    "src/lj_gc.h": "7e7d75d12c65e46f56492e4999b94a1d64318cef0bbb7d01352796fdc94b7fcf",
+    "src/lj_gc.c": "3cd90fc9507153f4acda2b11cf79fb637636a22b42a580b10389138908f47aea",
+    "src/lj_gc2.c": "ce389dec47b431d6ba67cbb76ad15fd6e3c0aa061cd50dc4d10a0396b8cf9cf6",
+    "src/lj_api.c": "62cb91a4a382bca4ece810557008895ae9910171d7e74ff11314c00df470d53e",
+    "src/vm_x64.dasc": "3c1a5c9750ba851b400b580a8b2a80f5c215736bf71fc81112ea728eebdb39ae"
+  },
+  "binaries": {
+    "luajit": "4201ddd18286ff7a03bb81dcfd208ec151c68834c7ddfb77b43aaf7aeab5222a",
+    "libluajit.a": "6e564bbe00a132cbc171dd03a4b9dd9fc7b97b44f4d26b662b681c6f8f463a63"
+  }
+}

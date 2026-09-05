@@ -1,0 +1,14 @@
+/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers/src/luajit: ...0905-h7ntx71p/helpers/tests/t-gc-active-thread-roots.lua:2: module 'thread_harness' not found:
+	no field package.preload['thread_harness']
+	no file '/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers/src/thread_harness.lua'
+	no file './thread_harness.lua'
+	no file '/usr/local/share/luajit-2.1/thread_harness.lua'
+	no file '/usr/local/share/lua/5.1/thread_harness.lua'
+	no file '/usr/local/share/lua/5.1/thread_harness/init.lua'
+	no file './thread_harness.so'
+	no file '/usr/local/lib/lua/5.1/thread_harness.so'
+	no file '/usr/local/lib/lua/5.1/loadall.so'
+stack traceback:
+	[C]: in function 'require'
+	...0905-h7ntx71p/helpers/tests/t-gc-active-thread-roots.lua:2: in main chunk
+	[C]: at 0x55f2e5095fc0

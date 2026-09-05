@@ -1,0 +1,179 @@
+[
+  {
+    "exit_code": 0,
+    "argv": [
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/t-string-retention.c",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-retention"
+    ],
+    "case": "compile",
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "seconds": 0.2643241800033138,
+    "stdout": "asan-compile.stdout",
+    "stderr": "asan-compile.stderr",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-retention",
+      "1",
+      "0",
+      "0",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/peer-control.lua"
+    ],
+    "case": "1-0-0",
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "seconds": 0.06381623100605793,
+    "stdout": "asan-1-0-0.stdout",
+    "stderr": "asan-1-0-0.stderr",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-retention",
+      "1",
+      "0",
+      "2",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/peer-control.lua"
+    ],
+    "case": "1-0-2",
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "seconds": 0.113943587995891,
+    "stdout": "asan-1-0-2.stdout",
+    "stderr": "asan-1-0-2.stderr",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-retention",
+      "1",
+      "1",
+      "0",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/peer-control.lua"
+    ],
+    "case": "1-1-0",
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "seconds": 0.11406220799835864,
+    "stdout": "asan-1-1-0.stdout",
+    "stderr": "asan-1-1-0.stderr",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-retention",
+      "1",
+      "1",
+      "2",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/peer-control.lua"
+    ],
+    "case": "1-1-2",
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "seconds": 0.16396143599558854,
+    "stdout": "asan-1-1-2.stdout",
+    "stderr": "asan-1-1-2.stderr",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-retention",
+      "0",
+      "0",
+      "0",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/peer-control.lua"
+    ],
+    "case": "0-0-0",
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "seconds": 0.26493070899596205,
+    "stdout": "asan-0-0-0.stdout",
+    "stderr": "asan-0-0-0.stderr",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 2,
+    "argv": [
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-retention",
+      "0",
+      "0",
+      "2",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/peer-control.lua"
+    ],
+    "case": "0-0-2",
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "seconds": 4.872507591004251,
+    "stdout": "asan-0-0-2.stdout",
+    "stderr": "asan-0-0-2.stderr",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-retention",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/peer-control.lua"
+    ],
+    "case": "0-1-0",
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "seconds": 0.41434270599711454,
+    "stdout": "asan-0-1-0.stdout",
+    "stderr": "asan-0-1-0.stderr",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 2,
+    "argv": [
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-retention",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/peer-control.lua"
+    ],
+    "case": "0-1-2",
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "seconds": 4.873233985003026,
+    "stdout": "asan-0-1-2.stdout",
+    "stderr": "asan-0-1-2.stderr",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  }
+]

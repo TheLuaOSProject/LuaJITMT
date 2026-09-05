@@ -1,0 +1,19 @@
+{
+  "argv": [
+    "gdb",
+    "--batch",
+    "-ex",
+    "set pagination off",
+    "-ex",
+    "run",
+    "-ex",
+    "thread apply all bt",
+    "--args",
+    "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers-safety-t-jit-idle-reclaim-entry"
+  ],
+  "seconds": 2.0110981810030353,
+  "exit_code": 0,
+  "interrupt_after_seconds": 2,
+  "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers",
+  "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/controlhelpers/src/?.lua;;"
+}

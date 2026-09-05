@@ -1,0 +1,2961 @@
+{
+  "package": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+  "copied": {
+    "package/HANDOFF.md": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/HANDOFF.md",
+      "sha256": "a24b77a19a3193534feabf3c047d2a581dbfdc1736fcb283cb797b500a1f23c7",
+      "bytes": 15117
+    },
+    "package/asan-0-0-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-0-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-0-0-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-0-0-0.stdout",
+      "sha256": "d3160c5e9a63ba90605907337d2aaafe732c0a3fd8ee4a45cfdd519e3e3ba069",
+      "bytes": 11430
+    },
+    "package/asan-0-0-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-0-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-0-0-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-0-0-2.stdout",
+      "sha256": "165d6597e67d6428001a2b8734362612e34b7d1c8f1bc04e481b74b79db9da61",
+      "bytes": 3417
+    },
+    "package/asan-0-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-0-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-0-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-0-1-0.stdout",
+      "sha256": "164aa95437c455d24e11f10c179b3e995cdd2629d278968d54688a454aeecc25",
+      "bytes": 11530
+    },
+    "package/asan-0-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-0-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-0-1-2.stdout",
+      "sha256": "8d7573a1336cd2a03157b45dbc75d9b4659d3347bec81e987045130400287d40",
+      "bytes": 3454
+    },
+    "package/asan-1-0-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-1-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-1-0-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-1-0-0.stdout",
+      "sha256": "fe73532e9bf7e98d2eabfa1cdf1ae3b5c7c29534465fcc205c589021744b7d1e",
+      "bytes": 11330
+    },
+    "package/asan-1-0-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-1-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-1-0-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-1-0-2.stdout",
+      "sha256": "bad83b43716fc6479e620a96facadbcd3203407f46bf48c56c1a37088f335b21",
+      "bytes": 11369
+    },
+    "package/asan-1-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-1-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-1-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-1-1-0.stdout",
+      "sha256": "cfc85d59b0cc714ec999a38b74d331d01e2fb528b63a49f6829bdb41f09cc0ee",
+      "bytes": 11511
+    },
+    "package/asan-1-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-1-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-1-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-1-1-2.stdout",
+      "sha256": "d4c7297410a485cff7f63cac7ad1568dea55db7fe13177957b95be2a77e6b579",
+      "bytes": 11547
+    },
+    "package/asan-build.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-build.json",
+      "sha256": "a110c8666f87bf0773b0d856d1a0f11bdeb32c26f496c2d33649ecdbbaecd53d",
+      "bytes": 1140
+    },
+    "package/asan-build.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-build.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-build.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-build.stdout",
+      "sha256": "e529adf98a278ad6f254cecfa17096a71be2c5027188f975b95c1772061ce276",
+      "bytes": 2315
+    },
+    "package/asan-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-0-0-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-0-0-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-0-0-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-0-0-1-0.stdout",
+      "sha256": "b421da97594939399c4b4302d51ea502bb52559b9877311801dcbde3e7b22265",
+      "bytes": 4162
+    },
+    "package/asan-controls-0-0-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-0-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-0-0-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-0-0-1-2.stdout",
+      "sha256": "f7fbeb70cb8113ba96683ca566b36f7505443ade7e9ee144ae1813db3bdf81d2",
+      "bytes": 4218
+    },
+    "package/asan-controls-0-1-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-0-1-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-0-1-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-0-1-1-0.stdout",
+      "sha256": "05271014772474a6a407035c6da24cb057d8d73f93240f6a35452c5580986479",
+      "bytes": 4163
+    },
+    "package/asan-controls-0-1-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-0-1-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-0-1-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-0-1-1-2.stdout",
+      "sha256": "fb21ea8672fb07ab96d35f7df601add61a5c04fbd5efc506f6cd3eff169138dc",
+      "bytes": 4219
+    },
+    "package/asan-controls-0-2-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-0-2-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-0-2-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-0-2-1-0.stdout",
+      "sha256": "4c883a5d768a28d840fd69c4960bc8163c4bbb770eff9f7f0389fd1cfb2ce0c0",
+      "bytes": 4161
+    },
+    "package/asan-controls-0-2-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-0-2-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-0-2-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-0-2-1-2.stdout",
+      "sha256": "813dcc8c8c1c20a9f40d38b199069b79a08abc75bb78db56b8bd7324a6856964",
+      "bytes": 4218
+    },
+    "package/asan-controls-0-3-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-0-3-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-0-3-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-0-3-1-0.stdout",
+      "sha256": "cdeca0f703944e40387224f0c8804d45e593b154f4f46d8c3f3603b748547d34",
+      "bytes": 4161
+    },
+    "package/asan-controls-0-3-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-0-3-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-0-3-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-0-3-1-2.stdout",
+      "sha256": "2c59028946f26cdcdf5ffa1f6b9056721b9b278d85468e8708ea75ba9f021111",
+      "bytes": 4224
+    },
+    "package/asan-controls-0-4-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-0-4-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-0-4-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-0-4-1-0.stdout",
+      "sha256": "329143066f5df080c16c8c28b7805f898e8b5d724f022e8a919bb582cba85c11",
+      "bytes": 4161
+    },
+    "package/asan-controls-0-4-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-0-4-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-0-4-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-0-4-1-2.stdout",
+      "sha256": "bcef187fc4c99aaf5ab800371bb994bfb29c31e8d9d32b7a0963f972873f4b74",
+      "bytes": 4223
+    },
+    "package/asan-controls-0-5-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-0-5-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-0-5-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-0-5-1-0.stdout",
+      "sha256": "bec04401cd37ca2c546daa5e0f60a6b2aeb44c779d6d127dcc7b56f990f25d76",
+      "bytes": 4162
+    },
+    "package/asan-controls-0-5-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-0-5-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-0-5-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-0-5-1-2.stdout",
+      "sha256": "099e8573047cb3091018d107e16b1b78cdc3c4093024cb69e95b31db16327912",
+      "bytes": 4221
+    },
+    "package/asan-controls-1-0-0-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-1-0-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-1-0-0-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-1-0-0-0.stdout",
+      "sha256": "d282ee26813bb54c34e26a1682c1d95c04a54c065a2d9d12dd2918a242920040",
+      "bytes": 4977
+    },
+    "package/asan-controls-1-0-0-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-1-0-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-1-0-0-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-1-0-0-2.stdout",
+      "sha256": "7a1e6aca9838a1c29c5350fe6b45b9b69c14c9becd63358b00d6b327e35a16f2",
+      "bytes": 5039
+    },
+    "package/asan-controls-1-0-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-1-0-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-1-0-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-1-0-1-0.stdout",
+      "sha256": "73fe17117c650164a77e2d7cf3b69e40c491caf2c007b528947a3311f524ce2d",
+      "bytes": 5034
+    },
+    "package/asan-controls-1-0-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-1-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-1-0-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-1-0-1-2.stdout",
+      "sha256": "3d3456e488dfa0eb40aab35e2c66f9fca5182a074fcdd5fe7d4e4429b0742281",
+      "bytes": 5092
+    },
+    "package/asan-controls-2-0-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-2-0-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-2-0-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-2-0-1-0.stdout",
+      "sha256": "8c595c7726a4fcde1b3e93499f00bff278d063afd121444220981670e4e12310",
+      "bytes": 6737
+    },
+    "package/asan-controls-2-0-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-2-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-2-0-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-2-0-1-2.stdout",
+      "sha256": "296969e4ac0da0dd75b220bfee050c6919c53a7e4024d57533d2423038ce4d19",
+      "bytes": 6802
+    },
+    "package/asan-controls-3-0-0-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-3-0-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-3-0-0-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-3-0-0-0.stdout",
+      "sha256": "a23395bcd4aeb495fd862b7b32cf629aca316d7790650bcf41e287665288303d",
+      "bytes": 4974
+    },
+    "package/asan-controls-3-0-0-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-3-0-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-3-0-0-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-3-0-0-2.stdout",
+      "sha256": "35a503b18ea3c7e146271597bdcf3cea1c5803977befa16035a7d75024cab4a4",
+      "bytes": 5036
+    },
+    "package/asan-controls-3-0-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-3-0-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-3-0-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-3-0-1-0.stdout",
+      "sha256": "625e5dadf19e7f224a9cc4250598544d4ea3ff9c4021c852945e10bc86b6b14b",
+      "bytes": 5031
+    },
+    "package/asan-controls-3-0-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-3-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-3-0-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-3-0-1-2.stdout",
+      "sha256": "b7fff6e44ef9b70d6d5d4640e3589424658dcf58f43671946a2bb9875552f3dc",
+      "bytes": 5091
+    },
+    "package/asan-controls-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-inputs.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-inputs.json",
+      "sha256": "3aed2369e9e93a1e91bb685ff186d7fefda8223852488707cd919e5e232f1e63",
+      "bytes": 798
+    },
+    "package/asan-controls-results.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-results.json",
+      "sha256": "13aa2a70f69d1bd5e326d06089b452e0c9af28562d34c1406c514f739408d093",
+      "bytes": 16432
+    },
+    "package/asan-controls-v2-4-0-0-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-v2-4-0-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-v2-4-0-0-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-v2-4-0-0-0.stdout",
+      "sha256": "a5678b199f10b22eda59530c3ab3c7c0f1b0d993dc237940d21369bfa925dceb",
+      "bytes": 5838
+    },
+    "package/asan-controls-v2-4-0-0-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-v2-4-0-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-v2-4-0-0-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-v2-4-0-0-2.stdout",
+      "sha256": "85f437c2339c79b12fe1b90f68076fc67170abacb9013b85741b82f19d722afe",
+      "bytes": 5924
+    },
+    "package/asan-controls-v2-4-0-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-v2-4-0-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-v2-4-0-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-v2-4-0-1-0.stdout",
+      "sha256": "124fd51fced5eac052662b731fc6104673e6bdf6c9c86fb9bca9b8f911eba42b",
+      "bytes": 5898
+    },
+    "package/asan-controls-v2-4-0-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-v2-4-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-v2-4-0-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-v2-4-0-1-2.stdout",
+      "sha256": "ddcb22618d4aafc2876dd661859e11ba0d8b5a95e0d3464abdbced15ff077365",
+      "bytes": 5983
+    },
+    "package/asan-controls-v2-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-v2-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-v2-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-v2-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-controls-v2-inputs.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-v2-inputs.json",
+      "sha256": "56314e45bdaf9a3573f5942d56a07b487e352a32a4c7eb6e9693f1b31c9954c2",
+      "bytes": 804
+    },
+    "package/asan-controls-v2-results.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-v2-results.json",
+      "sha256": "9079fef1c61214e2fe15a5698bea9fc0cce9bd95de4a0df41dc28e809ae342ed",
+      "bytes": 3901
+    },
+    "package/asan-inputs.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-inputs.json",
+      "sha256": "b56bd5f00733fcfd46e25b5b1ec145ba29f9fccf45b668ad814a6772fcffaaf6",
+      "bytes": 525
+    },
+    "package/asan-results.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-results.json",
+      "sha256": "1ec490d828ffb28ab0b6eec672d07e1c0a9c854af61f612a1961802de180b871",
+      "bytes": 5607
+    },
+    "package/asan-stop-overlap-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-stop-overlap-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-stop-overlap-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-stop-overlap-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-stop-overlap-restart-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-stop-overlap-restart-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-stop-overlap-restart-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-stop-overlap-restart-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-stop-overlap-restart-run.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-stop-overlap-restart-run.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-stop-overlap-restart-run.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-stop-overlap-restart-run.stdout",
+      "sha256": "004c50a21e1f9218b14499ba8cb5758e50846c7d3e0934d0ccc6b8c3d6dac4c8",
+      "bytes": 1651
+    },
+    "package/asan-stop-overlap-restart-v2-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-stop-overlap-restart-v2-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-stop-overlap-restart-v2-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-stop-overlap-restart-v2-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-stop-overlap-restart-v2-run.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-stop-overlap-restart-v2-run.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-stop-overlap-restart-v2-run.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-stop-overlap-restart-v2-run.stdout",
+      "sha256": "323c0957503dbb2fc8762f83863d45a397c2f349ebeec52a74c8ef2bc6131023",
+      "bytes": 1645
+    },
+    "package/asan-stop-overlap-run.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-stop-overlap-run.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/asan-stop-overlap-run.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-stop-overlap-run.stdout",
+      "sha256": "b9f8f149f68cb43439a33f345573a2acb0a153fb01b15ef88aad99a8e5a97e33",
+      "bytes": 941
+    },
+    "package/build.py": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/build.py",
+      "sha256": "246b178722fbd5ced046c9b1cd358cabffbca8bde441ca23377ecf91dd8f21a5",
+      "bytes": 1954
+    },
+    "package/candidate-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/candidate-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/candidate-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/candidate-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/candidate-restart-overlap-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/candidate-restart-overlap-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/candidate-restart-overlap-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/candidate-restart-overlap-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/candidate-restart-overlap-disassembly.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/candidate-restart-overlap-disassembly.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/candidate-restart-overlap-disassembly.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/candidate-restart-overlap-disassembly.stdout",
+      "sha256": "8d29441aa9447f15774bef16c5829ad54f45fcaff5456a1976adff1fcdf5b0b6",
+      "bytes": 11430
+    },
+    "package/candidate-restart-overlap-run.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/candidate-restart-overlap-run.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/candidate-restart-overlap-run.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/candidate-restart-overlap-run.stdout",
+      "sha256": "fdddc288896607580c5b82214437338512ac94bf51993b381d83a89c1b08bfa5",
+      "bytes": 1449
+    },
+    "package/candidate-run.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/candidate-run.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/candidate-run.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/candidate-run.stdout",
+      "sha256": "1aaa83a06673d89d4feb6650803ab2907f133bf83168f0e58f3c2ded28c77a50",
+      "bytes": 924
+    },
+    "package/control-boundaries.lua": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-boundaries.lua",
+      "sha256": "fc17679e2035924294a7003184e085b0437ea6ddf8cfcb0664dee3ccd8521460",
+      "bytes": 766
+    },
+    "package/control-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/control-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/control-function-timeout-gdb.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-function-timeout-gdb.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/control-function-timeout-gdb.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-function-timeout-gdb.stdout",
+      "sha256": "5eab3946c203d1fcaf371425293d08677fec0a88583df4a010e3cb4df709b157",
+      "bytes": 1177
+    },
+    "package/control-matched-safety-identities.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-matched-safety-identities.json",
+      "sha256": "f9c66a5f86ef6e743253e1e577f880cf8216a2be621b909676b87876f49cfcc5",
+      "bytes": 1018
+    },
+    "package/control-matched-safety-results.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-matched-safety-results.json",
+      "sha256": "08e525ec9453d5be36190bd5ffbba56302b86f3d5387ed08b50a2291191f7672",
+      "bytes": 5304
+    },
+    "package/control-matched-t-func-construction-anchor-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-matched-t-func-construction-anchor-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/control-matched-t-func-construction-anchor-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-matched-t-func-construction-anchor-0.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/control-matched-t-func-construction-anchor-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-matched-t-func-construction-anchor-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/control-matched-t-func-construction-anchor-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-matched-t-func-construction-anchor-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/control-matched-t-gc2-worker-scheduler-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-matched-t-gc2-worker-scheduler-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/control-matched-t-gc2-worker-scheduler-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-matched-t-gc2-worker-scheduler-0.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "package/control-matched-t-gc2-worker-scheduler-1.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-matched-t-gc2-worker-scheduler-1.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/control-matched-t-gc2-worker-scheduler-1.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-matched-t-gc2-worker-scheduler-1.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "package/control-matched-t-gc2-worker-scheduler-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-matched-t-gc2-worker-scheduler-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/control-matched-t-gc2-worker-scheduler-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-matched-t-gc2-worker-scheduler-2.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "package/control-matched-t-gc2-worker-scheduler-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-matched-t-gc2-worker-scheduler-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/control-matched-t-gc2-worker-scheduler-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-matched-t-gc2-worker-scheduler-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/control-restart-overlap-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-restart-overlap-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/control-restart-overlap-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-restart-overlap-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/control-restart-overlap-disassembly.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-restart-overlap-disassembly.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/control-restart-overlap-disassembly.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-restart-overlap-disassembly.stdout",
+      "sha256": "98f4fc2ad0071a6ac606010c0c7fe337513864e7044cf9147d8502e99325e4dd",
+      "bytes": 11428
+    },
+    "package/control-restart-overlap-run.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-restart-overlap-run.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/control-restart-overlap-run.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-restart-overlap-run.stdout",
+      "sha256": "dd49646a9826ff644353e6a8513e64ab049353c2249bb17e74b711c52f97e7f9",
+      "bytes": 1449
+    },
+    "package/control-run.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-run.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/control-run.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-run.stdout",
+      "sha256": "4a205a3976b7ce845f93d5bc3c8c5d1be5bdf4e4f1d4114ad7be111463b1dece",
+      "bytes": 938
+    },
+    "package/control-stop-overlap-restart-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-stop-overlap-restart-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/control-stop-overlap-restart-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-stop-overlap-restart-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/control-stop-overlap-restart-run.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-stop-overlap-restart-run.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/control-stop-overlap-restart-run.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-stop-overlap-restart-run.stdout",
+      "sha256": "7633105ae362b3ba2628a20d3cac4d8e707af1f41717af132a9be2863d4d6a03",
+      "bytes": 1669
+    },
+    "package/control-stop-overlap-restart-v2-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-stop-overlap-restart-v2-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/control-stop-overlap-restart-v2-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-stop-overlap-restart-v2-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/control-stop-overlap-restart-v2-run.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-stop-overlap-restart-v2-run.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/control-stop-overlap-restart-v2-run.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-stop-overlap-restart-v2-run.stdout",
+      "sha256": "03bc7e75503a5f3b6456e8fa84da1b5dddcdecf3b2253c7ef4ef23633df9ad24",
+      "bytes": 1670
+    },
+    "package/controlextrahelpers-build.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers-build.json",
+      "sha256": "0f28f988fb91e2152ef6323f9fc828fef16a1a638249deb683ac81eb2594cb43",
+      "bytes": 711
+    },
+    "package/controlextrahelpers-build.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers-build.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/controlextrahelpers-build.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers-build.stdout",
+      "sha256": "d038b32a3a6c2369b6acf6a3f701555e6041277906cdbdce023b337cf7c6de2a",
+      "bytes": 2345
+    },
+    "package/controls-v2.py": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controls-v2.py",
+      "sha256": "12df7497d2ef30767ab709a0b4e1a89bf2398232e03982a92223e19a7c06a7c8",
+      "bytes": 2887
+    },
+    "package/controls.py": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controls.py",
+      "sha256": "19491aaf44301289cc0a2d7ede550c5ed311a010fdc85607f2dfc9367a2a23e4",
+      "bytes": 2878
+    },
+    "package/extrahelpers-build.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-build.json",
+      "sha256": "e6a4c03724a29e1675e7e034237626d6c0ca08bb7ad3435e66a1f3545e9b727c",
+      "bytes": 1105
+    },
+    "package/extrahelpers-build.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-build.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-build.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-build.stdout",
+      "sha256": "1048bcc446de5047f32cf9360091b28ad328d4136689f709e09045d4347ff20d",
+      "bytes": 2331
+    },
+    "package/extrahelpers-safety-identities.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-identities.json",
+      "sha256": "ba28f3999ab4093756d6f4f379e5127904ef46fa1b95c88cefb8571f6428cd38",
+      "bytes": 19747
+    },
+    "package/extrahelpers-safety-results.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-results.json",
+      "sha256": "afb15ee553768924370c5b15a8b1bd925d3e74051e8e51709537b03be697ec32",
+      "bytes": 45788
+    },
+    "package/extrahelpers-safety-t-func-construction-anchor-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-func-construction-anchor-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-func-construction-anchor-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-func-construction-anchor-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-func-construction-anchor.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-func-construction-anchor.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-func-construction-anchor.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-func-construction-anchor.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc-active-thread-roots-jit.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc-active-thread-roots-jit.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc-active-thread-roots-jit.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc-active-thread-roots-jit.stdout",
+      "sha256": "4064f28fc860483db3937543d4f05191bc308869b99e050d389cb32d41ffd16a",
+      "bytes": 28
+    },
+    "package/extrahelpers-safety-t-gc-active-thread-roots-joff.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc-active-thread-roots-joff.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc-active-thread-roots-joff.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc-active-thread-roots-joff.stdout",
+      "sha256": "4064f28fc860483db3937543d4f05191bc308869b99e050d389cb32d41ffd16a",
+      "bytes": 28
+    },
+    "package/extrahelpers-safety-t-gc-root-pending-race-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc-root-pending-race-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc-root-pending-race-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc-root-pending-race-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc-root-pending-race.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc-root-pending-race.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc-root-pending-race.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc-root-pending-race.stdout",
+      "sha256": "429605383acdf16d5fe2e3c7a1aa1c694e8e2bc89db71e0cb7168f35ab40cb40",
+      "bytes": 113
+    },
+    "package/extrahelpers-safety-t-gc-workers-jit.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc-workers-jit.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc-workers-jit.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc-workers-jit.stdout",
+      "sha256": "33661d54c1d147e67572409e94fa87172e95a565e7608ff7bb14fb33e704456b",
+      "bytes": 16
+    },
+    "package/extrahelpers-safety-t-gc-workers-joff.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc-workers-joff.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc-workers-joff.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc-workers-joff.stdout",
+      "sha256": "33661d54c1d147e67572409e94fa87172e95a565e7608ff7bb14fb33e704456b",
+      "bytes": 16
+    },
+    "package/extrahelpers-safety-t-gc2-activation-veto-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-activation-veto-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-activation-veto-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-activation-veto-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-activation-veto.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-activation-veto.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-activation-veto.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-activation-veto.stdout",
+      "sha256": "00664e20c5c4e7f2d4f02afa91c36675f24283d89ffdf9a07eea15be2a1d85fe",
+      "bytes": 81
+    },
+    "package/extrahelpers-safety-t-gc2-alloc-account-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-alloc-account-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-alloc-account-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-alloc-account-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-alloc-account.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-alloc-account.stderr",
+      "sha256": "004badbac47fa71f1f9af04f84a8f1743f3374fee816f25188772fd94fce115c",
+      "bytes": 220
+    },
+    "package/extrahelpers-safety-t-gc2-alloc-account.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-alloc-account.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-finalizer-peer-collect-jit.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-finalizer-peer-collect-jit.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-finalizer-peer-collect-jit.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-finalizer-peer-collect-jit.stdout",
+      "sha256": "79a75783c6560cb072ffb7dcdd44c4c0ce0cc42efd8895de0530a57039abc747",
+      "bytes": 77
+    },
+    "package/extrahelpers-safety-t-gc2-finalizer-peer-collect-joff.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-finalizer-peer-collect-joff.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-finalizer-peer-collect-joff.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-finalizer-peer-collect-joff.stdout",
+      "sha256": "79a75783c6560cb072ffb7dcdd44c4c0ce0cc42efd8895de0530a57039abc747",
+      "bytes": 77
+    },
+    "package/extrahelpers-safety-t-gc2-interp-hard-check-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-interp-hard-check-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-interp-hard-check-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-interp-hard-check-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-interp-hard-check.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-interp-hard-check.stderr",
+      "sha256": "4b2a73f1d650b0d3633caa73809ac6c60dbd24de984b6bceef008778e0980ac2",
+      "bytes": 229
+    },
+    "package/extrahelpers-safety-t-gc2-interp-hard-check.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-interp-hard-check.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-jit-hard-check-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-jit-hard-check-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-jit-hard-check-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-jit-hard-check-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-jit-hard-check.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-jit-hard-check.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-jit-hard-check.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-jit-hard-check.stdout",
+      "sha256": "bd57992d5588e8f878cf1e689d4faf6f201977a46920f9a19193dc36fd4143e4",
+      "bytes": 124
+    },
+    "package/extrahelpers-safety-t-gc2-jit-mark-coop-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-jit-mark-coop-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-jit-mark-coop-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-jit-mark-coop-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-jit-mark-coop.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-jit-mark-coop.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-jit-mark-coop.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-jit-mark-coop.stdout",
+      "sha256": "e0afaa5e0a7a5801908b375d4a44355fa2f27b72185852fc63f950d75c9df7c6",
+      "bytes": 66
+    },
+    "package/extrahelpers-safety-t-gc2-jit-sweep-coop-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-jit-sweep-coop-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-jit-sweep-coop-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-jit-sweep-coop-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-jit-sweep-coop.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-jit-sweep-coop.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-jit-sweep-coop.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-jit-sweep-coop.stdout",
+      "sha256": "5e58d75e329ddd7129570233e71c1bf4bee6c6484e1fe9c37477ec7fa6572439",
+      "bytes": 96
+    },
+    "package/extrahelpers-safety-t-gc2-mark-close-progress-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-mark-close-progress-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-mark-close-progress-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-mark-close-progress-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-mark-close-progress.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-mark-close-progress.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-mark-close-progress.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-mark-close-progress.stdout",
+      "sha256": "b09b5fd141c389b66015f8a1f69b9a5b1749af2a3fb6d6163f96b40da8cbfbd5",
+      "bytes": 78
+    },
+    "package/extrahelpers-safety-t-gc2-pacing-atomic-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-pacing-atomic-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-pacing-atomic-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-pacing-atomic-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-pacing-atomic.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-pacing-atomic.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-pacing-atomic.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-pacing-atomic.stdout",
+      "sha256": "04d314c592ed666d3684897fb0c9306f338fbbc3f389d648715bb2611f3e5476",
+      "bytes": 58
+    },
+    "package/extrahelpers-safety-t-gc2-worker-scheduler-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-worker-scheduler-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-worker-scheduler-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-worker-scheduler-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-gc2-worker-scheduler.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-worker-scheduler.stderr",
+      "sha256": "8716fe22a860bac063f43022fe9cb16f81ad61a91535acc0f8f39a14baf731f8",
+      "bytes": 196
+    },
+    "package/extrahelpers-safety-t-gc2-worker-scheduler.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-worker-scheduler.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-jit-idle-reclaim-entry-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-jit-idle-reclaim-entry-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-jit-idle-reclaim-entry-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-jit-idle-reclaim-entry-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-jit-idle-reclaim-entry.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-jit-idle-reclaim-entry.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-jit-idle-reclaim-entry.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-jit-idle-reclaim-entry.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-safepoint-local-native-duplicate-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-local-native-duplicate-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-safepoint-local-native-duplicate-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-local-native-duplicate-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-safepoint-local-native-duplicate.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-local-native-duplicate.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-safepoint-local-native-duplicate.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-local-native-duplicate.stdout",
+      "sha256": "fdd24eb9e94248c692ac0d14d6395cd262047848205167b4d52022170c75ebc5",
+      "bytes": 274
+    },
+    "package/extrahelpers-safety-t-safepoint-native-root-hold-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-native-root-hold-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-safepoint-native-root-hold-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-native-root-hold-0.stdout",
+      "sha256": "c5b97133ac5f4e7f0324efddb54a8e1a1fc779f8b8b951253682685e6ec6103c",
+      "bytes": 321
+    },
+    "package/extrahelpers-safety-t-safepoint-native-root-hold-1.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-native-root-hold-1.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-safepoint-native-root-hold-1.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-native-root-hold-1.stdout",
+      "sha256": "2088f4e80767308cab2e276c38e6a4c10c9461253e37c55873edb09a669149d3",
+      "bytes": 321
+    },
+    "package/extrahelpers-safety-t-safepoint-native-root-hold-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-native-root-hold-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-safepoint-native-root-hold-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-native-root-hold-2.stdout",
+      "sha256": "e80929443049170aa66e5d3755df529990a0a00ba16bd73533d74d722a0a9dcd",
+      "bytes": 321
+    },
+    "package/extrahelpers-safety-t-safepoint-native-root-hold-3.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-native-root-hold-3.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-safepoint-native-root-hold-3.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-native-root-hold-3.stdout",
+      "sha256": "7602f099fd6597799d075cdbe52bd4b41809414aa13517f96081530872bc8cc4",
+      "bytes": 321
+    },
+    "package/extrahelpers-safety-t-safepoint-native-root-hold-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-native-root-hold-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-safepoint-native-root-hold-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-native-root-hold-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-safepoint-remote-root-completion-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-remote-root-completion-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-safepoint-remote-root-completion-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-remote-root-completion-0.stdout",
+      "sha256": "5016da24bd575da4667913c6cd3f9ec5c82a7c956534a90e6b96ebfb9bf83d10",
+      "bytes": 121
+    },
+    "package/extrahelpers-safety-t-safepoint-remote-root-completion-1.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-remote-root-completion-1.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-safepoint-remote-root-completion-1.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-remote-root-completion-1.stdout",
+      "sha256": "707a7d2c264eac86d683a52897e7bf042f86fdefa8bcac5b4bfb994d5e4cfd8d",
+      "bytes": 229
+    },
+    "package/extrahelpers-safety-t-safepoint-remote-root-completion-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-remote-root-completion-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-safepoint-remote-root-completion-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-remote-root-completion-2.stdout",
+      "sha256": "0d6d7b4a51c50627d6b73089385c1374cb72bec18953d9e91a69179919857388",
+      "bytes": 121
+    },
+    "package/extrahelpers-safety-t-safepoint-remote-root-completion-3.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-remote-root-completion-3.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-safepoint-remote-root-completion-3.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-remote-root-completion-3.stdout",
+      "sha256": "8207f8323104765f18c6a2f98a8f3ee7196ae7f1e3c8a8b26a7216260b44c37c",
+      "bytes": 121
+    },
+    "package/extrahelpers-safety-t-safepoint-remote-root-completion-4.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-remote-root-completion-4.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-safepoint-remote-root-completion-4.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-remote-root-completion-4.stdout",
+      "sha256": "101b4570a3e8b3d54bc076f86ffd213eba65b7a1bbc762902c44487d500e8fe4",
+      "bytes": 121
+    },
+    "package/extrahelpers-safety-t-safepoint-remote-root-completion-5.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-remote-root-completion-5.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-safepoint-remote-root-completion-5.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-remote-root-completion-5.stdout",
+      "sha256": "20d6847cbf16245a4761ef2986194ab3ba9ad909007ad9b940e195b0db964415",
+      "bytes": 121
+    },
+    "package/extrahelpers-safety-t-safepoint-remote-root-completion-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-remote-root-completion-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-safepoint-remote-root-completion-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-remote-root-completion-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-str-reclaim-sole-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-str-reclaim-sole-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-str-reclaim-sole-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-str-reclaim-sole-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-str-reclaim-sole.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-str-reclaim-sole.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-str-reclaim-sole.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-str-reclaim-sole.stdout",
+      "sha256": "39365fe74b1caf087ae37d2ed6ddabf44ac3ddc05e90f0dc9ee0f14cba9430d4",
+      "bytes": 113
+    },
+    "package/extrahelpers-safety-t-threading-spawn-native-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-threading-spawn-native-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-threading-spawn-native-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-threading-spawn-native-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-threading-spawn-native.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-threading-spawn-native.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-threading-spawn-native.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-threading-spawn-native.stdout",
+      "sha256": "04eb23954420859a1669ef53b0a35d3b561095c99ca167c07b5e9b0a0ac9e78f",
+      "bytes": 65
+    },
+    "package/extrahelpers-safety-t-udata-construction-roots-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-udata-construction-roots-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-udata-construction-roots-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-udata-construction-roots-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-udata-construction-roots.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-udata-construction-roots.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/extrahelpers-safety-t-udata-construction-roots.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-udata-construction-roots.stdout",
+      "sha256": "6b38cffb0e21b794b4f8e2ecec3f8655cbcfdcb92e7e26484f98cd771090392a",
+      "bytes": 30
+    },
+    "package/final-source-verification.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/final-source-verification.json",
+      "sha256": "172b7cf39299e87dbd8fadd7632d062414cec21b69bcaa6180c4b3fbcf882e02",
+      "bytes": 4579
+    },
+    "package/freeze-evidence.py": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/freeze-evidence.py",
+      "sha256": "96fc3c13afa898dad99e4539684497e272b5fdcb22e79c6fb2c205d2119ae2a4",
+      "bytes": 2164
+    },
+    "package/function-timeout-gdb-results.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/function-timeout-gdb-results.json",
+      "sha256": "531c3e07543e1fd1df86d538563e5603e3c146bfacefd73665ebf9984b9e3810",
+      "bytes": 2429
+    },
+    "package/inputs.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/inputs.json",
+      "sha256": "365f839e2144c12a72314452c77e4f0fbf6054b0cc1a028449701afac5e8b5ac",
+      "bytes": 222
+    },
+    "package/instrumented-stop-overlap-identities.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/instrumented-stop-overlap-identities.json",
+      "sha256": "ba318ccf49c7a9b130f762d9badd4d8b0dbee9ccd6fa89b6d365964e3f1323cb",
+      "bytes": 691
+    },
+    "package/instrumented-stop-overlap-results.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/instrumented-stop-overlap-results.json",
+      "sha256": "83fabc89f7faa199260aa3440d6ab5ab4a4f188684c244474593d29d8b6797f4",
+      "bytes": 2997
+    },
+    "package/matched-safety.py": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/matched-safety.py",
+      "sha256": "3c1285d04e18ca72d8656d47afb438cbf18f881f1c56aef0ef719ba006fd9fe6",
+      "bytes": 2016
+    },
+    "package/oldcandidate-function-timeout-gdb.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-function-timeout-gdb.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/oldcandidate-function-timeout-gdb.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-function-timeout-gdb.stdout",
+      "sha256": "021611a3fbf91db14c5fefa9255817c319623cc664c5240a2251fa35dfd35266",
+      "bytes": 1168
+    },
+    "package/oldcandidate-matched-safety-identities.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-matched-safety-identities.json",
+      "sha256": "69829b71f108485b7982552773135be2b05ff8a5fcc8dc541fedc339231ad0cd",
+      "bytes": 1018
+    },
+    "package/oldcandidate-matched-safety-results.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-matched-safety-results.json",
+      "sha256": "7a3e73e0b88f64231924a240b62b211cfe415e4bcff12632491b7de9cc7fc1a0",
+      "bytes": 5206
+    },
+    "package/oldcandidate-matched-t-func-construction-anchor-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-matched-t-func-construction-anchor-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/oldcandidate-matched-t-func-construction-anchor-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-matched-t-func-construction-anchor-0.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/oldcandidate-matched-t-func-construction-anchor-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-matched-t-func-construction-anchor-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/oldcandidate-matched-t-func-construction-anchor-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-matched-t-func-construction-anchor-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/oldcandidate-matched-t-gc2-worker-scheduler-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-matched-t-gc2-worker-scheduler-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/oldcandidate-matched-t-gc2-worker-scheduler-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-matched-t-gc2-worker-scheduler-0.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "package/oldcandidate-matched-t-gc2-worker-scheduler-1.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-matched-t-gc2-worker-scheduler-1.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/oldcandidate-matched-t-gc2-worker-scheduler-1.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-matched-t-gc2-worker-scheduler-1.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "package/oldcandidate-matched-t-gc2-worker-scheduler-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-matched-t-gc2-worker-scheduler-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/oldcandidate-matched-t-gc2-worker-scheduler-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-matched-t-gc2-worker-scheduler-2.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "package/oldcandidate-matched-t-gc2-worker-scheduler-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-matched-t-gc2-worker-scheduler-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/oldcandidate-matched-t-gc2-worker-scheduler-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-matched-t-gc2-worker-scheduler-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/oldcandidate-scheduler-isolation-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-scheduler-isolation-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/oldcandidate-scheduler-isolation-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-scheduler-isolation-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/oldcandidate-scheduler-isolation-run.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-scheduler-isolation-run.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/oldcandidate-scheduler-isolation-run.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-scheduler-isolation-run.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "package/overlap-identities.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/overlap-identities.json",
+      "sha256": "622f4481a796bae26646661c121fa91739db10ab0fd1af5a123972d27f1fd0e3",
+      "bytes": 723
+    },
+    "package/overlap-results.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/overlap-results.json",
+      "sha256": "663cd4378530a03d5034e74e2e00c0025a9c019bb54b604eb904fa2e8450a51f",
+      "bytes": 2558
+    },
+    "package/peer-control.lua": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/peer-control.lua",
+      "sha256": "519ebf714b0a33b9a436d3452a153a1bc3eea3322ebf0bf74d8e76fea4ab8cb2",
+      "bytes": 1756
+    },
+    "package/restart-overlap-identities.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/restart-overlap-identities.json",
+      "sha256": "b8eafaca70a1625543878854d48fd80e9b4431d3e4bc621ae7f18351be45b587",
+      "bytes": 1310
+    },
+    "package/restart-overlap-results.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/restart-overlap-results.json",
+      "sha256": "91a7f2bdf541a0238e38884a21aeecdc78600e4fbe1d12c826dc3145a6e95820",
+      "bytes": 5805
+    },
+    "package/run.py": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/run.py",
+      "sha256": "93b3cef59aa3a4b5faa3d77d2f7e050b6a3f08e5cc0fc1faa416744ddd5c7d41",
+      "bytes": 2648
+    },
+    "package/safety.py": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/safety.py",
+      "sha256": "9663bb569680f1c23715b2d904c946b91fe07c1c98a949fe25b728a9be21d85f",
+      "bytes": 3799
+    },
+    "package/scheduler-isolation-results.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/scheduler-isolation-results.json",
+      "sha256": "931c1c0b8f3b0f3d4d6698f3f50ab496abfb3a085793baceee9fbb9c1d65c6b9",
+      "bytes": 3496
+    },
+    "package/source-identity.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/source-identity.json",
+      "sha256": "dd5bf50ff45b52e2c953d2dea48eb32cb247df901d3c9b6d7643596cb0a09717",
+      "bytes": 83759
+    },
+    "package/stop-overlap-restart-identities.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/stop-overlap-restart-identities.json",
+      "sha256": "305749d0f814d709ccc27ff214793ab41a980d9a4053270d857a6892a668fafe",
+      "bytes": 1685
+    },
+    "package/stop-overlap-restart-results.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/stop-overlap-restart-results.json",
+      "sha256": "02f686e29a44915015ba5d4cb18f02b34a56063f5df033368600d99c3464f343",
+      "bytes": 6014
+    },
+    "package/stop-overlap-restart-v2-identities.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/stop-overlap-restart-v2-identities.json",
+      "sha256": "cfb0be4874a9a68a95440006f720e91a384bda0d48f927d4cb46dcf60dcc5343",
+      "bytes": 965
+    },
+    "package/stop-overlap-restart-v2-results.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/stop-overlap-restart-v2-results.json",
+      "sha256": "129da0ecc7549ae902421124f4ecf128947433a4c89de520aa239742dbf86e84",
+      "bytes": 6118
+    },
+    "package/strict-0-0-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-0-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-0-0-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-0-0-0.stdout",
+      "sha256": "756f955f3f67c379c1d84bfcb385b45b9eb13c084357fe94a226ae4bdb57a54c",
+      "bytes": 11430
+    },
+    "package/strict-0-0-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-0-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-0-0-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-0-0-2.stdout",
+      "sha256": "087bf77c71c579d90f8b5dc0d71b9ffc840e049d273ff708bd870b46064ae701",
+      "bytes": 3415
+    },
+    "package/strict-0-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-0-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-0-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-0-1-0.stdout",
+      "sha256": "263956f7b54b491ddb7965a3f605e5d02ba2cebbd3adc18082418b1dde4d165c",
+      "bytes": 11530
+    },
+    "package/strict-0-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-0-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-0-1-2.stdout",
+      "sha256": "f013262c09c4d938a54ed79f2a50e7648fe91315fd4a2246683086a73e15c5cc",
+      "bytes": 3454
+    },
+    "package/strict-1-0-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-1-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-1-0-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-1-0-0.stdout",
+      "sha256": "3a791b6a60e4139273514288c74e31cd0f2369708d3d6cdfe5eac0300f9a7881",
+      "bytes": 11330
+    },
+    "package/strict-1-0-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-1-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-1-0-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-1-0-2.stdout",
+      "sha256": "401847eb8d41d2094637139e8cc96c651e92329988a46a663bf9f7531ff7b3aa",
+      "bytes": 11369
+    },
+    "package/strict-1-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-1-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-1-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-1-1-0.stdout",
+      "sha256": "bde9b8a1c3ab8decc7b7ccd3c47990017029a1ff90294b94350642daa4a49d8a",
+      "bytes": 11511
+    },
+    "package/strict-1-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-1-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-1-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-1-1-2.stdout",
+      "sha256": "e24a85c742b3906486a8b36d7828af8f5ed9266c55768f38461b4ff030aa917b",
+      "bytes": 11547
+    },
+    "package/strict-build.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-build.json",
+      "sha256": "7758420e6ed5f7a34b9d9d4a81fbce879976f5dd8eb85230e3ef057a338eb9d6",
+      "bytes": 961
+    },
+    "package/strict-build.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-build.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-build.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-build.stdout",
+      "sha256": "9e9d76b068d8ffcbb4578e41133c5dca8e4d106f686a67027d8c14868e7153bc",
+      "bytes": 2319
+    },
+    "package/strict-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-0-0-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-0-0-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-0-0-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-0-0-1-0.stdout",
+      "sha256": "884e8a662dbe046c803a050a94d61f85ea3400d9d063d425d60cea52863a53eb",
+      "bytes": 4162
+    },
+    "package/strict-controls-0-0-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-0-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-0-0-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-0-0-1-2.stdout",
+      "sha256": "4e403ccf9d2a27790bd855bdc025bacd29adabd856f72b03165dac9345317173",
+      "bytes": 4221
+    },
+    "package/strict-controls-0-1-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-0-1-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-0-1-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-0-1-1-0.stdout",
+      "sha256": "303320f5a596170390711ad41fcbb67e1673f49e23a9c32ede9ef220b54c5db7",
+      "bytes": 4167
+    },
+    "package/strict-controls-0-1-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-0-1-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-0-1-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-0-1-1-2.stdout",
+      "sha256": "06a8d21226f813c2f4426588ac6bbf42b09adb1acc4ad8ef624b404a691bb665",
+      "bytes": 4225
+    },
+    "package/strict-controls-0-2-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-0-2-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-0-2-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-0-2-1-0.stdout",
+      "sha256": "d9a395a8d300b95eabace7afaa198b7e93afdedc772d3c7180b6552cc0b106cb",
+      "bytes": 4161
+    },
+    "package/strict-controls-0-2-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-0-2-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-0-2-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-0-2-1-2.stdout",
+      "sha256": "2b43676f59dc6c2c24a3acbb09da16c87281ba8577ff03f4386889703553b2b2",
+      "bytes": 4221
+    },
+    "package/strict-controls-0-3-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-0-3-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-0-3-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-0-3-1-0.stdout",
+      "sha256": "bd1213a3ee867edd12eeedcc8308b7f941ca9c585fd4123d22c11b0b8264af10",
+      "bytes": 4161
+    },
+    "package/strict-controls-0-3-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-0-3-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-0-3-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-0-3-1-2.stdout",
+      "sha256": "2dabfb0351043e70ad7e138b0fff97ef0273a32087073130129bfd4037e3ea55",
+      "bytes": 4223
+    },
+    "package/strict-controls-0-4-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-0-4-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-0-4-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-0-4-1-0.stdout",
+      "sha256": "3d8c06a987151959b0308410dd62248b174759a4b4f8f9ab2eb15098cc7c282b",
+      "bytes": 4161
+    },
+    "package/strict-controls-0-4-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-0-4-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-0-4-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-0-4-1-2.stdout",
+      "sha256": "358b823dce048d92a8c432ccb24de88c6d2fcdb480994ceb2bbc96e31d8a9398",
+      "bytes": 4223
+    },
+    "package/strict-controls-0-5-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-0-5-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-0-5-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-0-5-1-0.stdout",
+      "sha256": "1a2f2b645e725b865c8612c4f354177de85a5d3b81cee909e7f15786ccdee7a6",
+      "bytes": 4162
+    },
+    "package/strict-controls-0-5-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-0-5-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-0-5-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-0-5-1-2.stdout",
+      "sha256": "7b34c2d6ca456c972c6df5969a56d0e3045d331f0fc74029341a67a76a055e58",
+      "bytes": 4221
+    },
+    "package/strict-controls-1-0-0-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-1-0-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-1-0-0-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-1-0-0-0.stdout",
+      "sha256": "0bd1b8283e51f3552f08d80e74a6a5b2da46665d69468ee7d5db029d2ba8a5a3",
+      "bytes": 4977
+    },
+    "package/strict-controls-1-0-0-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-1-0-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-1-0-0-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-1-0-0-2.stdout",
+      "sha256": "37ac68c079f3d493c3672ee35a8f4901c000d9e9f413eeadf9d52e357a0e0d94",
+      "bytes": 5035
+    },
+    "package/strict-controls-1-0-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-1-0-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-1-0-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-1-0-1-0.stdout",
+      "sha256": "924fdaad595671f86bfb47d695d1678669dcf4bd55b16ddf9d7f9bf3eca04d5f",
+      "bytes": 5034
+    },
+    "package/strict-controls-1-0-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-1-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-1-0-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-1-0-1-2.stdout",
+      "sha256": "f947a578f996f2b20e09f8265c53aca5c83766c8e4edf8eca6e2bb29f97d4e5a",
+      "bytes": 5095
+    },
+    "package/strict-controls-2-0-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-2-0-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-2-0-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-2-0-1-0.stdout",
+      "sha256": "56bc316f3bf1b9f929d489edaa6fbaaff50b9a74fa9f7000d51c404ce4ca1608",
+      "bytes": 6737
+    },
+    "package/strict-controls-2-0-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-2-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-2-0-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-2-0-1-2.stdout",
+      "sha256": "d5f9bcb2e1d1733abcdf09a3d3742afa1b66650bfa7b7732d292ffff525b0a8a",
+      "bytes": 6805
+    },
+    "package/strict-controls-3-0-0-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-3-0-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-3-0-0-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-3-0-0-0.stdout",
+      "sha256": "4db5b42ecfdf08a75d2b3fae0107129d263aed8edeb8165723c9f671018c8e45",
+      "bytes": 4974
+    },
+    "package/strict-controls-3-0-0-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-3-0-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-3-0-0-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-3-0-0-2.stdout",
+      "sha256": "3797c77c4dd59a84ae25426d016e7a5b14d4529928a5d9cb2c791049ea981ee9",
+      "bytes": 5032
+    },
+    "package/strict-controls-3-0-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-3-0-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-3-0-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-3-0-1-0.stdout",
+      "sha256": "e5c555c73a99291215c429a204e8ce182be9a4fabfaf92d51a93ea4538676962",
+      "bytes": 5031
+    },
+    "package/strict-controls-3-0-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-3-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-3-0-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-3-0-1-2.stdout",
+      "sha256": "58cac726f6d636bfd5ef825ed67952d4d1794179c9b3d7f5a76da95fdf35df34",
+      "bytes": 5092
+    },
+    "package/strict-controls-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-inputs.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-inputs.json",
+      "sha256": "17ee67c7256f3e0a8231aa55e7ec3653dd5c71beaf95e988821d514255e05ec6",
+      "bytes": 798
+    },
+    "package/strict-controls-results.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-results.json",
+      "sha256": "c1c549a6d1ef3517d371d474226f91db3dda5bbda1def51033fca391ff5a681a",
+      "bytes": 15298
+    },
+    "package/strict-controls-v2-4-0-0-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-v2-4-0-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-v2-4-0-0-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-v2-4-0-0-0.stdout",
+      "sha256": "6d2016e554a57cacb5fa78a4d6c3fdb33d1e07271bcfd7e62e56a2a07b7fba45",
+      "bytes": 5838
+    },
+    "package/strict-controls-v2-4-0-0-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-v2-4-0-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-v2-4-0-0-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-v2-4-0-0-2.stdout",
+      "sha256": "6344751057cdb92d25addf20fe1d57292d1bfaa961a917e598ad532ab122213c",
+      "bytes": 5926
+    },
+    "package/strict-controls-v2-4-0-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-v2-4-0-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-v2-4-0-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-v2-4-0-1-0.stdout",
+      "sha256": "421a8e6d80e22efd8568a7995c0f092d0f474c7bdc301083f171c7cecff93add",
+      "bytes": 5898
+    },
+    "package/strict-controls-v2-4-0-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-v2-4-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-v2-4-0-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-v2-4-0-1-2.stdout",
+      "sha256": "ca456e1e44b8fca82269ab616d915180f6863161bc86d84e0cf3d8219182433b",
+      "bytes": 5983
+    },
+    "package/strict-controls-v2-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-v2-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-v2-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-v2-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-controls-v2-inputs.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-v2-inputs.json",
+      "sha256": "bd7eee12753234b5708c65e1349c43b4ab8fc2437fedaa45479d9e87a8bf000e",
+      "bytes": 804
+    },
+    "package/strict-controls-v2-results.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-v2-results.json",
+      "sha256": "2b68baa1c2f203c00b0fcf1f56025a63240a581ae471b02dc40d85220945a795",
+      "bytes": 3607
+    },
+    "package/strict-inputs.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-inputs.json",
+      "sha256": "2227fd24214861b1421c0bcae14bfb65c090d75457d92e5d5776b08245e569d8",
+      "bytes": 525
+    },
+    "package/strict-results.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-results.json",
+      "sha256": "c674b59f3afcea4c6b3a143372ea4a26d78cda6e35d30a37e3353c981445d43a",
+      "bytes": 5125
+    },
+    "package/strict-stop-overlap-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-stop-overlap-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-stop-overlap-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-stop-overlap-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-stop-overlap-restart-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-stop-overlap-restart-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-stop-overlap-restart-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-stop-overlap-restart-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-stop-overlap-restart-run.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-stop-overlap-restart-run.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-stop-overlap-restart-run.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-stop-overlap-restart-run.stdout",
+      "sha256": "3acb329c6de284789075ecfd22ffd0dd3de41dc3aafef6050486516444ba6162",
+      "bytes": 1645
+    },
+    "package/strict-stop-overlap-restart-v2-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-stop-overlap-restart-v2-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-stop-overlap-restart-v2-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-stop-overlap-restart-v2-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-stop-overlap-restart-v2-run.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-stop-overlap-restart-v2-run.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-stop-overlap-restart-v2-run.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-stop-overlap-restart-v2-run.stdout",
+      "sha256": "745b5be94ca46c60a32ff32e9ba1766947b0b93afc7148e0129d80eb0cee8a21",
+      "bytes": 1639
+    },
+    "package/strict-stop-overlap-run.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-stop-overlap-run.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/strict-stop-overlap-run.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-stop-overlap-run.stdout",
+      "sha256": "519cac380f4a8d0daeeee54b0d38e4309fc193b482ffad3f557fc86ab4746832",
+      "bytes": 938
+    },
+    "package/summarize.py": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/summarize.py",
+      "sha256": "10089c37e078a1330dc72d5bde33c0ed949ec7fd2b0c8cecfcd2802b504ff6c9",
+      "bytes": 2886
+    },
+    "package/summary.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/summary.json",
+      "sha256": "1d3467226136be1a7c6427dc853d48b67a790f30e843125d7c10318df06bbbe2",
+      "bytes": 1225053
+    },
+    "package/t-auto-controls-v2.c": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/t-auto-controls-v2.c",
+      "sha256": "e0a5445e48151078870dde0043c7a2c0bb95a50452a0e8cbde7dc6146fbebfc6",
+      "bytes": 7355
+    },
+    "package/t-auto-controls.c": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/t-auto-controls.c",
+      "sha256": "34d3aecdab7c3295c8a970284f678945a0b330b1a021cae148d5b3621104a141",
+      "bytes": 6573
+    },
+    "package/t-restart-first-attach.c": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/t-restart-first-attach.c",
+      "sha256": "f5f1fad1d435d828e92728726c7157a534c9b664fa4a4f576b075392444632d9",
+      "bytes": 6967
+    },
+    "package/t-stop-first-attach-restart-v2.c": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/t-stop-first-attach-restart-v2.c",
+      "sha256": "1a8453a8fa2d105dbd6ecc38d5432f0dda999f342952141508a5d46567c91683",
+      "bytes": 7280
+    },
+    "package/t-stop-first-attach-restart.c": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/t-stop-first-attach-restart.c",
+      "sha256": "daca72eab69487245a9fa0a4df6e2d75dcbca88c90f984de7e59ff4faca96c08",
+      "bytes": 7279
+    },
+    "package/t-stop-first-attach.c": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/t-stop-first-attach.c",
+      "sha256": "3ae6ce71c2cfa62f09bd3752f3736266a8606983a72928d2ef5476d1c16ab640",
+      "bytes": 6461
+    },
+    "package/t-string-retention.c": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/t-string-retention.c",
+      "sha256": "2e8e840fb4ba3a3b09168c06d828ff10ebafd41e9ff555b9737f34384fea3cf9",
+      "bytes": 12128
+    },
+    "package/veto-0-0-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-0-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-0-0-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-0-0-0.stdout",
+      "sha256": "8d2921ef60ab1b739198ed570be7deb609c9164b78b1ff84e50d33fbf8d8a91d",
+      "bytes": 11430
+    },
+    "package/veto-0-0-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-0-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-0-0-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-0-0-2.stdout",
+      "sha256": "af174ff009f2d9ca594e98548ce9c6176adc37f49222a593c3377acff4b49861",
+      "bytes": 3418
+    },
+    "package/veto-0-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-0-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-0-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-0-1-0.stdout",
+      "sha256": "2282c9fd9515191b06f8d024804024b40316c6572ea250acaa2cb57ec8a4f3e6",
+      "bytes": 11530
+    },
+    "package/veto-0-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-0-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-0-1-2.stdout",
+      "sha256": "0005b5d3bc39bd89aa4afb59a19f71bee2da9708098ea8f0a9863b87cdf2799a",
+      "bytes": 3454
+    },
+    "package/veto-1-0-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-1-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-1-0-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-1-0-0.stdout",
+      "sha256": "f2519d02c1301c71db3b641f9532de658c736476074e90368f8e729f45d32f18",
+      "bytes": 11330
+    },
+    "package/veto-1-0-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-1-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-1-0-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-1-0-2.stdout",
+      "sha256": "c03cb3b350487f87c99994cd2d167a5dadb964922d562498e6502a064b6aecda",
+      "bytes": 11373
+    },
+    "package/veto-1-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-1-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-1-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-1-1-0.stdout",
+      "sha256": "98817a0ea932a1c617e9de687c989c73d19bd38631dd3a177f1a3c7ee993edd7",
+      "bytes": 11511
+    },
+    "package/veto-1-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-1-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-1-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-1-1-2.stdout",
+      "sha256": "458f9c1c9cfd8d45cd33dd7434b0741fd3b94fc4baddd98c9189499d48a134da",
+      "bytes": 11545
+    },
+    "package/veto-build.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-build.json",
+      "sha256": "7f2fab763d35149bc7122de4f9efa8fcbc3c01b1e352402fd11c856099cebed1",
+      "bytes": 914
+    },
+    "package/veto-build.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-build.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-build.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-build.stdout",
+      "sha256": "d70193625012abda28c648f444d92b370845a15c493945145ae38309cd37fd66",
+      "bytes": 4287
+    },
+    "package/veto-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-0-0-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-0-0-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-0-0-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-0-0-1-0.stdout",
+      "sha256": "94e466ce2e2fc381a8c58b147736da8fdc5bfd315416c73d6cdf793c97f2267b",
+      "bytes": 4162
+    },
+    "package/veto-controls-0-0-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-0-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-0-0-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-0-0-1-2.stdout",
+      "sha256": "2cb81957c30e98bb1c9d703b9866d099ab9c81bfe25d6ea0b1a8ea7497e73ab7",
+      "bytes": 4221
+    },
+    "package/veto-controls-0-1-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-0-1-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-0-1-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-0-1-1-0.stdout",
+      "sha256": "d6c1fc025af7aae226b798c1a1d7edebda68a2f94b492d98dde940ad8c070aed",
+      "bytes": 4163
+    },
+    "package/veto-controls-0-1-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-0-1-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-0-1-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-0-1-1-2.stdout",
+      "sha256": "40d136b5f9779462389f48ab514c2da4356600fea03429fce6016b5cc0ca273e",
+      "bytes": 4220
+    },
+    "package/veto-controls-0-2-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-0-2-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-0-2-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-0-2-1-0.stdout",
+      "sha256": "d641effe452ee834a3ca872f0f3bf1159163e345ffa05db8d1f3a3ce68793dcb",
+      "bytes": 4161
+    },
+    "package/veto-controls-0-2-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-0-2-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-0-2-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-0-2-1-2.stdout",
+      "sha256": "553e575932a04c0e7b1d8716c89a2c6e7d0ec6ebfb2da543ced63ba5ded8958a",
+      "bytes": 4221
+    },
+    "package/veto-controls-0-3-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-0-3-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-0-3-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-0-3-1-0.stdout",
+      "sha256": "8932632ed36a75ee93d6cb4a29b042e22836a336959b60f3b02021b72c0551bd",
+      "bytes": 4161
+    },
+    "package/veto-controls-0-3-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-0-3-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-0-3-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-0-3-1-2.stdout",
+      "sha256": "8c44e2cfcddc2a5e4a875b84b75d442962a576de51c84f7b09d42816e02e29d5",
+      "bytes": 4220
+    },
+    "package/veto-controls-0-4-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-0-4-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-0-4-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-0-4-1-0.stdout",
+      "sha256": "65b4e648639c684f36b9e3dbc65c95ff1e234a05088099ea782a7534fc8862ed",
+      "bytes": 4161
+    },
+    "package/veto-controls-0-4-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-0-4-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-0-4-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-0-4-1-2.stdout",
+      "sha256": "1ec948a498da29992ed77e74f7eab35a4aab69deeb4ebd481fbc043202a7ad7e",
+      "bytes": 4220
+    },
+    "package/veto-controls-0-5-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-0-5-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-0-5-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-0-5-1-0.stdout",
+      "sha256": "1cf3c4322f07b53b661b09e6106517e2096b1d44420ae9cabf7a45ff48e8fa0c",
+      "bytes": 4162
+    },
+    "package/veto-controls-0-5-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-0-5-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-0-5-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-0-5-1-2.stdout",
+      "sha256": "43e04b84c81760ff5c830ee5e7d24f20b01a58b9a9c8a52f777d49462ba6eb6b",
+      "bytes": 4218
+    },
+    "package/veto-controls-1-0-0-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-1-0-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-1-0-0-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-1-0-0-0.stdout",
+      "sha256": "c655722293257f678e8d2c870bbea59f023672f056b15eed5644bf5ee15ed69a",
+      "bytes": 4977
+    },
+    "package/veto-controls-1-0-0-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-1-0-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-1-0-0-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-1-0-0-2.stdout",
+      "sha256": "35697d0fdab51ffe64f51a6a0477e4c14d383255b1a46496eab3b3cc667ea46c",
+      "bytes": 5039
+    },
+    "package/veto-controls-1-0-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-1-0-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-1-0-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-1-0-1-0.stdout",
+      "sha256": "db897b4697866842ffab648706b52c0705bb80de1ef8e98d82e5697b4f735d80",
+      "bytes": 5034
+    },
+    "package/veto-controls-1-0-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-1-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-1-0-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-1-0-1-2.stdout",
+      "sha256": "0c02580774755a290f35833bf4b4a6276f2da01697dd33f40f454eed9b149dc6",
+      "bytes": 5092
+    },
+    "package/veto-controls-2-0-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-2-0-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-2-0-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-2-0-1-0.stdout",
+      "sha256": "dfabd3e8d76097fc80fb39b14f50a92d8be1dfc7c16c175648450dfca7fcb31f",
+      "bytes": 6737
+    },
+    "package/veto-controls-2-0-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-2-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-2-0-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-2-0-1-2.stdout",
+      "sha256": "9621e2b4faba78ad6518d956809858319735170857ef067837838a5c84e82dd3",
+      "bytes": 6797
+    },
+    "package/veto-controls-3-0-0-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-3-0-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-3-0-0-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-3-0-0-0.stdout",
+      "sha256": "7a95fdf4f6f4ac220942d2a84043f7097a4057f35c1b76779e1e34fdbd2d7a0d",
+      "bytes": 4974
+    },
+    "package/veto-controls-3-0-0-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-3-0-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-3-0-0-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-3-0-0-2.stdout",
+      "sha256": "55273c6ca222537445c23d855f3a59b91f859fc96facebc092b73dfcceaf625e",
+      "bytes": 5032
+    },
+    "package/veto-controls-3-0-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-3-0-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-3-0-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-3-0-1-0.stdout",
+      "sha256": "f8d1a98730d0cfa9f60cae92425d0488a673b3fe206b684305eda22a4a732b23",
+      "bytes": 5031
+    },
+    "package/veto-controls-3-0-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-3-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-3-0-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-3-0-1-2.stdout",
+      "sha256": "00b9bff5a381ca47aece7c1e01cd75743477c26baa01fae3252e21974a863e06",
+      "bytes": 5088
+    },
+    "package/veto-controls-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-inputs.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-inputs.json",
+      "sha256": "f6591ba94d7dce014cc79da3549088df5b3ec6a671b2271a7e1a3d8c47843155",
+      "bytes": 796
+    },
+    "package/veto-controls-results.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-results.json",
+      "sha256": "183b21c2684a8c36ce497eabf767883d08b467a036d8e2089a1177f037f61740",
+      "bytes": 15058
+    },
+    "package/veto-controls-v2-4-0-0-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-v2-4-0-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-v2-4-0-0-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-v2-4-0-0-0.stdout",
+      "sha256": "8defe8cbdb00106e428d2e7dde4a6e30c5bf241c9f1ec7551ac3192051800e50",
+      "bytes": 5838
+    },
+    "package/veto-controls-v2-4-0-0-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-v2-4-0-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-v2-4-0-0-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-v2-4-0-0-2.stdout",
+      "sha256": "b5dc59acb6b65af87d0bd9e7fed03359b315c8430a254bf94de8787c557e13ad",
+      "bytes": 5929
+    },
+    "package/veto-controls-v2-4-0-1-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-v2-4-0-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-v2-4-0-1-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-v2-4-0-1-0.stdout",
+      "sha256": "cb3d7ac3de0969944f1c133bf2909e08f70913732a9f6c98155563c09ba5d6f2",
+      "bytes": 5898
+    },
+    "package/veto-controls-v2-4-0-1-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-v2-4-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-v2-4-0-1-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-v2-4-0-1-2.stdout",
+      "sha256": "a4099fedf82b08f7d58834717c463c467330bc7e785bc4f70e5d09c3b817d08e",
+      "bytes": 5983
+    },
+    "package/veto-controls-v2-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-v2-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-v2-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-v2-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-controls-v2-inputs.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-v2-inputs.json",
+      "sha256": "763fee4d70441ef12c410a50f77a26d146598b6727bf8e41eea8a77c1388aea4",
+      "bytes": 802
+    },
+    "package/veto-controls-v2-results.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-v2-results.json",
+      "sha256": "c4b00e60085e4c822bc770e71707dd7c714b550e88af0259854afa4e625776c9",
+      "bytes": 3510
+    },
+    "package/veto-full.patch": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-full.patch",
+      "sha256": "35e8abddecefe17ca842d96d4f2f237fd986303ca3eac8b45c1f60d2610f542b",
+      "bytes": 5430
+    },
+    "package/veto-function-timeout-gdb.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-function-timeout-gdb.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-function-timeout-gdb.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-function-timeout-gdb.stdout",
+      "sha256": "7960da689a076b19efc2bc4fbb9b55d47dec18333816218a907bfe9f8f3fede9",
+      "bytes": 1168
+    },
+    "package/veto-inputs.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-inputs.json",
+      "sha256": "8f16561ef0bef839689979516ddff9eba3de103f36d6cff5a7b0340052a69030",
+      "bytes": 523
+    },
+    "package/veto-matched-safety-identities.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-matched-safety-identities.json",
+      "sha256": "4a1677568120b66db9c0e8252fa4c8d3eadf2acd99c5b6d77e19c4f7565aa458",
+      "bytes": 1005
+    },
+    "package/veto-matched-safety-results.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-matched-safety-results.json",
+      "sha256": "27cfc85ff4199234836407a90a9a1473b51cc715382a71795b58a09250575cba",
+      "bytes": 5081
+    },
+    "package/veto-matched-t-func-construction-anchor-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-matched-t-func-construction-anchor-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-matched-t-func-construction-anchor-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-matched-t-func-construction-anchor-0.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-matched-t-func-construction-anchor-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-matched-t-func-construction-anchor-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-matched-t-func-construction-anchor-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-matched-t-func-construction-anchor-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-matched-t-gc2-worker-scheduler-0.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-matched-t-gc2-worker-scheduler-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-matched-t-gc2-worker-scheduler-0.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-matched-t-gc2-worker-scheduler-0.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "package/veto-matched-t-gc2-worker-scheduler-1.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-matched-t-gc2-worker-scheduler-1.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-matched-t-gc2-worker-scheduler-1.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-matched-t-gc2-worker-scheduler-1.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "package/veto-matched-t-gc2-worker-scheduler-2.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-matched-t-gc2-worker-scheduler-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-matched-t-gc2-worker-scheduler-2.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-matched-t-gc2-worker-scheduler-2.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "package/veto-matched-t-gc2-worker-scheduler-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-matched-t-gc2-worker-scheduler-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-matched-t-gc2-worker-scheduler-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-matched-t-gc2-worker-scheduler-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-only.patch": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-only.patch",
+      "sha256": "4808e3c7b435db176df4e5c4c33ce3bf8729cd3bfa6d5d2f1efd0a7f7c967048",
+      "bytes": 3260
+    },
+    "package/veto-overlap-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-overlap-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-overlap-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-overlap-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-overlap-identities.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-overlap-identities.json",
+      "sha256": "394f9c2a67a578cc74ba5a3ea60bb8ad8919f9a88f769eb1546de99985d31ff7",
+      "bytes": 411
+    },
+    "package/veto-overlap-results.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-overlap-results.json",
+      "sha256": "6da19aa250c3d6adff30d1304db39626299b086d6b3d464b462d2725aeb7815b",
+      "bytes": 1292
+    },
+    "package/veto-overlap-run.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-overlap-run.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-overlap-run.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-overlap-run.stdout",
+      "sha256": "4888155a877bb6d25280e9fe7298d6d8c33baab94c6e63cb528d37968c9d1d2d",
+      "bytes": 938
+    },
+    "package/veto-restart-overlap-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-restart-overlap-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-restart-overlap-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-restart-overlap-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-restart-overlap-disassembly.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-restart-overlap-disassembly.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-restart-overlap-disassembly.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-restart-overlap-disassembly.stdout",
+      "sha256": "8156e5ceddc135c4391bede9676d13fe1e83462ecc9eff2b0a17f98a7c0c5835",
+      "bytes": 11425
+    },
+    "package/veto-restart-overlap-run.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-restart-overlap-run.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-restart-overlap-run.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-restart-overlap-run.stdout",
+      "sha256": "20df016e3c0d861ff669ba73729fa55aabd77f399e6b8d1384fcd40686fc55f0",
+      "bytes": 1449
+    },
+    "package/veto-results.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-results.json",
+      "sha256": "39d781e9b0ee4e0a676fd3bc67f877b8d120da75f48577455a55d3b1a0c1cfbd",
+      "bytes": 4996
+    },
+    "package/veto-scheduler-isolation-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-scheduler-isolation-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-scheduler-isolation-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-scheduler-isolation-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-scheduler-isolation-run.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-scheduler-isolation-run.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-scheduler-isolation-run.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-scheduler-isolation-run.stdout",
+      "sha256": "3220202920b3f9a8cfcad37d75c0d3a4df26ff300c8e44899d6f4d92f327fc53",
+      "bytes": 79
+    },
+    "package/veto-stop-overlap-restart-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-stop-overlap-restart-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-stop-overlap-restart-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-stop-overlap-restart-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-stop-overlap-restart-run.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-stop-overlap-restart-run.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-stop-overlap-restart-run.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-stop-overlap-restart-run.stdout",
+      "sha256": "e860114b53bc6e1d4066e4a07bc1eb0349c575859f056f900133464495fb0a0b",
+      "bytes": 1645
+    },
+    "package/veto-stop-overlap-restart-v2-compile.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-stop-overlap-restart-v2-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-stop-overlap-restart-v2-compile.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-stop-overlap-restart-v2-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-stop-overlap-restart-v2-run.stderr": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-stop-overlap-restart-v2-run.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "package/veto-stop-overlap-restart-v2-run.stdout": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-stop-overlap-restart-v2-run.stdout",
+      "sha256": "1ae2ae8402114f6aa0cf18de5be6cb8d74d3e94436f14dbec0f29ece2dad9e5c",
+      "bytes": 1639
+    },
+    "modified-source/src/lj_obj.h": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto/src/lj_obj.h",
+      "sha256": "591085dbd6f5a550412b4978cf1ad96850b87c59c41e5883e87b034bcaf62f3c",
+      "bytes": 220849
+    },
+    "modified-source/src/lj_gc.h": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto/src/lj_gc.h",
+      "sha256": "7e7d75d12c65e46f56492e4999b94a1d64318cef0bbb7d01352796fdc94b7fcf",
+      "bytes": 22575
+    },
+    "modified-source/src/lj_gc.c": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto/src/lj_gc.c",
+      "sha256": "3cd90fc9507153f4acda2b11cf79fb637636a22b42a580b10389138908f47aea",
+      "bytes": 195276
+    },
+    "modified-source/src/lj_gc2.c": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto/src/lj_gc2.c",
+      "sha256": "ce389dec47b431d6ba67cbb76ad15fd6e3c0aa061cd50dc4d10a0396b8cf9cf6",
+      "bytes": 767764
+    },
+    "modified-source/src/lj_api.c": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto/src/lj_api.c",
+      "sha256": "62cb91a4a382bca4ece810557008895ae9910171d7e74ff11314c00df470d53e",
+      "bytes": 89891
+    },
+    "modified-source/src/vm_x64.dasc": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto/src/vm_x64.dasc",
+      "sha256": "3c1a5c9750ba851b400b580a8b2a80f5c215736bf71fc81112ea728eebdb39ae",
+      "bytes": 193172
+    },
+    "independent-review/artifact-manifest.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/independent-review/artifact-manifest.json",
+      "sha256": "09e728914a79566861a6ff4c2cbb0975538aebbdb5c85ed89a3fd09d35ab9007",
+      "bytes": 1776
+    },
+    "independent-review/review.md": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/independent-review/review.md",
+      "sha256": "eb90f485d2ba5de9dde4a5d92b3b3e3d50c830a1d3b77e692d78b1587d24170d",
+      "bytes": 6676
+    },
+    "independent-review/reviewed-inputs.json": {
+      "source": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/independent-review/reviewed-inputs.json",
+      "sha256": "230f501f99c49972f1b4aa79c99fe667134a3bccde73095748d28ede930fc30c",
+      "bytes": 2744
+    }
+  },
+  "hash_only": {
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-retention": {
+      "sha256": "b3d0de9cf4ca13431cad235abaf36d22964e92ddffcbe71cf7cfc0443c671b71",
+      "bytes": 19528688
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-controls-v2-retention": {
+      "sha256": "47097604a0eaae1e95103fecb957a2da4b8c37371c3cbd88b143a938bb816fc1",
+      "bytes": 19536264
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-retention": {
+      "sha256": "41f164d4f06af76f896330d2ffcf00ab82c9e8ceea754cbab540598376e2d63f",
+      "bytes": 19487848
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-stop-first-attach": {
+      "sha256": "915a11152df611ba4763bd8fc1d5ff213bf485321d2f6d33e1a1ac7e7e59391f",
+      "bytes": 19462896
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-stop-overlap-restart": {
+      "sha256": "0ae9286ffa07a44e4943bb67111f195c86ae438540588e1c6c51d44c5fc0cfde",
+      "bytes": 19469104
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-stop-overlap-restart-v2": {
+      "sha256": "25bc6a99734d40c4d76760b0b5a680ecad3c29c9c94515a9793d18d9601d6892",
+      "bytes": 19469112
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/candidate-restart-first-attach": {
+      "sha256": "d501b3e67bc713952f72bf05515347d6a104efabd32f9219609f0cf18161d293",
+      "bytes": 1736744
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/candidate-stop-first-attach": {
+      "sha256": "d55f8bfd2371a983ca4a3dc67d24b847b42e8c5bbb607e7ad54da1547a53dcba",
+      "bytes": 1737408
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-matched-t-func-construction-anchor": {
+      "sha256": "863b346f39df5300b28b869a823a44b5c3d8cddea3d19818dd33bd63e9f311a7",
+      "bytes": 2073352
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-matched-t-gc2-worker-scheduler": {
+      "sha256": "8f8d15fc10c396adaec3348bd34d7ce70d9f264e901ef0608eac304d5404ff98",
+      "bytes": 2238888
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-restart-first-attach": {
+      "sha256": "465e8e3170fde0a9b669fdb8b725c80c5e9220f390250d1d8e95ebf6ce23358f",
+      "bytes": 1736648
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-stop-first-attach": {
+      "sha256": "c039da5df4b73d4e288cd3746cb6cc6db945c2243c864e4a242266021829d65f",
+      "bytes": 1737312
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-stop-overlap-restart": {
+      "sha256": "41a386dd403b8b80782f832dddaeda75ea5a939de38b3e69155348df9c733167",
+      "bytes": 1739128
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-stop-overlap-restart-v2": {
+      "sha256": "55b0be069c621d2e84c0011bb93a3c8b89535944c9e72c4ffd86082d5e0cbe8a",
+      "bytes": 1739136
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-func-construction-anchor": {
+      "sha256": "fd846ca8a7f42306c31c6c6ab73759e6f92bfee297c4858408de30bfb4ca7f96",
+      "bytes": 2073448
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc-root-pending-race": {
+      "sha256": "b7bc9bf047b0b9b58aacfbbeebb05e728c5df08f0bf35f54f6e070b4eafb32b5",
+      "bytes": 2157760
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-activation-veto": {
+      "sha256": "46d25c0a6bf700c0d9909e84f93b9dc0f81207863df5613b2ea4f85227b63342",
+      "bytes": 2025784
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-alloc-account": {
+      "sha256": "92b5811e52a3f236e26226e8e932682e95372b9eb55cbfe5ecf19d10b1f98db5",
+      "bytes": 2122232
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-interp-hard-check": {
+      "sha256": "3c767070c6aa79f08965f2b4e003c27a1521309da0c4fffc8a7051ed24bde147",
+      "bytes": 2056424
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-jit-hard-check": {
+      "sha256": "befb1137e55aa3888ea2293e0fd5c16bcef7dbb648e2404a0d8c3b1632d67bca",
+      "bytes": 2043288
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-jit-mark-coop": {
+      "sha256": "2501a41883a2067ecb5eb4b6e37e15ce26f90dac5563c0da30bb0fbf4d36d6a9",
+      "bytes": 2111648
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-jit-sweep-coop": {
+      "sha256": "7c05f6ffd21cccb386c251f01e5a0c09a83f04489dbaba46158459dd15bf8d71",
+      "bytes": 2078536
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-mark-close-progress": {
+      "sha256": "25287d30d4532faa454c27d5da523dd47eb833b0299d8e12d0fe455fee446067",
+      "bytes": 1941224
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-pacing-atomic": {
+      "sha256": "27e8245fc22ad5697e0f154a0a21affcaaf4e068d67f187103dea2b6af483f1b",
+      "bytes": 1920768
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-gc2-worker-scheduler": {
+      "sha256": "9b650b2516a92a25ad7a291da437d18b41108c78ad6006fec531b70c0733d01e",
+      "bytes": 2238984
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-jit-idle-reclaim-entry": {
+      "sha256": "5f66cf89ea1d8faef7cb61c2b751f2210b5d62372c0a7a2db1a23d7a2c54b576",
+      "bytes": 2082696
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-local-native-duplicate": {
+      "sha256": "84c88903b70754e0c291382da23a5577ea649f18e8d5e49053a082d139251467",
+      "bytes": 2061976
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-native-root-hold": {
+      "sha256": "06d5775c30e9e1f0a7ad77a4704bcb1d75a9029d6044af1d60717d3626ba7bfd",
+      "bytes": 2066808
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-safepoint-remote-root-completion": {
+      "sha256": "7f1258a35164bf0cfb6e4a3a229a71ae91b1c2aabdfc90c4122991c0964ed106",
+      "bytes": 2093272
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-str-reclaim-sole": {
+      "sha256": "dae59e2da0f24449d3f271f733eed7af92333a85aa87045b5616cb087d31c575",
+      "bytes": 1932256
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-threading-spawn-native": {
+      "sha256": "5fbf9c512b2834fb7971ffadf9deb7f3bcc0af530cb49806ace739727aa62315",
+      "bytes": 2070552
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers-safety-t-udata-construction-roots": {
+      "sha256": "3d6dc02742fb86d072ffdd8ea1918f37f342c90f2a91990e7f39f94ce7afc6e8",
+      "bytes": 2041816
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-matched-t-func-construction-anchor": {
+      "sha256": "e9068aa4e348f1198d803ed4a783922dd89baa004a9b7ed3075a080c15f2d9a8",
+      "bytes": 2073432
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-matched-t-gc2-worker-scheduler": {
+      "sha256": "ceace9cdaab8304ec09718cc55de4b4cb4c7d2e7a945316255127934d7bd23d1",
+      "bytes": 2238968
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/oldcandidate-scheduler-isolation": {
+      "sha256": "ceace9cdaab8304ec09718cc55de4b4cb4c7d2e7a945316255127934d7bd23d1",
+      "bytes": 2238968
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-retention": {
+      "sha256": "338db3ad154795c16e8f367ad7ae5de876351d39372164fbb69a83bc745f4b3a",
+      "bytes": 2021656
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-controls-v2-retention": {
+      "sha256": "b3c9ef0786ba8ffbc0f7a816fd763e6751c718dcaf6420d01b1aece4e3652463",
+      "bytes": 2024432
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-retention": {
+      "sha256": "c9b1aa26079402a3f5409f5d5b9737cf9021396128ca06959b29c4ad01438730",
+      "bytes": 1996056
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-stop-first-attach": {
+      "sha256": "ccfdb9827e07c12078376e5e8a179ccb93702f6a3b0bbe900d4e3c8c2e3d09f4",
+      "bytes": 1989616
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-stop-overlap-restart": {
+      "sha256": "4740e75ca1754057b5c4badb6e8a3645da8a878d3c1615ec0fe8a259e8405764",
+      "bytes": 1991432
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-stop-overlap-restart-v2": {
+      "sha256": "d11caffc5e3ec0aaf4a44b111a89c66fd96061f084f5d4ce8fd2cdc55c565034",
+      "bytes": 1991432
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-retention": {
+      "sha256": "6e6939d3c9f7d1e4a6fa7c642c3c3168ed9c7110ce53ab97f9940b36bdb551b8",
+      "bytes": 1773608
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-controls-v2-retention": {
+      "sha256": "22d915dd83cfca01f887c23adaf03ec9cb11d525422b14189589aebe5ef8f296",
+      "bytes": 1776384
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-matched-t-func-construction-anchor": {
+      "sha256": "fd846ca8a7f42306c31c6c6ab73759e6f92bfee297c4858408de30bfb4ca7f96",
+      "bytes": 2073448
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-matched-t-gc2-worker-scheduler": {
+      "sha256": "9b650b2516a92a25ad7a291da437d18b41108c78ad6006fec531b70c0733d01e",
+      "bytes": 2238984
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-restart-first-attach": {
+      "sha256": "051baa5f22e4beb6f14c7d1bf2e47a34e9d7b1e0c8d06718c43e967801fd481f",
+      "bytes": 1736744
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-retention": {
+      "sha256": "f88656a19a1f0fe185d66006599ff2cefe71bc76f163e15d823b0a9148725a86",
+      "bytes": 1748008
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-scheduler-isolation": {
+      "sha256": "9b650b2516a92a25ad7a291da437d18b41108c78ad6006fec531b70c0733d01e",
+      "bytes": 2238984
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-stop-first-attach": {
+      "sha256": "8a8ec0a684255df7dc90561bd9eb2e82f924f324a83c3baf9cb7152f9c70d911",
+      "bytes": 1737424
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-stop-overlap-restart": {
+      "sha256": "f304652f649612bf5d60bae7f142f5df16ecd820f4174048f07c122d7b6fd276",
+      "bytes": 1743336
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-stop-overlap-restart-v2": {
+      "sha256": "bf1ae47387dc5a35fbe9fd02f86a000fe013449313c484404a78272432020162",
+      "bytes": 1743336
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto/src/luajit": {
+      "sha256": "4201ddd18286ff7a03bb81dcfd208ec151c68834c7ddfb77b43aaf7aeab5222a",
+      "bytes": 1514736
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto/src/libluajit.a": {
+      "sha256": "6e564bbe00a132cbc171dd03a4b9dd9fc7b97b44f4d26b662b681c6f8f463a63",
+      "bytes": 2356682
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto/src/host/minilua": {
+      "sha256": "8ab7d5a14b0525e3759effc570de0f02965b5618600fbfe15499924a399f1538",
+      "bytes": 154760
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto/src/host/buildvm": {
+      "sha256": "0a767c5554225c5e229cd2fbdb924bb3cf1aad375f57678dbc08f6880b6992ef",
+      "bytes": 122336
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict/src/luajit": {
+      "sha256": "b5fe2c844b4dd844d129ac15232b4091c523032093e79eff862f8e97ed958b89",
+      "bytes": 1936936
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict/src/libluajit.a": {
+      "sha256": "63e56469d34c5aa1363ad65a96bc7a6f4ca8ecf05bbbbd5253c50c1a71baeae1",
+      "bytes": 2867108
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict/src/host/minilua": {
+      "sha256": "8ab7d5a14b0525e3759effc570de0f02965b5618600fbfe15499924a399f1538",
+      "bytes": 154760
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict/src/host/buildvm": {
+      "sha256": "258c018f674b0a398495989c36510c6f62010672888a6d460c377aa8ae8840a3",
+      "bytes": 122336
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan/src/luajit": {
+      "sha256": "a72fd3f7c9af6e1eb8f9167a0eef015ec83c211dd9c0f23811bf87017202f05f",
+      "bytes": 19492168
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan/src/libluajit.a": {
+      "sha256": "d6ab609ea8d81157d77642cca8c68201c66bc4e155c0d5a250549ce3887c5eac",
+      "bytes": 26672262
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan/src/host/minilua": {
+      "sha256": "6b90a915a7876b83d25ae96b4dfe21310eaffa625e69ee9b8e684170c9588641",
+      "bytes": 550920
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan/src/host/buildvm": {
+      "sha256": "b7add4cbace2392299f8c1154146983fff85828c4ceab8196cf5da0b9002c027",
+      "bytes": 247664
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/luajit": {
+      "sha256": "98ea9eb4ababb99a9e9d7bb24c302ff4d96d81fe403fdc98396f3ae167ab6a49",
+      "bytes": 2010080
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/libluajit.a": {
+      "sha256": "67381c50c9865dc0fc74c40213c4f98eb72eb319f2a515d066f1c787c3187f45",
+      "bytes": 2980502
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/host/minilua": {
+      "sha256": "8ab7d5a14b0525e3759effc570de0f02965b5618600fbfe15499924a399f1538",
+      "bytes": 154760
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/extrahelpers/src/host/buildvm": {
+      "sha256": "b458d712179ee64cec6cf89b2cb3d4eafe7ae10dab152ef480dcf286127ce6ad",
+      "bytes": 122336
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/luajit": {
+      "sha256": "d30d6b89d555dc69eab8a5156c705136830d6a24fb4b3927bc46ebf778c12206",
+      "bytes": 2005888
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/libluajit.a": {
+      "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+      "bytes": 2976582
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/host/minilua": {
+      "sha256": "8ab7d5a14b0525e3759effc570de0f02965b5618600fbfe15499924a399f1538",
+      "bytes": 154760
+    },
+    "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers/src/host/buildvm": {
+      "sha256": "070836d59abc428ed92aeb9f055a1e24a58ff975ea50cb96bbdb4aa093265ca5",
+      "bytes": 122336
+    },
+    "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/runtime-source.tar": {
+      "sha256": "3f67cbcbf90024afc765adbe34f98e69895b6095df421490b1dbbfc182452bef",
+      "bytes": 13260800
+    },
+    "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/candidate.patch": {
+      "sha256": "f632c7f26051ffebb55fde65291a304b91a46df0371cf47f86aa1783efdf5cd9",
+      "bytes": 2485
+    },
+    "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/libluajit.a": {
+      "sha256": "da2308594747fcbff96dbf18753c4e980b5592669c686493e40401db6b5557ed",
+      "bytes": 2352868
+    },
+    "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/candidate/src/libluajit.a": {
+      "sha256": "b882fcd410b1cdb9382abbab210b2e62f94347434fa5dd7c220164bd690c9842",
+      "bytes": 2356530
+    },
+    "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/extrahelpers/src/libluajit.a": {
+      "sha256": "8e9ef65c3e1f90625c87b2416299595a87e4a776a49ec27bd7b7efbd4053f4ed",
+      "bytes": 2980350
+    }
+  }
+}

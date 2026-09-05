@@ -1,0 +1,92 @@
+[
+  {
+    "name": "strict-stop-overlap-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-I/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict/src",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/t-stop-first-attach.c",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_vm_cpcall",
+      "-o",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-stop-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.1641398220017436,
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-stop-overlap-compile.stdout",
+    "stderr": "strict-stop-overlap-compile.stderr"
+  },
+  {
+    "name": "strict-stop-overlap-run",
+    "argv": [
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict-stop-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.015760015005071182,
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/strict/src/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "stdout": "strict-stop-overlap-run.stdout",
+    "stderr": "strict-stop-overlap-run.stderr"
+  },
+  {
+    "name": "asan-stop-overlap-compile",
+    "argv": [
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-I/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan/src",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/t-stop-first-attach.c",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_vm_cpcall",
+      "-o",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-stop-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.26404883500072174,
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "stdout": "asan-stop-overlap-compile.stdout",
+    "stderr": "asan-stop-overlap-compile.stderr"
+  },
+  {
+    "name": "asan-stop-overlap-run",
+    "argv": [
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan-stop-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.06395910099672619,
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "stdout": "asan-stop-overlap-run.stdout",
+    "stderr": "asan-stop-overlap-run.stderr"
+  }
+]

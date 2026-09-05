@@ -79,7 +79,7 @@ are verified reasons the full goal is still open:
 | --- | --- | --- |
 | Table resize | Structural owner plus source `FORWARD` can strand the only value in an owner's local variable; descriptor migration is dormant | Durable exact payloads, helpable migration/publication, GC and native grace |
 | Descriptor installation | Separate capacity-shadow store can corrupt a winning descriptor before the losing ownership CAS | Publish control and capacity in one atomic pair; deterministic competing-generation test |
-| Automatic GC | Interpreted allocation can leave a live-peer IDLE request unconsumed; admitted worker-enabled cycles can miss SWEEP completion bounds; phase boundaries still handshake synchronously | Consume durable requests at safe VM boundaries, preserve stop/restart, then complete asynchronous phase ownership and worker scheduling |
+| Automatic GC | Live-peer IDLE requests can remain unconsumed; first attachment can misread completed STOP or undo RESTART; worker-enabled cycles miss SWEEP completion bounds | Separate public control from derived thresholds, preserve finalizer suppression, consume durable requests at safe boundaries, then complete asynchronous phase ownership |
 | Native acknowledgement | Completed exact owner-root actions can release through the unique remote executor; local/duplicate and broader actions still hold | Replace mutable-root borrowing and retain exact completion authority; local native-depth polls can overlap a remote pre-claim scan |
 | First MT attachment | Mode-0 traces omitted the TG request poll and real attachment waited for natural exit | Every XPOLL now observes the TG request; the larger attachment/flush ownership dependencies still require asynchronous completion |
 | Worker scheduling | MARK-close ownership loss can be reported as progress and cause repeated drain-loop execution | Return/defer without false progress or peer sleep; preserve durable retry |
@@ -530,6 +530,15 @@ detach, native return, STOPREQ, active finalizers, nested GC, and saturation.
 Do not remove consumed-ack waits until the scanner's stack access has a safe
 replacement. Then remove global trace exclusion from marking using the exact
 native/trace frame evidence, and distribute marking work among real workers.
+
+Before expanding automatic admission, repair logical control publication across
+first/last attachment and public STOP/restart. The initial admission prototype
+starts MARK after a completed STOP in a real first-child overlap. An independent
+STOP byte prevents that regression, but a delayed threshold MOV still loses a
+completed RESTART on both baseline and prototype. Temporary finalizer suppression
+must remain explicit before thresholds lose their control authority. Preserve
+the frozen negative schedules and the separate worker/safety observations in
+`notes/gc-auto-control-review-2026-09-05.md`; neither prototype is integrated.
 
 The real four-position consumed-ack probe and finite mode-0 attachment probe
 are recorded in `notes/native-progress-boundaries-2026-09-05.md`. The missing

@@ -1,0 +1,24 @@
+{
+  "argv": [
+    "make",
+    "-C",
+    "src",
+    "-j4",
+    "BUILDMODE=static",
+    "XCFLAGS=-DLUA_USE_ASSERT -DLUA_USE_APICHECK -DLJ_GC2_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_FUNC_TEST_HELPERS -DLJ_UDATA_TEST_HELPERS -DLJ_STR_TEST_HELPERS",
+    "TARGET_STRIP=:"
+  ],
+  "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/controlextrahelpers",
+  "exit_code": 0,
+  "seconds": 8.386681525000313,
+  "binaries": {
+    "luajit": {
+      "sha256": "d30d6b89d555dc69eab8a5156c705136830d6a24fb4b3927bc46ebf778c12206",
+      "bytes": 2005888
+    },
+    "libluajit.a": {
+      "sha256": "4314aded0d4e39b11fc9696db41cf6e093e585065346402f3eece9c3aab3fb6b",
+      "bytes": 2976582
+    }
+  }
+}

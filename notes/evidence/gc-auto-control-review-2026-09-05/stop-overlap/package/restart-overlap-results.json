@@ -1,0 +1,167 @@
+[
+  {
+    "name": "control-restart-overlap-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/t-restart-first-attach.c",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_vm_cpcall",
+      "-o",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-restart-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.11429486500128405,
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "stdout": "control-restart-overlap-compile.stdout",
+    "stderr": "control-restart-overlap-compile.stderr"
+  },
+  {
+    "name": "control-restart-overlap-disassembly",
+    "argv": [
+      "objdump",
+      "-d",
+      "--disassemble=threading_gc_enter_counted",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-restart-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.0036149529987596907,
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "stdout": "control-restart-overlap-disassembly.stdout",
+    "stderr": "control-restart-overlap-disassembly.stderr"
+  },
+  {
+    "name": "control-restart-overlap-run",
+    "argv": [
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/control-restart-first-attach"
+    ],
+    "exit_code": 43,
+    "seconds": 0.01544626300164964,
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/control/src/?.lua;;",
+    "stdout": "control-restart-overlap-run.stdout",
+    "stderr": "control-restart-overlap-run.stderr"
+  },
+  {
+    "name": "candidate-restart-overlap-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-admission-20260905-h7ntx71p/candidate/src",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/t-restart-first-attach.c",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_vm_cpcall",
+      "-o",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/candidate-restart-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.16396400500525488,
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/candidate/src/?.lua;;",
+    "stdout": "candidate-restart-overlap-compile.stdout",
+    "stderr": "candidate-restart-overlap-compile.stderr"
+  },
+  {
+    "name": "candidate-restart-overlap-disassembly",
+    "argv": [
+      "objdump",
+      "-d",
+      "--disassemble=threading_gc_enter_counted",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/candidate-restart-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.0036238379980204627,
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/candidate/src/?.lua;;",
+    "stdout": "candidate-restart-overlap-disassembly.stdout",
+    "stderr": "candidate-restart-overlap-disassembly.stderr"
+  },
+  {
+    "name": "candidate-restart-overlap-run",
+    "argv": [
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/candidate-restart-first-attach"
+    ],
+    "exit_code": 43,
+    "seconds": 0.03148879799846327,
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/candidate/src/?.lua;;",
+    "stdout": "candidate-restart-overlap-run.stdout",
+    "stderr": "candidate-restart-overlap-run.stderr"
+  },
+  {
+    "name": "veto-restart-overlap-compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto/src",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/t-restart-first-attach.c",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_vm_cpcall",
+      "-o",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-restart-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.16411660500307335,
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto/src/?.lua;;",
+    "stdout": "veto-restart-overlap-compile.stdout",
+    "stderr": "veto-restart-overlap-compile.stderr"
+  },
+  {
+    "name": "veto-restart-overlap-disassembly",
+    "argv": [
+      "objdump",
+      "-d",
+      "--disassemble=threading_gc_enter_counted",
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-restart-first-attach"
+    ],
+    "exit_code": 0,
+    "seconds": 0.003581810000468977,
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto/src/?.lua;;",
+    "stdout": "veto-restart-overlap-disassembly.stdout",
+    "stderr": "veto-restart-overlap-disassembly.stderr"
+  },
+  {
+    "name": "veto-restart-overlap-run",
+    "argv": [
+      "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto-restart-first-attach"
+    ],
+    "exit_code": 43,
+    "seconds": 0.03148595099628437,
+    "cwd": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a",
+    "LUA_PATH": "/tmp/lj-gc-auto-stop-overlap-20260905-y4h4cc8a/veto/src/?.lua;;",
+    "stdout": "veto-restart-overlap-run.stdout",
+    "stderr": "veto-restart-overlap-run.stderr"
+  }
+]

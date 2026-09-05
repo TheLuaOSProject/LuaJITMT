@@ -1,0 +1,17 @@
+{
+  "argv": [
+    "make",
+    "-C",
+    "src",
+    "-j4"
+  ],
+  "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/candidate",
+  "exit_code": 2,
+  "seconds": 1.5668375960012781,
+  "binaries": {
+    "host/minilua": {
+      "sha256": "8ab7d5a14b0525e3759effc570de0f02965b5618600fbfe15499924a399f1538",
+      "bytes": 154760
+    }
+  }
+}

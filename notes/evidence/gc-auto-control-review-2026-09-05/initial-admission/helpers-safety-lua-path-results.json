@@ -1,0 +1,31 @@
+[
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers/tests/t-gc-active-thread-roots.lua"
+    ],
+    "name": "t-gc-active-thread-roots-joff",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.6149074959976133,
+    "stdout": "helpers-safety-lua-path-t-gc-active-thread-roots-joff.stdout",
+    "stderr": "helpers-safety-lua-path-t-gc-active-thread-roots-joff.stderr"
+  },
+  {
+    "argv": [
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers/src/luajit",
+      "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers/tests/t-gc-active-thread-roots.lua"
+    ],
+    "name": "t-gc-active-thread-roots-jit",
+    "cwd": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers",
+    "LUA_PATH": "/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers/src/?.lua;/tmp/lj-gc-auto-admission-20260905-h7ntx71p/helpers/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": null,
+    "exit_code": 0,
+    "seconds": 0.6647024979974958,
+    "stdout": "helpers-safety-lua-path-t-gc-active-thread-roots-jit.stdout",
+    "stderr": "helpers-safety-lua-path-t-gc-active-thread-roots-jit.stderr"
+  }
+]

@@ -1,0 +1,105 @@
+--- a/src/lj_obj.h
++++ b/src/lj_obj.h
+@@ -1755,7 +1755,7 @@
+   GCSize threshold;	/* Memory threshold. */
+   uint8_t currentwhite;	/* Current white color. */
+   uint8_t state;	/* GC state. */
+-  uint8_t unused0;
++  uint8_t auto_stopped;  /* Explicit automatic-GC veto, independent of MT bridge. */
+ #if LJ_64
+   uint8_t lightudnum;	/* Number of lightuserdata segments - 1. */
+ #else
+--- a/src/lj_gc.h
++++ b/src/lj_gc.h
+@@ -276,6 +276,16 @@
+   lj_gcsize_store_rel(&g->gc.threshold, threshold);
+ }
+ 
++static LJ_AINLINE uint8_t lj_gc_auto_stopped_load(global_State *g)
++{
++  return la_load8_acq(&g->gc.auto_stopped);
++}
++
++static LJ_AINLINE void lj_gc_auto_stopped_store(global_State *g, uint8_t stopped)
++{
++  la_store8_rel(&g->gc.auto_stopped, stopped);
++}
++
+ static LJ_AINLINE MSize lj_gc_pause_load(global_State *g)
+ {
+   return (MSize)la_load32_acq(&g->gc.pause);
+--- a/src/lj_gc.c
++++ b/src/lj_gc.c
+@@ -66,6 +66,8 @@
+ static int gc_logical_running(global_State *g)
+ {
+   GCSize threshold;
++  if (lj_gc_auto_stopped_load(g))
++    return 0;
+   if (mt_live_acq(g) != 0) {
+     threshold = lj_gc_mt_threshold_load(g);
+     if (mt_live_acq(g) == 0)
+--- a/src/lj_gc2.c
++++ b/src/lj_gc2.c
+@@ -1651,6 +1651,7 @@
+ void lj_gc2_init(global_State *g)
+ {
+   uint32_t i;
++  lj_gc_auto_stopped_store(g, 0);
+   gc2_gcpause_pct_store_rlx(g, (uint32_t)lj_gc_pause_load(g));
+   gc2_assist_shift_store_rlx(g,
+     lj_gc2_assist_shift_from_stepmul(lj_gc_stepmul_load(g)));
+@@ -2836,6 +2837,8 @@
+ 
+ static int gc2_logical_stopped(global_State *g)
+ {
++  if (lj_gc_auto_stopped_load(g))
++    return 1;
+   if (mt_live_acq(g) != 0) {
+     GCSize threshold = lj_gc_mt_threshold_load(g);
+     if (mt_live_acq(g) == 0)
+--- a/src/lj_api.c
++++ b/src/lj_api.c
+@@ -2963,6 +2963,12 @@
+ static void api_gc_setlogical(global_State *g, GCSize threshold)
+ {
+   uint64_t soft = ~(uint64_t)0;
++  /* First attachment publishes mt_live before initializing its saved threshold.
++  ** Publish explicit STOP independently so that stale MT data cannot restart
++  ** automatic collection. Attach/detach and temporary finalizer thresholds
++  ** never clear this veto; only a public restart/full collection does. */
++  if (threshold == LJ_MAX_MEM)
++    lj_gc_auto_stopped_store(g, 1);
+   if (threshold != LJ_MAX_MEM) {
+     GCSize total = lj_gc_total_load(g);
+     soft = (uint64_t)total > soft - LJ_GC2_HELPER_IDLE_STEP ?
+@@ -2976,6 +2982,8 @@
+   } else {
+     lj_gc_threshold_store(g, threshold);
+   }
++  if (threshold != LJ_MAX_MEM)
++    lj_gc_auto_stopped_store(g, 0);
+ }
+ 
+ static GCSize api_gc_restart_threshold(global_State *g)
+@@ -3046,7 +3054,8 @@
+     gc2_assist_shift_rel(g, lj_gc2_assist_shift_from_stepmul((uint32_t)data));
+     break;
+   case LUA_GCISRUNNING:
+-    res = ((mt_live_acq(g) != 0 ? lj_gc_mt_threshold_load(g) :
++    res = (!lj_gc_auto_stopped_load(g) &&
++	   (mt_live_acq(g) != 0 ? lj_gc_mt_threshold_load(g) :
+ 	    lj_gc_threshold_load(g)) != LJ_MAX_MEM);
+     break;
+   default:
+--- a/src/vm_x64.dasc
++++ b/src/vm_x64.dasc
+@@ -426,6 +426,8 @@
+ |  cmp dword [g+GL_OFS(gc2.cycle_leader)], 0
+ |  je >6
+ |  cmp dword [g+GL_OFS(gc2.phase)], LJ_GC2_IDLE
++|  jne >6
++|  cmp byte [g+GL_OFS(gc.auto_stopped)], 0
+ |  jne >6
+ |  mov64 tmp, LJ_MAX_MEM
+ |  cmp dword [g+GL_OFS(mt_live)], 0

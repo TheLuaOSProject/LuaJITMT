@@ -1,0 +1,12 @@
+make: Entering directory '/tmp/lj-gc-auto-admission-20260905-h7ntx71p/candidate/src'
+HOSTCC    host/minilua.o
+HOSTCC    host/buildvm_asm.o
+HOSTCC    host/buildvm_peobj.o
+HOSTCC    host/buildvm_lib.o
+HOSTCC    host/buildvm_fold.o
+HOSTLINK  host/minilua
+VERSION   luajit.h
+DYNASM    host/buildvm_arch.h
+CC        luajit.o
+HOSTCC    host/buildvm.o
+make: Leaving directory '/tmp/lj-gc-auto-admission-20260905-h7ntx71p/candidate/src'
