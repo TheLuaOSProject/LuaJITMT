@@ -1,0 +1,11 @@
+{
+  "owner_package": "/tmp/lj-api-owned-capture-20260905-y8eduuo8",
+  "source_patch_sha256": "03e121fe7d124ba56fc212870e5a6667510d09c035ade3de4a5cff9aac5255b1",
+  "api_sha256": "a23958c380ac945e5d22d251bea9fdbeee0098a70df4006197645e1094aff902",
+  "code_manifest_sha256": "c9463506f5ef097e06cd9c77959c78a22b5ee5939eb0f757538ab7e7057f716e",
+  "status": "focused validation stopped by automated cybersecurity review",
+  "reported_completed": "Six unchanged C API geometries passed in the strict build before the agent error; no final accepted validation handoff.",
+  "rejection": "Agent errored: This content was flagged for possible cybersecurity risk.",
+  "specific_rejected_tool_call": "Not included in the agent error notification.",
+  "action": "Do not retry, rephrase, or take over the blocked validation. Continue independent GC and previously completed iterator work; this capture candidate remains unvalidated and unlanded."
+}

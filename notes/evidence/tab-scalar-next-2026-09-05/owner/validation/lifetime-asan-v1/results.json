@@ -1,0 +1,54 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/lifetime-asan-v1/fixture",
+      "preflight"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.016875215995241888,
+    "exit": 0,
+    "stdout": "scalar next lifetime passed: preflight\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-lifetime.c": "e95ba8b4c5a788af6a109992e6f474398f3bcb637486e06643c1fa67428242fa",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/libluajit.a": "b02a0a5b72f299d47ac83431740c57343f363ce5dae2faa9ec8d1075e652bdc7",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/lifetime-asan-v1/fixture": "4db8aa39d1bb0800ecb90d951ef37be71ff6340b43fa4892d18de663df8e7e93"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/lifetime-asan-v1/fixture",
+      "retired"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.020234026000252925,
+    "exit": 0,
+    "stdout": "scalar next lifetime passed: retired\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-lifetime.c": "e95ba8b4c5a788af6a109992e6f474398f3bcb637486e06643c1fa67428242fa",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/libluajit.a": "b02a0a5b72f299d47ac83431740c57343f363ce5dae2faa9ec8d1075e652bdc7",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/lifetime-asan-v1/fixture": "4db8aa39d1bb0800ecb90d951ef37be71ff6340b43fa4892d18de663df8e7e93"
+    }
+  }
+]

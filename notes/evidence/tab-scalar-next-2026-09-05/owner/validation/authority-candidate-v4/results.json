@@ -1,0 +1,277 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture",
+      "basic-colo"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.05024432600475848,
+    "exit": -6,
+    "stdout": "",
+    "stderr": "LuaJIT ASSERT /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority-v4.c:117: basic_cases: tvisint(L->base + 2)\n",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority-v4.c": "0ade6c880df52eeae3060882ce58f146e49e7a6a830e0c62b48e4277bdd38b19",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/libluajit.a": "6c515f2b05eac154f41c2d7cd044341167e67cc01a5cf7be117ec5512098a671",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture": "6cb4f680f9e3d08e5baabddf0bd2cdb9f50bd323dd484af464e5d1c90f7c4079"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture",
+      "basic-separate"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.04485570600081701,
+    "exit": -6,
+    "stdout": "",
+    "stderr": "LuaJIT ASSERT /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority-v4.c:117: basic_cases: tvisint(L->base + 2)\n",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority-v4.c": "0ade6c880df52eeae3060882ce58f146e49e7a6a830e0c62b48e4277bdd38b19",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/libluajit.a": "6c515f2b05eac154f41c2d7cd044341167e67cc01a5cf7be117ec5512098a671",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture": "6cb4f680f9e3d08e5baabddf0bd2cdb9f50bd323dd484af464e5d1c90f7c4079"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture",
+      "keys"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.040028915005677845,
+    "exit": -6,
+    "stdout": "",
+    "stderr": "LuaJIT ASSERT /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority-v4.c:141: key_cases: tvisint(L->base + 2)\n",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority-v4.c": "0ade6c880df52eeae3060882ce58f146e49e7a6a830e0c62b48e4277bdd38b19",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/libluajit.a": "6c515f2b05eac154f41c2d7cd044341167e67cc01a5cf7be117ec5512098a671",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture": "6cb4f680f9e3d08e5baabddf0bd2cdb9f50bd323dd484af464e5d1c90f7c4079"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture",
+      "aliases"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.033582837000722066,
+    "exit": -6,
+    "stdout": "",
+    "stderr": "LuaJIT ASSERT /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority-v4.c:164: alias_cases: tvisint(L->base + ki)\n",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority-v4.c": "0ade6c880df52eeae3060882ce58f146e49e7a6a830e0c62b48e4277bdd38b19",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/libluajit.a": "6c515f2b05eac154f41c2d7cd044341167e67cc01a5cf7be117ec5512098a671",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture": "6cb4f680f9e3d08e5baabddf0bd2cdb9f50bd323dd484af464e5d1c90f7c4079"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture",
+      "opaque"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.0040278980013681576,
+    "exit": 0,
+    "stdout": "scalar next authority passed: opaque\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority-v4.c": "0ade6c880df52eeae3060882ce58f146e49e7a6a830e0c62b48e4277bdd38b19",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/libluajit.a": "6c515f2b05eac154f41c2d7cd044341167e67cc01a5cf7be117ec5512098a671",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture": "6cb4f680f9e3d08e5baabddf0bd2cdb9f50bd323dd484af464e5d1c90f7c4079"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture",
+      "protected"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.004262183996615931,
+    "exit": 0,
+    "stdout": "scalar next authority passed: protected\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority-v4.c": "0ade6c880df52eeae3060882ce58f146e49e7a6a830e0c62b48e4277bdd38b19",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/libluajit.a": "6c515f2b05eac154f41c2d7cd044341167e67cc01a5cf7be117ec5512098a671",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture": "6cb4f680f9e3d08e5baabddf0bd2cdb9f50bd323dd484af464e5d1c90f7c4079"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture",
+      "bounds"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.007125274001737125,
+    "exit": 0,
+    "stdout": "scalar next authority passed: bounds\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority-v4.c": "0ade6c880df52eeae3060882ce58f146e49e7a6a830e0c62b48e4277bdd38b19",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/libluajit.a": "6c515f2b05eac154f41c2d7cd044341167e67cc01a5cf7be117ec5512098a671",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture": "6cb4f680f9e3d08e5baabddf0bd2cdb9f50bd323dd484af464e5d1c90f7c4079"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture",
+      "hooks-found"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.00427462300285697,
+    "exit": 0,
+    "stdout": "scalar next authority passed: hooks-found\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority-v4.c": "0ade6c880df52eeae3060882ce58f146e49e7a6a830e0c62b48e4277bdd38b19",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/libluajit.a": "6c515f2b05eac154f41c2d7cd044341167e67cc01a5cf7be117ec5512098a671",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture": "6cb4f680f9e3d08e5baabddf0bd2cdb9f50bd323dd484af464e5d1c90f7c4079"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture",
+      "hooks-end"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.003971284000726882,
+    "exit": 0,
+    "stdout": "scalar next authority passed: hooks-end\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority-v4.c": "0ade6c880df52eeae3060882ce58f146e49e7a6a830e0c62b48e4277bdd38b19",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/libluajit.a": "6c515f2b05eac154f41c2d7cd044341167e67cc01a5cf7be117ec5512098a671",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture": "6cb4f680f9e3d08e5baabddf0bd2cdb9f50bd323dd484af464e5d1c90f7c4079"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture",
+      "resize"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.03985649200330954,
+    "exit": -6,
+    "stdout": "",
+    "stderr": "LuaJIT ASSERT /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority-v4.c:320: resize_cases: tvisint(L->base + 3)\n",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority-v4.c": "0ade6c880df52eeae3060882ce58f146e49e7a6a830e0c62b48e4277bdd38b19",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/libluajit.a": "6c515f2b05eac154f41c2d7cd044341167e67cc01a5cf7be117ec5512098a671",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture": "6cb4f680f9e3d08e5baabddf0bd2cdb9f50bd323dd484af464e5d1c90f7c4079"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture",
+      "plain"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.03978180700505618,
+    "exit": -6,
+    "stdout": "",
+    "stderr": "LuaJIT ASSERT /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority-v4.c:359: plain_writer: tvisint(L->base + 3)\n",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority-v4.c": "0ade6c880df52eeae3060882ce58f146e49e7a6a830e0c62b48e4277bdd38b19",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/libluajit.a": "6c515f2b05eac154f41c2d7cd044341167e67cc01a5cf7be117ec5512098a671",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture": "6cb4f680f9e3d08e5baabddf0bd2cdb9f50bd323dd484af464e5d1c90f7c4079"
+    }
+  }
+]

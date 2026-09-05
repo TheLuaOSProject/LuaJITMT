@@ -1,0 +1,33 @@
+/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/idle: \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/fixtures/t-jit-idle-reclaim-entry.c \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lua.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/luaconf.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lauxlib.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lua.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lualib.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_obj.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_def.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_arch.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_atomic.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_gc2token.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_tgregistry.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_tgslot.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_atomic.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_bc.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_func.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_obj.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_gc2.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_arena.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_thr.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_tg.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_bc.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_ctype.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_gc.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_gc2.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_trace.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_jit.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_ir.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_dispatch.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_tg.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_traceerr.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/lua_fixture_helpers.h

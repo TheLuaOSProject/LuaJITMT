@@ -1,0 +1,54 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-baseline-complete/fixture",
+      "next",
+      "dense"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 4.004795193999598,
+    "exit": -14,
+    "stdout": "real reclaimer paused: mode=next kind=dense\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/libluajit.a": "3fdbe96a21431044549717f028252d2d0d103a16ae07215cbdc196dd96a7e55f",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-baseline-complete/fixture": "64c892aba697e25ede93585b337d470677453aa4fd682630282d4cae12ae9fb7"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-baseline-complete/fixture",
+      "rooted",
+      "empty"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 4.004225026998029,
+    "exit": -14,
+    "stdout": "real reclaimer paused: mode=rooted kind=empty\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/libluajit.a": "3fdbe96a21431044549717f028252d2d0d103a16ae07215cbdc196dd96a7e55f",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-baseline-complete/fixture": "64c892aba697e25ede93585b337d470677453aa4fd682630282d4cae12ae9fb7"
+    }
+  }
+]

@@ -1,0 +1,170 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/stack-retry-asan-v1/fixture",
+      "found",
+      "2",
+      "3"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.07233507100318093,
+    "exit": 0,
+    "stdout": "stack move then refused SMR passed: found 2 3\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-stack-retry.c": "87190a00d79e1ff998930400eb1ec9eb3455ea1451d79478c100baf5b3142d24",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/libluajit.a": "b02a0a5b72f299d47ac83431740c57343f363ce5dae2faa9ec8d1075e652bdc7",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/stack-retry-asan-v1/fixture": "97480521a037a4d62a8a79db214f85321bcd701fd3320022802c5f7f6857edec"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/stack-retry-asan-v1/fixture",
+      "found",
+      "1",
+      "3"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.0356809049990261,
+    "exit": 0,
+    "stdout": "stack move then refused SMR passed: found 1 3\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-stack-retry.c": "87190a00d79e1ff998930400eb1ec9eb3455ea1451d79478c100baf5b3142d24",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/libluajit.a": "b02a0a5b72f299d47ac83431740c57343f363ce5dae2faa9ec8d1075e652bdc7",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/stack-retry-asan-v1/fixture": "97480521a037a4d62a8a79db214f85321bcd701fd3320022802c5f7f6857edec"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/stack-retry-asan-v1/fixture",
+      "found",
+      "0",
+      "1"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.059939186001429334,
+    "exit": 0,
+    "stdout": "stack move then refused SMR passed: found 0 1\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-stack-retry.c": "87190a00d79e1ff998930400eb1ec9eb3455ea1451d79478c100baf5b3142d24",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/libluajit.a": "b02a0a5b72f299d47ac83431740c57343f363ce5dae2faa9ec8d1075e652bdc7",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/stack-retry-asan-v1/fixture": "97480521a037a4d62a8a79db214f85321bcd701fd3320022802c5f7f6857edec"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/stack-retry-asan-v1/fixture",
+      "end",
+      "2",
+      "3"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.06189540099876467,
+    "exit": 0,
+    "stdout": "stack move then refused SMR passed: end 2 3\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-stack-retry.c": "87190a00d79e1ff998930400eb1ec9eb3455ea1451d79478c100baf5b3142d24",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/libluajit.a": "b02a0a5b72f299d47ac83431740c57343f363ce5dae2faa9ec8d1075e652bdc7",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/stack-retry-asan-v1/fixture": "97480521a037a4d62a8a79db214f85321bcd701fd3320022802c5f7f6857edec"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/stack-retry-asan-v1/fixture",
+      "end",
+      "1",
+      "3"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.03381003299728036,
+    "exit": 0,
+    "stdout": "stack move then refused SMR passed: end 1 3\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-stack-retry.c": "87190a00d79e1ff998930400eb1ec9eb3455ea1451d79478c100baf5b3142d24",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/libluajit.a": "b02a0a5b72f299d47ac83431740c57343f363ce5dae2faa9ec8d1075e652bdc7",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/stack-retry-asan-v1/fixture": "97480521a037a4d62a8a79db214f85321bcd701fd3320022802c5f7f6857edec"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/stack-retry-asan-v1/fixture",
+      "end",
+      "0",
+      "1"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.05502902899752371,
+    "exit": 0,
+    "stdout": "stack move then refused SMR passed: end 0 1\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-stack-retry.c": "87190a00d79e1ff998930400eb1ec9eb3455ea1451d79478c100baf5b3142d24",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/libluajit.a": "b02a0a5b72f299d47ac83431740c57343f363ce5dae2faa9ec8d1075e652bdc7",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/stack-retry-asan-v1/fixture": "97480521a037a4d62a8a79db214f85321bcd701fd3320022802c5f7f6857edec"
+    }
+  }
+]

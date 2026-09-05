@@ -1,0 +1,2 @@
+real reclaimer paused: mode=itern kind=bool
+progress passed: mode=itern kind=bool count=3 sum=305

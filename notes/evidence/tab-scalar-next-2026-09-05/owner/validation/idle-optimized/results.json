@@ -1,0 +1,26 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/idle-optimized/fixture"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.014491642999928445,
+    "exit": 0,
+    "stdout": "t-jit-idle-reclaim-entry OK: IDLE reclaim owns native-entry closure\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-jit-idle-reclaim-entry.c": "d0d24a06085383dc95bb7f5ab83b1daf18d54fe46b98d6ece4190d34c3cd5343",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/idle-optimized/fixture": "08a97a7dc511e904f1a704d1ef885c3f206c38b89d551e874adb1efced3775c6"
+    }
+  }
+]

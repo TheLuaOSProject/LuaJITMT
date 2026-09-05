@@ -1,0 +1,23 @@
+{
+  "count": 17,
+  "artifacts": {
+    "base-inputs.json": "0916cc326c92663248f036f49e4b6e019e2a06cff382ab4ad62aee2f33cbfe51",
+    "freeze-source.py": "62de5e496043f4fc4ca69585dd0ee8abf1175096a7d650033959c8129c011a4f",
+    "source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+    "candidate-v1.patch": "fe8b4e4598f56e420c302ccd4545fd90c2707d59688565943b69044e7fb482f8",
+    "build-candidate.py": "1f927c7a305f06a2fd8608371dcb62a1d8df14b0c7783d61468208ee7d3659b4",
+    "candidate-build.json": "af37bf4458fc4aae91044baf45b2f4475d44416225baf27f56aab04446945200",
+    "prepare-idle-fixture.py": "57f08ae0b0c247323073ded8841ada113252f405b52674cceefd85d01524f9ce",
+    "idle-compile.json": "804849d8d33bc51fb58649d089517c4babc9f6b0aa9b98e90a35bf6671065d42",
+    "idle-candidate": "729cce0cc8733990e6ac5fb3d985f1da9b0eb690dada6e3e1ee59e7a1d59c391",
+    "idle-candidate.d": "5c58b2e361c2b1adf483ba0dc0ef6163e91e385bb0d942cd7509c1ba89e92478",
+    "source-proof.md": "9408fbd0ec87a3f8b09f8c75e0340d272022e1d7237e532c216b1070f0624c77",
+    "freeze-code-review.py": "a41264d2b8d2161b9cd66810eea215d79017ee32701de98052dcd3a7080e256e",
+    "verify-code-review.py": "b1f7c485d73997c3ca4077aa076601a47a3e846fc3072be06a4fe64e715c3e71",
+    "fixtures/t-jit-idle-reclaim-entry.c": "d0d24a06085383dc95bb7f5ab83b1daf18d54fe46b98d6ece4190d34c3cd5343",
+    "fixtures/lib/lua_fixture_helpers.h": "cba26c57b088692886b4df5223a3670fad11ec7951002a98c54be4fedb6844fe",
+    "candidate/src/lj_tab.c": "29da7b8b71c5ea65e4692ae6b8f1846445a6b67a8812a6f892aad1b54562c0a6",
+    "candidate/src/lj_tab.h": "24309f7eef00a37f338fbc53acb3aa563f32532ffc1d73ed9de36960003396d8"
+  },
+  "stage": "frozen source/build review; no runtime tests yet"
+}

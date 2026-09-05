@@ -1,0 +1,24 @@
+/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-strict/rooted-reader: \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/fixtures/t-tab-rooted-reader.c \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/lua.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/luaconf.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/lauxlib.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/lua.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/lualib.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/lj_obj.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/lj_def.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/lj_arch.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/lj_atomic.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/lj_gc2token.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/lj_tgregistry.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/lj_tgslot.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/lj_gc2.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/lj_obj.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/lj_arena.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/lj_state.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/lj_tab.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/lj_tg.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/lj_bc.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/lj_ctype.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/lj_gc.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/lj_gc2.h

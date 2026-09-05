@@ -1,0 +1,26 @@
+/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-baseline/progress: \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/fixtures/t-tab-scalar-next-progress.c \
+ /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/lua.h \
+ /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/luaconf.h \
+ /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/lauxlib.h \
+ /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/lua.h \
+ /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/lualib.h \
+ /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/luajit.h \
+ /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/lj_bc.h \
+ /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/lj_def.h \
+ /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/lj_arch.h \
+ /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/lj_atomic.h \
+ /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/lj_func.h \
+ /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/lj_obj.h \
+ /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/lj_gc2token.h \
+ /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/lj_tgregistry.h \
+ /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/lj_tgslot.h \
+ /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/lj_gc2.h \
+ /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/lj_arena.h \
+ /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/lj_obj.h \
+ /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/lj_tab.h \
+ /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/lj_tg.h \
+ /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/lj_bc.h \
+ /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/lj_ctype.h \
+ /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/lj_gc.h \
+ /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/lj_gc2.h

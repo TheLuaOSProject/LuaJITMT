@@ -1,0 +1,12 @@
+== m6_jit_alloc_account ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLJ_GC2_TEST_HELPERS -I'/workspaces/lj-lockless/src' '/workspaces/lj-lockless/tests/t-gc2-alloc-account.c' '/workspaces/lj-lockless/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj-scalar-next-combined-20260905-ufftrr0s/canonical-tmp/lj_t-gc2-alloc-account'
++ timeout '20s' '/tmp/lj-scalar-next-combined-20260905-ufftrr0s/canonical-tmp/lj_t-gc2-alloc-account'
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLJ_GC2_TEST_HELPERS -I'/workspaces/lj-lockless/src' '/workspaces/lj-lockless/tests/t-gc2-interp-hard-check.c' '/workspaces/lj-lockless/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj-scalar-next-combined-20260905-ufftrr0s/canonical-tmp/lj_t-gc2-interp-hard-check'
++ timeout '20s' '/tmp/lj-scalar-next-combined-20260905-ufftrr0s/canonical-tmp/lj_t-gc2-interp-hard-check'
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLJ_GC2_TEST_HELPERS -I'/workspaces/lj-lockless/src' '/workspaces/lj-lockless/tests/t-jit-idle-reclaim-entry.c' '/workspaces/lj-lockless/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj-scalar-next-combined-20260905-ufftrr0s/canonical-tmp/lj_t-jit-idle-reclaim-entry'
++ timeout '20s' '/tmp/lj-scalar-next-combined-20260905-ufftrr0s/canonical-tmp/lj_t-jit-idle-reclaim-entry'
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLJ_GC2_TEST_HELPERS -I'/workspaces/lj-lockless/src' '/workspaces/lj-lockless/tests/t-gc2-jit-sweep-coop.c' '/workspaces/lj-lockless/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj-scalar-next-combined-20260905-ufftrr0s/canonical-tmp/lj_t-gc2-jit-sweep-coop-helper'
++ timeout '30s' '/tmp/lj-scalar-next-combined-20260905-ufftrr0s/canonical-tmp/lj_t-gc2-jit-sweep-coop-helper'
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLJ_GC2_TEST_HELPERS -I'/workspaces/lj-lockless/src' '/workspaces/lj-lockless/tests/t-gc2-jit-mark-coop.c' '/workspaces/lj-lockless/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj-scalar-next-combined-20260905-ufftrr0s/canonical-tmp/lj_t-gc2-jit-mark-coop-helper'
++ timeout '40s' '/tmp/lj-scalar-next-combined-20260905-ufftrr0s/canonical-tmp/lj_t-gc2-jit-mark-coop-helper'
+ok m6_jit_alloc_account

@@ -1,0 +1,614 @@
+[
+  {
+    "name": "stock-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/luajit",
+      "-joff",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/stock/test",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 60,
+    "exit": 0,
+    "seconds": 1.3652984060026938
+  },
+  {
+    "name": "stock-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/luajit",
+      "-jon",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/stock/test",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 60,
+    "exit": 0,
+    "seconds": 1.8157163139985641
+  },
+  {
+    "name": "idle-compile",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/idle.d",
+      "-I/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src",
+      "-I/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests",
+      "-I/tmp/lj-scalar-next-combined-20260905-ufftrr0s/fixtures",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/fixtures/t-jit-idle-reclaim-entry.c",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/idle"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": false,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 40,
+    "exit": 0,
+    "seconds": 0.21415880099812057
+  },
+  {
+    "name": "idle-0",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/idle"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.007592296002258081
+  },
+  {
+    "name": "progress-compile",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress.d",
+      "-I/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src",
+      "-I/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests",
+      "-I/tmp/lj-scalar-next-combined-20260905-ufftrr0s/fixtures",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/fixtures/t-tab-scalar-next-progress.c",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": false,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 40,
+    "exit": 0,
+    "seconds": 0.16373634599585785
+  },
+  {
+    "name": "progress-0",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress",
+      "next",
+      "dense"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.007553556002676487
+  },
+  {
+    "name": "progress-1",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress",
+      "next",
+      "sparse"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.007393944993964396
+  },
+  {
+    "name": "progress-2",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress",
+      "next",
+      "empty"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.007356960995821282
+  },
+  {
+    "name": "progress-3",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress",
+      "next",
+      "holes"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.007378626003628597
+  },
+  {
+    "name": "progress-4",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress",
+      "next",
+      "zero"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.0074021930049639195
+  },
+  {
+    "name": "progress-5",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress",
+      "next",
+      "bool"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.007371615996817127
+  },
+  {
+    "name": "progress-6",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress",
+      "itern",
+      "dense"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.0073605709985713474
+  },
+  {
+    "name": "progress-7",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress",
+      "itern",
+      "sparse"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.007353085005888715
+  },
+  {
+    "name": "progress-8",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress",
+      "itern",
+      "empty"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.007387364996247925
+  },
+  {
+    "name": "progress-9",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress",
+      "itern",
+      "holes"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.007374562002951279
+  },
+  {
+    "name": "progress-10",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress",
+      "itern",
+      "zero"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.007375430999672972
+  },
+  {
+    "name": "progress-11",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress",
+      "itern",
+      "bool"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.007364135002717376
+  },
+  {
+    "name": "progress-12",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress",
+      "rooted",
+      "dense"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.007461032997525763
+  },
+  {
+    "name": "progress-13",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress",
+      "rooted",
+      "sparse"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.007543377003457863
+  },
+  {
+    "name": "progress-14",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress",
+      "rooted",
+      "empty"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.007407423996482976
+  },
+  {
+    "name": "progress-15",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress",
+      "rooted",
+      "holes"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.007406158001685981
+  },
+  {
+    "name": "progress-16",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress",
+      "rooted",
+      "zero"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.007376183006272186
+  },
+  {
+    "name": "progress-17",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress",
+      "rooted",
+      "bool"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.00738505399931455
+  },
+  {
+    "name": "progress-18",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress",
+      "cursor",
+      "dense"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.007462228000804316
+  },
+  {
+    "name": "progress-19",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress",
+      "cursor",
+      "sparse"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.007391065999399871
+  },
+  {
+    "name": "progress-20",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress",
+      "cursor",
+      "empty"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.007397050001600292
+  },
+  {
+    "name": "progress-21",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress",
+      "cursor",
+      "holes"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.007376538000244182
+  },
+  {
+    "name": "progress-22",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress",
+      "cursor",
+      "zero"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.007358347000263166
+  },
+  {
+    "name": "progress-23",
+    "command": [
+      "taskset",
+      "-c",
+      "4-7",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-optimized/progress",
+      "cursor",
+      "bool"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.0073519500001566485
+  }
+]

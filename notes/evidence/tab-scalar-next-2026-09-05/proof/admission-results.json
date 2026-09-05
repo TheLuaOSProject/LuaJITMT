@@ -1,0 +1,29 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "24-25",
+    "gdb",
+    "-q",
+    "-batch",
+    "-x",
+    "/tmp/lj-idle-scalar-next-proof-20260905-c53dodz1/admission.gdb",
+    "--args",
+    "/tmp/lj-idle-entry-timeout-20260905-1tin1mhx/fixture"
+  ],
+  "cwd": "/tmp/lj-idle-scalar-next-proof-20260905-c53dodz1",
+  "environment": {
+    "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/?.lua;;"
+  },
+  "seconds": 0.19343293400015682,
+  "exit": 0,
+  "stdout": "Breakpoint 1 at 0x5c070: file lj_tab.c, line 3715.\n[Thread debugging using libthread_db enabled]\nUsing host libthread_db library \"/lib/x86_64-linux-gnu/libthread_db.so.1\".\n[New Thread 0x7ffff792e6c0 (LWP 395347)]\n\nThread 1 \"fixture\" hit Breakpoint 1, lj_tab_next_rooted (L=L@entry=0x7ffff7c90080, tabroot=0x7ffff79791e0, keyroot=keyroot@entry=0x7fffffffddf8, outkey=outkey@entry=0x7ffff79791f0, outval=outval@entry=0x7ffff79791f8, nextidx=nextidx@entry=0x7fffffffddf4) at lj_tab.c:3715\n3715\t  if (!L || !key)\nentry phase=0 smr=1 readers=0 native_gate=0 table_root=0x7ffff79791e0 key_root=0x7fffffffddf8 outkey=0x7ffff79791f0 outval=0x7ffff79791f8\nsource table_word=0xfffa7ffff7952950 key_word=0xfffe7fff00000000 table=0x7ffff7952950 gct=11 asize=9 array=0x7ffff79529a0 node=0x7ffff7c90318 nilnode=0x7ffff7c90318 sizeof_tab=80\narray_words\n0x7ffff79529a0:\t0xffffffffffffffff\t0x4026000000000000\n0x7ffff79529b0:\t0x4036000000000000\t0x4040800000000000\n0x7ffff79529c0:\t0x4046000000000000\t0x404b800000000000\n\nThread 2 (Thread 0x7ffff792e6c0 (LWP 395347) \"fixture\"):\n#0  la_load32_acq (p=0x555555709438 <gc2_idle_reclaim_test_release>) at /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/lj_atomic.h:33\n#1  gc2_idle_reclaim_test_pause_after_jit_quiescence () at lj_gc2.c:760\n#2  gc2_idle_reclaim_enter (g=g@entry=0x7ffff7c90130) at lj_gc2.c:7074\n#3  0x0000555555577eed in lj_gc2_reclaim_retired (g=0x7ffff7c90130, epoch=5) at lj_gc2.c:7147\n#4  0x000055555555d120 in idle_reclaim_main (arg=0x7fffffffdfd0) at /tmp/lj-idle-entry-timeout-20260905-1tin1mhx/t-jit-idle-reclaim-entry.c:47\n#5  0x00007ffff7d35b7b in ?? () from /lib/x86_64-linux-gnu/libc.so.6\n#6  0x00007ffff7db37f8 in ?? () from /lib/x86_64-linux-gnu/libc.so.6\n\nThread 1 (Thread 0x7ffff7ca21c0 (LWP 395344) \"fixture\"):\n#0  lj_tab_next_rooted (L=L@entry=0x7ffff7c90080, tabroot=0x7ffff79791e0, keyroot=keyroot@entry=0x7fffffffddf8, outkey=outkey@entry=0x7ffff79791f0, outval=outval@entry=0x7ffff79791f8, nextidx=nextidx@entry=0x7fffffffddf4) at lj_tab.c:3715\n#1  0x00005555555b1153 in lj_tab_itern_rooted (L=0x7ffff7c90080, tabroot=<optimized out>, ctrl=0x7ffff79791e8) at lj_tab.c:8711\n#2  0x000055555563af32 in lj_vm_IITERN ()\n#3  0x00005555555bf107 in lj_vm_pcall_unwind (L=L@entry=0x7ffff7c90080, base=0x7ffff79791c0, nres1=nres1@entry=3, ef=ef@entry=0) at lj_state.c:130\n#4  0x00005555555f36b0 in lua_pcall (L=L@entry=0x7ffff7c90080, nargs=nargs@entry=1, nresults=nresults@entry=2, errfunc=errfunc@entry=0) at lj_api.c:2797\n#5  0x000055555555d2da in ljt_lua_pcall (L=L@entry=0x7ffff7c90080, nresults=nresults@entry=2, what=what@entry=0x5555556b7273 \"closed IDLE \"..., nargs=1) at /workspaces/lj-lockless/tests/lib/lua_fixture_helpers.h:50\n#6  0x000055555555c978 in main () at /tmp/lj-idle-entry-timeout-20260905-1tin1mhx/t-jit-idle-reclaim-entry.c:318\nTemporary breakpoint 2 at 0x555555569770: file lj_gc2.c, line 6874.\n\nThread 1 \"fixture\" hit Temporary breakpoint 2, lj_gc2_smr_read_try (g=0x7ffff7c90130) at lj_gc2.c:6874\n6874\t  if (!g)\nsmr_try entry g=0x7ffff7c90130 phase=0 smr=1 readers=0 native_gate=0\n#0  lj_gc2_smr_read_try (g=0x7ffff7c90130) at lj_gc2.c:6874\n#1  0x00005555555b01db in lj_tab_next_rooted (L=L@entry=0x7ffff7c90080, tabroot=0x7ffff79791e0, keyroot=keyroot@entry=0x7fffffffddf8, outkey=outkey@entry=0x7ffff79791f0, outval=outval@entry=0x7ffff79791f8, nextidx=nextidx@entry=0x7fffffffddf4) at lj_tab.c:8596\n#2  0x00005555555b1153 in lj_tab_itern_rooted (L=0x7ffff7c90080, tabroot=<optimized out>, ctrl=0x7ffff79791e8) at lj_tab.c:8711\n0x00005555555b01db in lj_tab_next_rooted (L=L@entry=0x7ffff7c90080, tabroot=0x7ffff79791e0, keyroot=keyroot@entry=0x7fffffffddf8, outkey=outkey@entry=0x7ffff79791f0, outval=outval@entry=0x7ffff79791f8, nextidx=nextidx@entry=0x7fffffffddf4) at lj_tab.c:8596\n8596\t    if (LJ_UNLIKELY(!lj_gc2_smr_read_try(G(L)))) {\nValue returned is $1 = 0\nsmr_try result=0 phase=0 smr=1 readers=0 native_gate=0\n",
+  "stderr": "",
+  "inputs": {
+    "/tmp/lj-idle-scalar-next-proof-20260905-c53dodz1/run-observer.py": "47e790787fbddca6ae3df934984ce8826e0cf015a3c4f8de20e6711c043e567f",
+    "/tmp/lj-idle-scalar-next-proof-20260905-c53dodz1/inputs.json": "c737c0e15e23750b2e31f6e0661a2f9371786c361d9f7b1cc514d3752ba14a9a",
+    "/tmp/lj-idle-scalar-next-proof-20260905-c53dodz1/admission.gdb": "921331f6076c12bc5887d39032a94292142d25516beeb32083a5330266f4f8d7",
+    "/tmp/lj-idle-entry-timeout-20260905-1tin1mhx/fixture": "ebe194f127d8b3193f8743124fe5cbd84cb9d535cbc6167d86a37ce5b92dd1ad"
+  },
+  "note": "Read-only debugger observation; quit terminates the still-paused target. Never a complete fixture pass."
+}

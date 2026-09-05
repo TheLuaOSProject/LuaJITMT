@@ -1,0 +1,27 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v3-diagnostic/fixture",
+      "basic-colo"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.043076778994873166,
+    "exit": -6,
+    "stdout": "",
+    "stderr": "arena 0 before=a000000000000000 after=a000000000000000 status=1 phase=0\nfixture: /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority-v3-diagnostic.c:90: attempt: Assertion `lj_arena_remote_active_acq(a[i]) == 0' failed.\n",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority-v3-diagnostic.c": "82366608be64536af9f25dfb395f6aa5396047fa7cf216033668622a1260116f",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/libluajit.a": "6c515f2b05eac154f41c2d7cd044341167e67cc01a5cf7be117ec5512098a671",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v3-diagnostic/fixture": "b6d1857e12cbeed63f1cc7dfd42ab045810339f4dd84eb5efe42c0ec6707741d"
+    }
+  }
+]

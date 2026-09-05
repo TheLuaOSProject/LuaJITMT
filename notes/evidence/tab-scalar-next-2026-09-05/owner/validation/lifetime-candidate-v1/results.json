@@ -1,0 +1,52 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/lifetime-candidate-v1/fixture",
+      "preflight"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.005031719003454782,
+    "exit": 0,
+    "stdout": "scalar next lifetime passed: preflight\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-lifetime.c": "e95ba8b4c5a788af6a109992e6f474398f3bcb637486e06643c1fa67428242fa",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/libluajit.a": "6c515f2b05eac154f41c2d7cd044341167e67cc01a5cf7be117ec5512098a671",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/lifetime-candidate-v1/fixture": "c5f8687ace0f84614d04b7f8300a6a40783f553987845c7c990fcd26d8a927c6"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/lifetime-candidate-v1/fixture",
+      "retired"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.006993406001129188,
+    "exit": 0,
+    "stdout": "scalar next lifetime passed: retired\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-lifetime.c": "e95ba8b4c5a788af6a109992e6f474398f3bcb637486e06643c1fa67428242fa",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/libluajit.a": "6c515f2b05eac154f41c2d7cd044341167e67cc01a5cf7be117ec5512098a671",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/lifetime-candidate-v1/fixture": "c5f8687ace0f84614d04b7f8300a6a40783f553987845c7c990fcd26d8a927c6"
+    }
+  }
+]

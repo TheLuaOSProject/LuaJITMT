@@ -1,0 +1,57 @@
+{
+  "status": "scalar-array iterator accepted on worker+fair source; public C capture candidate excluded",
+  "head_before_commit": "997c00440774d7714000e514a869fb26ec75a6a5",
+  "runtime_inputs_verified": 1125,
+  "isolated_results": {
+    "candidate": {
+      "runtime_inputs_verified": 225,
+      "runtime_processes": 4,
+      "positive_runtime_processes": 4,
+      "expected_failures": 0,
+      "all_expected": true
+    },
+    "optimized": {
+      "runtime_inputs_verified": 225,
+      "runtime_processes": 27,
+      "positive_runtime_processes": 27,
+      "expected_failures": 0,
+      "all_expected": true
+    },
+    "strict": {
+      "runtime_inputs_verified": 225,
+      "runtime_processes": 48,
+      "positive_runtime_processes": 48,
+      "expected_failures": 0,
+      "all_expected": true
+    },
+    "asan": {
+      "runtime_inputs_verified": 225,
+      "runtime_processes": 48,
+      "positive_runtime_processes": 48,
+      "expected_failures": 0,
+      "all_expected": true
+    },
+    "baseline": {
+      "runtime_inputs_verified": 225,
+      "runtime_processes": 2,
+      "positive_runtime_processes": 0,
+      "expected_failures": 2,
+      "all_expected": true
+    }
+  },
+  "canonical_positive_components": 49,
+  "root_positive_processes": 176,
+  "cost_processes": 56,
+  "cost_samples": 280,
+  "cost_pilot_processes": 8,
+  "default_runtime_binaries": {
+    "luajit": "394dcc2c5ab46854b653539f4f8f480a10f099dcc2f60bce78bcf0059907087f",
+    "libluajit.a": "fb646a232db2522d4344a28d83da52ab43c3c6ff180b74e037bfaee82abbe2c3",
+    "libluajit.so": "eea115a93a29a9096ad50b713e33ef4b2d0e10a349031b55fa0a12c6e765e078"
+  },
+  "source_files": {
+    "src/lj_tab.c": "29da7b8b71c5ea65e4692ae6b8f1846445a6b67a8812a6f892aad1b54562c0a6",
+    "src/lj_tab.h": "24309f7eef00a37f338fbc53acb3aa563f32532ffc1d73ed9de36960003396d8"
+  },
+  "capi_unchanged": true
+}

@@ -1,0 +1,626 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+      "next",
+      "dense"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.005893542998819612,
+    "exit": 0,
+    "stdout": "real reclaimer paused: mode=next kind=dense\nprogress passed: mode=next kind=dense count=5 sum=165\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture": "648ead061be179245d6fce4d357f83019b090dd74b78854da8792d2b041a6ffa"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+      "next",
+      "sparse"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.007130432997655589,
+    "exit": 0,
+    "stdout": "real reclaimer paused: mode=next kind=sparse\nprogress passed: mode=next kind=sparse count=4 sum=207\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture": "648ead061be179245d6fce4d357f83019b090dd74b78854da8792d2b041a6ffa"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+      "next",
+      "empty"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.005986531003145501,
+    "exit": 0,
+    "stdout": "real reclaimer paused: mode=next kind=empty\nprogress passed: mode=next kind=empty count=0 sum=0\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture": "648ead061be179245d6fce4d357f83019b090dd74b78854da8792d2b041a6ffa"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+      "next",
+      "holes"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.019976633004262112,
+    "exit": 0,
+    "stdout": "real reclaimer paused: mode=next kind=holes\nprogress passed: mode=next kind=holes count=0 sum=0\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture": "648ead061be179245d6fce4d357f83019b090dd74b78854da8792d2b041a6ffa"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+      "next",
+      "zero"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.0058009509957628325,
+    "exit": 0,
+    "stdout": "real reclaimer paused: mode=next kind=zero\nprogress passed: mode=next kind=zero count=2 sum=2.5\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture": "648ead061be179245d6fce4d357f83019b090dd74b78854da8792d2b041a6ffa"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+      "next",
+      "bool"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.00761829900147859,
+    "exit": 0,
+    "stdout": "real reclaimer paused: mode=next kind=bool\nprogress passed: mode=next kind=bool count=3 sum=305\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture": "648ead061be179245d6fce4d357f83019b090dd74b78854da8792d2b041a6ffa"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+      "itern",
+      "dense"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.010666555994248483,
+    "exit": 0,
+    "stdout": "real reclaimer paused: mode=itern kind=dense\nprogress passed: mode=itern kind=dense count=5 sum=165\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture": "648ead061be179245d6fce4d357f83019b090dd74b78854da8792d2b041a6ffa"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+      "itern",
+      "sparse"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.008973705000244081,
+    "exit": 0,
+    "stdout": "real reclaimer paused: mode=itern kind=sparse\nprogress passed: mode=itern kind=sparse count=4 sum=207\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture": "648ead061be179245d6fce4d357f83019b090dd74b78854da8792d2b041a6ffa"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+      "itern",
+      "empty"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.007464176000212319,
+    "exit": 0,
+    "stdout": "real reclaimer paused: mode=itern kind=empty\nprogress passed: mode=itern kind=empty count=0 sum=0\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture": "648ead061be179245d6fce4d357f83019b090dd74b78854da8792d2b041a6ffa"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+      "itern",
+      "holes"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.008688654001161922,
+    "exit": 0,
+    "stdout": "real reclaimer paused: mode=itern kind=holes\nprogress passed: mode=itern kind=holes count=0 sum=0\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture": "648ead061be179245d6fce4d357f83019b090dd74b78854da8792d2b041a6ffa"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+      "itern",
+      "zero"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.010907014002441429,
+    "exit": 0,
+    "stdout": "real reclaimer paused: mode=itern kind=zero\nprogress passed: mode=itern kind=zero count=2 sum=2.5\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture": "648ead061be179245d6fce4d357f83019b090dd74b78854da8792d2b041a6ffa"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+      "itern",
+      "bool"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.013242719003756065,
+    "exit": 0,
+    "stdout": "real reclaimer paused: mode=itern kind=bool\nprogress passed: mode=itern kind=bool count=3 sum=305\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture": "648ead061be179245d6fce4d357f83019b090dd74b78854da8792d2b041a6ffa"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+      "rooted",
+      "dense"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.013280823994136881,
+    "exit": 0,
+    "stdout": "real reclaimer paused: mode=rooted kind=dense\nprogress passed: mode=rooted kind=dense count=5 sum=165\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture": "648ead061be179245d6fce4d357f83019b090dd74b78854da8792d2b041a6ffa"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+      "rooted",
+      "sparse"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.008348588002263568,
+    "exit": 0,
+    "stdout": "real reclaimer paused: mode=rooted kind=sparse\nprogress passed: mode=rooted kind=sparse count=4 sum=207\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture": "648ead061be179245d6fce4d357f83019b090dd74b78854da8792d2b041a6ffa"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+      "rooted",
+      "empty"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.02111876900016796,
+    "exit": 0,
+    "stdout": "real reclaimer paused: mode=rooted kind=empty\nprogress passed: mode=rooted kind=empty count=0 sum=0\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture": "648ead061be179245d6fce4d357f83019b090dd74b78854da8792d2b041a6ffa"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+      "rooted",
+      "holes"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.01815900200017495,
+    "exit": 0,
+    "stdout": "real reclaimer paused: mode=rooted kind=holes\nprogress passed: mode=rooted kind=holes count=0 sum=0\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture": "648ead061be179245d6fce4d357f83019b090dd74b78854da8792d2b041a6ffa"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+      "rooted",
+      "zero"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.01500963700527791,
+    "exit": 0,
+    "stdout": "real reclaimer paused: mode=rooted kind=zero\nprogress passed: mode=rooted kind=zero count=2 sum=2.5\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture": "648ead061be179245d6fce4d357f83019b090dd74b78854da8792d2b041a6ffa"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+      "rooted",
+      "bool"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.01847190400440013,
+    "exit": 0,
+    "stdout": "real reclaimer paused: mode=rooted kind=bool\nprogress passed: mode=rooted kind=bool count=3 sum=305\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture": "648ead061be179245d6fce4d357f83019b090dd74b78854da8792d2b041a6ffa"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+      "cursor",
+      "dense"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.013575645003584214,
+    "exit": 0,
+    "stdout": "real reclaimer paused: mode=cursor kind=dense\nprogress passed: mode=cursor kind=dense count=5 sum=165\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture": "648ead061be179245d6fce4d357f83019b090dd74b78854da8792d2b041a6ffa"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+      "cursor",
+      "sparse"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.02530518999992637,
+    "exit": 0,
+    "stdout": "real reclaimer paused: mode=cursor kind=sparse\nprogress passed: mode=cursor kind=sparse count=4 sum=207\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture": "648ead061be179245d6fce4d357f83019b090dd74b78854da8792d2b041a6ffa"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+      "cursor",
+      "empty"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.005454247999296058,
+    "exit": 0,
+    "stdout": "real reclaimer paused: mode=cursor kind=empty\nprogress passed: mode=cursor kind=empty count=0 sum=0\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture": "648ead061be179245d6fce4d357f83019b090dd74b78854da8792d2b041a6ffa"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+      "cursor",
+      "holes"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.01004667300003348,
+    "exit": 0,
+    "stdout": "real reclaimer paused: mode=cursor kind=holes\nprogress passed: mode=cursor kind=holes count=0 sum=0\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture": "648ead061be179245d6fce4d357f83019b090dd74b78854da8792d2b041a6ffa"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+      "cursor",
+      "zero"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.013040051999269053,
+    "exit": 0,
+    "stdout": "real reclaimer paused: mode=cursor kind=zero\nprogress passed: mode=cursor kind=zero count=2 sum=2.5\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture": "648ead061be179245d6fce4d357f83019b090dd74b78854da8792d2b041a6ffa"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+      "cursor",
+      "bool"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.022100515001511667,
+    "exit": 0,
+    "stdout": "real reclaimer paused: mode=cursor kind=bool\nprogress passed: mode=cursor kind=bool count=3 sum=305\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture": "648ead061be179245d6fce4d357f83019b090dd74b78854da8792d2b041a6ffa"
+    }
+  }
+]

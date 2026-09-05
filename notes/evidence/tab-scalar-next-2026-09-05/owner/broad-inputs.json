@@ -1,0 +1,949 @@
+{
+  "base": "79345529",
+  "files": {
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/README": {
+      "sha256": "48f5ffd4b13d671710af53ede656ad902beb7f5a71e927b20a5a0ed20177733c",
+      "git_blob": "da72c0a2d90e9c508adf5c44e2efb4b71dcaf662"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/PARAM_arm.txt": {
+      "sha256": "ebbbc37bda977f71a2a52e0b64e4ff2631c323d6a30b61785daff3cd1d5a4f91",
+      "git_blob": "a07fd010b2de0dd5ac95fd4c0b6ac124c45417df"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/PARAM_mips.txt": {
+      "sha256": "9b58f4722b0a7ade7e6ee0d3f234bbc3a79c2181353b04c453a2585b88d99914",
+      "git_blob": "e6bcadbacd37c692f1f38a5059849055141cece5"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/PARAM_ppc.txt": {
+      "sha256": "1c8ad5f50c0290a16236fc65e961fa04ead232472f7624f79ffb900d2c64ce29",
+      "git_blob": "c8319a158c4220001ea9f3c9782a276d9c4502e8"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/PARAM_x86.txt": {
+      "sha256": "3a45a4a40ad77631acd8baca7c6d71e3e7f733de221b1fcbbba9f90a824367f1",
+      "git_blob": "87088d7b13db43c12de529f46358403a1c2789ed"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/SUMCOL_1.txt": {
+      "sha256": "91728918bc3d637b7f9f842b7135054e8198519295e185a2a657f2f1f615f5c1",
+      "git_blob": "956aba1447cbaceb6159f31703cdfeaa6f817655"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/TEST_md5sum.txt": {
+      "sha256": "6de501bcc016257b6c098c6cd4bff94c9e66c1e7560ae316e0dc064cb929ec64",
+      "git_blob": "15aa8a1c8f4c4df824625617e4fe5e1489c61a89"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/array3d.lua": {
+      "sha256": "ee18b103080846dc6fe34f5c6c9ca6a618cade711d12601a3485c1b7ca7281ae",
+      "git_blob": "c10b09b13544eda99a166f734ed0318f2abbee6d"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/binary-trees.lua": {
+      "sha256": "11566fb21417631710f21018367ac6e6f3880684c07ec1f074bc18df5266de71",
+      "git_blob": "bf0404666f0a4c0504ef92a9062ce2b59d6be6df"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/chameneos.lua": {
+      "sha256": "61b2fc5c86c0c25d5a4751d3cdae1f19de7cfc4b4f7a932e6e8fa61c6db53b46",
+      "git_blob": "78b64c3f3bf9046f763a178767248d82b0ab3613"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/coroutine-ring.lua": {
+      "sha256": "fff18a3e2b9781b5caa7f30fa201b440a6cc2d6ac4d0e6852a5fc0a4cf2882ad",
+      "git_blob": "1e8c5ef68822717f24a3db6e4b9a5eda231468ed"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/euler14-bit.lua": {
+      "sha256": "1c541bffb67529d8d0366fef6cf3bb7f147204217e4e5b76fffb742681dbe6d9",
+      "git_blob": "537f2bf322a41a45730aab2de69fd284c0894598"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/fannkuch.lua": {
+      "sha256": "df492b9a335878772efdcb237cc09076c9048c32808da66c3eceabdfeb670071",
+      "git_blob": "2a4cd4267a506f4c44cd10f905196da098fa4fe0"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/fasta.lua": {
+      "sha256": "c0c82fd5874f6e159679b71a2c883f21122cf67d525a77f293ae0a6cf0bce8dd",
+      "git_blob": "7ce60804111592258e9d3beb56f90075178dfc3d"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/k-nucleotide.lua": {
+      "sha256": "2d6fd3ab3a31803c26f9c840d881cc3d4a92488c4152d033d9284f2433e93b14",
+      "git_blob": "0bfb41bec5c97e66c529e97c9e587860d3916f66"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/life.lua": {
+      "sha256": "8b6d100472572d4baf4ff06901077aad24d98336cdf7500871f07a486c7a25d2",
+      "git_blob": "911d9fe177ba7bdd5965d3df89d09b673466f558"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/mandelbrot-bit.lua": {
+      "sha256": "291a124f68059a5d8c02c11532ffa16af68bdb5757d17d5440f183c696d65c08",
+      "git_blob": "91d96975c8221f2326c8dc0020edc326ed277126"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/mandelbrot.lua": {
+      "sha256": "9eed10c026380b0ddde46783ee6c78333060a93db0fba9a328740de287dcaa01",
+      "git_blob": "0ef595a2fec610841b54ed29b3b2bcfb287febb5"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/md5.lua": {
+      "sha256": "c709a703f376d7676379a7e12f0946efe9097db09427af6030d8389f18c8bf6a",
+      "git_blob": "fdf6b4a7c7d03c63d1e9a4cf578d74ef9fa18570"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/meteor.lua": {
+      "sha256": "3839bb71630743b4cb587ee41e70d384e8b796fcb760285b339b7be9be638f97",
+      "git_blob": "80588ab532900adf8e618d937b9a89b8ff861805"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/nbody.lua": {
+      "sha256": "02f46f5ff6128b3d1871a74c928368554eaf1e5e11dd641ac6a3d721c9a8fbb7",
+      "git_blob": "e0ff8f7712c8083f54c71fb4a13c2c5ffff16109"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/nsieve-bit-fp.lua": {
+      "sha256": "693cda9e73dde85f892fdd8a9fd1a8cf3109f234249da293b357dd5208839a1a",
+      "git_blob": "3971ec1f1e4bb877ca4bff677d40b4f416821238"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/nsieve-bit.lua": {
+      "sha256": "6a7591eab89b0b1b0608d9538b03490e37d3c3cb02f0c482c8fb5e5f06d431ba",
+      "git_blob": "820a3726479ca63e5075b190b8113f9f2d8491e5"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/nsieve.lua": {
+      "sha256": "9617df0e21e479955e53b614c2c31a6eed09a7f7cf9305a11d705218b6476b5f",
+      "git_blob": "6de0524f958a358ffca981629c35375ccf9af8ef"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/partialsums.lua": {
+      "sha256": "f504f6cce521141f611240c832eccc67d91c4ab07d4d2562a2bb94d125ae9bd0",
+      "git_blob": "46bb9da35fc65124b715c467fc1cdd600fe970c3"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/pidigits-nogmp.lua": {
+      "sha256": "5829bd673ed8ad4c5d0ddaa2e5e3e6df2deed8084db3a5b827eeff1563ec1a60",
+      "git_blob": "63a1cb0ee858a09271ee9873a3030b7b979aca84"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/ray.lua": {
+      "sha256": "ac3b27b1877a97ca1c6130b410051755a6c682b558e1540aa386e00c3a3f9d69",
+      "git_blob": "2acc24c0bf91a645481c1705dd32c900bfa40667"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/recursive-ack.lua": {
+      "sha256": "d601c5d52d5bd0d996954a3fca8449621a6f3f6f94aed48000125c937edabcef",
+      "git_blob": "fad30589bc8497edb07b46ecb1ad8e40d58979f7"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/recursive-fib.lua": {
+      "sha256": "62a31dabb8148278bf39a822e6602b3530dba2dcef4f38b4c7ced81952ac6251",
+      "git_blob": "ef9950decb95c884658194326a09b0402728bc95"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/revcomp.lua": {
+      "sha256": "a8a90cdbd8790a5a503105b71f481f6368bf1b87ac0105ae048a61f8bf672775",
+      "git_blob": "34fe347bf979b7897616bf74e0d2f9bf404f7333"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/scimark-2010-12-20.lua": {
+      "sha256": "127b989170ed19023d5ce2639f23b8fbd7fd63f394b2e74d216bf051344e4c27",
+      "git_blob": "353acb7cbcfe77fd32f4ddb73fe0b112afa023bc"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/scimark-fft.lua": {
+      "sha256": "c41b8f16215c41988cb8a38da62aca6e1bb9d82435e10ded87b6a490f14d75d3",
+      "git_blob": "c05bb69a6b043fa317a3fc24f3f40c7f4af8bb86"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/scimark-lu.lua": {
+      "sha256": "103c4b6c98c83ff14c7e6b90f94b81eb877e30a93ca5973eba7dd8887dffa85c",
+      "git_blob": "7636d994c61bd29af36a8f510e804a9ff38e81f1"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/scimark-sor.lua": {
+      "sha256": "058cf93a9aaa3eb80eab5fe41673f4146d4ecfb219ad9b49ab3946e502304e08",
+      "git_blob": "e537e9867f1624dd3c4b56f295fbd877827a2183"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/scimark-sparse.lua": {
+      "sha256": "28041423e8c0dc09d50dccf1d0cfe7a67e642bd89671e0683ff6f0ac358c1cd2",
+      "git_blob": "01a2258df9e0e79e59e8abc63c1951fd2c848bf3"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/scimark_lib.lua": {
+      "sha256": "30657fd2a435a68ffef86c0f3f6d63337a06f99d9a38da5470f7588e23ac1b41",
+      "git_blob": "aeffd75a62f7c7f78ce760b59ada794051a45dfa"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/series.lua": {
+      "sha256": "2514c81e48ef9ee5f79e42ea27018f8b5919cde78f2b554c42ea3fcb40a11c6f",
+      "git_blob": "f766cb32479fbd6641bf6a50413715be1634a0ca"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/spectral-norm.lua": {
+      "sha256": "132555f6c37bda8c62358ebfd886a02fa3cf36f9a1dd88fd6b46563623b1de98",
+      "git_blob": "ecc8011208a8b8f7aaa713d475fbd347c1cc8480"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/bench/sum-file.lua": {
+      "sha256": "85523e6847d7ac3c184155f8c48854625a3dc62aabd83eabd5e5e02eae131f1a",
+      "git_blob": "c9e618fdf53f4830c73de7758d5e2082a8822007"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/README.md": {
+      "sha256": "5e40ea3805b1f1e78a2efefd18ac7b2aa5118517d0da8319ddc8b8daf54c2042",
+      "git_blob": "ff16ac8ef8bfa33ce271019309dc22992e2322ed"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/bc/constov.lua": {
+      "sha256": "0bc12063fb0b3534ac8aa1d4920eb43efb9855c5465ca590fe0d4724016e97b8",
+      "git_blob": "5827840b466745be4451f0659897e062e45e8229"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/bc/index": {
+      "sha256": "385cad86fb64ce07548a29750000d03d2ba903089e191014d95f92b1280f09c1",
+      "git_blob": "dead10f555e39c2eb59010aec17d7ff0e0b2c525"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/common/expect_error.lua": {
+      "sha256": "4183cb75e359c7f899370252eb5b4afbfa7f1c5b2b6a4800626129b6684863d4",
+      "git_blob": "e155090edab1c053476f6c521aa9309cab7ac378"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/common/ffi_util.inc": {
+      "sha256": "afad3e68fbc7785938c40121a7be9c3d27a10b43a76435785532a88ef046da6e",
+      "git_blob": "1eee8dd933e7df30c756031046e7dd7724f1d031"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/common/test_runner_canary.lua": {
+      "sha256": "1854f715c8960e788142b7704bf511398ce90279c29a539cfdf84aad1d9647dc",
+      "git_blob": "fc9cadc63797c52fcf2d605d79fbe93532c033c0"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/computations.lua": {
+      "sha256": "3c791ba0856f344a6aa1d30be09776825feff4cc29d01ae47675465d64415280",
+      "git_blob": "4fce7fcd4a7aaa6a690ce54a45574a2720d5782a"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/index": {
+      "sha256": "a986690912fe471311a839260345ce7c81bcdd3d564b74c69903b0ba5087aa4d",
+      "git_blob": "bd4081e39ef6ce663ab9eed262f1397e675b07d5"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/andor.lua": {
+      "sha256": "b9c087d743005579c1f7848ac96bb4c0f5015a363163cf9d15a134136c054dbe",
+      "git_blob": "55b2c756e50e4711d2505016aa22dc2a95ad5dc0"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/assignment.lua": {
+      "sha256": "b9bfb57fa11272d1a78b1ed91db44bbd3472d4b00dc459a6c52f2f6863e1aa4e",
+      "git_blob": "e9745ef66733ba226362bd64296ac6a946fb2d06"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/compare.lua": {
+      "sha256": "668f1ca5d7f86f5535b083a732bfd832316a4f56888385a806d538f1d9ca8ddb",
+      "git_blob": "09c5488d15cab59764a7fe11f13fca34306fb101"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/compare_nan.lua": {
+      "sha256": "c62e2c734960fc8398f14c77c041692895016090ebfcec3c026a581f7130b680",
+      "git_blob": "878f39a7f51bf0265178d0766e97ea7f45427831"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/concat.lua": {
+      "sha256": "32f34836b380dff49ee42de240655d3f7daf8095fac440e8bf94e3d6131cf75f",
+      "git_blob": "04d665b2b75514715b5a9243abc2f3fccbf398f6"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/constant/index": {
+      "sha256": "0928dc8f1518faac7327768cdda28a9a84dc8d66ddfb4de52a6ecbbc6190ad9e",
+      "git_blob": "e738357d7902f8f360f32570d010eed0066465f6"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/constant/number.lua": {
+      "sha256": "4913ca42641474f1a90f8ccd93a9fca7dcd39dcb6cd8d3f751a9730ea0063aa9",
+      "git_blob": "fb67356e7f305792201a0fc556d203f5823e0013"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/constant/table.lua": {
+      "sha256": "d657db7c0f8fc6a9d35fc38106a03991a923b2fb340c02b5e0d3688160711551",
+      "git_blob": "899d0f671c2066708dfaa7af06e703d38fc5980e"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/coroutine.lua": {
+      "sha256": "23ce9ee966eef022b5d74478e985ec048af879f64aaa1a30af60c7b25b0972bf",
+      "git_blob": "405135c968f73a2fa218bb127b7e42a2e72cc59d"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/for.lua": {
+      "sha256": "d05d034cdd67cfed5d6430cd9db4b705bc5a60989ca12b04b800f5ee5e0ae2c5",
+      "git_blob": "4982b32b9508157b3748d2dbc6f5d4a79fa0e69e"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/gc.lua": {
+      "sha256": "3b63d78f868d645b34c078c906e499faaac24084bd063843d6832eaf318d9231",
+      "git_blob": "35e6a1f33615bd51a94d6e0c56750bb1dc86fa87"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/goto.lua": {
+      "sha256": "d8003bb954343db89d36c6ea24d1f785aabc88897e98612b75c50d614745eff2",
+      "git_blob": "1563a234aee2a7768e91b9b82ac05be462e86e2e"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/index": {
+      "sha256": "293bedec63e2b3e37c85f1299f8bd0be01fd487f4e7bcfa127faaeef8329944e",
+      "git_blob": "88e2edfac7a172e67bca56c5093845215e4eade4"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/length.lua": {
+      "sha256": "838bbd5e16eb05d3f3a5e8cb62ad91c8b60282206d6609fc2076bf22ab19fec4",
+      "git_blob": "67c68ae70ab535d67537ff750bb32fb5214df5ed"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/meta/arith.lua": {
+      "sha256": "a3f46e031e1671c62526089af3264d99af950596f4a9fa0dd8a9c9b7202ccfd6",
+      "git_blob": "17de4c8cde938c9b7380ab38bf55dc7ab865086f"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/meta/arith_jit.lua": {
+      "sha256": "47cb7942ec774983d34c9529c0bbdb02627afa5e050cd0ef98af571a58cbdc73",
+      "git_blob": "2cb35dbb37914efc433aeba7c2cf1b369784ab25"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/meta/call.lua": {
+      "sha256": "6ba88db51533eac94e35270bcbb51e09783f1656d7a7328865ac71075d531aae",
+      "git_blob": "c77c0dd8ffb71dfc13a1bbc3bb598e4b7a2886f6"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/meta/cat.lua": {
+      "sha256": "0127c77239709c7a05f884f82a4d2d57f5c7d3137983c4140a3daaa6dbb4c400",
+      "git_blob": "48a89e4d68bc3a6c662fab59fd951be14b9928eb"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/meta/comp.lua": {
+      "sha256": "6f502e28d024c480f4bd4a186a2ec72992a863badff16e65f311de77b52bbb24",
+      "git_blob": "23f18b08eca6d1ab5e9dde4d951e048e23feed6c"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/meta/comp_jit.lua": {
+      "sha256": "eb7ec54a36575ea4e012a32637ef65a406213bebff88d7aaedf8fe8e8e2810e3",
+      "git_blob": "0bf07b9f6178f32e7e0a3491407e96f4415a32a3"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/meta/debuginfo.lua": {
+      "sha256": "aada8f4154ee59dd7e8937b73cfca860a2295de7ef5d4abf4fa6a0e0d1ee92d3",
+      "git_blob": "a99941fa26285428f4128592195800dc64cc62c8"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/meta/eq.lua": {
+      "sha256": "7ae7dcb9fb82ddab1a976635edd8bf80c9e4050e7a2d2a823ee0ca525fa58702",
+      "git_blob": "ebf604357ca6dd8673da21a749ecadf1e8047426"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/meta/eq_jit.lua": {
+      "sha256": "bbc58352649820f7df965037f94aea6f6cbb887ad3ba5b2839761a315c4b9854",
+      "git_blob": "47e14207cfa718a653317376d91cbb1a3ffe3cfd"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/meta/framegap.lua": {
+      "sha256": "ce10715ec0a231276e76deaecbb51997563d28116fba004b15cfa45144ff1fb7",
+      "git_blob": "0080633a24d0b0317b447ef4a4d785514b0e8005"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/meta/index": {
+      "sha256": "3e008ee5913f365f26346779af834d480d19939f82f70684341ba993a4ac89c6",
+      "git_blob": "f114e78d040bd36bcf3b98dcd2cc23ee973a258e"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/meta/index.lua": {
+      "sha256": "5cd4bc367c41f8c74b44402ca5194ce909abe8009fe41aa41210689e18eabc71",
+      "git_blob": "4d6d0ffee33c1a2ba4222f705458e7d8312db534"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/meta/len.lua": {
+      "sha256": "3592d456015791fb3713b8a9f70dc90121447c67e6317378bef0c4629f5a927c",
+      "git_blob": "2410daa6173fdc041f8ec5120bd10f6b92c47790"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/meta/newindex.lua": {
+      "sha256": "3ba50392ac28d7bc18c29c515d48a7d9e450f8c0377aa04d2189d665cc58b151",
+      "git_blob": "6c46b8cbdc652bba6e4f85383e7c45600a7f979a"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/meta/nomm.lua": {
+      "sha256": "dbb2b4a8e044aa3f517a743214ebaa9bed49b2701e673767da89e56c606a8812",
+      "git_blob": "2b3db86fd1284d52d1ee1cd7b469d89d300bda27"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/modulo.lua": {
+      "sha256": "8eb6d58c3b5dbf231508309f605257ecd132c449c8cb2e1d830b56be38d0c4e6",
+      "git_blob": "eddaea77fac6f6ed286b1cb221073a86d896e46c"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/self.lua": {
+      "sha256": "ea2d8727bc3ebc56647b6ecd799ecb97e7b092873d6d684fd0ab6add6a939238",
+      "git_blob": "d37466642d815135add234f9e6f8c7b228eeb5c6"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/table.lua": {
+      "sha256": "7d86a72b70072f98eb85f4de7d628c8eb3987859c740a734a26eff8777f9b43d",
+      "git_blob": "3ff38cfe78f6de83d1409f15685616b97ba207cf"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/tail_recursion.lua": {
+      "sha256": "4848b62e5a8e2d9a4a06d453be584f4461eae51e2947fb63253c8769cc9ffbbc",
+      "git_blob": "78f071fd2253ae1df4807bdd4c6cd59260a9a0fb"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/upvalue/closure.lua": {
+      "sha256": "fa00152c736e3d4ca029885695aaa451b15094d98595e8423eb25e53bbe16194",
+      "git_blob": "faa4de1c3ce0015b9f90f0599974020afa6e2b31"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/upvalue/index": {
+      "sha256": "36d8251942aee5ee32d37c0d8b0839cf984db991e03b2fa0402ccbb92cf65bb7",
+      "git_blob": "3c170db922947690c12451f13791f26317cc7ad6"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lang/vararg_jit.lua": {
+      "sha256": "104345eb7006650a6d651f3fc98510247225331a0cba1aa068dd9e6a2715eea1",
+      "git_blob": "4e78f96b5d97ee894051d7ebe242e5d0607054b9"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/base/assert.lua": {
+      "sha256": "8bae467bf452c788b4bd27f6fa389c431a92915130943ff0850b13f106c6b85c",
+      "git_blob": "9c30ba029c4558973775dccb0988e47a126158de"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/base/error.lua": {
+      "sha256": "3487e41266a49e90d3a7c5ee905a45920d358e94946705db95133fa73eac7312",
+      "git_blob": "91930854230587f4cba07e309e978b12a8281503"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/base/getfenv.lua": {
+      "sha256": "f33413f82946e0bb10aa703c0b358f472f8d42055eaf2ecdfc8464534832246a",
+      "git_blob": "9c00ed7cd1969007255fd990a19b53260ba98172"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/base/getsetmetatable.lua": {
+      "sha256": "9860a67225a86f33e9f26a1aeaaed736c7d3040a963c035899d664f55466590f",
+      "git_blob": "7d57343ec5aa6500c8d685f2c3cdecc73724a500"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/base/index": {
+      "sha256": "1fc1b8210f2138b96a7d7737722fffd060122d01ca3abf52fa6db77fb227ce5d",
+      "git_blob": "942c53c0f2711e27510c80755fb5296cd873d345"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/base/ipairs.lua": {
+      "sha256": "54a50139346abe330bb79112b6fa9d37c7d21c39e1866925db85a91710dcab54",
+      "git_blob": "a9de087e26d37fb1c8ded59ed88ff24b923d08c0"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/base/next.lua": {
+      "sha256": "b26b8529b1bb5a009e3e4fb9611c17b4a0396553e5afea2f4f68435b9ed5e036",
+      "git_blob": "0e40615afeb2c68c6ed0d178a27b78a8c941bf7b"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/base/pairs.lua": {
+      "sha256": "ade805f969cff7b44bc7e7f1ff9f58c41d874d706a1d39f1e07ce3840117ab55",
+      "git_blob": "4d89d42d39fd48b052cb26d42e8503e7a510b8e3"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/base/pcall_jit.lua": {
+      "sha256": "4d99d0fe79da0421f36bf5d5efd6487f6c1f2f2a61dcf6337bb6384e804fdcea",
+      "git_blob": "dc9cd5fa8bb8c0100077a7c4094dbc2ba10f8bd1"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/base/select.lua": {
+      "sha256": "ec8ca5538a497b4f177c5fd60115178f7aba071e7cbd6449c3ef2f6f2a2d2950",
+      "git_blob": "8278e5e9997be64dbeb3ce7703a7bd764e699537"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/base/tonumber_tostring.lua": {
+      "sha256": "a13c77f17cf0a5937438746a7771d056525c04138c973e455239b076729740ce",
+      "git_blob": "e7f576cea39dfd99f0eb5ad90eec67fc3d07373d"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/base/xpcall_jit.lua": {
+      "sha256": "77b3f257be353d1c1ace5d12f30967e4872b20f093a8579bb8327092823d5cdd",
+      "git_blob": "f4993cc619eaeae477e085b058beb160813fb579"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/bit.lua": {
+      "sha256": "32f15ceba293f877dca6314912537ba44b520360016f718b8b4dd6bb8956b155",
+      "git_blob": "1adf5507810c56e3b13f0171221ce6f558c65ed7"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/contents.lua": {
+      "sha256": "e26f44324e7099ac486a451e914affc94cf5ea7e3ce9c3880f618540a3c19caf",
+      "git_blob": "a5a32db9d07c8ad91ae3feef36e81cd815d051fc"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/coroutine/index": {
+      "sha256": "86b570b3ce68c1d779d7b8fe807ea5c48ee432938678f7a3f7ea8a0f658e99ed",
+      "git_blob": "9c5c17ec19fdd56997c4f8dd60f7088a609de914"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/coroutine/yield.lua": {
+      "sha256": "e63131403527fededf8bc89617dff11f0ce20ff74f294beaffd0298bb7294825",
+      "git_blob": "d995bf87e15d3bd1280a2460f048b4584f8a8b9b"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/bit64.lua": {
+      "sha256": "0b064aed72dba9408a9d174195a605a9fd64c7e9e4e6aef1d049e7bc8e19634b",
+      "git_blob": "d1b47bef7b87b5e850ad121aeb489af6c1ca30c7"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/cdata_var.lua": {
+      "sha256": "25f2dc7053e338d90b46a57b78acd9c24f5f1eaf038f86c8aa90592037ecd17f",
+      "git_blob": "42d6028a532b76c688630fd97269cc24829f956b"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/copy_fill.lua": {
+      "sha256": "32b91b3ff88a5aa2f3681cd510dc19f8f211cebc282f9b061d31e5d7c65f21e8",
+      "git_blob": "295638182df9def0eeead89ed62847742887e106"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/err.lua": {
+      "sha256": "7434d45930c52816e15af2d19e3bf5c3634d00100ab67fd009149e76af354387",
+      "git_blob": "44723657c0ad490c19db45bade112fd5b4e02b36"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/ffi_arith_ptr.lua": {
+      "sha256": "069b1ce7faacdc8bb1e730ce7dc85b52b269b9ab85e60847552cfec150b2c450",
+      "git_blob": "8cf890c6085b2330b93f427abd17aeb1d7cd548a"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/ffi_bitfield.lua": {
+      "sha256": "625db5b037861f6664f21f62777ab646c7f6c8049c056f95775721d1fb8866ed",
+      "git_blob": "cd0b1815bdef87e765a57250b598daac1a637136"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/ffi_call.lua": {
+      "sha256": "92b5e58b002c9c142e93328a6df4667073ef016aef8df11ef0acdaa31afa0596",
+      "git_blob": "1eb5e906b1e3f7669ad8cc74d8a01941182d5720"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/ffi_callback.lua": {
+      "sha256": "729652f90ab775daae08da92a7eb1f5d5543d6ca90da052f7bbd2d1de88436f3",
+      "git_blob": "1fd14bd0d2368e3f1cfa17a055cc498d3831f607"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/ffi_const.lua": {
+      "sha256": "475313c789427d26ea6285adc98d87bec351288e32929bd31bd9b16977755213",
+      "git_blob": "d42133ad9437f984ded2f285e1d235c2a3179079"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/ffi_convert.lua": {
+      "sha256": "7bf03a26e04cc4fa72c0f7709c5f9fad3f91069061217fd7359f36fcf201a0cc",
+      "git_blob": "bd3fb1f9030174c75311a809402865bc6c9148bd"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/ffi_enum.lua": {
+      "sha256": "03542dfb2084f7eef4d66cf9db52f0168b593f9fcd1ca553694284108c685baf",
+      "git_blob": "e8e40ad08469408e73d450ca1fb367eaa382ea5d"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/ffi_gcstep_recursive.lua": {
+      "sha256": "79d44a90955bb343f4927a47174566001a5323ecb9f7dfa01e0d7709f1e23047",
+      "git_blob": "cb19df11419c12dbdcd9fad7717e86fea3dafe22"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/ffi_jit_arith.lua": {
+      "sha256": "39e6330ce2dd5cefe0f9ca59363b7dc0ead7b938958ae681de78de3a5efecbc0",
+      "git_blob": "0554fe60aae053f138b58c5fc4aaf3084c190945"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/ffi_jit_call.lua": {
+      "sha256": "308cb6247c907a3699edcbf14e6c3ec7cc6f6a5c2635163a45fe3d85b43f57a5",
+      "git_blob": "b79d60b106545c3c27373389f6e035e88b1f3130"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/ffi_jit_conv.lua": {
+      "sha256": "aa26f34e3f00ede259077076a140fde6bae307c13bc0695748f11250fffb3b26",
+      "git_blob": "d4707db7a82d439978958fbf5728f2bc6a59acf3"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/ffi_lex_number.lua": {
+      "sha256": "ed10ec86066bd608098c20a6fe74096a789e04d7b58c499dde6cdc46a5c5af6d",
+      "git_blob": "e26650effd120c1a83991c79cff944c62604427a"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/ffi_metatype.lua": {
+      "sha256": "9ac43eb447f2491f946cb9b524a640f7d7615a2d794c9078d2fbb9993419d9f3",
+      "git_blob": "2db717f479c45d483622717b2fcac64889919fa5"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/ffi_new.lua": {
+      "sha256": "ec67ace4a1ad23ba403c75911df2d32541232dcb60027b561e66f2151d4bd00c",
+      "git_blob": "9cdbd538cb42e0593a0a2d44f27e079971af398b"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/ffi_parse_array.lua": {
+      "sha256": "bb3e5a9b5db01ae7c2ddc5ebc5f3a9c344ba81daad04c6b739764b171e12ad42",
+      "git_blob": "3a9616d730cc00a03bdb0aa2fb4f3275c719932f"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/ffi_parse_basic.lua": {
+      "sha256": "ee05e611d1eddb20944a6c5479a010b2f6253a5e05ce9d073623d59272ba3fa6",
+      "git_blob": "c054bcfb896243e047aeda9372fa3f115b91bc07"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/ffi_parse_cdef.lua": {
+      "sha256": "b1c4d8b861475f4eb020be76182474a2a52a5516c4979678b1c73fcee17c7e0f",
+      "git_blob": "4bb5d903eb207fbb11c949be17c3bea17906eaa5"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/ffi_parse_struct.lua": {
+      "sha256": "e0b9826d5b5a4ba1c346b3f22f4c7d8d364790434cc86e589234f0c209bfb4bb",
+      "git_blob": "16a3d053e4fb15cbcfb1ff4c3a51c9b57a617a89"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/ffi_tabov.lua": {
+      "sha256": "78ceb9e660ffbef27be327302ebc3037ceb7e4f30bb1346fdf473d3161de36b5",
+      "git_blob": "ba621960bd394f5efb29e82bc26d2f739c54dc04"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/index": {
+      "sha256": "74f69baabb253876c57a22cad2c6017b4be052a79b2b718c94750a03d2115b0e",
+      "git_blob": "59e36dd8b00c01728e6514cf0baafe8c836872c2"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/istype.lua": {
+      "sha256": "d1dd149f340fc02d804641b977de88cd3558df2e1232a6e0c097c9a43a4dd55c",
+      "git_blob": "5aba7759e7dce157baaf9ffc8bff9daa88f04251"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/jit_array.lua": {
+      "sha256": "f3e4f2aafe19d0e7ad4882d052858fb7e6c52f307c5432eaff19e3f1cadf0ab1",
+      "git_blob": "e8de4af13c5ad6ba58267e484714c2dd23bc197c"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/jit_complex.lua": {
+      "sha256": "fc5b40b83a4399d98385ec483a772f2109d35f62689da6115f2ec0038363a7aa",
+      "git_blob": "3296f0cbfa9b5148cd87d9e76484899e5d2e5213"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/jit_misc.lua": {
+      "sha256": "e9838009bc0fce234e3eb08d8500d0a126100613ba5c94edc195c3af3aed32ca",
+      "git_blob": "41e4737bc78caa5165895e674493af4a8f977423"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/jit_struct.lua": {
+      "sha256": "35b073d39103930dafd8019d50f92a33c5aea2360f9e58ca75a02010c949cd9b",
+      "git_blob": "8aa64c1bcab3bd96527c9d975bf432462c1aee66"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/meta_tostring.lua": {
+      "sha256": "2379d43969760ee25497507de3c71a73a7c7e31948fe065cd811c28910b2d5c8",
+      "git_blob": "bb065e16ab89904a536695542f7eb6f75f519989"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/redir.lua": {
+      "sha256": "8eb3bb7c28fcc2b1b329de510015c3a68e2bec8730090f1568c30f8e52cceaa4",
+      "git_blob": "c492055adc885f3197e69a613bd23af8282ccb45"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/ffi/type_punning.lua": {
+      "sha256": "8c7f5d7b98a262af8b58cdc111db4129cc1659e80c88b57fdfc521bb06a71936",
+      "git_blob": "ac70b4b4cba146f9d21336f0949a8d12af8b7148"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/index": {
+      "sha256": "9e6907a2ecb7d1d0348031045bc1a34f376857439c04907f3d6d964a03c4f440",
+      "git_blob": "cc9d7d73012ca9ace073ec7f14b017dd40de20c8"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/math/abs.lua": {
+      "sha256": "293ea8e2a60357e4b0f2d0133353945147b77e6aa7d8abd3a10bec8ed134e215",
+      "git_blob": "4223a78062627ff9acb801fc8676d7890db4a1db"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/math/constants.lua": {
+      "sha256": "05d771ac698289fae722bfd777570a8e293ad58e9df203774844dbb7103d30f2",
+      "git_blob": "ec35b4cecb33f3ba5e9973dc670532fef933351b"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/math/index": {
+      "sha256": "6e7bdd2fc8272b8cf59cd91d7cebac0fad2894f86176b553c34aeb0206495509",
+      "git_blob": "944e1aebd40f17e668d77b364a3933082cbfd5a9"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/math/random.lua": {
+      "sha256": "7f9a4158e015a416b34350cb0065cd465994b47282ecae4b7470b0dc590bc2ed",
+      "git_blob": "dc2ca00bda90d5d1775d3aa6272496efc3a69db4"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/string/byte.lua": {
+      "sha256": "e4123d155ab94c77fb2762958ed1281942e20a347b7dc6a1556464c70141e6c9",
+      "git_blob": "697a2c2e72e78fdca53ef90025e0656af6f7d326"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/string/char.lua": {
+      "sha256": "21f9559ddab584b89105d3ee7ba49eaa69383c778af0a681b56be6eb38c4248b",
+      "git_blob": "544767de036a95ac57febd2790694dac63c4c86f"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/string/dump.lua": {
+      "sha256": "37e669f08e9325e146b8e49d49336355aa5496505d41e7c2867156411459cd50",
+      "git_blob": "eb694339883628c89fea11dd714ca24f9c3720ac"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/string/format/index": {
+      "sha256": "82ba3391cdf1bfb821d270a25411cc056671684f7bd1d9052d60e1827cbe60d7",
+      "git_blob": "44088536339669229c66fe37c42b8cf7051b6a9c"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/string/format/num.lua": {
+      "sha256": "a6c572c2a271b5ab4a8d8eef8f48878a6809ad09e1dee01d9a9c1505267919a4",
+      "git_blob": "e8cb33f3ce253397e03f5e5a82616a5523a69e60"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/string/index": {
+      "sha256": "8cf005117130e1f0eaed19e281137a0851e20ecf2c46a84882ddbc985eb7fdcf",
+      "git_blob": "c0638e9c3456b8fbe514954a2da6cbd773d6f692"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/string/len.lua": {
+      "sha256": "f7e239ed28b3b9e2aeee495ca57e5e8912c03971bc399e0e092d502ae5d9eb43",
+      "git_blob": "8ed7e8ae4972f62ba830485e5082fbfcc50226d3"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/string/lower_upper.lua": {
+      "sha256": "8ffcd61b24d4e4cd6dd94e7726e8b21e66658e07865734e61ccf7546741161aa",
+      "git_blob": "7370c44ce1a5662a1d1e96cb91ee604890116128"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/string/metatable.lua": {
+      "sha256": "a04ebc8cf90da660b5cdca880f885f9071c59a74cd213bd45cce010cbb7fe63c",
+      "git_blob": "d39ed432646d4f3730bcb4edc26904867567ab02"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/string/multiple_functions.lua": {
+      "sha256": "54d0e4f61bfe8fdff24089328fd7332f39dc9691139d5823ef95a50aefed72d0",
+      "git_blob": "7b9d0f138312bea8ef1c587f5c4e07f6ba0a9d5f"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/string/rep.lua": {
+      "sha256": "10652e10b5305ca0ba87e81dac7e36fb30ad68d68a045e7361140a0263b737ff",
+      "git_blob": "550c15b8a8dcc5870fdbfd17ef6b32ba68e3c98e"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/string/reverse.lua": {
+      "sha256": "316710e9a454806a59f5da62410a0609d205b3e6a5f5cf08b4e436c66ca72116",
+      "git_blob": "deaade7ceffedbbfd7edb13df9e28ab0755ab65b"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/string/sub.lua": {
+      "sha256": "a52e4433903b7498cc8ebdb63343fd25ff81fbd1d7af53d1ea861f825e1ac12a",
+      "git_blob": "ecb80216c95e7b1df297e09082fac70b3d5478da"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/table/concat.lua": {
+      "sha256": "b84b0c2d2ab5e7ae18a8adf2c378a579ba3c250146a603d60133b495e638b56e",
+      "git_blob": "1f2a2f924d4f99f1ab28b6d1370ebb21d0dac886"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/table/index": {
+      "sha256": "8142b1fba1aee68f6b1cc4b1fe3f520e703d85fa9ad00f23866f19948db4bcab",
+      "git_blob": "bd3af0bef14c2a77ca4fcf46fd4703a41d0f03e3"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/table/insert.lua": {
+      "sha256": "aca77556d17e5cbedb892b90f5bbd4f55aa0b7b4c8fe59dbf06207a90656acad",
+      "git_blob": "91d4dd87673fadc9adb3318e1855e3fb8ec4a277"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/table/misc.lua": {
+      "sha256": "4b4742284360331b717e568fde4dfea5bec7f8ba2a83b1e056ab3ceb31062360",
+      "git_blob": "e0e2fc592f990e3e0760cc093977563ab7b89c1d"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/table/new.lua": {
+      "sha256": "beeb3cbda89fe11331da9f501d983b29d09ff0e7e195c0ac08a686c1f2c66eed",
+      "git_blob": "483c1298fe027c67eaaa3f75d1b8ac821a37bfe8"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/table/pack.lua": {
+      "sha256": "8cd3a1c116b665ac11ae264319e506592027f469d8fc565f09dc82309aaaac8f",
+      "git_blob": "5bd6ecbe0ebade135d768535347aaa21943c0c52"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/table/remove.lua": {
+      "sha256": "8bda535038018e34c2a47fbc561835f995e8ffb1ff2f738e1646e924fb5a1848",
+      "git_blob": "1b24a4fb8c7e59b1bca6877ef3b7b037f517aa97"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/lib/table/sort.lua": {
+      "sha256": "567d250cc84dc54a9037beb049b16142c67b45e01bdcef1efe8a5c11c6a9d820",
+      "git_blob": "6a86fcf3829069e7315e3d7ea1852c0618466b25"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/alias_alloc.lua": {
+      "sha256": "80ea698e0f13d1bb0cac1e828679aefce6e3eab54e3d2e3185b9e694328dcb0b",
+      "git_blob": "02fe618d81b5d7eb3c1c80d12235b9e552ab950e"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/api_call.lua": {
+      "sha256": "c6fc07d6891d02388bea96ae506ef38cb776780667c3c4511b8f7b9c1adfcb42",
+      "git_blob": "7dbd5e401174567f57e1ccdb6cedef68d8458fbc"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/catch_wrap.lua": {
+      "sha256": "7eb55382768b8df799e0de649581cef2aeabb1b0402497f6bf273c5e956db3db",
+      "git_blob": "7f656bcc26fbe6e66a0ca0325f8066362fb09679"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/coro_traceback.lua": {
+      "sha256": "900a0379fe64e1412a267c94adcab9ed96acdd9ed33c2bc268de7b6acbeff3be",
+      "git_blob": "2676d2c68eae30e47958732b93b6344407fd5f17"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/coro_yield.lua": {
+      "sha256": "95a498e8abde13c1d56353b1209571e14dffb5e4e4f21701d45708b1eb740d8a",
+      "git_blob": "ae3206e05b69ae84c6e162e16e2a6ec595471974"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/debug_gc.lua": {
+      "sha256": "ecf3f4550280a7af5cb5ca27722251f73387602c631af1c661f811cb8eac278b",
+      "git_blob": "30fb2b99b994c8297e2790a06369cb0caaeda7eb"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/dualnum.lua": {
+      "sha256": "1a2e1905ddb1da17ef542c45d0bc41c8e22cb125a0c5a43ac8d33a74e3d3bb73",
+      "git_blob": "5f1288c8df786e687c9a4de44fdd2c316e5ec1f8"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/for_dir.lua": {
+      "sha256": "acbe7838f7990b3c34da754565302e1f801775ad3c08db6975ed3b59626bad1d",
+      "git_blob": "4dd38dee0db2789ef4c042438a1cb00d5f4ababd"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/fori_coerce.lua": {
+      "sha256": "4175c8b3c5bdf0ff6e05e76dda765c48d752adb2cbb9b16b875aa9c70aedf2e0",
+      "git_blob": "7330943bd805c5b96b0fb6c41fb8d67914585d31"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/gc_rechain.lua": {
+      "sha256": "1014a863640c3f1cbbe4c56e6f92e3ef106b65818b75939794a146177dbc65cb",
+      "git_blob": "285f40867140b584c7fef24d9283d9d9a2792d2c"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/gc_trace.lua": {
+      "sha256": "1d1afe2abd9fcb17d72bcf21ad2fcad1662eff1290715d3cc60c9b14944c7271",
+      "git_blob": "bc38ce0ca3004355501ef14c0cdd777c89d1ab24"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/gcstep.lua": {
+      "sha256": "cfbfd1dd351aea4889b53484ca2a3081e415a2ccb25dc29c8ad9b17fa20970cc",
+      "git_blob": "533356b76e4cfd070e6a450877be985ffe6c4004"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/hook_active.lua": {
+      "sha256": "a73cbb575456adab97b702575a49eeeccb6f70bc59135676e8584b0df2e7c493",
+      "git_blob": "37dfc37937e6982426232d987e8342fb3651bf92"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/hook_line.lua": {
+      "sha256": "d84fbf05f5c44c033a49171be7bac7c8fb8d127ddea59baf9dafd7f95681870e",
+      "git_blob": "36f710807ad0c154845af0603778db2c33b7e4e9"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/hook_norecord.lua": {
+      "sha256": "7e0e5d0430f2de7b523857bcbf89fe5f8f9788690d2328aca42539c1a803a217",
+      "git_blob": "8e7cba05ea10daf2af2cfd8dd5132c3b635a58fa"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/hook_record.lua": {
+      "sha256": "d0cf0179547ab3a89ce85325a9214a47afe9a153d379f7aefe253ba241d70942",
+      "git_blob": "6f1646dead982b522edb4b56a86f7ebf71030994"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/hook_top.lua": {
+      "sha256": "754fb5e33419fe162a96d0e2a89b4302cf616e00c719e0995ac903e14332a006",
+      "git_blob": "f809fcea64918c4190d2738cf007dabe61d41bc5"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/jit_flush.lua": {
+      "sha256": "f450fe959bf9d4abeb62bab0057282b8d67a4ca4a32ce8c2fd141ae4e0a81dd4",
+      "git_blob": "ead1e4e99197dadacd7181accc8c01b60d1091a4"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/lightud.lua": {
+      "sha256": "dbe40c1a9da03cc35e96d5ee1e145c8c3f6c3d8e5ba6d27f5d929079cbad6d9e",
+      "git_blob": "4974d50fcbe0ab2a9a9f5a8856c417c2f27ecfae"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/loop_unroll.lua": {
+      "sha256": "e2a46171621b0cbb6988821aca9cc31e5bca9a201e9f513b6d004a20ef3fade5",
+      "git_blob": "1700fac9100dade9bddfeb5c3c15abfba4f77c3a"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/parse_comp.lua": {
+      "sha256": "70b1dd2250b912f3d6351a97abb9e4e118108ec75b167ed47438dc1d74b45c66",
+      "git_blob": "5e1948da8066bc0bee2de3ca171731a15e267a72"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/parse_esc.lua": {
+      "sha256": "a51d5cea28c81d60f248e3f9d277e44776e92f6c0ac23a4bebab5e63cd0afdd9",
+      "git_blob": "4bcce0e86498eaace6a8ee4a1677fcf329d102eb"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/parse_misc.lua": {
+      "sha256": "11e28e8b1738c85cbf453386b28cb3d33ffec985a290f9be83ea698e4137bddd",
+      "git_blob": "2c9949e326ea325b4aa7260409449e9a61db1088"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/phi_conv.lua": {
+      "sha256": "b273b03dd669e404fa54295ac04cf12792ab35f491f87daa55d5a4ddb9c0735f",
+      "git_blob": "8d7bea5fdc291a6123579324927966825bd13e24"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/recurse_deep.lua": {
+      "sha256": "92fc58ce6e5de4bc10672370c71f4c110084e5ed386ee7e53b2c95c19bf68637",
+      "git_blob": "9b9af2952fd931546c46dd33fd70018c5402b038"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/recurse_tail.lua": {
+      "sha256": "88fd9634ca1b650608122d86a78bcdd0fe372c1ba377b9e40cb55d96d40e4c9d",
+      "git_blob": "ef76443211c508c82a5bb20043cdccd42e1ea82d"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/stack_gc.lua": {
+      "sha256": "503a461af7d8c2e14743764b9bb3d87ec1ea13f32617c0e08ddfb375d2b10151",
+      "git_blob": "656a06a054a3d1dfb8f5541de49eb4d68a2f7e7f"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/stack_purge.lua": {
+      "sha256": "1be8f047c0e03a86c00165cff17104df63423ece4f7068e726b10e1819528189",
+      "git_blob": "bfaee0f3e9199e483ce7833a7c8efbdd44d4b665"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/stackov.lua": {
+      "sha256": "abb97aba2cebb039c23abe42d39ca8cb601b5c9b9a87b3d957a05ffe3d400ddf",
+      "git_blob": "ef105af6f95f8aea39146911c0c356520dc1ea14"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/stackovc.lua": {
+      "sha256": "d3edf0013d816ccec887ce2beb1b02b722a59759b8a9900815045fcaacb84748",
+      "git_blob": "c00bcbd825f68669e314651b3007329dcc3ffb8c"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/tcall_base.lua": {
+      "sha256": "6a60290656de62aa3c8f1efa836ca8629026d3d520bbe50bd935659ac47ca7f3",
+      "git_blob": "c6c4ae1a312fd52474fcd82b2e4c82f24cb20488"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/tcall_loop.lua": {
+      "sha256": "241f7293de0f880a1412b30964fa9bb96204581f77f4f204b17436e2882325b9",
+      "git_blob": "d3c6f1a6ded20c9f126faa61ef9d9bc11d1c6944"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/tonumber_scan.lua": {
+      "sha256": "8bf4a74dc05baf807043b2aa3f0b58a26abe50c169957433958fc0df25f0d031",
+      "git_blob": "78e1ca3ee57f67b0b26265fadfe6989c86639ff8"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/uclo.lua": {
+      "sha256": "67fb99d5d4fa33d09e3dc1cd0a34cf26022dfa4e98f5eb72308e5743d2088636",
+      "git_blob": "bd9bd242997e3e940237204f21e15f60b6042627"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/unordered_jit.lua": {
+      "sha256": "7f3bcad41f04939ce6643e731f3e4d63e0aecf8557bb0faea11930787a61e730",
+      "git_blob": "5ff1a1bafd6f74b822bc2ae5f8236995b5358221"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/wbarrier.lua": {
+      "sha256": "1c230c481880a2e767fb48451c5b558a3800179f300fe73f147a65f31a2ba444",
+      "git_blob": "5536625a360d1e1dfda33faceae95754e386c896"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/wbarrier_jit.lua": {
+      "sha256": "f8d9e9450ea98e57b4d2dea2524c85c992864646985d8bd9f81393bdd6a3bb2b",
+      "git_blob": "2c8dd7fbcb53070b91e9ec08718f581b4e9b8d66"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/misc/wbarrier_obar.lua": {
+      "sha256": "2e3adae0013bd7ca09eb23a9c5a107f26f716398eef06614a412ea3eb014e334",
+      "git_blob": "258db2158ea93414ed6375e71456ef8f6325c533"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/opt/dse/array.lua": {
+      "sha256": "26b76e39d6975b395b5e720b05f0226014fd1591082e64d6917775032c36103d",
+      "git_blob": "8c766248a30f442424787d32c27422a9a37cf098"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/opt/dse/field.lua": {
+      "sha256": "90bb2e246121a79b9417739eed7e589b5125519ccf40043579c40e8da728e95e",
+      "git_blob": "d8a5411c75cc8b737f930ef1918bc6762df45fb4"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/opt/dse/index": {
+      "sha256": "5c994ba9a0c9b7f7a52b549812ce64aef903a048f46cc26d635fff7605701784",
+      "git_blob": "7b8ad1f4cd89cb93721fd578e4f5095412b26f6e"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/opt/fold/index": {
+      "sha256": "1119e80d91e0f7aabd68e9bcb1ae806b92d1be2af92c12cdd5c3b97c78656dfe",
+      "git_blob": "8b4648c788aa842cccf6a9f7f6bf004be13665cb"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/opt/fold/kfold.lua": {
+      "sha256": "8fb45635b4acec6340681eea77a072b05866d69b3e7e10f0a488f9ba9c65c192",
+      "git_blob": "9cd39190de601d76ebcc546c7718ba4db9d91832"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/opt/fuse.lua": {
+      "sha256": "9fe8c82cff3750c6cd414e8c5922840ad8e5c58c79c269ffd7c5a979ccc52d62",
+      "git_blob": "a68381ef07e37eb3450f5c7e8216717453762884"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/opt/fwd/hrefk_rollback.lua": {
+      "sha256": "7b318a5bd04653f8a1b904b9963612c91fc0ab1ea132bb3ebf42dac2502363e8",
+      "git_blob": "5a6ad876884ce711b5a49e16d4bb97abca01f378"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/opt/fwd/index": {
+      "sha256": "148965190298ed5d8fabdaa0026c8678f84690f6043f58bf1b7e8a02017860fa",
+      "git_blob": "5bb1537f0a8f6c238216b61ce38b6f21f9970776"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/opt/fwd/tnew_tdup.lua": {
+      "sha256": "05505c4d732d1d102cc0e19860f3f6f6aac27ef28071a885ecbacb6bcd8d98a6",
+      "git_blob": "9e18fa3bd1a33af235660bf71ae2db127858172a"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/opt/fwd/upval.lua": {
+      "sha256": "d265e98afd77943d046e755ee354b55e03493c292d6e4f031761f947b93d46c2",
+      "git_blob": "a3e83dff4ef677927aed8d3efc9dfcd95bd41918"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/opt/index": {
+      "sha256": "8f19ca0b384556df88c96eadb8d500efa9b48ce53da266091fce0c1ec9bdea0e",
+      "git_blob": "94d50aecfd2bee565adfc99fa20bbc72d9ba6170"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/opt/loop/index": {
+      "sha256": "e0a345d6a2e9d18cda26ee8ded266a20c358f958d87791d7ea89f091cb10e1dc",
+      "git_blob": "e5820234811001fed00f7860b6c76620826813c1"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/opt/loop/unroll.lua": {
+      "sha256": "b2788e8d9feeeb797e5f145292711be0ab0bbd9b7482f0a0354bb23412809b81",
+      "git_blob": "6fbd565afc009d7eddab2ba6a59e8cc02b7d5fe4"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/opt/sink/alloc.lua": {
+      "sha256": "253df8db9fea334b5ca49e3cff21b8d1f47318bb88f491280e817c4a5b371224",
+      "git_blob": "bb2a0f727239405219447669548e1ce05e54b86d"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/opt/sink/ffi.lua": {
+      "sha256": "406fbd5d04cfd47129d96f6ccc25d0fd3f998df45d83d4e9fda402c2c34460f2",
+      "git_blob": "0bba0978d2fa6e566b480183d569ca5c734cb06e"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/opt/sink/ffi_nosink.lua": {
+      "sha256": "8597ad1e75c70b7d6719ef4a24df5249e79b1dfbe4e89f40fd05beafc23e862e",
+      "git_blob": "8f7cced26449b96a50073c88eb8bd9c352cef1c6"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/opt/sink/index": {
+      "sha256": "e196ca8ff160eb203b1e889bc37130de74dfae5c623b211362886ac7b2c6a655",
+      "git_blob": "8bfa370e508f057716d6548c5d56d823a6f6885b"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/opt/sink/nosink.lua": {
+      "sha256": "20d213d63fa1aed6049f6561a57a2970bfc7cfefe5aaf021ac16ec1f416e6e93",
+      "git_blob": "762aaced573a440d5736e03ac46efd0a47c9acc4"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/src/cpptest.cpp": {
+      "sha256": "20202fd455543a2c81dab2b12f2fbf5d4d9fcfc90a4ed04829f25d27a31dacdf",
+      "git_blob": "6566c560f77651c4a5513d0c32aa0f5ff8f3d9b8"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/src/ctest.c": {
+      "sha256": "79015435c8319cfcb7f7f66be296b4a9147a11b547f4b32718051f1de61af6ab",
+      "git_blob": "15b6a713e94a9521ff42e2f27e5ad88441249856"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/sysdep/catch_cpp.lua": {
+      "sha256": "05b7346d3fa2ce6f22457c5d8245875ee99d79f8196ddb262795024d07cb43d2",
+      "git_blob": "b2251009a51be6a03aa816b23f9429074aa7183c"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/sysdep/ffi_include_gtk.lua": {
+      "sha256": "86c82f6bd96c43417ed21c1a36cf0d0470171a28ed3b63ffedbe24750da86e34",
+      "git_blob": "a4bfceacaf82c6869aa44e27c86501bc8f01a44e"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/sysdep/ffi_include_std.lua": {
+      "sha256": "66538ddebc1ebdd1956ced176f87de5eccc4a69dc16aa0e732d2b67a92d53d97",
+      "git_blob": "b88c82bdae0c922251c83e1213cb2500465e4c4a"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/sysdep/ffi_lib_c.lua": {
+      "sha256": "ad36b7e40eecbcf187ede6e5b78704a8b1e3140096cd3b7a4f8433d5e03b7e4d",
+      "git_blob": "a368d750f73c4f13b83b27d9641b5de71d70b079"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/sysdep/ffi_lib_z.lua": {
+      "sha256": "ddb6abe88215624b47538ccba706d2bf69ee9d380e8cf5284fe5c54de0efef82",
+      "git_blob": "69a19aedcd031f1713c2e833afd3884235dffeca"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/test.lua": {
+      "sha256": "364b05bb7ad95cef27a8f38c636e10df05e233c8559961398197fcd2993c4b50",
+      "git_blob": "2470cd5c7aec982a13240b427fef3afdded134b9"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/trace/exit_frame.lua": {
+      "sha256": "718e470e64677df04e6386dac4026a87edc4632160a8d647fc6cae007fb2c63d",
+      "git_blob": "9537c56342fe2651bc2825f7d74a2e8812165b7c"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/trace/exit_growstack.lua": {
+      "sha256": "13a7b3a8d74a7bc195cf5342ece50fdfc6e070482eda45bacc3b4b5cb20ce37f",
+      "git_blob": "658a31a509ced04afa5487b05de6c221b63d5510"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/trace/exit_jfuncf.lua": {
+      "sha256": "8cc93a773e3daa67cb62413c550c067a4f88003bb39e3b83b87710c27049ddeb",
+      "git_blob": "67ad7c369d33e1aa0e4945944df6ae05bfa21788"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/trace/gc64_slot_revival.lua": {
+      "sha256": "43adda4dec7c73284f54894e580e5cf495c9859bfc883a9fe15accc49439d89f",
+      "git_blob": "40b9d8718012f94051dcc2d7167a9dd3ca725162"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/trace/index": {
+      "sha256": "ec330cbfb92686ed4b238d0ae2a4eff2b61b5362092abf8a7faa6482249a03df",
+      "git_blob": "ea7a22e06626087d48d43d1095725af07cc7a338"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/trace/phi/copyspill.lua": {
+      "sha256": "49ed85c77566f8098ccaa0b71e10cf38aedf30f1e3d27ec98deee3aef8dd9fc7",
+      "git_blob": "17a8698f5630e89945b6ee7b052875f3823154c1"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/trace/phi/index": {
+      "sha256": "d036a32d52926ddc89c2216735b9ae737076311ac6b6b4002a07209daf23f893",
+      "git_blob": "74a07333c4d706737b4733f3ed038a2333ce6389"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/trace/phi/ref.lua": {
+      "sha256": "cfb995b24e9478c6ba78bc104a1364fbe1bd41806c34b3ea837a3e10de140069",
+      "git_blob": "3662912d276b8f1688a97dc041db0e25f6cfe77e"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/trace/phi/rotate.lua": {
+      "sha256": "69f5101f182fe1950b4b19216b9c8c58729130316f7ad2f96b9530cf340dc71f",
+      "git_blob": "cb751e0b9f8aae3ec59b7c962ecf1872c0c264ca"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/trace/snap.lua": {
+      "sha256": "b3ea22b1841466dfe952623a1844c2e876c67c99da428521d25e9a649931487e",
+      "git_blob": "ba26326e0f5d891ad48130eb94f9a1f8f2b962ab"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/trace/stitch.lua": {
+      "sha256": "796dad6a3779f6009f8531bca68377ebe8f03d5c2c3f276b9f0f6ec00e41cc09",
+      "git_blob": "3f7f97342f51d253a111160e142ca00c32522c6d"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/unportable/ffi_arith_int64.lua": {
+      "sha256": "646e913c3d19644149883a1b369d70f5b6175be2be4fbe698ba7ce3609503f8c",
+      "git_blob": "c05e02a9744241b5f67dd0986a398cae3e3e0fb1"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/stock/test/unportable/math_special.lua": {
+      "sha256": "a5fad7173a51e8a81c2e6ce6c03c055e8665aca9e49f75571aab14351885fd4c",
+      "git_blob": "49161014a7d19e7a99cc745eaaa1d9b824a89159"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-hit.c": {
+      "sha256": "3f22601cdf84eaafec855d25b82ab7fac71d7111afcf97d63b1ac04400c6df20",
+      "git_blob": "ac74d35586699d5e20ad438eaae36dfac4cbb404"
+    },
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-rooted-reader.c": {
+      "sha256": "90bca2d587122fca7db9a0b9917401b5118f4900be5a2f85da815732fcb69657",
+      "git_blob": "afa7c2b7fe354d15caaf7e61a99067f68c63f2ac"
+    }
+  }
+}

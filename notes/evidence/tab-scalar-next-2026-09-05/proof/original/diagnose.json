@@ -1,0 +1,18 @@
+{
+  "command": [
+    "gdb",
+    "-q",
+    "-batch",
+    "-x",
+    "/tmp/lj-idle-entry-timeout-20260905-1tin1mhx/diagnose.gdb",
+    "--args",
+    "/tmp/lj-idle-entry-timeout-20260905-1tin1mhx/fixture"
+  ],
+  "environment": {
+    "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/?.lua;;"
+  },
+  "seconds": 3.1086044019975816,
+  "exit": 0,
+  "binary_sha256": "ebe194f127d8b3193f8743124fe5cbd84cb9d535cbc6167d86a37ce5b92dd1ad",
+  "note": "Three-second debugger interruption is evidence capture, never a fixture pass. Actual source unchanged; strict debug archive differs from original canonical GC2-only binary."
+}

@@ -1,0 +1,33 @@
+/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/idle-optimized/fixture: \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-jit-idle-reclaim-entry.c \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lua.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/luaconf.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lauxlib.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lua.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lualib.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_obj.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_def.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_arch.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_atomic.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_gc2token.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_tgregistry.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_tgslot.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_atomic.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_bc.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_func.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_obj.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_gc2.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_arena.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_thr.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_tg.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_bc.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_ctype.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_gc.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_gc2.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_trace.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_jit.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_ir.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_dispatch.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_tg.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/lj_traceerr.h \
+ /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/lib/lua_fixture_helpers.h

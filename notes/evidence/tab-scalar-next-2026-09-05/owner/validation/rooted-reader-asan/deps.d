@@ -1,0 +1,21 @@
+/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/rooted-reader-asan/fixture: \
+  /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-rooted-reader.c \
+  /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/lua.h \
+  /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/luaconf.h \
+  /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/lauxlib.h \
+  /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/lualib.h \
+  /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/lj_obj.h \
+  /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/lj_def.h \
+  /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/lj_arch.h \
+  /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/lj_atomic.h \
+  /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/lj_gc2token.h \
+  /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/lj_tgregistry.h \
+  /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/lj_tgslot.h \
+  /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/lj_gc2.h \
+  /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/lj_arena.h \
+  /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/lj_state.h \
+  /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/lj_tab.h \
+  /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/lj_tg.h \
+  /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/lj_bc.h \
+  /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/lj_ctype.h \
+  /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/lj_gc.h

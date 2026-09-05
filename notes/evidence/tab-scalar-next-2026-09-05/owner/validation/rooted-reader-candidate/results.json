@@ -1,0 +1,26 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/rooted-reader-candidate/fixture"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.3003390519952518,
+    "exit": 0,
+    "stdout": "t-tab-rooted-reader OK: rooted table snapshots preserve parent/key/result lifetimes\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-rooted-reader.c": "90bca2d587122fca7db9a0b9917401b5118f4900be5a2f85da815732fcb69657",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/libluajit.a": "6c515f2b05eac154f41c2d7cd044341167e67cc01a5cf7be117ec5512098a671",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/rooted-reader-candidate/fixture": "0351d9a4ea156de75f61f26707db042a260b062cd99b6941c10a4c4f7e851ade"
+    }
+  }
+]

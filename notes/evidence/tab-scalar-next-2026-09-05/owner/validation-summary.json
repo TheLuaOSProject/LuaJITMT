@@ -1,0 +1,2216 @@
+{
+  "base": "79345529",
+  "source_patch_sha256": "fe8b4e4598f56e420c302ccd4545fd90c2707d59688565943b69044e7fb482f8",
+  "source_count_per_build": 224,
+  "runtime": {
+    "candidate": {
+      "src/luajit": "9c2b10b90988c2678b0b9a3f9d67027d5097a512bafbc71d0ed4b00a4af2a269",
+      "src/libluajit.a": "6c515f2b05eac154f41c2d7cd044341167e67cc01a5cf7be117ec5512098a671",
+      "src/jit/vmdef.lua": "3599350c275505afd26b570a8eb83443b0c4cb06fb161db677362cae7816bba9"
+    },
+    "optimized": {
+      "src/luajit": "d222c20376cc66a64e015c065ab3dd8c3e5d20d38b325d283f3f4bd6498d528c",
+      "src/libluajit.a": "46bef05af57d07b92817c46579382e7b037215efa3cc69c9ef763a7b949a9e0b",
+      "src/jit/vmdef.lua": "3599350c275505afd26b570a8eb83443b0c4cb06fb161db677362cae7816bba9"
+    },
+    "asan": {
+      "src/luajit": "36a43ec368383537710b2e7d677c10286871f8c99d2f9ef1c7da394fbcef00a9",
+      "src/libluajit.a": "b02a0a5b72f299d47ac83431740c57343f363ce5dae2faa9ec8d1075e652bdc7",
+      "src/jit/vmdef.lua": "3599350c275505afd26b570a8eb83443b0c4cb06fb161db677362cae7816bba9"
+    }
+  },
+  "final_runtime_passes": 123,
+  "all_recorded_runtime_processes": 149,
+  "rows": [
+    {
+      "record": "idle-initial-results.json",
+      "category": "idle",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/idle-candidate"
+      ],
+      "exit": 0,
+      "seconds": 0.007242872001370415
+    },
+    {
+      "record": "validation/authority-asan-v6/results.json",
+      "category": "authority",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-asan-v6/fixture",
+        "basic-colo"
+      ],
+      "exit": 0,
+      "seconds": 0.016943868999078404
+    },
+    {
+      "record": "validation/authority-asan-v6/results.json",
+      "category": "authority",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-asan-v6/fixture",
+        "basic-separate"
+      ],
+      "exit": 0,
+      "seconds": 0.015467367004021071
+    },
+    {
+      "record": "validation/authority-asan-v6/results.json",
+      "category": "authority",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-asan-v6/fixture",
+        "keys"
+      ],
+      "exit": 0,
+      "seconds": 0.015916570999252144
+    },
+    {
+      "record": "validation/authority-asan-v6/results.json",
+      "category": "authority",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-asan-v6/fixture",
+        "aliases"
+      ],
+      "exit": 0,
+      "seconds": 0.015206726995529607
+    },
+    {
+      "record": "validation/authority-asan-v6/results.json",
+      "category": "authority",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-asan-v6/fixture",
+        "opaque"
+      ],
+      "exit": 0,
+      "seconds": 0.015283461994840764
+    },
+    {
+      "record": "validation/authority-asan-v6/results.json",
+      "category": "authority",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-asan-v6/fixture",
+        "protected"
+      ],
+      "exit": 0,
+      "seconds": 0.015223654001601972
+    },
+    {
+      "record": "validation/authority-asan-v6/results.json",
+      "category": "authority",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-asan-v6/fixture",
+        "bounds"
+      ],
+      "exit": 0,
+      "seconds": 0.022892517001309898
+    },
+    {
+      "record": "validation/authority-asan-v6/results.json",
+      "category": "authority",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-asan-v6/fixture",
+        "hooks-found"
+      ],
+      "exit": 0,
+      "seconds": 0.01522503599699121
+    },
+    {
+      "record": "validation/authority-asan-v6/results.json",
+      "category": "authority",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-asan-v6/fixture",
+        "hooks-end"
+      ],
+      "exit": 0,
+      "seconds": 0.015011529998446349
+    },
+    {
+      "record": "validation/authority-asan-v6/results.json",
+      "category": "authority",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-asan-v6/fixture",
+        "resize"
+      ],
+      "exit": 0,
+      "seconds": 0.02679863000230398
+    },
+    {
+      "record": "validation/authority-asan-v6/results.json",
+      "category": "authority",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-asan-v6/fixture",
+        "plain"
+      ],
+      "exit": 0,
+      "seconds": 0.016163920001417864
+    },
+    {
+      "record": "validation/authority-candidate-v2/results.json",
+      "category": "fixture-development",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v2/fixture",
+        "basic-colo"
+      ],
+      "exit": -6,
+      "seconds": 0.043797917998745106
+    },
+    {
+      "record": "validation/authority-candidate-v2/results.json",
+      "category": "fixture-development",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v2/fixture",
+        "basic-separate"
+      ],
+      "exit": -6,
+      "seconds": 0.04212903900042875
+    },
+    {
+      "record": "validation/authority-candidate-v2/results.json",
+      "category": "fixture-development",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v2/fixture",
+        "keys"
+      ],
+      "exit": -6,
+      "seconds": 0.03684726999927079
+    },
+    {
+      "record": "validation/authority-candidate-v2/results.json",
+      "category": "fixture-development",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v2/fixture",
+        "aliases"
+      ],
+      "exit": -6,
+      "seconds": 0.040409715998976026
+    },
+    {
+      "record": "validation/authority-candidate-v2/results.json",
+      "category": "fixture-development",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v2/fixture",
+        "opaque"
+      ],
+      "exit": -6,
+      "seconds": 0.03355855200061342
+    },
+    {
+      "record": "validation/authority-candidate-v2/results.json",
+      "category": "fixture-development",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v2/fixture",
+        "protected"
+      ],
+      "exit": -6,
+      "seconds": 0.033138367005449254
+    },
+    {
+      "record": "validation/authority-candidate-v2/results.json",
+      "category": "fixture-development",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v2/fixture",
+        "bounds"
+      ],
+      "exit": -6,
+      "seconds": 0.03513579499849584
+    },
+    {
+      "record": "validation/authority-candidate-v2/results.json",
+      "category": "fixture-development",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v2/fixture",
+        "hooks-found"
+      ],
+      "exit": -6,
+      "seconds": 0.034080725999956485
+    },
+    {
+      "record": "validation/authority-candidate-v2/results.json",
+      "category": "fixture-development",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v2/fixture",
+        "hooks-end"
+      ],
+      "exit": -6,
+      "seconds": 0.032726174002164043
+    },
+    {
+      "record": "validation/authority-candidate-v2/results.json",
+      "category": "fixture-development",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v2/fixture",
+        "resize"
+      ],
+      "exit": -6,
+      "seconds": 0.035488514993630815
+    },
+    {
+      "record": "validation/authority-candidate-v2/results.json",
+      "category": "fixture-development",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v2/fixture",
+        "plain"
+      ],
+      "exit": -6,
+      "seconds": 0.042569498997181654
+    },
+    {
+      "record": "validation/authority-candidate-v3-diagnostic/results.json",
+      "category": "fixture-development",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v3-diagnostic/fixture",
+        "basic-colo"
+      ],
+      "exit": -6,
+      "seconds": 0.043076778994873166
+    },
+    {
+      "record": "validation/authority-candidate-v4/results.json",
+      "category": "fixture-development",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture",
+        "basic-colo"
+      ],
+      "exit": -6,
+      "seconds": 0.05024432600475848
+    },
+    {
+      "record": "validation/authority-candidate-v4/results.json",
+      "category": "fixture-development",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture",
+        "basic-separate"
+      ],
+      "exit": -6,
+      "seconds": 0.04485570600081701
+    },
+    {
+      "record": "validation/authority-candidate-v4/results.json",
+      "category": "fixture-development",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture",
+        "keys"
+      ],
+      "exit": -6,
+      "seconds": 0.040028915005677845
+    },
+    {
+      "record": "validation/authority-candidate-v4/results.json",
+      "category": "fixture-development",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture",
+        "aliases"
+      ],
+      "exit": -6,
+      "seconds": 0.033582837000722066
+    },
+    {
+      "record": "validation/authority-candidate-v4/results.json",
+      "category": "fixture-development",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture",
+        "opaque"
+      ],
+      "exit": 0,
+      "seconds": 0.0040278980013681576
+    },
+    {
+      "record": "validation/authority-candidate-v4/results.json",
+      "category": "fixture-development",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture",
+        "protected"
+      ],
+      "exit": 0,
+      "seconds": 0.004262183996615931
+    },
+    {
+      "record": "validation/authority-candidate-v4/results.json",
+      "category": "fixture-development",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture",
+        "bounds"
+      ],
+      "exit": 0,
+      "seconds": 0.007125274001737125
+    },
+    {
+      "record": "validation/authority-candidate-v4/results.json",
+      "category": "fixture-development",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture",
+        "hooks-found"
+      ],
+      "exit": 0,
+      "seconds": 0.00427462300285697
+    },
+    {
+      "record": "validation/authority-candidate-v4/results.json",
+      "category": "fixture-development",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture",
+        "hooks-end"
+      ],
+      "exit": 0,
+      "seconds": 0.003971284000726882
+    },
+    {
+      "record": "validation/authority-candidate-v4/results.json",
+      "category": "fixture-development",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture",
+        "resize"
+      ],
+      "exit": -6,
+      "seconds": 0.03985649200330954
+    },
+    {
+      "record": "validation/authority-candidate-v4/results.json",
+      "category": "fixture-development",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v4/fixture",
+        "plain"
+      ],
+      "exit": -6,
+      "seconds": 0.03978180700505618
+    },
+    {
+      "record": "validation/authority-candidate-v6/results.json",
+      "category": "authority",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v6/fixture",
+        "basic-colo"
+      ],
+      "exit": 0,
+      "seconds": 0.004760858995723538
+    },
+    {
+      "record": "validation/authority-candidate-v6/results.json",
+      "category": "authority",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v6/fixture",
+        "basic-separate"
+      ],
+      "exit": 0,
+      "seconds": 0.004553214996121824
+    },
+    {
+      "record": "validation/authority-candidate-v6/results.json",
+      "category": "authority",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v6/fixture",
+        "keys"
+      ],
+      "exit": 0,
+      "seconds": 0.004468560000532307
+    },
+    {
+      "record": "validation/authority-candidate-v6/results.json",
+      "category": "authority",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v6/fixture",
+        "aliases"
+      ],
+      "exit": 0,
+      "seconds": 0.0044551460014190525
+    },
+    {
+      "record": "validation/authority-candidate-v6/results.json",
+      "category": "authority",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v6/fixture",
+        "opaque"
+      ],
+      "exit": 0,
+      "seconds": 0.004364157997770235
+    },
+    {
+      "record": "validation/authority-candidate-v6/results.json",
+      "category": "authority",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v6/fixture",
+        "protected"
+      ],
+      "exit": 0,
+      "seconds": 0.004186537000350654
+    },
+    {
+      "record": "validation/authority-candidate-v6/results.json",
+      "category": "authority",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v6/fixture",
+        "bounds"
+      ],
+      "exit": 0,
+      "seconds": 0.007042273005936295
+    },
+    {
+      "record": "validation/authority-candidate-v6/results.json",
+      "category": "authority",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v6/fixture",
+        "hooks-found"
+      ],
+      "exit": 0,
+      "seconds": 0.004109085995878559
+    },
+    {
+      "record": "validation/authority-candidate-v6/results.json",
+      "category": "authority",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v6/fixture",
+        "hooks-end"
+      ],
+      "exit": 0,
+      "seconds": 0.004151335000642575
+    },
+    {
+      "record": "validation/authority-candidate-v6/results.json",
+      "category": "authority",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v6/fixture",
+        "resize"
+      ],
+      "exit": 0,
+      "seconds": 0.01031616600084817
+    },
+    {
+      "record": "validation/authority-candidate-v6/results.json",
+      "category": "authority",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v6/fixture",
+        "plain"
+      ],
+      "exit": 0,
+      "seconds": 0.00529976799589349
+    },
+    {
+      "record": "validation/idle-asan/results.json",
+      "category": "idle",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/idle-asan/fixture"
+      ],
+      "exit": 0,
+      "seconds": 0.047551723997457884
+    },
+    {
+      "record": "validation/idle-optimized/results.json",
+      "category": "idle",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/idle-optimized/fixture"
+      ],
+      "exit": 0,
+      "seconds": 0.014491642999928445
+    },
+    {
+      "record": "validation/lifetime-asan-v1/results.json",
+      "category": "lifetime",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/lifetime-asan-v1/fixture",
+        "preflight"
+      ],
+      "exit": 0,
+      "seconds": 0.016875215995241888
+    },
+    {
+      "record": "validation/lifetime-asan-v1/results.json",
+      "category": "lifetime",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/lifetime-asan-v1/fixture",
+        "retired"
+      ],
+      "exit": 0,
+      "seconds": 0.020234026000252925
+    },
+    {
+      "record": "validation/lifetime-candidate-v1/results.json",
+      "category": "lifetime",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/lifetime-candidate-v1/fixture",
+        "preflight"
+      ],
+      "exit": 0,
+      "seconds": 0.005031719003454782
+    },
+    {
+      "record": "validation/lifetime-candidate-v1/results.json",
+      "category": "lifetime",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/lifetime-candidate-v1/fixture",
+        "retired"
+      ],
+      "exit": 0,
+      "seconds": 0.006993406001129188
+    },
+    {
+      "record": "validation/progress-asan-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-asan-complete/fixture",
+        "next",
+        "dense"
+      ],
+      "exit": 0,
+      "seconds": 0.020050323000759818
+    },
+    {
+      "record": "validation/progress-asan-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-asan-complete/fixture",
+        "next",
+        "sparse"
+      ],
+      "exit": 0,
+      "seconds": 0.036621240004024
+    },
+    {
+      "record": "validation/progress-asan-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-asan-complete/fixture",
+        "next",
+        "empty"
+      ],
+      "exit": 0,
+      "seconds": 0.02513352400274016
+    },
+    {
+      "record": "validation/progress-asan-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-asan-complete/fixture",
+        "next",
+        "holes"
+      ],
+      "exit": 0,
+      "seconds": 0.028645400998357218
+    },
+    {
+      "record": "validation/progress-asan-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-asan-complete/fixture",
+        "next",
+        "zero"
+      ],
+      "exit": 0,
+      "seconds": 0.03763597199576907
+    },
+    {
+      "record": "validation/progress-asan-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-asan-complete/fixture",
+        "next",
+        "bool"
+      ],
+      "exit": 0,
+      "seconds": 0.024748951000219677
+    },
+    {
+      "record": "validation/progress-asan-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-asan-complete/fixture",
+        "itern",
+        "dense"
+      ],
+      "exit": 0,
+      "seconds": 0.03464567800256191
+    },
+    {
+      "record": "validation/progress-asan-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-asan-complete/fixture",
+        "itern",
+        "sparse"
+      ],
+      "exit": 0,
+      "seconds": 0.020033929002238438
+    },
+    {
+      "record": "validation/progress-asan-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-asan-complete/fixture",
+        "itern",
+        "empty"
+      ],
+      "exit": 0,
+      "seconds": 0.01789244799874723
+    },
+    {
+      "record": "validation/progress-asan-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-asan-complete/fixture",
+        "itern",
+        "holes"
+      ],
+      "exit": 0,
+      "seconds": 0.016791489004390314
+    },
+    {
+      "record": "validation/progress-asan-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-asan-complete/fixture",
+        "itern",
+        "zero"
+      ],
+      "exit": 0,
+      "seconds": 0.022379680995072704
+    },
+    {
+      "record": "validation/progress-asan-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-asan-complete/fixture",
+        "itern",
+        "bool"
+      ],
+      "exit": 0,
+      "seconds": 0.04170060100295814
+    },
+    {
+      "record": "validation/progress-asan-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-asan-complete/fixture",
+        "rooted",
+        "dense"
+      ],
+      "exit": 0,
+      "seconds": 0.021257182997942436
+    },
+    {
+      "record": "validation/progress-asan-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-asan-complete/fixture",
+        "rooted",
+        "sparse"
+      ],
+      "exit": 0,
+      "seconds": 0.03898577799554914
+    },
+    {
+      "record": "validation/progress-asan-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-asan-complete/fixture",
+        "rooted",
+        "empty"
+      ],
+      "exit": 0,
+      "seconds": 0.03980544400110375
+    },
+    {
+      "record": "validation/progress-asan-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-asan-complete/fixture",
+        "rooted",
+        "holes"
+      ],
+      "exit": 0,
+      "seconds": 0.03778248100570636
+    },
+    {
+      "record": "validation/progress-asan-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-asan-complete/fixture",
+        "rooted",
+        "zero"
+      ],
+      "exit": 0,
+      "seconds": 0.03785670599609148
+    },
+    {
+      "record": "validation/progress-asan-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-asan-complete/fixture",
+        "rooted",
+        "bool"
+      ],
+      "exit": 0,
+      "seconds": 0.02046166599757271
+    },
+    {
+      "record": "validation/progress-asan-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-asan-complete/fixture",
+        "cursor",
+        "dense"
+      ],
+      "exit": 0,
+      "seconds": 0.020201282000925858
+    },
+    {
+      "record": "validation/progress-asan-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-asan-complete/fixture",
+        "cursor",
+        "sparse"
+      ],
+      "exit": 0,
+      "seconds": 0.035748588998103514
+    },
+    {
+      "record": "validation/progress-asan-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-asan-complete/fixture",
+        "cursor",
+        "empty"
+      ],
+      "exit": 0,
+      "seconds": 0.02085484200506471
+    },
+    {
+      "record": "validation/progress-asan-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-asan-complete/fixture",
+        "cursor",
+        "holes"
+      ],
+      "exit": 0,
+      "seconds": 0.03377528599958168
+    },
+    {
+      "record": "validation/progress-asan-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-asan-complete/fixture",
+        "cursor",
+        "zero"
+      ],
+      "exit": 0,
+      "seconds": 0.04181163899920648
+    },
+    {
+      "record": "validation/progress-asan-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-asan-complete/fixture",
+        "cursor",
+        "bool"
+      ],
+      "exit": 0,
+      "seconds": 0.03793073000269942
+    },
+    {
+      "record": "validation/progress-baseline-complete/results.json",
+      "category": "baseline-negative-control",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-baseline-complete/fixture",
+        "next",
+        "dense"
+      ],
+      "exit": -14,
+      "seconds": 4.004795193999598
+    },
+    {
+      "record": "validation/progress-baseline-complete/results.json",
+      "category": "baseline-negative-control",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-baseline-complete/fixture",
+        "rooted",
+        "empty"
+      ],
+      "exit": -14,
+      "seconds": 4.004225026998029
+    },
+    {
+      "record": "validation/progress-candidate-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-complete/fixture",
+        "next",
+        "sparse"
+      ],
+      "exit": 0,
+      "seconds": 0.006359445003909059
+    },
+    {
+      "record": "validation/progress-candidate-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-complete/fixture",
+        "next",
+        "holes"
+      ],
+      "exit": 0,
+      "seconds": 0.0059061409992864355
+    },
+    {
+      "record": "validation/progress-candidate-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-complete/fixture",
+        "next",
+        "zero"
+      ],
+      "exit": 0,
+      "seconds": 0.006396663004125003
+    },
+    {
+      "record": "validation/progress-candidate-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-complete/fixture",
+        "next",
+        "bool"
+      ],
+      "exit": 0,
+      "seconds": 0.006340544998238329
+    },
+    {
+      "record": "validation/progress-candidate-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-complete/fixture",
+        "itern",
+        "sparse"
+      ],
+      "exit": 0,
+      "seconds": 0.02418041799683124
+    },
+    {
+      "record": "validation/progress-candidate-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-complete/fixture",
+        "itern",
+        "holes"
+      ],
+      "exit": 0,
+      "seconds": 0.02300357499916572
+    },
+    {
+      "record": "validation/progress-candidate-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-complete/fixture",
+        "itern",
+        "zero"
+      ],
+      "exit": 0,
+      "seconds": 0.027671264004311524
+    },
+    {
+      "record": "validation/progress-candidate-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-complete/fixture",
+        "itern",
+        "bool"
+      ],
+      "exit": 0,
+      "seconds": 0.015868242997385096
+    },
+    {
+      "record": "validation/progress-candidate-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-complete/fixture",
+        "rooted",
+        "sparse"
+      ],
+      "exit": 0,
+      "seconds": 0.016223338003328536
+    },
+    {
+      "record": "validation/progress-candidate-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-complete/fixture",
+        "rooted",
+        "holes"
+      ],
+      "exit": 0,
+      "seconds": 0.009390170002006926
+    },
+    {
+      "record": "validation/progress-candidate-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-complete/fixture",
+        "rooted",
+        "zero"
+      ],
+      "exit": 0,
+      "seconds": 0.01671551699837437
+    },
+    {
+      "record": "validation/progress-candidate-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-complete/fixture",
+        "rooted",
+        "bool"
+      ],
+      "exit": 0,
+      "seconds": 0.017787420001695864
+    },
+    {
+      "record": "validation/progress-candidate-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-complete/fixture",
+        "cursor",
+        "sparse"
+      ],
+      "exit": 0,
+      "seconds": 0.01671511300082784
+    },
+    {
+      "record": "validation/progress-candidate-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-complete/fixture",
+        "cursor",
+        "holes"
+      ],
+      "exit": 0,
+      "seconds": 0.023152532005042303
+    },
+    {
+      "record": "validation/progress-candidate-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-complete/fixture",
+        "cursor",
+        "zero"
+      ],
+      "exit": 0,
+      "seconds": 0.014445108005020302
+    },
+    {
+      "record": "validation/progress-candidate-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-complete/fixture",
+        "cursor",
+        "bool"
+      ],
+      "exit": 0,
+      "seconds": 0.023915853998914827
+    },
+    {
+      "record": "validation/progress-candidate-v1/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-v1/fixture",
+        "next",
+        "dense"
+      ],
+      "exit": 0,
+      "seconds": 0.005947200996160973
+    },
+    {
+      "record": "validation/progress-candidate-v1/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-v1/fixture",
+        "itern",
+        "dense"
+      ],
+      "exit": 0,
+      "seconds": 0.005451675999211147
+    },
+    {
+      "record": "validation/progress-candidate-v1/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-v1/fixture",
+        "rooted",
+        "dense"
+      ],
+      "exit": 0,
+      "seconds": 0.005417685999418609
+    },
+    {
+      "record": "validation/progress-candidate-v1/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-v1/fixture",
+        "cursor",
+        "dense"
+      ],
+      "exit": 0,
+      "seconds": 0.0052959070017095655
+    },
+    {
+      "record": "validation/progress-candidate-v1/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-v1/fixture",
+        "next",
+        "empty"
+      ],
+      "exit": 0,
+      "seconds": 0.005341144998965319
+    },
+    {
+      "record": "validation/progress-candidate-v1/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-v1/fixture",
+        "itern",
+        "empty"
+      ],
+      "exit": 0,
+      "seconds": 0.00539414600643795
+    },
+    {
+      "record": "validation/progress-candidate-v1/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-v1/fixture",
+        "rooted",
+        "empty"
+      ],
+      "exit": 0,
+      "seconds": 0.005279996999888681
+    },
+    {
+      "record": "validation/progress-candidate-v1/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-v1/fixture",
+        "cursor",
+        "empty"
+      ],
+      "exit": 0,
+      "seconds": 0.005314579997502733
+    },
+    {
+      "record": "validation/progress-candidate-v1/results.json",
+      "category": "unresolved-C-API-progress",
+      "final": false,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-v1/fixture",
+        "capi",
+        "dense"
+      ],
+      "exit": -14,
+      "seconds": 4.003648236001027
+    },
+    {
+      "record": "validation/progress-optimized-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+        "next",
+        "dense"
+      ],
+      "exit": 0,
+      "seconds": 0.005893542998819612
+    },
+    {
+      "record": "validation/progress-optimized-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+        "next",
+        "sparse"
+      ],
+      "exit": 0,
+      "seconds": 0.007130432997655589
+    },
+    {
+      "record": "validation/progress-optimized-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+        "next",
+        "empty"
+      ],
+      "exit": 0,
+      "seconds": 0.005986531003145501
+    },
+    {
+      "record": "validation/progress-optimized-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+        "next",
+        "holes"
+      ],
+      "exit": 0,
+      "seconds": 0.019976633004262112
+    },
+    {
+      "record": "validation/progress-optimized-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+        "next",
+        "zero"
+      ],
+      "exit": 0,
+      "seconds": 0.0058009509957628325
+    },
+    {
+      "record": "validation/progress-optimized-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+        "next",
+        "bool"
+      ],
+      "exit": 0,
+      "seconds": 0.00761829900147859
+    },
+    {
+      "record": "validation/progress-optimized-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+        "itern",
+        "dense"
+      ],
+      "exit": 0,
+      "seconds": 0.010666555994248483
+    },
+    {
+      "record": "validation/progress-optimized-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+        "itern",
+        "sparse"
+      ],
+      "exit": 0,
+      "seconds": 0.008973705000244081
+    },
+    {
+      "record": "validation/progress-optimized-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+        "itern",
+        "empty"
+      ],
+      "exit": 0,
+      "seconds": 0.007464176000212319
+    },
+    {
+      "record": "validation/progress-optimized-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+        "itern",
+        "holes"
+      ],
+      "exit": 0,
+      "seconds": 0.008688654001161922
+    },
+    {
+      "record": "validation/progress-optimized-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+        "itern",
+        "zero"
+      ],
+      "exit": 0,
+      "seconds": 0.010907014002441429
+    },
+    {
+      "record": "validation/progress-optimized-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+        "itern",
+        "bool"
+      ],
+      "exit": 0,
+      "seconds": 0.013242719003756065
+    },
+    {
+      "record": "validation/progress-optimized-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+        "rooted",
+        "dense"
+      ],
+      "exit": 0,
+      "seconds": 0.013280823994136881
+    },
+    {
+      "record": "validation/progress-optimized-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+        "rooted",
+        "sparse"
+      ],
+      "exit": 0,
+      "seconds": 0.008348588002263568
+    },
+    {
+      "record": "validation/progress-optimized-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+        "rooted",
+        "empty"
+      ],
+      "exit": 0,
+      "seconds": 0.02111876900016796
+    },
+    {
+      "record": "validation/progress-optimized-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+        "rooted",
+        "holes"
+      ],
+      "exit": 0,
+      "seconds": 0.01815900200017495
+    },
+    {
+      "record": "validation/progress-optimized-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+        "rooted",
+        "zero"
+      ],
+      "exit": 0,
+      "seconds": 0.01500963700527791
+    },
+    {
+      "record": "validation/progress-optimized-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+        "rooted",
+        "bool"
+      ],
+      "exit": 0,
+      "seconds": 0.01847190400440013
+    },
+    {
+      "record": "validation/progress-optimized-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+        "cursor",
+        "dense"
+      ],
+      "exit": 0,
+      "seconds": 0.013575645003584214
+    },
+    {
+      "record": "validation/progress-optimized-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+        "cursor",
+        "sparse"
+      ],
+      "exit": 0,
+      "seconds": 0.02530518999992637
+    },
+    {
+      "record": "validation/progress-optimized-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+        "cursor",
+        "empty"
+      ],
+      "exit": 0,
+      "seconds": 0.005454247999296058
+    },
+    {
+      "record": "validation/progress-optimized-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+        "cursor",
+        "holes"
+      ],
+      "exit": 0,
+      "seconds": 0.01004667300003348
+    },
+    {
+      "record": "validation/progress-optimized-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+        "cursor",
+        "zero"
+      ],
+      "exit": 0,
+      "seconds": 0.013040051999269053
+    },
+    {
+      "record": "validation/progress-optimized-complete/results.json",
+      "category": "progress",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-optimized-complete/fixture",
+        "cursor",
+        "bool"
+      ],
+      "exit": 0,
+      "seconds": 0.022100515001511667
+    },
+    {
+      "record": "validation/rooted-reader-asan/results.json",
+      "category": "rooted",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/rooted-reader-asan/fixture"
+      ],
+      "exit": 0,
+      "seconds": 0.5090289290019427
+    },
+    {
+      "record": "validation/rooted-reader-candidate/results.json",
+      "category": "rooted",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/rooted-reader-candidate/fixture"
+      ],
+      "exit": 0,
+      "seconds": 0.3003390519952518
+    },
+    {
+      "record": "validation/scalar-hit-asan/results.json",
+      "category": "scalar",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/scalar-hit-asan/fixture"
+      ],
+      "exit": 0,
+      "seconds": 0.1649660889961524
+    },
+    {
+      "record": "validation/scalar-hit-candidate/results.json",
+      "category": "scalar",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/scalar-hit-candidate/fixture"
+      ],
+      "exit": 0,
+      "seconds": 0.14062701600050787
+    },
+    {
+      "record": "validation/stack-retry-asan-v1/results.json",
+      "category": "stack",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/stack-retry-asan-v1/fixture",
+        "found",
+        "2",
+        "3"
+      ],
+      "exit": 0,
+      "seconds": 0.07233507100318093
+    },
+    {
+      "record": "validation/stack-retry-asan-v1/results.json",
+      "category": "stack",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/stack-retry-asan-v1/fixture",
+        "found",
+        "1",
+        "3"
+      ],
+      "exit": 0,
+      "seconds": 0.0356809049990261
+    },
+    {
+      "record": "validation/stack-retry-asan-v1/results.json",
+      "category": "stack",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/stack-retry-asan-v1/fixture",
+        "found",
+        "0",
+        "1"
+      ],
+      "exit": 0,
+      "seconds": 0.059939186001429334
+    },
+    {
+      "record": "validation/stack-retry-asan-v1/results.json",
+      "category": "stack",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/stack-retry-asan-v1/fixture",
+        "end",
+        "2",
+        "3"
+      ],
+      "exit": 0,
+      "seconds": 0.06189540099876467
+    },
+    {
+      "record": "validation/stack-retry-asan-v1/results.json",
+      "category": "stack",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/stack-retry-asan-v1/fixture",
+        "end",
+        "1",
+        "3"
+      ],
+      "exit": 0,
+      "seconds": 0.03381003299728036
+    },
+    {
+      "record": "validation/stack-retry-asan-v1/results.json",
+      "category": "stack",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/stack-retry-asan-v1/fixture",
+        "end",
+        "0",
+        "1"
+      ],
+      "exit": 0,
+      "seconds": 0.05502902899752371
+    },
+    {
+      "record": "validation/stack-retry-candidate-v1/results.json",
+      "category": "stack",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/stack-retry-candidate-v1/fixture",
+        "found",
+        "2",
+        "3"
+      ],
+      "exit": 0,
+      "seconds": 0.006617883998842444
+    },
+    {
+      "record": "validation/stack-retry-candidate-v1/results.json",
+      "category": "stack",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/stack-retry-candidate-v1/fixture",
+        "found",
+        "1",
+        "3"
+      ],
+      "exit": 0,
+      "seconds": 0.006246124998142477
+    },
+    {
+      "record": "validation/stack-retry-candidate-v1/results.json",
+      "category": "stack",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/stack-retry-candidate-v1/fixture",
+        "found",
+        "0",
+        "1"
+      ],
+      "exit": 0,
+      "seconds": 0.006075006996979937
+    },
+    {
+      "record": "validation/stack-retry-candidate-v1/results.json",
+      "category": "stack",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/stack-retry-candidate-v1/fixture",
+        "end",
+        "2",
+        "3"
+      ],
+      "exit": 0,
+      "seconds": 0.005723415000829846
+    },
+    {
+      "record": "validation/stack-retry-candidate-v1/results.json",
+      "category": "stack",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/stack-retry-candidate-v1/fixture",
+        "end",
+        "1",
+        "3"
+      ],
+      "exit": 0,
+      "seconds": 0.0057925549990613945
+    },
+    {
+      "record": "validation/stack-retry-candidate-v1/results.json",
+      "category": "stack",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/stack-retry-candidate-v1/fixture",
+        "end",
+        "0",
+        "1"
+      ],
+      "exit": 0,
+      "seconds": 0.0057537379980203696
+    },
+    {
+      "record": "stock-candidate-results.json",
+      "category": "stock",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/luajit",
+        "-joff",
+        "test.lua"
+      ],
+      "exit": 0,
+      "seconds": 4.6622592019994045
+    },
+    {
+      "record": "stock-candidate-results.json",
+      "category": "stock",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/luajit",
+        "-jon",
+        "test.lua"
+      ],
+      "exit": 0,
+      "seconds": 2.9452604979960597
+    },
+    {
+      "record": "stock-optimized-results.json",
+      "category": "stock",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/luajit",
+        "-joff",
+        "test.lua"
+      ],
+      "exit": 0,
+      "seconds": 4.589851128999726
+    },
+    {
+      "record": "stock-optimized-results.json",
+      "category": "stock",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/optimized/src/luajit",
+        "-jon",
+        "test.lua"
+      ],
+      "exit": 0,
+      "seconds": 4.418315260998497
+    },
+    {
+      "record": "stock-asan-results.json",
+      "category": "stock",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/luajit",
+        "-joff",
+        "test.lua"
+      ],
+      "exit": 0,
+      "seconds": 4.543442633999803
+    },
+    {
+      "record": "stock-asan-results.json",
+      "category": "stock",
+      "final": true,
+      "command": [
+        "taskset",
+        "-c",
+        "24-25",
+        "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/asan/src/luajit",
+        "-jon",
+        "test.lua"
+      ],
+      "exit": 0,
+      "seconds": 7.678158599002927
+    }
+  ],
+  "preserved_failed_compiles": [
+    "validation/authority-candidate-v1/compile.json",
+    "validation/authority-candidate-v5/compile.json"
+  ],
+  "observer": "capi-observer.json; read-only interruption, not runtime pass",
+  "known_runtime_limit": "Public C lua_next blocks before the new iterator, in unchanged API receiver capture."
+}

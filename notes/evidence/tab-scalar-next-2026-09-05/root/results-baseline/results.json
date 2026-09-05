@@ -1,0 +1,87 @@
+[
+  {
+    "name": "progress-compile",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_APICHECK",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-baseline/progress.d",
+      "-I/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src",
+      "-I/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/tests",
+      "-I/tmp/lj-scalar-next-combined-20260905-ufftrr0s/fixtures",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/fixtures/t-tab-scalar-next-progress.c",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-baseline/progress"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict",
+    "test": false,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 40,
+    "exit": 0,
+    "seconds": 0.1638690649997443
+  },
+  {
+    "name": "progress-0",
+    "command": [
+      "taskset",
+      "-c",
+      "28-29",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-baseline/progress",
+      "next",
+      "dense"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict",
+    "test": true,
+    "expected_exit": -14,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": -14,
+    "seconds": 4.025094743003137
+  },
+  {
+    "name": "progress-1",
+    "command": [
+      "taskset",
+      "-c",
+      "28-29",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-baseline/progress",
+      "rooted",
+      "empty"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict",
+    "test": true,
+    "expected_exit": -14,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": -14,
+    "seconds": 4.021935611999652
+  }
+]

@@ -1,0 +1,2 @@
+real reclaimer paused: mode=cursor kind=bool
+progress passed: mode=cursor kind=bool count=3 sum=305

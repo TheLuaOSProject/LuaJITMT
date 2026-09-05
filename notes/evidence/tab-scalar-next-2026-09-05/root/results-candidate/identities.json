@@ -1,0 +1,14 @@
+{
+  "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit": {
+    "sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "bytes": 1522928
+  },
+  "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/libluajit.a": {
+    "sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "bytes": 2363346
+  },
+  "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/tests/t-gc-generational-mode.lua": {
+    "sha256": "a6558752d2fb1c41fce1790c65be7fe6147f5e4a6327f1edff72bf9a57a3bb68",
+    "bytes": 4626
+  }
+}

@@ -1,0 +1,1850 @@
+[
+  {
+    "workload": "next",
+    "mode": "-joff",
+    "pair": 0,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.328530000,\"ns\":1026.656250000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.327819000,\"ns\":1024.434375000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.327781000,\"ns\":1024.315625000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.327773000,\"ns\":1024.290625000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.327699000,\"ns\":1024.059375000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 1.6572171160005382,
+    "median_ns": 1024.315625,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-joff",
+    "pair": 0,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.327759000,\"ns\":1024.246875000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.327552000,\"ns\":1023.600000000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.326964000,\"ns\":1021.762500000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.326809000,\"ns\":1021.278125000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.326845000,\"ns\":1021.390625000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 1.6542457040050067,
+    "median_ns": 1021.7625,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-joff",
+    "pair": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.328306000,\"ns\":1025.956250000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.327078000,\"ns\":1022.118750000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.327161000,\"ns\":1022.378125000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.327189000,\"ns\":1022.465625000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.327170000,\"ns\":1022.406250000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 1.6542784539997228,
+    "median_ns": 1022.40625,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-joff",
+    "pair": 1,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.327060000,\"ns\":1022.062500000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.328598000,\"ns\":1026.868750000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.328561000,\"ns\":1026.753125000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.327426000,\"ns\":1023.206250000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.326462000,\"ns\":1020.193750000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 1.655297643999802,
+    "median_ns": 1023.20625,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-joff",
+    "pair": 2,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.326992000,\"ns\":1021.850000000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.326324000,\"ns\":1019.762500000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.326238000,\"ns\":1019.493750000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.326181000,\"ns\":1019.315625000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.326206000,\"ns\":1019.393750000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 1.6486554490038543,
+    "median_ns": 1019.49375,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-joff",
+    "pair": 2,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.328474000,\"ns\":1026.481250000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.327175000,\"ns\":1022.421875000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.327248000,\"ns\":1022.650000000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.327668000,\"ns\":1023.962500000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.327951000,\"ns\":1024.846875000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 1.655807082002866,
+    "median_ns": 1023.9625,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-joff",
+    "pair": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.328070000,\"ns\":1025.218750000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.327548000,\"ns\":1023.587500000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.327447000,\"ns\":1023.271875000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.327410000,\"ns\":1023.156250000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.327404000,\"ns\":1023.137500000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 1.6548173429982853,
+    "median_ns": 1023.271875,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-joff",
+    "pair": 3,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.326665000,\"ns\":1020.828125000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.325692000,\"ns\":1017.787500000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.325624000,\"ns\":1017.575000000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.325694000,\"ns\":1017.793750000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.325730000,\"ns\":1017.906250000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 1.6464191129998653,
+    "median_ns": 1017.79375,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-joff",
+    "pair": 4,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.327337000,\"ns\":1022.928125000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.326577000,\"ns\":1020.553125000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.326681000,\"ns\":1020.878125000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.326685000,\"ns\":1020.890625000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.326676000,\"ns\":1020.862500000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 1.6510414169970318,
+    "median_ns": 1020.878125,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-joff",
+    "pair": 4,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.327645000,\"ns\":1023.890625000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.326773000,\"ns\":1021.165625000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.326893000,\"ns\":1021.540625000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.326830000,\"ns\":1021.343750000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.326753000,\"ns\":1021.103125000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 1.6517797369961045,
+    "median_ns": 1021.34375,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-joff",
+    "pair": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.328595000,\"ns\":1026.859375000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.327538000,\"ns\":1023.556250000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.327386000,\"ns\":1023.081250000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.327322000,\"ns\":1022.881250000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.327192000,\"ns\":1022.475000000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 1.654821821997757,
+    "median_ns": 1023.08125,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-joff",
+    "pair": 5,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.326633000,\"ns\":1020.728125000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.325770000,\"ns\":1018.031250000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.325806000,\"ns\":1018.143750000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.325820000,\"ns\":1018.187500000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.325856000,\"ns\":1018.300000000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 1.6467642499992508,
+    "median_ns": 1018.1875,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-joff",
+    "pair": 6,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.327201000,\"ns\":1022.503125000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.326390000,\"ns\":1019.968750000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.326339000,\"ns\":1019.809375000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.326375000,\"ns\":1019.921875000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.326376000,\"ns\":1019.925000000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 1.6496086779952748,
+    "median_ns": 1019.925,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-joff",
+    "pair": 6,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.330235000,\"ns\":1031.984375000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.329068000,\"ns\":1028.337500000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.329178000,\"ns\":1028.681250000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.329389000,\"ns\":1029.340625000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.327546000,\"ns\":1023.581250000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 1.6624572569999145,
+    "median_ns": 1028.68125,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-joff",
+    "pair": 0,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.048188000,\"ns\":150.587500000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.048263000,\"ns\":150.821875000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.048224000,\"ns\":150.700000000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.048259000,\"ns\":150.809375000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.048247000,\"ns\":150.771875000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 0.25003234700125176,
+    "median_ns": 150.771875,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-joff",
+    "pair": 0,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.048378000,\"ns\":151.181250000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.048358000,\"ns\":151.118750000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.048374000,\"ns\":151.168750000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.048364000,\"ns\":151.137500000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.048410000,\"ns\":151.281250000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 0.25061036300030537,
+    "median_ns": 151.16875,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-joff",
+    "pair": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.048658000,\"ns\":152.056250000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.048539000,\"ns\":151.684375000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.048522000,\"ns\":151.631250000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.048538000,\"ns\":151.681250000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.048534000,\"ns\":151.668750000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 0.2513018750032643,
+    "median_ns": 151.68125,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-joff",
+    "pair": 1,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.048332000,\"ns\":151.037500000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.048355000,\"ns\":151.109375000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.048362000,\"ns\":151.131250000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.048354000,\"ns\":151.106250000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.048356000,\"ns\":151.112500000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 0.25045395200140774,
+    "median_ns": 151.109375,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-joff",
+    "pair": 2,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.048307000,\"ns\":150.959375000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.048317000,\"ns\":150.990625000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.048322000,\"ns\":151.006250000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.048364000,\"ns\":151.137500000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.048316000,\"ns\":150.987500000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 0.25015916799748084,
+    "median_ns": 150.990625,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-joff",
+    "pair": 2,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.048439000,\"ns\":151.371875000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.048386000,\"ns\":151.206250000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.048395000,\"ns\":151.234375000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.048398000,\"ns\":151.243750000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.048412000,\"ns\":151.287500000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 0.2506872059966554,
+    "median_ns": 151.24375,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-joff",
+    "pair": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.048268000,\"ns\":150.837500000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.048340000,\"ns\":151.062500000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.048362000,\"ns\":151.131250000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.048438000,\"ns\":151.368750000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.048358000,\"ns\":151.118750000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 0.25036097199335927,
+    "median_ns": 151.11875,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-joff",
+    "pair": 3,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.048359000,\"ns\":151.121875000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.048402000,\"ns\":151.256250000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.048401000,\"ns\":151.253125000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.048391000,\"ns\":151.221875000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.048393000,\"ns\":151.228125000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 0.25054326900135493,
+    "median_ns": 151.228125,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-joff",
+    "pair": 4,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.048450000,\"ns\":151.406250000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.048617000,\"ns\":151.928125000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.048629000,\"ns\":151.965625000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.048626000,\"ns\":151.956250000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.048634000,\"ns\":151.981250000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 0.25148907500260975,
+    "median_ns": 151.95625,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-joff",
+    "pair": 4,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.048657000,\"ns\":152.053125000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.048681000,\"ns\":152.128125000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.048685000,\"ns\":152.140625000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.048698000,\"ns\":152.181250000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.048695000,\"ns\":152.171875000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 0.25192218599841,
+    "median_ns": 152.140625,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-joff",
+    "pair": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.048623000,\"ns\":151.946875000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.048676000,\"ns\":152.112500000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.048664000,\"ns\":152.075000000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.048661000,\"ns\":152.065625000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.048657000,\"ns\":152.053125000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 0.25186820100498153,
+    "median_ns": 152.065625,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-joff",
+    "pair": 5,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.048174000,\"ns\":150.543750000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.048220000,\"ns\":150.687500000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.048229000,\"ns\":150.715625000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.048225000,\"ns\":150.703125000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.048232000,\"ns\":150.725000000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 0.24971316300070612,
+    "median_ns": 150.703125,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-joff",
+    "pair": 6,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.048598000,\"ns\":151.868750000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.048748000,\"ns\":152.337500000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.048741000,\"ns\":152.315625000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.048742000,\"ns\":152.318750000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.048729000,\"ns\":152.278125000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 0.2521987919972162,
+    "median_ns": 152.315625,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-joff",
+    "pair": 6,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "10000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":320000,\"seconds\":0.048235000,\"ns\":150.734375000,\"checksum\":5280000}\n{\"sample\":2,\"visits\":320000,\"seconds\":0.048432000,\"ns\":151.350000000,\"checksum\":5280000}\n{\"sample\":3,\"visits\":320000,\"seconds\":0.048444000,\"ns\":151.387500000,\"checksum\":5280000}\n{\"sample\":4,\"visits\":320000,\"seconds\":0.048421000,\"ns\":151.315625000,\"checksum\":5280000}\n{\"sample\":5,\"visits\":320000,\"seconds\":0.048352000,\"ns\":151.100000000,\"checksum\":5280000}\n{\"jit_enabled\":false,\"trace_count\":0}\n",
+    "stderr": "",
+    "seconds": 0.25055201599752763,
+    "median_ns": 151.315625,
+    "jit_observation": {
+      "jit_enabled": false,
+      "trace_count": 0
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-jon",
+    "pair": 0,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.254046000,\"ns\":39.694687500,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.253743000,\"ns\":39.647343750,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.253503000,\"ns\":39.609843750,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.253540000,\"ns\":39.615625000,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.253467000,\"ns\":39.604218750,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":7}\n",
+    "stderr": "",
+    "seconds": 1.2777953670010902,
+    "median_ns": 39.615625,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 7
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-jon",
+    "pair": 0,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.257961000,\"ns\":40.306406250,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.257029000,\"ns\":40.160781250,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.256842000,\"ns\":40.131562500,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.256953000,\"ns\":40.148906250,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.257168000,\"ns\":40.182500000,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":7}\n",
+    "stderr": "",
+    "seconds": 1.2958570460032206,
+    "median_ns": 40.16078125,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 7
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-jon",
+    "pair": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.262120000,\"ns\":40.956250000,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.261464000,\"ns\":40.853750000,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.261407000,\"ns\":40.844843750,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.261324000,\"ns\":40.831875000,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.261426000,\"ns\":40.847812500,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":7}\n",
+    "stderr": "",
+    "seconds": 1.3176903179992223,
+    "median_ns": 40.8478125,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 7
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-jon",
+    "pair": 1,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.254507000,\"ns\":39.766718750,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.253679000,\"ns\":39.637343750,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.253782000,\"ns\":39.653437500,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.253683000,\"ns\":39.637968750,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.253266000,\"ns\":39.572812500,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":7}\n",
+    "stderr": "",
+    "seconds": 1.2787134230020456,
+    "median_ns": 39.63796875,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 7
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-jon",
+    "pair": 2,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.254149000,\"ns\":39.710781250,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.253647000,\"ns\":39.632343750,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.253503000,\"ns\":39.609843750,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.253392000,\"ns\":39.592500000,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.253617000,\"ns\":39.627656250,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":7}\n",
+    "stderr": "",
+    "seconds": 1.2781506750034168,
+    "median_ns": 39.62765625,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 7
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-jon",
+    "pair": 2,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.258030000,\"ns\":40.317187500,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.258513000,\"ns\":40.392656250,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.257082000,\"ns\":40.169062500,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.257661000,\"ns\":40.259531250,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.257200000,\"ns\":40.187500000,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":7}\n",
+    "stderr": "",
+    "seconds": 1.2985100929945474,
+    "median_ns": 40.25953125,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 7
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-jon",
+    "pair": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.257418000,\"ns\":40.221562500,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.256202000,\"ns\":40.031562500,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.256424000,\"ns\":40.066250000,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.256144000,\"ns\":40.022500000,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.256404000,\"ns\":40.063125000,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":7}\n",
+    "stderr": "",
+    "seconds": 1.2924527719951584,
+    "median_ns": 40.063125,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 7
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-jon",
+    "pair": 3,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.254467000,\"ns\":39.760468750,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.253640000,\"ns\":39.631250000,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.253447000,\"ns\":39.601093750,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.253798000,\"ns\":39.655937500,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.253569000,\"ns\":39.620156250,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":7}\n",
+    "stderr": "",
+    "seconds": 1.2788097239972558,
+    "median_ns": 39.63125,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 7
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-jon",
+    "pair": 4,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.253824000,\"ns\":39.660000000,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.253041000,\"ns\":39.537656250,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.254448000,\"ns\":39.757500000,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.253502000,\"ns\":39.609687500,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.252918000,\"ns\":39.518437500,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":7}\n",
+    "stderr": "",
+    "seconds": 1.2776430410012836,
+    "median_ns": 39.6096875,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 7
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-jon",
+    "pair": 4,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.257982000,\"ns\":40.309687500,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.257401000,\"ns\":40.218906250,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.257064000,\"ns\":40.166250000,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.257064000,\"ns\":40.166250000,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.257173000,\"ns\":40.183281250,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":7}\n",
+    "stderr": "",
+    "seconds": 1.296698527999979,
+    "median_ns": 40.18328125,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 7
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-jon",
+    "pair": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.257891000,\"ns\":40.295468750,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.257058000,\"ns\":40.165312500,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.257469000,\"ns\":40.229531250,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.257304000,\"ns\":40.203750000,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.257195000,\"ns\":40.186718750,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":7}\n",
+    "stderr": "",
+    "seconds": 1.2967010639986256,
+    "median_ns": 40.20375,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 7
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-jon",
+    "pair": 5,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.254233000,\"ns\":39.723906250,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.253268000,\"ns\":39.573125000,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.253217000,\"ns\":39.565156250,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.253176000,\"ns\":39.558750000,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.253100000,\"ns\":39.546875000,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":7}\n",
+    "stderr": "",
+    "seconds": 1.2767564429959748,
+    "median_ns": 39.56515625,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 7
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-jon",
+    "pair": 6,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.254074000,\"ns\":39.699062500,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.253529000,\"ns\":39.613906250,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.253178000,\"ns\":39.559062500,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.253065000,\"ns\":39.541406250,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.252904000,\"ns\":39.516250000,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":7}\n",
+    "stderr": "",
+    "seconds": 1.2765241090019117,
+    "median_ns": 39.5590625,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 7
+    }
+  },
+  {
+    "workload": "next",
+    "mode": "-jon",
+    "pair": 6,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "next",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.258180000,\"ns\":40.340625000,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.257761000,\"ns\":40.275156250,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.257547000,\"ns\":40.241718750,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.257517000,\"ns\":40.237031250,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.257409000,\"ns\":40.220156250,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":7}\n",
+    "stderr": "",
+    "seconds": 1.2980212550028227,
+    "median_ns": 40.24171875,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 7
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-jon",
+    "pair": 0,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.059229000,\"ns\":9.254531250,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.054474000,\"ns\":8.511562500,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.054424000,\"ns\":8.503750000,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.054402000,\"ns\":8.500312500,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.054416000,\"ns\":8.502500000,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":5}\n",
+    "stderr": "",
+    "seconds": 0.28537551300541963,
+    "median_ns": 8.50375,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 5
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-jon",
+    "pair": 0,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.059297000,\"ns\":9.265156250,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.054156000,\"ns\":8.461875000,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.054183000,\"ns\":8.466093750,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.054138000,\"ns\":8.459062500,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.054109000,\"ns\":8.454531250,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":5}\n",
+    "stderr": "",
+    "seconds": 0.28440205800143303,
+    "median_ns": 8.461875,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 5
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-jon",
+    "pair": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.058753000,\"ns\":9.180156250,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.054100000,\"ns\":8.453125000,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.054258000,\"ns\":8.477812500,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.054248000,\"ns\":8.476250000,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.054225000,\"ns\":8.472656250,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":5}\n",
+    "stderr": "",
+    "seconds": 0.28389425999921514,
+    "median_ns": 8.47625,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 5
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-jon",
+    "pair": 1,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.059622000,\"ns\":9.315937500,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.054575000,\"ns\":8.527343750,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.054557000,\"ns\":8.524531250,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.054518000,\"ns\":8.518437500,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.054597000,\"ns\":8.530781250,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":5}\n",
+    "stderr": "",
+    "seconds": 0.28630516400153283,
+    "median_ns": 8.52734375,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 5
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-jon",
+    "pair": 2,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.059307000,\"ns\":9.266718750,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.053973000,\"ns\":8.433281250,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.054021000,\"ns\":8.440781250,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.054019000,\"ns\":8.440468750,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.054112000,\"ns\":8.455000000,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":5}\n",
+    "stderr": "",
+    "seconds": 0.2836032939958386,
+    "median_ns": 8.44078125,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 5
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-jon",
+    "pair": 2,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.060381000,\"ns\":9.434531250,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.055786000,\"ns\":8.716562500,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.055917000,\"ns\":8.737031250,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.055940000,\"ns\":8.740625000,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.056002000,\"ns\":8.750312500,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":5}\n",
+    "stderr": "",
+    "seconds": 0.2925299409980653,
+    "median_ns": 8.740625,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 5
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-jon",
+    "pair": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.058924000,\"ns\":9.206875000,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.054002000,\"ns\":8.437812500,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.054021000,\"ns\":8.440781250,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.054034000,\"ns\":8.442812500,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.054044000,\"ns\":8.444375000,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":5}\n",
+    "stderr": "",
+    "seconds": 0.28330608499527443,
+    "median_ns": 8.4428125,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 5
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-jon",
+    "pair": 3,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.059432000,\"ns\":9.286250000,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.054318000,\"ns\":8.487187500,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.054437000,\"ns\":8.505781250,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.054370000,\"ns\":8.495312500,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.054359000,\"ns\":8.493593750,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":5}\n",
+    "stderr": "",
+    "seconds": 0.2852418559996295,
+    "median_ns": 8.4953125,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 5
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-jon",
+    "pair": 4,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.058706000,\"ns\":9.172812500,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.054118000,\"ns\":8.455937500,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.054097000,\"ns\":8.452656250,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.054169000,\"ns\":8.463906250,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.054137000,\"ns\":8.458906250,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":5}\n",
+    "stderr": "",
+    "seconds": 0.28336357399530243,
+    "median_ns": 8.45890625,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 5
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-jon",
+    "pair": 4,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.058710000,\"ns\":9.173437500,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.054109000,\"ns\":8.454531250,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.054194000,\"ns\":8.467812500,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.054195000,\"ns\":8.467968750,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.054155000,\"ns\":8.461718750,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":5}\n",
+    "stderr": "",
+    "seconds": 0.28370122799969977,
+    "median_ns": 8.4678125,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 5
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-jon",
+    "pair": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.059406000,\"ns\":9.282187500,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.054231000,\"ns\":8.473593750,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.054340000,\"ns\":8.490625000,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.054332000,\"ns\":8.489375000,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.054337000,\"ns\":8.490156250,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":5}\n",
+    "stderr": "",
+    "seconds": 0.285064121002506,
+    "median_ns": 8.49015625,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 5
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-jon",
+    "pair": 5,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.058895000,\"ns\":9.202343750,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.054265000,\"ns\":8.478906250,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.054244000,\"ns\":8.475625000,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.054245000,\"ns\":8.475781250,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.054250000,\"ns\":8.476562500,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":5}\n",
+    "stderr": "",
+    "seconds": 0.28435375599656254,
+    "median_ns": 8.4765625,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 5
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-jon",
+    "pair": 6,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "archive_sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.059524000,\"ns\":9.300625000,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.054355000,\"ns\":8.492968750,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.054370000,\"ns\":8.495312500,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.054376000,\"ns\":8.496250000,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.054386000,\"ns\":8.497812500,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":5}\n",
+    "stderr": "",
+    "seconds": 0.28523781900003087,
+    "median_ns": 8.49625,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 5
+    }
+  },
+  {
+    "workload": "itern",
+    "mode": "-jon",
+    "pair": 6,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf/iteration-cost.lua",
+      "itern",
+      "200000"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/perf",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f15d4cd798bc6d04d519d98ab4b1020ebc49f54aee38c096e65994be7eee095c",
+    "exe_sha256": "8349ba3f6f0469c640aa2ef68ed4929ed5b387e9714ba8b06ce931ab26de70ca",
+    "archive_sha256": "42c45e2656d18c0fe2e6cc515e626a744ec629669db1df005375c39d9791f602",
+    "timeout_seconds": 60,
+    "exit": 0,
+    "stdout": "{\"sample\":1,\"visits\":6400000,\"seconds\":0.060992000,\"ns\":9.530000000,\"checksum\":105600000}\n{\"sample\":2,\"visits\":6400000,\"seconds\":0.055645000,\"ns\":8.694531250,\"checksum\":105600000}\n{\"sample\":3,\"visits\":6400000,\"seconds\":0.055636000,\"ns\":8.693125000,\"checksum\":105600000}\n{\"sample\":4,\"visits\":6400000,\"seconds\":0.055618000,\"ns\":8.690312500,\"checksum\":105600000}\n{\"sample\":5,\"visits\":6400000,\"seconds\":0.055622000,\"ns\":8.690937500,\"checksum\":105600000}\n{\"jit_enabled\":true,\"trace_count\":5}\n",
+    "stderr": "",
+    "seconds": 0.2919381399988197,
+    "median_ns": 8.693125,
+    "jit_observation": {
+      "jit_enabled": true,
+      "trace_count": 5
+    }
+  }
+]

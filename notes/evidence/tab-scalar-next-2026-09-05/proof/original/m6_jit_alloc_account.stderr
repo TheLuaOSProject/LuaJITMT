@@ -1,0 +1,13 @@
+== m6_jit_alloc_account ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLJ_GC2_TEST_HELPERS -I'/workspaces/lj-lockless/src' '/workspaces/lj-lockless/tests/t-gc2-alloc-account.c' '/workspaces/lj-lockless/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj-helper-fixtures-root-20260905-wa27ui28/canonical-tmp/lj_t-gc2-alloc-account'
++ timeout '20s' '/tmp/lj-helper-fixtures-root-20260905-wa27ui28/canonical-tmp/lj_t-gc2-alloc-account'
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLJ_GC2_TEST_HELPERS -I'/workspaces/lj-lockless/src' '/workspaces/lj-lockless/tests/t-gc2-interp-hard-check.c' '/workspaces/lj-lockless/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj-helper-fixtures-root-20260905-wa27ui28/canonical-tmp/lj_t-gc2-interp-hard-check'
++ timeout '20s' '/tmp/lj-helper-fixtures-root-20260905-wa27ui28/canonical-tmp/lj_t-gc2-interp-hard-check'
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLJ_GC2_TEST_HELPERS -I'/workspaces/lj-lockless/src' '/workspaces/lj-lockless/tests/t-jit-idle-reclaim-entry.c' '/workspaces/lj-lockless/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj-helper-fixtures-root-20260905-wa27ui28/canonical-tmp/lj_t-jit-idle-reclaim-entry'
++ timeout '20s' '/tmp/lj-helper-fixtures-root-20260905-wa27ui28/canonical-tmp/lj_t-jit-idle-reclaim-entry'
+/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/luajit: /workspaces/lj-lockless/tests/lib/suite_build.lua:172: command failed (31744): timeout '20s' '/tmp/lj-helper-fixtures-root-20260905-wa27ui28/canonical-tmp/lj_t-jit-idle-reclaim-entry'
+stack traceback:
+	[C]: in function 'error'
+	/workspaces/lj-lockless/tests/lib/suite_utils.lua:123: in function 'with_directory_lock'
+	/workspaces/lj-lockless/tools/test.lua:95: in main chunk
+	[C]: at 0x55f88f20dfc0

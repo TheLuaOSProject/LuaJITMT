@@ -1,0 +1,431 @@
+make: Entering directory '/workspaces/lj-lockless/src'
+rm -f luajit libluajit.a libluajit.so host/minilua host/buildvm lj_vm.S lj_bcdef.h lj_ffdef.h lj_libdef.h lj_recdef.h lj_folddef.h host/buildvm_arch.h luajit.h luajit_relver.txt jit/vmdef.lua *.o host/*.o *.obj *.lib *.exp *.dll *.exe *.manifest *.pdb *.ilk
+make: Leaving directory '/workspaces/lj-lockless/src'
+make: Entering directory '/workspaces/lj-lockless/src'
+HOSTCC    host/minilua.o
+HOSTCC    host/buildvm_asm.o
+HOSTCC    host/buildvm_peobj.o
+HOSTCC    host/buildvm_lib.o
+HOSTCC    host/buildvm_fold.o
+HOSTLINK  host/minilua
+VERSION   luajit.h
+DYNASM    host/buildvm_arch.h
+CC        luajit.o
+HOSTCC    host/buildvm.o
+HOSTLINK  host/buildvm
+BUILDVM   lj_vm.S
+BUILDVM   lj_bcdef.h
+BUILDVM   lj_ffdef.h
+BUILDVM   lj_libdef.h
+BUILDVM   lj_recdef.h
+BUILDVM   lj_folddef.h
+BUILDVM   jit/vmdef.lua
+ASM       lj_vm.o
+CC        lj_assert.o
+CC        lj_gc.o
+CC        lj_gc2.o
+CC        lj_safepoint.o
+CC        lj_err.o
+CC        lj_char.o
+CC        lj_bc.o
+CC        lj_obj.o
+CC        lj_buf.o
+CC        lj_str.o
+CC        lj_tab.o
+CC        lj_func.o
+CC        lj_udata.o
+CC        lj_meta.o
+CC        lj_debug.o
+CC        lj_prng.o
+CC        lj_state.o
+CC        lj_dispatch.o
+CC        lj_tg.o
+CC        lj_thr.o
+CC        lj_chan.o
+CC        lj_arena.o
+CC        lj_vmevent.o
+CC        lj_vmmath.o
+CC        lj_strscan.o
+CC        lj_strfmt.o
+CC        lj_strfmt_num.o
+CC        lj_serialize.o
+CC        lj_api.o
+CC        lj_profile.o
+CC        lj_lex.o
+CC        lj_parse.o
+CC        lj_bcread.o
+CC        lj_bcwrite.o
+CC        lj_load.o
+CC        lj_ir.o
+CC        lj_opt_mem.o
+CC        lj_opt_fold.o
+CC        lj_opt_narrow.o
+CC        lj_opt_dce.o
+CC        lj_opt_loop.o
+CC        lj_opt_split.o
+CC        lj_opt_sink.o
+CC        lj_mcode.o
+CC        lj_snap.o
+CC        lj_record.o
+CC        lj_crecord.o
+CC        lj_ffrecord.o
+CC        lj_asm.o
+CC        lj_trace.o
+CC        lj_gdbjit.o
+CC        lj_ctype.o
+CC        lj_cdata.o
+CC        lj_cconv.o
+CC        lj_ccall.o
+CC        lj_ccallback.o
+CC        lj_carith.o
+CC        lj_clib.o
+CC        lj_cparse.o
+CC        lj_lib.o
+CC        lj_alloc.o
+CC        lib_aux.o
+CC        lib_base.o
+CC        lib_math.o
+CC        lib_bit.o
+CC        lib_string.o
+CC        lib_table.o
+CC        lib_io.o
+CC        lib_os.o
+CC        lib_package.o
+CC        lib_debug.o
+CC        lib_jit.o
+CC        lib_ffi.o
+CC        lib_buffer.o
+CC        lib_threading.o
+CC        lib_init.o
+DYNASM    lj_vm_dyn.o
+DYNCC     lj_assert_dyn.o
+DYNCC     lj_gc_dyn.o
+DYNCC     lj_gc2_dyn.o
+DYNCC     lj_safepoint_dyn.o
+DYNCC     lj_err_dyn.o
+DYNCC     lj_char_dyn.o
+DYNCC     lj_bc_dyn.o
+DYNCC     lj_obj_dyn.o
+DYNCC     lj_buf_dyn.o
+DYNCC     lj_str_dyn.o
+DYNCC     lj_tab_dyn.o
+DYNCC     lj_func_dyn.o
+DYNCC     lj_udata_dyn.o
+DYNCC     lj_meta_dyn.o
+DYNCC     lj_debug_dyn.o
+DYNCC     lj_prng_dyn.o
+DYNCC     lj_state_dyn.o
+DYNCC     lj_dispatch_dyn.o
+DYNCC     lj_tg_dyn.o
+DYNCC     lj_thr_dyn.o
+DYNCC     lj_chan_dyn.o
+DYNCC     lj_arena_dyn.o
+DYNCC     lj_vmevent_dyn.o
+DYNCC     lj_vmmath_dyn.o
+DYNCC     lj_strscan_dyn.o
+DYNCC     lj_strfmt_dyn.o
+DYNCC     lj_strfmt_num_dyn.o
+DYNCC     lj_serialize_dyn.o
+DYNCC     lj_api_dyn.o
+DYNCC     lj_profile_dyn.o
+DYNCC     lj_lex_dyn.o
+DYNCC     lj_parse_dyn.o
+DYNCC     lj_bcread_dyn.o
+DYNCC     lj_bcwrite_dyn.o
+DYNCC     lj_load_dyn.o
+DYNCC     lj_ir_dyn.o
+DYNCC     lj_opt_mem_dyn.o
+DYNCC     lj_opt_fold_dyn.o
+DYNCC     lj_opt_narrow_dyn.o
+DYNCC     lj_opt_dce_dyn.o
+DYNCC     lj_opt_loop_dyn.o
+DYNCC     lj_opt_split_dyn.o
+DYNCC     lj_opt_sink_dyn.o
+DYNCC     lj_mcode_dyn.o
+DYNCC     lj_snap_dyn.o
+DYNCC     lj_record_dyn.o
+DYNCC     lj_crecord_dyn.o
+DYNCC     lj_ffrecord_dyn.o
+DYNCC     lj_asm_dyn.o
+DYNCC     lj_trace_dyn.o
+DYNCC     lj_gdbjit_dyn.o
+DYNCC     lj_ctype_dyn.o
+DYNCC     lj_cdata_dyn.o
+DYNCC     lj_cconv_dyn.o
+DYNCC     lj_ccall_dyn.o
+DYNCC     lj_ccallback_dyn.o
+DYNCC     lj_carith_dyn.o
+DYNCC     lj_clib_dyn.o
+DYNCC     lj_cparse_dyn.o
+DYNCC     lj_lib_dyn.o
+DYNCC     lj_alloc_dyn.o
+DYNCC     lib_aux_dyn.o
+DYNCC     lib_base_dyn.o
+DYNCC     lib_math_dyn.o
+DYNCC     lib_bit_dyn.o
+DYNCC     lib_string_dyn.o
+DYNCC     lib_table_dyn.o
+DYNCC     lib_io_dyn.o
+DYNCC     lib_os_dyn.o
+DYNCC     lib_package_dyn.o
+DYNCC     lib_debug_dyn.o
+DYNCC     lib_jit_dyn.o
+DYNCC     lib_ffi_dyn.o
+DYNCC     lib_buffer_dyn.o
+DYNCC     lib_threading_dyn.o
+DYNCC     lib_init_dyn.o
+AR        libluajit.a
+DYNLINK   libluajit.so
+LINK      luajit
+OK        Successfully built LuaJIT
+make: Leaving directory '/workspaces/lj-lockless/src'
+real reclaimer paused: mode=next kind=dense
+progress passed: mode=next kind=dense count=5 sum=165
+real reclaimer paused: mode=next kind=sparse
+progress passed: mode=next kind=sparse count=4 sum=207
+real reclaimer paused: mode=next kind=empty
+progress passed: mode=next kind=empty count=0 sum=0
+real reclaimer paused: mode=next kind=holes
+progress passed: mode=next kind=holes count=0 sum=0
+real reclaimer paused: mode=next kind=zero
+progress passed: mode=next kind=zero count=2 sum=2.5
+real reclaimer paused: mode=next kind=bool
+progress passed: mode=next kind=bool count=3 sum=305
+real reclaimer paused: mode=itern kind=dense
+progress passed: mode=itern kind=dense count=5 sum=165
+real reclaimer paused: mode=itern kind=sparse
+progress passed: mode=itern kind=sparse count=4 sum=207
+real reclaimer paused: mode=itern kind=empty
+progress passed: mode=itern kind=empty count=0 sum=0
+real reclaimer paused: mode=itern kind=holes
+progress passed: mode=itern kind=holes count=0 sum=0
+real reclaimer paused: mode=itern kind=zero
+progress passed: mode=itern kind=zero count=2 sum=2.5
+real reclaimer paused: mode=itern kind=bool
+progress passed: mode=itern kind=bool count=3 sum=305
+real reclaimer paused: mode=rooted kind=dense
+progress passed: mode=rooted kind=dense count=5 sum=165
+real reclaimer paused: mode=rooted kind=sparse
+progress passed: mode=rooted kind=sparse count=4 sum=207
+real reclaimer paused: mode=rooted kind=empty
+progress passed: mode=rooted kind=empty count=0 sum=0
+real reclaimer paused: mode=rooted kind=holes
+progress passed: mode=rooted kind=holes count=0 sum=0
+real reclaimer paused: mode=rooted kind=zero
+progress passed: mode=rooted kind=zero count=2 sum=2.5
+real reclaimer paused: mode=rooted kind=bool
+progress passed: mode=rooted kind=bool count=3 sum=305
+real reclaimer paused: mode=cursor kind=dense
+progress passed: mode=cursor kind=dense count=5 sum=165
+real reclaimer paused: mode=cursor kind=sparse
+progress passed: mode=cursor kind=sparse count=4 sum=207
+real reclaimer paused: mode=cursor kind=empty
+progress passed: mode=cursor kind=empty count=0 sum=0
+real reclaimer paused: mode=cursor kind=holes
+progress passed: mode=cursor kind=holes count=0 sum=0
+real reclaimer paused: mode=cursor kind=zero
+progress passed: mode=cursor kind=zero count=2 sum=2.5
+real reclaimer paused: mode=cursor kind=bool
+progress passed: mode=cursor kind=bool count=3 sum=305
+scalar next authority passed: basic-colo
+scalar next authority passed: basic-separate
+scalar next authority passed: keys
+scalar next authority passed: aliases
+scalar next authority passed: opaque
+scalar next authority passed: protected
+scalar next authority passed: bounds
+scalar next authority passed: hooks-found
+scalar next authority passed: hooks-end
+scalar next authority passed: resize
+scalar next authority passed: plain
+stack move then refused SMR passed: found 2 3
+stack move then refused SMR passed: found 1 3
+stack move then refused SMR passed: found 0 1
+stack move then refused SMR passed: end 2 3
+stack move then refused SMR passed: end 1 3
+stack move then refused SMR passed: end 0 1
+scalar next lifetime passed: preflight
+scalar next lifetime passed: retired
+t-jit-idle-reclaim-entry OK: IDLE reclaim owns native-entry closure
+make: Entering directory '/workspaces/lj-lockless/src'
+rm -f luajit libluajit.a libluajit.so host/minilua host/buildvm lj_vm.S lj_bcdef.h lj_ffdef.h lj_libdef.h lj_recdef.h lj_folddef.h host/buildvm_arch.h luajit.h luajit_relver.txt jit/vmdef.lua *.o host/*.o *.obj *.lib *.exp *.dll *.exe *.manifest *.pdb *.ilk
+make: Leaving directory '/workspaces/lj-lockless/src'
+make: Entering directory '/workspaces/lj-lockless/src'
+HOSTCC    host/minilua.o
+HOSTCC    host/buildvm_asm.o
+HOSTCC    host/buildvm_peobj.o
+HOSTCC    host/buildvm_lib.o
+HOSTCC    host/buildvm_fold.o
+HOSTLINK  host/minilua
+VERSION   luajit.h
+DYNASM    host/buildvm_arch.h
+CC        luajit.o
+HOSTCC    host/buildvm.o
+HOSTLINK  host/buildvm
+BUILDVM   lj_vm.S
+BUILDVM   lj_bcdef.h
+BUILDVM   lj_ffdef.h
+BUILDVM   lj_libdef.h
+BUILDVM   lj_recdef.h
+BUILDVM   lj_folddef.h
+BUILDVM   jit/vmdef.lua
+ASM       lj_vm.o
+CC        lj_assert.o
+CC        lj_gc.o
+CC        lj_gc2.o
+CC        lj_safepoint.o
+CC        lj_err.o
+CC        lj_char.o
+CC        lj_bc.o
+CC        lj_obj.o
+CC        lj_buf.o
+CC        lj_str.o
+CC        lj_tab.o
+CC        lj_func.o
+CC        lj_udata.o
+CC        lj_meta.o
+CC        lj_debug.o
+CC        lj_prng.o
+CC        lj_state.o
+CC        lj_dispatch.o
+CC        lj_tg.o
+CC        lj_thr.o
+CC        lj_chan.o
+CC        lj_arena.o
+CC        lj_vmevent.o
+CC        lj_vmmath.o
+CC        lj_strscan.o
+CC        lj_strfmt.o
+CC        lj_strfmt_num.o
+CC        lj_serialize.o
+CC        lj_api.o
+CC        lj_profile.o
+CC        lj_lex.o
+CC        lj_parse.o
+CC        lj_bcread.o
+CC        lj_bcwrite.o
+CC        lj_load.o
+CC        lj_ir.o
+CC        lj_opt_mem.o
+CC        lj_opt_fold.o
+CC        lj_opt_narrow.o
+CC        lj_opt_dce.o
+CC        lj_opt_loop.o
+CC        lj_opt_split.o
+CC        lj_opt_sink.o
+CC        lj_mcode.o
+CC        lj_snap.o
+CC        lj_record.o
+CC        lj_crecord.o
+CC        lj_ffrecord.o
+CC        lj_asm.o
+CC        lj_trace.o
+CC        lj_gdbjit.o
+CC        lj_ctype.o
+CC        lj_cdata.o
+CC        lj_cconv.o
+CC        lj_ccall.o
+CC        lj_ccallback.o
+CC        lj_carith.o
+CC        lj_clib.o
+CC        lj_cparse.o
+CC        lj_lib.o
+CC        lj_alloc.o
+CC        lib_aux.o
+CC        lib_base.o
+CC        lib_math.o
+CC        lib_bit.o
+CC        lib_string.o
+CC        lib_table.o
+CC        lib_io.o
+CC        lib_os.o
+CC        lib_package.o
+CC        lib_debug.o
+CC        lib_jit.o
+CC        lib_ffi.o
+CC        lib_buffer.o
+CC        lib_threading.o
+CC        lib_init.o
+DYNASM    lj_vm_dyn.o
+DYNCC     lj_assert_dyn.o
+DYNCC     lj_gc_dyn.o
+DYNCC     lj_gc2_dyn.o
+DYNCC     lj_safepoint_dyn.o
+DYNCC     lj_err_dyn.o
+DYNCC     lj_char_dyn.o
+DYNCC     lj_bc_dyn.o
+DYNCC     lj_obj_dyn.o
+DYNCC     lj_buf_dyn.o
+DYNCC     lj_str_dyn.o
+DYNCC     lj_tab_dyn.o
+DYNCC     lj_func_dyn.o
+DYNCC     lj_udata_dyn.o
+DYNCC     lj_meta_dyn.o
+DYNCC     lj_debug_dyn.o
+DYNCC     lj_prng_dyn.o
+DYNCC     lj_state_dyn.o
+DYNCC     lj_dispatch_dyn.o
+DYNCC     lj_tg_dyn.o
+DYNCC     lj_thr_dyn.o
+DYNCC     lj_chan_dyn.o
+DYNCC     lj_arena_dyn.o
+DYNCC     lj_vmevent_dyn.o
+DYNCC     lj_vmmath_dyn.o
+DYNCC     lj_strscan_dyn.o
+DYNCC     lj_strfmt_dyn.o
+DYNCC     lj_strfmt_num_dyn.o
+DYNCC     lj_serialize_dyn.o
+DYNCC     lj_api_dyn.o
+DYNCC     lj_profile_dyn.o
+DYNCC     lj_lex_dyn.o
+DYNCC     lj_parse_dyn.o
+DYNCC     lj_bcread_dyn.o
+DYNCC     lj_bcwrite_dyn.o
+DYNCC     lj_load_dyn.o
+DYNCC     lj_ir_dyn.o
+DYNCC     lj_opt_mem_dyn.o
+DYNCC     lj_opt_fold_dyn.o
+DYNCC     lj_opt_narrow_dyn.o
+DYNCC     lj_opt_dce_dyn.o
+DYNCC     lj_opt_loop_dyn.o
+DYNCC     lj_opt_split_dyn.o
+DYNCC     lj_opt_sink_dyn.o
+DYNCC     lj_mcode_dyn.o
+DYNCC     lj_snap_dyn.o
+DYNCC     lj_record_dyn.o
+DYNCC     lj_crecord_dyn.o
+DYNCC     lj_ffrecord_dyn.o
+DYNCC     lj_asm_dyn.o
+DYNCC     lj_trace_dyn.o
+DYNCC     lj_gdbjit_dyn.o
+DYNCC     lj_ctype_dyn.o
+DYNCC     lj_cdata_dyn.o
+DYNCC     lj_cconv_dyn.o
+DYNCC     lj_ccall_dyn.o
+DYNCC     lj_ccallback_dyn.o
+DYNCC     lj_carith_dyn.o
+DYNCC     lj_clib_dyn.o
+DYNCC     lj_cparse_dyn.o
+DYNCC     lj_lib_dyn.o
+DYNCC     lj_alloc_dyn.o
+DYNCC     lib_aux_dyn.o
+DYNCC     lib_base_dyn.o
+DYNCC     lib_math_dyn.o
+DYNCC     lib_bit_dyn.o
+DYNCC     lib_string_dyn.o
+DYNCC     lib_table_dyn.o
+DYNCC     lib_io_dyn.o
+DYNCC     lib_os_dyn.o
+DYNCC     lib_package_dyn.o
+DYNCC     lib_debug_dyn.o
+DYNCC     lib_jit_dyn.o
+DYNCC     lib_ffi_dyn.o
+DYNCC     lib_buffer_dyn.o
+DYNCC     lib_threading_dyn.o
+DYNCC     lib_init_dyn.o
+AR        libluajit.a
+DYNLINK   libluajit.so
+LINK      luajit
+OK        Successfully built LuaJIT
+make: Leaving directory '/workspaces/lj-lockless/src'
+M5 scalar array-next tests passed

@@ -1,0 +1,14 @@
+{
+  "command": [
+    "patch",
+    "-p1",
+    "--fuzz=0",
+    "--no-backup-if-mismatch",
+    "-i",
+    "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate-v1.patch"
+  ],
+  "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict",
+  "exit": 0,
+  "stdout": "patching file src/lj_tab.c\npatching file src/lj_tab.h\n",
+  "stderr": ""
+}

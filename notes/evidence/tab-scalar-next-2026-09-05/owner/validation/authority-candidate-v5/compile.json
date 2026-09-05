@@ -1,0 +1,43 @@
+{
+  "command": [
+    "cc",
+    "-std=gnu11",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-mcx16",
+    "-DLUA_USE_APICHECK",
+    "-DLUA_USE_ASSERT",
+    "-DLJ_FUNC_TEST_HELPERS",
+    "-DLJ_GC2_TEST_HELPERS",
+    "-DLJ_TAB_TEST_HELPERS",
+    "-DLJ_ARENA_TEST_HELPERS",
+    "-DLJ_TRACE_TEST_HELPERS",
+    "-DLJ_XSAVE_TEST_HELPERS",
+    "-MMD",
+    "-MF",
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v5/deps.d",
+    "-I/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src",
+    "-I/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures",
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority-v5.c",
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/libluajit.a",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-o",
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v5/fixture"
+  ],
+  "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+  "seconds": 0.061269035999430344,
+  "exit": 1,
+  "stdout": "",
+  "stderr": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority-v5.c: In function \u2018key_cases\u2019:\n/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority-v5.c:141:3: error: implicit declaration of function \u2018setnumberVnum\u2019; did you mean \u2018numberVnum\u2019? [-Wimplicit-function-declaration]\n  141 |   setnumberVnum(k, 0); assert(probe(L, &idx) == 1 && numberVnum(L->base + 2) == 1);\n      |   ^~~~~~~~~~~~~\n      |   numberVnum\n",
+  "inputs": {
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority-v5.c": "0841b7702930e23d9f81cfbbbb5ee94003ca335ee8ed32e46c68a91e6a4a60c9",
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/libluajit.a": "6c515f2b05eac154f41c2d7cd044341167e67cc01a5cf7be117ec5512098a671",
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856"
+  }
+}

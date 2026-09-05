@@ -1,0 +1,26 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24-25",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/scalar-hit-candidate/fixture"
+    ],
+    "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "seconds": 0.14062701600050787,
+    "exit": 0,
+    "stdout": "simple/nonmarking/aliases/misses passed\nsource replacement/real resize/retirement passed\nprotected candidates/collision keys/vector bounds passed\nHuge fallback/custom allocator preflight passed\nreal IDLE reclaimer paused; entering ordinary scalar field loop\nordinary scalar field loop completed before reclaimer release\npaused unrelated plain-arena writer remains a bounded refusal\nscalar table-hit tests passed\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-hit.c": "3f22601cdf84eaafec855d25b82ab7fac71d7111afcf97d63b1ac04400c6df20",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/libluajit.a": "6c515f2b05eac154f41c2d7cd044341167e67cc01a5cf7be117ec5512098a671",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856",
+      "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/scalar-hit-candidate/fixture": "7ee6e4d33d048f84662ff81a66c4e7bc911a6529bb7b15ef6e6bc39a36767c4b"
+    }
+  }
+]

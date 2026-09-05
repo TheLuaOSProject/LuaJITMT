@@ -1,7 +1,7 @@
 # Lockless completion plan
 
 Reviewed: 2026-09-04, starting at `a649f737`.
-Updated: 2026-09-05 after worker SWEEP scheduling and native teardown validation.
+Updated: 2026-09-05 after worker SWEEP scheduling and scalar-array iteration validation.
 
 This is the operative continuation of the original plan. It preserves the
 requested end state: one shared Lua heap, safe ordinary racy Lua programs,
@@ -78,7 +78,7 @@ are verified reasons the full goal is still open:
 | Area | Finding at review entry | Required direction |
 | --- | --- | --- |
 | Table resize | Structural owner plus source `FORWARD` can strand the only value in an owner's local variable; descriptor migration is dormant | Durable exact payloads, helpable migration/publication, GC and native grace |
-| Table iteration | Ordinary scalar ITERN waits for global SMR while an unrelated IDLE reclaimer is suspended | Prove independently leased iteration progress, including exact source validation and terminal END; preserve general hash/GC-result lifetime requirements |
+| Table iteration | Scalar-array Lua next/ITERN now finish through independent leases; public C lua_next still waits in earlier receiver capture | Resolve receiver capture and general hash/GC-result iteration while preserving exact source, owner, vector and terminal END validation |
 | Descriptor installation | Separate capacity-shadow store can corrupt a winning descriptor before the losing ownership CAS | Publish control and capacity in one atomic pair; deterministic competing-generation test |
 | Automatic GC | Safe boundaries consume durable requests and workers now schedule missing SWEEP preparation; a sole-main JIT workload still exceeds its automatic completion bound | Resolve compiled-allocation assistance, same-TG arena fairness and unbounded EOF work, then complete asynchronous phase ownership; retain independent finalizer suppression |
 | Closure construction | Test-injected nested collection now defers an unfinished owner, and scalar continuation preserves sweep turns for other TGs | Complete same-TG arena fairness and asynchronous phase ownership; retain exact construction state and eventual publish/cancel completion |
@@ -359,10 +359,10 @@ controls and post-fix completion tests:
 - The hard-assist and allocation-account fixtures now prove their measured
   cycle and SSB-pool setup, and exact meta-store publication counts are backed
   by actual source-stack observations. Ten isolated final processes and five
-  canonical components pass without runtime changes. M6 still times out in
-  unchanged scalar ITERN under the paused IDLE reclaimer; its last two cases
-  remain unrun. Treat that wait as runtime progress work, retaining the paused
-  window and original outcomes. See `notes/gc-helper-fixtures-2026-09-05.md`.
+  canonical components pass without runtime changes. At that checkpoint M6
+  still timed out in scalar ITERN under the paused IDLE reclaimer; its last two
+  cases remained unrun. The later scalar-next repair below completes all five
+  with the original paused window. See `notes/gc-helper-fixtures-2026-09-05.md`.
 - The scheduler terminal-unlink fixture now clears its own synthetic shutdown
   flag before real close admission. The original rejected close and 131,280-byte
   LeakSanitizer report are preserved; eight isolated and three registered
@@ -390,6 +390,17 @@ controls and post-fix completion tests:
   The JIT-enabled sole-main case still exceeds its bound on both old and new
   runtimes; same-TG fairness, EOF work and synchronous handshakes remain open.
   See `notes/gc-worker-sweep-2026-09-05.md`.
+- Scalar-array Lua next/ITERN now make progress after refused global SMR
+  admission through independent table/vector leases and exact final source
+  validation. The worker/fairness combination passes 127 isolated and 49
+  registered components, including the original paused ITERN and all M6
+  accounting/cooperation cases. Current-baseline alarms remain negative
+  controls. Public C lua_next receiver capture, general hash/GC results and
+  plain-arena writer dependencies remain open. The separate C API capture
+  candidate's interrupted automatic-review validation is not retried or
+  counted as completion. Fifty-six paired cost processes retain a +1.59%
+  JIT-enabled next-loop cost (about 0.6 ns/value); the other selected ranges
+  overlap. See `notes/tab-scalar-next-2026-09-05.md`.
 - `1bce0fa5`: promote exhausted inline table dirty authority into pre-reserved
   persistent wide proof, retaining common stamp/token geometry. Small mappings
   use a dense sidecar plane and Huge mappings use checked tail reservation.

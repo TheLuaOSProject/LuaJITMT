@@ -1,0 +1,81 @@
+[
+  {
+    "name": "m6_jit_alloc_account",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/luajit",
+      "/workspaces/lj-lockless/tools/test.lua",
+      "m6_jit_alloc_account"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LJ_TEST_ROOT": "/workspaces/lj-lockless",
+      "JOBS": "4",
+      "MAKE_JOBS": "4",
+      "TMPDIR": "/tmp/lj-helper-fixtures-root-20260905-wa27ui28/canonical-tmp",
+      "LUA_PATH": "/workspaces/lj-lockless/src/?.lua;;"
+    },
+    "expected_runtime_processes": 5,
+    "inputs": {
+      "tests/t-gc2-interp-hard-check.c": "6584c6cc748f3ae27b93409e24755296d20eaa5ecc1ef6e0576017194021943a",
+      "tests/t-gc2-alloc-account.c": "931232437a4fa22103d3673dcf31f1ad5c2689ebbd70110ce1a743a786f5ddda",
+      "tests/suites/m6_jit.lua": "8a06a961f8d8e1f6b25a6f691d90f3be909333c67f6769e6c800ee29133c572d",
+      "tests/suites/m9_m10_gc.lua": "b2dbc4ce0cf6e0e92b0fbb70fd1a9b0ca6c197709defac963cc5c4692b9e90bb"
+    },
+    "runner_sha256": "914c42cc9565b3b61117de954446da8ca8ffbcab091d338f4cfa036f1443be27",
+    "seconds": 33.97706720499991,
+    "binaries": {
+      "luajit": "c6f6bccd72367b06be18c11db8845a5c62bf4ced75f4703446f3d8bdf15a0aa1",
+      "libluajit.a": "261febe3107ef5b8485dbe358980495ea943542d9367479354245280f63961db",
+      "libluajit.so": "d5f84c80d838b290b6bea1f61ea7a39f254e90c4458795533ae696f2466d229b"
+    },
+    "temporary_files": {
+      "canonical-tmp/lj_t-gc2-alloc-account": "4a3d64b2a14e284fd6e990fa83579f79f8ae1cfb071675680647413a0c21d263",
+      "canonical-tmp/lj_t-gc2-interp-hard-check": "f924b9785bdb87456b25d630d9789f6b81972396894d7e43a886c75cf6b41ea1",
+      "canonical-tmp/lj_t-jit-idle-reclaim-entry": "15a4c536742c43d70906f0ff5b9485d0e72881583f3414a3676915dfba1339e1"
+    },
+    "exit": 1
+  },
+  {
+    "name": "m10_generational",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/luajit",
+      "/workspaces/lj-lockless/tools/test.lua",
+      "m10_generational"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LJ_TEST_ROOT": "/workspaces/lj-lockless",
+      "JOBS": "4",
+      "MAKE_JOBS": "4",
+      "TMPDIR": "/tmp/lj-helper-fixtures-root-20260905-wa27ui28/canonical-tmp",
+      "LUA_PATH": "/workspaces/lj-lockless/src/?.lua;;"
+    },
+    "expected_runtime_processes": 3,
+    "inputs": {
+      "tests/t-gc2-interp-hard-check.c": "6584c6cc748f3ae27b93409e24755296d20eaa5ecc1ef6e0576017194021943a",
+      "tests/t-gc2-alloc-account.c": "931232437a4fa22103d3673dcf31f1ad5c2689ebbd70110ce1a743a786f5ddda",
+      "tests/suites/m6_jit.lua": "8a06a961f8d8e1f6b25a6f691d90f3be909333c67f6769e6c800ee29133c572d",
+      "tests/suites/m9_m10_gc.lua": "b2dbc4ce0cf6e0e92b0fbb70fd1a9b0ca6c197709defac963cc5c4692b9e90bb"
+    },
+    "runner_sha256": "914c42cc9565b3b61117de954446da8ca8ffbcab091d338f4cfa036f1443be27",
+    "seconds": 13.468180548996315,
+    "binaries": {
+      "luajit": "256a8843d9def7dca64494c0cd2d5b1a1411826893542d81b44ec03e9de06522",
+      "libluajit.a": "98d10a3fa980338ed83accc3b7b1b57f988d83b9448932bb037cbf424384b300",
+      "libluajit.so": "7fecf4128609336ed77c005312927a4279a7f68eb288f4172e91c96bb526d0bd"
+    },
+    "temporary_files": {
+      "canonical-tmp/lj_t-gc2-alloc-account": "4a3d64b2a14e284fd6e990fa83579f79f8ae1cfb071675680647413a0c21d263",
+      "canonical-tmp/lj_t-gc2-interp-hard-check": "f924b9785bdb87456b25d630d9789f6b81972396894d7e43a886c75cf6b41ea1",
+      "canonical-tmp/lj_t-jit-idle-reclaim-entry": "15a4c536742c43d70906f0ff5b9485d0e72881583f3414a3676915dfba1339e1",
+      "canonical-tmp/lj_t-gc2-alloc-account-m10": "98df47ebd4a5e1f2932545e9f139e176b69a884046dedb5e77840c783766e98e"
+    },
+    "exit": 0
+  }
+]

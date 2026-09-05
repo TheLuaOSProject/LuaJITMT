@@ -1,0 +1,28 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "24-25",
+    "gdb",
+    "-q",
+    "-batch",
+    "-x",
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/capi-observer.gdb",
+    "--args",
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-v1/fixture",
+    "capi",
+    "dense"
+  ],
+  "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+  "exit": 0,
+  "seconds": 1.1725781739951344,
+  "stdout": "[Thread debugging using libthread_db enabled]\nUsing host libthread_db library \"/lib/x86_64-linux-gnu/libthread_db.so.1\".\n[New Thread 0x7f1d6adff6c0 (LWP 422497)]\nreal reclaimer paused: mode=capi kind=dense\n\nThread 1 \"fixture\" received signal SIGINT, Interrupt.\nla_cpu_pause () at /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/lj_atomic.h:140\n140\t  __builtin_ia32_pause();\n\nThread 2 (Thread 0x7f1d6adff6c0 (LWP 422497) \"fixture\"):\n#0  la_load32_acq (p=0x55fa210af438 <gc2_idle_reclaim_test_release>) at /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/lj_atomic.h:33\n#1  gc2_idle_reclaim_test_pause_after_jit_quiescence () at lj_gc2.c:760\n#2  gc2_idle_reclaim_enter (g=g@entry=0x7f1d6b080130) at lj_gc2.c:7074\n#3  0x000055fa20f1e76d in lj_gc2_reclaim_retired (g=0x7f1d6b080130, epoch=18) at lj_gc2.c:7147\n#4  0x000055fa20f03ab8 in reclaim_main (arg=0x7ffce563a040) at /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c:32\n#5  0x00007f1d6b12cb7b in ?? () from /lib/x86_64-linux-gnu/libc.so.6\n#6  0x00007f1d6b1aa7f8 in ?? () from /lib/x86_64-linux-gnu/libc.so.6\n\nThread 1 (Thread 0x7f1d6b0991c0 (LWP 422493) \"fixture\"):\n#0  la_cpu_pause () at /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/lj_atomic.h:140\n#1  lj_thr_retry_yield (L=0x7f1d6b080080) at lj_thr.c:2202\n#2  0x000055fa20f46b4f in lj_tab_wait_l (L=L@entry=0x7f1d6b080080) at lj_tab.c:237\n#3  0x000055fa20f913c9 in api_stackroot_capture_edge (L=0x7f1d6b080080, edge=0x7f1d6ae66708, out=<optimized out>) at lj_api.c:315\n#4  api_stackroot_push_index (L=L@entry=0x7f1d6b080080, idx=idx@entry=2) at lj_api.c:367\n#5  0x000055fa20f97f17 in lua_next (L=L@entry=0x7f1d6b080080, idx=idx@entry=2) at lj_api.c:2206\n#6  0x000055fa20f038eb in main (argc=<optimized out>, argv=<optimized out>) at /tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c:171\n",
+  "stderr": "",
+  "inputs": {
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/run-capi-observer.py": "ef37761b2c15e91854ef57d0c32f3c972cfa55b5cc5039233d7a1e6bade4d236",
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/capi-observer.gdb": "5fecdba8b1d9a863273ded23083742b7923decd00d3063398663a2a678b0f3df",
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/progress-candidate-v1/fixture": "8b7c125288b151493a140db02b81ca85ce3a857e68811dbab4d143ae74d7925b",
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-progress.c": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c"
+  },
+  "note": "Read-only debugger interruption; not a runtime pass. Separate actual unmodified capi-mode SIGALRM retained in progress-candidate-v1/results.json."
+}

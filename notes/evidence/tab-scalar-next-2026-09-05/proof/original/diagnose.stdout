@@ -1,0 +1,31 @@
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+[New Thread 0x7ffff792e6c0 (LWP 390256)]
+
+Thread 1 "fixture" received signal SIGINT, Interrupt.
+la_cpu_pause () at /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/lj_atomic.h:140
+140	  __builtin_ia32_pause();
+
+Thread 2 (Thread 0x7ffff792e6c0 (LWP 390256) "fixture"):
+#0  la_load32_acq (p=0x555555709438 <gc2_idle_reclaim_test_release>) at /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/lj_atomic.h:33
+#1  gc2_idle_reclaim_test_pause_after_jit_quiescence () at lj_gc2.c:760
+#2  gc2_idle_reclaim_enter (g=g@entry=0x7ffff7c90130) at lj_gc2.c:7074
+#3  0x0000555555577eed in lj_gc2_reclaim_retired (g=0x7ffff7c90130, epoch=5) at lj_gc2.c:7147
+#4  0x000055555555d120 in idle_reclaim_main (arg=0x7fffffffe030) at /tmp/lj-idle-entry-timeout-20260905-1tin1mhx/t-jit-idle-reclaim-entry.c:47
+#5  0x00007ffff7d35b7b in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#6  0x00007ffff7db37f8 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+
+Thread 1 (Thread 0x7ffff7ca21c0 (LWP 390253) "fixture"):
+#0  la_cpu_pause () at /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/lj_atomic.h:140
+#1  lj_thr_retry_yield (L=0x7ffff7c90080) at lj_thr.c:2202
+#2  0x000055555559facf in lj_tab_wait_l (L=L@entry=0x7ffff7c90080) at lj_tab.c:237
+#3  0x00005555555b02d0 in lj_tab_next_rooted (L=L@entry=0x7ffff7c90080, tabroot=0x7ffff79791e0, keyroot=keyroot@entry=0x7fffffffde58, outkey=outkey@entry=0x7ffff79791f0, outval=outval@entry=0x7ffff79791f8, nextidx=nextidx@entry=0x7fffffffde54) at lj_tab.c:8635
+#4  0x00005555555b1153 in lj_tab_itern_rooted (L=0x7ffff7c90080, tabroot=<optimized out>, ctrl=0x7ffff79791e8) at lj_tab.c:8711
+#5  0x000055555563af32 in lj_vm_IITERN ()
+#6  0x00005555555bf107 in lj_vm_pcall_unwind (L=L@entry=0x7ffff7c90080, base=0x7ffff79791c0, nres1=nres1@entry=3, ef=ef@entry=0) at lj_state.c:130
+#7  0x00005555555f36b0 in lua_pcall (L=L@entry=0x7ffff7c90080, nargs=nargs@entry=1, nresults=nresults@entry=2, errfunc=errfunc@entry=0) at lj_api.c:2797
+#8  0x000055555555d2da in ljt_lua_pcall (L=L@entry=0x7ffff7c90080, nresults=nresults@entry=2, what=what@entry=0x5555556b7273 "closed IDLE ITERN shadow", nargs=1) at /workspaces/lj-lockless/tests/lib/lua_fixture_helpers.h:50
+#9  0x000055555555c978 in main () at /tmp/lj-idle-entry-timeout-20260905-1tin1mhx/t-jit-idle-reclaim-entry.c:318
+  Id   Target Id                                    Frame 
+* 1    Thread 0x7ffff7ca21c0 (LWP 390253) "fixture" la_cpu_pause () at /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/lj_atomic.h:140
+  2    Thread 0x7ffff792e6c0 (LWP 390256) "fixture" la_load32_acq (p=0x555555709438 <gc2_idle_reclaim_test_release>) at /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/lj_atomic.h:33

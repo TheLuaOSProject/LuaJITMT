@@ -1,0 +1,35 @@
+{
+  "command": [
+    "git",
+    "apply",
+    "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate-v1.patch"
+  ],
+  "runtime_inputs_verified": 225,
+  "changed": [
+    "src/lj_tab.c",
+    "src/lj_tab.h"
+  ],
+  "fixtures": {
+    "t-tab-scalar-next-progress.c": {
+      "target": "tests/t-tab-scalar-next-progress.c",
+      "source_sha256": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c",
+      "target_sha256": "f96f936cfee25626b99875cd554ab79d228fc94a83b520e20405ee4a262a2f7c"
+    },
+    "t-tab-scalar-next-authority-v6.c": {
+      "target": "tests/t-tab-scalar-next-authority.c",
+      "source_sha256": "c41766f91d08827e55b594597d3141217381b5b7ec58b6c881562302df6433e8",
+      "target_sha256": "c41766f91d08827e55b594597d3141217381b5b7ec58b6c881562302df6433e8"
+    },
+    "t-tab-scalar-next-stack-retry.c": {
+      "target": "tests/t-tab-scalar-next-stack-retry.c",
+      "source_sha256": "87190a00d79e1ff998930400eb1ec9eb3455ea1451d79478c100baf5b3142d24",
+      "target_sha256": "87190a00d79e1ff998930400eb1ec9eb3455ea1451d79478c100baf5b3142d24"
+    },
+    "t-tab-scalar-next-lifetime.c": {
+      "target": "tests/t-tab-scalar-next-lifetime.c",
+      "source_sha256": "e95ba8b4c5a788af6a109992e6f474398f3bcb637486e06643c1fa67428242fa",
+      "target_sha256": "a577de929b8fbfe85121d7cff0d940e311413b009ec5d990d9e9d61ae2bfa79b"
+    }
+  },
+  "note": "Permanent authority filename drops the evidence-generation suffix; lifetime fixture changes only its include name and introductory comment."
+}

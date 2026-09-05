@@ -1,0 +1,22 @@
+/tmp/lj-scalar-next-combined-20260905-ufftrr0s/results-asan/authority: \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/fixtures/t-tab-scalar-next-authority-v6.c \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lua.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/luaconf.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lauxlib.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lualib.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/luajit.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_arena.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_def.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_atomic.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_gc2token.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_gc.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_obj.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_arch.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_tgregistry.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_tgslot.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_gc2.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_state.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_tab.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_tg.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_bc.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_ctype.h

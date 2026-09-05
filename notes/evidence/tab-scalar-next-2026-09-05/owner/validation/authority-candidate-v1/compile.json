@@ -1,0 +1,43 @@
+{
+  "command": [
+    "cc",
+    "-std=gnu11",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-mcx16",
+    "-DLUA_USE_APICHECK",
+    "-DLUA_USE_ASSERT",
+    "-DLJ_FUNC_TEST_HELPERS",
+    "-DLJ_GC2_TEST_HELPERS",
+    "-DLJ_TAB_TEST_HELPERS",
+    "-DLJ_ARENA_TEST_HELPERS",
+    "-DLJ_TRACE_TEST_HELPERS",
+    "-DLJ_XSAVE_TEST_HELPERS",
+    "-MMD",
+    "-MF",
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v1/deps.d",
+    "-I/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src",
+    "-I/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures",
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority.c",
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/libluajit.a",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-o",
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation/authority-candidate-v1/fixture"
+  ],
+  "cwd": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn",
+  "seconds": 0.060038134004571475,
+  "exit": 1,
+  "stdout": "",
+  "stderr": "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority.c: In function \u2018bounds_cases\u2019:\n/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority.c:227:16: error: \u2018TABARRAY_RETIRED\u2019 undeclared (first use in this function)\n  227 |   hdr->acap |= TABARRAY_RETIRED; assert(probe(L, &idx) == -2); hdr->acap = acap;\n      |                ^~~~~~~~~~~~~~~~\n/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority.c:227:16: note: each undeclared identifier is reported only once for each function it appears in\n",
+  "inputs": {
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/validation-driver.py": "a4e61991f86a622fada72b8129012bda487b58dc116d1c3103ddda690dbc7103",
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/fixtures/t-tab-scalar-next-authority.c": "4bf1aa71252c1e7008c0e6dd75b5eed3d44b84ee1ce38a43087a75f4266f39c0",
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/candidate/src/libluajit.a": "6c515f2b05eac154f41c2d7cd044341167e67cc01a5cf7be117ec5512098a671",
+    "/tmp/lj-idle-scalar-next-20260905-zsvtsqsn/source-identity.json": "40ad7d1ee612ae432ea35c61fedfb5d941e2598c04289517de3034c5d1169856"
+  }
+}

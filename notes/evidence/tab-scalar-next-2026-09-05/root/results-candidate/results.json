@@ -1,0 +1,84 @@
+[
+  {
+    "name": "stock-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-3",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-joff",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/tests/stock/test",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 60,
+    "exit": 0,
+    "seconds": 1.4182269650045782
+  },
+  {
+    "name": "stock-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-3",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-jon",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/tests/stock/test",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 60,
+    "exit": 0,
+    "seconds": 1.8695853120007087
+  },
+  {
+    "name": "generational-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-3",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/tests/t-gc-generational-mode.lua"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.01609286000166321
+  },
+  {
+    "name": "generational-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-3",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/tests/t-gc-generational-mode.lua"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate",
+    "test": true,
+    "expected_exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/candidate/tests/lib/?.lua;;"
+    },
+    "timeout_seconds": 20,
+    "exit": 0,
+    "seconds": 0.01566648700099904
+  }
+]
