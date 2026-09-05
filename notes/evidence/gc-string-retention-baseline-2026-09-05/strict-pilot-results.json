@@ -1,0 +1,75 @@
+[
+  {
+    "exit_code": 0,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/t-string-retention.c",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-retention"
+    ],
+    "case": "compile",
+    "cwd": "/tmp/lj-string-retention-baseline-20260905-424nvcfy",
+    "seconds": 0.16392045100292307,
+    "stdout": "strict-pilot-compile.stdout",
+    "stderr": "strict-pilot-compile.stderr"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-retention",
+      "1",
+      "0",
+      "0",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/peer-control.lua"
+    ],
+    "case": "1-0-0",
+    "cwd": "/tmp/lj-string-retention-baseline-20260905-424nvcfy",
+    "seconds": 0.03152212100030738,
+    "stdout": "strict-pilot-1-0-0.stdout",
+    "stderr": "strict-pilot-1-0-0.stderr"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-retention",
+      "1",
+      "1",
+      "2",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/peer-control.lua"
+    ],
+    "case": "1-1-2",
+    "cwd": "/tmp/lj-string-retention-baseline-20260905-424nvcfy",
+    "seconds": 0.0636487150004541,
+    "stdout": "strict-pilot-1-1-2.stdout",
+    "stderr": "strict-pilot-1-1-2.stderr"
+  },
+  {
+    "exit_code": -6,
+    "argv": [
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-retention",
+      "0",
+      "0",
+      "0",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/peer-control.lua"
+    ],
+    "case": "0-0-0",
+    "cwd": "/tmp/lj-string-retention-baseline-20260905-424nvcfy",
+    "seconds": 0.21406217700132402,
+    "stdout": "strict-pilot-0-0-0.stdout",
+    "stderr": "strict-pilot-0-0-0.stderr"
+  }
+]

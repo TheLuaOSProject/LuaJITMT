@@ -1,0 +1,68 @@
+[
+  {
+    "argv": [
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/t-string-retention.c",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-trace"
+    ],
+    "cwd": "/tmp/lj-string-retention-baseline-20260905-424nvcfy",
+    "exit_code": 0,
+    "seconds": 0.26411741500123753,
+    "stdout": "asan-trace-compile.stdout",
+    "stderr": "asan-trace-compile.stderr",
+    "LUA_PATH": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan/src/?.lua;;",
+    "RETENTION_JIT": "1",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "argv": [
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-trace",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/trace-trigger-late.lua"
+    ],
+    "cwd": "/tmp/lj-string-retention-baseline-20260905-424nvcfy",
+    "exit_code": 2,
+    "seconds": 0.06380518700098037,
+    "stdout": "asan-trace-1-0.stdout",
+    "stderr": "asan-trace-1-0.stderr",
+    "LUA_PATH": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan/src/?.lua;;",
+    "RETENTION_JIT": "1",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "argv": [
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-trace",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/trace-trigger-late.lua"
+    ],
+    "cwd": "/tmp/lj-string-retention-baseline-20260905-424nvcfy",
+    "exit_code": 2,
+    "seconds": 0.06374362300266512,
+    "stdout": "asan-trace-1-2.stdout",
+    "stderr": "asan-trace-1-2.stderr",
+    "LUA_PATH": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan/src/?.lua;;",
+    "RETENTION_JIT": "1",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  }
+]

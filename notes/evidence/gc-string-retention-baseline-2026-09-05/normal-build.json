@@ -1,0 +1,37 @@
+{
+  "argv": [
+    "make",
+    "-C",
+    "src",
+    "-j4"
+  ],
+  "cwd": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal",
+  "exit_code": 0,
+  "seconds": 14.950147939001909,
+  "binaries": {
+    "luajit": {
+      "sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+      "bytes": 1514736
+    },
+    "libluajit.a": {
+      "sha256": "1522fb7d4c449fb2955e6d060f24f7b3d4a6d71ad7e29f1350065f303adb7cbb",
+      "bytes": 2352940
+    },
+    "libluajit.so": {
+      "sha256": "af8194bce5c1f056958b71e3ef66eefca2be66892e648a2391afdbc513848036",
+      "bytes": 1511160
+    },
+    "host/minilua": {
+      "sha256": "8ab7d5a14b0525e3759effc570de0f02965b5618600fbfe15499924a399f1538",
+      "bytes": 154760
+    },
+    "host/buildvm": {
+      "sha256": "25e60faa6ce6116c437801080e19b9b46355243233dcca44851a9532fabbe44c",
+      "bytes": 122336
+    },
+    "lj_str.o": {
+      "sha256": "b163f488d802afe43613dcf7477e38a175680b5888e251f91cd9cd21eade5b39",
+      "bytes": 26200
+    }
+  }
+}

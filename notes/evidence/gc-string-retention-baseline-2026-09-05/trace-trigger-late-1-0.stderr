@@ -1,0 +1,1 @@
+strict-burst-retention: /tmp/lj-string-retention-baseline-20260905-424nvcfy/t-string-retention.c:291: main: Assertion `recovered.strings <= base.strings' failed.

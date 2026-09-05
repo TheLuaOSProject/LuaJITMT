@@ -1,0 +1,32 @@
+[
+  {
+    "argv": [
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-retention",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/trace-trigger-late.lua"
+    ],
+    "exit_code": 2,
+    "seconds": 0.03171370599739021,
+    "RETENTION_JIT": "1",
+    "LUA_PATH": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict/src/?.lua;;",
+    "fixture_sha256": "c4c9339d80586a5b2f637230d6d7d10ddb39099ba3bf0174a4738b4286379a4c",
+    "lua_sha256": "044388d04353b24b2ab1ec939bba7daa94bafcac9028c08fed19db70068f119a"
+  },
+  {
+    "argv": [
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-retention",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/trace-trigger-late.lua"
+    ],
+    "exit_code": -6,
+    "seconds": 0.11370087400064222,
+    "RETENTION_JIT": "1",
+    "LUA_PATH": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict/src/?.lua;;",
+    "fixture_sha256": "c4c9339d80586a5b2f637230d6d7d10ddb39099ba3bf0174a4738b4286379a4c",
+    "lua_sha256": "044388d04353b24b2ab1ec939bba7daa94bafcac9028c08fed19db70068f119a"
+  }
+]

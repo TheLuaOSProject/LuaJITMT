@@ -1,0 +1,18 @@
+{
+  "t-string-retention-recovery.c": {
+    "sha256": "502686c89266dc8abdd04dcae5a3558ee8d4a63ff8fe52c85448e5402bc2fae5",
+    "bytes": 12594
+  },
+  "peer-control.lua": {
+    "sha256": "519ebf714b0a33b9a436d3452a153a1bc3eea3322ebf0bf74d8e76fea4ab8cb2",
+    "bytes": 1756
+  },
+  "normal-recovery": {
+    "sha256": "e548bc8b5e6945e46f6333ce33a697f7b764224d22db58391ca95ae9c3807a2e",
+    "bytes": 1748000
+  },
+  "normal/src/libluajit.a": {
+    "sha256": "1522fb7d4c449fb2955e6d060f24f7b3d4a6d71ad7e29f1350065f303adb7cbb",
+    "bytes": 2352940
+  }
+}

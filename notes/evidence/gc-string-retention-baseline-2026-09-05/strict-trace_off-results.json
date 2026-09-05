@@ -1,0 +1,63 @@
+[
+  {
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/t-string-retention.c",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-trace_off"
+    ],
+    "cwd": "/tmp/lj-string-retention-baseline-20260905-424nvcfy",
+    "exit_code": 0,
+    "seconds": 0.16426881499864976,
+    "stdout": "strict-trace_off-compile.stdout",
+    "stderr": "strict-trace_off-compile.stderr",
+    "LUA_PATH": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "argv": [
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-trace_off",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/trace-trigger-late.lua"
+    ],
+    "cwd": "/tmp/lj-string-retention-baseline-20260905-424nvcfy",
+    "exit_code": 2,
+    "seconds": 0.03183933099717251,
+    "stdout": "strict-trace_off-1-0.stdout",
+    "stderr": "strict-trace_off-1-0.stderr",
+    "LUA_PATH": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "argv": [
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-trace_off",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/trace-trigger-late.lua"
+    ],
+    "cwd": "/tmp/lj-string-retention-baseline-20260905-424nvcfy",
+    "exit_code": 2,
+    "seconds": 0.03170088799743098,
+    "stdout": "strict-trace_off-1-2.stdout",
+    "stderr": "strict-trace_off-1-2.stderr",
+    "LUA_PATH": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  }
+]

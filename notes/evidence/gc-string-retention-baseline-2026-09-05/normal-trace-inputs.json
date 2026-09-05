@@ -1,0 +1,18 @@
+{
+  "t-string-retention.c": {
+    "sha256": "2e8e840fb4ba3a3b09168c06d828ff10ebafd41e9ff555b9737f34384fea3cf9",
+    "bytes": 12128
+  },
+  "trace-trigger-late.lua": {
+    "sha256": "044388d04353b24b2ab1ec939bba7daa94bafcac9028c08fed19db70068f119a",
+    "bytes": 1470
+  },
+  "normal-trace": {
+    "sha256": "be38ad8d79b4d22fa4a6f5818d71ad1cb14356cf5fb3bd0abe8d3c695ad6e1e8",
+    "bytes": 1747920
+  },
+  "normal/src/libluajit.a": {
+    "sha256": "1522fb7d4c449fb2955e6d060f24f7b3d4a6d71ad7e29f1350065f303adb7cbb",
+    "bytes": 2352940
+  }
+}

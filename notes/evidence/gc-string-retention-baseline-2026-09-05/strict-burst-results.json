@@ -1,0 +1,83 @@
+[
+  {
+    "exit_code": 0,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/t-string-retention.c",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-retention"
+    ],
+    "case": "compile",
+    "cwd": "/tmp/lj-string-retention-baseline-20260905-424nvcfy",
+    "seconds": 0.16407392399923992,
+    "stdout": "strict-burst-compile.stdout",
+    "stderr": "strict-burst-compile.stderr",
+    "LUA_PATH": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 2,
+    "argv": [
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-retention",
+      "0",
+      "0",
+      "2",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/peer-control.lua"
+    ],
+    "case": "0-0-2",
+    "cwd": "/tmp/lj-string-retention-baseline-20260905-424nvcfy",
+    "seconds": 3.120210686000064,
+    "stdout": "strict-burst-0-0-2.stdout",
+    "stderr": "strict-burst-0-0-2.stderr",
+    "LUA_PATH": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 2,
+    "argv": [
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-retention",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/peer-control.lua"
+    ],
+    "case": "0-1-2",
+    "cwd": "/tmp/lj-string-retention-baseline-20260905-424nvcfy",
+    "seconds": 1.468868621999718,
+    "stdout": "strict-burst-0-1-2.stdout",
+    "stderr": "strict-burst-0-1-2.stderr",
+    "LUA_PATH": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-retention",
+      "1",
+      "0",
+      "0",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/peer-control.lua"
+    ],
+    "case": "1-0-0",
+    "cwd": "/tmp/lj-string-retention-baseline-20260905-424nvcfy",
+    "seconds": 0.03203076499994495,
+    "stdout": "strict-burst-1-0-0.stdout",
+    "stderr": "strict-burst-1-0-0.stderr",
+    "LUA_PATH": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  }
+]

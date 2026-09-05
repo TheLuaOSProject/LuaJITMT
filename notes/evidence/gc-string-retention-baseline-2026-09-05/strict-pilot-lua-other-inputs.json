@@ -1,0 +1,18 @@
+{
+  "strict-pilot-lua-other-retention": {
+    "sha256": "f068386e6de8262d9b1fe5df1f9ad1c34b39c506fdbbb7384a21cc78faa55cc8",
+    "bytes": 1988944
+  },
+  "t-string-retention.c": {
+    "sha256": "018a157ef1903f4c72fcf81c14b25eb809410e363609d29f6b9e37b455b8dd01",
+    "bytes": 9846
+  },
+  "peer-control.lua": {
+    "sha256": "e035a1509c8a9417529a0fe68188eedea71d5cd310fe7755618fd6d6c8d0772b",
+    "bytes": 1380
+  },
+  "libluajit.a": {
+    "sha256": "b5a9866f22fe0a17f4553e080db73b2c3eda2c30a7e3bcac9b1a18594e012650",
+    "bytes": 2863486
+  }
+}

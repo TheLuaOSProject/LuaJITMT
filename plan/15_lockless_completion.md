@@ -1,7 +1,7 @@
 # Lockless completion plan
 
 Reviewed: 2026-09-04, starting at `a649f737`.
-Updated: 2026-09-05 after guarded cdata reuse and restricted remote-root completion.
+Updated: 2026-09-05 after userdata guards/reuse and automatic-GC admission review.
 
 This is the operative continuation of the original plan. It preserves the
 requested end state: one shared Lua heap, safe ordinary racy Lua programs,
@@ -79,13 +79,13 @@ are verified reasons the full goal is still open:
 | --- | --- | --- |
 | Table resize | Structural owner plus source `FORWARD` can strand the only value in an owner's local variable; descriptor migration is dormant | Durable exact payloads, helpable migration/publication, GC and native grace |
 | Descriptor installation | Separate capacity-shadow store can corrupt a winning descriptor before the losing ownership CAS | Publish control and capacity in one atomic pair; deterministic competing-generation test |
-| Automatic GC | Allocation-driven MARK/root/sweep boundaries still execute synchronous handshakes | Persistent asynchronous phase requests and helper-owned completion |
+| Automatic GC | Interpreted allocation can leave a live-peer IDLE request unconsumed; admitted worker-enabled cycles can miss SWEEP completion bounds; phase boundaries still handshake synchronously | Consume durable requests at safe VM boundaries, preserve stop/restart, then complete asynchronous phase ownership and worker scheduling |
 | Native acknowledgement | Completed exact owner-root actions can release through the unique remote executor; local/duplicate and broader actions still hold | Replace mutable-root borrowing and retain exact completion authority; local native-depth polls can overlap a remote pre-claim scan |
 | First MT attachment | Mode-0 traces omitted the TG request poll and real attachment waited for natural exit | Every XPOLL now observes the TG request; the larger attachment/flush ownership dependencies still require asynchronous completion |
 | Worker scheduling | MARK-close ownership loss can be reported as progress and cause repeated drain-loop execution | Return/defer without false progress or peer sleep; preserve durable retry |
 | GC work per mutation | Public SWEEP barriers can repeatedly queue an entire growing table; traversal charges a whole vector as one work unit | Prove redundant barrier elision, bound traversal by slots/bytes, and measure full-suite phase/history amplification |
 | Table scan authority exhaustion | A long-lived table's 32-bit dirty counter saturated into a permanent universe-wide reclamation veto | Persistent wide promotion now preserves collection through that rollover; retain full-namespace containment and current cycle-namespace limits |
-| Strings | Physical body reclamation requires explicit collection by the sole main TG with no GC workers | Concurrent canonicalization, unlink, and eventual body reclamation |
+| Strings | Physical body reclamation requires sole-main explicit collection without GC workers; peer/worker cases retain 24,576 dropped bodies through 12 completed cycles | Concurrent canonicalization, unlink, and eventual body reclamation; preserve existing exclusion until replacement lifetime proof is complete |
 | String interning | Header resize claim waits for pinned readers and blocks entrants | Immutable successor topology and helpable publication |
 | Marking/JIT overlap | One worker token serializes tracing; each mark quantum excludes every active `jit_base` | Parallel mark ownership plus certified concurrent native/JIT roots |
 | CType state | General FFI readers wait for the parser sequence, including existing user-defined types | Private parser transactions with immutable committed versions |
@@ -304,6 +304,14 @@ controls and post-fix completion tests:
   improve about 40% for namespaces and 54% for file/buffer; captured receiver
   loops remain excluded and variable file costs remain unexplained. See
   `notes/jit-udata-pure-2026-09-05.md`.
+- The isolated string baseline separates completed-cycle retention from missing
+  automatic progress. Persistent peers or workers retain 2,457,600 string-body
+  bytes through 12 explicit completed cycles; sole-main cleanup reclaims them.
+  Interpreted allocation can strand a published IDLE request behind the child
+  lifetime threshold, while trace completion or last-child detach provides a
+  different entrance. Worker-enabled SWEEP completion remains separately open.
+  All incomplete cases and counterexamples are preserved. See
+  `notes/gc-string-retention-baseline-2026-09-05.md`.
 - `1bce0fa5`: promote exhausted inline table dirty authority into pre-reserved
   persistent wide proof, retaining common stamp/token geometry. Small mappings
   use a dense sidecar plane and Huge mappings use checked tail reservation.

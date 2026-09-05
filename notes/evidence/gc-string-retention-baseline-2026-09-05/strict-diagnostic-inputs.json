@@ -1,0 +1,18 @@
+{
+  "strict-diagnostic-retention": {
+    "sha256": "cb19bab8f1d192a3761f8a96a66111cab21713df25af4db5ec421da1463b6e8e",
+    "bytes": 1993496
+  },
+  "t-string-retention.c": {
+    "sha256": "38458cad7a10787754330b2c612ce45be4576b3d268d4e88d1078a10c4be2522",
+    "bytes": 11127
+  },
+  "peer-control.lua": {
+    "sha256": "e035a1509c8a9417529a0fe68188eedea71d5cd310fe7755618fd6d6c8d0772b",
+    "bytes": 1380
+  },
+  "libluajit.a": {
+    "sha256": "b5a9866f22fe0a17f4553e080db73b2c3eda2c30a7e3bcac9b1a18594e012650",
+    "bytes": 2863486
+  }
+}

@@ -1,0 +1,61 @@
+[
+  {
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal/src",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/t-string-retention-recovery.c",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-recovery"
+    ],
+    "cwd": "/tmp/lj-string-retention-baseline-20260905-424nvcfy",
+    "exit_code": 0,
+    "seconds": 0.1639288240003225,
+    "stdout": "normal-recovery-compile.stdout",
+    "stderr": "normal-recovery-compile.stderr",
+    "LUA_PATH": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "argv": [
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-recovery",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/peer-control.lua"
+    ],
+    "cwd": "/tmp/lj-string-retention-baseline-20260905-424nvcfy",
+    "exit_code": 0,
+    "seconds": 1.5660741240026255,
+    "stdout": "normal-recovery-1-0.stdout",
+    "stderr": "normal-recovery-1-0.stderr",
+    "LUA_PATH": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "argv": [
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-recovery",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/peer-control.lua"
+    ],
+    "cwd": "/tmp/lj-string-retention-baseline-20260905-424nvcfy",
+    "exit_code": 0,
+    "seconds": 1.5673793739988469,
+    "stdout": "normal-recovery-1-2.stdout",
+    "stderr": "normal-recovery-1-2.stderr",
+    "LUA_PATH": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  }
+]

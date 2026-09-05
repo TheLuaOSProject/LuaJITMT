@@ -1,0 +1,60 @@
+[
+  {
+    "exit_code": 0,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/t-string-retention.c",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-diagnostic-retention"
+    ],
+    "case": "compile",
+    "cwd": "/tmp/lj-string-retention-baseline-20260905-424nvcfy",
+    "seconds": 0.1641582339980232,
+    "stdout": "strict-diagnostic-compile.stdout",
+    "stderr": "strict-diagnostic-compile.stderr"
+  },
+  {
+    "exit_code": -6,
+    "argv": [
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-diagnostic-retention",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/peer-control.lua"
+    ],
+    "case": "0-1-2",
+    "cwd": "/tmp/lj-string-retention-baseline-20260905-424nvcfy",
+    "seconds": 0.4142581350024557,
+    "stdout": "strict-diagnostic-0-1-2.stdout",
+    "stderr": "strict-diagnostic-0-1-2.stderr"
+  },
+  {
+    "exit_code": -6,
+    "argv": [
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-diagnostic-retention",
+      "0",
+      "0",
+      "2",
+      "/tmp/lj-string-retention-baseline-20260905-424nvcfy/peer-control.lua"
+    ],
+    "case": "0-0-2",
+    "cwd": "/tmp/lj-string-retention-baseline-20260905-424nvcfy",
+    "seconds": 1.3155597789991589,
+    "stdout": "strict-diagnostic-0-0-2.stdout",
+    "stderr": "strict-diagnostic-0-0-2.stderr"
+  }
+]

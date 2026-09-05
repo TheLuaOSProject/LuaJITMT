@@ -1,0 +1,2095 @@
+{
+  "head": "e34282576c7df0180e8113a4cfba07fd637a36b3",
+  "package": "/tmp/lj-string-retention-baseline-20260905-424nvcfy",
+  "artifacts": [
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/HANDOFF.md",
+      "relative_path": "HANDOFF.md",
+      "sha256": "935ff4167334f768f23e9f7e09d995958bfa72dda513e9ac8faa343acb087526",
+      "bytes": 14826,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/archive.py",
+      "relative_path": "archive.py",
+      "sha256": "a0f067422ce4b2a89402dcc1e0db6bd04bdb2e87defb10dca0e0fbc5b1c5d306",
+      "bytes": 2828,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan/src/host/buildvm",
+      "relative_path": "asan/src/host/buildvm",
+      "sha256": "2c94acf59ad1537021b71d551f7323e42f501561b15894707894ef7f78e599b4",
+      "bytes": 246896,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan/src/host/minilua",
+      "relative_path": "asan/src/host/minilua",
+      "sha256": "0eacc47db0da85a1a453d673ab8f7c6ad6aea37cd6c6a335d5736972637be683",
+      "bytes": 550936,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan/src/libluajit.a",
+      "relative_path": "asan/src/libluajit.a",
+      "sha256": "5801526d0845b07b0cd4adb375bfbd5ed3c6682e0432386b7e3537f19476611d",
+      "bytes": 26643776,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan/src/lj_str.o",
+      "relative_path": "asan/src/lj_str.o",
+      "sha256": "bd4ad5f093bd24ae3d2481c7763d2edff501885410786b08ace7473222817acb",
+      "bytes": 381680,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan/src/luajit",
+      "relative_path": "asan/src/luajit",
+      "sha256": "acab2d2fa6b963e6876c8c84b00fd68956dee070e50b835979daa7e23cf17706",
+      "bytes": 19471304,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-0-0-0.stderr",
+      "relative_path": "asan-0-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-0-0-0.stdout",
+      "relative_path": "asan-0-0-0.stdout",
+      "sha256": "7c23205efc9d0afc5627a8d0870779c54df3787fc6a04073fc199c5fb820c7c0",
+      "bytes": 11430,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-0-0-2.stderr",
+      "relative_path": "asan-0-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-0-0-2.stdout",
+      "relative_path": "asan-0-0-2.stdout",
+      "sha256": "4dc848f64bcc01a22fb9b0ff66235af5967d71213b549356b781683e22bf8aa9",
+      "bytes": 3416,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-0-1-0.stderr",
+      "relative_path": "asan-0-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-0-1-0.stdout",
+      "relative_path": "asan-0-1-0.stdout",
+      "sha256": "eb77d54b1f086c5138fe89f5066d62078b554266982ec5523dfc9ef64cdaf1f5",
+      "bytes": 3439,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-0-1-2.stderr",
+      "relative_path": "asan-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-0-1-2.stdout",
+      "relative_path": "asan-0-1-2.stdout",
+      "sha256": "d0bae343cbf87f82faca7845a8a24202b06dd762af8bde31deb6a39acdf5c888",
+      "bytes": 3447,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-1-0-0.stderr",
+      "relative_path": "asan-1-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-1-0-0.stdout",
+      "relative_path": "asan-1-0-0.stdout",
+      "sha256": "a688dead4262aa5672e3d7b25c332fe429e1ae55dee123cfd16a6f7aaa9574b5",
+      "bytes": 11330,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-1-0-2.stderr",
+      "relative_path": "asan-1-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-1-0-2.stdout",
+      "relative_path": "asan-1-0-2.stdout",
+      "sha256": "555a905d159860ede40c916a7151bc65bbf63a4e999ee4dc502199daf4eaf15e",
+      "bytes": 11367,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-1-1-0.stderr",
+      "relative_path": "asan-1-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-1-1-0.stdout",
+      "relative_path": "asan-1-1-0.stdout",
+      "sha256": "1aa26d8ee6e8196ce3f8e4292c345bdcea9c409111d4a3d4ff9d36fe9904b095",
+      "bytes": 11511,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-1-1-2.stderr",
+      "relative_path": "asan-1-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-1-1-2.stdout",
+      "relative_path": "asan-1-1-2.stdout",
+      "sha256": "9077d402d77031f33eb88c118870667f8e3d7e3fdeef362706fc8d50ed5683ec",
+      "bytes": 11555,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-build.json",
+      "relative_path": "asan-build.json",
+      "sha256": "8e47e46dcaadc18b238611c2cf6fe3ded825179bdc29e1e423c9049ae762cd96",
+      "bytes": 1145,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-build.stderr",
+      "relative_path": "asan-build.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-build.stdout",
+      "relative_path": "asan-build.stdout",
+      "sha256": "824c006a2a600be6ccc1bb5025f3d52327c4047259de358ef35adab053d68a88",
+      "bytes": 2325,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-compile.stderr",
+      "relative_path": "asan-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-compile.stdout",
+      "relative_path": "asan-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-inputs.json",
+      "relative_path": "asan-inputs.json",
+      "sha256": "09fb36340c6331a346541f85a1b237d57a8eba6492136d5b5c28535069f9ff1d",
+      "bytes": 525,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-recovery",
+      "relative_path": "asan-recovery",
+      "sha256": "df8a18dc83dfc7b8993b9cb9276164fe8c34c57ef1581354515a17f8dda5547b",
+      "bytes": 19468272,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-recovery-1-0.stderr",
+      "relative_path": "asan-recovery-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-recovery-1-0.stdout",
+      "relative_path": "asan-recovery-1-0.stdout",
+      "sha256": "4b65d9b8ef45b444a4d5f3a19d2fb8e723953819ab613936d1e2cc3e4aab2c93",
+      "bytes": 5971,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-recovery-1-2.stderr",
+      "relative_path": "asan-recovery-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-recovery-1-2.stdout",
+      "relative_path": "asan-recovery-1-2.stdout",
+      "sha256": "524c6e59fdee3b6042a508539c5f02fce17254a848120c76ba6be8997f5433da",
+      "bytes": 5985,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-recovery-compile.stderr",
+      "relative_path": "asan-recovery-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-recovery-compile.stdout",
+      "relative_path": "asan-recovery-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-recovery-inputs.json",
+      "relative_path": "asan-recovery-inputs.json",
+      "sha256": "ccbb9ccfd601e5307a1f8983a298dee8a9637fb85710143ee142ceaf8e8578c9",
+      "bytes": 542,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-recovery-results.json",
+      "relative_path": "asan-recovery-results.json",
+      "sha256": "88c80d0bfd31f8bab3b7f4cece88da3257235663b6f985072a09388ce09b3fc1",
+      "bytes": 2205,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-results.json",
+      "relative_path": "asan-results.json",
+      "sha256": "e16b68dbbaccd977defd2c94c2974eb1a9510722b2fdab53e7614f216089d11b",
+      "bytes": 5796,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-retention",
+      "relative_path": "asan-retention",
+      "sha256": "d2755b4014278ca37fe381d51392eef687fb64ca525148e48bd1aa195fb9929b",
+      "bytes": 19466992,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-trace",
+      "relative_path": "asan-trace",
+      "sha256": "d2755b4014278ca37fe381d51392eef687fb64ca525148e48bd1aa195fb9929b",
+      "bytes": 19466992,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-trace-1-0.stderr",
+      "relative_path": "asan-trace-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-trace-1-0.stdout",
+      "relative_path": "asan-trace-1-0.stdout",
+      "sha256": "e0e99c9c1b26edfcfb3a8ef1a42440a2d82a57d7ec92619be9eba5bce0bef080",
+      "bytes": 3414,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-trace-1-2.stderr",
+      "relative_path": "asan-trace-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-trace-1-2.stdout",
+      "relative_path": "asan-trace-1-2.stdout",
+      "sha256": "673633ea0eaa95c9decfb607b61cc5964bcbdfce2d5c55d5dcd2240196e16d58",
+      "bytes": 3417,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-trace-compile.stderr",
+      "relative_path": "asan-trace-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-trace-compile.stdout",
+      "relative_path": "asan-trace-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-trace-inputs.json",
+      "relative_path": "asan-trace-inputs.json",
+      "sha256": "ac5af04e8004a5903fdd043610acec5e015757ecad51e9e7a89e176375e463c2",
+      "bytes": 536,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan-trace-results.json",
+      "relative_path": "asan-trace-results.json",
+      "sha256": "4df4962c0b35e93e424251861b324964e9845c0eda3df6f82e2d1c8b68fa00db",
+      "bytes": 2185,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/bounded-input/peer-control.lua",
+      "relative_path": "bounded-input/peer-control.lua",
+      "sha256": "589ae45f77e81864ac7920889cfa2f644c3d276775d54981897fe97029de0036",
+      "bytes": 1504,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/bounded-input/run.py",
+      "relative_path": "bounded-input/run.py",
+      "sha256": "7faa11320525a587be54fa95ca08de6fca7a1c8c7544cecf32c50be19fc68dcb",
+      "bytes": 2526,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/bounded-input/t-string-retention.c",
+      "relative_path": "bounded-input/t-string-retention.c",
+      "sha256": "97a42e4dbf027279ce8e74de3d33757744b23ee86e5d41d88074395166d8c3c9",
+      "bytes": 12153,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/build.py",
+      "relative_path": "build.py",
+      "sha256": "6dd574f6b4c72df027cc49e125bbfab6914ed1dca68e920f46d4932cfb62989b",
+      "bytes": 1453,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/buildvm-asan-symbols.txt",
+      "relative_path": "buildvm-asan-symbols.txt",
+      "sha256": "3587c33cb31bf515911bc51fb12ce27ec9c2b14966db04b9004d464871035e5e",
+      "bytes": 1405,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/burst-input/peer-control.lua",
+      "relative_path": "burst-input/peer-control.lua",
+      "sha256": "519ebf714b0a33b9a436d3452a153a1bc3eea3322ebf0bf74d8e76fea4ab8cb2",
+      "bytes": 1756,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/burst-input/run.py",
+      "relative_path": "burst-input/run.py",
+      "sha256": "9b0ffd320bc893c11fa57b275b0048add45096e01fd15347af0857bb13be1a40",
+      "bytes": 2627,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/burst-input/t-string-retention.c",
+      "relative_path": "burst-input/t-string-retention.c",
+      "sha256": "9403fef7795ef28637ca68dc6399002e19a9666717dcfcd90ce61d9eaaa24f17",
+      "bytes": 12118,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/diagnostic-input/peer-control.lua",
+      "relative_path": "diagnostic-input/peer-control.lua",
+      "sha256": "e035a1509c8a9417529a0fe68188eedea71d5cd310fe7755618fd6d6c8d0772b",
+      "bytes": 1380,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/diagnostic-input/run.py",
+      "relative_path": "diagnostic-input/run.py",
+      "sha256": "7faa11320525a587be54fa95ca08de6fca7a1c8c7544cecf32c50be19fc68dcb",
+      "bytes": 2526,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/diagnostic-input/t-string-retention.c",
+      "relative_path": "diagnostic-input/t-string-retention.c",
+      "sha256": "38458cad7a10787754330b2c612ce45be4576b3d268d4e88d1078a10c4be2522",
+      "bytes": 11127,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/environment.txt",
+      "relative_path": "environment.txt",
+      "sha256": "63f90e261aa7a52131ecd77b517507d0411e951faf2b6f244d241532db3dfa02",
+      "bytes": 462,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/extra.py",
+      "relative_path": "extra.py",
+      "sha256": "d2195f7083f51d7b10d86dfb37baa999a0f17c591131b06b49360fee60e3bc98",
+      "bytes": 2311,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/final-source-verification.json",
+      "relative_path": "final-source-verification.json",
+      "sha256": "2ed450c6d279e5c2816b4b2e15ba95f1f1ec7e7ce58f2545829b26a32134d4ce",
+      "bytes": 811,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/lj_str.o-asan-symbols.txt",
+      "relative_path": "lj_str.o-asan-symbols.txt",
+      "sha256": "e7ad288d03ee45c48f3a4cf948f12d780f96911514e5b70f80a43882ee185aac",
+      "bytes": 1877,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/minilua-asan-symbols.txt",
+      "relative_path": "minilua-asan-symbols.txt",
+      "sha256": "bdcd228904518052af6d448663e2452b8efc01290f5ab6ee9bc5f1cf5c46a65d",
+      "bytes": 2046,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal/src/host/buildvm",
+      "relative_path": "normal/src/host/buildvm",
+      "sha256": "25e60faa6ce6116c437801080e19b9b46355243233dcca44851a9532fabbe44c",
+      "bytes": 122336,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal/src/host/minilua",
+      "relative_path": "normal/src/host/minilua",
+      "sha256": "8ab7d5a14b0525e3759effc570de0f02965b5618600fbfe15499924a399f1538",
+      "bytes": 154760,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal/src/libluajit.a",
+      "relative_path": "normal/src/libluajit.a",
+      "sha256": "1522fb7d4c449fb2955e6d060f24f7b3d4a6d71ad7e29f1350065f303adb7cbb",
+      "bytes": 2352940,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal/src/libluajit.so",
+      "relative_path": "normal/src/libluajit.so",
+      "sha256": "af8194bce5c1f056958b71e3ef66eefca2be66892e648a2391afdbc513848036",
+      "bytes": 1511160,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal/src/lj_str.o",
+      "relative_path": "normal/src/lj_str.o",
+      "sha256": "b163f488d802afe43613dcf7477e38a175680b5888e251f91cd9cd21eade5b39",
+      "bytes": 26200,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal/src/luajit",
+      "relative_path": "normal/src/luajit",
+      "sha256": "4f447e897e0be388cca48c6cbb218f2245289442f77c0af96a82ce77cd83de1a",
+      "bytes": 1514736,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-0-0-0.stderr",
+      "relative_path": "normal-0-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-0-0-0.stdout",
+      "relative_path": "normal-0-0-0.stdout",
+      "sha256": "eaf83b3c0066659b85d2b4e87fac908205fe1369b73c82c422702c07739e20ac",
+      "bytes": 11430,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-0-0-2.stderr",
+      "relative_path": "normal-0-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-0-0-2.stdout",
+      "relative_path": "normal-0-0-2.stdout",
+      "sha256": "1219c8e2c036f154d0cb31445afb38997383238498a62710453681e6ac5d2b6c",
+      "bytes": 3416,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-0-1-0.stderr",
+      "relative_path": "normal-0-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-0-1-0.stdout",
+      "relative_path": "normal-0-1-0.stdout",
+      "sha256": "cb119b5d6bb6ca5519c7a18e60759c827148d7eb65f4074479cbc6ee35cb352f",
+      "bytes": 3439,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-0-1-2.stderr",
+      "relative_path": "normal-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-0-1-2.stdout",
+      "relative_path": "normal-0-1-2.stdout",
+      "sha256": "5272ede1ea30e8ba3af7e56335ccfa95a9ffd69bc75837777f7c06a3f45bb62a",
+      "bytes": 3447,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-1-0-0.stderr",
+      "relative_path": "normal-1-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-1-0-0.stdout",
+      "relative_path": "normal-1-0-0.stdout",
+      "sha256": "cee08a73cac758f490065877919ae6ccc47bafacf89e15a173102cec41fe24a4",
+      "bytes": 11330,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-1-0-2.stderr",
+      "relative_path": "normal-1-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-1-0-2.stdout",
+      "relative_path": "normal-1-0-2.stdout",
+      "sha256": "add71ab52dc7b9b4c6d2daf0401de760b5df429a4b1b69ee86b9ef1e16646b95",
+      "bytes": 11369,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-1-1-0.stderr",
+      "relative_path": "normal-1-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-1-1-0.stdout",
+      "relative_path": "normal-1-1-0.stdout",
+      "sha256": "92f18a92741984fa9daffd51bb85d1a83f4bb5ac6d4a4043c32121bf56945fbc",
+      "bytes": 11511,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-1-1-2.stderr",
+      "relative_path": "normal-1-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-1-1-2.stdout",
+      "relative_path": "normal-1-1-2.stdout",
+      "sha256": "4eb34cd0ecaa562c5e92624383b9cb8f97fceef43b3256c2472c9a66d5e8a640",
+      "bytes": 11547,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-build.json",
+      "relative_path": "normal-build.json",
+      "sha256": "2a93228bbc10e30c6cf1334a7ddd1b10893b48bcd5332c0aba4417871b9872ee",
+      "bytes": 1006,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-build.stderr",
+      "relative_path": "normal-build.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-build.stdout",
+      "relative_path": "normal-build.stdout",
+      "sha256": "71994ade8652c356d2ca31904f51161f7c6ac90f0263a26929be7ef122465225",
+      "bytes": 4301,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-compile.stderr",
+      "relative_path": "normal-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-compile.stdout",
+      "relative_path": "normal-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-inputs.json",
+      "relative_path": "normal-inputs.json",
+      "sha256": "c27bd5e21e6a3e8977b1be492bd23289c4b8275e77f7b16c3f80ae657f8894cb",
+      "bytes": 525,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-recovery",
+      "relative_path": "normal-recovery",
+      "sha256": "e548bc8b5e6945e46f6333ce33a697f7b764224d22db58391ca95ae9c3807a2e",
+      "bytes": 1748000,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-recovery-1-0.stderr",
+      "relative_path": "normal-recovery-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-recovery-1-0.stdout",
+      "relative_path": "normal-recovery-1-0.stdout",
+      "sha256": "83bfc732ffb26c93a2d904b44fdab30df0a23492b5ec99accc5b530a213301c4",
+      "bytes": 5971,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-recovery-1-2.stderr",
+      "relative_path": "normal-recovery-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-recovery-1-2.stdout",
+      "relative_path": "normal-recovery-1-2.stdout",
+      "sha256": "c90382da131e296aa16526fc3b3fa62f628a7cc19b1e54e807413dfc7c2f1010",
+      "bytes": 5978,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-recovery-compile.stderr",
+      "relative_path": "normal-recovery-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-recovery-compile.stdout",
+      "relative_path": "normal-recovery-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-recovery-inputs.json",
+      "relative_path": "normal-recovery-inputs.json",
+      "sha256": "29b7853a4f96aa42b3e4416532fffb9134964f886268255a44c9ea1a1db6f03f",
+      "bytes": 544,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-recovery-results.json",
+      "relative_path": "normal-recovery-results.json",
+      "sha256": "c67d6ba9bb0c1d68568c26a8a408e09aead7fdbac5660a0a3ee43308299346cd",
+      "bytes": 1951,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-results.json",
+      "relative_path": "normal-results.json",
+      "sha256": "f4e25cc88f1ca95c47cb7ae8d027a9fcb20c3ed915615ba88d596d195dccbce4",
+      "bytes": 5263,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-retention",
+      "relative_path": "normal-retention",
+      "sha256": "be38ad8d79b4d22fa4a6f5818d71ad1cb14356cf5fb3bd0abe8d3c695ad6e1e8",
+      "bytes": 1747920,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-trace",
+      "relative_path": "normal-trace",
+      "sha256": "be38ad8d79b4d22fa4a6f5818d71ad1cb14356cf5fb3bd0abe8d3c695ad6e1e8",
+      "bytes": 1747920,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-trace-1-0.stderr",
+      "relative_path": "normal-trace-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-trace-1-0.stdout",
+      "relative_path": "normal-trace-1-0.stdout",
+      "sha256": "3b32bff3978b15ce91600dbb757721797fab14c559fc7bc1acb27f8f60e3a335",
+      "bytes": 3414,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-trace-1-2.stderr",
+      "relative_path": "normal-trace-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-trace-1-2.stdout",
+      "relative_path": "normal-trace-1-2.stdout",
+      "sha256": "1e1e9408ae798713dbd6fafcd9a3f703248cf17443282c75fb0e53d38f1979e5",
+      "bytes": 3420,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-trace-compile.stderr",
+      "relative_path": "normal-trace-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-trace-compile.stdout",
+      "relative_path": "normal-trace-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-trace-inputs.json",
+      "relative_path": "normal-trace-inputs.json",
+      "sha256": "cf0c3563d97b8f17286731ebb60b0f97fdea41242b36f69370e92d843a283b92",
+      "bytes": 538,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/normal-trace-results.json",
+      "relative_path": "normal-trace-results.json",
+      "sha256": "5cabc469a4babd967f09886691bd6ad7ac2569c09225258bfb00268f98910949",
+      "bytes": 1930,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/peer-control.lua",
+      "relative_path": "peer-control.lua",
+      "sha256": "519ebf714b0a33b9a436d3452a153a1bc3eea3322ebf0bf74d8e76fea4ab8cb2",
+      "bytes": 1756,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/pilot-input/peer-control.lua",
+      "relative_path": "pilot-input/peer-control.lua",
+      "sha256": "62d9b1d6cbd056307c19673277409e996afb38243f7240281a7e5dc1f4680661",
+      "bytes": 1162,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/pilot-input/run.py",
+      "relative_path": "pilot-input/run.py",
+      "sha256": "7faa11320525a587be54fa95ca08de6fca7a1c8c7544cecf32c50be19fc68dcb",
+      "bytes": 2526,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/pilot-input/t-string-retention.c",
+      "relative_path": "pilot-input/t-string-retention.c",
+      "sha256": "43121e59530fedf9d7331fab0921db398e4b47ff5261b637ee15924f0b977ef4",
+      "bytes": 9343,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/pilot-lua-input/peer-control.lua",
+      "relative_path": "pilot-lua-input/peer-control.lua",
+      "sha256": "e035a1509c8a9417529a0fe68188eedea71d5cd310fe7755618fd6d6c8d0772b",
+      "bytes": 1380,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/pilot-lua-input/run.py",
+      "relative_path": "pilot-lua-input/run.py",
+      "sha256": "7faa11320525a587be54fa95ca08de6fca7a1c8c7544cecf32c50be19fc68dcb",
+      "bytes": 2526,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/pilot-lua-input/t-string-retention.c",
+      "relative_path": "pilot-lua-input/t-string-retention.c",
+      "sha256": "018a157ef1903f4c72fcf81c14b25eb809410e363609d29f6b9e37b455b8dd01",
+      "bytes": 9846,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/recovery-fixture.patch",
+      "relative_path": "recovery-fixture.patch",
+      "sha256": "855e17e20416ffc1a3faa8acf9c642be8b44daba693968f980ccac123532f19c",
+      "bytes": 857,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/review-input/notes/gc2-string-b120-sole-mutator-reclaim-2026-07-12.md",
+      "relative_path": "review-input/notes/gc2-string-b120-sole-mutator-reclaim-2026-07-12.md",
+      "sha256": "21d889f4ed1fbf95469e9ac49b64a37078d1986f7041fdce4e2a76609cb4bce9",
+      "bytes": 7027,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/review-input/notes/gc2-string-canonical-quarantine-protocol-2026-07-10.md",
+      "relative_path": "review-input/notes/gc2-string-canonical-quarantine-protocol-2026-07-10.md",
+      "sha256": "d506d9b02cae14223843c1280918d2498911caab7c8ad37b2e93d35f2f5af826",
+      "bytes": 29427,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/review-input/notes/gc2-string-native-borrow-clib-slice-2026-07-11.md",
+      "relative_path": "review-input/notes/gc2-string-native-borrow-clib-slice-2026-07-11.md",
+      "sha256": "96ebfec790b77f4886a99cd2e0e8616c833eadbc23fe4d6a9dd398460533eec3",
+      "bytes": 4028,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/review-input/notes/gc2-string-reclamation-safety-gate-2026-07-10.md",
+      "relative_path": "review-input/notes/gc2-string-reclamation-safety-gate-2026-07-10.md",
+      "sha256": "7eacc3e83bc7501572065430d73fb06e6ff7bd2c8a20df2c4431c4d71725db3a",
+      "bytes": 5766,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/run.py",
+      "relative_path": "run.py",
+      "sha256": "9b0ffd320bc893c11fa57b275b0048add45096e01fd15347af0857bb13be1a40",
+      "bytes": 2627,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/runtime-source.tar",
+      "relative_path": "runtime-source.tar",
+      "sha256": "9741de1ddccc3f5b0895d34a302464458514643d7126de0855e367e15173f422",
+      "bytes": 8038400,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/source-excerpts.json",
+      "relative_path": "source-excerpts.json",
+      "sha256": "4157b94d98ff30c0a0de6d5fbade6d27c65a72bda729a77c10912ca8870f03f7",
+      "bytes": 36321,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/source-identity.json",
+      "relative_path": "source-identity.json",
+      "sha256": "b9a8e48e6d22bde7945da9b953f120f8f69cde4bec6df8e89cd856650fc78861",
+      "bytes": 20680,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict/src/host/buildvm",
+      "relative_path": "strict/src/host/buildvm",
+      "sha256": "a4998e91137b3e730fe1fba252b70941030fa6b1635fa62a3f133ef9a3ef1263",
+      "bytes": 122336,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict/src/host/minilua",
+      "relative_path": "strict/src/host/minilua",
+      "sha256": "8ab7d5a14b0525e3759effc570de0f02965b5618600fbfe15499924a399f1538",
+      "bytes": 154760,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict/src/libluajit.a",
+      "relative_path": "strict/src/libluajit.a",
+      "sha256": "b5a9866f22fe0a17f4553e080db73b2c3eda2c30a7e3bcac9b1a18594e012650",
+      "bytes": 2863486,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict/src/lj_str.o",
+      "relative_path": "strict/src/lj_str.o",
+      "sha256": "d284d30823c6e0f3821d496dbdd740c295fd582602a1f656619435bbb77fa5b7",
+      "bytes": 38448,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict/src/luajit",
+      "relative_path": "strict/src/luajit",
+      "sha256": "1e1dce31903b75b3075d9eb7d0402409a2b4a237320b987adcd54d7a9c760cc2",
+      "bytes": 1932736,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-0-0-0.stderr",
+      "relative_path": "strict-0-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-0-0-0.stdout",
+      "relative_path": "strict-0-0-0.stdout",
+      "sha256": "7c23205efc9d0afc5627a8d0870779c54df3787fc6a04073fc199c5fb820c7c0",
+      "bytes": 11430,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-0-0-2.stderr",
+      "relative_path": "strict-0-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-0-0-2.stdout",
+      "relative_path": "strict-0-0-2.stdout",
+      "sha256": "b0165336fa65f28be998f8f2f23eb90e4865bfc03ed81f13c3d918b3fc09f29b",
+      "bytes": 3414,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-0-1-0.stderr",
+      "relative_path": "strict-0-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-0-1-0.stdout",
+      "relative_path": "strict-0-1-0.stdout",
+      "sha256": "eb77d54b1f086c5138fe89f5066d62078b554266982ec5523dfc9ef64cdaf1f5",
+      "bytes": 3439,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-0-1-2.stderr",
+      "relative_path": "strict-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-0-1-2.stdout",
+      "relative_path": "strict-0-1-2.stdout",
+      "sha256": "69d28d5d0a7066bbf0c1a8fe518ceb1105edcee26985e38d6587cae67cdfe71f",
+      "bytes": 3447,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-1-0-0.stderr",
+      "relative_path": "strict-1-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-1-0-0.stdout",
+      "relative_path": "strict-1-0-0.stdout",
+      "sha256": "a688dead4262aa5672e3d7b25c332fe429e1ae55dee123cfd16a6f7aaa9574b5",
+      "bytes": 11330,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-1-0-2.stderr",
+      "relative_path": "strict-1-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-1-0-2.stdout",
+      "relative_path": "strict-1-0-2.stdout",
+      "sha256": "ccac174c2380b1ba396769e1b5b6dc9007d879aa2d2f6f6b7d84c89c5451bc37",
+      "bytes": 11367,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-1-1-0.stderr",
+      "relative_path": "strict-1-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-1-1-0.stdout",
+      "relative_path": "strict-1-1-0.stdout",
+      "sha256": "9f56e0f9803272473a4a26a34e30735665e7358ce3b94eb94cffc076ee1545ee",
+      "bytes": 11511,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-1-1-2.stderr",
+      "relative_path": "strict-1-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-1-1-2.stdout",
+      "relative_path": "strict-1-1-2.stdout",
+      "sha256": "799eee921acc08b26cfb011fb1b663d8213f27c0e2e2ee15485fc99ba862b5b9",
+      "bytes": 11545,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-0-0-0.stderr",
+      "relative_path": "strict-bounded-0-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-0-0-0.stdout",
+      "relative_path": "strict-bounded-0-0-0.stdout",
+      "sha256": "082cf6e5659bafe04b323eba1b2258008f1835c57314da665127fd41c4edf165",
+      "bytes": 11418,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-0-0-2.stderr",
+      "relative_path": "strict-bounded-0-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-0-0-2.stdout",
+      "relative_path": "strict-bounded-0-0-2.stdout",
+      "sha256": "de8675c270e1f96595dab0c39fc720353365e0ddf69dddf8b355d0c4c4ad5935",
+      "bytes": 3420,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-0-1-0.stderr",
+      "relative_path": "strict-bounded-0-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-0-1-0.stdout",
+      "relative_path": "strict-bounded-0-1-0.stdout",
+      "sha256": "8b81633a5e37c82effe80f30740c970f0e788f742cac8bcc9c61b4f6de11971e",
+      "bytes": 3439,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-0-1-2.stderr",
+      "relative_path": "strict-bounded-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-0-1-2.stdout",
+      "relative_path": "strict-bounded-0-1-2.stdout",
+      "sha256": "30042af0911380739e47fbb132bb0800abd4af3e5ba2fb6f1c91df9d824c1759",
+      "bytes": 3443,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-1-0-0.stderr",
+      "relative_path": "strict-bounded-1-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-1-0-0.stdout",
+      "relative_path": "strict-bounded-1-0-0.stdout",
+      "sha256": "19ae21fe164b23c341619cf43fa35765e3a55873ed4bae357c46b0b561abc390",
+      "bytes": 11330,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-1-0-2.stderr",
+      "relative_path": "strict-bounded-1-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-1-0-2.stdout",
+      "relative_path": "strict-bounded-1-0-2.stdout",
+      "sha256": "ab018c35ba1048c639c888822a4263abfdd9971bf2acbd5a876c14b1fb657536",
+      "bytes": 11365,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-1-1-0.stderr",
+      "relative_path": "strict-bounded-1-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-1-1-0.stdout",
+      "relative_path": "strict-bounded-1-1-0.stdout",
+      "sha256": "8ca12b9576d2ed907cc7308afc446d825816dc047e7bdf50da292cad05021041",
+      "bytes": 11511,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-1-1-2.stderr",
+      "relative_path": "strict-bounded-1-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-1-1-2.stdout",
+      "relative_path": "strict-bounded-1-1-2.stdout",
+      "sha256": "79f602c205c0df13f1e7becb029223bc715791b2f53363aad29db669d1a3ae7f",
+      "bytes": 11563,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-compile.stderr",
+      "relative_path": "strict-bounded-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-compile.stdout",
+      "relative_path": "strict-bounded-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-inputs.json",
+      "relative_path": "strict-bounded-inputs.json",
+      "sha256": "17949ea1c94cdab04ff3923c35ae57573a39875702831f8a74a8685cb4d79034",
+      "bytes": 533,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-jit-0-1-0.stderr",
+      "relative_path": "strict-bounded-jit-0-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-jit-0-1-0.stdout",
+      "relative_path": "strict-bounded-jit-0-1-0.stdout",
+      "sha256": "da531c19a5586116e272f9b561e9266254515f0edc7be1d802bb46d0e1d2eff2",
+      "bytes": 3439,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-jit-0-1-2.stderr",
+      "relative_path": "strict-bounded-jit-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-jit-0-1-2.stdout",
+      "relative_path": "strict-bounded-jit-0-1-2.stdout",
+      "sha256": "69f0d84834422cbc2ce43b41814b3f87f5c79511582c1b248876dedb31b7ae95",
+      "bytes": 3443,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-jit-compile.stderr",
+      "relative_path": "strict-bounded-jit-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-jit-compile.stdout",
+      "relative_path": "strict-bounded-jit-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-jit-inputs.json",
+      "relative_path": "strict-bounded-jit-inputs.json",
+      "sha256": "3b2d78f11d6a9ae55b9aeeabe8713c00c957f5b579c27ba5993a4630538331e3",
+      "bytes": 537,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-jit-results.json",
+      "relative_path": "strict-bounded-jit-results.json",
+      "sha256": "557f0610aedffca74d1d4d248309c1e87436677f3732e98c2f1be9522a8b4e1e",
+      "bytes": 1779,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-jit-retention",
+      "relative_path": "strict-bounded-jit-retention",
+      "sha256": "257905bab10450be09cd8887997b5c3de25e9b59bccb06b5cef639bdaafdc00a",
+      "bytes": 1996048,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-results.json",
+      "relative_path": "strict-bounded-results.json",
+      "sha256": "0abea38cdcdf642d189804b3f22dbef610ae82491daf6cf06b6b6f5fdc133c5b",
+      "bytes": 4489,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-bounded-retention",
+      "relative_path": "strict-bounded-retention",
+      "sha256": "257905bab10450be09cd8887997b5c3de25e9b59bccb06b5cef639bdaafdc00a",
+      "bytes": 1996048,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-build.json",
+      "relative_path": "strict-build.json",
+      "sha256": "bde09f950d14ed50c99a36d28287ff1fd530f70638fb18f843824b4d693bebc7",
+      "bytes": 965,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-build.stderr",
+      "relative_path": "strict-build.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-build.stdout",
+      "relative_path": "strict-build.stdout",
+      "sha256": "2d9dd011f55b33e7c68831bd68f3a5cc6d7ca460d422582ec99494a4fc13fa71",
+      "bytes": 2329,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-0-0-2.stderr",
+      "relative_path": "strict-burst-0-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-0-0-2.stdout",
+      "relative_path": "strict-burst-0-0-2.stdout",
+      "sha256": "36b91376e9e94db5b51585e56cf004bc5928e50e38e54ea6840cd606b4eebf63",
+      "bytes": 3420,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-0-1-2.stderr",
+      "relative_path": "strict-burst-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-0-1-2.stdout",
+      "relative_path": "strict-burst-0-1-2.stdout",
+      "sha256": "2f24924487a0772261ac66f7f8c9b5798df5eff5f5bbd5155ed469b239c2ebb0",
+      "bytes": 3443,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-1-0-0.stderr",
+      "relative_path": "strict-burst-1-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-1-0-0.stdout",
+      "relative_path": "strict-burst-1-0-0.stdout",
+      "sha256": "a688dead4262aa5672e3d7b25c332fe429e1ae55dee123cfd16a6f7aaa9574b5",
+      "bytes": 11330,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-compile.stderr",
+      "relative_path": "strict-burst-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-compile.stdout",
+      "relative_path": "strict-burst-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-inputs.json",
+      "relative_path": "strict-burst-inputs.json",
+      "sha256": "a938cfcaa16d5537cd744b0ec1c080df4d14df0d4f77a26447694cab8ec82a3f",
+      "bytes": 531,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-jit-0-1-0.stderr",
+      "relative_path": "strict-burst-jit-0-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-jit-0-1-0.stdout",
+      "relative_path": "strict-burst-jit-0-1-0.stdout",
+      "sha256": "2ad6d4ad7c141b6eacb5d9ed064531fea40e46bc8cc0125296496d5e6eb4c6f3",
+      "bytes": 3439,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-jit-0-1-2.stderr",
+      "relative_path": "strict-burst-jit-0-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-jit-0-1-2.stdout",
+      "relative_path": "strict-burst-jit-0-1-2.stdout",
+      "sha256": "8b88a76cf13256b981aa8508743b4a276b1317a6ce16ef2718eaf0bf84acaf51",
+      "bytes": 3447,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-jit-compile.stderr",
+      "relative_path": "strict-burst-jit-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-jit-compile.stdout",
+      "relative_path": "strict-burst-jit-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-jit-inputs.json",
+      "relative_path": "strict-burst-jit-inputs.json",
+      "sha256": "dcad583a83c3c6536fdd948c5e9abf72dee0689c0e83a3e58e04b9f8936d5e85",
+      "bytes": 535,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-jit-results.json",
+      "relative_path": "strict-burst-jit-results.json",
+      "sha256": "ad0fb05be5598b5739f3629ceea0359330a12eb3c7601dfd5296ddd6068c6591",
+      "bytes": 2107,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-jit-retention",
+      "relative_path": "strict-burst-jit-retention",
+      "sha256": "c4c9339d80586a5b2f637230d6d7d10ddb39099ba3bf0174a4738b4286379a4c",
+      "bytes": 1995872,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-results.json",
+      "relative_path": "strict-burst-results.json",
+      "sha256": "e6dc7f552f5e37fb77be7316f37a8b6e89acd17d4c6f41dd854fd6e5ed583d86",
+      "bytes": 2639,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-burst-retention",
+      "relative_path": "strict-burst-retention",
+      "sha256": "c4c9339d80586a5b2f637230d6d7d10ddb39099ba3bf0174a4738b4286379a4c",
+      "bytes": 1995872,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-compile.stderr",
+      "relative_path": "strict-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-compile.stdout",
+      "relative_path": "strict-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-diagnostic-0-0-2.stderr",
+      "relative_path": "strict-diagnostic-0-0-2.stderr",
+      "sha256": "8d630798cb75be72d2f54d9e11d2f009ca48aa5b1edba187a0e368e7aea871a3",
+      "bytes": 156,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-diagnostic-0-0-2.stdout",
+      "relative_path": "strict-diagnostic-0-0-2.stdout",
+      "sha256": "4445332d16bfb4c440301aa8bc018b90d19e722f3f62552f29b44f4ad8f1b0e8",
+      "bytes": 2202,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-diagnostic-0-1-2.stderr",
+      "relative_path": "strict-diagnostic-0-1-2.stderr",
+      "sha256": "8d630798cb75be72d2f54d9e11d2f009ca48aa5b1edba187a0e368e7aea871a3",
+      "bytes": 156,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-diagnostic-0-1-2.stdout",
+      "relative_path": "strict-diagnostic-0-1-2.stdout",
+      "sha256": "48eb2ddbc40b54567ae4db574aa468eafa0f2f65ab08806af4da9e9c9bba5e9b",
+      "bytes": 2242,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-diagnostic-compile.stderr",
+      "relative_path": "strict-diagnostic-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-diagnostic-compile.stdout",
+      "relative_path": "strict-diagnostic-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-diagnostic-inputs.json",
+      "relative_path": "strict-diagnostic-inputs.json",
+      "sha256": "50b2dca674a100516cae8f8df462353b2eb6ca506577662c4d06c2af07ba3d78",
+      "bytes": 536,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-diagnostic-results.json",
+      "relative_path": "strict-diagnostic-results.json",
+      "sha256": "e42173017032f28042a454f1f25450579e7857f70bf642ef237de76678df381c",
+      "bytes": 1771,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-diagnostic-retention",
+      "relative_path": "strict-diagnostic-retention",
+      "sha256": "cb19bab8f1d192a3761f8a96a66111cab21713df25af4db5ec421da1463b6e8e",
+      "bytes": 1993496,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-inputs.json",
+      "relative_path": "strict-inputs.json",
+      "sha256": "cfee972e08df517607b9e70bbe3d7997463b271682688c5e378e516e70e18743",
+      "bytes": 525,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-0-0-0.stderr",
+      "relative_path": "strict-pilot-0-0-0.stderr",
+      "sha256": "65aa29344f542adf745cc81cf998d7230b3104b9218ea05eaa6b334f49356a3b",
+      "bytes": 206,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-0-0-0.stdout",
+      "relative_path": "strict-pilot-0-0-0.stdout",
+      "sha256": "20a783af46dba0a214fe4d9cb8f9e720b278c772fcf1b1eb45aab113f2a3b3a4",
+      "bytes": 674,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-1-0-0.stderr",
+      "relative_path": "strict-pilot-1-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-1-0-0.stdout",
+      "relative_path": "strict-pilot-1-0-0.stdout",
+      "sha256": "94a6bb45ae74a58a384e56c3c0bc2e21f3b3ee45562f734917970a8a733336d8",
+      "bytes": 4924,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-1-1-2.stderr",
+      "relative_path": "strict-pilot-1-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-1-1-2.stdout",
+      "relative_path": "strict-pilot-1-1-2.stdout",
+      "sha256": "fce305ad17d82ee4af2287a665b37a5bae213475c458923137dcea4e10cea099",
+      "bytes": 4916,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-compile.stderr",
+      "relative_path": "strict-pilot-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-compile.stdout",
+      "relative_path": "strict-pilot-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-inputs.json",
+      "relative_path": "strict-pilot-inputs.json",
+      "sha256": "13f8bae79c458034f06cf33cdc8e697a700ea71b2c4ad799e288e418bb1e35c4",
+      "bytes": 530,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-lua-0-0-0.stderr",
+      "relative_path": "strict-pilot-lua-0-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-lua-0-0-0.stdout",
+      "relative_path": "strict-pilot-lua-0-0-0.stdout",
+      "sha256": "0ace0a8e1b549d5aa57f561870088284aa6e27a7e3a1394212e5a7a7c18eff2d",
+      "bytes": 4963,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-lua-0-1-2.stderr",
+      "relative_path": "strict-pilot-lua-0-1-2.stderr",
+      "sha256": "8d630798cb75be72d2f54d9e11d2f009ca48aa5b1edba187a0e368e7aea871a3",
+      "bytes": 156,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-lua-0-1-2.stdout",
+      "relative_path": "strict-pilot-lua-0-1-2.stdout",
+      "sha256": "b6e3ea231bedf2623911c2da7e3e5da42825db4498a46251a46b6faae2d70d98",
+      "bytes": 1024,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-lua-1-0-0.stderr",
+      "relative_path": "strict-pilot-lua-1-0-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-lua-1-0-0.stdout",
+      "relative_path": "strict-pilot-lua-1-0-0.stdout",
+      "sha256": "d2255d60bc7f97f0f8ebafd2bf46e58996f30192019b79624ea87890b5c98532",
+      "bytes": 4924,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-lua-compile.stderr",
+      "relative_path": "strict-pilot-lua-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-lua-compile.stdout",
+      "relative_path": "strict-pilot-lua-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-lua-inputs.json",
+      "relative_path": "strict-pilot-lua-inputs.json",
+      "sha256": "2afe66df9b3dc04b00b512ce7619513b60a47db9deb9a48cab1fb27e4b6fb2df",
+      "bytes": 534,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-lua-other-0-0-2.stderr",
+      "relative_path": "strict-pilot-lua-other-0-0-2.stderr",
+      "sha256": "8d630798cb75be72d2f54d9e11d2f009ca48aa5b1edba187a0e368e7aea871a3",
+      "bytes": 156,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-lua-other-0-0-2.stdout",
+      "relative_path": "strict-pilot-lua-other-0-0-2.stdout",
+      "sha256": "2aa665401ad1f5ed62d4ddffe6787a8be38402715910a5ec53560b5ed59aeb46",
+      "bytes": 1027,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-lua-other-0-1-0.stderr",
+      "relative_path": "strict-pilot-lua-other-0-1-0.stderr",
+      "sha256": "8d630798cb75be72d2f54d9e11d2f009ca48aa5b1edba187a0e368e7aea871a3",
+      "bytes": 156,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-lua-other-0-1-0.stdout",
+      "relative_path": "strict-pilot-lua-other-0-1-0.stdout",
+      "sha256": "d036b6447b2e0bbf9a68c5265863f48b92fa865caba509aa7b650ab630d75b7d",
+      "bytes": 1024,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-lua-other-1-0-2.stderr",
+      "relative_path": "strict-pilot-lua-other-1-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-lua-other-1-0-2.stdout",
+      "relative_path": "strict-pilot-lua-other-1-0-2.stdout",
+      "sha256": "b0174ff56c336c4feac021fbaef5f45049b995b034f4a40e95d299bcec0544af",
+      "bytes": 4924,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-lua-other-1-1-0.stderr",
+      "relative_path": "strict-pilot-lua-other-1-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-lua-other-1-1-0.stdout",
+      "relative_path": "strict-pilot-lua-other-1-1-0.stdout",
+      "sha256": "bb219e07464827dfa58b7f787207c4e1c0bd67e6fe4b9bc4d7270f73b4eb6aed",
+      "bytes": 4904,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-lua-other-compile.stderr",
+      "relative_path": "strict-pilot-lua-other-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-lua-other-compile.stdout",
+      "relative_path": "strict-pilot-lua-other-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-lua-other-inputs.json",
+      "relative_path": "strict-pilot-lua-other-inputs.json",
+      "sha256": "e65b2763a11a0491882290bfa5d141ab065f16b12af191f6e50cadffce06306e",
+      "bytes": 540,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-lua-other-results.json",
+      "relative_path": "strict-pilot-lua-other-results.json",
+      "sha256": "f6d0bf2c154043485d140637cf40fa645027f3430c6e47f737e557f16f751245",
+      "bytes": 2780,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-lua-other-retention",
+      "relative_path": "strict-pilot-lua-other-retention",
+      "sha256": "f068386e6de8262d9b1fe5df1f9ad1c34b39c506fdbbb7384a21cc78faa55cc8",
+      "bytes": 1988944,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-lua-results.json",
+      "relative_path": "strict-pilot-lua-results.json",
+      "sha256": "64ea88b4f9b6163f4d985db677ec85910601553127413ea2e3b624eaa56294de",
+      "bytes": 2227,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-lua-retention",
+      "relative_path": "strict-pilot-lua-retention",
+      "sha256": "f068386e6de8262d9b1fe5df1f9ad1c34b39c506fdbbb7384a21cc78faa55cc8",
+      "bytes": 1988944,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-results.json",
+      "relative_path": "strict-pilot-results.json",
+      "sha256": "470ef3dfc4e958002fd411719117df3dacde1148ebbf704e88992e8a0a32d882",
+      "bytes": 2179,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-pilot-retention",
+      "relative_path": "strict-pilot-retention",
+      "sha256": "872bbef404090bc4c5d4cfb9cbef954af5fc2370bab2fb62eaf18f9142c3038d",
+      "bytes": 1987712,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-recovery",
+      "relative_path": "strict-recovery",
+      "sha256": "f64caac4cba6cb601c973eff0a49578008d87ef13d31aa51b0b5cbc9404dab32",
+      "bytes": 1996048,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-recovery-1-0.stderr",
+      "relative_path": "strict-recovery-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-recovery-1-0.stdout",
+      "relative_path": "strict-recovery-1-0.stdout",
+      "sha256": "4b65d9b8ef45b444a4d5f3a19d2fb8e723953819ab613936d1e2cc3e4aab2c93",
+      "bytes": 5971,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-recovery-1-2.stderr",
+      "relative_path": "strict-recovery-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-recovery-1-2.stdout",
+      "relative_path": "strict-recovery-1-2.stdout",
+      "sha256": "dcda6bba8c35f956e724df9f4b0b74ed3e0aa288fd3378f2ff3c9768c5cc780e",
+      "bytes": 5985,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-recovery-compile.stderr",
+      "relative_path": "strict-recovery-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-recovery-compile.stdout",
+      "relative_path": "strict-recovery-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-recovery-inputs.json",
+      "relative_path": "strict-recovery-inputs.json",
+      "sha256": "d1650cbaad2f61efaa291b395fd30b683b9322a8d15f6d074d6c243609481014",
+      "bytes": 544,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-recovery-results.json",
+      "relative_path": "strict-recovery-results.json",
+      "sha256": "c45d4b2be601c5009af53d1ee3ecb832a9776a06d6d60338efc06a370ed4f840",
+      "bytes": 2006,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-results.json",
+      "relative_path": "strict-results.json",
+      "sha256": "0613aee6eb470d65e37b8a0bba18279c981485be6fac43d4b11a62085d27a7b6",
+      "bytes": 5315,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-retention",
+      "relative_path": "strict-retention",
+      "sha256": "59a8dd85361a7e250cbd3efcaa7ae187c69ed2e89dd2cf482219ce380e3c07bd",
+      "bytes": 1995968,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-trace",
+      "relative_path": "strict-trace",
+      "sha256": "59a8dd85361a7e250cbd3efcaa7ae187c69ed2e89dd2cf482219ce380e3c07bd",
+      "bytes": 1995968,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-trace-1-0.stderr",
+      "relative_path": "strict-trace-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-trace-1-0.stdout",
+      "relative_path": "strict-trace-1-0.stdout",
+      "sha256": "d7ae2ad3776dcf1810d025db023f575378f68e3fa0fe237a76d33373576d395f",
+      "bytes": 3414,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-trace-1-2.stderr",
+      "relative_path": "strict-trace-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-trace-1-2.stdout",
+      "relative_path": "strict-trace-1-2.stdout",
+      "sha256": "023116bcd73ab401e35260b186651e97d3e51748ec57aa69c0a3acd988efe4b1",
+      "bytes": 3420,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-trace-compile.stderr",
+      "relative_path": "strict-trace-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-trace-compile.stdout",
+      "relative_path": "strict-trace-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-trace-inputs.json",
+      "relative_path": "strict-trace-inputs.json",
+      "sha256": "a7d0df30f73646d1b2ccc92e1dc0215110c9aac75c1be93ac01cc1b93b006aa6",
+      "bytes": 538,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-trace-results.json",
+      "relative_path": "strict-trace-results.json",
+      "sha256": "5e309ea8630354bf05b3cd3bb61884abcd7bd563e2f311f546b1a93f6b858003",
+      "bytes": 1984,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-trace_off",
+      "relative_path": "strict-trace_off",
+      "sha256": "59a8dd85361a7e250cbd3efcaa7ae187c69ed2e89dd2cf482219ce380e3c07bd",
+      "bytes": 1995968,
+      "storage": "hash-only"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-trace_off-1-0.stderr",
+      "relative_path": "strict-trace_off-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-trace_off-1-0.stdout",
+      "relative_path": "strict-trace_off-1-0.stdout",
+      "sha256": "15329c58ebd44dd18ae57513772fdcbc2a7ecbe9506672ac32b3003ec3f6ff8a",
+      "bytes": 3429,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-trace_off-1-2.stderr",
+      "relative_path": "strict-trace_off-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-trace_off-1-2.stdout",
+      "relative_path": "strict-trace_off-1-2.stdout",
+      "sha256": "5d822017330d4425794758bb9e60825a8d9dd55b2754b5f3e363a62ded59c360",
+      "bytes": 3433,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-trace_off-compile.stderr",
+      "relative_path": "strict-trace_off-compile.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-trace_off-compile.stdout",
+      "relative_path": "strict-trace_off-compile.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-trace_off-inputs.json",
+      "relative_path": "strict-trace_off-inputs.json",
+      "sha256": "553e3df00997d4faad7cb49375d29daf48fca3f68aeafe8ff87f271f513f3c04",
+      "bytes": 542,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/strict-trace_off-results.json",
+      "relative_path": "strict-trace_off-results.json",
+      "sha256": "b09ac5b2584a6c4d5891cd89ff9344a106a0a7421ed55aa3005cfcc4cfda5b1c",
+      "bytes": 2020,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/summarize-first-assumption.py",
+      "relative_path": "summarize-first-assumption.py",
+      "sha256": "3c1aa4d251a4cd9852c13c4f787147269fc04f3495dafcf1760758dc013b72b0",
+      "bytes": 3651,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/summarize.py",
+      "relative_path": "summarize.py",
+      "sha256": "9bcd9e5bcafccd048e1c1a4a31970e9c68709720f51ddb6258c8aa0b31c8f850",
+      "bytes": 3650,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/summary.json",
+      "relative_path": "summary.json",
+      "sha256": "c363542b2a8dd90a63d06b35a4865200ec59c4bd5456fbc920e16ddc1aef5dcc",
+      "bytes": 98365,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/t-string-retention-recovery.c",
+      "relative_path": "t-string-retention-recovery.c",
+      "sha256": "502686c89266dc8abdd04dcae5a3558ee8d4a63ff8fe52c85448e5402bc2fae5",
+      "bytes": 12594,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/t-string-retention.c",
+      "relative_path": "t-string-retention.c",
+      "sha256": "2e8e840fb4ba3a3b09168c06d828ff10ebafd41e9ff555b9737f34384fea3cf9",
+      "bytes": 12128,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/trace-trigger-0-2.stderr",
+      "relative_path": "trace-trigger-0-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/trace-trigger-0-2.stdout",
+      "relative_path": "trace-trigger-0-2.stdout",
+      "sha256": "c37bb732b922bd5a13a55bc0a4349d0cec917d884823777ae5ede9a3fc3c147f",
+      "bytes": 3425,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/trace-trigger-1-0.stderr",
+      "relative_path": "trace-trigger-1-0.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/trace-trigger-1-0.stdout",
+      "relative_path": "trace-trigger-1-0.stdout",
+      "sha256": "8a138c828af6ad1d36d145ad473e59dc0d9c3e775b7520963620c393158741b4",
+      "bytes": 11520,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/trace-trigger-1-2.stderr",
+      "relative_path": "trace-trigger-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/trace-trigger-1-2.stdout",
+      "relative_path": "trace-trigger-1-2.stdout",
+      "sha256": "48722a5a567bd0e8f304bb1df1b4dc41dcd68b00a69f33473b882026e12b083c",
+      "bytes": 1619,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/trace-trigger-late-1-0.stderr",
+      "relative_path": "trace-trigger-late-1-0.stderr",
+      "sha256": "c7a370924ec22c723e20c44b72e634b2483c2e7ef1da7c78c9f914106917e160",
+      "bytes": 162,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/trace-trigger-late-1-0.stdout",
+      "relative_path": "trace-trigger-late-1-0.stdout",
+      "sha256": "2ea3f4877b0d0d260fb0bfd985052c7ca985997e1b75e11a8c3b1cb4938238be",
+      "bytes": 3300,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/trace-trigger-late-1-2.stderr",
+      "relative_path": "trace-trigger-late-1-2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/trace-trigger-late-1-2.stdout",
+      "relative_path": "trace-trigger-late-1-2.stdout",
+      "sha256": "5c2502f5e2506e0e72092ec380b7ac9d3c5fed0aaf6049980f65138bca19d027",
+      "bytes": 3424,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/trace-trigger-late-results.json",
+      "relative_path": "trace-trigger-late-results.json",
+      "sha256": "9442f3dadf72caad8a1de8c77e2142e024de8a7f16e98498aa6eefa3f5c18d49",
+      "bytes": 1158,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/trace-trigger-late.lua",
+      "relative_path": "trace-trigger-late.lua",
+      "sha256": "044388d04353b24b2ab1ec939bba7daa94bafcac9028c08fed19db70068f119a",
+      "bytes": 1470,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/trace-trigger-results.json",
+      "relative_path": "trace-trigger-results.json",
+      "sha256": "9d85e55c73db6d41d561fc66176c86a6c7ede7086d5fc096fb1f13ab972ee97d",
+      "bytes": 1723,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/trace-trigger.lua",
+      "relative_path": "trace-trigger.lua",
+      "sha256": "d5046562383177e91755c1f211037f00cf162482268ca44794228b484dd534f0",
+      "bytes": 1685,
+      "storage": "text"
+    }
+  ],
+  "text_files": 263,
+  "text_bytes": 847087,
+  "hash_only_files": 35
+}

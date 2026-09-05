@@ -1,0 +1,42 @@
+{
+  "argv": [
+    "make",
+    "-C",
+    "src",
+    "-j4",
+    "BUILDMODE=static",
+    "CC=clang",
+    "HOST_CC=clang",
+    "CCOPT=-O1",
+    "CCDEBUG=-g",
+    "XCFLAGS=-DLUA_USE_ASSERT -DLUA_USE_APICHECK",
+    "TARGET_CFLAGS=-fsanitize=address -fno-omit-frame-pointer",
+    "TARGET_LDFLAGS=-fsanitize=address",
+    "TARGET_STRIP=:"
+  ],
+  "cwd": "/tmp/lj-string-retention-baseline-20260905-424nvcfy/asan",
+  "exit_code": 0,
+  "seconds": 11.787823677001143,
+  "binaries": {
+    "luajit": {
+      "sha256": "acab2d2fa6b963e6876c8c84b00fd68956dee070e50b835979daa7e23cf17706",
+      "bytes": 19471304
+    },
+    "libluajit.a": {
+      "sha256": "5801526d0845b07b0cd4adb375bfbd5ed3c6682e0432386b7e3537f19476611d",
+      "bytes": 26643776
+    },
+    "host/minilua": {
+      "sha256": "0eacc47db0da85a1a453d673ab8f7c6ad6aea37cd6c6a335d5736972637be683",
+      "bytes": 550936
+    },
+    "host/buildvm": {
+      "sha256": "2c94acf59ad1537021b71d551f7323e42f501561b15894707894ef7f78e599b4",
+      "bytes": 246896
+    },
+    "lj_str.o": {
+      "sha256": "bd4ad5f093bd24ae3d2481c7763d2edff501885410786b08ace7473222817acb",
+      "bytes": 381680
+    }
+  }
+}

@@ -1,0 +1,1 @@
+strict-pilot-retention: /tmp/lj-string-retention-baseline-20260905-424nvcfy/t-string-retention.c:151: automatic_cycles: Assertion `0 && "automatic allocation did not complete three real GC cycles"' failed.

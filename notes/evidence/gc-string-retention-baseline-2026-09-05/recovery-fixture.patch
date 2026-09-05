@@ -1,0 +1,20 @@
+--- t-string-retention.c
++++ t-string-retention-recovery.c
+@@ -280,9 +280,17 @@
+     }
+   }
+   call(L, workers, 0, 1);
++  (void)snapshot(L, "workers_disabled", rounds_done, filler_total);
+   call(L, stop, 0, 0);
+   la_store32_rel(&peer_credit, 0);  /* Detach already returned unused credits. */
+   assert(mt_live_acq(g) == 0 && gc2_n_workers_acq(g) == 0);
++  (void)snapshot(L, "last_peer_joined", rounds_done, filler_total);
++  if (!explicit_collect && with_peer) {
++    filler_total += automatic_cycles(L, automatic);
++    settled = snapshot(L, "automatic_after_last_detach", rounds_done, filler_total);
++    assert(automatic_completed && settled.reclaimed == base.reclaimed);
++    assert(settled.strings == base.strings + (uint64_t)rounds_done * BATCH);
++  }
+   full_cycles(L);
+   lua_rawgeti(L, LUA_REGISTRYINDEX, live);
+   check_live(L, lua_gettop(L));

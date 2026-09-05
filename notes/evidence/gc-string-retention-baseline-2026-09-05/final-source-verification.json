@@ -1,0 +1,31 @@
+{
+  "normal": {
+    "checked": 224,
+    "mismatches": []
+  },
+  "strict": {
+    "checked": 224,
+    "mismatches": []
+  },
+  "asan": {
+    "checked": 224,
+    "mismatches": []
+  },
+  "fixtures": {
+    "t-string-retention.c": "2e8e840fb4ba3a3b09168c06d828ff10ebafd41e9ff555b9737f34384fea3cf9",
+    "t-string-retention-recovery.c": "502686c89266dc8abdd04dcae5a3558ee8d4a63ff8fe52c85448e5402bc2fae5",
+    "peer-control.lua": "519ebf714b0a33b9a436d3452a153a1bc3eea3322ebf0bf74d8e76fea4ab8cb2",
+    "trace-trigger-late.lua": "044388d04353b24b2ab1ec939bba7daa94bafcac9028c08fed19db70068f119a"
+  },
+  "sanitizer": {
+    "asan/src/host/minilua": {
+      "asan_symbol_count": 0
+    },
+    "asan/src/host/buildvm": {
+      "asan_symbol_count": 0
+    },
+    "asan/src/lj_str.o": {
+      "asan_symbol_count": 16
+    }
+  }
+}
