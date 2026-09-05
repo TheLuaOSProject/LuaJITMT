@@ -1,0 +1,23 @@
+--- a/tests/t-safepoint-local-native-duplicate.c
++++ b/tests/t-safepoint-local-native-duplicate.c
+@@ -48,7 +48,19 @@
+   if (point == LJ_SAFEPOINT_COMPLETION_TEST_CONSUMED &&
+       lj_thr_get_tg() == tg && lj_tg_hs_epoch_ack_acq(tg) != epoch) {
+     assert(lj_tg_in_native_acq(tg) == 1);
+-    assert(lj_tg_reqmask_acq(tg) == 0);
++    {
++      /* A late signal or remote refusal can republish this same counted
++      ** request after our consume and before its epoch claim. Observe only
++      ** valid masks here; the original owner/remote overlap and final pending
++      ** assertions below prove completion of every admitted action. */
++      uint32_t mask = lj_tg_reqmask_acq(tg);
++      if (mask != 0) {
++        uint32_t expected = LJ_GC2_HS_SCAN_OWNER_ROOTS|LJ_GC2_HS_FLUSH_SSB;
++        assert(mask == expected);
++        assert(gc2_hs_epoch_acq(g) == epoch);
++        assert(gc2_hs_actions_acq(g) == expected);
++      }
++    }
+     la_store32_rel(&p->consumed, 1);
+     until(&p->remote_scan, 1);
+   }

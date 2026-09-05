@@ -368,6 +368,12 @@ controls and post-fix completion tests:
   LeakSanitizer report are preserved; eight isolated and three registered
   components pass with the cleanup. Runtime close guards remain intact. See
   `notes/gc-scheduler-close-2026-09-05.md`.
+- The local-native duplicate fixture now accepts an exact same-epoch request
+  republished between consume and claim. Forced real schedules reproduce the
+  old assertion on both original runtimes; all actual completion and teardown
+  checks remain. Eight owner, four current-runtime and eleven registered
+  processes pass. Runtime acknowledgement rules are unchanged. See
+  `notes/gc-native-duplicate-fixture-2026-09-05.md`.
 - `1bce0fa5`: promote exhausted inline table dirty authority into pre-reserved
   persistent wide proof, retaining common stamp/token geometry. Small mappings
   use a dense sidecar plane and Huge mappings use checked tail reservation.

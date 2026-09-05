@@ -1,0 +1,58 @@
+{
+  "duplicate-diagnostic/t-safepoint-local-native-duplicate.c": {
+    "sha256": "176e970901f5fdf8e492f9eed62cace2b0d2978d1fcf41e53f71383703cfe28f",
+    "bytes": 7617
+  },
+  "duplicate-diagnostic-run.py": {
+    "sha256": "3c4dbedb2de864290db86f227bef81d980f2e0b23c025230c55ec4fe60283706",
+    "bytes": 1943
+  },
+  "baseline-helpers-duplicate-diagnostic-inputs.json": {
+    "sha256": "bafebfb04d2720e615fdffbd3440f66ddabb3fced924099d0049322435c5a25f",
+    "bytes": 640
+  },
+  "baseline-helpers-duplicate-diagnostic-results.json": {
+    "sha256": "8d229c6d36a659119a10f814c907b39fbc9eb4241b8819544fe8161cd314f734",
+    "bytes": 1524
+  },
+  "baseline-helpers-duplicate-diagnostic-t-safepoint-local-native-duplicate-0.stderr": {
+    "sha256": "4c4fd186f5c6d9a3435e71c325b379b17e9e974e7bd0389f9d37922822723985",
+    "bytes": 230
+  },
+  "baseline-helpers-duplicate-diagnostic-t-safepoint-local-native-duplicate-0.stdout": {
+    "sha256": "c8ba5917250a733ff00d698e9e871d3bfde9aba33c76c4147f1ac2359fac0ff4",
+    "bytes": 92
+  },
+  "baseline-helpers-duplicate-diagnostic-t-safepoint-local-native-duplicate-compile.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "baseline-helpers-duplicate-diagnostic-t-safepoint-local-native-duplicate-compile.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "candidate2-helpers-duplicate-diagnostic-inputs.json": {
+    "sha256": "c7ac706605d517cb965389591b88569a69d230228c08721871400a6ce22ce2ae",
+    "bytes": 644
+  },
+  "candidate2-helpers-duplicate-diagnostic-results.json": {
+    "sha256": "0c0e687a528ce3eff1d5f7fd33bb1fee0b916f5a87b2f758a51e44410971daf7",
+    "bytes": 1536
+  },
+  "candidate2-helpers-duplicate-diagnostic-t-safepoint-local-native-duplicate-0.stderr": {
+    "sha256": "b15c77cbfd0d5f69c220482e4a2f3f9eaddeeb284f6d8be793315c5ff9fb9bba",
+    "bytes": 232
+  },
+  "candidate2-helpers-duplicate-diagnostic-t-safepoint-local-native-duplicate-0.stdout": {
+    "sha256": "ef3be5308ee299a7456bc8f4708cfe4b0cac80f90a6c26ab206fb0f71322ac89",
+    "bytes": 92
+  },
+  "candidate2-helpers-duplicate-diagnostic-t-safepoint-local-native-duplicate-compile.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "candidate2-helpers-duplicate-diagnostic-t-safepoint-local-native-duplicate-compile.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  }
+}

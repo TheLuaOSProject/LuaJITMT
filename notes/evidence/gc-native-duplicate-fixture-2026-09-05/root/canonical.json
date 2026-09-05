@@ -1,0 +1,38 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/luajit",
+    "/workspaces/lj-lockless/tools/test.lua",
+    "m3_safepoint_native_completion"
+  ],
+  "cwd": "/workspaces/lj-lockless",
+  "expected_runtime_processes": 11,
+  "runner_sha256": "914c42cc9565b3b61117de954446da8ca8ffbcab091d338f4cfa036f1443be27",
+  "environment": {
+    "LJ_TEST_ROOT": "/workspaces/lj-lockless",
+    "JOBS": "4",
+    "MAKE_JOBS": "4",
+    "TMPDIR": "/tmp/lj-native-duplicate-root-20260905-s79t69ze/canonical-tmp",
+    "LUA_PATH": "/workspaces/lj-lockless/src/?.lua;;"
+  },
+  "inputs": {
+    "tests/t-safepoint-local-native-duplicate.c": "f8f0ce140091d4105419177d5c3bb9299858debc46d6f628d8aeceea944cdc4a",
+    "tests/t-safepoint-remote-root-completion.c": "9d8944de53856419fc82aefed90f7dac346cd5d014c2bb2b92f2904cf8566dfb",
+    "tests/t-safepoint-native-root-hold.c": "e7993ffdfd42218236986f960d95765b865d7a3f05b4637dbf4c7b33be8b5946",
+    "tests/suites/m3_gc.lua": "ae284a4686a1c5d036c88bbe8a32addf24e315647e138dc73f8dab3a92a46572"
+  },
+  "exit": 0,
+  "seconds": 28.234940823000215,
+  "binaries": {
+    "luajit": "d239cf1d9391bc99bc806f85cf56e1111777181d86dd4c2bd9cd2fd0f869a53e",
+    "libluajit.a": "4c326b46cf57e655e84b8cdf8b7db4c551eb4aa94a931281b82b910be46a50e4",
+    "libluajit.so": "60ddec357e9e2138352b7d39deec533529d3c6cec40fbc50c8df6106553feec4"
+  },
+  "temporary_files": {
+    "canonical-tmp/lj_t-safepoint-remote-root-completion": "94651ba19467c4d7c04ef2f3827949d904e71779c5ddc65d05c8d16dc14492e7",
+    "canonical-tmp/lj_t-safepoint-local-native-duplicate": "22e37a18157148317466bb2333a71d18fba71c8de684e9647bdf5e37269ed202",
+    "canonical-tmp/lj_t-safepoint-native-root-hold": "795e0139776a29a3c7ae7a9ea02e8c9146f64e6ced8fc564ddfd2b53ca6f173e"
+  }
+}

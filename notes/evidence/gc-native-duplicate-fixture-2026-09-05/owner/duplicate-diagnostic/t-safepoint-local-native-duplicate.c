@@ -49,17 +49,21 @@ static void completion_hook(global_State *g, TGState *tg,
       lj_thr_get_tg() == tg && lj_tg_hs_epoch_ack_acq(tg) != epoch) {
     assert(lj_tg_in_native_acq(tg) == 1);
     {
-      /* A late signal or remote refusal can republish this same counted
-      ** request after our consume and before its epoch claim. Observe only
-      ** valid masks here; the original owner/remote overlap and final pending
-      ** assertions below prove completion of every admitted action. */
-      uint32_t mask = lj_tg_reqmask_acq(tg);
-      if (mask != 0) {
-        uint32_t expected = LJ_GC2_HS_SCAN_OWNER_ROOTS|LJ_GC2_HS_FLUSH_SSB;
-        assert(mask == expected);
-        assert(gc2_hs_epoch_acq(g) == epoch);
-        assert(gc2_hs_actions_acq(g) == expected);
+      /* Observation-only diagnostic: let the real leader run while this exact
+      ** owner is at the existing post-consume, pre-claim hook. No request,
+      ** epoch, phase or native state is written by this pause. */
+      uint64_t end = now_ns() + 5000000000ull;
+      uint32_t observed;
+      while ((observed = lj_tg_reqmask_acq(tg)) == 0) {
+        assert(now_ns() < end);
+        la_cpu_pause();
       }
+      printf("diagnostic consumed hook: reqmask=%u epoch=%llu ack=%llu pending=%u leader=%u phase=%u workers=%u\n",
+             observed, (unsigned long long)epoch,
+             (unsigned long long)lj_tg_hs_epoch_ack_acq(tg),
+             gc2_hs_pending_acq(g), gc2_hs_leader_acq(g), gc2_phase_acq(g),
+             gc2_n_workers_acq(g));
+      assert(observed == 0);  /* Preserve the original zero-request oracle. */
     }
     la_store32_rel(&p->consumed, 1);
     until(&p->remote_scan, 1);

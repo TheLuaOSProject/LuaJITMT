@@ -1,0 +1,122 @@
+[
+  {
+    "name": "ordinary-compile",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_APICHECK",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-native-duplicate-root-20260905-s79t69ze/strict/ordinary.d",
+      "-I/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src",
+      "/tmp/lj-native-duplicate-root-20260905-s79t69ze/ordinary.c",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots",
+      "-o",
+      "/tmp/lj-native-duplicate-root-20260905-s79t69ze/strict/ordinary"
+    ],
+    "test": false,
+    "timeout_seconds": 45,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.1641259509997326
+  },
+  {
+    "name": "ordinary",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-native-duplicate-root-20260905-s79t69ze/strict/ordinary"
+    ],
+    "test": true,
+    "timeout_seconds": 45,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.007675606997509021
+  },
+  {
+    "name": "forced-compile",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_APICHECK",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-native-duplicate-root-20260905-s79t69ze/strict/forced.d",
+      "-I/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src",
+      "/tmp/lj-native-duplicate-root-20260905-s79t69ze/forced.c",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots",
+      "-o",
+      "/tmp/lj-native-duplicate-root-20260905-s79t69ze/strict/forced"
+    ],
+    "test": false,
+    "timeout_seconds": 45,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.2139527140025166
+  },
+  {
+    "name": "forced",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-native-duplicate-root-20260905-s79t69ze/strict/forced"
+    ],
+    "test": true,
+    "timeout_seconds": 45,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.007725347000814509
+  }
+]

@@ -1,0 +1,30 @@
+{
+  "runtime_pass": 2,
+  "runtime_fail": 0,
+  "runtime_inputs_verified": 225,
+  "build_command": [
+    "taskset",
+    "-c",
+    "16-23",
+    "make",
+    "-C",
+    "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src",
+    "-j4",
+    "BUILDMODE=static",
+    "CCDEBUG=-g",
+    "TARGET_STRIP=:",
+    "XCFLAGS=-DLUA_USE_APICHECK -DLUA_USE_ASSERT -DLJ_FUNC_TEST_HELPERS -DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLJ_XSAVE_TEST_HELPERS -DLJ_UDATA_TEST_HELPERS -DLJ_STR_TEST_HELPERS"
+  ],
+  "flags": [
+    "-DLUA_USE_APICHECK",
+    "-DLUA_USE_ASSERT",
+    "-DLJ_FUNC_TEST_HELPERS",
+    "-DLJ_GC2_TEST_HELPERS",
+    "-DLJ_TAB_TEST_HELPERS",
+    "-DLJ_ARENA_TEST_HELPERS",
+    "-DLJ_TRACE_TEST_HELPERS",
+    "-DLJ_XSAVE_TEST_HELPERS",
+    "-DLJ_UDATA_TEST_HELPERS",
+    "-DLJ_STR_TEST_HELPERS"
+  ]
+}
