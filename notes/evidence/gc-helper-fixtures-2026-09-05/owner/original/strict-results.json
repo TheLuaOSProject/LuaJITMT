@@ -1,0 +1,198 @@
+[
+  {
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_APICHECK",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/original/strict-t-gc2-interp-hard-check.d",
+      "-I/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src",
+      "-I/tmp/lj-gc-helper-assertions-20260905-z9obuha4",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/t-gc2-interp-hard-check.c",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/original/strict-t-gc2-interp-hard-check"
+    ],
+    "cwd": "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/original",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/?.lua;;"
+    },
+    "inputs": {
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/run.py": "a05fbc32c0349a100debe836d599e0443d67c825e593c22bf7cd03e041cd6dcd",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/t-gc2-interp-hard-check.c": "d1ab1088824cfc34996ef9e725cf79cb7fcd3490b3134ec382987c02cb2c8845",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/lib/lua_fixture_helpers.h": "cba26c57b088692886b4df5223a3670fad11ec7951002a98c54be4fedb6844fe",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/libluajit.a": "6aba90a3352142d02a4f63e83106017c8ab39cfcfc62d0385ae949a934961189"
+    },
+    "seconds": 0.16400648499984527,
+    "name": "t-gc2-interp-hard-check",
+    "stage": "compile",
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "output_binary_sha256": "fff93a53414a0bce885d340518e7f0e2a3dab45026d64d35981cb69bc06ec728",
+    "transitive_dependencies": {
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/t-gc2-interp-hard-check.c": "d1ab1088824cfc34996ef9e725cf79cb7fcd3490b3134ec382987c02cb2c8845",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lua.h": "5bcec229da426c785982dffe2f832a5dc83dac0024a09e40a6b725b1968b8a6b",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/luaconf.h": "a70c46233a56ea0c74d4df2e88e45371bf94df9b10ef9d2a81cbe18758c1ceff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lauxlib.h": "7093ea70fb38341d10475814b90961cec22f9643c11e3ea4c2ddc2cd4b03164e",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lualib.h": "10fd6bccc4ae40cc9094b10d8d8de5a8d3febb90668cde599c253bec04bf4546",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_obj.h": "a8962fcc16e961ad29275cffc993ff368c229dc435f5794babbbacd8214557bc",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_def.h": "625089c379122ad13e4b8078e073512da41ebfe80173f806abb0d1e4d3b66858",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_arch.h": "d21ad3f86b2f7651de5ab1dcfc4a3c504deae83d8b2b77d5ccbf75394a98ca7b",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_atomic.h": "0a7bbdc91ae21c4dcbe09cd7de500e0aeb341173f5059f43659678e5be53fac1",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_gc2token.h": "3c1ccf57ef4dd5f5a9a251e0472569939bd0bca8d21260f0497a0d1f84aa29b6",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_tgregistry.h": "e97c3112f34628eec2a0e10e7722e0b85f92f94aec92c3ab1e7f93a7bdd4ec99",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_tgslot.h": "f11ac945f5a0d12026bea04a07fc35dedd0571cd3c21a737c508d3e973384b6f",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_gc.h": "56b9e71567ffca558f06be0a844da3389faca8a8ede1da1d3cf0a614e7beddf6",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_gc2.h": "244b10c49ad036b661a08adc178e6b8247d8ff1b18ed63bc035d3440df16a9f9",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_arena.h": "c1e19e04c5a65aa05f7f37a195864995988610f06b4fb9ec897405982a4cd1c8",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_tg.h": "a5cb46bde2868512743795750b5a1da71cd1a581bc037da127e60b36cb994015",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_bc.h": "e0ba29a7f70141876b2a071483db1d489b2b7b57cd6f6dc879ecb3cea0f283fa",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_ctype.h": "8ee89b4adca50452d429e57ae528568ee9a2ac185eb15922f88e4007d0fd5e7d",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/lib/lua_fixture_helpers.h": "cba26c57b088692886b4df5223a3670fad11ec7951002a98c54be4fedb6844fe"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/original/strict-t-gc2-interp-hard-check"
+    ],
+    "cwd": "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/original",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/?.lua;;"
+    },
+    "inputs": {
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/t-gc2-interp-hard-check.c": "d1ab1088824cfc34996ef9e725cf79cb7fcd3490b3134ec382987c02cb2c8845",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/original/strict-t-gc2-interp-hard-check": "fff93a53414a0bce885d340518e7f0e2a3dab45026d64d35981cb69bc06ec728",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/libluajit.a": "6aba90a3352142d02a4f63e83106017c8ab39cfcfc62d0385ae949a934961189"
+    },
+    "seconds": 0.07451644899992971,
+    "name": "t-gc2-interp-hard-check",
+    "stage": "run",
+    "exit": -6,
+    "stdout": "",
+    "stderr": "interpreted hard-only TNEW did not run the GC2 hard assist\nstrict-t-gc2-interp-hard-check: /tmp/lj-gc-helper-assertions-20260905-z9obuha4/t-gc2-interp-hard-check.c:230: main: Assertion `0' failed.\n"
+  },
+  {
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_APICHECK",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/original/strict-t-gc2-alloc-account.d",
+      "-I/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src",
+      "-I/tmp/lj-gc-helper-assertions-20260905-z9obuha4",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/t-gc2-alloc-account.c",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/original/strict-t-gc2-alloc-account"
+    ],
+    "cwd": "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/original",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/?.lua;;"
+    },
+    "inputs": {
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/run.py": "a05fbc32c0349a100debe836d599e0443d67c825e593c22bf7cd03e041cd6dcd",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/t-gc2-alloc-account.c": "5d16d4eb914e2614578b04a2a6e3589c62c3965def9b7a93dee8601a8ab1abfd",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/lib/lua_fixture_helpers.h": "cba26c57b088692886b4df5223a3670fad11ec7951002a98c54be4fedb6844fe",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/libluajit.a": "6aba90a3352142d02a4f63e83106017c8ab39cfcfc62d0385ae949a934961189"
+    },
+    "seconds": 0.3668136519991094,
+    "name": "t-gc2-alloc-account",
+    "stage": "compile",
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "output_binary_sha256": "767185b6c2ae596f31b7de6883310207e2cbce7f07e78e4043da6611ecf29bc6",
+    "transitive_dependencies": {
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/t-gc2-alloc-account.c": "5d16d4eb914e2614578b04a2a6e3589c62c3965def9b7a93dee8601a8ab1abfd",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lua.h": "5bcec229da426c785982dffe2f832a5dc83dac0024a09e40a6b725b1968b8a6b",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/luaconf.h": "a70c46233a56ea0c74d4df2e88e45371bf94df9b10ef9d2a81cbe18758c1ceff",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lauxlib.h": "7093ea70fb38341d10475814b90961cec22f9643c11e3ea4c2ddc2cd4b03164e",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lualib.h": "10fd6bccc4ae40cc9094b10d8d8de5a8d3febb90668cde599c253bec04bf4546",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_obj.h": "a8962fcc16e961ad29275cffc993ff368c229dc435f5794babbbacd8214557bc",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_def.h": "625089c379122ad13e4b8078e073512da41ebfe80173f806abb0d1e4d3b66858",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_arch.h": "d21ad3f86b2f7651de5ab1dcfc4a3c504deae83d8b2b77d5ccbf75394a98ca7b",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_atomic.h": "0a7bbdc91ae21c4dcbe09cd7de500e0aeb341173f5059f43659678e5be53fac1",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_gc2token.h": "3c1ccf57ef4dd5f5a9a251e0472569939bd0bca8d21260f0497a0d1f84aa29b6",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_tgregistry.h": "e97c3112f34628eec2a0e10e7722e0b85f92f94aec92c3ab1e7f93a7bdd4ec99",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_tgslot.h": "f11ac945f5a0d12026bea04a07fc35dedd0571cd3c21a737c508d3e973384b6f",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_cdata.h": "f2e5fcfa4759afe46442017def8d746ecccf914a460c3e7accfedf114a1536f7",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_gc.h": "56b9e71567ffca558f06be0a844da3389faca8a8ede1da1d3cf0a614e7beddf6",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_ctype.h": "8ee89b4adca50452d429e57ae528568ee9a2ac185eb15922f88e4007d0fd5e7d",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_gc2.h": "244b10c49ad036b661a08adc178e6b8247d8ff1b18ed63bc035d3440df16a9f9",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_arena.h": "c1e19e04c5a65aa05f7f37a195864995988610f06b4fb9ec897405982a4cd1c8",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_err.h": "ba27aab6b3b40569b92d95fb467785e79fccd974100eb658ba9ea9e4f530eaaa",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_errmsg.h": "e60dbd39214f5b6e1ae6cc2ea505705a0ecbe981d5f2dcfb8d6eb25af8eb88c5",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_oserr.h": "9ed2d42fb151864f50d3e1e32b5035b64ba14b41fb4f5a07a8b44504183d36af",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_meta.h": "da0ea0cce5a729d8cd9fd417f7d36f044445c16f8fad6f9dae3a2f89c26d4501",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_safepoint.h": "328aa2bc63d753257d8adca5a5417ccdda059b942138aecda20a3da53752d46c",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_tg.h": "a5cb46bde2868512743795750b5a1da71cd1a581bc037da127e60b36cb994015",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_bc.h": "e0ba29a7f70141876b2a071483db1d489b2b7b57cd6f6dc879ecb3cea0f283fa",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_tab.h": "2f9f61003cfdd252c306f3bc7a12e176483dc879b1adbc6653754ccc88478cf2",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_thr.h": "f39140aec08b622f0db5123fdf311e5e753075462b7a0f75c251c86a58985b28",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_dispatch.h": "c73f12ffc1cf58a7443d310e71d45d6ac1b791f0688b7f848521e149110c14e5",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_jit.h": "7608c51820c5f365d5cd7ce74fc79a0a3b87b6f9c437b97d01e83b78e7a6c1fa",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_ir.h": "c1c811b87570b2ade55348b356f9b0331c7fa51af6961433d72194adedd1f0a6"
+    }
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/original/strict-t-gc2-alloc-account"
+    ],
+    "cwd": "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/original",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/?.lua;;"
+    },
+    "inputs": {
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/t-gc2-alloc-account.c": "5d16d4eb914e2614578b04a2a6e3589c62c3965def9b7a93dee8601a8ab1abfd",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/original/strict-t-gc2-alloc-account": "767185b6c2ae596f31b7de6883310207e2cbce7f07e78e4043da6611ecf29bc6",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/libluajit.a": "6aba90a3352142d02a4f63e83106017c8ab39cfcfc62d0385ae949a934961189"
+    },
+    "seconds": 0.06560161199740833,
+    "name": "t-gc2-alloc-account",
+    "stage": "run",
+    "exit": -6,
+    "stdout": "",
+    "stderr": "strict-t-gc2-alloc-account: /tmp/lj-gc-helper-assertions-20260905-z9obuha4/t-gc2-alloc-account.c:929: main: Assertion `gc2_remembered_filtered_acq(g) == remembered_filtered0 + 4u' failed.\n"
+  }
+]

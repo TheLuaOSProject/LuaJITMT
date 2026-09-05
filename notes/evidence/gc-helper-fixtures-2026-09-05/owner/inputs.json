@@ -1,0 +1,10 @@
+{
+  "head": "843786094729ca189b39920cd05ec6756d28444f",
+  "sources": {
+    "t-gc2-interp-hard-check.c": "d1ab1088824cfc34996ef9e725cf79cb7fcd3490b3134ec382987c02cb2c8845",
+    "t-gc2-alloc-account.c": "5d16d4eb914e2614578b04a2a6e3589c62c3965def9b7a93dee8601a8ab1abfd"
+  },
+  "candidate_runtime": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict",
+  "earlier_control_runtime": "/tmp/lj-gc-auto-control-20260905-qs673ryl/controlhelpers",
+  "note": "Initial observations preserve each runtime and exact flags separately; do not claim macro-matched comparison between these differently configured helper archives."
+}

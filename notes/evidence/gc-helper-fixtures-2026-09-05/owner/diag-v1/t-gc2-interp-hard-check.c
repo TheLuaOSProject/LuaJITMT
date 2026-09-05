@@ -17,11 +17,27 @@
 
 #include "lib/lua_fixture_helpers.h"
 
+
+static void diagnose_phase(global_State *g, const char *name, unsigned line)
+{
+  TGState *tg=G2TG(g);
+  fprintf(stderr,"snapshot %s line=%u phase=%u cycle=%u request=%u requests=%llu starts=%llu major=%llu force=%u threshold=%llu total=%llu debt=%llu hard=%llu checks=%llu assists=%llu sweep=%u/%u/%u mark_active=%u gen=%u minor=%u filtered=%llu pushed=%llu\n",
+    name,line,gc2_phase_acq(g),gc2_cycle_acq(g),gc2_cycle_leader_acq(g),
+    (unsigned long long)gc2_cycle_requests_acq(g),(unsigned long long)gc2_cycle_starts_acq(g),
+    (unsigned long long)gc2_major_cycle_starts_acq(g),gc2_force_major_acq(g),
+    (unsigned long long)lj_gc_threshold_load(g),(unsigned long long)lj_gc_total_load(g),
+    (unsigned long long)gc2_alloc_since_trigger_acq(g),(unsigned long long)gc2_hard_bytes_acq(g),
+    (unsigned long long)gc2_interp_hard_checks_acq(g),(unsigned long long)gc2_assist_runs_acq(g),
+    gc2_sweep_bridge_ready_acq(g),gc2_sweep_root_done_acq(g),gc2_sweep_grace_needed_acq(g),
+    tg?lj_tg_mark_active_acq(tg):0,gc2_generational_acq(g),gc2_minor_sweep_enabled_acq(g),
+    (unsigned long long)gc2_remembered_filtered_acq(g),(unsigned long long)gc2_remembered_pushed_acq(g));
+}
+
 static void arm_gc2_hard_mark(global_State *g)
 {
-  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  diagnose_phase(g,"before-mark-begin",__LINE__);
   lj_gc2_mark_begin(g);
-  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  diagnose_phase(g,"after-mark-begin",__LINE__);
   /* The explicit cycle-start request makes the ordinary threshold due. Reset
   ** it afterwards: these fixtures isolate the hard cadence from threshold GC. */
   lj_gc_threshold_store(g, LJ_MAX_MEM);
@@ -32,9 +48,9 @@ static void arm_gc2_hard_mark(global_State *g)
 
 static void arm_gc2_normal_hard_mark(global_State *g)
 {
-  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  diagnose_phase(g,"before-mark-begin",__LINE__);
   lj_gc2_mark_begin(g);
-  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  diagnose_phase(g,"after-mark-begin",__LINE__);
   lj_gc_threshold_store(g, LJ_MAX_MEM);
   la_store64_rel(&g->gc2.hard_bytes, 2u * LJ_GC2_ACCT_FLUSH);
   la_store32_rel(&g->gc2.assist_shift, 0);
@@ -42,14 +58,11 @@ static void arm_gc2_normal_hard_mark(global_State *g)
 		 2u * LJ_GC2_ACCT_FLUSH + 1u);
 }
 
-static void finish_gc2_mark(lua_State *L, global_State *g)
+static void finish_gc2_mark(global_State *g)
 {
-  /* A threshold step may leave fair MARK-close intent pending. The preserving
-  ** cycle_to_idle abort can then refuse; use the real completion driver and
-  ** prove that the next hard-assist case starts from a completed cycle. */
-  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
-  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
-  assert(gc2_mark_close_intent_acq(g) == 0);
+  diagnose_phase(g,"before-cycle-to-idle",__LINE__);
+  lj_gc2_cycle_to_idle(g);
+  diagnose_phase(g,"after-cycle-to-idle",__LINE__);
   g->gc.state = GCSpause;
   lj_gc_threshold_store(g, g->gc.total + 4u * LJ_GC2_ACCT_FLUSH);
 }
@@ -79,7 +92,7 @@ static void test_hard_only_helper(lua_State *L, global_State *g)
 	    (unsigned)color_state0, (unsigned)g->gc.state);
     assert(0);
   }
-  finish_gc2_mark(L, g);
+  finish_gc2_mark(g);
 }
 
 static void test_normal_hard_tnew_batch_gate(lua_State *L, global_State *g)
@@ -97,7 +110,9 @@ static void test_normal_hard_tnew_batch_gate(lua_State *L, global_State *g)
   interp_checks0 = gc2_interp_hard_checks_acq(g);
   assist_runs0 = gc2_assist_runs_acq(g);
 
+  diagnose_phase(g,"before-pcall",__LINE__);
   ljt_lua_pcall(L, 0, 0, "lua_pcall");
+  diagnose_phase(g,"after-pcall",__LINE__);
 
   if (lj_gc_test_step_fixtop_calls() != fixtop_calls0) {
     fputs("normal hard-only TNEW entered the fixtop helper before local batch debt\n",
@@ -113,7 +128,7 @@ static void test_normal_hard_tnew_batch_gate(lua_State *L, global_State *g)
     fputs("normal hard-only TNEW assisted before local batch debt\n", stderr);
     assert(0);
   }
-  finish_gc2_mark(L, g);
+  finish_gc2_mark(g);
   lj_tg_local_total_xchg_acqrel(L2TG(L), 0);
 }
 
@@ -144,7 +159,7 @@ static void test_hard_only_c_check(lua_State *L, global_State *g)
 	    (unsigned)color_state0, (unsigned)g->gc.state);
     assert(0);
   }
-  finish_gc2_mark(L, g);
+  finish_gc2_mark(g);
 }
 
 static void test_hard_only_fastfunc(lua_State *L, global_State *g)
@@ -160,7 +175,9 @@ static void test_hard_only_fastfunc(lua_State *L, global_State *g)
   interp_checks0 = gc2_interp_hard_checks_acq(g);
   assist_runs0 = gc2_assist_runs_acq(g);
 
+  diagnose_phase(g,"before-pcall",__LINE__);
   ljt_lua_pcall(L, 0, 0, "lua_pcall");
+  diagnose_phase(g,"after-pcall",__LINE__);
 
   if (gc2_interp_hard_checks_acq(g) <= interp_checks0) {
     fputs("hard-only fast function did not enter the GC2 hard check\n",
@@ -177,7 +194,7 @@ static void test_hard_only_fastfunc(lua_State *L, global_State *g)
 	    (unsigned)color_state0, (unsigned)g->gc.state);
     assert(0);
   }
-  finish_gc2_mark(L, g);
+  finish_gc2_mark(g);
 }
 
 int main(void)
@@ -205,7 +222,9 @@ int main(void)
   assist_runs0 = gc2_assist_runs_acq(g);
 
   lj_gc_threshold_store(g, g->gc.total);
+  diagnose_phase(g,"before-pcall",__LINE__);
   ljt_lua_pcall(L, 0, 0, "lua_pcall");
+  diagnose_phase(g,"after-pcall",__LINE__);
 
   if (gc2_interp_hard_checks_acq(g) <= interp_checks0) {
     fputs("interpreted TNEW did not enter the GC2 hard check\n", stderr);
@@ -216,7 +235,7 @@ int main(void)
     assert(0);
   }
 
-  finish_gc2_mark(L, g);
+  finish_gc2_mark(g);
 
   ljt_lua_loadstring(L,
     "local x = {}\n"
@@ -226,7 +245,9 @@ int main(void)
   interp_checks0 = gc2_interp_hard_checks_acq(g);
   assist_runs0 = gc2_assist_runs_acq(g);
 
+  diagnose_phase(g,"before-pcall",__LINE__);
   ljt_lua_pcall(L, 0, 0, "lua_pcall");
+  diagnose_phase(g,"after-pcall",__LINE__);
 
   if (gc2_interp_hard_checks_acq(g) <= interp_checks0) {
     fputs("interpreted hard-only TNEW did not enter the GC2 hard check\n",
@@ -243,7 +264,7 @@ int main(void)
 	    (unsigned)color_state0, (unsigned)g->gc.state);
     assert(0);
   }
-  finish_gc2_mark(L, g);
+  finish_gc2_mark(g);
 
   test_hard_only_fastfunc(L, g);
   test_hard_only_helper(L, g);

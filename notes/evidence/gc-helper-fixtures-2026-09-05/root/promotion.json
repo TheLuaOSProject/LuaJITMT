@@ -1,0 +1,14 @@
+[
+  {
+    "name": "t-gc2-interp-hard-check.c",
+    "source": "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/candidate-v4/t-gc2-interp-hard-check.c",
+    "before": "d1ab1088824cfc34996ef9e725cf79cb7fcd3490b3134ec382987c02cb2c8845",
+    "after": "6584c6cc748f3ae27b93409e24755296d20eaa5ecc1ef6e0576017194021943a"
+  },
+  {
+    "name": "t-gc2-alloc-account.c",
+    "source": "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/candidate-v4/t-gc2-alloc-account.c",
+    "before": "5d16d4eb914e2614578b04a2a6e3589c62c3965def9b7a93dee8601a8ab1abfd",
+    "after": "931232437a4fa22103d3673dcf31f1ad5c2689ebbd70110ce1a743a786f5ddda"
+  }
+]

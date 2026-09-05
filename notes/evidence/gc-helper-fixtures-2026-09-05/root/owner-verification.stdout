@@ -1,0 +1,12 @@
+{
+  "artifact_manifest_sha256": "5aad0e6bde498e1f93c9591c14ed7e765c7394df2d6dbc1095396a84308a8921",
+  "artifact_count": 141,
+  "source_checks": 1344,
+  "unique_artifact_input_dependency_files": 1496,
+  "final_runtime": {
+    "pass": 10
+  },
+  "original_runtime": {
+    "failure": 6
+  }
+}

@@ -1,0 +1,172 @@
+{
+  "final_candidate": "candidate-v4",
+  "results": {
+    "candidate-v1/strict-results.json": {
+      "counts": {
+        "compile_pass": 2,
+        "run_pass": 1,
+        "run_failure": 1
+      },
+      "sha256": "f965cedef8ba070af8df47651d0b326794e15d1578ec7658c757a74c8004a0b7"
+    },
+    "candidate-v2/strict-results.json": {
+      "counts": {
+        "compile_pass": 1,
+        "run_failure": 1
+      },
+      "sha256": "df34cfd0f2ad608c5e8951b32a53991fe95ab1f19b90fbcad996386192f03c3c"
+    },
+    "candidate-v3/strict-results.json": {
+      "counts": {
+        "compile_pass": 1,
+        "run_pass": 1
+      },
+      "sha256": "414f5e3906fcc01204953820cc4ffe65ffaf746b6e603f30ddeee2aae67c79e8"
+    },
+    "candidate-v4/793-asan-results.json": {
+      "counts": {
+        "compile_pass": 2,
+        "run_pass": 2
+      },
+      "sha256": "ed00f071849e8fd6613c4e33449e186f0b264621a2bcf14855894faf3982a94b"
+    },
+    "candidate-v4/793-strict-results.json": {
+      "counts": {
+        "compile_pass": 2,
+        "run_pass": 2
+      },
+      "sha256": "0dfb176f288fe67dc1db6fd6577043de3a2d8d149e1a5aef339b0cec745bc9e5"
+    },
+    "candidate-v4/843-optimized-helpers-results.json": {
+      "counts": {
+        "compile_pass": 2,
+        "run_pass": 2
+      },
+      "sha256": "6b754a0f5d5d17715ff3fb472e3e3319d6bdc4962873126c912517f00ffd7997"
+    },
+    "candidate-v4/asan-results.json": {
+      "counts": {
+        "compile_pass": 2,
+        "run_pass": 2
+      },
+      "sha256": "c21821e49fcce3fe4157dfe22ad2e23ec0e79a6ecea170dee494e4dfb50ab0f6"
+    },
+    "candidate-v4/strict-results.json": {
+      "counts": {
+        "compile_pass": 2,
+        "run_pass": 2
+      },
+      "sha256": "a9c3dd438270dda41a24b032c1c871523208e52879697cc7c693bef1b46c6b2e"
+    },
+    "diag-v1/strict-results.json": {
+      "counts": {
+        "compile_failure": 2
+      },
+      "sha256": "f50da92e2fbc3801008382f1953caf7156e2039cbe2df651534e516a5a2cd998"
+    },
+    "diag-v2/strict-results.json": {
+      "counts": {
+        "compile_pass": 2,
+        "run_failure": 2
+      },
+      "sha256": "ac95183c51b5d5544b2889497cb07e5aea333be6d0ffd46c2139434fcbad492e"
+    },
+    "diag-v3/strict-results.json": {
+      "counts": {
+        "compile_pass": 2,
+        "run_failure": 2
+      },
+      "sha256": "6fd7049826bc655d611416df953bdd55a0bab40b691a76372526c7d520dacd1e"
+    },
+    "diag-v4/strict-results.json": {
+      "counts": {
+        "compile_pass": 2,
+        "run_failure": 2
+      },
+      "sha256": "84020c75619f4cc425e06b150beb281a6038c3339a5dad75730a424becf0271a"
+    },
+    "diag-v5/strict-results.json": {
+      "counts": {
+        "compile_pass": 2,
+        "run_failure": 2
+      },
+      "sha256": "dada9b910f43a43dfcac174db523bd862e5e83ea889541a1863d65c028785bf9"
+    },
+    "diag-v6/strict-results.json": {
+      "counts": {
+        "compile_pass": 2,
+        "run_failure": 2
+      },
+      "sha256": "0d14e32c2acf2b4d8fe407daa5d1f90fa3a41189c7d8bccab230db25a7493b4a"
+    },
+    "diag-v7/strict-results.json": {
+      "counts": {
+        "compile_pass": 2,
+        "run_failure": 2
+      },
+      "sha256": "e4f99cf88b8aebe8035117b73af39ef351600486915137af121b0a437b3bcf15"
+    },
+    "diag-v8/strict-results.json": {
+      "counts": {
+        "compile_pass": 1,
+        "run_failure": 1
+      },
+      "sha256": "61c25a0016d28af6bc66e5ce9e6b4af4acfd9168a16c64bdb91f1b72baed0fcf"
+    },
+    "original/843-asan-control-results.json": {
+      "counts": {
+        "compile_pass": 2,
+        "run_failure": 2
+      },
+      "sha256": "021deec4ce3d1c8655f5707db45d9acaa1f306b635a2413f429457777b097d9d"
+    },
+    "original/843-optimized-helpers-results.json": {
+      "counts": {
+        "compile_pass": 2,
+        "run_failure": 2
+      },
+      "sha256": "63c42e21b7813e1f6185b85da990600eeb0a4034afcb2a267fb6920ed60183c5"
+    },
+    "original/strict-results.json": {
+      "counts": {
+        "compile_pass": 2,
+        "run_failure": 2
+      },
+      "sha256": "73ba5e89d66197ec698f294c664bc65693a85fb0ab2027d910eaefbebcd28709"
+    }
+  },
+  "all_compile": {
+    "pass": 33,
+    "failure": 2
+  },
+  "all_runtime": {
+    "pass": 12,
+    "failure": 21
+  },
+  "final_runtime": {
+    "pass": 10
+  },
+  "original_runtime": {
+    "failure": 6
+  },
+  "debuggers": {
+    "diag-v3/publication-watch-results.json": {
+      "driver_exit": 1,
+      "target_sigabrt": false,
+      "status": "observer failure",
+      "sha256": "ef60a2de988824884fdb81cb87ac26d034426ce1dd5cd649ba010f74e95cfd2a"
+    },
+    "diag-v3/publication-watch-v2-results.json": {
+      "driver_exit": 0,
+      "target_sigabrt": true,
+      "status": "aborted target observation",
+      "sha256": "e9c9e880057c1f5e60e480b28bddde77c98b7b38f34f734715ae22d229b3c146"
+    },
+    "diag-v4/publication-watch-results.json": {
+      "driver_exit": 0,
+      "target_sigabrt": true,
+      "status": "aborted target observation",
+      "sha256": "f29c49c6568d876840286aa4dcbff75845cbdc460180ea9c1b2c59bcd97e5043"
+    }
+  }
+}

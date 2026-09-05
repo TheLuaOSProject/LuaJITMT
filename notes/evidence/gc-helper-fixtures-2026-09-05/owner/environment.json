@@ -1,0 +1,56 @@
+{
+  "system": {
+    "command": [
+      "uname",
+      "-a"
+    ],
+    "exit": 0,
+    "stdout": "Linux 7f3bd9b38fd8 7.2.1-ogc4.1.fc44.x86_64 #1 SMP PREEMPT_DYNAMIC Tue Sep  1 22:10:56 UTC 2026 x86_64 GNU/Linux\n",
+    "stderr": ""
+  },
+  "cc": {
+    "command": [
+      "cc",
+      "--version"
+    ],
+    "exit": 0,
+    "stdout": "cc (Debian 14.2.0-19) 14.2.0\nCopyright (C) 2024 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+    "stderr": ""
+  },
+  "clang": {
+    "command": [
+      "clang",
+      "--version"
+    ],
+    "exit": 0,
+    "stdout": "Debian clang version 19.1.7 (3+b1)\nTarget: x86_64-pc-linux-gnu\nThread model: posix\nInstalledDir: /usr/lib/llvm-19/bin\n",
+    "stderr": ""
+  },
+  "make": {
+    "command": [
+      "make",
+      "--version"
+    ],
+    "exit": 0,
+    "stdout": "GNU Make 4.4.1\nBuilt for x86_64-pc-linux-gnu\nCopyright (C) 1988-2023 Free Software Foundation, Inc.\nLicense GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>\nThis is free software: you are free to change and redistribute it.\nThere is NO WARRANTY, to the extent permitted by law.\n",
+    "stderr": ""
+  },
+  "gdb": {
+    "command": [
+      "gdb",
+      "--version"
+    ],
+    "exit": 0,
+    "stdout": "GNU gdb (Debian 16.3-1) 16.3\nCopyright (C) 2024 Free Software Foundation, Inc.\nLicense GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>\nThis is free software: you are free to change and redistribute it.\nThere is NO WARRANTY, to the extent permitted by law.\n",
+    "stderr": ""
+  },
+  "python": {
+    "command": [
+      "python3",
+      "--version"
+    ],
+    "exit": 0,
+    "stdout": "Python 3.13.5\n",
+    "stderr": ""
+  }
+}

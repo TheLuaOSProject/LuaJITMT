@@ -1,0 +1,6 @@
+== m10_generational ==
++ LUA_PATH='/workspaces/lj-lockless/tests/lib/?.lua;/workspaces/lj-lockless/src/?.lua;/workspaces/lj-lockless/src/jit/?.lua;;' '/workspaces/lj-lockless/src/luajit' '-joff' '/workspaces/lj-lockless/tests/t-gc-generational-mode.lua'
++ LUA_PATH='/workspaces/lj-lockless/tests/lib/?.lua;/workspaces/lj-lockless/src/?.lua;/workspaces/lj-lockless/src/jit/?.lua;;' '/workspaces/lj-lockless/src/luajit' '/workspaces/lj-lockless/tests/t-gc-generational-mode.lua'
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -I'/workspaces/lj-lockless/src' '/workspaces/lj-lockless/tests/t-gc2-alloc-account.c' '/workspaces/lj-lockless/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj-helper-fixtures-root-20260905-wa27ui28/canonical-tmp/lj_t-gc2-alloc-account-m10'
++ timeout '20s' '/tmp/lj-helper-fixtures-root-20260905-wa27ui28/canonical-tmp/lj_t-gc2-alloc-account-m10'
+ok m10_generational

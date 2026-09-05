@@ -1,0 +1,15 @@
+{
+  "command": [
+    "python3",
+    "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/verify-final.py"
+  ],
+  "cwd": "/workspaces/lj-lockless",
+  "seconds": 0.39586198500182945,
+  "exit": 0,
+  "stdout": "{\n  \"artifact_manifest_sha256\": \"5aad0e6bde498e1f93c9591c14ed7e765c7394df2d6dbc1095396a84308a8921\",\n  \"artifact_count\": 141,\n  \"source_checks\": 1344,\n  \"unique_artifact_input_dependency_files\": 1496,\n  \"final_runtime\": {\n    \"pass\": 10\n  },\n  \"original_runtime\": {\n    \"failure\": 6\n  }\n}\n",
+  "stderr": "",
+  "inputs": {
+    "verify-final.py": "70aff6d488f03bd38af5aac9a272ebd69559c6539f9b83875db5d2e2b2e13fa6",
+    "artifact-manifest.json": "5aad0e6bde498e1f93c9591c14ed7e765c7394df2d6dbc1095396a84308a8921"
+  }
+}

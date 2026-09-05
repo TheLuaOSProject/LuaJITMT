@@ -1,7 +1,7 @@
 # Lockless completion plan
 
 Reviewed: 2026-09-04, starting at `a649f737`.
-Updated: 2026-09-05 after GC control repair and retained-cdata lookup comparison.
+Updated: 2026-09-05 after GC control, retained-cdata lookup and helper-fixture review.
 
 This is the operative continuation of the original plan. It preserves the
 requested end state: one shared Lua heap, safe ordinary racy Lua programs,
@@ -78,6 +78,7 @@ are verified reasons the full goal is still open:
 | Area | Finding at review entry | Required direction |
 | --- | --- | --- |
 | Table resize | Structural owner plus source `FORWARD` can strand the only value in an owner's local variable; descriptor migration is dormant | Durable exact payloads, helpable migration/publication, GC and native grace |
+| Table iteration | Ordinary scalar ITERN waits for global SMR while an unrelated IDLE reclaimer is suspended | Prove independently leased iteration progress, including exact source validation and terminal END; preserve general hash/GC-result lifetime requirements |
 | Descriptor installation | Separate capacity-shadow store can corrupt a winning descriptor before the losing ownership CAS | Publish control and capacity in one atomic pair; deterministic competing-generation test |
 | Automatic GC | Durable IDLE requests now enter at safe boundaries; public control survives delayed attachment stores; worker-enabled cycles still miss SWEEP completion bounds | Resolve worker completion and unfinished-owner deferral, then complete asynchronous phase ownership; retain independent finalizer suppression |
 | Closure construction | A test-only nested full collect revisits an unfinished closure; the first deferral candidate stops that wait but starves later eligible TGs | Preserve construction/retry authority, prove completion after publish/cancel, and provide fair bounded owner traversal across work-budget boundaries |
@@ -348,6 +349,13 @@ controls and post-fix completion tests:
   completion. Preserve this counterexample when adding a bounded continuation
   between owner turns. See
   `notes/gc-construction-defer-review-2026-09-05.md`.
+- The hard-assist and allocation-account fixtures now prove their measured
+  cycle and SSB-pool setup, and exact meta-store publication counts are backed
+  by actual source-stack observations. Ten isolated final processes and five
+  canonical components pass without runtime changes. M6 still times out in
+  unchanged scalar ITERN under the paused IDLE reclaimer; its last two cases
+  remain unrun. Treat that wait as runtime progress work, retaining the paused
+  window and original outcomes. See `notes/gc-helper-fixtures-2026-09-05.md`.
 - `1bce0fa5`: promote exhausted inline table dirty authority into pre-reserved
   persistent wide proof, retaining common stamp/token geometry. Small mappings
   use a dense sidecar plane and Huge mappings use checked tail reservation.

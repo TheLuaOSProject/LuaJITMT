@@ -1,0 +1,6 @@
+{
+  "setup_failure": "FileNotFoundError: candidate/.relver does not exist; source224 and top Makefile had been copied before the failure.",
+  "build_driver_failure": "build-releasehelpers.py ran make, then failed while hashing missing releasehelpers-inputs.json, so its captured compiler output was not written. This generation is not accepted build evidence.",
+  "tree": "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/releasehelpers",
+  "recovery": "New releasehelpers-v2 copies the actual src/luajit_relver.txt metadata and records all inputs before building; no prior tree or source changed."
+}

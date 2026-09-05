@@ -932,7 +932,6 @@ int main(void)
   assert(gc2_remembered_filtered_acq(g) == remembered_filtered0 + 9u);
   assert(active_ssb_last(tg) == obj2gco(parent));
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
-  assert(tvistab(lj_tab_getint(parent, 1)));
   assert(tabV(lj_tab_getint(parent, 1)) == grandchild);
   /* Existing-key resolution adds the copied old value's root and pair.
   ** Its eleven filtered edges bring the cumulative count to twenty; the
@@ -945,7 +944,6 @@ int main(void)
 	 remembered_pushed0 + 3u);
   assert(active_ssb_last(tg) == obj2gco(parent));
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
-  assert(tvistab(lj_tab_getint(parent, 1)));
   assert(tabV(lj_tab_getint(parent, 1)) == child);
   (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
   (void)lj_gc2_test_ssb_drain(g);
@@ -1130,7 +1128,6 @@ int main(void)
   (void)lj_gc2_test_ssb_drain(g);
   assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
   lj_gc2_cycle_to_idle(g);
-
   lua_settop(L, 0);
   lua_newtable(L);
   parent = tabV(L->top - 1);
@@ -1145,11 +1142,12 @@ int main(void)
 
   /* The next case measures a published-SSB assist frontier. A preserving abort
   ** can leave its free-node pool empty; flushing would then recycle old work
-  ** before the measured assist. Collect after constructing the next graph,
-  ** so its setup publications drain before the measured cycle begins. */
+  ** before the measured assist. Finish a real collection after constructing the next graph, so its
+  ** setup publications also drain before the measured cycle begins. */
   assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
   assert(lj_tg_ssb_free_acq(tg) != NULL);
+
 
   lj_gc2_mark_begin(g);
   assert(gc2_phase_acq(g) == LJ_GC2_MARK);

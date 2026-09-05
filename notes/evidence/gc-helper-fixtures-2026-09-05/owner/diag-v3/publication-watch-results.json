@@ -1,0 +1,19 @@
+{
+  "command": [
+    "gdb",
+    "-q",
+    "-batch",
+    "-x",
+    "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/diag-v3/publication-watch.gdb",
+    "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/original/strict-t-gc2-alloc-account"
+  ],
+  "exit": 1,
+  "seconds": 0.05987019399617566,
+  "stdout": "Breakpoint 1 at 0x9830: file /tmp/lj-gc-helper-assertions-20260905-z9obuha4/t-gc2-alloc-account.c, line 548.\n[Thread debugging using libthread_db enabled]\nUsing host libthread_db library \"/lib/x86_64-linux-gnu/libthread_db.so.1\".\n\nBreakpoint 1, main () at /tmp/lj-gc-helper-assertions-20260905-z9obuha4/t-gc2-alloc-account.c:548\n548\t  lua_State *L = luaL_newstate();\n",
+  "stderr": "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/diag-v3/publication-watch.gdb:7: Error in sourced command file:\nvalue has been optimized out\n",
+  "inputs": {
+    "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/diag-v3/publication-watch.gdb": "83a206dc9191c5295c3a3b6d4098e39f2de653ab75e5942e025ebd886bfb57bf",
+    "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/original/strict-t-gc2-alloc-account": "767185b6c2ae596f31b7de6883310207e2cbce7f07e78e4043da6611ecf29bc6",
+    "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/t-gc2-alloc-account.c": "5d16d4eb914e2614578b04a2a6e3589c62c3965def9b7a93dee8601a8ab1abfd"
+  }
+}

@@ -1,0 +1,25 @@
+/tmp/lj-gc-helper-assertions-20260905-z9obuha4/diag-v1/strict-t-gc2-interp-hard-check: \
+ /tmp/lj-gc-helper-assertions-20260905-z9obuha4/diag-v1/t-gc2-interp-hard-check.c \
+ /tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lua.h \
+ /tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/luaconf.h \
+ /tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lauxlib.h \
+ /tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lua.h \
+ /tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lualib.h \
+ /tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_obj.h \
+ /tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_def.h \
+ /tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_arch.h \
+ /tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_atomic.h \
+ /tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_gc2token.h \
+ /tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_tgregistry.h \
+ /tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_tgslot.h \
+ /tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_atomic.h \
+ /tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_gc.h \
+ /tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_obj.h \
+ /tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_gc2.h \
+ /tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_arena.h \
+ /tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_tg.h \
+ /tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_bc.h \
+ /tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_ctype.h \
+ /tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_gc.h \
+ /tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/lj_gc2.h \
+ /tmp/lj-gc-helper-assertions-20260905-z9obuha4/lib/lua_fixture_helpers.h

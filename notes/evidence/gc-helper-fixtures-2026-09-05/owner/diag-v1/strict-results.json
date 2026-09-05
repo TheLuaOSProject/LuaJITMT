@@ -1,0 +1,98 @@
+[
+  {
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_APICHECK",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/diag-v1/strict-t-gc2-interp-hard-check.d",
+      "-I/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src",
+      "-I/tmp/lj-gc-helper-assertions-20260905-z9obuha4",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/diag-v1/t-gc2-interp-hard-check.c",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/diag-v1/strict-t-gc2-interp-hard-check"
+    ],
+    "cwd": "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/diag-v1",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/?.lua;;"
+    },
+    "inputs": {
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/run.py": "a05fbc32c0349a100debe836d599e0443d67c825e593c22bf7cd03e041cd6dcd",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/diag-v1/t-gc2-interp-hard-check.c": "15dca833a094ad56d00bcfa85c3bf9536e93a8ea94ded5c590eed8ca3a5258bb",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/lib/lua_fixture_helpers.h": "cba26c57b088692886b4df5223a3670fad11ec7951002a98c54be4fedb6844fe",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/libluajit.a": "6aba90a3352142d02a4f63e83106017c8ab39cfcfc62d0385ae949a934961189"
+    },
+    "seconds": 0.07775443999707932,
+    "name": "t-gc2-interp-hard-check",
+    "stage": "compile",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/diag-v1/t-gc2-interp-hard-check.c: In function \u2018diagnose_phase\u2019:\n/tmp/lj-gc-helper-assertions-20260905-z9obuha4/diag-v1/t-gc2-interp-hard-check.c:27:55: error: implicit declaration of function \u2018gc2_force_major_acq\u2019; did you mean \u2018gc2_force_major_rel\u2019? [-Wimplicit-function-declaration]\n   27 |     (unsigned long long)gc2_major_cycle_starts_acq(g),gc2_force_major_acq(g),\n      |                                                       ^~~~~~~~~~~~~~~~~~~\n      |                                                       gc2_force_major_rel\n/tmp/lj-gc-helper-assertions-20260905-z9obuha4/diag-v1/t-gc2-interp-hard-check.c:29:25: error: implicit declaration of function \u2018gc2_alloc_since_trigger_acq\u2019 [-Wimplicit-function-declaration]\n   29 |     (unsigned long long)gc2_alloc_since_trigger_acq(g),(unsigned long long)gc2_hard_bytes_acq(g),\n      |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~\n/tmp/lj-gc-helper-assertions-20260905-z9obuha4/diag-v1/t-gc2-interp-hard-check.c:29:76: error: implicit declaration of function \u2018gc2_hard_bytes_acq\u2019 [-Wimplicit-function-declaration]\n   29 |     (unsigned long long)gc2_alloc_since_trigger_acq(g),(unsigned long long)gc2_hard_bytes_acq(g),\n      |                                                                            ^~~~~~~~~~~~~~~~~~\n"
+  },
+  {
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_APICHECK",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/diag-v1/strict-t-gc2-alloc-account.d",
+      "-I/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src",
+      "-I/tmp/lj-gc-helper-assertions-20260905-z9obuha4",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/diag-v1/t-gc2-alloc-account.c",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/diag-v1/strict-t-gc2-alloc-account"
+    ],
+    "cwd": "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/diag-v1",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/?.lua;;"
+    },
+    "inputs": {
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/run.py": "a05fbc32c0349a100debe836d599e0443d67c825e593c22bf7cd03e041cd6dcd",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/diag-v1/t-gc2-alloc-account.c": "543ea54fda0ae2023c3d7f022c3f6ecd2ab57b2e1a7ac848e059288c404211d0",
+      "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/lib/lua_fixture_helpers.h": "cba26c57b088692886b4df5223a3670fad11ec7951002a98c54be4fedb6844fe",
+      "/tmp/lj-gc-auto-control-root-20260905-au933s3w/strict/src/libluajit.a": "6aba90a3352142d02a4f63e83106017c8ab39cfcfc62d0385ae949a934961189"
+    },
+    "seconds": 0.09460056300304132,
+    "name": "t-gc2-alloc-account",
+    "stage": "compile",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-gc-helper-assertions-20260905-z9obuha4/diag-v1/t-gc2-alloc-account.c: In function \u2018diagnose_phase\u2019:\n/tmp/lj-gc-helper-assertions-20260905-z9obuha4/diag-v1/t-gc2-alloc-account.c:39:55: error: implicit declaration of function \u2018gc2_force_major_acq\u2019; did you mean \u2018gc2_force_major_rel\u2019? [-Wimplicit-function-declaration]\n   39 |     (unsigned long long)gc2_major_cycle_starts_acq(g),gc2_force_major_acq(g),\n      |                                                       ^~~~~~~~~~~~~~~~~~~\n      |                                                       gc2_force_major_rel\n/tmp/lj-gc-helper-assertions-20260905-z9obuha4/diag-v1/t-gc2-alloc-account.c:41:25: error: implicit declaration of function \u2018gc2_alloc_since_trigger_acq\u2019 [-Wimplicit-function-declaration]\n   41 |     (unsigned long long)gc2_alloc_since_trigger_acq(g),(unsigned long long)gc2_hard_bytes_acq(g),\n      |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~\n/tmp/lj-gc-helper-assertions-20260905-z9obuha4/diag-v1/t-gc2-alloc-account.c:41:76: error: implicit declaration of function \u2018gc2_hard_bytes_acq\u2019 [-Wimplicit-function-declaration]\n   41 |     (unsigned long long)gc2_alloc_since_trigger_acq(g),(unsigned long long)gc2_hard_bytes_acq(g),\n      |                                                                            ^~~~~~~~~~~~~~~~~~\n"
+  }
+]

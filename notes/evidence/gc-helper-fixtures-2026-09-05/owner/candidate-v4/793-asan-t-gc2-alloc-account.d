@@ -1,0 +1,30 @@
+/tmp/lj-gc-helper-assertions-20260905-z9obuha4/candidate-v4/793-asan-t-gc2-alloc-account: \
+  /tmp/lj-gc-helper-assertions-20260905-z9obuha4/candidate-v4/t-gc2-alloc-account.c \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lua.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/luaconf.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lauxlib.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lualib.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_obj.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_def.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_arch.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_atomic.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_gc2token.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_tgregistry.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_tgslot.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_cdata.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_gc.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_ctype.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_gc2.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_arena.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_err.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_errmsg.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_oserr.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_meta.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_safepoint.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_tg.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_bc.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_tab.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_thr.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_dispatch.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_jit.h \
+  /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/asan/src/lj_ir.h

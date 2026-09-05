@@ -19,9 +19,7 @@
 
 static void arm_gc2_hard_mark(global_State *g)
 {
-  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
   lj_gc2_mark_begin(g);
-  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
   /* The explicit cycle-start request makes the ordinary threshold due. Reset
   ** it afterwards: these fixtures isolate the hard cadence from threshold GC. */
   lj_gc_threshold_store(g, LJ_MAX_MEM);
@@ -32,9 +30,7 @@ static void arm_gc2_hard_mark(global_State *g)
 
 static void arm_gc2_normal_hard_mark(global_State *g)
 {
-  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
   lj_gc2_mark_begin(g);
-  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
   lj_gc_threshold_store(g, LJ_MAX_MEM);
   la_store64_rel(&g->gc2.hard_bytes, 2u * LJ_GC2_ACCT_FLUSH);
   la_store32_rel(&g->gc2.assist_shift, 0);
@@ -42,14 +38,9 @@ static void arm_gc2_normal_hard_mark(global_State *g)
 		 2u * LJ_GC2_ACCT_FLUSH + 1u);
 }
 
-static void finish_gc2_mark(lua_State *L, global_State *g)
+static void finish_gc2_mark(global_State *g)
 {
-  /* A threshold step may leave fair MARK-close intent pending. The preserving
-  ** cycle_to_idle abort can then refuse; use the real completion driver and
-  ** prove that the next hard-assist case starts from a completed cycle. */
-  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
-  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
-  assert(gc2_mark_close_intent_acq(g) == 0);
+  lj_gc2_cycle_to_idle(g);
   g->gc.state = GCSpause;
   lj_gc_threshold_store(g, g->gc.total + 4u * LJ_GC2_ACCT_FLUSH);
 }
@@ -79,7 +70,7 @@ static void test_hard_only_helper(lua_State *L, global_State *g)
 	    (unsigned)color_state0, (unsigned)g->gc.state);
     assert(0);
   }
-  finish_gc2_mark(L, g);
+  finish_gc2_mark(g);
 }
 
 static void test_normal_hard_tnew_batch_gate(lua_State *L, global_State *g)
@@ -113,7 +104,7 @@ static void test_normal_hard_tnew_batch_gate(lua_State *L, global_State *g)
     fputs("normal hard-only TNEW assisted before local batch debt\n", stderr);
     assert(0);
   }
-  finish_gc2_mark(L, g);
+  finish_gc2_mark(g);
   lj_tg_local_total_xchg_acqrel(L2TG(L), 0);
 }
 
@@ -144,7 +135,7 @@ static void test_hard_only_c_check(lua_State *L, global_State *g)
 	    (unsigned)color_state0, (unsigned)g->gc.state);
     assert(0);
   }
-  finish_gc2_mark(L, g);
+  finish_gc2_mark(g);
 }
 
 static void test_hard_only_fastfunc(lua_State *L, global_State *g)
@@ -177,7 +168,7 @@ static void test_hard_only_fastfunc(lua_State *L, global_State *g)
 	    (unsigned)color_state0, (unsigned)g->gc.state);
     assert(0);
   }
-  finish_gc2_mark(L, g);
+  finish_gc2_mark(g);
 }
 
 int main(void)
@@ -216,7 +207,7 @@ int main(void)
     assert(0);
   }
 
-  finish_gc2_mark(L, g);
+  finish_gc2_mark(g);
 
   ljt_lua_loadstring(L,
     "local x = {}\n"
@@ -243,7 +234,7 @@ int main(void)
 	    (unsigned)color_state0, (unsigned)g->gc.state);
     assert(0);
   }
-  finish_gc2_mark(L, g);
+  finish_gc2_mark(g);
 
   test_hard_only_fastfunc(L, g);
   test_hard_only_helper(L, g);
