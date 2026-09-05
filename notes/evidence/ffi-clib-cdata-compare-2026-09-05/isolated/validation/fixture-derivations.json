@@ -1,0 +1,58 @@
+[
+  {
+    "file": "t-clib-cache-authority.lua",
+    "original_path": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+    "original_sha256": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+    "new_sha256": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+    "changed": true
+  },
+  {
+    "file": "t-clib-cache-supplement.lua",
+    "original_path": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+    "original_sha256": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+    "new_sha256": "9a32499439be8caa202d4f4d7063a2a98694a7d02e2a5956e5684fa025fb181b",
+    "changed": true
+  },
+  {
+    "file": "t-clib-cache-between-close.c",
+    "original_path": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close.c",
+    "original_sha256": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+    "new_sha256": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+    "changed": true
+  },
+  {
+    "file": "t-clib-cache-geometry.c",
+    "original_path": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c",
+    "original_sha256": "4241db4f4be64f1d37f534e204c6d961cec2c7350b7f64099528987a4517e89a",
+    "new_sha256": "4241db4f4be64f1d37f534e204c6d961cec2c7350b7f64099528987a4517e89a",
+    "changed": false
+  },
+  {
+    "file": "t-clib-cache-authority-lib.c",
+    "original_path": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-lib.c",
+    "original_sha256": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+    "new_sha256": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+    "changed": false
+  },
+  {
+    "file": "authority.so",
+    "original_path": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+    "original_sha256": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+    "new_sha256": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+    "changed": false
+  },
+  {
+    "file": "run-final.py",
+    "original_path": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-final.py",
+    "original_sha256": "641164b56c97b2b020cc40020a4c7daf92754b5b56572b44f40596abf4b1caf0",
+    "new_sha256": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+    "changed": true
+  },
+  {
+    "file": "run-supplement.py",
+    "original_path": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py",
+    "original_sha256": "ff0513326113cc36c59d7670c10900f292b24a3d3b0abbbefdcde24889863c9a",
+    "new_sha256": "6ff88497cac7a2b6c1663617923a3b843f98ff840ee9105f706769ec55ed4836",
+    "changed": true
+  }
+]

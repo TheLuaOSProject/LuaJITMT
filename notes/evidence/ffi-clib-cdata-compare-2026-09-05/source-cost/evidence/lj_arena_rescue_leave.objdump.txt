@@ -1,0 +1,10 @@
+
+/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_arena.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000006e30 <lj_arena_rescue_leave>:
+    6e30:	e9 fb cd ff ff       	jmp    3c30 <arena_publish_leave>
+
+Disassembly of section .text.unlikely:

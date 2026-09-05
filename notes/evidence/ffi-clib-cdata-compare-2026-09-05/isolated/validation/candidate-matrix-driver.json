@@ -1,0 +1,77 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24",
+      "python3",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py",
+      "candidate",
+      "full"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "exit": 0,
+    "stdout": "candidate full function complete\ncandidate full read complete\ncandidate full write complete\ncandidate full zero complete\ncandidate full big complete\ncandidate full passes 80 of 80\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24",
+      "python3",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py",
+      "candidate",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "exit": 0,
+    "stdout": "candidate gc function complete\ncandidate gc read complete\ncandidate gc write complete\ncandidate gc passes 20 of 20\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24",
+      "python3",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py",
+      "candidate",
+      "wrapper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "exit": 0,
+    "stdout": "candidate wrapper passes 4 of 4\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24",
+      "python3",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py",
+      "candidate",
+      "gc-wrapper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "exit": 0,
+    "stdout": "candidate gc-wrapper passes 4 of 4\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "24",
+      "python3",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-supplement.py",
+      "candidate",
+      "full"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "exit": 0,
+    "stdout": "candidate full passes 40 of 40\n",
+    "stderr": ""
+  }
+]

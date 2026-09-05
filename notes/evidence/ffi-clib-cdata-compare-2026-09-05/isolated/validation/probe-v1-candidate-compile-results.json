@@ -1,0 +1,45 @@
+[
+  {
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/comparison-probe-candidate.d",
+      "-I/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cdata-probe.c",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--export-dynamic",
+      "-Wl,--wrap=lj_tab_cmpcdata_kgc_rooted_try",
+      "-Wl,--wrap=lj_tg_any_jit_active",
+      "-o",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/comparison-probe-candidate"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/?.lua;;"
+    },
+    "seconds": 0.057111567999527324,
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cdata-probe.c": "7de788db5477e5c280091784aeae6db8217f4f724686459008a4438dd42c6b46",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cdata-probe.lua": "270fef94d67285044dbc2581e73c9e2e500a5708f12420fbdaaa7f5ed4517054",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/luajit": "2d7649d7269b024753caf87f718e4821dfd164854bfd9402928ceb3e7a708ee7",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/libluajit.a": "92e52001f8f418828a491939c7575ce9deb910cc66d82c0c4674d726e43fb3bf",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "operation": "compile",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cdata-probe.c: In function \u2018__wrap_lj_tab_cmpcdata_kgc_rooted_try\u2019:\n/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cdata-probe.c:82:24: error: implicit declaration of function \u2018lj_thr_gc2_tls_current\u2019; did you mean \u2018lj_thr_actor_current\u2019? [-Wimplicit-function-declaration]\n   82 |     LJThrGC2TLS *tls = lj_thr_gc2_tls_current();\n      |                        ^~~~~~~~~~~~~~~~~~~~~~\n      |                        lj_thr_actor_current\n/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cdata-probe.c:82:24: error: initialization of \u2018LJThrGC2TLS *\u2019 from \u2018int\u2019 makes pointer from integer without a cast [-Wint-conversion]\n/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cdata-probe.c: In function \u2018arm_probe\u2019:\n/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cdata-probe.c:151:22: error: initialization of \u2018LJThrGC2TLS *\u2019 from \u2018int\u2019 makes pointer from integer without a cast [-Wint-conversion]\n  151 |   LJThrGC2TLS *tls = lj_thr_gc2_tls_current();\n      |                      ^~~~~~~~~~~~~~~~~~~~~~\n"
+  }
+]

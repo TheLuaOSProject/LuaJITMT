@@ -1,0 +1,107 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "25",
+      "python3",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py",
+      "strict",
+      "compile"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "exit": 0,
+    "stdout": "strict wrapper built 86273d36a282d5fe847b99f78e65d88021ba6c016a728a3889b8fc3373e67e88\nstrict compile passes 1 of 1\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "25",
+      "python3",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-supplement.py",
+      "strict",
+      "compile"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "exit": 0,
+    "stdout": "strict compile passes 1 of 1\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "25",
+      "python3",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py",
+      "strict",
+      "full"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "exit": 0,
+    "stdout": "strict full function complete\nstrict full read complete\nstrict full write complete\nstrict full zero complete\nstrict full big complete\nstrict full passes 80 of 80\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "25",
+      "python3",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py",
+      "strict",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "exit": 0,
+    "stdout": "strict gc function complete\nstrict gc read complete\nstrict gc write complete\nstrict gc passes 20 of 20\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "25",
+      "python3",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py",
+      "strict",
+      "wrapper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "exit": 0,
+    "stdout": "strict wrapper passes 4 of 4\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "25",
+      "python3",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py",
+      "strict",
+      "gc-wrapper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "exit": 0,
+    "stdout": "strict gc-wrapper passes 4 of 4\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "25",
+      "python3",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-supplement.py",
+      "strict",
+      "full"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "exit": 0,
+    "stdout": "strict full passes 40 of 40\n",
+    "stderr": ""
+  }
+]

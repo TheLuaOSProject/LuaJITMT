@@ -1,0 +1,186 @@
+{
+  "base": "843786094729ca189b39920cd05ec6756d28444f",
+  "source_inputs_each": 224,
+  "source_delta": {
+    "lj_crecord.c": "20ae6cbfff9cab4d8a3ae085463b45f9eb2610fc4edae40a4917fd979117508c",
+    "lj_ircall.h": "1d88dcfa2daac962f030459f2a95af42abd5c40b9dc3899cb176c6f646b6f0c5",
+    "lj_tab.c": "64cda324340427db88b34605dd610646e3feb1bd3b6d862db9f12f2c2c70cd79",
+    "lj_tab.h": "08f3fca94f1fe734238b3cfe3c45686375413a29bbd77da1d83a2590553b137d"
+  },
+  "variants": {
+    "candidate": {
+      "broad": 98,
+      "scoped_suites": {
+        "final-candidate-full-results.json": {
+          "count": 80,
+          "sha256": "8814793525764ed5648cb637edc94166dc05b8ee3b55ccdb38d62d487fb39b0f"
+        },
+        "final-candidate-gc-results.json": {
+          "count": 20,
+          "sha256": "b5f60ef86da1c6072d02a70589b8e01ed9c4fc361c0b8fc6f910f77dac97e868"
+        },
+        "final-candidate-wrapper-results.json": {
+          "count": 4,
+          "sha256": "2efda2d92cfac7dfbb0d893a7edb70802fc477ba6d0e36cd196159a2099eb696"
+        },
+        "final-candidate-gc-wrapper-results.json": {
+          "count": 4,
+          "sha256": "dce4b3e3d7383589d1a07097b4e95e1d350902ed2d926348e07161704f492469"
+        },
+        "supplement-candidate-full-results.json": {
+          "count": 40,
+          "sha256": "165dac00b2e6ac243767b1f545fb282991f61364a6aff31968a252d7195789ba"
+        },
+        "probe-v3-candidate-full-results.json": {
+          "count": 30,
+          "sha256": "599e4d0446b1180edfda54ab8d860eb9abbc79c86e80a5d4e619145fe5dac109"
+        },
+        "retention-v1-candidate-full-results.json": {
+          "count": 12,
+          "sha256": "29978f59fa066aa0996dbd6e7f1d71f778c80dd6c2b5cdfde4f786a4c33dcb15"
+        }
+      },
+      "scoped": 190,
+      "binaries": {
+        "candidate-t-ffi-recorder-libmeta-busy": "2c2c2226d57e8fcfa93b733e3db65029445453295c19a9167c9a4e3780c64c31",
+        "candidate-t-ffi-clib-extern-snapshot": "2199a3655f06b535955af3ab45f74de012b45dbeb26af782be05569a0df4ee9d",
+        "candidate-t-ffi-clib-cache-retire": "bd58ee4c367c1e631afd2330f7081df697abeba0eda1edb0b2256ba834557761",
+        "candidate-t-ffi-callxs-callback-stack": "27f48e55b35bcb5f7d3494659bb1e745a9ff4785f25b61ab3a1b8b56acf5ee80",
+        "luajit": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+        "libluajit.a": "1cc2bd3ba6f7350cc9b4306f4bbf7b00d8e0832e4323be5c4b59584b34a677dc",
+        "extern.so": "2993fb39e017fc1654a1934f61f22206d67663d61e7eee92a94a5012f44a63cf",
+        "remote.so": "1d1346ed5a22f133d8c0fcd44bdf4565d5e526d11fe93c16c3b97258780db9c1"
+      }
+    },
+    "strict": {
+      "broad": 98,
+      "scoped_suites": {
+        "final-strict-full-results.json": {
+          "count": 80,
+          "sha256": "a0279673600574b59765e99dec39f1fe43fb4504e2acf8956b24e708a9280169"
+        },
+        "final-strict-gc-results.json": {
+          "count": 20,
+          "sha256": "2e4cc41293a0fc8fd8ac4b58bf0dd6494f3ef8961892476066b6e1c8e67d2425"
+        },
+        "final-strict-wrapper-results.json": {
+          "count": 4,
+          "sha256": "dc9c8ff5a9559d130e5fab97686792b39f476e42e980d3eba405ebc50c8fe0d3"
+        },
+        "final-strict-gc-wrapper-results.json": {
+          "count": 4,
+          "sha256": "c23780201d9169539219da4574ee39f4548eebab6e3e8e7a3e862209f5e933c5"
+        },
+        "supplement-strict-full-results.json": {
+          "count": 40,
+          "sha256": "d983cce1706abb8302b0e3fae998824f3b58c0d2cd92858302b290c5c002fd03"
+        },
+        "probe-v3-strict-full-results.json": {
+          "count": 42,
+          "sha256": "9fcef29ca0a59cf8b504cc05efd059877c9582303c268b866b7bbfb462b2dafe"
+        },
+        "retention-v1-strict-full-results.json": {
+          "count": 12,
+          "sha256": "9a49403f9aba2cb0a8cca63d0acdad2f9519a70f94d5ec1d735244b69ddf11ba"
+        }
+      },
+      "scoped": 202,
+      "binaries": {
+        "strict-t-ffi-recorder-libmeta-busy": "75db92a6e9d895306f963c2271fbef027ed78971fee88238ff7625f45ac4fd0c",
+        "strict-t-ffi-clib-extern-snapshot": "31da80727eb836dc10739eb9f4a0b820d9cd3b587f36b5b2f3de48c9b7a8ed2b",
+        "strict-t-ffi-clib-cache-retire": "2647f5d9e26f3249199ac1327debe844256a8254529c965546ac28a8994d83d8",
+        "strict-t-ffi-callxs-callback-stack": "dbd56a62a16cf4b76fcf5fb2fe83a6f2991339246c4e7de7c00a9ee180bf5e02",
+        "luajit": "914c42cc9565b3b61117de954446da8ca8ffbcab091d338f4cfa036f1443be27",
+        "libluajit.a": "3fdbe96a21431044549717f028252d2d0d103a16ae07215cbdc196dd96a7e55f",
+        "extern.so": "2993fb39e017fc1654a1934f61f22206d67663d61e7eee92a94a5012f44a63cf",
+        "remote.so": "1d1346ed5a22f133d8c0fcd44bdf4565d5e526d11fe93c16c3b97258780db9c1"
+      }
+    },
+    "asan": {
+      "broad": 98,
+      "scoped_suites": {
+        "final-asan-full-results.json": {
+          "count": 80,
+          "sha256": "8c0ee872a3c1933839126970ee94d9a8e648d3b95061b6b7b852f14a143fb8b6"
+        },
+        "final-asan-gc-results.json": {
+          "count": 20,
+          "sha256": "ec4ed0437c187c64d6006d59aa53d08896a4aab95505018b02be98af23254418"
+        },
+        "final-asan-wrapper-results.json": {
+          "count": 4,
+          "sha256": "8f425ce2ca95012f433251fb34eba58f94e6251ef335408b87ce07720b0b14f4"
+        },
+        "final-asan-gc-wrapper-results.json": {
+          "count": 4,
+          "sha256": "6c8c61567e5bb288e0731c3ab527dd1542190320af6c0d0ba71e9e45adf0a915"
+        },
+        "supplement-asan-full-results.json": {
+          "count": 40,
+          "sha256": "b20aa4e2a779bfd1789279cf298673dfb0d4d43dcd2c3c86c2da401e43dd42d4"
+        },
+        "probe-v3-asan-full-results.json": {
+          "count": 42,
+          "sha256": "e5b6795111c9cbe54ed9bcc4a9806e7822cbf2109f6f1a9c5344017d71261ecb"
+        },
+        "retention-v1-asan-full-results.json": {
+          "count": 12,
+          "sha256": "c7ca763ba1372f86cbad3abceb132312ec884ecde869e289e77f88605094cde2"
+        }
+      },
+      "scoped": 202,
+      "binaries": {
+        "asan-t-ffi-recorder-libmeta-busy": "cd1a8e39dcb74e8dea6a1e4eebfd0bdec9d892d1c5556f8d3de6bd6dc1466673",
+        "asan-t-ffi-clib-extern-snapshot": "aa063c78df45751032579d8f10a3d3ab87bb20cde5e3e94c64fce0f45f4cb229",
+        "asan-t-ffi-clib-cache-retire": "4fe855f4fa59bc1e3e68142200f02fc20f989637bb0e88f18206f9560383dbbc",
+        "asan-t-ffi-callxs-callback-stack": "63c0fbe9458d2bfc4a419ba2756b5e6bdfd8640ed8e92ba96e6ba339df35908e",
+        "luajit": "46807e1782210122224df522c9b5ea449aeecead833681d34b4b4a3a465646ac",
+        "libluajit.a": "9261101e116b1407eb68e0b35d10a44e28da96d9c931983699c18f4a6e097b21",
+        "extern.so": "8338cd9c57f0c8c9250c2ad61c031862c83a6d326ff16292a9bb3fa99cb9d642",
+        "remote.so": "5a3133dee8397ad6869009cdba03914000db508a9da0773a555abdfb065bbc7d"
+      }
+    }
+  },
+  "combined_isolated_functional": 888,
+  "canonical": [
+    {
+      "name": "m3_gc2_auto_control",
+      "exit": 0,
+      "seconds": 46.542335764999734,
+      "expected_runtime_processes": 37,
+      "default_binaries": {
+        "luajit": "226deab70e1ed8608a6f13d90c8445e5e5ee945087868e85261f656588d2d385",
+        "libluajit.a": "d7278ecb35007efc8e0b6e799909047b8f795db26499ee7297f940144c40952d",
+        "libluajit.so": "189e885f3c32a044ac1458743f5987675eac1282d5e7c195896e5689eb933944"
+      }
+    },
+    {
+      "name": "m7_ffi_clib_cache_authority",
+      "exit": 0,
+      "seconds": 2.628244915002142,
+      "expected_runtime_processes": 153,
+      "default_binaries": {
+        "luajit": "226deab70e1ed8608a6f13d90c8445e5e5ee945087868e85261f656588d2d385",
+        "libluajit.a": "d7278ecb35007efc8e0b6e799909047b8f795db26499ee7297f940144c40952d",
+        "libluajit.so": "189e885f3c32a044ac1458743f5987675eac1282d5e7c195896e5689eb933944"
+      }
+    },
+    {
+      "name": "m7_ffi_clib_cdata_compare",
+      "exit": 0,
+      "seconds": 28.760044203998405,
+      "expected_runtime_processes": 96,
+      "default_binaries": {
+        "luajit": "226deab70e1ed8608a6f13d90c8445e5e5ee945087868e85261f656588d2d385",
+        "libluajit.a": "d7278ecb35007efc8e0b6e799909047b8f795db26499ee7297f940144c40952d",
+        "libluajit.so": "189e885f3c32a044ac1458743f5987675eac1282d5e7c195896e5689eb933944"
+      }
+    }
+  ],
+  "combined_functional_total": 1174,
+  "prior_isolated_functional": 594,
+  "both_generations_functional_total": 1768,
+  "combined_cost_processes": 14,
+  "prior_isolated_cost_processes": 14,
+  "bounds": "individual stock assertions are not additional process counts; build/compile/IR/pilot/cost processes excluded from functional totals"
+}

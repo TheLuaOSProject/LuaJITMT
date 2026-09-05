@@ -1,0 +1,71 @@
+{
+  "archive_members": [
+    {
+      "command": [
+        "ar",
+        "p",
+        "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a",
+        "lj_tab.o"
+      ],
+      "cwd": "/tmp/lj-clib-hit-cost-review-20260905-cmxsefzb",
+      "exit": 0,
+      "archive_member_sha256": "06175337ce0c272fc722fe7fed4596585412a5224e611a512bb35e1e02ae2511",
+      "object_sha256": "06175337ce0c272fc722fe7fed4596585412a5224e611a512bb35e1e02ae2511",
+      "equal": true,
+      "stderr": ""
+    },
+    {
+      "command": [
+        "ar",
+        "p",
+        "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a",
+        "lj_gc2.o"
+      ],
+      "cwd": "/tmp/lj-clib-hit-cost-review-20260905-cmxsefzb",
+      "exit": 0,
+      "archive_member_sha256": "1ccddff86c9f6a5bbd8feb336157799b1e6a4deca40479707b43fe94e6262d12",
+      "object_sha256": "1ccddff86c9f6a5bbd8feb336157799b1e6a4deca40479707b43fe94e6262d12",
+      "equal": true,
+      "stderr": ""
+    },
+    {
+      "command": [
+        "ar",
+        "p",
+        "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a",
+        "lj_arena.o"
+      ],
+      "cwd": "/tmp/lj-clib-hit-cost-review-20260905-cmxsefzb",
+      "exit": 0,
+      "archive_member_sha256": "a5e410b06f1a8f2890a1479edb8e1259ed8aa4d60c8a55ea8d367620594daa81",
+      "object_sha256": "a5e410b06f1a8f2890a1479edb8e1259ed8aa4d60c8a55ea8d367620594daa81",
+      "equal": true,
+      "stderr": ""
+    },
+    {
+      "command": [
+        "ar",
+        "p",
+        "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a",
+        "lj_cdata.o"
+      ],
+      "cwd": "/tmp/lj-clib-hit-cost-review-20260905-cmxsefzb",
+      "exit": 0,
+      "archive_member_sha256": "59c54a48a760bba6863f87081541b660256d62f44b9e388da9621e0b1fd0cfe4",
+      "object_sha256": "59c54a48a760bba6863f87081541b660256d62f44b9e388da9621e0b1fd0cfe4",
+      "equal": true,
+      "stderr": ""
+    }
+  ],
+  "executable_dynamic_section": {
+    "command": [
+      "readelf",
+      "-d",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit"
+    ],
+    "cwd": "/tmp/lj-clib-hit-cost-review-20260905-cmxsefzb",
+    "exit": 0,
+    "stdout": "\nDynamic section at offset 0x170dc0 contains 28 entries:\n  Tag        Type                         Name/Value\n 0x0000000000000001 (NEEDED)             Shared library: [libm.so.6]\n 0x0000000000000001 (NEEDED)             Shared library: [libgcc_s.so.1]\n 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]\n 0x000000000000000c (INIT)               0x9000\n 0x000000000000000d (FINI)               0x137a8c\n 0x0000000000000019 (INIT_ARRAY)         0x16ffe0\n 0x000000000000001b (INIT_ARRAYSZ)       8 (bytes)\n 0x000000000000001a (FINI_ARRAY)         0x16ffe8\n 0x000000000000001c (FINI_ARRAYSZ)       24 (bytes)\n 0x000000006ffffef5 (GNU_HASH)           0x3e8\n 0x0000000000000005 (STRTAB)             0x2390\n 0x0000000000000006 (SYMTAB)             0x908\n 0x000000000000000a (STRSZ)              3390 (bytes)\n 0x000000000000000b (SYMENT)             24 (bytes)\n 0x0000000000000015 (DEBUG)              0x0\n 0x0000000000000003 (PLTGOT)             0x171fe8\n 0x0000000000000002 (PLTRELSZ)           2808 (bytes)\n 0x0000000000000014 (PLTREL)             RELA\n 0x0000000000000017 (JMPREL)             0x7748\n 0x0000000000000007 (RELA)               0x33f8\n 0x0000000000000008 (RELASZ)             17232 (bytes)\n 0x0000000000000009 (RELAENT)            24 (bytes)\n 0x000000006ffffffb (FLAGS_1)            Flags: PIE\n 0x000000006ffffffe (VERNEED)            0x3308\n 0x000000006fffffff (VERNEEDNUM)         3\n 0x000000006ffffff0 (VERSYM)             0x30ce\n 0x000000006ffffff9 (RELACOUNT)          689\n 0x0000000000000000 (NULL)               0x0\n",
+    "stderr": ""
+  }
+}

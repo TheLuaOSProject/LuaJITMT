@@ -1,0 +1,120 @@
+
+/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_tab.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000001290 <tab_keyed_slot_owner_snapshot>:
+    1290:	48 85 ff             	test   %rdi,%rdi
+    1293:	0f 84 57 01 00 00    	je     13f0 <tab_keyed_slot_owner_snapshot+0x160>
+    1299:	41 57                	push   %r15
+    129b:	41 56                	push   %r14
+    129d:	41 55                	push   %r13
+    129f:	41 54                	push   %r12
+    12a1:	55                   	push   %rbp
+    12a2:	48 89 f5             	mov    %rsi,%rbp
+    12a5:	53                   	push   %rbx
+    12a6:	48 83 ec 18          	sub    $0x18,%rsp
+    12aa:	48 85 f6             	test   %rsi,%rsi
+    12ad:	74 0c                	je     12bb <tab_keyed_slot_owner_snapshot+0x2b>
+    12af:	4c 8b 67 10          	mov    0x10(%rdi),%r12
+    12b3:	48 89 fb             	mov    %rdi,%rbx
+    12b6:	4d 85 e4             	test   %r12,%r12
+    12b9:	75 15                	jne    12d0 <tab_keyed_slot_owner_snapshot+0x40>
+    12bb:	31 c0                	xor    %eax,%eax
+    12bd:	48 83 c4 18          	add    $0x18,%rsp
+    12c1:	5b                   	pop    %rbx
+    12c2:	5d                   	pop    %rbp
+    12c3:	41 5c                	pop    %r12
+    12c5:	41 5d                	pop    %r13
+    12c7:	41 5e                	pop    %r14
+    12c9:	41 5f                	pop    %r15
+    12cb:	c3                   	ret
+    12cc:	0f 1f 40 00          	nopl   0x0(%rax)
+    12d0:	e8 00 00 00 00       	call   12d5 <tab_keyed_slot_owner_snapshot+0x45>
+			12d1: R_X86_64_PLT32	lj_thr_actor_current-0x4
+    12d5:	41 89 c5             	mov    %eax,%r13d
+    12d8:	85 c0                	test   %eax,%eax
+    12da:	74 df                	je     12bb <tab_keyed_slot_owner_snapshot+0x2b>
+    12dc:	4c 89 e7             	mov    %r12,%rdi
+    12df:	e8 00 00 00 00       	call   12e4 <tab_keyed_slot_owner_snapshot+0x54>
+			12e0: R_X86_64_PLT32	lj_thr_get_tg_fallback-0x4
+    12e4:	49 89 c6             	mov    %rax,%r14
+    12e7:	48 85 c0             	test   %rax,%rax
+    12ea:	74 cf                	je     12bb <tab_keyed_slot_owner_snapshot+0x2b>
+    12ec:	4c 39 a0 98 08 00 00 	cmp    %r12,0x898(%rax)
+    12f3:	75 c6                	jne    12bb <tab_keyed_slot_owner_snapshot+0x2b>
+    12f5:	8b 80 8c 6d 00 00    	mov    0x6d8c(%rax),%eax
+    12fb:	41 39 c5             	cmp    %eax,%r13d
+    12fe:	75 bb                	jne    12bb <tab_keyed_slot_owner_snapshot+0x2b>
+    1300:	41 0f b6 86 2e 09 00 	movzbl 0x92e(%r14),%eax
+    1307:	00 
+    1308:	a8 04                	test   $0x4,%al
+    130a:	75 af                	jne    12bb <tab_keyed_slot_owner_snapshot+0x2b>
+    130c:	45 8b be 88 6d 00 00 	mov    0x6d88(%r14),%r15d
+    1313:	48 8b 93 80 00 00 00 	mov    0x80(%rbx),%rdx
+    131a:	41 8b 84 24 b0 15 00 	mov    0x15b0(%r12),%eax
+    1321:	00 
+    1322:	85 c0                	test   %eax,%eax
+    1324:	74 0e                	je     1334 <tab_keyed_slot_owner_snapshot+0xa4>
+    1326:	4d 39 b4 24 00 04 00 	cmp    %r14,0x400(%r12)
+    132d:	00 
+    132e:	0f 84 bf 00 00 00    	je     13f3 <tab_keyed_slot_owner_snapshot+0x163>
+    1334:	31 c9                	xor    %ecx,%ecx
+    1336:	41 8d 47 ff          	lea    -0x1(%r15),%eax
+    133a:	3d fd ff fe ff       	cmp    $0xfffefffd,%eax
+    133f:	0f 87 76 ff ff ff    	ja     12bb <tab_keyed_slot_owner_snapshot+0x2b>
+    1345:	4c 89 e8             	mov    %r13,%rax
+    1348:	44 89 fe             	mov    %r15d,%esi
+    134b:	48 c1 e0 20          	shl    $0x20,%rax
+    134f:	48 09 f0             	or     %rsi,%rax
+    1352:	48 39 c2             	cmp    %rax,%rdx
+    1355:	0f 85 60 ff ff ff    	jne    12bb <tab_keyed_slot_owner_snapshot+0x2b>
+    135b:	41 8b 84 24 b0 15 00 	mov    0x15b0(%r12),%eax
+    1362:	00 
+    1363:	83 f1 01             	xor    $0x1,%ecx
+    1366:	85 c0                	test   %eax,%eax
+    1368:	74 08                	je     1372 <tab_keyed_slot_owner_snapshot+0xe2>
+    136a:	84 c9                	test   %cl,%cl
+    136c:	0f 85 49 ff ff ff    	jne    12bb <tab_keyed_slot_owner_snapshot+0x2b>
+    1372:	49 8b 86 a0 08 00 00 	mov    0x8a0(%r14),%rax
+    1379:	48 39 c3             	cmp    %rax,%rbx
+    137c:	74 0e                	je     138c <tab_keyed_slot_owner_snapshot+0xfc>
+    137e:	4c 39 73 78          	cmp    %r14,0x78(%rbx)
+    1382:	74 08                	je     138c <tab_keyed_slot_owner_snapshot+0xfc>
+    1384:	84 c9                	test   %cl,%cl
+    1386:	0f 85 2f ff ff ff    	jne    12bb <tab_keyed_slot_owner_snapshot+0x2b>
+    138c:	41 8b 86 8c 6d 00 00 	mov    0x6d8c(%r14),%eax
+    1393:	41 39 c5             	cmp    %eax,%r13d
+    1396:	0f 85 1f ff ff ff    	jne    12bb <tab_keyed_slot_owner_snapshot+0x2b>
+    139c:	48 89 54 24 08       	mov    %rdx,0x8(%rsp)
+    13a1:	e8 00 00 00 00       	call   13a6 <tab_keyed_slot_owner_snapshot+0x116>
+			13a2: R_X86_64_PLT32	lj_thr_actor_current-0x4
+    13a6:	48 8b 54 24 08       	mov    0x8(%rsp),%rdx
+    13ab:	44 39 e8             	cmp    %r13d,%eax
+    13ae:	0f 85 07 ff ff ff    	jne    12bb <tab_keyed_slot_owner_snapshot+0x2b>
+    13b4:	48 8b 83 80 00 00 00 	mov    0x80(%rbx),%rax
+    13bb:	48 39 c2             	cmp    %rax,%rdx
+    13be:	0f 85 f7 fe ff ff    	jne    12bb <tab_keyed_slot_owner_snapshot+0x2b>
+    13c4:	66 49 0f 6e c4       	movq   %r12,%xmm0
+    13c9:	66 49 0f 6e ce       	movq   %r14,%xmm1
+    13ce:	48 89 55 10          	mov    %rdx,0x10(%rbp)
+    13d2:	b8 01 00 00 00       	mov    $0x1,%eax
+    13d7:	66 0f 6c c1          	punpcklqdq %xmm1,%xmm0
+    13db:	44 89 6d 18          	mov    %r13d,0x18(%rbp)
+    13df:	44 89 7d 1c          	mov    %r15d,0x1c(%rbp)
+    13e3:	0f 11 45 00          	movups %xmm0,0x0(%rbp)
+    13e7:	e9 d1 fe ff ff       	jmp    12bd <tab_keyed_slot_owner_snapshot+0x2d>
+    13ec:	0f 1f 40 00          	nopl   0x0(%rax)
+    13f0:	31 c0                	xor    %eax,%eax
+    13f2:	c3                   	ret
+    13f3:	49 8b 84 24 a0 01 00 	mov    0x1a0(%r12),%rax
+    13fa:	00 
+    13fb:	48 85 c0             	test   %rax,%rax
+    13fe:	0f 84 30 ff ff ff    	je     1334 <tab_keyed_slot_owner_snapshot+0xa4>
+    1404:	31 c9                	xor    %ecx,%ecx
+    1406:	48 39 c3             	cmp    %rax,%rbx
+    1409:	0f 94 c1             	sete   %cl
+    140c:	e9 25 ff ff ff       	jmp    1336 <tab_keyed_slot_owner_snapshot+0xa6>
+
+Disassembly of section .text.unlikely:

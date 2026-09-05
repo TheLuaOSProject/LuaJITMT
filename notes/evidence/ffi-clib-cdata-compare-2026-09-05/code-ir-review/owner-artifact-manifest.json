@@ -1,0 +1,83 @@
+{
+  "root": "/tmp/lj-clib-cdata-compare-proof-20260905-ei_30vvn",
+  "artifacts": [
+    {
+      "relative_path": "candidate/src/lj_crecord.c",
+      "sha256": "20ae6cbfff9cab4d8a3ae085463b45f9eb2610fc4edae40a4917fd979117508c",
+      "bytes": 114115,
+      "storage": "text"
+    },
+    {
+      "relative_path": "candidate/src/lj_ircall.h",
+      "sha256": "1d88dcfa2daac962f030459f2a95af42abd5c40b9dc3899cb176c6f646b6f0c5",
+      "bytes": 14133,
+      "storage": "text"
+    },
+    {
+      "relative_path": "candidate/src/lj_tab.c",
+      "sha256": "64cda324340427db88b34605dd610646e3feb1bd3b6d862db9f12f2c2c70cd79",
+      "bytes": 291123,
+      "storage": "text"
+    },
+    {
+      "relative_path": "candidate/src/lj_tab.h",
+      "sha256": "08f3fca94f1fe734238b3cfe3c45686375413a29bbd77da1d83a2590553b137d",
+      "bytes": 33046,
+      "storage": "text"
+    },
+    {
+      "relative_path": "candidate-v1.patch",
+      "sha256": "e8175c5b2c4a86a87caba35336ac1bc5bcdfdeeed88492fb0fe5b0ede9530d62",
+      "bytes": 7012,
+      "storage": "text"
+    },
+    {
+      "relative_path": "ir-review-manifest.json",
+      "sha256": "b7d89d3db0d4151cfdc89c3cc6e651aeae9c55abaa67dd0541c0859aa5296c68",
+      "bytes": 7466,
+      "storage": "text"
+    },
+    {
+      "relative_path": "ir-review-summary.json",
+      "sha256": "feb6bad7f5cc5f2e03117c41bfeb566ae3bd8898081479a6df0564edf3f58f9a",
+      "bytes": 3809,
+      "storage": "text"
+    },
+    {
+      "relative_path": "ir-v2-candidate-function.txt",
+      "sha256": "370322a5eccae1f56db1bba3d3a7b8fec8a0d9e15be394e10cb593295d192900",
+      "bytes": 4794,
+      "storage": "text"
+    },
+    {
+      "relative_path": "ir-v2-candidate-number.txt",
+      "sha256": "135b4d8232c60a821fa2b0e01a452884b55fce1ae60b16c0e12a75103dcb4c46",
+      "bytes": 4945,
+      "storage": "text"
+    },
+    {
+      "relative_path": "ir-v2-candidate-read.txt",
+      "sha256": "6ba00b4484ff7130fa7942781f1c4e04614b9563cb23ce5c0a8de9e7e8f2d30c",
+      "bytes": 5023,
+      "storage": "text"
+    },
+    {
+      "relative_path": "ir-v2-candidate-write.txt",
+      "sha256": "b28fa3e5c6c4ece7d0c7a643f8388ce700467fffa52cb25169e56f6ba1e53282",
+      "bytes": 5042,
+      "storage": "text"
+    },
+    {
+      "relative_path": "review.md",
+      "sha256": "32c1ad186979e3b3430420a0bdddc6ee9379e162a0d65def6756dfda2189a387",
+      "bytes": 6704,
+      "storage": "text"
+    },
+    {
+      "relative_path": "verification.json",
+      "sha256": "5f96302a9287ca3ddddf948817eac4486506830bd3a0bf134d68288ed045a83a",
+      "bytes": 11646,
+      "storage": "text"
+    }
+  ]
+}

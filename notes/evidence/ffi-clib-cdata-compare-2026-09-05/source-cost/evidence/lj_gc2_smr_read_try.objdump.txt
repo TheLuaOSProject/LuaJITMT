@@ -1,0 +1,59 @@
+
+/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_gc2.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000009b00 <lj_gc2_smr_read_try>:
+    9b00:	48 85 ff             	test   %rdi,%rdi
+    9b03:	74 4e                	je     9b53 <lj_gc2_smr_read_try+0x53>
+    9b05:	64 48 3b 3c 25 00 00 	cmp    %fs:0x0,%rdi
+    9b0c:	00 00 
+			9b0a: R_X86_64_TPOFF32	gc2_tls_state+0x10
+    9b0e:	74 50                	je     9b60 <lj_gc2_smr_read_try+0x60>
+    9b10:	8b 87 54 06 00 00    	mov    0x654(%rdi),%eax
+    9b16:	85 c0                	test   %eax,%eax
+    9b18:	74 06                	je     9b20 <lj_gc2_smr_read_try+0x20>
+    9b1a:	31 c0                	xor    %eax,%eax
+    9b1c:	c3                   	ret
+    9b1d:	0f 1f 00             	nopl   (%rax)
+    9b20:	f0 83 87 50 06 00 00 	lock addl $0x1,0x650(%rdi)
+    9b27:	01 
+    9b28:	8b 87 54 06 00 00    	mov    0x654(%rdi),%eax
+    9b2e:	85 c0                	test   %eax,%eax
+    9b30:	75 5e                	jne    9b90 <lj_gc2_smr_read_try+0x90>
+    9b32:	64 48 83 3c 25 00 00 	cmpq   $0x0,%fs:0x0
+    9b39:	00 00 00 
+			9b37: R_X86_64_TPOFF32	gc2_tls_state+0x10
+    9b3c:	75 15                	jne    9b53 <lj_gc2_smr_read_try+0x53>
+    9b3e:	64 48 89 3c 25 00 00 	mov    %rdi,%fs:0x0
+    9b45:	00 00 
+			9b43: R_X86_64_TPOFF32	gc2_tls_state+0x10
+    9b47:	64 c7 04 25 00 00 00 	movl   $0x1,%fs:0x0
+    9b4e:	00 01 00 00 00 
+			9b4b: R_X86_64_TPOFF32	gc2_tls_state+0x1c
+    9b53:	b8 01 00 00 00       	mov    $0x1,%eax
+    9b58:	c3                   	ret
+    9b59:	0f 1f 80 00 00 00 00 	nopl   0x0(%rax)
+    9b60:	64 8b 04 25 00 00 00 	mov    %fs:0x0,%eax
+    9b67:	00 
+			9b64: R_X86_64_TPOFF32	gc2_tls_state+0x1c
+    9b68:	85 c0                	test   %eax,%eax
+    9b6a:	74 a4                	je     9b10 <lj_gc2_smr_read_try+0x10>
+    9b6c:	83 f8 ff             	cmp    $0xffffffff,%eax
+    9b6f:	0f 84 00 00 00 00    	je     9b75 <lj_gc2_smr_read_try+0x75>
+			9b71: R_X86_64_PC32	.text.unlikely+0x70
+    9b75:	83 c0 01             	add    $0x1,%eax
+    9b78:	64 89 04 25 00 00 00 	mov    %eax,%fs:0x0
+    9b7f:	00 
+			9b7c: R_X86_64_TPOFF32	gc2_tls_state+0x1c
+    9b80:	b8 01 00 00 00       	mov    $0x1,%eax
+    9b85:	c3                   	ret
+    9b86:	66 2e 0f 1f 84 00 00 	cs nopw 0x0(%rax,%rax,1)
+    9b8d:	00 00 00 
+    9b90:	f0 83 af 50 06 00 00 	lock subl $0x1,0x650(%rdi)
+    9b97:	01 
+    9b98:	31 c0                	xor    %eax,%eax
+    9b9a:	c3                   	ret
+
+Disassembly of section .text.unlikely:

@@ -1,0 +1,36 @@
+
+/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_gc2.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000009d00 <lj_gc2_smr_read_leave>:
+    9d00:	48 85 ff             	test   %rdi,%rdi
+    9d03:	74 13                	je     9d18 <lj_gc2_smr_read_leave+0x18>
+    9d05:	64 48 39 3c 25 00 00 	cmp    %rdi,%fs:0x0
+    9d0c:	00 00 
+			9d0a: R_X86_64_TPOFF32	gc2_tls_state+0x10
+    9d0e:	74 10                	je     9d20 <lj_gc2_smr_read_leave+0x20>
+    9d10:	f0 83 af 50 06 00 00 	lock subl $0x1,0x650(%rdi)
+    9d17:	01 
+    9d18:	c3                   	ret
+    9d19:	0f 1f 80 00 00 00 00 	nopl   0x0(%rax)
+    9d20:	64 8b 04 25 00 00 00 	mov    %fs:0x0,%eax
+    9d27:	00 
+			9d24: R_X86_64_TPOFF32	gc2_tls_state+0x1c
+    9d28:	85 c0                	test   %eax,%eax
+    9d2a:	0f 84 00 00 00 00    	je     9d30 <lj_gc2_smr_read_leave+0x30>
+			9d2c: R_X86_64_PC32	.text.unlikely+0x89
+    9d30:	83 e8 01             	sub    $0x1,%eax
+    9d33:	64 89 04 25 00 00 00 	mov    %eax,%fs:0x0
+    9d3a:	00 
+			9d37: R_X86_64_TPOFF32	gc2_tls_state+0x1c
+    9d3b:	75 db                	jne    9d18 <lj_gc2_smr_read_leave+0x18>
+    9d3d:	64 48 c7 04 25 00 00 	movq   $0x0,%fs:0x0
+    9d44:	00 00 00 00 00 00 
+			9d42: R_X86_64_TPOFF32	gc2_tls_state+0x10
+    9d4a:	f0 83 af 50 06 00 00 	lock subl $0x1,0x650(%rdi)
+    9d51:	01 
+    9d52:	c3                   	ret
+
+Disassembly of section .text.unlikely:

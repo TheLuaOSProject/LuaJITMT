@@ -1,0 +1,214 @@
+[
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/final-strict-between-close",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cache-authority.lua",
+      "read",
+      "between-close",
+      "root",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/?.lua;;"
+    },
+    "seconds": 0.052913209998223465,
+    "cpu_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/run-final.py": "5d237ce663e5fffe98db02a88c1a43ae2f28299edae760f76f89e2449a04f029",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/luajit": "914c42cc9565b3b61117de954446da8ca8ffbcab091d338f4cfa036f1443be27",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/libluajit.a": "3fdbe96a21431044549717f028252d2d0d103a16ae07215cbdc196dd96a7e55f",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/jit/vmdef.lua": "3599350c275505afd26b570a8eb83443b0c4cb06fb161db677362cae7816bba9",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/final-strict-between-close": "b6133c0db79621e3417902e2446965e5f74c8ef267e80db5f72bf3339f2af986"
+    },
+    "kind": "read",
+    "mode": "between-close",
+    "target": "root",
+    "gc": true,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "gc-lifetime\tafter-warm\tafter-mutation\toriginal-env-alive\ncache-authority\tread\tbetween-close\troot\twarm\t2\t6\thelpers\t2\told-exits\t1\t0\tok\tfalse\teffects\t1\tslots\t17\t41\t73\nclose-witness\t1\t1\t1\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/final-strict-between-close",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cache-authority.lua",
+      "read",
+      "between-close",
+      "side",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/?.lua;;"
+    },
+    "seconds": 0.04700052699627122,
+    "cpu_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/run-final.py": "5d237ce663e5fffe98db02a88c1a43ae2f28299edae760f76f89e2449a04f029",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/luajit": "914c42cc9565b3b61117de954446da8ca8ffbcab091d338f4cfa036f1443be27",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/libluajit.a": "3fdbe96a21431044549717f028252d2d0d103a16ae07215cbdc196dd96a7e55f",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/jit/vmdef.lua": "3599350c275505afd26b570a8eb83443b0c4cb06fb161db677362cae7816bba9",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/final-strict-between-close": "b6133c0db79621e3417902e2446965e5f74c8ef267e80db5f72bf3339f2af986"
+    },
+    "kind": "read",
+    "mode": "between-close",
+    "target": "side",
+    "gc": true,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "gc-lifetime\tafter-warm\tafter-mutation\toriginal-env-alive\ncache-authority\tread\tbetween-close\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\tfalse\teffects\t40\tslots\t17\t41\t73\nclose-witness\t1\t1\t1\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/final-strict-between-close",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cache-authority.lua",
+      "write",
+      "between-close",
+      "root",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/?.lua;;"
+    },
+    "seconds": 0.04460928300250089,
+    "cpu_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/run-final.py": "5d237ce663e5fffe98db02a88c1a43ae2f28299edae760f76f89e2449a04f029",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/luajit": "914c42cc9565b3b61117de954446da8ca8ffbcab091d338f4cfa036f1443be27",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/libluajit.a": "3fdbe96a21431044549717f028252d2d0d103a16ae07215cbdc196dd96a7e55f",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/jit/vmdef.lua": "3599350c275505afd26b570a8eb83443b0c4cb06fb161db677362cae7816bba9",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/final-strict-between-close": "b6133c0db79621e3417902e2446965e5f74c8ef267e80db5f72bf3339f2af986"
+    },
+    "kind": "write",
+    "mode": "between-close",
+    "target": "root",
+    "gc": true,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "gc-lifetime\tafter-warm\tafter-mutation\toriginal-env-alive\ncache-authority\twrite\tbetween-close\troot\twarm\t2\t6\thelpers\t2\told-exits\t1\t0\tok\tfalse\teffects\t1\tslots\t17\t41\t73\nclose-witness\t1\t1\t1\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/final-strict-between-close",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cache-authority.lua",
+      "write",
+      "between-close",
+      "side",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/?.lua;;"
+    },
+    "seconds": 0.04603993199998513,
+    "cpu_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/run-final.py": "5d237ce663e5fffe98db02a88c1a43ae2f28299edae760f76f89e2449a04f029",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/luajit": "914c42cc9565b3b61117de954446da8ca8ffbcab091d338f4cfa036f1443be27",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/libluajit.a": "3fdbe96a21431044549717f028252d2d0d103a16ae07215cbdc196dd96a7e55f",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/jit/vmdef.lua": "3599350c275505afd26b570a8eb83443b0c4cb06fb161db677362cae7816bba9",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/final-strict-between-close": "b6133c0db79621e3417902e2446965e5f74c8ef267e80db5f72bf3339f2af986"
+    },
+    "kind": "write",
+    "mode": "between-close",
+    "target": "side",
+    "gc": true,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "gc-lifetime\tafter-warm\tafter-mutation\toriginal-env-alive\ncache-authority\twrite\tbetween-close\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\tfalse\teffects\t40\tslots\t39\t41\t73\nclose-witness\t1\t1\t1\n",
+    "stderr": ""
+  }
+]

@@ -1,0 +1,6 @@
+{
+  "baseline": "84378609 exact GC-control candidate3 normal source and binary",
+  "candidate": "84378609 plus four-file e8175c cdata comparison",
+  "fixture_sha256": "168779e16873fb591f870033be89751d3b8940c158b2d09b7c2191e6c17b5215",
+  "scope": "seven matching pairs of shared captured builtin lookup; same fixture as owner isolated aee benchmark; no application or stock speedup claim"
+}

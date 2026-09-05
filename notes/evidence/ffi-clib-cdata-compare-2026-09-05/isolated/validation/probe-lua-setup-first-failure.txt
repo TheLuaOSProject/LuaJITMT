@@ -1,0 +1,1 @@
+Initial read-only substring lookup expected ready:recv(10))) but original fixture has ready:recv(10))==true). Python raised ValueError: substring not found; no fixture was written and no runtime process ran. Corrected using the exact original line.

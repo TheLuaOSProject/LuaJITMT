@@ -1,0 +1,3122 @@
+[
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "function",
+      "false",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.09962396499759052,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "function",
+    "mode": "false",
+    "target": "root",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tfalse\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "function",
+      "false",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.08598667700425722,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "function",
+    "mode": "false",
+    "target": "root",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tfalse\troot\twarm\t2\t6\thelpers\t2\told-exits\t39\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "function",
+      "false",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.08460513799946057,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "function",
+    "mode": "false",
+    "target": "side",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tfalse\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "function",
+      "false",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.08958823300054064,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "function",
+    "mode": "false",
+    "target": "side",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tfalse\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t41\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "function",
+      "nil",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.08533265000005485,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "function",
+    "mode": "nil",
+    "target": "root",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tnil\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "function",
+      "nil",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.09659295900200959,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "function",
+    "mode": "nil",
+    "target": "root",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tnil\troot\twarm\t2\t6\thelpers\t2\told-exits\t2\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "function",
+      "nil",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.08202819299913244,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "function",
+    "mode": "nil",
+    "target": "side",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tnil\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "function",
+      "nil",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.08408804800274083,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "function",
+    "mode": "nil",
+    "target": "side",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tnil\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t2\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "function",
+      "other",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.08163603399589192,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "function",
+    "mode": "other",
+    "target": "root",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tother\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "function",
+      "other",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.09195804300543386,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "function",
+    "mode": "other",
+    "target": "root",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tother\troot\twarm\t2\t6\thelpers\t2\told-exits\t39\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "function",
+      "other",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.08505395500105806,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "function",
+    "mode": "other",
+    "target": "side",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tother\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "function",
+      "other",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.10388074700313155,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "function",
+    "mode": "other",
+    "target": "side",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tother\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t41\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "function",
+      "fenv",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.09935356800269801,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "function",
+    "mode": "fenv",
+    "target": "root",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tfenv\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "function",
+      "fenv",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.08627492200321285,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "function",
+    "mode": "fenv",
+    "target": "root",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tfenv\troot\twarm\t2\t6\thelpers\t2\told-exits\t1\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "function",
+      "fenv",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.08958105299825547,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "function",
+    "mode": "fenv",
+    "target": "side",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tfenv\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "function",
+      "fenv",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.08756083500338718,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "function",
+    "mode": "fenv",
+    "target": "side",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tfenv\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "function",
+      "close",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.08170159100700403,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "function",
+    "mode": "close",
+    "target": "root",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tclose\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\tfalse\teffects\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "function",
+      "close",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.08764117300597718,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "function",
+    "mode": "close",
+    "target": "root",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tclose\troot\twarm\t2\t6\thelpers\t2\told-exits\t1\t0\tok\tfalse\teffects\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "function",
+      "close",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.08995899299770826,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "function",
+    "mode": "close",
+    "target": "side",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tclose\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\tfalse\teffects\t40\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "function",
+      "close",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.08337728699552827,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "function",
+    "mode": "close",
+    "target": "side",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tclose\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\tfalse\teffects\t40\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "read",
+      "false",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07423408100294182,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "read",
+    "mode": "false",
+    "target": "root",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tfalse\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "read",
+      "false",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07621049600129481,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "read",
+    "mode": "false",
+    "target": "root",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tfalse\troot\twarm\t2\t6\thelpers\t2\told-exits\t39\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "read",
+      "false",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07452885200473247,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "read",
+    "mode": "false",
+    "target": "side",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tfalse\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "read",
+      "false",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07593269900098676,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "read",
+    "mode": "false",
+    "target": "side",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tfalse\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t41\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "read",
+      "nil",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07502983999438584,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "read",
+    "mode": "nil",
+    "target": "root",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tnil\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "read",
+      "nil",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.0758123190025799,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "read",
+    "mode": "nil",
+    "target": "root",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tnil\troot\twarm\t2\t6\thelpers\t2\told-exits\t2\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "read",
+      "nil",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07560362399817677,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "read",
+    "mode": "nil",
+    "target": "side",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tnil\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "read",
+      "nil",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07728947400028119,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "read",
+    "mode": "nil",
+    "target": "side",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tnil\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t2\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "read",
+      "other",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07310284300183412,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "read",
+    "mode": "other",
+    "target": "root",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tother\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "read",
+      "other",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07604471399827162,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "read",
+    "mode": "other",
+    "target": "root",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tother\troot\twarm\t2\t6\thelpers\t2\told-exits\t39\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "read",
+      "other",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07615018799697282,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "read",
+    "mode": "other",
+    "target": "side",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tother\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "read",
+      "other",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07669993200397585,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "read",
+    "mode": "other",
+    "target": "side",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tother\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t41\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "read",
+      "close",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07517861900123535,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "read",
+    "mode": "close",
+    "target": "root",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tclose\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\tfalse\teffects\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "read",
+      "close",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07757492599921534,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "read",
+    "mode": "close",
+    "target": "root",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tclose\troot\twarm\t2\t6\thelpers\t2\told-exits\t1\t0\tok\tfalse\teffects\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "read",
+      "close",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07598563000647118,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "read",
+    "mode": "close",
+    "target": "side",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tclose\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\tfalse\teffects\t40\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "read",
+      "close",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.0779508679988794,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "read",
+    "mode": "close",
+    "target": "side",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tclose\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\tfalse\teffects\t40\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "write",
+      "false",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07126878599956399,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "write",
+    "mode": "false",
+    "target": "root",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tfalse\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\tfalse\teffects\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "write",
+      "false",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.0729666150000412,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "write",
+    "mode": "false",
+    "target": "root",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tfalse\troot\twarm\t2\t6\thelpers\t2\told-exits\t1\t0\tok\tfalse\teffects\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "write",
+      "false",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07400848399993265,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "write",
+    "mode": "false",
+    "target": "side",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tfalse\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\tfalse\teffects\t40\tslots\t39\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "write",
+      "false",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07424426900252001,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "write",
+    "mode": "false",
+    "target": "side",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tfalse\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\tfalse\teffects\t40\tslots\t39\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "write",
+      "nil",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07347156800096855,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "write",
+    "mode": "nil",
+    "target": "root",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tnil\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t39\tslots\t39\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "write",
+      "nil",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07258661999367177,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "write",
+    "mode": "nil",
+    "target": "root",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tnil\troot\twarm\t2\t6\thelpers\t2\told-exits\t2\t0\tok\ttrue\teffects\t39\tslots\t39\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "write",
+      "nil",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07366569100122433,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "write",
+    "mode": "nil",
+    "target": "side",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tnil\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t39\t180\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "write",
+      "nil",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07453792799788062,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "write",
+    "mode": "nil",
+    "target": "side",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tnil\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t2\tok\ttrue\teffects\t80\tslots\t39\t180\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "write",
+      "other",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07246328099427046,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "write",
+    "mode": "other",
+    "target": "root",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tother\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t39\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "write",
+      "other",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.06941873499454232,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "write",
+    "mode": "other",
+    "target": "root",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tother\troot\twarm\t2\t6\thelpers\t2\told-exits\t39\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t39\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "write",
+      "other",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07030188100179657,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "write",
+    "mode": "other",
+    "target": "side",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tother\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t39\t41\t180\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "write",
+      "other",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07053498199820751,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "write",
+    "mode": "other",
+    "target": "side",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tother\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t41\tok\ttrue\teffects\t80\tslots\t39\t41\t180\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "write",
+      "close",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07015664800564991,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "write",
+    "mode": "close",
+    "target": "root",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tclose\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\tfalse\teffects\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "write",
+      "close",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.06982250100554666,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "write",
+    "mode": "close",
+    "target": "root",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tclose\troot\twarm\t2\t6\thelpers\t2\told-exits\t1\t0\tok\tfalse\teffects\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "write",
+      "close",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.06919670999923255,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "write",
+    "mode": "close",
+    "target": "side",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tclose\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\tfalse\teffects\t40\tslots\t39\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "write",
+      "close",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.0732208819972584,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "write",
+    "mode": "close",
+    "target": "side",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tclose\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\tfalse\teffects\t40\tslots\t39\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "zero",
+      "negative-zero",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07540495200373698,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "zero",
+    "mode": "negative-zero",
+    "target": "root",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tnegative-zero\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "zero",
+      "negative-zero",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07958393200533465,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "zero",
+    "mode": "negative-zero",
+    "target": "root",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tnegative-zero\troot\twarm\t2\t6\thelpers\t2\told-exits\t1\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "zero",
+      "negative-zero",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.08309846900374396,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "zero",
+    "mode": "negative-zero",
+    "target": "side",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tnegative-zero\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "zero",
+      "negative-zero",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07705551999970339,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "zero",
+    "mode": "negative-zero",
+    "target": "side",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tnegative-zero\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "zero",
+      "positive-zero",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07646115799434483,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "zero",
+    "mode": "positive-zero",
+    "target": "root",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tpositive-zero\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "zero",
+      "positive-zero",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07628606199432397,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "zero",
+    "mode": "positive-zero",
+    "target": "root",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tpositive-zero\troot\twarm\t2\t6\thelpers\t2\told-exits\t1\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "zero",
+      "positive-zero",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07506558299792232,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "zero",
+    "mode": "positive-zero",
+    "target": "side",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tpositive-zero\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "zero",
+      "positive-zero",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.0798730250025983,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "zero",
+    "mode": "positive-zero",
+    "target": "side",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tpositive-zero\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "zero",
+      "false",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07561583500501001,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "zero",
+    "mode": "false",
+    "target": "root",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tfalse\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "zero",
+      "false",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07940102999418741,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "zero",
+    "mode": "false",
+    "target": "root",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tfalse\troot\twarm\t2\t6\thelpers\t2\told-exits\t39\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "zero",
+      "false",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07642750199738657,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "zero",
+    "mode": "false",
+    "target": "side",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tfalse\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "zero",
+      "false",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07513489900156856,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "zero",
+    "mode": "false",
+    "target": "side",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tfalse\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t41\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "zero",
+      "nil",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07377742899552686,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "zero",
+    "mode": "nil",
+    "target": "root",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tnil\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "zero",
+      "nil",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.0775264390031225,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "zero",
+    "mode": "nil",
+    "target": "root",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tnil\troot\twarm\t2\t6\thelpers\t2\told-exits\t2\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "zero",
+      "nil",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07302657300169813,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "zero",
+    "mode": "nil",
+    "target": "side",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tnil\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "zero",
+      "nil",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07352924199949484,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "zero",
+    "mode": "nil",
+    "target": "side",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tnil\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t2\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "big",
+      "number",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07034330400347244,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "big",
+    "mode": "number",
+    "target": "root",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tbig\tnumber\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "big",
+      "number",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07220988599874545,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "big",
+    "mode": "number",
+    "target": "root",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tbig\tnumber\troot\twarm\t2\t6\thelpers\t2\told-exits\t1\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "big",
+      "number",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.0704388599988306,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "big",
+    "mode": "number",
+    "target": "side",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tbig\tnumber\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "big",
+      "number",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07347296400257619,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "big",
+    "mode": "number",
+    "target": "side",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tbig\tnumber\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "big",
+      "false",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07023147900326876,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "big",
+    "mode": "false",
+    "target": "root",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tbig\tfalse\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "big",
+      "false",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07196631799888564,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "big",
+    "mode": "false",
+    "target": "root",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tbig\tfalse\troot\twarm\t2\t6\thelpers\t2\told-exits\t39\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "big",
+      "false",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07164141300017945,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "big",
+    "mode": "false",
+    "target": "side",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tbig\tfalse\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "big",
+      "false",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07881944099790417,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "big",
+    "mode": "false",
+    "target": "side",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tbig\tfalse\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t41\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "big",
+      "nil",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.06907292299729306,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "big",
+    "mode": "nil",
+    "target": "root",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tbig\tnil\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "big",
+      "nil",
+      "root",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.06870815799629781,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "big",
+    "mode": "nil",
+    "target": "root",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tbig\tnil\troot\twarm\t2\t6\thelpers\t2\told-exits\t2\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "big",
+      "nil",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.0668655609988491,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "big",
+    "mode": "nil",
+    "target": "side",
+    "gc": false,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "cache-authority\tbig\tnil\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "big",
+      "nil",
+      "side",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.07040210200648289,
+    "cpu_affinity": [
+      26
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py": "0162ec5c51a176e1c4e5a7d1035f4891be342c3e95fc76e473ef6c6bf0ed4fc4",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/luajit": "e1046ef860924c9d2fd1a12fab408b0cb72c0fb2c41efffbdb8819a85a2d3b64",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/libluajit.a": "262a993001a4c1a8533cb71c668a3614da9a6e2cbbb20d45b07f2b90d8957023",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/asan/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+    },
+    "kind": "big",
+    "mode": "nil",
+    "target": "side",
+    "gc": false,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "cache-authority\tbig\tnil\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t2\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  }
+]

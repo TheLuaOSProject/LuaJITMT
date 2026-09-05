@@ -1,0 +1,142 @@
+---- TRACE flush
+
+---- TRACE 1 start shared-cost.lua:19
+---- TRACE 1 IR
+0001 >  [35mint[m SLOAD  #7    CRI
+0002 >  [35mint[m LE     0001  [35m+2147483646[m
+0003    [35mint[m SLOAD  #6    CI
+0004 >  [1mfun[m SLOAD  #2    T
+0005 >  [36mudt[m SLOAD  #3    T
+0006 >  [1mfun[m EQ     0004  [1mffi.clib.__index[m
+0007 >  [36mudt[m EQ     0005  [36muserdata:0x7f47b84d65d0[m
+0008    p64 TMPREF [31m{0x7f47b84d6550}[m  INOUT
+0009    p64 TMPREF [32m"abs"[m  #8  
+0012 >  [35mint[m CALLS  lj_tab_gettv_rooted_hit_try  (0008 0009 0008)
+0013 >  [35mint[m NE     0012  [35m+0  [m
+0014 >  [33mcdt[m VLOAD  0008  #0  
+0015 >  [33mcdt[m EQ     0014  [33mcdata<int ()>: 0x7f47b8870e00[m
+0016    [35mint[m XLOAD  [0x7f47b84d65f0]  V
+0017 >  [35mint[m GE     0016  [35m+0  [m
+0018 >  [34mnum[m SLOAD  #5    T
+0019  + [34mnum[m ADD    0018  [34m+1  [m
+0020  + [35mint[m ADD    0003  [35m+1  [m
+0021 >  [35mint[m LE     0020  0001
+0022 ------ LOOP ------------
+0023 >  nil XPOLL  #1  
+0024    p64 TMPREF [31m{0x7f47b84d6550}[m  INOUT
+0025    p64 TMPREF [32m"abs"[m  #8  
+0028 >  [35mint[m CALLS  lj_tab_gettv_rooted_hit_try  (0024 0025 0024)
+0029 >  [35mint[m NE     0028  [35m+0  [m
+0030 >  [33mcdt[m VLOAD  0024  #0  
+0031 >  [33mcdt[m EQ     0030  [33mcdata<int ()>: 0x7f47b8870e00[m
+0032    [35mint[m XLOAD  [0x7f47b84d65f0]  V
+0033 >  [35mint[m GE     0032  [35m+0  [m
+0034  + [34mnum[m ADD    0019  [34m+1  [m
+0035  + [35mint[m ADD    0020  [35m+1  [m
+0036 >  [35mint[m LE     0035  0001
+0037    [35mint[m PHI    0020  0035
+0038    [34mnum[m PHI    0019  0034
+---- TRACE 1 mcode 515
+5588d2f0fdfd  add rsp, -0x10
+5588d2f0fe01  mov dword [r14+0x84c], 0x1
+5588d2f0fe0c  mov r13, 0x00007f47b84d65f0
+5588d2f0fe16  mov rdi, [r14+0x820]
+5588d2f0fe1d  mov rax, 0x00007f47b84d65a0
+5588d2f0fe27  movsd xmm7, [rdx+0x28]
+5588d2f0fe2c  cvttsd2si ebx, xmm7
+5588d2f0fe30  xorps xmm6, xmm6
+5588d2f0fe33  cvtsi2sd xmm6, ebx
+5588d2f0fe37  ucomisd xmm7, xmm6
+5588d2f0fe3b  jnz 0x5588d2f00138
+5588d2f0fe41  jpe 0x5588d2f00138
+5588d2f0fe47  cmp ebx, 0x7ffffffe
+5588d2f0fe4d  jg 0x5588d2f00138
+5588d2f0fe53  cvttsd2si ebp, [rdx+0x20]
+5588d2f0fe58  rorx rcx, [rdx], 0x2f
+5588d2f0fe5e  cmp cx, -0x09
+5588d2f0fe62  jnz 0x5588d2f00138
+5588d2f0fe68  shr rcx, 0x11
+5588d2f0fe6c  mov [rsp+0x10], rcx
+5588d2f0fe71  rorx r12, [rdx+0x8], 0x2f
+5588d2f0fe78  cmp r12w, -0x0d
+5588d2f0fe7d  jnz 0x5588d2f00138
+5588d2f0fe83  shr r12, 0x11
+5588d2f0fe87  mov rdx, 0x00007f47b84d63b0
+5588d2f0fe91  cmp rcx, rdx
+5588d2f0fe94  jnz 0x5588d2f00140
+5588d2f0fe9a  cmp r12, rax
+5588d2f0fe9d  jnz 0x5588d2f00140
+5588d2f0fea3  lea rsi, [r14+0x4c50]
+5588d2f0feaa  mov dword [rsi], 0xb84d6550
+5588d2f0feb0  mov dword [rsi+0x4], 0xfffa7f47
+5588d2f0feb7  lea rdx, [r14+0x4c58]
+5588d2f0febe  mov dword [rdx], 0xb85d6b80
+5588d2f0fec4  mov dword [rdx+0x4], 0xfffdff47
+5588d2f0fecb  mov rcx, rsi
+5588d2f0fece  call 0x5588d3a87490	->lj_tab_gettv_rooted_hit_try
+5588d2f0fed3  mov rdx, [r14+0x830]
+5588d2f0feda  mov rcx, 0x00007f47b84d74c0
+5588d2f0fee4  test eax, eax
+5588d2f0fee6  jz 0x5588d2f00148
+5588d2f0feec  rorx rax, [r14+0x4c50], 0x2f
+5588d2f0fef6  cmp ax, -0x0b
+5588d2f0fefa  jnz 0x5588d2f00148
+5588d2f0ff00  shr rax, 0x11
+5588d2f0ff04  cmp rax, rcx
+5588d2f0ff07  jnz 0x5588d2f00148
+5588d2f0ff0d  cmp dword [r13+0x0], +0x00
+5588d2f0ff12  jl 0x5588d2f00148
+5588d2f0ff18  cmp dword [rdx+0x1c], 0xfff90000
+5588d2f0ff1f  jnb 0x5588d2f00150
+5588d2f0ff25  movsd xmm7, [rdx+0x18]
+5588d2f0ff2a  addsd xmm7, [rip-0xfdb2]
+5588d2f0ff32  movsd [rsp+0x8], xmm7
+5588d2f0ff38  add ebp, +0x01
+5588d2f0ff3b  cmp ebp, ebx
+5588d2f0ff3d  jg 0x5588d2f00158
+->LOOP:
+5588d2f0ff43  movsd [rsp+0x8], xmm7
+5588d2f0ff49  mov rdi, [r14+0x820]
+5588d2f0ff50  mov rsi, 0x00007f47b8810584
+5588d2f0ff5a  mov esi, [rsi]
+5588d2f0ff5c  cmp esi, +0x00
+5588d2f0ff5f  jz 0x5588d2f00160
+5588d2f0ff65  cmp qword [r14+0x808], +0x00
+5588d2f0ff6d  jnz 0x5588d2f00160
+5588d2f0ff73  lea rsi, [r14+0x4c50]
+5588d2f0ff7a  mov dword [rsi], 0xb84d6550
+5588d2f0ff80  mov dword [rsi+0x4], 0xfffa7f47
+5588d2f0ff87  lea rdx, [r14+0x4c58]
+5588d2f0ff8e  mov dword [rdx], 0xb85d6b80
+5588d2f0ff94  mov dword [rdx+0x4], 0xfffdff47
+5588d2f0ff9b  mov rcx, rsi
+5588d2f0ff9e  call 0x5588d3a87490	->lj_tab_gettv_rooted_hit_try
+5588d2f0ffa3  movsd xmm7, [rsp+0x8]
+5588d2f0ffa9  test eax, eax
+5588d2f0ffab  jz 0x5588d2f00170
+5588d2f0ffb1  mov rax, 0x00007f47b84d74c0
+5588d2f0ffbb  rorx r15, [r14+0x4c50], 0x2f
+5588d2f0ffc5  cmp r15w, -0x0b
+5588d2f0ffca  jnz 0x5588d2f00170
+5588d2f0ffd0  shr r15, 0x11
+5588d2f0ffd4  cmp r15, rax
+5588d2f0ffd7  jnz 0x5588d2f00170
+5588d2f0ffdd  cmp dword [r13+0x0], +0x00
+5588d2f0ffe2  jl 0x5588d2f00170
+5588d2f0ffe8  addsd xmm7, [rip-0xfe70]
+5588d2f0fff0  add ebp, +0x01
+5588d2f0fff3  cmp ebp, ebx
+5588d2f0fff5  jle 0x5588d2f0ff43	->LOOP
+5588d2f0fffb  jmp 0x5588d2f00178
+---- TRACE 1 stop -> loop
+
+shape	1	39	515	2	1
+sample	1	0.000026000
+---- TRACE 2 start shared-cost.lua:17
+---- TRACE 2 abort shared-cost.lua:17 -- NYI: bytecode ISLT  
+
+sample	2	0.000094000
+sample	3	0.000024000
+sample	4	0.000024000
+sample	5	0.000024000
+result	shared	80	0.000024000

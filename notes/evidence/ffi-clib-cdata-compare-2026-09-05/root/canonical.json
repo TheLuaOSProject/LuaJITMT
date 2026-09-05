@@ -1,0 +1,124 @@
+[
+  {
+    "name": "m3_gc2_auto_control",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/luajit",
+      "/workspaces/lj-lockless/tools/test.lua",
+      "m3_gc2_auto_control"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LJ_TEST_ROOT": "/workspaces/lj-lockless",
+      "JOBS": "4",
+      "MAKE_JOBS": "4",
+      "TMPDIR": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/canonical-tmp",
+      "LUA_PATH": "/workspaces/lj-lockless/src/?.lua;;"
+    },
+    "runner_sha256": "914c42cc9565b3b61117de954446da8ca8ffbcab091d338f4cfa036f1443be27",
+    "seconds": 46.542335764999734,
+    "expected_runtime_processes": 37,
+    "exit": 0,
+    "default_binaries": {
+      "luajit": "226deab70e1ed8608a6f13d90c8445e5e5ee945087868e85261f656588d2d385",
+      "libluajit.a": "d7278ecb35007efc8e0b6e799909047b8f795db26499ee7297f940144c40952d",
+      "libluajit.so": "189e885f3c32a044ac1458743f5987675eac1282d5e7c195896e5689eb933944"
+    },
+    "temporary_files": {
+      "canonical-tmp/lj_t-stop-first-attach": "df61e437ae74ff4367b8522e18c82a25df3e37d6bc94ff722a57816ce9317880",
+      "canonical-tmp/lj_t-auto-restart-numeric-max": "fca657fb52eda13777035a13d34c5ce956ed05a8f34f5dadce775023b5aced8a",
+      "canonical-tmp/lj_auto-control-compiler-macros.txt": "3718ff27868c37c361d501270a31436095a1fb75e6b898ff66959bb5b0fceddf",
+      "canonical-tmp/lj_t-restart-first-attach": "84cd168abf18359bc234b95a6a16a7a69508d93a2cdfd66eaac646f594d17cf9",
+      "canonical-tmp/lj_t-restart-last-detach": "35607a9c9e6efb6a0c3fd01b326375bf6ffd110da2e8d71c6f24e875c0386205",
+      "canonical-tmp/lj_t-auto-finalizer-controls-v3": "2c95f62315b573ef2dc18bc6a138d41210ebb32d3d0bb5d342732cd19e4fa78e",
+      "canonical-tmp/lj_t-auto-controls-v2": "b6850d4e3cd8a6697d35b84eaae56d7f0bab444fbdc2c39c4f3dfd8218a11a52"
+    }
+  },
+  {
+    "name": "m7_ffi_clib_cache_authority",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/luajit",
+      "/workspaces/lj-lockless/tools/test.lua",
+      "m7_ffi_clib_cache_authority"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LJ_TEST_ROOT": "/workspaces/lj-lockless",
+      "JOBS": "4",
+      "MAKE_JOBS": "4",
+      "TMPDIR": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/canonical-tmp",
+      "LUA_PATH": "/workspaces/lj-lockless/src/?.lua;;"
+    },
+    "runner_sha256": "914c42cc9565b3b61117de954446da8ca8ffbcab091d338f4cfa036f1443be27",
+    "seconds": 2.628244915002142,
+    "expected_runtime_processes": 153,
+    "exit": 0,
+    "default_binaries": {
+      "luajit": "226deab70e1ed8608a6f13d90c8445e5e5ee945087868e85261f656588d2d385",
+      "libluajit.a": "d7278ecb35007efc8e0b6e799909047b8f795db26499ee7297f940144c40952d",
+      "libluajit.so": "189e885f3c32a044ac1458743f5987675eac1282d5e7c195896e5689eb933944"
+    },
+    "temporary_files": {
+      "canonical-tmp/lj_t-stop-first-attach": "df61e437ae74ff4367b8522e18c82a25df3e37d6bc94ff722a57816ce9317880",
+      "canonical-tmp/lj_t-auto-restart-numeric-max": "fca657fb52eda13777035a13d34c5ce956ed05a8f34f5dadce775023b5aced8a",
+      "canonical-tmp/lj_auto-control-compiler-macros.txt": "3718ff27868c37c361d501270a31436095a1fb75e6b898ff66959bb5b0fceddf",
+      "canonical-tmp/lj_t-restart-first-attach": "84cd168abf18359bc234b95a6a16a7a69508d93a2cdfd66eaac646f594d17cf9",
+      "canonical-tmp/lj_t-restart-last-detach": "35607a9c9e6efb6a0c3fd01b326375bf6ffd110da2e8d71c6f24e875c0386205",
+      "canonical-tmp/lj_t-auto-finalizer-controls-v3": "2c95f62315b573ef2dc18bc6a138d41210ebb32d3d0bb5d342732cd19e4fa78e",
+      "canonical-tmp/lj_t-auto-controls-v2": "b6850d4e3cd8a6697d35b84eaae56d7f0bab444fbdc2c39c4f3dfd8218a11a52",
+      "canonical-tmp/lj_t-ffi-clib-cache-authority.so": "27210b3fec3209553c220b3ca6e156adc4b581ccb38500ff75dee45c92c6a506",
+      "canonical-tmp/lj_t-ffi-clib-cache-geometry.so": "f6eb62aee2aef8255b1c2c172b3336e13c5927baf4296f344d7de611ccc961f6",
+      "canonical-tmp/lj_t-ffi-clib-cache-between-close": "c320a6948299008170ed139f655a46670bd8236babf402072d07881c930e3433",
+      "canonical-tmp/lj_t-ffi-clib-recorder-roots": "68ece28b87138378d52ec42bd43c8a04813969e9deea5e6619164f257421b001"
+    }
+  },
+  {
+    "name": "m7_ffi_clib_cdata_compare",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/luajit",
+      "/workspaces/lj-lockless/tools/test.lua",
+      "m7_ffi_clib_cdata_compare"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LJ_TEST_ROOT": "/workspaces/lj-lockless",
+      "JOBS": "4",
+      "MAKE_JOBS": "4",
+      "TMPDIR": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/canonical-tmp",
+      "LUA_PATH": "/workspaces/lj-lockless/src/?.lua;;"
+    },
+    "runner_sha256": "914c42cc9565b3b61117de954446da8ca8ffbcab091d338f4cfa036f1443be27",
+    "seconds": 28.760044203998405,
+    "expected_runtime_processes": 96,
+    "exit": 0,
+    "default_binaries": {
+      "luajit": "226deab70e1ed8608a6f13d90c8445e5e5ee945087868e85261f656588d2d385",
+      "libluajit.a": "d7278ecb35007efc8e0b6e799909047b8f795db26499ee7297f940144c40952d",
+      "libluajit.so": "189e885f3c32a044ac1458743f5987675eac1282d5e7c195896e5689eb933944"
+    },
+    "temporary_files": {
+      "canonical-tmp/lj_t-stop-first-attach": "df61e437ae74ff4367b8522e18c82a25df3e37d6bc94ff722a57816ce9317880",
+      "canonical-tmp/lj_t-auto-restart-numeric-max": "fca657fb52eda13777035a13d34c5ce956ed05a8f34f5dadce775023b5aced8a",
+      "canonical-tmp/lj_auto-control-compiler-macros.txt": "3718ff27868c37c361d501270a31436095a1fb75e6b898ff66959bb5b0fceddf",
+      "canonical-tmp/lj_t-restart-first-attach": "84cd168abf18359bc234b95a6a16a7a69508d93a2cdfd66eaac646f594d17cf9",
+      "canonical-tmp/lj_t-restart-last-detach": "35607a9c9e6efb6a0c3fd01b326375bf6ffd110da2e8d71c6f24e875c0386205",
+      "canonical-tmp/lj_t-auto-finalizer-controls-v3": "2c95f62315b573ef2dc18bc6a138d41210ebb32d3d0bb5d342732cd19e4fa78e",
+      "canonical-tmp/lj_t-auto-controls-v2": "b6850d4e3cd8a6697d35b84eaae56d7f0bab444fbdc2c39c4f3dfd8218a11a52",
+      "canonical-tmp/lj_t-ffi-clib-cache-authority.so": "27210b3fec3209553c220b3ca6e156adc4b581ccb38500ff75dee45c92c6a506",
+      "canonical-tmp/lj_t-ffi-clib-cache-geometry.so": "f6eb62aee2aef8255b1c2c172b3336e13c5927baf4296f344d7de611ccc961f6",
+      "canonical-tmp/lj_t-ffi-clib-cache-between-close": "c320a6948299008170ed139f655a46670bd8236babf402072d07881c930e3433",
+      "canonical-tmp/lj_t-ffi-clib-recorder-roots": "68ece28b87138378d52ec42bd43c8a04813969e9deea5e6619164f257421b001",
+      "canonical-tmp/lj_t-ffi-clib-cdata-compare.so": "27210b3fec3209553c220b3ca6e156adc4b581ccb38500ff75dee45c92c6a506",
+      "canonical-tmp/lj_t-ffi-clib-cdata-compare-default": "4a6977cdf5e49aa7f7098d2365d095dc79e52c61326df01fba2cb0532d229c48",
+      "canonical-tmp/lj_t-ffi-clib-cdata-compare-helpers": "7d8e55740a68d5120a052c3aed6e4a3587416d6309b21678dfd75ffef86d7cb5"
+    }
+  }
+]

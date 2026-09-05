@@ -1,0 +1,76 @@
+{
+  "artifacts": [
+    {
+      "file": "isolated-aee/benchmark.py",
+      "sha256": "41b68e7fca7fc75267bf32331ebd4f8b07b3158bca05b7044154fb01312d9c79",
+      "bytes": 1741,
+      "storage": "text"
+    },
+    {
+      "file": "isolated-aee/cost-parsed-results.json",
+      "sha256": "8373f9bc85780493545d9fea6506a645c800e5da22473b6a790f6710444ecb69",
+      "bytes": 24557,
+      "storage": "text"
+    },
+    {
+      "file": "isolated-aee/cost-results.json",
+      "sha256": "5cb75586ae5b2cb0fea440e53d4e7cd3b50d1cb6a6695614a57449d87804ab08",
+      "bytes": 22120,
+      "storage": "text"
+    },
+    {
+      "file": "isolated-aee/cost-summary.json",
+      "sha256": "75947be5ed1c354dde3727d5f8e81d1af6bb865981a03597662f47402319ff87",
+      "bytes": 1627,
+      "storage": "text"
+    },
+    {
+      "file": "isolated-aee/setup.json",
+      "sha256": "ba39ae7fe95aceb454edc52b1afa2119532f212dfaac7538479212754a1788ca",
+      "bytes": 5119,
+      "storage": "text"
+    },
+    {
+      "file": "isolated-aee/shared-cost.lua",
+      "sha256": "168779e16873fb591f870033be89751d3b8940c158b2d09b7c2191e6c17b5215",
+      "bytes": 2364,
+      "storage": "text"
+    },
+    {
+      "file": "combined-843/benchmark.py",
+      "sha256": "08a004bada43399800a18a1d8ee36b75c4bd4882e7a1a9840bc730a9fa0e7726",
+      "bytes": 1743,
+      "storage": "text"
+    },
+    {
+      "file": "combined-843/cost-parsed-results.json",
+      "sha256": "a0b3be321b7d49cb6d9c576c1bd90176eb99a0ee801b0826a8c9c2d31fa936c8",
+      "bytes": 3528,
+      "storage": "text"
+    },
+    {
+      "file": "combined-843/cost-results.json",
+      "sha256": "9274d72642a8fb2700c74c97ff07ed2349a662b9b8289f90a4f4d25af149b516",
+      "bytes": 22278,
+      "storage": "text"
+    },
+    {
+      "file": "combined-843/cost-summary.json",
+      "sha256": "4a75e4296fe4229c04e95075e8402246c4db080d2b8d0cc5f1a72576549e9662",
+      "bytes": 1430,
+      "storage": "text"
+    },
+    {
+      "file": "combined-843/setup.json",
+      "sha256": "119bec25231c7e3e2ade073b6a71826694e17083fbe398a9054344abc06fc98c",
+      "bytes": 390,
+      "storage": "text"
+    },
+    {
+      "file": "combined-843/shared-cost.lua",
+      "sha256": "168779e16873fb591f870033be89751d3b8940c158b2d09b7c2191e6c17b5215",
+      "bytes": 2364,
+      "storage": "text"
+    }
+  ]
+}

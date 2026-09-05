@@ -1,0 +1,11 @@
+{
+  "command": [
+    "python3",
+    "/tmp/lj-clib-hit-cost-review-20260905-cmxsefzb/verify-review.py"
+  ],
+  "cwd": "/tmp/lj-clib-hit-cost-review-20260905-cmxsefzb",
+  "exit": 0,
+  "stdout": "{\n  \"runtime_inputs\": 224,\n  \"extra_inputs\": 14,\n  \"prior_artifact_counts\": {\n    \"/tmp/lj-clib-cache-regressions-20260905-741ke1nb/artifact-manifest.json\": 116,\n    \"/tmp/lj-special-udata-pure-20260905-u7z61i10/artifact-manifest.json\": 110,\n    \"/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/artifact-manifest.json\": 64\n  },\n  \"all_pass\": true\n}\n",
+  "stderr": "",
+  "scope": "Source, external inputs and all prior artifacts; the newly generated local manifest is verified afterward by the same script."
+}

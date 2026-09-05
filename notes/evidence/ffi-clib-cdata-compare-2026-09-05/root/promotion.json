@@ -1,0 +1,66 @@
+{
+  "head": "843786094729ca189b39920cd05ec6756d28444f",
+  "promotions": [
+    {
+      "source": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_crecord.c",
+      "dest": "/workspaces/lj-lockless/src/lj_crecord.c",
+      "before": "62a718fad1c9c271c8225cb1d2255fddf526dde17eff3ecfe2318c2a2249eaa5",
+      "after": "20ae6cbfff9cab4d8a3ae085463b45f9eb2610fc4edae40a4917fd979117508c"
+    },
+    {
+      "source": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_ircall.h",
+      "dest": "/workspaces/lj-lockless/src/lj_ircall.h",
+      "before": "822ee730b3589500bf463c9b345cd91fd3c4c5ce056a297734b90f121bd14a69",
+      "after": "1d88dcfa2daac962f030459f2a95af42abd5c40b9dc3899cb176c6f646b6f0c5"
+    },
+    {
+      "source": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_tab.c",
+      "dest": "/workspaces/lj-lockless/src/lj_tab.c",
+      "before": "28b2eac3dc6c0734d131cf33d3f34826ae758c9b3deb437c6bd154e0cd2fd48f",
+      "after": "64cda324340427db88b34605dd610646e3feb1bd3b6d862db9f12f2c2c70cd79"
+    },
+    {
+      "source": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_tab.h",
+      "dest": "/workspaces/lj-lockless/src/lj_tab.h",
+      "before": "2f9f61003cfdd252c306f3bc7a12e176483dc879b1adbc6653754ccc88478cf2",
+      "after": "08f3fca94f1fe734238b3cfe3c45686375413a29bbd77da1d83a2590553b137d"
+    },
+    {
+      "source": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-authority.lua",
+      "dest": "/workspaces/lj-lockless/tests/t-ffi-clib-cache-authority.lua",
+      "before": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "after": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6"
+    },
+    {
+      "source": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-supplement.lua",
+      "dest": "/workspaces/lj-lockless/tests/t-ffi-clib-cache-supplement.lua",
+      "before": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "after": "9a32499439be8caa202d4f4d7063a2a98694a7d02e2a5956e5684fa025fb181b"
+    },
+    {
+      "source": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cache-between-close.c",
+      "dest": "/workspaces/lj-lockless/tests/t-ffi-clib-cache-between-close.c",
+      "before": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+      "after": "37b93174f4197a620c58e5da17569d96d4d758eeb9c2f840ee406c099a102a72"
+    },
+    {
+      "source": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cdata-retention.c",
+      "dest": "/workspaces/lj-lockless/tests/t-ffi-clib-cdata-compare.c",
+      "before": null,
+      "after": "5480a5e547dea4eaba58cd31a303bc9b3a50b71ca19db4d48bd463f4b9b98ded"
+    },
+    {
+      "source": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cdata-probe.lua",
+      "dest": "/workspaces/lj-lockless/tests/t-ffi-clib-cdata-probe.lua",
+      "before": null,
+      "after": "270fef94d67285044dbc2581e73c9e2e500a5708f12420fbdaaa7f5ed4517054"
+    },
+    {
+      "source": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/t-clib-cdata-retention.lua",
+      "dest": "/workspaces/lj-lockless/tests/t-ffi-clib-cdata-retention.lua",
+      "before": null,
+      "after": "513f995540e1d87966d97c5635666bd27247346aa61e212763f87e217440879a"
+    }
+  ],
+  "fixture_note": "One permanent comparison C fixture uses exact retention-C bytes, which also implements all probe modes. It differs from the frozen probe C only by the KGC/off zero-hit branch; canonical tests cover both entrypoint Lua scripts."
+}

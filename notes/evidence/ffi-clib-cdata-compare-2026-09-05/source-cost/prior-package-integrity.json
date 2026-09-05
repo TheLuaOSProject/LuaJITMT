@@ -1,0 +1,20 @@
+{
+  "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/artifact-manifest.json": {
+    "sha256": "880d0c16fd8cee50456eed2490970f4f3ba546014283d7da4be5d0b0cac038e2",
+    "unchanged_manifest": true,
+    "artifacts_verified": 116,
+    "all_artifact_hashes_and_sizes_match": true
+  },
+  "/tmp/lj-special-udata-pure-20260905-u7z61i10/artifact-manifest.json": {
+    "sha256": "01fbabe6f4f261e542538c1508dd82234a5be5259c1f3bb5a4d2a79e94f25d6c",
+    "unchanged_manifest": true,
+    "artifacts_verified": 110,
+    "all_artifact_hashes_and_sizes_match": true
+  },
+  "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/artifact-manifest.json": {
+    "sha256": "384a0d0dbe792f29a92d3fa116590120dc7df26cde08542adca6e1f18e865ae2",
+    "unchanged_manifest": true,
+    "artifacts_verified": 64,
+    "all_artifact_hashes_and_sizes_match": true
+  }
+}

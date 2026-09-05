@@ -1,0 +1,50 @@
+
+/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_gc2.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+000000000001b4b0 <lj_gc2_lease_release>:
+   1b4b0:	48 85 ff             	test   %rdi,%rdi
+   1b4b3:	74 5b                	je     1b510 <lj_gc2_lease_release+0x60>
+   1b4b5:	48 83 ec 38          	sub    $0x38,%rsp
+   1b4b9:	f3 0f 6f 47 10       	movdqu 0x10(%rdi),%xmm0
+   1b4be:	48 8b 17             	mov    (%rdi),%rdx
+   1b4c1:	48 8b 47 08          	mov    0x8(%rdi),%rax
+   1b4c5:	48 8b 4f 20          	mov    0x20(%rdi),%rcx
+   1b4c9:	48 c7 47 20 00 00 00 	movq   $0x0,0x20(%rdi)
+   1b4d0:	00 
+   1b4d1:	0f 29 44 24 10       	movaps %xmm0,0x10(%rsp)
+   1b4d6:	66 0f ef c0          	pxor   %xmm0,%xmm0
+   1b4da:	48 89 14 24          	mov    %rdx,(%rsp)
+   1b4de:	89 44 24 08          	mov    %eax,0x8(%rsp)
+   1b4e2:	48 89 4c 24 20       	mov    %rcx,0x20(%rsp)
+   1b4e7:	0f 11 07             	movups %xmm0,(%rdi)
+   1b4ea:	0f 11 47 10          	movups %xmm0,0x10(%rdi)
+   1b4ee:	3d ce bc b8 ff       	cmp    $0xffb8bcce,%eax
+   1b4f3:	74 33                	je     1b528 <lj_gc2_lease_release+0x78>
+   1b4f5:	48 85 d2             	test   %rdx,%rdx
+   1b4f8:	74 08                	je     1b502 <lj_gc2_lease_release+0x52>
+   1b4fa:	83 e8 01             	sub    $0x1,%eax
+   1b4fd:	83 f8 02             	cmp    $0x2,%eax
+   1b500:	76 16                	jbe    1b518 <lj_gc2_lease_release+0x68>
+   1b502:	48 83 c4 38          	add    $0x38,%rsp
+   1b506:	c3                   	ret
+   1b507:	66 0f 1f 84 00 00 00 	nopw   0x0(%rax,%rax,1)
+   1b50e:	00 00 
+   1b510:	c3                   	ret
+   1b511:	0f 1f 80 00 00 00 00 	nopl   0x0(%rax)
+   1b518:	48 89 d7             	mov    %rdx,%rdi
+   1b51b:	e8 00 00 00 00       	call   1b520 <lj_gc2_lease_release+0x70>
+			1b51c: R_X86_64_PLT32	lj_arena_rescue_leave-0x4
+   1b520:	48 83 c4 38          	add    $0x38,%rsp
+   1b524:	c3                   	ret
+   1b525:	0f 1f 00             	nopl   (%rax)
+   1b528:	48 8d 7c 24 10       	lea    0x10(%rsp),%rdi
+   1b52d:	31 f6                	xor    %esi,%esi
+   1b52f:	e8 00 00 00 00       	call   1b534 <lj_gc2_lease_release+0x84>
+			1b530: R_X86_64_PLT32	lj_arena_hugetab_reader_release-0x4
+   1b534:	48 83 c4 38          	add    $0x38,%rsp
+   1b538:	c3                   	ret
+
+Disassembly of section .text.unlikely:

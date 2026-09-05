@@ -1,0 +1,74 @@
+[
+  {
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-shared",
+      "-fPIC",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/geometry-candidate.d",
+      "-I/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cache-geometry.c",
+      "-o",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/geometry-candidate.so"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;"
+    },
+    "cpu_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "seconds": 0.06011851700168336,
+    "inputs": {
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/run-supplement.py": "66a413965bb85bc6eae85c831fdccc906081010d9be8815a001b1be281e57d4b",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cache-authority.lua": "1f78804eaf78a974d9d00d7b02f35e98628dd53f3ef0b0c62a0abca49354a1a6",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cache-supplement.lua": "9a32499439be8caa202d4f4d7063a2a98694a7d02e2a5956e5684fa025fb181b",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cache-geometry.c": "4241db4f4be64f1d37f534e204c6d961cec2c7350b7f64099528987a4517e89a",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/jit/vmdef.lua": "3599350c275505afd26b570a8eb83443b0c4cb06fb161db677362cae7816bba9"
+    },
+    "operation": "compile",
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "output_binary_sha256": "2f0a840819372cf110fe8f1b7769c727d963ab9b3d89d708f4438b43a70b6f34",
+    "header_and_source_dependencies": {
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cache-geometry.c": "4241db4f4be64f1d37f534e204c6d961cec2c7350b7f64099528987a4517e89a",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lua.h": "5bcec229da426c785982dffe2f832a5dc83dac0024a09e40a6b725b1968b8a6b",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luaconf.h": "a70c46233a56ea0c74d4df2e88e45371bf94df9b10ef9d2a81cbe18758c1ceff",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lauxlib.h": "7093ea70fb38341d10475814b90961cec22f9643c11e3ea4c2ddc2cd4b03164e",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_obj.h": "a8962fcc16e961ad29275cffc993ff368c229dc435f5794babbbacd8214557bc",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_def.h": "625089c379122ad13e4b8078e073512da41ebfe80173f806abb0d1e4d3b66858",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_arch.h": "d21ad3f86b2f7651de5ab1dcfc4a3c504deae83d8b2b77d5ccbf75394a98ca7b",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_atomic.h": "0a7bbdc91ae21c4dcbe09cd7de500e0aeb341173f5059f43659678e5be53fac1",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_gc2token.h": "3c1ccf57ef4dd5f5a9a251e0472569939bd0bca8d21260f0497a0d1f84aa29b6",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_tgregistry.h": "e97c3112f34628eec2a0e10e7722e0b85f92f94aec92c3ab1e7f93a7bdd4ec99",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_tgslot.h": "f11ac945f5a0d12026bea04a07fc35dedd0571cd3c21a737c508d3e973384b6f",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_clib.h": "15bd45fe03be044eb902d541028d1e206d2bfdf249ec4de26047df0719d400b9"
+    }
+  }
+]

@@ -1,0 +1,77 @@
+
+/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_gc2.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+000000000001b3e0 <lj_gc2_tv_lease_acquire>:
+   1b3e0:	55                   	push   %rbp
+   1b3e1:	53                   	push   %rbx
+   1b3e2:	48 83 ec 38          	sub    $0x38,%rsp
+   1b3e6:	48 85 d2             	test   %rdx,%rdx
+   1b3e9:	74 65                	je     1b450 <lj_gc2_tv_lease_acquire+0x70>
+   1b3eb:	66 0f ef c0          	pxor   %xmm0,%xmm0
+   1b3ef:	48 c7 42 20 00 00 00 	movq   $0x0,0x20(%rdx)
+   1b3f6:	00 
+   1b3f7:	48 89 d3             	mov    %rdx,%rbx
+   1b3fa:	0f 11 02             	movups %xmm0,(%rdx)
+   1b3fd:	0f 11 42 10          	movups %xmm0,0x10(%rdx)
+   1b401:	48 85 ff             	test   %rdi,%rdi
+   1b404:	74 4a                	je     1b450 <lj_gc2_tv_lease_acquire+0x70>
+   1b406:	48 85 f6             	test   %rsi,%rsi
+   1b409:	74 45                	je     1b450 <lj_gc2_tv_lease_acquire+0x70>
+   1b40b:	48 89 e2             	mov    %rsp,%rdx
+   1b40e:	31 c9                	xor    %ecx,%ecx
+   1b410:	e8 2b 23 ff ff       	call   d740 <gc2_tv_admit_scoped_impl>
+   1b415:	89 c5                	mov    %eax,%ebp
+   1b417:	8b 44 24 08          	mov    0x8(%rsp),%eax
+   1b41b:	83 fd 01             	cmp    $0x1,%ebp
+   1b41e:	74 40                	je     1b460 <lj_gc2_tv_lease_acquire+0x80>
+   1b420:	3d ce bc b8 ff       	cmp    $0xffb8bcce,%eax
+   1b425:	74 69                	je     1b490 <lj_gc2_tv_lease_acquire+0xb0>
+   1b427:	48 8b 3c 24          	mov    (%rsp),%rdi
+   1b42b:	48 85 ff             	test   %rdi,%rdi
+   1b42e:	74 08                	je     1b438 <lj_gc2_tv_lease_acquire+0x58>
+   1b430:	83 e8 01             	sub    $0x1,%eax
+   1b433:	83 f8 02             	cmp    $0x2,%eax
+   1b436:	76 68                	jbe    1b4a0 <lj_gc2_tv_lease_acquire+0xc0>
+   1b438:	83 fd ff             	cmp    $0xffffffff,%ebp
+   1b43b:	40 0f 94 c5          	sete   %bpl
+   1b43f:	48 83 c4 38          	add    $0x38,%rsp
+   1b443:	40 0f b6 ed          	movzbl %bpl,%ebp
+   1b447:	5b                   	pop    %rbx
+   1b448:	f7 dd                	neg    %ebp
+   1b44a:	89 e8                	mov    %ebp,%eax
+   1b44c:	5d                   	pop    %rbp
+   1b44d:	c3                   	ret
+   1b44e:	66 90                	xchg   %ax,%ax
+   1b450:	31 ed                	xor    %ebp,%ebp
+   1b452:	48 83 c4 38          	add    $0x38,%rsp
+   1b456:	89 e8                	mov    %ebp,%eax
+   1b458:	5b                   	pop    %rbx
+   1b459:	5d                   	pop    %rbp
+   1b45a:	c3                   	ret
+   1b45b:	0f 1f 44 00 00       	nopl   0x0(%rax,%rax,1)
+   1b460:	48 8b 14 24          	mov    (%rsp),%rdx
+   1b464:	48 89 13             	mov    %rdx,(%rbx)
+   1b467:	48 63 d0             	movslq %eax,%rdx
+   1b46a:	48 89 53 08          	mov    %rdx,0x8(%rbx)
+   1b46e:	3d ce bc b8 ff       	cmp    $0xffb8bcce,%eax
+   1b473:	75 dd                	jne    1b452 <lj_gc2_tv_lease_acquire+0x72>
+   1b475:	66 0f 6f 44 24 10    	movdqa 0x10(%rsp),%xmm0
+   1b47b:	48 8b 44 24 20       	mov    0x20(%rsp),%rax
+   1b480:	0f 11 43 10          	movups %xmm0,0x10(%rbx)
+   1b484:	48 89 43 20          	mov    %rax,0x20(%rbx)
+   1b488:	eb c8                	jmp    1b452 <lj_gc2_tv_lease_acquire+0x72>
+   1b48a:	66 0f 1f 44 00 00    	nopw   0x0(%rax,%rax,1)
+   1b490:	48 8d 7c 24 10       	lea    0x10(%rsp),%rdi
+   1b495:	31 f6                	xor    %esi,%esi
+   1b497:	e8 00 00 00 00       	call   1b49c <lj_gc2_tv_lease_acquire+0xbc>
+			1b498: R_X86_64_PLT32	lj_arena_hugetab_reader_release-0x4
+   1b49c:	eb 9a                	jmp    1b438 <lj_gc2_tv_lease_acquire+0x58>
+   1b49e:	66 90                	xchg   %ax,%ax
+   1b4a0:	e8 00 00 00 00       	call   1b4a5 <lj_gc2_tv_lease_acquire+0xc5>
+			1b4a1: R_X86_64_PLT32	lj_arena_rescue_leave-0x4
+   1b4a5:	eb 91                	jmp    1b438 <lj_gc2_tv_lease_acquire+0x58>
+
+Disassembly of section .text.unlikely:

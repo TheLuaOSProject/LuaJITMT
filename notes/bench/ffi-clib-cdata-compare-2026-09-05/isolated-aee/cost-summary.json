@@ -1,0 +1,77 @@
+{
+  "runtime_processes": 14,
+  "pairs": 7,
+  "timer": "os.clock, per-process min of five passes",
+  "n": 2000000,
+  "affinity_cpu": 31,
+  "gc": "enabled, two full collections before warmup; real attached peer remains idle",
+  "values_ns": {
+    "baseline": [
+      251.45299999999997,
+      250.91049999999998,
+      250.89450000000002,
+      252.07649999999998,
+      251.41549999999998,
+      251.56450000000004,
+      251.0285
+    ],
+    "candidate": [
+      167.81050000000002,
+      167.97750000000002,
+      167.2925,
+      167.4115,
+      167.2235,
+      167.71200000000002,
+      168.0435
+    ]
+  },
+  "medians_ns": {
+    "baseline": 251.41549999999998,
+    "candidate": 167.71200000000002
+  },
+  "ranges_ns": {
+    "baseline": [
+      250.89450000000002,
+      252.07649999999998
+    ],
+    "candidate": [
+      167.2235,
+      168.0435
+    ]
+  },
+  "shapes": {
+    "baseline": [
+      [
+        1,
+        39,
+        515,
+        2,
+        1
+      ]
+    ],
+    "candidate": [
+      [
+        1,
+        35,
+        438,
+        2,
+        1
+      ]
+    ]
+  },
+  "paired_ratios": [
+    0.6673632845899633,
+    0.6694717837635333,
+    0.6667842459679266,
+    0.6641297383929086,
+    0.6651280450091582,
+    0.666675941955244,
+    0.6694200060949255
+  ],
+  "median_paired_ratio": 0.6667842459679266,
+  "geometric_paired_ratio": 0.6669935799905615,
+  "source": "matching aee88db5 vs aee plus frozen e8175c cdata comparison",
+  "scope": "shared captured-builtin namespace lookup; no application or CALLXS speedup claim",
+  "median_paired_change_percent": -33.32157540320734,
+  "median_pair_speedup": 1.499735493222948
+}

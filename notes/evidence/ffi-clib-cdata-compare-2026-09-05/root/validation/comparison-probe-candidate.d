@@ -1,0 +1,26 @@
+/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-probe-candidate: \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-probe.c \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lua.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luaconf.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lauxlib.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lua.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lualib.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_obj.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_def.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_arch.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_atomic.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_gc2token.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_tgregistry.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_tgslot.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_arena.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_clib.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_obj.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_gc2.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_arena.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_tab.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_tg.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_bc.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_ctype.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_gc.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_gc2.h \
+ /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/lj_thr.h

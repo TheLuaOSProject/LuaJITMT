@@ -1,0 +1,88 @@
+{
+  "note": "All224 tracked runtime/generator inputs match. Isolated git-archive fallback version and shared Git timestamp version differ. Compiler/GC/table/VM object identities below match. Shared canonical ELF identity is recorded separately.",
+  "files": {
+    "luajit.h": {
+      "isolated": "581946bdf4e0826210a77f910596f6ebb18af58a52a4d4a473efadd85680fd21",
+      "shared": "82ad80b46bf44dddcd4d042d8ee73a27e762518d4441236898f5c6be6ba9b31a",
+      "same": false,
+      "diff": "--- /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit.h\t2026-09-05 09:58:56.546721988 +0000\n+++ /workspaces/lj-lockless/src/luajit.h\t2026-09-05 10:05:43.380471180 +0000\n@@ -30,9 +30,9 @@\n \n #include \"lua.h\"\n \n-#define LUAJIT_VERSION\t\t\"LuaJIT 2.1.ROLLING\"\n+#define LUAJIT_VERSION\t\t\"LuaJIT 2.1.1788601441\"\n #define LUAJIT_VERSION_NUM\t20199  /* Deprecated. */\n-#define LUAJIT_VERSION_SYM\tluaJIT_version_2_1_ROLLING\n+#define LUAJIT_VERSION_SYM\tluaJIT_version_2_1_1788601441\n #define LUAJIT_COPYRIGHT\t\"Copyright (C) 2005-2026 Mike Pall\"\n #define LUAJIT_URL\t\t\"https://luajit.org/\"\n \n"
+    },
+    "luajit_relver.txt": {
+      "isolated": "446318567f29353e55371e5dc03efa6acd84b838af84a7acb3e8b494cd69eaba",
+      "shared": "8780d891478e5ffe45d85f2127dd98f0286f1012d3bd4dc318f1b555b447aced",
+      "same": false,
+      "diff": "--- /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit_relver.txt\t2026-09-05 09:58:56.546675571 +0000\n+++ /workspaces/lj-lockless/src/luajit_relver.txt\t2026-09-05 10:05:43.378780247 +0000\n@@ -1 +1 @@\n-ROLLING\n+1788601441\n"
+    },
+    "lj_bcdef.h": {
+      "isolated": "3ff1a255efb83f3e2bcb3c4664639bdc6f5ec0584d9b1c324e2261e7f79385b2",
+      "shared": "3ff1a255efb83f3e2bcb3c4664639bdc6f5ec0584d9b1c324e2261e7f79385b2",
+      "same": true
+    },
+    "lj_ffdef.h": {
+      "isolated": "97f76e37cbe49a4465faa4a39386df79979d1068de9129cd82408f0f5dc9ccb6",
+      "shared": "97f76e37cbe49a4465faa4a39386df79979d1068de9129cd82408f0f5dc9ccb6",
+      "same": true
+    },
+    "lj_libdef.h": {
+      "isolated": "bbd4c5755415c5e9c7e1daebd3d301c1a65cae0d59a4186547454e8b51c8f736",
+      "shared": "bbd4c5755415c5e9c7e1daebd3d301c1a65cae0d59a4186547454e8b51c8f736",
+      "same": true
+    },
+    "lj_recdef.h": {
+      "isolated": "ef796976a2e6fc0e769897dfa90f07d9316b3dd79c9f00d38eb9126d67e02d41",
+      "shared": "ef796976a2e6fc0e769897dfa90f07d9316b3dd79c9f00d38eb9126d67e02d41",
+      "same": true
+    },
+    "lj_folddef.h": {
+      "isolated": "b09c7392ffdb83f663f770f5f16128371b7aeebfa03ef65472b12c13b82c75c7",
+      "shared": "b09c7392ffdb83f663f770f5f16128371b7aeebfa03ef65472b12c13b82c75c7",
+      "same": true
+    },
+    "lj_vm.S": {
+      "isolated": "7d934b89eddfcc493405de758b617d22eae10ce43413b806da7ce74d45b8afc7",
+      "shared": "7d934b89eddfcc493405de758b617d22eae10ce43413b806da7ce74d45b8afc7",
+      "same": true
+    },
+    "jit/vmdef.lua": {
+      "isolated": "3599350c275505afd26b570a8eb83443b0c4cb06fb161db677362cae7816bba9",
+      "shared": "ea59f5c601d088db70ffdbc4755f3db17df84382c7adaa07961d137189e36271",
+      "same": false,
+      "diff": "--- /tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/jit/vmdef.lua\t2026-09-05 09:58:57.155066893 +0000\n+++ /workspaces/lj-lockless/src/jit/vmdef.lua\t2026-09-05 10:05:43.734581715 +0000\n@@ -1,6 +1,6 @@\n -- This is a generated file. DO NOT EDIT!\n \n-assert(require(\"jit\").version == \"LuaJIT 2.1.ROLLING\", \"LuaJIT core/library version mismatch\")\n+assert(require(\"jit\").version == \"LuaJIT 2.1.1788601441\", \"LuaJIT core/library version mismatch\")\n \n return {\n \n"
+    },
+    "lj_tab.o": {
+      "isolated": "94624af0785ef4e075d5a2e23df3c61397f9c7890cea1d46444ab255251396f7",
+      "shared": "94624af0785ef4e075d5a2e23df3c61397f9c7890cea1d46444ab255251396f7",
+      "same": true
+    },
+    "lj_crecord.o": {
+      "isolated": "3a6c28ba6f1405950786339f6d787f88fa3115187361a44eb1368a37606cdfea",
+      "shared": "3a6c28ba6f1405950786339f6d787f88fa3115187361a44eb1368a37606cdfea",
+      "same": true
+    },
+    "lj_ir.o": {
+      "isolated": "30a2e91d486001da8a0f9f1e0a65b0c8e3b54153ec7b4861c3f4a8bece5fb5dc",
+      "shared": "30a2e91d486001da8a0f9f1e0a65b0c8e3b54153ec7b4861c3f4a8bece5fb5dc",
+      "same": true
+    },
+    "lj_gc.o": {
+      "isolated": "f3be24eb27125d48301bbb3777fc9387937c4916e0164a475bc64a33aefae1bd",
+      "shared": "f3be24eb27125d48301bbb3777fc9387937c4916e0164a475bc64a33aefae1bd",
+      "same": true
+    },
+    "lj_gc2.o": {
+      "isolated": "94e224879c77ad54e7f844a0fbcd59297f87d86c6ce519dd764b7d5c8c11714b",
+      "shared": "94e224879c77ad54e7f844a0fbcd59297f87d86c6ce519dd764b7d5c8c11714b",
+      "same": true
+    },
+    "lj_api.o": {
+      "isolated": "2778fa66117b04a12b5d2a02eae64afbba505b07469df09ee7e4e0c26f60c0b0",
+      "shared": "2778fa66117b04a12b5d2a02eae64afbba505b07469df09ee7e4e0c26f60c0b0",
+      "same": true
+    },
+    "lj_vm.o": {
+      "isolated": "e65ec36106db2b307055c9c26169861afc2b800e39ba96342c938edc39085619",
+      "shared": "e65ec36106db2b307055c9c26169861afc2b800e39ba96342c938edc39085619",
+      "same": true
+    }
+  }
+}

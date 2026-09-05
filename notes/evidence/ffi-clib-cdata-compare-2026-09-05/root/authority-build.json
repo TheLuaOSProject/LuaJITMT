@@ -1,0 +1,19 @@
+{
+  "command": [
+    "cc",
+    "-shared",
+    "-fPIC",
+    "-O2",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cache-authority-lib.c",
+    "-o",
+    "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so"
+  ],
+  "seconds": 0.01644244199997047,
+  "exit": 0,
+  "stdout": "",
+  "stderr": "",
+  "binary_sha256": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+}

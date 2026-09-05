@@ -1,0 +1,386 @@
+[
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-retention-candidate",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.lua",
+      "function",
+      "kgc",
+      "root",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so",
+      "on"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;"
+    },
+    "seconds": 0.015502676003961824,
+    "inputs": {
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.c": "5480a5e547dea4eaba58cd31a303bc9b3a50b71ca19db4d48bd463f4b9b98ded",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.lua": "513f995540e1d87966d97c5635666bd27247346aa61e212763f87e217440879a",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/libluajit.a": "1cc2bd3ba6f7350cc9b4306f4bbf7b00d8e0832e4323be5c4b59584b34a677dc",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/jit/vmdef.lua": "3599350c275505afd26b570a8eb83443b0c4cb06fb161db677362cae7816bba9",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-retention-candidate": "09d58967d8e5e48d626fe9122ab96d9d4be0575fe00e51dfd39137bd8a46ae06"
+    },
+    "mode": "kgc",
+    "kind": "function",
+    "target": "root",
+    "jit": "on",
+    "exit": 0,
+    "stdout": "retention-roots\tfunction\troot\ton\tcycles\t1\tretired-empty\ttrue\tweak-cdata\ttrue\nretention-native\tfunction\troot\thelpers\t2\told-exits\t1\t0\teffects\t1\tstatus\t1\tclean\t1\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-retention-candidate",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.lua",
+      "function",
+      "kgc",
+      "side",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so",
+      "on"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;"
+    },
+    "seconds": 0.016612184001132846,
+    "inputs": {
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.c": "5480a5e547dea4eaba58cd31a303bc9b3a50b71ca19db4d48bd463f4b9b98ded",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.lua": "513f995540e1d87966d97c5635666bd27247346aa61e212763f87e217440879a",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/libluajit.a": "1cc2bd3ba6f7350cc9b4306f4bbf7b00d8e0832e4323be5c4b59584b34a677dc",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/jit/vmdef.lua": "3599350c275505afd26b570a8eb83443b0c4cb06fb161db677362cae7816bba9",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-retention-candidate": "09d58967d8e5e48d626fe9122ab96d9d4be0575fe00e51dfd39137bd8a46ae06"
+    },
+    "mode": "kgc",
+    "kind": "function",
+    "target": "side",
+    "jit": "on",
+    "exit": 0,
+    "stdout": "retention-roots\tfunction\tside\ton\tcycles\t1\tretired-empty\ttrue\tweak-cdata\ttrue\nretention-native\tfunction\tside\thelpers\t2\told-exits\t0\t1\teffects\t40\tstatus\t1\tclean\t1\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-retention-candidate",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.lua",
+      "read",
+      "kgc",
+      "root",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so",
+      "on"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;"
+    },
+    "seconds": 0.014218186006473843,
+    "inputs": {
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.c": "5480a5e547dea4eaba58cd31a303bc9b3a50b71ca19db4d48bd463f4b9b98ded",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.lua": "513f995540e1d87966d97c5635666bd27247346aa61e212763f87e217440879a",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/libluajit.a": "1cc2bd3ba6f7350cc9b4306f4bbf7b00d8e0832e4323be5c4b59584b34a677dc",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/jit/vmdef.lua": "3599350c275505afd26b570a8eb83443b0c4cb06fb161db677362cae7816bba9",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-retention-candidate": "09d58967d8e5e48d626fe9122ab96d9d4be0575fe00e51dfd39137bd8a46ae06"
+    },
+    "mode": "kgc",
+    "kind": "read",
+    "target": "root",
+    "jit": "on",
+    "exit": 0,
+    "stdout": "retention-roots\tread\troot\ton\tcycles\t1\tretired-empty\ttrue\tweak-cdata\ttrue\nretention-native\tread\troot\thelpers\t2\told-exits\t1\t0\teffects\t1\tstatus\t1\tclean\t1\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-retention-candidate",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.lua",
+      "read",
+      "kgc",
+      "side",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so",
+      "on"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;"
+    },
+    "seconds": 0.015810452001460362,
+    "inputs": {
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.c": "5480a5e547dea4eaba58cd31a303bc9b3a50b71ca19db4d48bd463f4b9b98ded",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.lua": "513f995540e1d87966d97c5635666bd27247346aa61e212763f87e217440879a",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/libluajit.a": "1cc2bd3ba6f7350cc9b4306f4bbf7b00d8e0832e4323be5c4b59584b34a677dc",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/jit/vmdef.lua": "3599350c275505afd26b570a8eb83443b0c4cb06fb161db677362cae7816bba9",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-retention-candidate": "09d58967d8e5e48d626fe9122ab96d9d4be0575fe00e51dfd39137bd8a46ae06"
+    },
+    "mode": "kgc",
+    "kind": "read",
+    "target": "side",
+    "jit": "on",
+    "exit": 0,
+    "stdout": "retention-roots\tread\tside\ton\tcycles\t1\tretired-empty\ttrue\tweak-cdata\ttrue\nretention-native\tread\tside\thelpers\t2\told-exits\t0\t1\teffects\t40\tstatus\t1\tclean\t1\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-retention-candidate",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.lua",
+      "write",
+      "kgc",
+      "root",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so",
+      "on"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;"
+    },
+    "seconds": 0.014261542004533112,
+    "inputs": {
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.c": "5480a5e547dea4eaba58cd31a303bc9b3a50b71ca19db4d48bd463f4b9b98ded",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.lua": "513f995540e1d87966d97c5635666bd27247346aa61e212763f87e217440879a",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/libluajit.a": "1cc2bd3ba6f7350cc9b4306f4bbf7b00d8e0832e4323be5c4b59584b34a677dc",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/jit/vmdef.lua": "3599350c275505afd26b570a8eb83443b0c4cb06fb161db677362cae7816bba9",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-retention-candidate": "09d58967d8e5e48d626fe9122ab96d9d4be0575fe00e51dfd39137bd8a46ae06"
+    },
+    "mode": "kgc",
+    "kind": "write",
+    "target": "root",
+    "jit": "on",
+    "exit": 0,
+    "stdout": "retention-roots\twrite\troot\ton\tcycles\t1\tretired-empty\ttrue\tweak-cdata\ttrue\nretention-native\twrite\troot\thelpers\t2\told-exits\t1\t0\teffects\t1\tstatus\t1\tclean\t1\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-retention-candidate",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.lua",
+      "write",
+      "kgc",
+      "side",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so",
+      "on"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;"
+    },
+    "seconds": 0.013628175998746883,
+    "inputs": {
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.c": "5480a5e547dea4eaba58cd31a303bc9b3a50b71ca19db4d48bd463f4b9b98ded",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.lua": "513f995540e1d87966d97c5635666bd27247346aa61e212763f87e217440879a",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/libluajit.a": "1cc2bd3ba6f7350cc9b4306f4bbf7b00d8e0832e4323be5c4b59584b34a677dc",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/jit/vmdef.lua": "3599350c275505afd26b570a8eb83443b0c4cb06fb161db677362cae7816bba9",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-retention-candidate": "09d58967d8e5e48d626fe9122ab96d9d4be0575fe00e51dfd39137bd8a46ae06"
+    },
+    "mode": "kgc",
+    "kind": "write",
+    "target": "side",
+    "jit": "on",
+    "exit": 0,
+    "stdout": "retention-roots\twrite\tside\ton\tcycles\t1\tretired-empty\ttrue\tweak-cdata\ttrue\nretention-native\twrite\tside\thelpers\t2\told-exits\t0\t1\teffects\t40\tstatus\t1\tclean\t1\t1\tslots\t39\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-retention-candidate",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.lua",
+      "function",
+      "kgc",
+      "root",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so",
+      "off"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;"
+    },
+    "seconds": 0.011418875001254492,
+    "inputs": {
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.c": "5480a5e547dea4eaba58cd31a303bc9b3a50b71ca19db4d48bd463f4b9b98ded",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.lua": "513f995540e1d87966d97c5635666bd27247346aa61e212763f87e217440879a",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/libluajit.a": "1cc2bd3ba6f7350cc9b4306f4bbf7b00d8e0832e4323be5c4b59584b34a677dc",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/jit/vmdef.lua": "3599350c275505afd26b570a8eb83443b0c4cb06fb161db677362cae7816bba9",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-retention-candidate": "09d58967d8e5e48d626fe9122ab96d9d4be0575fe00e51dfd39137bd8a46ae06"
+    },
+    "mode": "kgc",
+    "kind": "function",
+    "target": "root",
+    "jit": "off",
+    "exit": 0,
+    "stdout": "retention-roots\tfunction\troot\toff\tcycles\t1\tretired-empty\ttrue\tweak-cdata\tfalse\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-retention-candidate",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.lua",
+      "function",
+      "kgc",
+      "side",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so",
+      "off"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;"
+    },
+    "seconds": 0.013119531999109313,
+    "inputs": {
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.c": "5480a5e547dea4eaba58cd31a303bc9b3a50b71ca19db4d48bd463f4b9b98ded",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.lua": "513f995540e1d87966d97c5635666bd27247346aa61e212763f87e217440879a",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/libluajit.a": "1cc2bd3ba6f7350cc9b4306f4bbf7b00d8e0832e4323be5c4b59584b34a677dc",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/jit/vmdef.lua": "3599350c275505afd26b570a8eb83443b0c4cb06fb161db677362cae7816bba9",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-retention-candidate": "09d58967d8e5e48d626fe9122ab96d9d4be0575fe00e51dfd39137bd8a46ae06"
+    },
+    "mode": "kgc",
+    "kind": "function",
+    "target": "side",
+    "jit": "off",
+    "exit": 0,
+    "stdout": "retention-roots\tfunction\tside\toff\tcycles\t1\tretired-empty\ttrue\tweak-cdata\tfalse\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-retention-candidate",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.lua",
+      "read",
+      "kgc",
+      "root",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so",
+      "off"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;"
+    },
+    "seconds": 0.013636625997605734,
+    "inputs": {
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.c": "5480a5e547dea4eaba58cd31a303bc9b3a50b71ca19db4d48bd463f4b9b98ded",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.lua": "513f995540e1d87966d97c5635666bd27247346aa61e212763f87e217440879a",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/libluajit.a": "1cc2bd3ba6f7350cc9b4306f4bbf7b00d8e0832e4323be5c4b59584b34a677dc",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/jit/vmdef.lua": "3599350c275505afd26b570a8eb83443b0c4cb06fb161db677362cae7816bba9",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-retention-candidate": "09d58967d8e5e48d626fe9122ab96d9d4be0575fe00e51dfd39137bd8a46ae06"
+    },
+    "mode": "kgc",
+    "kind": "read",
+    "target": "root",
+    "jit": "off",
+    "exit": 0,
+    "stdout": "retention-roots\tread\troot\toff\tcycles\t1\tretired-empty\ttrue\tweak-cdata\tfalse\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-retention-candidate",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.lua",
+      "read",
+      "kgc",
+      "side",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so",
+      "off"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;"
+    },
+    "seconds": 0.015871436000452377,
+    "inputs": {
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.c": "5480a5e547dea4eaba58cd31a303bc9b3a50b71ca19db4d48bd463f4b9b98ded",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.lua": "513f995540e1d87966d97c5635666bd27247346aa61e212763f87e217440879a",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/libluajit.a": "1cc2bd3ba6f7350cc9b4306f4bbf7b00d8e0832e4323be5c4b59584b34a677dc",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/jit/vmdef.lua": "3599350c275505afd26b570a8eb83443b0c4cb06fb161db677362cae7816bba9",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-retention-candidate": "09d58967d8e5e48d626fe9122ab96d9d4be0575fe00e51dfd39137bd8a46ae06"
+    },
+    "mode": "kgc",
+    "kind": "read",
+    "target": "side",
+    "jit": "off",
+    "exit": 0,
+    "stdout": "retention-roots\tread\tside\toff\tcycles\t1\tretired-empty\ttrue\tweak-cdata\tfalse\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-retention-candidate",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.lua",
+      "write",
+      "kgc",
+      "root",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so",
+      "off"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;"
+    },
+    "seconds": 0.014841379997960757,
+    "inputs": {
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.c": "5480a5e547dea4eaba58cd31a303bc9b3a50b71ca19db4d48bd463f4b9b98ded",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.lua": "513f995540e1d87966d97c5635666bd27247346aa61e212763f87e217440879a",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/libluajit.a": "1cc2bd3ba6f7350cc9b4306f4bbf7b00d8e0832e4323be5c4b59584b34a677dc",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/jit/vmdef.lua": "3599350c275505afd26b570a8eb83443b0c4cb06fb161db677362cae7816bba9",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-retention-candidate": "09d58967d8e5e48d626fe9122ab96d9d4be0575fe00e51dfd39137bd8a46ae06"
+    },
+    "mode": "kgc",
+    "kind": "write",
+    "target": "root",
+    "jit": "off",
+    "exit": 0,
+    "stdout": "retention-roots\twrite\troot\toff\tcycles\t1\tretired-empty\ttrue\tweak-cdata\tfalse\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-retention-candidate",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.lua",
+      "write",
+      "kgc",
+      "side",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so",
+      "off"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/?.lua;;"
+    },
+    "seconds": 0.0174368570005754,
+    "inputs": {
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.c": "5480a5e547dea4eaba58cd31a303bc9b3a50b71ca19db4d48bd463f4b9b98ded",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/t-clib-cdata-retention.lua": "513f995540e1d87966d97c5635666bd27247346aa61e212763f87e217440879a",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/luajit": "38d560af1217354bf4473b8dd902a62430670009e4df01be2add625b480159e1",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/libluajit.a": "1cc2bd3ba6f7350cc9b4306f4bbf7b00d8e0832e4323be5c4b59584b34a677dc",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/candidate/src/jit/vmdef.lua": "3599350c275505afd26b570a8eb83443b0c4cb06fb161db677362cae7816bba9",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/comparison-retention-candidate": "09d58967d8e5e48d626fe9122ab96d9d4be0575fe00e51dfd39137bd8a46ae06"
+    },
+    "mode": "kgc",
+    "kind": "write",
+    "target": "side",
+    "jit": "off",
+    "exit": 0,
+    "stdout": "retention-roots\twrite\tside\toff\tcycles\t1\tretired-empty\ttrue\tweak-cdata\tfalse\n",
+    "stderr": ""
+  }
+]

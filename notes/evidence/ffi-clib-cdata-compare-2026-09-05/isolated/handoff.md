@@ -1,0 +1,33 @@
+The isolated cdata-only comparison is ready for ROOT's combined-runtime validation. All 594 scoped functional processes pass, and seven matching alternating CPU-31 pairs reduce shared captured-builtin namespace lookup from 251.4155 ns to 167.7120 ns per lookup. The median paired reduction is 33.3216%; the geometric paired ratio is 0.66699358. These results apply to the frozen aee88db5 baseline and this candidate. The newer 84378609 GC-control repair still requires ROOT's separate combination and integration checks.
+
+The unchanged candidate is candidate-v1.patch, SHA e8175c5b2c4a86a87caba35336ac1bc5bcdfdeeed88492fb0fe5b0ede9530d62. It modifies only lj_tab.c, lj_tab.h, lj_crecord.c and lj_ircall.h. All 224 runtime/generator inputs match across normal/assert/ASan except build flags; source-identity-final.json records all sources and final binaries. The matching baseline's 224 inputs were also rechecked against the aee input set. No shared source, build, commit, or release was changed.
+
+The new native helper retains the two exact table/key leases, one-shot SMR admission, physical owner and source-word checks, current paired table-vector resolver and all its generation/forwarding checks. It compares an acquired local TValue with an actual typed cdata IR_KGC operand. That trace operand retains the exact expected object. The helper neither dereferences nor publishes an unmatched newly observed result. The immediate post-call refusal snapshot and status guard remain, followed by the signed volatile close guard before result export or extern access. Recording-time hit_try and numeric actual-value loads are unchanged.
+
+The saved source cost is one ordinary result lease, its registry/arena handoff and fence, cdata layout discovery, output copy/publication and the generated result load/identity check. Source operation counts are 14 to 10 nominal shared RMWs and three to two explicit SC fences on the ordinary small-table/string/cdata path. Those counts are not a hardware profile. Root publication is already an early return in the measured nongenerational IDLE case; queue allocation is not the measured explanation. Existing internal CAS retry loops remain, so this is not a wait-free claim.
+
+The performance process minima, in pair order, are:
+
+| Pair | Matching baseline ns | Candidate ns |
+| --- | ---: | ---: |
+| 0 | 251.4530 | 167.8105 |
+| 1 | 250.9105 | 167.9775 |
+| 2 | 250.8945 | 167.2925 |
+| 3 | 252.0765 | 167.4115 |
+| 4 | 251.4155 | 167.2235 |
+| 5 | 251.5645 | 167.7120 |
+| 6 | 251.0285 | 168.0435 |
+
+Every process keeps a real worker attached, enables GC, demonstrates an actual installed native root, and times five passes of two million lookups. Process order alternates by pair; all 14 processes and all 70 samples are retained in perf/cost-results.json and cost-parsed-results.json. No slow sample was removed. The timing fixture differs from ROOT's previous shared-cost.lua only in helper-name witness selection and its assertion label. All baseline traces are 39 IR instructions/515 bytes; all candidate traces are 35/438. Each has two static helper calls, one preheader and one body call; ordinary iterations execute one. These isolated lookup measurements do not establish an application, foreign-call, or combined-runtime speedup.
+
+The 594 functional processes are 190 normal, 202 assertion and 202 ASan:
+
+- 444 adapted accepted authority/lifecycle cases, including real native root/installed-side reentry, numeric sign/NaN/infinity behavior, authoritative cache growth plus full GC, original-env lifetime, prior close and real-success-before-close wrappers.
+- 114 native comparison controls covering function/extern-read/extern-write and original root/installed side. They test wrong/null expected operands, real pending SMR-exclusive rejection, real public GC and flush overlap, and existing table/key one-shot admission refusals. They check exact prefix counts, extern targets, unchanged source scratch, exact state owner/jit_base and balanced real-call lease/SMR cleanup. Five invalid/nonnative calls per control reject before SMR. Result-lease refusal was removed by design and is not counted as retained coverage.
+- 36 retained-KGC controls with matching on/off negative controls. After semantic close and cache-value deletion, real grace progression empties the namespace side cache and global retired CLibrary-cache list. Two further full collections preserve weak cdata only with the old trace. All 18 off controls clear it. Restoring that exact retained cdata makes the old native helper return 1, then the later close guard errors before any closed extern store, without prefix replay.
+
+validation-handoff.md provides exact fixture paths, argv, compile flags, wrappers and evidence limits. The immutable validation-frozen-manifest.json has 109 artifacts and SHA 03cf3284aea61d0abbcd883450a884d759f97b61793eaaacb977b94a7de3cb10. The 594 count excludes the eight final IR shape processes, successful development pilots and preserved first failures. The initial probe compile used a Windows-only accessor on Linux; a later GC observer incorrectly expected public collection to block instead of performing its intended nonwaiting deferral. Both were fixture issues, preserved before correction, and required no runtime change. Stopped-GC authority cases are not overlap proof. Cache growth/retirement is covered; a forced same-address table-storage ABA schedule or paused in-progress table forwarding is not claimed as new native runtime evidence. The unchanged common resolver's exclusions remain part of the reviewed source proof.
+
+Code/IR was frozen and independently reviewed before runtime validation. ir-review-manifest.json binds 38 artifacts (SHA b7d89d3db0d4151cfdc89c3cc6e651aeae9c55abaa67dd0541c0859aa5296c68). ROOT's frozen review is /tmp/lj-clib-cdata-compare-proof-20260905-ei_30vvn/review.md, SHA 32c1ad186979e3b3430420a0bdddc6ee9379e162a0d65def6756dfda2189a387, with manifest 19e60c095f33bcd56b0472a2f24c0b3272797836030c41b80a4f1dd29ca86ee8. The original source proof remains /tmp/lj-clib-hit-cost-review-20260905-cmxsefzb/source-proof.md, SHA cf0d30efd16f43a5deec19fd2936073fe5ee021eb1e5bb65b240e23120871a6b.
+
+verify-final.py rehashes the candidate review/validation, five 224-input source sets, all functional/cost input records, and all 330 artifacts in the five earlier immutable source-proof/review/regression/optimizer packages. The old accepted 444-process CLibrary package and both prior optimizer packages remain unchanged. ROOT owns canonical registration, captured-receiver and phase/profile combination checks, and any integration with 84378609. The attachment-during-recording test was not pursued. Windows, macOS and release readiness are outside this study.

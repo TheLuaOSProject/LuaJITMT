@@ -1,0 +1,242 @@
+[
+  {
+    "variant": "baseline",
+    "kind": "function",
+    "command": [
+      "taskset",
+      "-c",
+      "24",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jdump=imsT",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/t-clib-cdata-shape.lua",
+      "function",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "baseline"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.01460839500214206,
+    "exit": 0,
+    "stdout": "---- TRACE flush\n\nshape\tfunction\t1\t39\t515\t0\t2\t0\t2\t1\t1\t1\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/t-clib-cdata-shape.lua": "ef21bb26951747e37cf835e50090effb7ac92b04ebcbb77469a23e2fbaf63686",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/dump.lua": "b19cd68796592ba1b441464d8c5a36ec34eab5463d1779d4537c75714527e388"
+    }
+  },
+  {
+    "variant": "baseline",
+    "kind": "read",
+    "command": [
+      "taskset",
+      "-c",
+      "24",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jdump=imsT",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/t-clib-cdata-shape.lua",
+      "read",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "baseline"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.013363542006118223,
+    "exit": 0,
+    "stdout": "---- TRACE flush\n\nshape\tread\t1\t41\t546\t0\t2\t0\t2\t1\t1\t1\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/t-clib-cdata-shape.lua": "ef21bb26951747e37cf835e50090effb7ac92b04ebcbb77469a23e2fbaf63686",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/dump.lua": "b19cd68796592ba1b441464d8c5a36ec34eab5463d1779d4537c75714527e388"
+    }
+  },
+  {
+    "variant": "baseline",
+    "kind": "write",
+    "command": [
+      "taskset",
+      "-c",
+      "24",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jdump=imsT",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/t-clib-cdata-shape.lua",
+      "write",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "baseline"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.01332758799981093,
+    "exit": 0,
+    "stdout": "---- TRACE flush\n\nshape\twrite\t1\t41\t530\t0\t2\t0\t2\t1\t1\t1\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/t-clib-cdata-shape.lua": "ef21bb26951747e37cf835e50090effb7ac92b04ebcbb77469a23e2fbaf63686",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/dump.lua": "b19cd68796592ba1b441464d8c5a36ec34eab5463d1779d4537c75714527e388"
+    }
+  },
+  {
+    "variant": "baseline",
+    "kind": "number",
+    "command": [
+      "taskset",
+      "-c",
+      "24",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jdump=imsT",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/t-clib-cdata-shape.lua",
+      "number",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "baseline"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.013072327004920226,
+    "exit": 0,
+    "stdout": "---- TRACE flush\n\nshape\tnumber\t1\t37\t473\t0\t2\t0\t2\t1\t1\t1\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/t-clib-cdata-shape.lua": "ef21bb26951747e37cf835e50090effb7ac92b04ebcbb77469a23e2fbaf63686",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/dump.lua": "b19cd68796592ba1b441464d8c5a36ec34eab5463d1779d4537c75714527e388"
+    }
+  },
+  {
+    "variant": "candidate",
+    "kind": "function",
+    "command": [
+      "taskset",
+      "-c",
+      "24",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/luajit",
+      "-jdump=imsT",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/t-clib-cdata-shape.lua",
+      "function",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "candidate"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/?.lua;;"
+    },
+    "seconds": 0.013064414997643325,
+    "exit": 0,
+    "stdout": "---- TRACE flush\n\nshape\tfunction\t1\t35\t438\t2\t0\t2\t0\t1\t1\t1\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/t-clib-cdata-shape.lua": "ef21bb26951747e37cf835e50090effb7ac92b04ebcbb77469a23e2fbaf63686",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/luajit": "2d7649d7269b024753caf87f718e4821dfd164854bfd9402928ceb3e7a708ee7",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/jit/dump.lua": "b19cd68796592ba1b441464d8c5a36ec34eab5463d1779d4537c75714527e388"
+    }
+  },
+  {
+    "variant": "candidate",
+    "kind": "read",
+    "command": [
+      "taskset",
+      "-c",
+      "24",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/luajit",
+      "-jdump=imsT",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/t-clib-cdata-shape.lua",
+      "read",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "candidate"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/?.lua;;"
+    },
+    "seconds": 0.012947577000886668,
+    "exit": 0,
+    "stdout": "---- TRACE flush\n\nshape\tread\t1\t37\t469\t2\t0\t2\t0\t1\t1\t1\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/t-clib-cdata-shape.lua": "ef21bb26951747e37cf835e50090effb7ac92b04ebcbb77469a23e2fbaf63686",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/luajit": "2d7649d7269b024753caf87f718e4821dfd164854bfd9402928ceb3e7a708ee7",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/jit/dump.lua": "b19cd68796592ba1b441464d8c5a36ec34eab5463d1779d4537c75714527e388"
+    }
+  },
+  {
+    "variant": "candidate",
+    "kind": "write",
+    "command": [
+      "taskset",
+      "-c",
+      "24",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/luajit",
+      "-jdump=imsT",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/t-clib-cdata-shape.lua",
+      "write",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "candidate"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/?.lua;;"
+    },
+    "seconds": 0.012951675002113916,
+    "exit": 0,
+    "stdout": "---- TRACE flush\n\nshape\twrite\t1\t37\t458\t2\t0\t2\t0\t1\t1\t1\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/t-clib-cdata-shape.lua": "ef21bb26951747e37cf835e50090effb7ac92b04ebcbb77469a23e2fbaf63686",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/luajit": "2d7649d7269b024753caf87f718e4821dfd164854bfd9402928ceb3e7a708ee7",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/jit/dump.lua": "b19cd68796592ba1b441464d8c5a36ec34eab5463d1779d4537c75714527e388"
+    }
+  },
+  {
+    "variant": "candidate",
+    "kind": "number",
+    "command": [
+      "taskset",
+      "-c",
+      "24",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/luajit",
+      "-jdump=imsT",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/t-clib-cdata-shape.lua",
+      "number",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "candidate"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/?.lua;;"
+    },
+    "seconds": 0.012924034002935514,
+    "exit": 0,
+    "stdout": "---- TRACE flush\n\nshape\tnumber\t1\t37\t473\t0\t2\t0\t2\t1\t1\t1\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/t-clib-cdata-shape.lua": "ef21bb26951747e37cf835e50090effb7ac92b04ebcbb77469a23e2fbaf63686",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/luajit": "2d7649d7269b024753caf87f718e4821dfd164854bfd9402928ceb3e7a708ee7",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/jit/dump.lua": "b19cd68796592ba1b441464d8c5a36ec34eab5463d1779d4537c75714527e388"
+    }
+  }
+]

@@ -1,0 +1,75 @@
+{
+  "pairs": 7,
+  "runtime_processes": 14,
+  "all_samples": 70,
+  "n": 2000000,
+  "timer": "os.clock, per-process min of five retained passes",
+  "affinity_cpu": 31,
+  "gc": "enabled with an actual attached peer",
+  "values_ns": {
+    "baseline": [
+      251.20350000000002,
+      251.5425,
+      251.86999999999998,
+      250.93300000000002,
+      250.832,
+      251.42249999999999,
+      251.1645
+    ],
+    "candidate": [
+      167.5415,
+      167.492,
+      166.98350000000002,
+      167.315,
+      167.964,
+      167.43,
+      167.359
+    ]
+  },
+  "medians_ns": {
+    "baseline": 251.20350000000002,
+    "candidate": 167.43
+  },
+  "ranges_ns": {
+    "baseline": [
+      250.832,
+      251.86999999999998
+    ],
+    "candidate": [
+      166.98350000000002,
+      167.964
+    ]
+  },
+  "paired_ratios": [
+    0.6669552772951014,
+    0.665859645984277,
+    0.6629749473934968,
+    0.6667716083576093,
+    0.6696274797474007,
+    0.6659308534439042,
+    0.666332224498287
+  ],
+  "median_paired_change_percent": -33.3667775501713,
+  "geometric_paired_ratio": 0.6663478151276085,
+  "shapes": {
+    "baseline": [
+      [
+        1,
+        39,
+        515,
+        2,
+        1
+      ]
+    ],
+    "candidate": [
+      [
+        1,
+        35,
+        438,
+        2,
+        1
+      ]
+    ]
+  },
+  "scope": "84378609 versus 84378609 plus e8175c; shared captured-builtin namespace lookup, no application/CALLXS/stock speedup claim"
+}

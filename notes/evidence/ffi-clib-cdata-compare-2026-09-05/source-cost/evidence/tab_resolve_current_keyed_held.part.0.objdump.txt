@@ -1,0 +1,346 @@
+
+/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_tab.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000001720 <tab_resolve_current_keyed_held.part.0>:
+    1720:	41 57                	push   %r15
+    1722:	49 89 d7             	mov    %rdx,%r15
+    1725:	41 56                	push   %r14
+    1727:	49 89 ce             	mov    %rcx,%r14
+    172a:	41 55                	push   %r13
+    172c:	41 54                	push   %r12
+    172e:	49 89 f4             	mov    %rsi,%r12
+    1731:	55                   	push   %rbp
+    1732:	53                   	push   %rbx
+    1733:	48 89 fb             	mov    %rdi,%rbx
+    1736:	48 83 ec 48          	sub    $0x48,%rsp
+    173a:	48 8b 6f 10          	mov    0x10(%rdi),%rbp
+    173e:	48 85 ed             	test   %rbp,%rbp
+    1741:	74 45                	je     1788 <tab_resolve_current_keyed_held.part.0+0x68>
+    1743:	48 8d 47 50          	lea    0x50(%rdi),%rax
+    1747:	48 39 c5             	cmp    %rax,%rbp
+    174a:	74 3c                	je     1788 <tab_resolve_current_keyed_held.part.0+0x68>
+    174c:	8b 45 f4             	mov    -0xc(%rbp),%eax
+    174f:	85 c0                	test   %eax,%eax
+    1751:	78 1d                	js     1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    1753:	44 8b 4d f0          	mov    -0x10(%rbp),%r9d
+    1757:	48 8b 4b 28          	mov    0x28(%rbx),%rcx
+    175b:	44 8b 69 f0          	mov    -0x10(%rcx),%r13d
+    175f:	8b 41 f4             	mov    -0xc(%rcx),%eax
+    1762:	85 c0                	test   %eax,%eax
+    1764:	79 35                	jns    179b <tab_resolve_current_keyed_held.part.0+0x7b>
+    1766:	66 2e 0f 1f 84 00 00 	cs nopw 0x0(%rax,%rax,1)
+    176d:	00 00 00 
+    1770:	b8 ff ff ff ff       	mov    $0xffffffff,%eax
+    1775:	48 83 c4 48          	add    $0x48,%rsp
+    1779:	5b                   	pop    %rbx
+    177a:	5d                   	pop    %rbp
+    177b:	41 5c                	pop    %r12
+    177d:	41 5d                	pop    %r13
+    177f:	41 5e                	pop    %r14
+    1781:	41 5f                	pop    %r15
+    1783:	c3                   	ret
+    1784:	0f 1f 40 00          	nopl   0x0(%rax)
+    1788:	44 8b 4b 30          	mov    0x30(%rbx),%r9d
+    178c:	48 8b 4b 28          	mov    0x28(%rbx),%rcx
+    1790:	44 8b 69 f0          	mov    -0x10(%rcx),%r13d
+    1794:	8b 41 f4             	mov    -0xc(%rcx),%eax
+    1797:	85 c0                	test   %eax,%eax
+    1799:	78 d5                	js     1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    179b:	41 81 fd ff ff ff 03 	cmp    $0x3ffffff,%r13d
+    17a2:	77 cc                	ja     1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    17a4:	45 8d 45 01          	lea    0x1(%r13),%r8d
+    17a8:	45 21 e8             	and    %r13d,%r8d
+    17ab:	75 c3                	jne    1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    17ad:	49 8b 04 24          	mov    (%r12),%rax
+    17b1:	48 89 c2             	mov    %rax,%rdx
+    17b4:	48 c1 fa 2f          	sar    $0x2f,%rdx
+    17b8:	83 fa f1             	cmp    $0xfffffff1,%edx
+    17bb:	0f 87 af 00 00 00    	ja     1870 <tab_resolve_current_keyed_held.part.0+0x150>
+    17c1:	66 48 0f 6e c0       	movq   %rax,%xmm0
+    17c6:	44 89 44 24 18       	mov    %r8d,0x18(%rsp)
+    17cb:	48 89 4c 24 08       	mov    %rcx,0x8(%rsp)
+    17d0:	44 89 0c 24          	mov    %r9d,(%rsp)
+    17d4:	e8 00 00 00 00       	call   17d9 <tab_resolve_current_keyed_held.part.0+0xb9>
+			17d5: R_X86_64_PLT32	lj_vm_num2int_check-0x4
+    17d9:	44 8b 0c 24          	mov    (%rsp),%r9d
+    17dd:	48 8b 4c 24 08       	mov    0x8(%rsp),%rcx
+    17e2:	48 85 c0             	test   %rax,%rax
+    17e5:	44 8b 44 24 18       	mov    0x18(%rsp),%r8d
+    17ea:	0f 88 b8 00 00 00    	js     18a8 <tab_resolve_current_keyed_held.part.0+0x188>
+    17f0:	44 39 c8             	cmp    %r9d,%eax
+    17f3:	0f 83 af 00 00 00    	jae    18a8 <tab_resolve_current_keyed_held.part.0+0x188>
+    17f9:	48 85 ed             	test   %rbp,%rbp
+    17fc:	0f 84 6e ff ff ff    	je     1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    1802:	48 ba 01 00 00 00 80 	movabs $0xfffe7f8000000001,%rdx
+    1809:	7f fe ff 
+    180c:	48 98                	cltq
+    180e:	4c 8d 54 c5 00       	lea    0x0(%rbp,%rax,8),%r10
+    1813:	49 8b 02             	mov    (%r10),%rax
+    1816:	48 89 44 24 38       	mov    %rax,0x38(%rsp)
+    181b:	48 39 d0             	cmp    %rdx,%rax
+    181e:	0f 85 cc 02 00 00    	jne    1af0 <tab_resolve_current_keyed_held.part.0+0x3d0>
+    1824:	48 8d 43 50          	lea    0x50(%rbx),%rax
+    1828:	48 39 c5             	cmp    %rax,%rbp
+    182b:	0f 84 3f ff ff ff    	je     1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    1831:	b8 fe ff ff ff       	mov    $0xfffffffe,%eax
+    1836:	48 ba 00 00 00 00 00 	movabs $0xffff800000000000,%rdx
+    183d:	80 ff ff 
+    1840:	48 8b 73 40          	mov    0x40(%rbx),%rsi
+    1844:	48 bf 00 00 00 00 00 	movabs $0xffff000000000000,%rdi
+    184b:	00 ff ff 
+    184e:	48 21 f2             	and    %rsi,%rdx
+    1851:	48 39 fa             	cmp    %rdi,%rdx
+    1854:	0f 84 16 ff ff ff    	je     1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    185a:	48 c1 ee 20          	shr    $0x20,%rsi
+    185e:	0f 85 0c ff ff ff    	jne    1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    1864:	45 31 d2             	xor    %r10d,%r10d
+    1867:	e9 dd 01 00 00       	jmp    1a49 <tab_resolve_current_keyed_held.part.0+0x329>
+    186c:	0f 1f 40 00          	nopl   0x0(%rax)
+    1870:	45 85 ed             	test   %r13d,%r13d
+    1873:	0f 84 bf 01 00 00    	je     1a38 <tab_resolve_current_keyed_held.part.0+0x318>
+    1879:	83 fa fb             	cmp    $0xfffffffb,%edx
+    187c:	0f 85 46 02 00 00    	jne    1ac8 <tab_resolve_current_keyed_held.part.0+0x3a8>
+    1882:	48 ba ff ff ff ff ff 	movabs $0x7fffffffffff,%rdx
+    1889:	7f 00 00 
+    188c:	44 89 ee             	mov    %r13d,%esi
+    188f:	48 21 d0             	and    %rdx,%rax
+    1892:	23 70 0c             	and    0xc(%rax),%esi
+    1895:	48 8d 04 76          	lea    (%rsi,%rsi,2),%rax
+    1899:	31 f6                	xor    %esi,%esi
+    189b:	4c 8d 14 c1          	lea    (%rcx,%rax,8),%r10
+    189f:	eb 3e                	jmp    18df <tab_resolve_current_keyed_held.part.0+0x1bf>
+    18a1:	0f 1f 80 00 00 00 00 	nopl   0x0(%rax)
+    18a8:	45 85 ed             	test   %r13d,%r13d
+    18ab:	0f 84 87 01 00 00    	je     1a38 <tab_resolve_current_keyed_held.part.0+0x318>
+    18b1:	41 8b 44 24 04       	mov    0x4(%r12),%eax
+    18b6:	41 8b 14 24          	mov    (%r12),%edx
+    18ba:	01 c0                	add    %eax,%eax
+    18bc:	89 c6                	mov    %eax,%esi
+    18be:	31 c2                	xor    %eax,%edx
+    18c0:	c1 c8 0d             	ror    $0xd,%eax
+    18c3:	c1 c6 0e             	rol    $0xe,%esi
+    18c6:	29 f2                	sub    %esi,%edx
+    18c8:	be 01 00 00 00       	mov    $0x1,%esi
+    18cd:	31 d0                	xor    %edx,%eax
+    18cf:	c1 c2 0d             	rol    $0xd,%edx
+    18d2:	29 d0                	sub    %edx,%eax
+    18d4:	44 21 e8             	and    %r13d,%eax
+    18d7:	48 8d 04 40          	lea    (%rax,%rax,2),%rax
+    18db:	4c 8d 14 c1          	lea    (%rcx,%rax,8),%r10
+    18df:	4c 89 d7             	mov    %r10,%rdi
+    18e2:	49 39 ca             	cmp    %rcx,%r10
+    18e5:	0f 82 85 fe ff ff    	jb     1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    18eb:	44 89 e8             	mov    %r13d,%eax
+    18ee:	89 34 24             	mov    %esi,(%rsp)
+    18f1:	4c 89 e6             	mov    %r12,%rsi
+    18f4:	4c 8d 5c 40 03       	lea    0x3(%rax,%rax,2),%r11
+    18f9:	49 c1 e3 03          	shl    $0x3,%r11
+    18fd:	48 29 cf             	sub    %rcx,%rdi
+    1900:	4c 39 df             	cmp    %r11,%rdi
+    1903:	0f 83 67 fe ff ff    	jae    1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    1909:	48 b8 ab aa aa aa aa 	movabs $0xaaaaaaaaaaaaaaab,%rax
+    1910:	aa aa aa 
+    1913:	48 0f af f8          	imul   %rax,%rdi
+    1917:	48 b8 aa aa aa aa aa 	movabs $0xaaaaaaaaaaaaaaa,%rax
+    191e:	aa aa 0a 
+    1921:	48 c1 cf 03          	ror    $0x3,%rdi
+    1925:	48 39 f8             	cmp    %rdi,%rax
+    1928:	0f 82 42 fe ff ff    	jb     1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    192e:	45 39 c5             	cmp    %r8d,%r13d
+    1931:	0f 82 39 fe ff ff    	jb     1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    1937:	48 b8 ff ff ff ff 7f 	movabs $0x1807fffffffff,%rax
+    193e:	80 01 00 
+    1941:	49 8b 7a 08          	mov    0x8(%r10),%rdi
+    1945:	48 01 f8             	add    %rdi,%rax
+    1948:	48 89 7c 24 30       	mov    %rdi,0x30(%rsp)
+    194d:	48 83 f8 01          	cmp    $0x1,%rax
+    1951:	0f 86 19 fe ff ff    	jbe    1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    1957:	48 b8 ff ff ff ff ff 	movabs $0xfffe7fffffffffff,%rax
+    195e:	7f fe ff 
+    1961:	48 8b 54 24 30       	mov    0x30(%rsp),%rdx
+    1966:	48 39 c2             	cmp    %rax,%rdx
+    1969:	0f 84 01 fe ff ff    	je     1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    196f:	48 89 f8             	mov    %rdi,%rax
+    1972:	48 c1 f8 2f          	sar    $0x2f,%rax
+    1976:	8d 50 04             	lea    0x4(%rax),%edx
+    1979:	83 fa f6             	cmp    $0xfffffff6,%edx
+    197c:	0f 87 9d 01 00 00    	ja     1b1f <tab_resolve_current_keyed_held.part.0+0x3ff>
+    1982:	8b 14 24             	mov    (%rsp),%edx
+    1985:	85 d2                	test   %edx,%edx
+    1987:	0f 85 23 02 00 00    	jne    1bb0 <tab_resolve_current_keyed_held.part.0+0x490>
+    198d:	48 8b 06             	mov    (%rsi),%rax
+    1990:	48 c1 f8 2f          	sar    $0x2f,%rax
+    1994:	83 f8 fb             	cmp    $0xfffffffb,%eax
+    1997:	74 57                	je     19f0 <tab_resolve_current_keyed_held.part.0+0x2d0>
+    1999:	48 8d 7c 24 30       	lea    0x30(%rsp),%rdi
+    199e:	4c 89 5c 24 28       	mov    %r11,0x28(%rsp)
+    19a3:	4c 89 54 24 20       	mov    %r10,0x20(%rsp)
+    19a8:	44 89 44 24 1c       	mov    %r8d,0x1c(%rsp)
+    19ad:	48 89 4c 24 10       	mov    %rcx,0x10(%rsp)
+    19b2:	44 89 4c 24 18       	mov    %r9d,0x18(%rsp)
+    19b7:	48 89 74 24 08       	mov    %rsi,0x8(%rsp)
+    19bc:	e8 00 00 00 00       	call   19c1 <tab_resolve_current_keyed_held.part.0+0x2a1>
+			19bd: R_X86_64_PLT32	lj_obj_equal-0x4
+    19c1:	48 8b 74 24 08       	mov    0x8(%rsp),%rsi
+    19c6:	44 8b 4c 24 18       	mov    0x18(%rsp),%r9d
+    19cb:	85 c0                	test   %eax,%eax
+    19cd:	48 8b 4c 24 10       	mov    0x10(%rsp),%rcx
+    19d2:	44 8b 44 24 1c       	mov    0x1c(%rsp),%r8d
+    19d7:	4c 8b 54 24 20       	mov    0x20(%rsp),%r10
+    19dc:	4c 8b 5c 24 28       	mov    0x28(%rsp),%r11
+    19e1:	0f 85 e7 01 00 00    	jne    1bce <tab_resolve_current_keyed_held.part.0+0x4ae>
+    19e7:	66 0f 1f 84 00 00 00 	nopw   0x0(%rax,%rax,1)
+    19ee:	00 00 
+    19f0:	49 8b 7a 10          	mov    0x10(%r10),%rdi
+    19f4:	49 89 fa             	mov    %rdi,%r10
+    19f7:	48 85 ff             	test   %rdi,%rdi
+    19fa:	74 3c                	je     1a38 <tab_resolve_current_keyed_held.part.0+0x318>
+    19fc:	48 39 cf             	cmp    %rcx,%rdi
+    19ff:	0f 82 6b fd ff ff    	jb     1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    1a05:	48 89 f8             	mov    %rdi,%rax
+    1a08:	48 29 c8             	sub    %rcx,%rax
+    1a0b:	4c 39 d8             	cmp    %r11,%rax
+    1a0e:	0f 83 5c fd ff ff    	jae    1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    1a14:	41 bc 18 00 00 00    	mov    $0x18,%r12d
+    1a1a:	31 d2                	xor    %edx,%edx
+    1a1c:	41 83 c0 01          	add    $0x1,%r8d
+    1a20:	49 f7 f4             	div    %r12
+    1a23:	48 85 d2             	test   %rdx,%rdx
+    1a26:	0f 85 44 fd ff ff    	jne    1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    1a2c:	e9 cc fe ff ff       	jmp    18fd <tab_resolve_current_keyed_held.part.0+0x1dd>
+    1a31:	0f 1f 80 00 00 00 00 	nopl   0x0(%rax)
+    1a38:	4d 85 f6             	test   %r14,%r14
+    1a3b:	74 07                	je     1a44 <tab_resolve_current_keyed_held.part.0+0x324>
+    1a3d:	49 c7 06 ff ff ff ff 	movq   $0xffffffffffffffff,(%r14)
+    1a44:	31 c0                	xor    %eax,%eax
+    1a46:	45 31 d2             	xor    %r10d,%r10d
+    1a49:	48 8b 53 10          	mov    0x10(%rbx),%rdx
+    1a4d:	48 39 d5             	cmp    %rdx,%rbp
+    1a50:	0f 85 1a fd ff ff    	jne    1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    1a56:	48 8b 53 28          	mov    0x28(%rbx),%rdx
+    1a5a:	48 39 d1             	cmp    %rdx,%rcx
+    1a5d:	0f 85 0d fd ff ff    	jne    1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    1a63:	48 85 ed             	test   %rbp,%rbp
+    1a66:	74 14                	je     1a7c <tab_resolve_current_keyed_held.part.0+0x35c>
+    1a68:	48 8d 53 50          	lea    0x50(%rbx),%rdx
+    1a6c:	48 39 d5             	cmp    %rdx,%rbp
+    1a6f:	74 0b                	je     1a7c <tab_resolve_current_keyed_held.part.0+0x35c>
+    1a71:	8b 55 f4             	mov    -0xc(%rbp),%edx
+    1a74:	85 d2                	test   %edx,%edx
+    1a76:	0f 88 f4 fc ff ff    	js     1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    1a7c:	8b 51 f4             	mov    -0xc(%rcx),%edx
+    1a7f:	85 d2                	test   %edx,%edx
+    1a81:	0f 88 e9 fc ff ff    	js     1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    1a87:	8b 51 f0             	mov    -0x10(%rcx),%edx
+    1a8a:	41 39 d5             	cmp    %edx,%r13d
+    1a8d:	0f 85 dd fc ff ff    	jne    1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    1a93:	48 85 ed             	test   %rbp,%rbp
+    1a96:	74 0d                	je     1aa5 <tab_resolve_current_keyed_held.part.0+0x385>
+    1a98:	48 8d 53 50          	lea    0x50(%rbx),%rdx
+    1a9c:	48 39 d5             	cmp    %rdx,%rbp
+    1a9f:	0f 85 63 01 00 00    	jne    1c08 <tab_resolve_current_keyed_held.part.0+0x4e8>
+    1aa5:	8b 53 30             	mov    0x30(%rbx),%edx
+    1aa8:	41 39 d1             	cmp    %edx,%r9d
+    1aab:	0f 85 bf fc ff ff    	jne    1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    1ab1:	4d 85 ff             	test   %r15,%r15
+    1ab4:	0f 84 bb fc ff ff    	je     1775 <tab_resolve_current_keyed_held.part.0+0x55>
+    1aba:	4d 89 17             	mov    %r10,(%r15)
+    1abd:	e9 b3 fc ff ff       	jmp    1775 <tab_resolve_current_keyed_held.part.0+0x55>
+    1ac2:	66 0f 1f 44 00 00    	nopw   0x0(%rax,%rax,1)
+    1ac8:	44 89 ee             	mov    %r13d,%esi
+    1acb:	48 89 cf             	mov    %rcx,%rdi
+    1ace:	4c 89 e2             	mov    %r12,%rdx
+    1ad1:	48 89 0c 24          	mov    %rcx,(%rsp)
+    1ad5:	e8 26 e6 ff ff       	call   100 <hashkey_node>
+    1ada:	48 8b 0c 24          	mov    (%rsp),%rcx
+    1ade:	31 f6                	xor    %esi,%esi
+    1ae0:	49 89 c2             	mov    %rax,%r10
+    1ae3:	e9 f7 fd ff ff       	jmp    18df <tab_resolve_current_keyed_held.part.0+0x1bf>
+    1ae8:	0f 1f 84 00 00 00 00 	nopl   0x0(%rax,%rax,1)
+    1aef:	00 
+    1af0:	48 b8 ff ff ff ff ff 	movabs $0xfffe7fffffffffff,%rax
+    1af7:	7f fe ff 
+    1afa:	48 8b 54 24 38       	mov    0x38(%rsp),%rdx
+    1aff:	48 39 c2             	cmp    %rax,%rdx
+    1b02:	0f 84 68 fc ff ff    	je     1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    1b08:	48 8b 44 24 38       	mov    0x38(%rsp),%rax
+    1b0d:	4d 85 f6             	test   %r14,%r14
+    1b10:	74 5e                	je     1b70 <tab_resolve_current_keyed_held.part.0+0x450>
+    1b12:	49 89 06             	mov    %rax,(%r14)
+    1b15:	b8 01 00 00 00       	mov    $0x1,%eax
+    1b1a:	e9 2a ff ff ff       	jmp    1a49 <tab_resolve_current_keyed_held.part.0+0x329>
+    1b1f:	48 ba ff ff ff ff ff 	movabs $0x7fffffffffff,%rdx
+    1b26:	7f 00 00 
+    1b29:	48 21 fa             	and    %rdi,%rdx
+    1b2c:	49 89 d4             	mov    %rdx,%r12
+    1b2f:	0f 84 bb fe ff ff    	je     19f0 <tab_resolve_current_keyed_held.part.0+0x2d0>
+    1b35:	83 e7 07             	and    $0x7,%edi
+    1b38:	0f 85 b2 fe ff ff    	jne    19f0 <tab_resolve_current_keyed_held.part.0+0x2d0>
+    1b3e:	89 c7                	mov    %eax,%edi
+    1b40:	0f b6 52 09          	movzbl 0x9(%rdx),%edx
+    1b44:	f7 d7                	not    %edi
+    1b46:	39 d7                	cmp    %edx,%edi
+    1b48:	0f 85 a2 fe ff ff    	jne    19f0 <tab_resolve_current_keyed_held.part.0+0x2d0>
+    1b4e:	48 8b 3e             	mov    (%rsi),%rdi
+    1b51:	48 89 fa             	mov    %rdi,%rdx
+    1b54:	48 c1 fa 2f          	sar    $0x2f,%rdx
+    1b58:	83 fa fb             	cmp    $0xfffffffb,%edx
+    1b5b:	0f 84 b8 00 00 00    	je     1c19 <tab_resolve_current_keyed_held.part.0+0x4f9>
+    1b61:	83 3c 24 00          	cmpl   $0x0,(%rsp)
+    1b65:	0f 85 85 fe ff ff    	jne    19f0 <tab_resolve_current_keyed_held.part.0+0x2d0>
+    1b6b:	e9 29 fe ff ff       	jmp    1999 <tab_resolve_current_keyed_held.part.0+0x279>
+    1b70:	48 89 c2             	mov    %rax,%rdx
+    1b73:	48 c1 fa 2f          	sar    $0x2f,%rdx
+    1b77:	8d 72 04             	lea    0x4(%rdx),%esi
+    1b7a:	83 fe f6             	cmp    $0xfffffff6,%esi
+    1b7d:	76 96                	jbe    1b15 <tab_resolve_current_keyed_held.part.0+0x3f5>
+    1b7f:	48 be ff ff ff ff ff 	movabs $0x7fffffffffff,%rsi
+    1b86:	7f 00 00 
+    1b89:	48 21 c6             	and    %rax,%rsi
+    1b8c:	0f 84 de fb ff ff    	je     1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    1b92:	a8 07                	test   $0x7,%al
+    1b94:	0f 85 d6 fb ff ff    	jne    1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    1b9a:	0f b6 46 09          	movzbl 0x9(%rsi),%eax
+    1b9e:	f7 d2                	not    %edx
+    1ba0:	39 c2                	cmp    %eax,%edx
+    1ba2:	0f 84 6d ff ff ff    	je     1b15 <tab_resolve_current_keyed_held.part.0+0x3f5>
+    1ba8:	e9 c3 fb ff ff       	jmp    1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    1bad:	0f 1f 00             	nopl   (%rax)
+    1bb0:	83 f8 f1             	cmp    $0xfffffff1,%eax
+    1bb3:	0f 87 37 fe ff ff    	ja     19f0 <tab_resolve_current_keyed_held.part.0+0x2d0>
+    1bb9:	66 48 0f 6e c7       	movq   %rdi,%xmm0
+    1bbe:	66 0f 2e 06          	ucomisd (%rsi),%xmm0
+    1bc2:	0f 8a 28 fe ff ff    	jp     19f0 <tab_resolve_current_keyed_held.part.0+0x2d0>
+    1bc8:	0f 85 22 fe ff ff    	jne    19f0 <tab_resolve_current_keyed_held.part.0+0x2d0>
+    1bce:	48 ba 01 00 00 00 80 	movabs $0xfffe7f8000000001,%rdx
+    1bd5:	7f fe ff 
+    1bd8:	49 8b 02             	mov    (%r10),%rax
+    1bdb:	48 89 44 24 38       	mov    %rax,0x38(%rsp)
+    1be0:	48 39 d0             	cmp    %rdx,%rax
+    1be3:	74 55                	je     1c3a <tab_resolve_current_keyed_held.part.0+0x51a>
+    1be5:	48 ba ff ff ff ff ff 	movabs $0xfffe7fffffffffff,%rdx
+    1bec:	7f fe ff 
+    1bef:	48 8b 74 24 38       	mov    0x38(%rsp),%rsi
+    1bf4:	48 39 d6             	cmp    %rdx,%rsi
+    1bf7:	0f 85 10 ff ff ff    	jne    1b0d <tab_resolve_current_keyed_held.part.0+0x3ed>
+    1bfd:	e9 6e fb ff ff       	jmp    1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    1c02:	66 0f 1f 44 00 00    	nopw   0x0(%rax,%rax,1)
+    1c08:	8b 55 f0             	mov    -0x10(%rbp),%edx
+    1c0b:	41 39 d1             	cmp    %edx,%r9d
+    1c0e:	0f 84 9d fe ff ff    	je     1ab1 <tab_resolve_current_keyed_held.part.0+0x391>
+    1c14:	e9 57 fb ff ff       	jmp    1770 <tab_resolve_current_keyed_held.part.0+0x50>
+    1c19:	83 f8 fb             	cmp    $0xfffffffb,%eax
+    1c1c:	0f 85 ce fd ff ff    	jne    19f0 <tab_resolve_current_keyed_held.part.0+0x2d0>
+    1c22:	48 b8 ff ff ff ff ff 	movabs $0x7fffffffffff,%rax
+    1c29:	7f 00 00 
+    1c2c:	48 21 c7             	and    %rax,%rdi
+    1c2f:	49 39 fc             	cmp    %rdi,%r12
+    1c32:	0f 85 b8 fd ff ff    	jne    19f0 <tab_resolve_current_keyed_held.part.0+0x2d0>
+    1c38:	eb 94                	jmp    1bce <tab_resolve_current_keyed_held.part.0+0x4ae>
+    1c3a:	b8 fd ff ff ff       	mov    $0xfffffffd,%eax
+    1c3f:	e9 f2 fb ff ff       	jmp    1836 <tab_resolve_current_keyed_held.part.0+0x116>
+
+Disassembly of section .text.unlikely:

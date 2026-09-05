@@ -1,0 +1,53 @@
+{
+  "command": [
+    "python3",
+    "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/verify-final.py"
+  ],
+  "exit": 0,
+  "stdout": {
+    "prior_manifests": [
+      {
+        "path": "/tmp/lj-clib-hit-cost-review-20260905-cmxsefzb/artifact-manifest.json",
+        "sha256": "38c9329080373a95dbb843ef1baa16398c372a7c36dcefe7b10373dbf97e85e5",
+        "artifacts": 27
+      },
+      {
+        "path": "/tmp/lj-clib-cdata-compare-proof-20260905-ei_30vvn/artifact-manifest.json",
+        "sha256": "19e60c095f33bcd56b0472a2f24c0b3272797836030c41b80a4f1dd29ca86ee8",
+        "artifacts": 13
+      },
+      {
+        "path": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/artifact-manifest.json",
+        "sha256": "880d0c16fd8cee50456eed2490970f4f3ba546014283d7da4be5d0b0cac038e2",
+        "artifacts": 116
+      },
+      {
+        "path": "/tmp/lj-special-udata-pure-20260905-u7z61i10/artifact-manifest.json",
+        "sha256": "01fbabe6f4f261e542538c1508dd82234a5be5259c1f3bb5a4d2a79e94f25d6c",
+        "artifacts": 110
+      },
+      {
+        "path": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/artifact-manifest.json",
+        "sha256": "384a0d0dbe792f29a92d3fa116590120dc7df26cde08542adca6e1f18e865ae2",
+        "artifacts": 64
+      }
+    ],
+    "current_manifests": [
+      {
+        "path": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/ir-review-manifest.json",
+        "sha256": "b7d89d3db0d4151cfdc89c3cc6e651aeae9c55abaa67dd0541c0859aa5296c68",
+        "artifacts": 38
+      },
+      {
+        "path": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation-frozen-manifest.json",
+        "sha256": "03cf3284aea61d0abbcd883450a884d759f97b61793eaaacb977b94a7de3cb10",
+        "artifacts": 109
+      }
+    ],
+    "runtime_generator_input_sets": 5,
+    "inputs_each": 224,
+    "functional_processes": 594,
+    "cost_processes": 14
+  },
+  "stderr": ""
+}

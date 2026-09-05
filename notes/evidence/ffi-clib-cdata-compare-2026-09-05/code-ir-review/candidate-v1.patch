@@ -1,0 +1,158 @@
+--- a/src/lj_crecord.c
++++ b/src/lj_crecord.c
+@@ -3087,15 +3087,27 @@
+         TRef parentout = emitir(IRT(IR_TMPREF, IRT_PGC), envref,
+                                IRTMPREF_IN1|IRTMPREF_OUT1);
+         TRef keyroot = emitir(IRT(IR_TMPREF, IRT_PGC), nameref, IRTMPREF_IN2);
+-        TRef hit = lj_ir_call(J, IRCALL_lj_tab_gettv_rooted_hit_try,
+-                             parentout, keyroot, parentout);
+-        /* Guard refusal and the published result after preceding Lua effects.
+-        ** The hit helper attempts admission once and preserves inputs on miss. */
++        TRef hit;
++        if (ctype_isconstval(info)) {
++          hit = lj_ir_call(J, IRCALL_lj_tab_gettv_rooted_hit_try,
++                          parentout, keyroot, parentout);
++        } else {
++          if (!tviscdata(tv))
++            lj_trace_err(J, LJ_TRERR_NOCACHE);
++          /* The helper compares with this exact retained GC object. Keep a
++          ** typed KGC argument even when only an extern address is used. */
++          value = lj_ir_kgc(J, obj2gco(cdataV(tv)), IRT_CDATA);
++          hit = lj_ir_call(J, IRCALL_lj_tab_cmpcdata_kgc_rooted_try,
++                          parentout, keyroot, value);
++        }
++        /* Guard refusal after preceding Lua effects. Both helpers attempt
++        ** source admission once and preserve inputs on miss/refusal. */
+         J->mergesnap = 0;
+         lj_snap_add(J);
+         J->mergesnap = 1;
+         emitir(IRTGI(IR_NE), hit, lj_ir_kint(J, 0));
+-        value = lj_record_vload(J, parentout, 0, itype2irt(tv));
++        if (ctype_isconstval(info))
++          value = lj_record_vload(J, parentout, 0, itype2irt(tv));
+       } else {
+         RecordIndex ix;
+         IRRef calls = J->chain[IR_CALLS];
+--- a/src/lj_ircall.h
++++ b/src/lj_ircall.h
+@@ -204,6 +204,7 @@
+   _(ANY,	lj_tab_newkey,		3,   S, PGC, CCI_L|CCI_T) \
+   _(ANY,	lj_tab_gettv_rooted,	4,   S, PGC, CCI_L|CCI_T) \
+   _(ANY,	lj_tab_gettv_rooted_hit_try, 4, S, INT, CCI_L|CCI_T) \
++  _(FFI,	lj_tab_cmpcdata_kgc_rooted_try, 4, S, INT, CCI_L|CCI_T) \
+   _(ANY,	lj_tab_gettv_forjit,	4,   S, PGC, CCI_L|CCI_T) \
+   _(ANY,	lj_tab_storetv_forjit_array_nogc, 5, S, PGC, CCI_L|CCI_T) \
+   _(ANY,	lj_tab_storetv_forjit_array, 5, S, PGC, CCI_L|CCI_T) \
+--- a/src/lj_tab.c
++++ b/src/lj_tab.c
+@@ -5019,6 +5019,89 @@
+   return tab_gettv_rooted_try_impl(L, tabroot, keyroot, NULL, outroot, 1) ==
+ 	 LJ_TAB_ROOTED_GET_FOUND;
+ }
++
++#if LJ_HASJIT && LJ_HASFFI
++/* Compare with an independently retained trace KGC, never discover a new GC
++** result. The native caller must not cross a safepoint until this returns. */
++int lj_tab_cmpcdata_kgc_rooted_try(lua_State *L, cTValue *tabroot,
++				 cTValue *keyroot, GCcdata *expected)
++{
++  TabKeyedSlotOwnerSnapshot owner;
++  LJGC2Lease table_lease = { 0 };
++  LJGC2Lease key_lease = { 0 };
++  TValue tablev, keysnap, result, table_confirm, key_confirm;
++  cTValue *curtab, *curkey;
++  TValue *jitbase;
++  ptrdiff_t tabofs = 0, keyofs = 0;
++  int tabstack, keystack;
++  int hit = 0, table_snapshot = 0, key_snapshot = 0;
++  int table_lease_active = 0, key_lease_active = 0;
++
++  if (!L || !tabroot || !keyroot || !expected ||
++      !tab_keyed_slot_owner_snapshot(L, &owner))
++    return 0;
++  jitbase = lj_tg_load_jit_base(owner.tg);
++  if (!jitbase)
++    return 0;
++  tabstack = tab_key_on_stack(L, tabroot);
++  keystack = tab_key_on_stack(L, keyroot);
++  tabofs = tabstack ? savestack(L, (TValue *)(void *)tabroot) : 0;
++  keyofs = keystack ? savestack(L, (TValue *)(void *)keyroot) : 0;
++  curtab = tabstack ? restorestack(L, tabofs) : tabroot;
++  curkey = keystack ? restorestack(L, keyofs) : keyroot;
++
++  /* Retain source incarnations before observation, exactly as the rooted
++  ** value getter does. A KGC result does not protect table/vector storage. */
++  if (!lj_gc2_smr_read_try(owner.g))
++    return 0;
++  lj_tv_load_acq(&tablev, curtab);
++  table_snapshot = 1;
++  if (!tvistab(&tablev) ||
++      lj_gc2_tv_lease_acquire(owner.g, &tablev, &table_lease) !=
++	LJ_GC2_TV_EDGE_VALID)
++    goto confirm;
++  table_lease_active = 1;
++  lj_tv_load_acq(&keysnap, curkey);
++  key_snapshot = 1;
++  if (lj_gc2_tv_lease_acquire(owner.g, &keysnap, &key_lease) !=
++      LJ_GC2_TV_EDGE_VALID)
++    goto confirm;
++  key_lease_active = 1;
++  if (!tab_rooted_get_key_valid(&keysnap))
++    goto confirm;
++  if (tab_get_current_forjit(tabV(&tablev), &keysnap, &result) ==
++      LJ_TAB_ROOTED_GET_FOUND) {
++    /* Decode only the copied tag/pointer. An unmatched cache value can be a
++    ** stale or newly published GC word: never dereference or publish it.
++    ** Equality names the exact cdata already kept live by the typed KGC. */
++    hit = tviscdata(&result) && gcval(&result) == obj2gco(expected);
++  }
++
++confirm:
++  if (table_snapshot) {
++    curtab = tabstack ? restorestack(L, tabofs) : tabroot;
++    lj_tv_load_acq(&table_confirm, curtab);
++  }
++  if (key_snapshot) {
++    curkey = keystack ? restorestack(L, keyofs) : keyroot;
++    lj_tv_load_acq(&key_confirm, curkey);
++  }
++  if (!tab_keyed_slot_owner_current(L, &owner) ||
++      lj_tg_load_jit_base(owner.tg) != jitbase ||
++      (table_snapshot &&
++	tv_rawload(&table_confirm) != tv_rawload(&tablev)) ||
++      (key_snapshot && tv_rawload(&key_confirm) != tv_rawload(&keysnap)))
++    hit = 0;
++  /* No vector pointer escapes SMR. Sources are unchanged, and the integer
++  ** result introduces no GC edge requiring a result lease/publication. */
++  lj_gc2_smr_read_leave(owner.g);
++  if (key_lease_active)
++    lj_gc2_lease_release(&key_lease);
++  if (table_lease_active)
++    lj_gc2_lease_release(&table_lease);
++  return hit;
++}
++#endif
+ 
+ int lj_tab_getinttv_rooted_try(lua_State *L, cTValue *tabroot, int32_t key,
+ 				TValue *outroot)
+--- a/src/lj_tab.h
++++ b/src/lj_tab.h
+@@ -431,6 +431,18 @@
+ ** interval and supports GC results and Huge vectors. It never waits for SMR. */
+ LJ_FUNC int lj_tab_gettv_rooted_hit_try(lua_State *L, cTValue *tabroot,
+ 				     cTValue *keyroot, TValue *outroot);
++#if LJ_HASJIT && LJ_HASFFI
++/* Native JIT comparison only. expected must be an exact typed IR_KGC cdata
++** operand retained by the executing trace, not an observed raw cache pointer.
++** The caller's published native interval must span the entire call. Source
++** roots require the same owner/container provenance as the rooted getter.
++** Keep its exact table/key leases, one-shot SMR and generation confirmation;
++** return one only for the same cdata identity. No source/output store, result
++** discovery lease, allocation, callback or root publication. Nonnative calls,
++** misses and all source/owner/admission refusals return zero. */
++LJ_FUNC int lj_tab_cmpcdata_kgc_rooted_try(lua_State *L, cTValue *tabroot,
++				       cTValue *keyroot, GCcdata *expected);
++#endif
+ /* Positive number/boolean hit only, with small table/string/vector leases
+ ** independent of global SMR. Sources must be authoritative cells in a caller-
+ ** retained container or stable owner/prototype roots (including VM constant

@@ -1,0 +1,6 @@
+{
+  "scope": "Source-first independent review of frozen v2 shared CLibrary lookup cost; no shared edits/builds, previous handoff immutable.",
+  "source_root": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate",
+  "perf_root": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf",
+  "no_work_on_attachment_recording_test": true
+}

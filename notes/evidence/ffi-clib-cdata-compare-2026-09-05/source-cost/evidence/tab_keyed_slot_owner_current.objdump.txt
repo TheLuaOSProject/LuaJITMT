@@ -1,0 +1,97 @@
+
+/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_tab.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000001420 <tab_keyed_slot_owner_current>:
+    1420:	48 85 ff             	test   %rdi,%rdi
+    1423:	0f 84 07 01 00 00    	je     1530 <tab_keyed_slot_owner_current+0x110>
+    1429:	55                   	push   %rbp
+    142a:	53                   	push   %rbx
+    142b:	48 89 f3             	mov    %rsi,%rbx
+    142e:	48 83 ec 08          	sub    $0x8,%rsp
+    1432:	48 85 f6             	test   %rsi,%rsi
+    1435:	74 0c                	je     1443 <tab_keyed_slot_owner_current+0x23>
+    1437:	48 8b 47 10          	mov    0x10(%rdi),%rax
+    143b:	48 89 fd             	mov    %rdi,%rbp
+    143e:	48 39 06             	cmp    %rax,(%rsi)
+    1441:	74 0d                	je     1450 <tab_keyed_slot_owner_current+0x30>
+    1443:	31 c0                	xor    %eax,%eax
+    1445:	48 83 c4 08          	add    $0x8,%rsp
+    1449:	5b                   	pop    %rbx
+    144a:	5d                   	pop    %rbp
+    144b:	c3                   	ret
+    144c:	0f 1f 40 00          	nopl   0x0(%rax)
+    1450:	e8 00 00 00 00       	call   1455 <tab_keyed_slot_owner_current+0x35>
+			1451: R_X86_64_PLT32	lj_thr_actor_current-0x4
+    1455:	3b 43 18             	cmp    0x18(%rbx),%eax
+    1458:	75 e9                	jne    1443 <tab_keyed_slot_owner_current+0x23>
+    145a:	48 8b 3b             	mov    (%rbx),%rdi
+    145d:	e8 00 00 00 00       	call   1462 <tab_keyed_slot_owner_current+0x42>
+			145e: R_X86_64_PLT32	lj_thr_get_tg_fallback-0x4
+    1462:	48 39 43 08          	cmp    %rax,0x8(%rbx)
+    1466:	75 db                	jne    1443 <tab_keyed_slot_owner_current+0x23>
+    1468:	48 85 c0             	test   %rax,%rax
+    146b:	74 d6                	je     1443 <tab_keyed_slot_owner_current+0x23>
+    146d:	48 8b 13             	mov    (%rbx),%rdx
+    1470:	48 39 90 98 08 00 00 	cmp    %rdx,0x898(%rax)
+    1477:	75 ca                	jne    1443 <tab_keyed_slot_owner_current+0x23>
+    1479:	8b 8a b0 15 00 00    	mov    0x15b0(%rdx),%ecx
+    147f:	48 8b 13             	mov    (%rbx),%rdx
+    1482:	85 c9                	test   %ecx,%ecx
+    1484:	74 0d                	je     1493 <tab_keyed_slot_owner_current+0x73>
+    1486:	48 39 82 00 04 00 00 	cmp    %rax,0x400(%rdx)
+    148d:	0f 84 a0 00 00 00    	je     1533 <tab_keyed_slot_owner_current+0x113>
+    1493:	8b 92 b0 15 00 00    	mov    0x15b0(%rdx),%edx
+    1499:	31 c9                	xor    %ecx,%ecx
+    149b:	85 d2                	test   %edx,%edx
+    149d:	75 a4                	jne    1443 <tab_keyed_slot_owner_current+0x23>
+    149f:	0f b6 90 2e 09 00 00 	movzbl 0x92e(%rax),%edx
+    14a6:	83 e2 04             	and    $0x4,%edx
+    14a9:	75 98                	jne    1443 <tab_keyed_slot_owner_current+0x23>
+    14ab:	8b 90 8c 6d 00 00    	mov    0x6d8c(%rax),%edx
+    14b1:	39 53 18             	cmp    %edx,0x18(%rbx)
+    14b4:	75 8d                	jne    1443 <tab_keyed_slot_owner_current+0x23>
+    14b6:	8b b0 88 6d 00 00    	mov    0x6d88(%rax),%esi
+    14bc:	8b 53 1c             	mov    0x1c(%rbx),%edx
+    14bf:	39 f2                	cmp    %esi,%edx
+    14c1:	75 80                	jne    1443 <tab_keyed_slot_owner_current+0x23>
+    14c3:	83 ea 01             	sub    $0x1,%edx
+    14c6:	81 fa fd ff fe ff    	cmp    $0xfffefffd,%edx
+    14cc:	0f 87 71 ff ff ff    	ja     1443 <tab_keyed_slot_owner_current+0x23>
+    14d2:	48 8b b5 80 00 00 00 	mov    0x80(%rbp),%rsi
+    14d9:	48 8b 53 10          	mov    0x10(%rbx),%rdx
+    14dd:	48 39 f2             	cmp    %rsi,%rdx
+    14e0:	0f 85 5d ff ff ff    	jne    1443 <tab_keyed_slot_owner_current+0x23>
+    14e6:	39 53 1c             	cmp    %edx,0x1c(%rbx)
+    14e9:	0f 85 54 ff ff ff    	jne    1443 <tab_keyed_slot_owner_current+0x23>
+    14ef:	48 c1 ea 20          	shr    $0x20,%rdx
+    14f3:	39 53 18             	cmp    %edx,0x18(%rbx)
+    14f6:	0f 85 47 ff ff ff    	jne    1443 <tab_keyed_slot_owner_current+0x23>
+    14fc:	48 8b 90 a0 08 00 00 	mov    0x8a0(%rax),%rdx
+    1503:	48 39 d5             	cmp    %rdx,%rbp
+    1506:	74 0e                	je     1516 <tab_keyed_slot_owner_current+0xf6>
+    1508:	48 39 45 78          	cmp    %rax,0x78(%rbp)
+    150c:	74 08                	je     1516 <tab_keyed_slot_owner_current+0xf6>
+    150e:	85 c9                	test   %ecx,%ecx
+    1510:	0f 84 2d ff ff ff    	je     1443 <tab_keyed_slot_owner_current+0x23>
+    1516:	8b 80 8c 6d 00 00    	mov    0x6d8c(%rax),%eax
+    151c:	39 43 18             	cmp    %eax,0x18(%rbx)
+    151f:	0f 94 c0             	sete   %al
+    1522:	0f b6 c0             	movzbl %al,%eax
+    1525:	e9 1b ff ff ff       	jmp    1445 <tab_keyed_slot_owner_current+0x25>
+    152a:	66 0f 1f 44 00 00    	nopw   0x0(%rax,%rax,1)
+    1530:	31 c0                	xor    %eax,%eax
+    1532:	c3                   	ret
+    1533:	48 8b 8a a0 01 00 00 	mov    0x1a0(%rdx),%rcx
+    153a:	48 8b 13             	mov    (%rbx),%rdx
+    153d:	48 85 c9             	test   %rcx,%rcx
+    1540:	0f 84 4d ff ff ff    	je     1493 <tab_keyed_slot_owner_current+0x73>
+    1546:	48 39 cd             	cmp    %rcx,%rbp
+    1549:	0f 85 44 ff ff ff    	jne    1493 <tab_keyed_slot_owner_current+0x73>
+    154f:	8b 92 b0 15 00 00    	mov    0x15b0(%rdx),%edx
+    1555:	b9 01 00 00 00       	mov    $0x1,%ecx
+    155a:	e9 40 ff ff ff       	jmp    149f <tab_keyed_slot_owner_current+0x7f>
+
+Disassembly of section .text.unlikely:

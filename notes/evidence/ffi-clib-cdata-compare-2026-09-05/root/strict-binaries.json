@@ -1,0 +1,10 @@
+{
+  "strict-t-ffi-recorder-libmeta-busy": "75db92a6e9d895306f963c2271fbef027ed78971fee88238ff7625f45ac4fd0c",
+  "strict-t-ffi-clib-extern-snapshot": "31da80727eb836dc10739eb9f4a0b820d9cd3b587f36b5b2f3de48c9b7a8ed2b",
+  "strict-t-ffi-clib-cache-retire": "2647f5d9e26f3249199ac1327debe844256a8254529c965546ac28a8994d83d8",
+  "strict-t-ffi-callxs-callback-stack": "dbd56a62a16cf4b76fcf5fb2fe83a6f2991339246c4e7de7c00a9ee180bf5e02",
+  "luajit": "914c42cc9565b3b61117de954446da8ca8ffbcab091d338f4cfa036f1443be27",
+  "libluajit.a": "3fdbe96a21431044549717f028252d2d0d103a16ae07215cbdc196dd96a7e55f",
+  "extern.so": "2993fb39e017fc1654a1934f61f22206d67663d61e7eee92a94a5012f44a63cf",
+  "remote.so": "1d1346ed5a22f133d8c0fcd44bdf4565d5e526d11fe93c16c3b97258780db9c1"
+}

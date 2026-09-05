@@ -1,0 +1,134 @@
+{
+  "source_patch": "candidate-v1.patch",
+  "shape_fixture": "t-clib-cdata-shape.lua",
+  "shapes": {
+    "baseline-function": {
+      "root": 1,
+      "nins": 39,
+      "mcode_bytes": 515,
+      "comparison_calls": 0,
+      "old_hit_calls": 2,
+      "typed_cdata_kgc_arguments": 0,
+      "vloads": 2,
+      "preheader_calls": 1,
+      "loop_body_calls": 1,
+      "native_exits": 1
+    },
+    "baseline-read": {
+      "root": 1,
+      "nins": 41,
+      "mcode_bytes": 546,
+      "comparison_calls": 0,
+      "old_hit_calls": 2,
+      "typed_cdata_kgc_arguments": 0,
+      "vloads": 2,
+      "preheader_calls": 1,
+      "loop_body_calls": 1,
+      "native_exits": 1
+    },
+    "baseline-write": {
+      "root": 1,
+      "nins": 41,
+      "mcode_bytes": 530,
+      "comparison_calls": 0,
+      "old_hit_calls": 2,
+      "typed_cdata_kgc_arguments": 0,
+      "vloads": 2,
+      "preheader_calls": 1,
+      "loop_body_calls": 1,
+      "native_exits": 1
+    },
+    "baseline-number": {
+      "root": 1,
+      "nins": 37,
+      "mcode_bytes": 473,
+      "comparison_calls": 0,
+      "old_hit_calls": 2,
+      "typed_cdata_kgc_arguments": 0,
+      "vloads": 2,
+      "preheader_calls": 1,
+      "loop_body_calls": 1,
+      "native_exits": 1
+    },
+    "candidate-function": {
+      "root": 1,
+      "nins": 35,
+      "mcode_bytes": 438,
+      "comparison_calls": 2,
+      "old_hit_calls": 0,
+      "typed_cdata_kgc_arguments": 2,
+      "vloads": 0,
+      "preheader_calls": 1,
+      "loop_body_calls": 1,
+      "native_exits": 1
+    },
+    "candidate-read": {
+      "root": 1,
+      "nins": 37,
+      "mcode_bytes": 469,
+      "comparison_calls": 2,
+      "old_hit_calls": 0,
+      "typed_cdata_kgc_arguments": 2,
+      "vloads": 0,
+      "preheader_calls": 1,
+      "loop_body_calls": 1,
+      "native_exits": 1
+    },
+    "candidate-write": {
+      "root": 1,
+      "nins": 37,
+      "mcode_bytes": 458,
+      "comparison_calls": 2,
+      "old_hit_calls": 0,
+      "typed_cdata_kgc_arguments": 2,
+      "vloads": 0,
+      "preheader_calls": 1,
+      "loop_body_calls": 1,
+      "native_exits": 1
+    },
+    "candidate-number": {
+      "root": 1,
+      "nins": 37,
+      "mcode_bytes": 473,
+      "comparison_calls": 0,
+      "old_hit_calls": 2,
+      "typed_cdata_kgc_arguments": 0,
+      "vloads": 2,
+      "preheader_calls": 1,
+      "loop_body_calls": 1,
+      "native_exits": 1
+    }
+  },
+  "qualification": "Native shape only; no optimization timing and no broad/scoped regression claim. Each of eight final processes has real loop+texit and verifies expected KGC operand identity. First eight shape-only passes retained separately; V1 fixture trace observer displaced the dump observer so V2 removes that observer, with unchanged source and binaries.",
+  "binary_sha256": {
+    "luajit": "2d7649d7269b024753caf87f718e4821dfd164854bfd9402928ceb3e7a708ee7",
+    "libluajit.a": "92e52001f8f418828a491939c7575ce9deb910cc66d82c0c4674d726e43fb3bf",
+    "jit/vmdef.lua": "baeda7805628921048fe2da3567d9a342660478e3c95beb8a8cb94d76ff1e169"
+  },
+  "object_inspections": [
+    {
+      "command": [
+        "objdump",
+        "-dr",
+        "--disassemble=lj_tab_cmpcdata_kgc_rooted_try",
+        "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/lj_tab.o"
+      ],
+      "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj",
+      "exit": 0,
+      "stdout_file": "lj_tab_cmpcdata_kgc_rooted_try-v1.objdump.txt",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "objdump",
+        "-dr",
+        "--disassemble=tab_gettv_rooted_try_impl",
+        "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/candidate/src/lj_tab.o"
+      ],
+      "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj",
+      "exit": 0,
+      "stdout_file": "tab_gettv_rooted_try_impl-v1.objdump.txt",
+      "stderr": ""
+    }
+  ]
+}

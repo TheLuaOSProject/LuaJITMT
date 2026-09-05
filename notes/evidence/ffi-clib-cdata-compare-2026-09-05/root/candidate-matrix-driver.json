@@ -1,0 +1,167 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "python3",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/run-final.py",
+      "candidate",
+      "compile"
+    ],
+    "seconds": 0.11848340099822963,
+    "exit": 0,
+    "stdout": "candidate wrapper built 8df0b5fbfac6d0799a5ccb216f730832d82d6f6d666f21650b52af39d75a9bb3\ncandidate compile passes 1 of 1\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "python3",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/run-final.py",
+      "candidate",
+      "full"
+    ],
+    "seconds": 0.8079068459992413,
+    "exit": 0,
+    "stdout": "candidate full function complete\ncandidate full read complete\ncandidate full write complete\ncandidate full zero complete\ncandidate full big complete\ncandidate full passes 80 of 80\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "python3",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/run-final.py",
+      "candidate",
+      "gc"
+    ],
+    "seconds": 0.2935309560052701,
+    "exit": 0,
+    "stdout": "candidate gc function complete\ncandidate gc read complete\ncandidate gc write complete\ncandidate gc passes 20 of 20\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "python3",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/run-final.py",
+      "candidate",
+      "wrapper"
+    ],
+    "seconds": 0.06161375399824465,
+    "exit": 0,
+    "stdout": "candidate wrapper passes 4 of 4\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "python3",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/run-final.py",
+      "candidate",
+      "gc-wrapper"
+    ],
+    "seconds": 0.07219975899351994,
+    "exit": 0,
+    "stdout": "candidate gc-wrapper passes 4 of 4\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "python3",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/run-supplement.py",
+      "candidate",
+      "compile"
+    ],
+    "seconds": 0.08352900000318186,
+    "exit": 0,
+    "stdout": "candidate compile passes 1 of 1\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "python3",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/run-supplement.py",
+      "candidate",
+      "full"
+    ],
+    "seconds": 1.510444200001075,
+    "exit": 0,
+    "stdout": "candidate full passes 40 of 40\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "python3",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/run-probes.py",
+      "candidate",
+      "compile"
+    ],
+    "seconds": 0.18507563599996502,
+    "exit": 0,
+    "stdout": "candidate compile {'operation': 'compile'} {'exit': 0, 'stdout': '', 'stderr': ''}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "python3",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/run-probes.py",
+      "candidate",
+      "full"
+    ],
+    "seconds": 0.39917846400203416,
+    "exit": 0,
+    "stdout": "candidate full {'mode': 'wrong', 'kind': 'function', 'target': 'root'} {'exit': 0, 'stdout': 'cache-authority\\tfunction\\twrong\\troot\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t2\\t0\\tok\\ttrue\\teffects\\t39\\tslots\\t17\\t41\\t73\\ncomparison-probe\\twrong\\t1\\t0\\t1\\t1\\t1\\t0\\t0\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'wrong', 'kind': 'function', 'target': 'side'} {'exit': 0, 'stdout': 'cache-authority\\tfunction\\twrong\\tside\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t0\\t2\\tok\\ttrue\\teffects\\t80\\tslots\\t17\\t41\\t73\\ncomparison-probe\\twrong\\t1\\t0\\t1\\t1\\t1\\t0\\t0\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'wrong', 'kind': 'read', 'target': 'root'} {'exit': 0, 'stdout': 'cache-authority\\tread\\twrong\\troot\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t2\\t0\\tok\\ttrue\\teffects\\t39\\tslots\\t17\\t41\\t73\\ncomparison-probe\\twrong\\t1\\t0\\t1\\t1\\t1\\t0\\t0\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'wrong', 'kind': 'read', 'target': 'side'} {'exit': 0, 'stdout': 'cache-authority\\tread\\twrong\\tside\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t0\\t2\\tok\\ttrue\\teffects\\t80\\tslots\\t17\\t41\\t73\\ncomparison-probe\\twrong\\t1\\t0\\t1\\t1\\t1\\t0\\t0\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'wrong', 'kind': 'write', 'target': 'root'} {'exit': 0, 'stdout': 'cache-authority\\twrite\\twrong\\troot\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t2\\t0\\tok\\ttrue\\teffects\\t39\\tslots\\t39\\t41\\t73\\ncomparison-probe\\twrong\\t1\\t0\\t1\\t1\\t1\\t0\\t0\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'wrong', 'kind': 'write', 'target': 'side'} {'exit': 0, 'stdout': 'cache-authority\\twrite\\twrong\\tside\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t0\\t2\\tok\\ttrue\\teffects\\t80\\tslots\\t39\\t180\\t73\\ncomparison-probe\\twrong\\t1\\t0\\t1\\t1\\t1\\t0\\t0\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'null', 'kind': 'function', 'target': 'root'} {'exit': 0, 'stdout': 'cache-authority\\tfunction\\tnull\\troot\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t2\\t0\\tok\\ttrue\\teffects\\t39\\tslots\\t17\\t41\\t73\\ncomparison-probe\\tnull\\t1\\t0\\t1\\t1\\t1\\t0\\t0\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'null', 'kind': 'function', 'target': 'side'} {'exit': 0, 'stdout': 'cache-authority\\tfunction\\tnull\\tside\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t0\\t2\\tok\\ttrue\\teffects\\t80\\tslots\\t17\\t41\\t73\\ncomparison-probe\\tnull\\t1\\t0\\t1\\t1\\t1\\t0\\t0\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'null', 'kind': 'read', 'target': 'root'} {'exit': 0, 'stdout': 'cache-authority\\tread\\tnull\\troot\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t2\\t0\\tok\\ttrue\\teffects\\t39\\tslots\\t17\\t41\\t73\\ncomparison-probe\\tnull\\t1\\t0\\t1\\t1\\t1\\t0\\t0\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'null', 'kind': 'read', 'target': 'side'} {'exit': 0, 'stdout': 'cache-authority\\tread\\tnull\\tside\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t0\\t2\\tok\\ttrue\\teffects\\t80\\tslots\\t17\\t41\\t73\\ncomparison-probe\\tnull\\t1\\t0\\t1\\t1\\t1\\t0\\t0\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'null', 'kind': 'write', 'target': 'root'} {'exit': 0, 'stdout': 'cache-authority\\twrite\\tnull\\troot\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t2\\t0\\tok\\ttrue\\teffects\\t39\\tslots\\t39\\t41\\t73\\ncomparison-probe\\tnull\\t1\\t0\\t1\\t1\\t1\\t0\\t0\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'null', 'kind': 'write', 'target': 'side'} {'exit': 0, 'stdout': 'cache-authority\\twrite\\tnull\\tside\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t0\\t2\\tok\\ttrue\\teffects\\t80\\tslots\\t39\\t180\\t73\\ncomparison-probe\\tnull\\t1\\t0\\t1\\t1\\t1\\t0\\t0\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'smr', 'kind': 'function', 'target': 'root'} {'exit': 0, 'stdout': 'cache-authority\\tfunction\\tsmr\\troot\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t2\\t0\\tok\\ttrue\\teffects\\t39\\tslots\\t17\\t41\\t73\\ncomparison-probe\\tsmr\\t1\\t0\\t1\\t1\\t1\\t1\\t0\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'smr', 'kind': 'function', 'target': 'side'} {'exit': 0, 'stdout': 'cache-authority\\tfunction\\tsmr\\tside\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t0\\t2\\tok\\ttrue\\teffects\\t80\\tslots\\t17\\t41\\t73\\ncomparison-probe\\tsmr\\t1\\t0\\t1\\t1\\t1\\t1\\t0\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'smr', 'kind': 'read', 'target': 'root'} {'exit': 0, 'stdout': 'cache-authority\\tread\\tsmr\\troot\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t2\\t0\\tok\\ttrue\\teffects\\t39\\tslots\\t17\\t41\\t73\\ncomparison-probe\\tsmr\\t1\\t0\\t1\\t1\\t1\\t1\\t0\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'smr', 'kind': 'read', 'target': 'side'} {'exit': 0, 'stdout': 'cache-authority\\tread\\tsmr\\tside\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t0\\t2\\tok\\ttrue\\teffects\\t80\\tslots\\t17\\t41\\t73\\ncomparison-probe\\tsmr\\t1\\t0\\t1\\t1\\t1\\t1\\t0\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'smr', 'kind': 'write', 'target': 'root'} {'exit': 0, 'stdout': 'cache-authority\\twrite\\tsmr\\troot\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t2\\t0\\tok\\ttrue\\teffects\\t39\\tslots\\t39\\t41\\t73\\ncomparison-probe\\tsmr\\t1\\t0\\t1\\t1\\t1\\t1\\t0\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'smr', 'kind': 'write', 'target': 'side'} {'exit': 0, 'stdout': 'cache-authority\\twrite\\tsmr\\tside\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t0\\t2\\tok\\ttrue\\teffects\\t80\\tslots\\t39\\t180\\t73\\ncomparison-probe\\tsmr\\t1\\t0\\t1\\t1\\t1\\t1\\t0\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'gc', 'kind': 'function', 'target': 'root'} {'exit': 0, 'stdout': 'gc-lifetime\\tafter-warm\\tafter-mutation\\toriginal-env-alive\\ncache-authority\\tfunction\\tgc\\troot\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t2\\t0\\tok\\ttrue\\teffects\\t39\\tslots\\t17\\t41\\t73\\ncomparison-probe\\tgc\\t1\\t1\\t1\\t1\\t1\\t1\\t1\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'gc', 'kind': 'function', 'target': 'side'} {'exit': 0, 'stdout': 'gc-lifetime\\tafter-warm\\tafter-mutation\\toriginal-env-alive\\ncache-authority\\tfunction\\tgc\\tside\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t0\\t2\\tok\\ttrue\\teffects\\t80\\tslots\\t17\\t41\\t73\\ncomparison-probe\\tgc\\t1\\t1\\t1\\t1\\t1\\t1\\t1\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'gc', 'kind': 'read', 'target': 'root'} {'exit': 0, 'stdout': 'gc-lifetime\\tafter-warm\\tafter-mutation\\toriginal-env-alive\\ncache-authority\\tread\\tgc\\troot\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t2\\t0\\tok\\ttrue\\teffects\\t39\\tslots\\t17\\t41\\t73\\ncomparison-probe\\tgc\\t1\\t1\\t1\\t1\\t1\\t1\\t1\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'gc', 'kind': 'read', 'target': 'side'} {'exit': 0, 'stdout': 'gc-lifetime\\tafter-warm\\tafter-mutation\\toriginal-env-alive\\ncache-authority\\tread\\tgc\\tside\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t0\\t2\\tok\\ttrue\\teffects\\t80\\tslots\\t17\\t41\\t73\\ncomparison-probe\\tgc\\t1\\t1\\t1\\t1\\t1\\t1\\t1\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'gc', 'kind': 'write', 'target': 'root'} {'exit': 0, 'stdout': 'gc-lifetime\\tafter-warm\\tafter-mutation\\toriginal-env-alive\\ncache-authority\\twrite\\tgc\\troot\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t2\\t0\\tok\\ttrue\\teffects\\t39\\tslots\\t39\\t41\\t73\\ncomparison-probe\\tgc\\t1\\t1\\t1\\t1\\t1\\t1\\t1\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'gc', 'kind': 'write', 'target': 'side'} {'exit': 0, 'stdout': 'gc-lifetime\\tafter-warm\\tafter-mutation\\toriginal-env-alive\\ncache-authority\\twrite\\tgc\\tside\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t0\\t2\\tok\\ttrue\\teffects\\t80\\tslots\\t39\\t180\\t73\\ncomparison-probe\\tgc\\t1\\t1\\t1\\t1\\t1\\t1\\t1\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'flush', 'kind': 'function', 'target': 'root'} {'exit': 0, 'stdout': 'gc-lifetime\\tafter-warm\\tafter-mutation\\toriginal-env-alive\\ncache-authority\\tfunction\\tflush\\troot\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t1\\t0\\tok\\ttrue\\teffects\\t39\\tslots\\t17\\t41\\t73\\ncomparison-probe\\tflush\\t1\\t1\\t1\\t1\\t1\\t0\\t1\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'flush', 'kind': 'function', 'target': 'side'} {'exit': 0, 'stdout': 'gc-lifetime\\tafter-warm\\tafter-mutation\\toriginal-env-alive\\ncache-authority\\tfunction\\tflush\\tside\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t0\\t1\\tok\\ttrue\\teffects\\t80\\tslots\\t17\\t41\\t73\\ncomparison-probe\\tflush\\t1\\t1\\t1\\t1\\t1\\t0\\t1\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'flush', 'kind': 'read', 'target': 'root'} {'exit': 0, 'stdout': 'gc-lifetime\\tafter-warm\\tafter-mutation\\toriginal-env-alive\\ncache-authority\\tread\\tflush\\troot\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t1\\t0\\tok\\ttrue\\teffects\\t39\\tslots\\t17\\t41\\t73\\ncomparison-probe\\tflush\\t1\\t1\\t1\\t1\\t1\\t0\\t1\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'flush', 'kind': 'read', 'target': 'side'} {'exit': 0, 'stdout': 'gc-lifetime\\tafter-warm\\tafter-mutation\\toriginal-env-alive\\ncache-authority\\tread\\tflush\\tside\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t0\\t1\\tok\\ttrue\\teffects\\t80\\tslots\\t17\\t41\\t73\\ncomparison-probe\\tflush\\t1\\t1\\t1\\t1\\t1\\t0\\t1\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'flush', 'kind': 'write', 'target': 'root'} {'exit': 0, 'stdout': 'gc-lifetime\\tafter-warm\\tafter-mutation\\toriginal-env-alive\\ncache-authority\\twrite\\tflush\\troot\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t1\\t0\\tok\\ttrue\\teffects\\t39\\tslots\\t39\\t41\\t73\\ncomparison-probe\\tflush\\t1\\t1\\t1\\t1\\t1\\t0\\t1\\t5\\n', 'stderr': ''}\ncandidate full {'mode': 'flush', 'kind': 'write', 'target': 'side'} {'exit': 0, 'stdout': 'gc-lifetime\\tafter-warm\\tafter-mutation\\toriginal-env-alive\\ncache-authority\\twrite\\tflush\\tside\\twarm\\t2\\t6\\thelpers\\t2\\told-exits\\t0\\t1\\tok\\ttrue\\teffects\\t80\\tslots\\t39\\t180\\t73\\ncomparison-probe\\tflush\\t1\\t1\\t1\\t1\\t1\\t0\\t1\\t5\\n', 'stderr': ''}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "python3",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/run-retention.py",
+      "candidate",
+      "compile"
+    ],
+    "seconds": 0.1864300769957481,
+    "exit": 0,
+    "stdout": "candidate compile {'operation': 'compile'} {'exit': 0, 'stdout': '', 'stderr': ''}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "python3",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/validation/run-retention.py",
+      "candidate",
+      "full"
+    ],
+    "seconds": 0.20045857899822295,
+    "exit": 0,
+    "stdout": "candidate full {'mode': 'kgc', 'kind': 'function', 'target': 'root', 'jit': 'on'} {'exit': 0, 'stdout': 'retention-roots\\tfunction\\troot\\ton\\tcycles\\t1\\tretired-empty\\ttrue\\tweak-cdata\\ttrue\\nretention-native\\tfunction\\troot\\thelpers\\t2\\told-exits\\t1\\t0\\teffects\\t1\\tstatus\\t1\\tclean\\t1\\t1\\tslots\\t17\\t41\\t73\\n', 'stderr': ''}\ncandidate full {'mode': 'kgc', 'kind': 'function', 'target': 'side', 'jit': 'on'} {'exit': 0, 'stdout': 'retention-roots\\tfunction\\tside\\ton\\tcycles\\t1\\tretired-empty\\ttrue\\tweak-cdata\\ttrue\\nretention-native\\tfunction\\tside\\thelpers\\t2\\told-exits\\t0\\t1\\teffects\\t40\\tstatus\\t1\\tclean\\t1\\t1\\tslots\\t17\\t41\\t73\\n', 'stderr': ''}\ncandidate full {'mode': 'kgc', 'kind': 'read', 'target': 'root', 'jit': 'on'} {'exit': 0, 'stdout': 'retention-roots\\tread\\troot\\ton\\tcycles\\t1\\tretired-empty\\ttrue\\tweak-cdata\\ttrue\\nretention-native\\tread\\troot\\thelpers\\t2\\told-exits\\t1\\t0\\teffects\\t1\\tstatus\\t1\\tclean\\t1\\t1\\tslots\\t17\\t41\\t73\\n', 'stderr': ''}\ncandidate full {'mode': 'kgc', 'kind': 'read', 'target': 'side', 'jit': 'on'} {'exit': 0, 'stdout': 'retention-roots\\tread\\tside\\ton\\tcycles\\t1\\tretired-empty\\ttrue\\tweak-cdata\\ttrue\\nretention-native\\tread\\tside\\thelpers\\t2\\told-exits\\t0\\t1\\teffects\\t40\\tstatus\\t1\\tclean\\t1\\t1\\tslots\\t17\\t41\\t73\\n', 'stderr': ''}\ncandidate full {'mode': 'kgc', 'kind': 'write', 'target': 'root', 'jit': 'on'} {'exit': 0, 'stdout': 'retention-roots\\twrite\\troot\\ton\\tcycles\\t1\\tretired-empty\\ttrue\\tweak-cdata\\ttrue\\nretention-native\\twrite\\troot\\thelpers\\t2\\told-exits\\t1\\t0\\teffects\\t1\\tstatus\\t1\\tclean\\t1\\t1\\tslots\\t17\\t41\\t73\\n', 'stderr': ''}\ncandidate full {'mode': 'kgc', 'kind': 'write', 'target': 'side', 'jit': 'on'} {'exit': 0, 'stdout': 'retention-roots\\twrite\\tside\\ton\\tcycles\\t1\\tretired-empty\\ttrue\\tweak-cdata\\ttrue\\nretention-native\\twrite\\tside\\thelpers\\t2\\told-exits\\t0\\t1\\teffects\\t40\\tstatus\\t1\\tclean\\t1\\t1\\tslots\\t39\\t41\\t73\\n', 'stderr': ''}\ncandidate full {'mode': 'kgc', 'kind': 'function', 'target': 'root', 'jit': 'off'} {'exit': 0, 'stdout': 'retention-roots\\tfunction\\troot\\toff\\tcycles\\t1\\tretired-empty\\ttrue\\tweak-cdata\\tfalse\\n', 'stderr': ''}\ncandidate full {'mode': 'kgc', 'kind': 'function', 'target': 'side', 'jit': 'off'} {'exit': 0, 'stdout': 'retention-roots\\tfunction\\tside\\toff\\tcycles\\t1\\tretired-empty\\ttrue\\tweak-cdata\\tfalse\\n', 'stderr': ''}\ncandidate full {'mode': 'kgc', 'kind': 'read', 'target': 'root', 'jit': 'off'} {'exit': 0, 'stdout': 'retention-roots\\tread\\troot\\toff\\tcycles\\t1\\tretired-empty\\ttrue\\tweak-cdata\\tfalse\\n', 'stderr': ''}\ncandidate full {'mode': 'kgc', 'kind': 'read', 'target': 'side', 'jit': 'off'} {'exit': 0, 'stdout': 'retention-roots\\tread\\tside\\toff\\tcycles\\t1\\tretired-empty\\ttrue\\tweak-cdata\\tfalse\\n', 'stderr': ''}\ncandidate full {'mode': 'kgc', 'kind': 'write', 'target': 'root', 'jit': 'off'} {'exit': 0, 'stdout': 'retention-roots\\twrite\\troot\\toff\\tcycles\\t1\\tretired-empty\\ttrue\\tweak-cdata\\tfalse\\n', 'stderr': ''}\ncandidate full {'mode': 'kgc', 'kind': 'write', 'target': 'side', 'jit': 'off'} {'exit': 0, 'stdout': 'retention-roots\\twrite\\tside\\toff\\tcycles\\t1\\tretired-empty\\ttrue\\tweak-cdata\\tfalse\\n', 'stderr': ''}\n",
+    "stderr": ""
+  }
+]

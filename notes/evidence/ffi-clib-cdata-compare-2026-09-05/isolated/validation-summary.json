@@ -1,0 +1,103 @@
+{
+  "candidate": {
+    "count": 190,
+    "suites": {
+      "final-candidate-full-results.json": {
+        "count": 80,
+        "sha256": "f42f3ac3db8266210df1f3d65f30deb68c7ce486e572f9ad4fd4cabd8b171219"
+      },
+      "final-candidate-gc-results.json": {
+        "count": 20,
+        "sha256": "2f4e3fc5a5e9db1bb79320ebc8fda01fdd19fbd76bef17db49e0785ff2019c18"
+      },
+      "final-candidate-wrapper-results.json": {
+        "count": 4,
+        "sha256": "a2a12d59830d3c9fdf1fc6fb6dcc3217f47e115e956bd967246e0e1f19e44eae"
+      },
+      "final-candidate-gc-wrapper-results.json": {
+        "count": 4,
+        "sha256": "8cc2ac6abb400ccf5910ab183a3c8c5504c6795747336efc790a83d79df9e8a3"
+      },
+      "supplement-candidate-full-results.json": {
+        "count": 40,
+        "sha256": "0c275902b2bfc9acc4d8f91d58ee82eb3df5385252bfe9aea337dd1a05104efb"
+      },
+      "probe-v3-candidate-full-results.json": {
+        "count": 30,
+        "sha256": "22645046f11e3c84a86b18b8ba08e45158321294d4a4b2bfbf3da73c3baad394"
+      },
+      "retention-v1-candidate-full-results.json": {
+        "count": 12,
+        "sha256": "609bb1a947adda004034aec321a2752e7ecf7ea06079eff345be1fc629b9afdf"
+      }
+    }
+  },
+  "strict": {
+    "count": 202,
+    "suites": {
+      "final-strict-full-results.json": {
+        "count": 80,
+        "sha256": "3055b6db62af949622df00777d51876b1587db40a0e25d6d50cde74676a21e5b"
+      },
+      "final-strict-gc-results.json": {
+        "count": 20,
+        "sha256": "eb1ce6aa18df737943336b728edce98480c7719b2ea9a1173b2ecd1cfa74c00f"
+      },
+      "final-strict-wrapper-results.json": {
+        "count": 4,
+        "sha256": "0dabfedaae534944397502caeaa3b2dfad575c0f445b0a9c8dc6c07d35a8b41c"
+      },
+      "final-strict-gc-wrapper-results.json": {
+        "count": 4,
+        "sha256": "8e54b60ca9eee2c6a44f85a33db5e8ae85de614da849d699de91a0eb7051c5db"
+      },
+      "supplement-strict-full-results.json": {
+        "count": 40,
+        "sha256": "07d61f9156886301df1aab02286c7a94f3dd75ba8b0305fafbe3bcb09ee4f47e"
+      },
+      "probe-v3-strict-full-results.json": {
+        "count": 42,
+        "sha256": "86247a885b03042c41d032ecd994415efbc0dc7a4c8c91380f43ee22804a1e9c"
+      },
+      "retention-v1-strict-full-results.json": {
+        "count": 12,
+        "sha256": "d791ab0354b7eca520107160a1561596923b05bce523b66690f9ada0b461b8bb"
+      }
+    }
+  },
+  "asan": {
+    "count": 202,
+    "suites": {
+      "final-asan-full-results.json": {
+        "count": 80,
+        "sha256": "440ca515af8f75bef68ab8997985bc64cc05b1a60b4798cc71b4bb42621d0b23"
+      },
+      "final-asan-gc-results.json": {
+        "count": 20,
+        "sha256": "908906ecf2c5873e02b411ee4c47a0581c0b14f6624e46b54eb0b11a14c4a90a"
+      },
+      "final-asan-wrapper-results.json": {
+        "count": 4,
+        "sha256": "cec69174a694b674f2d6048ce3be1d19af865afc8db241a858170b9e52528f00"
+      },
+      "final-asan-gc-wrapper-results.json": {
+        "count": 4,
+        "sha256": "d63bd4eabfbda417460d40ae3ebd75e833a11c2dc463214a9507c07d8008bf6f"
+      },
+      "supplement-asan-full-results.json": {
+        "count": 40,
+        "sha256": "6b798cd8868dcc17fcfdbb63a2b86b0e18f20a87b07d01bbda9889a4045b4e2b"
+      },
+      "probe-v3-asan-full-results.json": {
+        "count": 42,
+        "sha256": "6e5bf4719e5a39dcce5d9cbdd2ccd504edd05fd28d3948333064027f17b1a7b8"
+      },
+      "retention-v1-asan-full-results.json": {
+        "count": 12,
+        "sha256": "08c6720055a87186ea26f577a5b26eb76af5c717215f06a57f1ea23128384a7b"
+      }
+    }
+  },
+  "total": 594,
+  "excluded_development_pilots_and_shape": true
+}

@@ -1,0 +1,24 @@
+{
+  "source_commit": "aee88db569b82216b705408f00295a337a7393fe",
+  "source_proof": "source-proof.md",
+  "runtime_inputs_verified": 224,
+  "existing_cost_processes_reanalyzed": 70,
+  "new_shape_processes": 1,
+  "new_timing_processes": 0,
+  "runtime_implementations": 0,
+  "runtime_builds": 0,
+  "shared_mutations": 0,
+  "prior_artifacts_verified": 290,
+  "proposal": "Shared CLibrary cdata identity comparison against retained typed IR_KGC; table/key/source/owner/generation/SMR gates unchanged; old numeric actual-value path unchanged.",
+  "review_required_before_implementation": true,
+  "shared_lookup_median_ns": 251.144,
+  "nominal_registered_small_shared_rmw": {
+    "current": 14,
+    "proposed": 10
+  },
+  "nominal_registered_small_explicit_sc_fences": {
+    "current": 3,
+    "proposed": 2
+  },
+  "qualification": "Source operation counts only. No predicted or measured optimization speedup; existing CAS retries and lifecycle wakes remain. A retained GC constant is not permission to remove source/table/vector admission."
+}

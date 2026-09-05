@@ -1,0 +1,129 @@
+---- TRACE flush
+
+---- TRACE 1 start t-clib-cdata-shape.lua:28
+---- TRACE 1 IR
+....        SNAP   #0   [ ---- ---- ]
+0001 >  int SLOAD  #7    CRI
+0002 >  int LE     0001  +2147483646
+0003    int SLOAD  #6    CI
+0004 >  fun SLOAD  #2    T
+0005 >  udt SLOAD  #3    T
+....        SNAP   #1   [ ---- ---- ---- ---- ---- ---- 0003 0001 ---- 0003 0004 ---- 0005 "reg_clib_root_slot" 0003 ]
+0006 >  fun EQ     0004  ffi.clib.__newindex
+0007 >  udt EQ     0005  userdata:0x7f33938b8920
+0008    p64 TMPREF {0x7f33938b88a0}  INOUT
+0009    p64 TMPREF "reg_clib_root_slot"  #8  
+0012 >  int CALLS  lj_tab_cmpcdata_kgc_rooted_try  (0008 0009 cdata<int>: 0x7f33938b8980)
+....        SNAP   #2   [ ---- ---- ---- ---- ---- ---- 0003 0001 ---- 0003 ffi.clib.__newindex ftsz|0005 "reg_clib_root_slot" 0003 ]
+0013 >  int NE     0012  +0  
+0014    int XLOAD  [0x7f33938b8940]  V
+0015 >  int GE     0014  +0  
+0016    int XSTORE +139859502153744  0003
+....        SNAP   #3   [ ---- ---- ---- ---- ---- ---- 0003 0001 ---- 0003 ]
+0017 >  num SLOAD  #5    T
+0018  + num ADD    0017  +1  
+0019  + int ADD    0003  +1  
+....        SNAP   #4   [ ---- ---- ---- ---- ---- 0018 ]
+0020 >  int LE     0019  0001
+....        SNAP   #5   [ ---- ---- ---- ---- ---- 0018 0019 0001 ---- 0019 ]
+0021 ------ LOOP ------------
+0022 >  nil XPOLL  #1  
+....        SNAP   #6   [ ---- ---- ---- ---- ---- 0018 0019 0001 ---- 0019 0004 ---- 0005 "reg_clib_root_slot" 0019 ]
+0023    p64 TMPREF {0x7f33938b88a0}  INOUT
+0024    p64 TMPREF "reg_clib_root_slot"  #8  
+0027 >  int CALLS  lj_tab_cmpcdata_kgc_rooted_try  (0023 0024 cdata<int>: 0x7f33938b8980)
+....        SNAP   #7   [ ---- ---- ---- ---- ---- 0018 0019 0001 ---- 0019 ffi.clib.__newindex ftsz|0005 "reg_clib_root_slot" 0019 ]
+0028 >  int NE     0027  +0  
+0029    int XLOAD  [0x7f33938b8940]  V
+0030 >  int GE     0029  +0  
+0031    int XSTORE +139859502153744  0019
+0032  + num ADD    0018  +1  
+0033  + int ADD    0019  +1  
+....        SNAP   #8   [ ---- ---- ---- ---- ---- 0032 ]
+0034 >  int LE     0033  0001
+0035    int PHI    0019  0033
+0036    num PHI    0018  0032
+---- TRACE 1 mcode 458
+56467be8fe36  add rsp, -0x10
+56467be8fe3a  mov dword [r14+0x84c], 0x1
+56467be8fe45  mov r15, 0x00007f33938b8940
+56467be8fe4f  mov r12, 0x00007f3393f1c010
+56467be8fe59  mov rdi, [r14+0x820]
+56467be8fe60  mov rax, 0x00007f33938b88f0
+56467be8fe6a  movsd xmm7, [rdx+0x28]
+56467be8fe6f  cvttsd2si ebx, xmm7
+56467be8fe73  xorps xmm6, xmm6
+56467be8fe76  cvtsi2sd xmm6, ebx
+56467be8fe7a  ucomisd xmm7, xmm6
+56467be8fe7e  jnz 0x56467be80138
+56467be8fe84  jpe 0x56467be80138
+56467be8fe8a  cmp ebx, 0x7ffffffe
+56467be8fe90  jg 0x56467be80138
+56467be8fe96  cvttsd2si ebp, [rdx+0x20]
+56467be8fe9b  rorx rcx, [rdx], 0x2f
+56467be8fea1  cmp cx, -0x09
+56467be8fea5  jnz 0x56467be80138
+56467be8feab  shr rcx, 0x11
+56467be8feaf  mov [rsp+0x10], rcx
+56467be8feb4  rorx r13, [rdx+0x8], 0x2f
+56467be8febb  cmp r13w, -0x0d
+56467be8fec0  jnz 0x56467be80138
+56467be8fec6  shr r13, 0x11
+56467be8feca  mov rdx, 0x00007f33938b7790
+56467be8fed4  cmp rcx, rdx
+56467be8fed7  jnz 0x56467be80140
+56467be8fedd  cmp r13, rax
+56467be8fee0  jnz 0x56467be80140
+56467be8fee6  lea rsi, [r14+0x4c50]
+56467be8feed  mov dword [rsi], 0x938b88a0
+56467be8fef3  mov dword [rsi+0x4], 0xfffa7f33
+56467be8fefa  lea rdx, [r14+0x4c58]
+56467be8ff01  mov dword [rdx], 0x938b3540
+56467be8ff07  mov dword [rdx+0x4], 0xfffdff33
+56467be8ff0e  mov rcx, 0x00007f33938b8970
+56467be8ff18  call 0x56469264e4c0	->lj_tab_cmpcdata_kgc_rooted_try
+56467be8ff1d  mov rdx, [r14+0x830]
+56467be8ff24  test eax, eax
+56467be8ff26  jz 0x56467be80148
+56467be8ff2c  cmp dword [r15], +0x00
+56467be8ff30  jl 0x56467be80148
+56467be8ff36  mov [r12], ebp
+56467be8ff3a  cmp dword [rdx+0x1c], 0xfff90000
+56467be8ff41  jnb 0x56467be80150
+56467be8ff47  movsd xmm7, [rdx+0x18]
+56467be8ff4c  addsd xmm7, [rip-0xfdd4]
+56467be8ff54  movsd [rsp+0x8], xmm7
+56467be8ff5a  add ebp, +0x01
+56467be8ff5d  cmp ebp, ebx
+56467be8ff5f  jg 0x56467be80158
+->LOOP:
+56467be8ff65  movsd [rsp+0x8], xmm7
+56467be8ff6b  mov rdi, [r14+0x820]
+56467be8ff72  mov rsi, 0x00007f3393bf0584
+56467be8ff7c  mov esi, [rsi]
+56467be8ff7e  cmp esi, +0x00
+56467be8ff81  jz 0x56467be80160
+56467be8ff87  cmp qword [r14+0x808], +0x00
+56467be8ff8f  jnz 0x56467be80160
+56467be8ff95  lea rsi, [r14+0x4c50]
+56467be8ff9c  mov dword [rsi], 0x938b88a0
+56467be8ffa2  mov dword [rsi+0x4], 0xfffa7f33
+56467be8ffa9  lea rdx, [r14+0x4c58]
+56467be8ffb0  mov dword [rdx], 0x938b3540
+56467be8ffb6  mov dword [rdx+0x4], 0xfffdff33
+56467be8ffbd  mov rcx, 0x00007f33938b8970
+56467be8ffc7  call 0x56469264e4c0	->lj_tab_cmpcdata_kgc_rooted_try
+56467be8ffcc  movsd xmm7, [rsp+0x8]
+56467be8ffd2  test eax, eax
+56467be8ffd4  jz 0x56467be80170
+56467be8ffda  cmp dword [r15], +0x00
+56467be8ffde  jl 0x56467be80170
+56467be8ffe4  mov [r12], ebp
+56467be8ffe8  addsd xmm7, [rip-0xfe70]
+56467be8fff0  add ebp, +0x01
+56467be8fff3  cmp ebp, ebx
+56467be8fff5  jle 0x56467be8ff65	->LOOP
+56467be8fffb  jmp 0x56467be80178
+---- TRACE 1 stop -> loop
+
+shape	write	1	37	458	2	0	2	0	1	1	1

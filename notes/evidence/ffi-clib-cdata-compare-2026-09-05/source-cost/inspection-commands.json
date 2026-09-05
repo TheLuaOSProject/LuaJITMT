@@ -1,0 +1,170 @@
+[
+  {
+    "command": [
+      "objdump",
+      "-dr",
+      "--disassemble=lj_tab_gettv_rooted_hit_try",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_tab.o"
+    ],
+    "cwd": "/tmp/lj-clib-hit-cost-review-20260905-cmxsefzb",
+    "exit": 0,
+    "stdout_file": "evidence/lj_tab_gettv_rooted_hit_try.objdump.txt",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "objdump",
+      "-dr",
+      "--disassemble=tab_gettv_rooted_try_impl",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_tab.o"
+    ],
+    "cwd": "/tmp/lj-clib-hit-cost-review-20260905-cmxsefzb",
+    "exit": 0,
+    "stdout_file": "evidence/tab_gettv_rooted_try_impl.objdump.txt",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "objdump",
+      "-dr",
+      "--disassemble=tab_keyed_slot_owner_snapshot",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_tab.o"
+    ],
+    "cwd": "/tmp/lj-clib-hit-cost-review-20260905-cmxsefzb",
+    "exit": 0,
+    "stdout_file": "evidence/tab_keyed_slot_owner_snapshot.objdump.txt",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "objdump",
+      "-dr",
+      "--disassemble=tab_keyed_slot_owner_current",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_tab.o"
+    ],
+    "cwd": "/tmp/lj-clib-hit-cost-review-20260905-cmxsefzb",
+    "exit": 0,
+    "stdout_file": "evidence/tab_keyed_slot_owner_current.objdump.txt",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "objdump",
+      "-dr",
+      "--disassemble=tab_resolve_current_keyed_held.part.0",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_tab.o"
+    ],
+    "cwd": "/tmp/lj-clib-hit-cost-review-20260905-cmxsefzb",
+    "exit": 0,
+    "stdout_file": "evidence/tab_resolve_current_keyed_held.part.0.objdump.txt",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "objdump",
+      "-dr",
+      "--disassemble=lj_gc2_tv_lease_acquire",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_gc2.o"
+    ],
+    "cwd": "/tmp/lj-clib-hit-cost-review-20260905-cmxsefzb",
+    "exit": 0,
+    "stdout_file": "evidence/lj_gc2_tv_lease_acquire.objdump.txt",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "objdump",
+      "-dr",
+      "--disassemble=lj_gc2_lease_release",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_gc2.o"
+    ],
+    "cwd": "/tmp/lj-clib-hit-cost-review-20260905-cmxsefzb",
+    "exit": 0,
+    "stdout_file": "evidence/lj_gc2_lease_release.objdump.txt",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "objdump",
+      "-dr",
+      "--disassemble=lj_gc2_smr_read_try",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_gc2.o"
+    ],
+    "cwd": "/tmp/lj-clib-hit-cost-review-20260905-cmxsefzb",
+    "exit": 0,
+    "stdout_file": "evidence/lj_gc2_smr_read_try.objdump.txt",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "objdump",
+      "-dr",
+      "--disassemble=lj_gc2_smr_read_leave",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_gc2.o"
+    ],
+    "cwd": "/tmp/lj-clib-hit-cost-review-20260905-cmxsefzb",
+    "exit": 0,
+    "stdout_file": "evidence/lj_gc2_smr_read_leave.objdump.txt",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "objdump",
+      "-dr",
+      "--disassemble=lj_arena_rescue_enter",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_arena.o"
+    ],
+    "cwd": "/tmp/lj-clib-hit-cost-review-20260905-cmxsefzb",
+    "exit": 0,
+    "stdout_file": "evidence/lj_arena_rescue_enter.objdump.txt",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "objdump",
+      "-dr",
+      "--disassemble=lj_arena_rescue_leave",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_arena.o"
+    ],
+    "cwd": "/tmp/lj-clib-hit-cost-review-20260905-cmxsefzb",
+    "exit": 0,
+    "stdout_file": "evidence/lj_arena_rescue_leave.objdump.txt",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "nm",
+      "-S",
+      "--defined-only",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_tab.o"
+    ],
+    "cwd": "/tmp/lj-clib-hit-cost-review-20260905-cmxsefzb",
+    "exit": 0,
+    "stdout_file": "evidence/lj_tab.o.symbols.txt",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "nm",
+      "-S",
+      "--defined-only",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_gc2.o"
+    ],
+    "cwd": "/tmp/lj-clib-hit-cost-review-20260905-cmxsefzb",
+    "exit": 0,
+    "stdout_file": "evidence/lj_gc2.o.symbols.txt",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "nm",
+      "-S",
+      "--defined-only",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_arena.o"
+    ],
+    "cwd": "/tmp/lj-clib-hit-cost-review-20260905-cmxsefzb",
+    "exit": 0,
+    "stdout_file": "evidence/lj_arena.o.symbols.txt",
+    "stderr": ""
+  }
+]

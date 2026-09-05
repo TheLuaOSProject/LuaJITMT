@@ -1,0 +1,73 @@
+
+/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_arena.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000006d50 <lj_arena_rescue_enter>:
+    6d50:	48 85 ff             	test   %rdi,%rdi
+    6d53:	74 12                	je     6d67 <lj_arena_rescue_enter+0x17>
+    6d55:	48 8b 47 38          	mov    0x38(%rdi),%rax
+    6d59:	48 89 fa             	mov    %rdi,%rdx
+    6d5c:	48 8d 77 38          	lea    0x38(%rdi),%rsi
+    6d60:	8b 4a 64             	mov    0x64(%rdx),%ecx
+    6d63:	85 c9                	test   %ecx,%ecx
+    6d65:	74 09                	je     6d70 <lj_arena_rescue_enter+0x20>
+    6d67:	31 c0                	xor    %eax,%eax
+    6d69:	c3                   	ret
+    6d6a:	66 0f 1f 44 00 00    	nopw   0x0(%rax,%rax,1)
+    6d70:	8b 0a                	mov    (%rdx),%ecx
+    6d72:	f7 d1                	not    %ecx
+    6d74:	81 e1 00 48 4a 4c    	and    $0x4c4a4800,%ecx
+    6d7a:	75 44                	jne    6dc0 <lj_arena_rescue_enter+0x70>
+    6d7c:	48 b9 ff ff ff ff ff 	movabs $0x1fffffffffffffff,%rcx
+    6d83:	ff ff 1f 
+    6d86:	48 39 c1             	cmp    %rax,%rcx
+    6d89:	72 dc                	jb     6d67 <lj_arena_rescue_enter+0x17>
+    6d8b:	48 39 c8             	cmp    %rcx,%rax
+    6d8e:	0f 84 00 00 00 00    	je     6d94 <lj_arena_rescue_enter+0x44>
+			6d90: R_X86_64_PC32	.text.unlikely+0x2d
+    6d94:	48 8d 48 01          	lea    0x1(%rax),%rcx
+    6d98:	31 ff                	xor    %edi,%edi
+    6d9a:	45 31 c0             	xor    %r8d,%r8d
+    6d9d:	f0 48 0f b1 0e       	lock cmpxchg %rcx,(%rsi)
+    6da2:	75 bc                	jne    6d60 <lj_arena_rescue_enter+0x10>
+    6da4:	49 83 f8 01          	cmp    $0x1,%r8
+    6da8:	b8 01 00 00 00       	mov    $0x1,%eax
+    6dad:	ba 03 00 00 00       	mov    $0x3,%edx
+    6db2:	83 d8 ff             	sbb    $0xffffffff,%eax
+    6db5:	85 ff                	test   %edi,%edi
+    6db7:	0f 45 c2             	cmovne %edx,%eax
+    6dba:	c3                   	ret
+    6dbb:	0f 1f 44 00 00       	nopl   0x0(%rax,%rax,1)
+    6dc0:	8b 0a                	mov    (%rdx),%ecx
+    6dc2:	83 e1 01             	and    $0x1,%ecx
+    6dc5:	74 b5                	je     6d7c <lj_arena_rescue_enter+0x2c>
+    6dc7:	48 bf ff ff ff ff ff 	movabs $0x1fffffffffffffff,%rdi
+    6dce:	ff ff 1f 
+    6dd1:	48 89 c1             	mov    %rax,%rcx
+    6dd4:	48 f7 d1             	not    %rcx
+    6dd7:	48 85 f9             	test   %rdi,%rcx
+    6dda:	0f 84 00 00 00 00    	je     6de0 <lj_arena_rescue_enter+0x90>
+			6ddc: R_X86_64_PC32	.text.unlikely+0x2d
+    6de0:	49 b9 00 00 00 00 00 	movabs $0x4000000000000000,%r9
+    6de7:	00 00 40 
+    6dea:	49 89 c0             	mov    %rax,%r8
+    6ded:	48 8d 48 01          	lea    0x1(%rax),%rcx
+    6df1:	4d 21 c8             	and    %r9,%r8
+    6df4:	74 16                	je     6e0c <lj_arena_rescue_enter+0xbc>
+    6df6:	bf 01 00 00 00       	mov    $0x1,%edi
+    6dfb:	4d 89 c8             	mov    %r9,%r8
+    6dfe:	48 85 c0             	test   %rax,%rax
+    6e01:	79 9a                	jns    6d9d <lj_arena_rescue_enter+0x4d>
+    6e03:	48 0f ba e9 3d       	bts    $0x3d,%rcx
+    6e08:	31 ff                	xor    %edi,%edi
+    6e0a:	eb 91                	jmp    6d9d <lj_arena_rescue_enter+0x4d>
+    6e0c:	49 b9 ff ff ff ff ff 	movabs $0x3fffffffffffffff,%r9
+    6e13:	ff ff 3f 
+    6e16:	31 ff                	xor    %edi,%edi
+    6e18:	49 39 c1             	cmp    %rax,%r9
+    6e1b:	72 e6                	jb     6e03 <lj_arena_rescue_enter+0xb3>
+    6e1d:	e9 7b ff ff ff       	jmp    6d9d <lj_arena_rescue_enter+0x4d>
+
+Disassembly of section .text.unlikely:

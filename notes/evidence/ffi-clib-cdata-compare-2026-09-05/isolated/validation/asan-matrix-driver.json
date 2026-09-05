@@ -1,0 +1,107 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "26",
+      "python3",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py",
+      "asan",
+      "compile"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "exit": 0,
+    "stdout": "asan wrapper built 8affedd9448466e44df2c513e9793f12ddcb5ae66e933b17b7357ffb8524c29b\nasan compile passes 1 of 1\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "26",
+      "python3",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-supplement.py",
+      "asan",
+      "compile"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "exit": 0,
+    "stdout": "asan compile passes 1 of 1\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "26",
+      "python3",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py",
+      "asan",
+      "full"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "exit": 0,
+    "stdout": "asan full function complete\nasan full read complete\nasan full write complete\nasan full zero complete\nasan full big complete\nasan full passes 80 of 80\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "26",
+      "python3",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py",
+      "asan",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "exit": 0,
+    "stdout": "asan gc function complete\nasan gc read complete\nasan gc write complete\nasan gc passes 20 of 20\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "26",
+      "python3",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py",
+      "asan",
+      "wrapper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "exit": 0,
+    "stdout": "asan wrapper passes 4 of 4\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "26",
+      "python3",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-final.py",
+      "asan",
+      "gc-wrapper"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "exit": 0,
+    "stdout": "asan gc-wrapper passes 4 of 4\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "26",
+      "python3",
+      "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation/run-supplement.py",
+      "asan",
+      "full"
+    ],
+    "cwd": "/tmp/lj-clib-cdata-compare-20260905-mt2wayvj/validation",
+    "exit": 0,
+    "stdout": "asan full passes 40 of 40\n",
+    "stderr": ""
+  }
+]

@@ -1,0 +1,181 @@
+{
+  "frozen_study": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf",
+  "source_commit": "aee88db569b82216b705408f00295a337a7393fe",
+  "scope": "Reanalysis of existing 70-process study; no new timing or hardware sampling. One additional count=80 native shape probe is recorded separately.",
+  "runtime_processes": 70,
+  "cpu": 31,
+  "pairs_per_workload": 7,
+  "gc_enabled": true,
+  "shared": {
+    "ns": {
+      "baseline": [
+        0.6885,
+        0.6875,
+        0.6880000000000001,
+        0.6880000000000001,
+        0.6880000000000001,
+        0.6880000000000001,
+        0.6880000000000001
+      ],
+      "candidate": [
+        250.739,
+        251.33050000000003,
+        251.277,
+        251.6595,
+        251.00450000000004,
+        251.01350000000002,
+        251.14399999999995
+      ]
+    },
+    "median_ns": {
+      "baseline": 0.6880000000000001,
+      "candidate": 251.14399999999995
+    },
+    "median_paired_percent": 36403.48837209301,
+    "geometric_ratio": 365.06792099392993,
+    "shape_and_result_lines": {
+      "baseline": [
+        [
+          "shape\t1\t19\t234\t0\t1",
+          "result\tshared\t2000000\t0.001377000"
+        ],
+        [
+          "shape\t1\t19\t234\t0\t1",
+          "result\tshared\t2000000\t0.001375000"
+        ],
+        [
+          "shape\t1\t19\t234\t0\t1",
+          "result\tshared\t2000000\t0.001376000"
+        ],
+        [
+          "shape\t1\t19\t234\t0\t1",
+          "result\tshared\t2000000\t0.001376000"
+        ],
+        [
+          "shape\t1\t19\t234\t0\t1",
+          "result\tshared\t2000000\t0.001376000"
+        ],
+        [
+          "shape\t1\t19\t234\t0\t1",
+          "result\tshared\t2000000\t0.001376000"
+        ],
+        [
+          "shape\t1\t19\t234\t0\t1",
+          "result\tshared\t2000000\t0.001376000"
+        ]
+      ],
+      "candidate": [
+        [
+          "shape\t1\t39\t515\t2\t1",
+          "result\tshared\t2000000\t0.501478000"
+        ],
+        [
+          "shape\t1\t39\t515\t2\t1",
+          "result\tshared\t2000000\t0.502661000"
+        ],
+        [
+          "shape\t1\t39\t515\t2\t1",
+          "result\tshared\t2000000\t0.502554000"
+        ],
+        [
+          "shape\t1\t39\t515\t2\t1",
+          "result\tshared\t2000000\t0.503319000"
+        ],
+        [
+          "shape\t1\t39\t515\t2\t1",
+          "result\tshared\t2000000\t0.502009000"
+        ],
+        [
+          "shape\t1\t39\t515\t2\t1",
+          "result\tshared\t2000000\t0.502027000"
+        ],
+        [
+          "shape\t1\t39\t515\t2\t1",
+          "result\tshared\t2000000\t0.502288000"
+        ]
+      ]
+    }
+  },
+  "all_medians": {
+    "direct_clib": {
+      "baseline": 0.68385,
+      "candidate": 1.09405
+    },
+    "clib": {
+      "baseline": 2.0511,
+      "candidate": 2.50685
+    },
+    "call": {
+      "baseline": 84.198,
+      "candidate": 85.1
+    },
+    "ffi_struct": {
+      "baseline": 0.6866666666666666,
+      "candidate": 0.6866666666666666
+    },
+    "shared": {
+      "baseline": 0.6880000000000001,
+      "candidate": 251.14399999999995
+    }
+  },
+  "object_code_sizes": [
+    {
+      "object": "lj_tab.o",
+      "symbol": "lj_tab_gettv_rooted_hit_try",
+      "size_bytes": 34
+    },
+    {
+      "object": "lj_tab.o",
+      "symbol": "tab_get_current_forjit",
+      "size_bytes": 89
+    },
+    {
+      "object": "lj_tab.o",
+      "symbol": "tab_gettv_rooted_try_impl",
+      "size_bytes": 2309
+    },
+    {
+      "object": "lj_tab.o",
+      "symbol": "tab_keyed_slot_owner_current",
+      "size_bytes": 319
+    },
+    {
+      "object": "lj_tab.o",
+      "symbol": "tab_keyed_slot_owner_snapshot",
+      "size_bytes": 385
+    },
+    {
+      "object": "lj_tab.o",
+      "symbol": "tab_resolve_current_keyed_held.part.0",
+      "size_bytes": 1316
+    },
+    {
+      "object": "lj_gc2.o",
+      "symbol": "lj_gc2_lease_release",
+      "size_bytes": 137
+    },
+    {
+      "object": "lj_gc2.o",
+      "symbol": "lj_gc2_smr_read_leave",
+      "size_bytes": 83
+    },
+    {
+      "object": "lj_gc2.o",
+      "symbol": "lj_gc2_smr_read_try",
+      "size_bytes": 155
+    },
+    {
+      "object": "lj_gc2.o",
+      "symbol": "lj_gc2_tv_lease_acquire",
+      "size_bytes": 199
+    }
+  ],
+  "ordinary_registered_small_path": {
+    "conditions": "Uncontended successful table/string-key/cdata-result leases, persistent registry present, outermost SMR, non-generational incremental IDLE; no lifecycle slow edge. This is a source operation count, not measured cost attribution.",
+    "current_shared_rmw": 14,
+    "current_explicit_sc_fences": 3,
+    "proposed_shared_rmw": 10,
+    "proposed_explicit_sc_fences": 2,
+    "per_small_lease": "Two full-slot 128-bit registry CAS operations, one 64-bit arena admission CAS, one 64-bit arena release subtraction, and one explicit SC fence."
+  }
+}
