@@ -1,0 +1,4 @@
+== m3_gc2_weak_helper_claim ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLJ_GC2_TEST_HELPERS -DLUA_USE_ASSERT -DLUA_USE_APICHECK -DLJ_GC2_TEST_WEAK_ONLY -Wno-unused-function -I'/workspaces/lj-lockless/src' '/workspaces/lj-lockless/tests/t-gc2-traverse.c' '/workspaces/lj-lockless/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/canonical-tmp/lj-t-gc2-weak-helper-claim'
++ timeout '60s' '/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/canonical-tmp/lj-t-gc2-weak-helper-claim'
+ok m3_gc2_weak_helper_claim

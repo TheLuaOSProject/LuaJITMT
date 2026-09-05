@@ -1,0 +1,1 @@
+t-gc2-traverse: /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/tests/t-gc2-traverse.c:7188: void test_stack_admission_tristate(lua_State *, global_State *, TGState *): Assertion `lj_tg_reclaim_dead(g) == 1u' failed.

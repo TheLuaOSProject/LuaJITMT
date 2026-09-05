@@ -1,0 +1,59 @@
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/tests/t-gc2-traverse.c:105:13: error: unused function 'test_strong_table' [-Werror,-Wunused-function]
+  105 | static void test_strong_table(lua_State *L, global_State *g, TGState *tg)
+      |             ^~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/tests/t-gc2-traverse.c:142:13: error: unused function 'test_retired_table_owner_nonsemantic' [-Werror,-Wunused-function]
+  142 | static void test_retired_table_owner_nonsemantic(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/tests/t-gc2-traverse.c:182:13: error: unused function 'test_retired_table_root_cycle_retries' [-Werror,-Wunused-function]
+  182 | static void test_retired_table_root_cycle_retries(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/tests/t-gc2-traverse.c:220:13: error: unused function 'test_false_candidate_mark_admission' [-Werror,-Wunused-function]
+  220 | static void test_false_candidate_mark_admission(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/tests/t-gc2-traverse.c:249:13: error: unused function 'test_embedded_empty_string_mark' [-Werror,-Wunused-function]
+  249 | static void test_embedded_empty_string_mark(global_State *g)
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/tests/t-gc2-traverse.c:277:13: error: unused function 'test_cdata_exact_coverage_admission' [-Werror,-Wunused-function]
+  277 | static void test_cdata_exact_coverage_admission(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/tests/t-gc2-traverse.c:300:13: error: unused function 'test_huge_false_type_discharge' [-Werror,-Wunused-function]
+  300 | static void test_huge_false_type_discharge(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/tests/t-gc2-traverse.c:330:13: error: unused function 'test_grey_deque_growth' [-Werror,-Wunused-function]
+  330 | static void test_grey_deque_growth(lua_State *L, global_State *g, TGState *tg)
+      |             ^~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/tests/t-gc2-traverse.c:493:13: error: unused function 'test_grey_deque_steal_race' [-Werror,-Wunused-function]
+  493 | static void test_grey_deque_steal_race(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/tests/t-gc2-traverse.c:551:13: error: unused function 'test_worker_drain' [-Werror,-Wunused-function]
+  551 | static void test_worker_drain(lua_State *L, global_State *g, TGState *tg)
+      |             ^~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/tests/t-gc2-traverse.c:612:13: error: unused function 'test_worker_drain_race' [-Werror,-Wunused-function]
+  612 | static void test_worker_drain_race(lua_State *L, global_State *g, TGState *tg)
+      |             ^~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/tests/t-gc2-traverse.c:685:13: error: unused function 'test_worker_leaf_ssb' [-Werror,-Wunused-function]
+  685 | static void test_worker_leaf_ssb(lua_State *L, global_State *g, TGState *tg)
+      |             ^~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/tests/t-gc2-traverse.c:732:13: error: unused function 'test_fixpoint_round' [-Werror,-Wunused-function]
+  732 | static void test_fixpoint_round(lua_State *L, global_State *g, TGState *tg)
+      |             ^~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/tests/t-gc2-traverse.c:798:13: error: unused function 'test_c_value_barrier' [-Werror,-Wunused-function]
+  798 | static void test_c_value_barrier(lua_State *L, global_State *g, TGState *tg)
+      |             ^~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/tests/t-gc2-traverse.c:822:13: error: unused function 'test_c_table_rescan_barrier' [-Werror,-Wunused-function]
+  822 | static void test_c_table_rescan_barrier(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/tests/t-gc2-traverse.c:849:13: error: unused function 'test_table_rescan_idle_clear' [-Werror,-Wunused-function]
+  849 | static void test_table_rescan_idle_clear(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/tests/t-gc2-traverse.c:891:13: error: unused function 'test_upval_needscan_preserve_abort' [-Werror,-Wunused-function]
+  891 | static void test_upval_needscan_preserve_abort(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/tests/t-gc2-traverse.c:944:13: error: unused function 'test_vm_upvalue_barrier' [-Werror,-Wunused-function]
+  944 | static void test_vm_upvalue_barrier(lua_State *L, global_State *g, TGState *tg)
+      |             ^~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/tests/t-gc2-traverse.c:983:13: error: unused function 'test_vm_table_barrier' [-Werror,-Wunused-function]
+  983 | static void test_vm_table_barrier(lua_State *L, global_State *g, TGState *tg)
+      |             ^~~~~~~~~~~~~~~~~~~~~
+fatal error: too many errors emitted, stopping now [-ferror-limit=]
+20 errors generated.

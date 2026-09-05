@@ -1,0 +1,16 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/original-traverse/fixture"
+  ],
+  "cwd": "/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict",
+  "environment": {
+    "LUA_PATH": "/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/?.lua;/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/lib/?.lua;;"
+  },
+  "seconds": 0.14313003799907165,
+  "exit": -6,
+  "stdout": "",
+  "stderr": "fixture: /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/base/tests/t-gc2-traverse.c:7151: test_stack_admission_tristate: Assertion `lj_tg_reclaim_dead(g) == 1u' failed.\n"
+}

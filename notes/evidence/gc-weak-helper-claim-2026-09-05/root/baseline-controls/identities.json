@@ -1,0 +1,22 @@
+{
+  "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/libluajit.a": {
+    "sha256": "82af451fd6a6dd470b8d9f16df8435433593b20304cb2b10c89a6c3ef2188ba8",
+    "bytes": 31173654
+  },
+  "/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/baseline-controls/original": {
+    "sha256": "1f8b9897e1e46560f1cca0fb47011eff847844650873d2e47a03cc72f639907e",
+    "bytes": 15461544
+  },
+  "/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/baseline-controls/held-claim": {
+    "sha256": "8e9cd49042e3049980f5fc94a6d2f5991fad2afd487090d6f5b3b4d2bbd3a18e",
+    "bytes": 15466224
+  },
+  "/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/base/tests/t-gc2-traverse.c": {
+    "sha256": "a58b77d512009f07d900cbf1e4f1c83588e970081c1d986e9446a84776dd6693",
+    "bytes": 338433
+  },
+  "/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/candidate/tests/t-gc2-traverse.c": {
+    "sha256": "62f08653d0cfbc724b9071d5c326c7b298c519d7e44afd225b9f61eb53604be5",
+    "bytes": 340063
+  }
+}

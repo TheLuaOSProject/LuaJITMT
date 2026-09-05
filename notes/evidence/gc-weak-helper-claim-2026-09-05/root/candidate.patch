@@ -1,0 +1,18 @@
+--- a/src/lj_gc2.c
++++ b/src/lj_gc2.c
+@@ -12412,7 +12412,14 @@
+ int lj_gc2_test_weak_overflow_clear_bridge(global_State *g,
+ 					    GCobj *bridge_head)
+ {
+-  return gc2_weak_overflow_clear_bridge(g, bridge_head);
++  int complete;
++  /* Match the production WEAK-close caller: bridge tracing can drain the
++  ** shared grey/recovery queues and must hold the actual worker claim. */
++  if (!g || !gc2_worker_claim_count_busy(g))
++    return 0;
++  complete = gc2_weak_overflow_clear_bridge(g, bridge_head);
++  gc2_worker_release(g);
++  return complete;
+ }
+ #endif
+ 

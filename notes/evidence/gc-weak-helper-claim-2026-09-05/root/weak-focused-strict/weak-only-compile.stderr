@@ -1,0 +1,322 @@
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:9468:13: error: ‘test_leaf_ssb’ defined but not used [-Werror=unused-function]
+ 9468 | static void test_leaf_ssb(lua_State *L, global_State *g, TGState *tg)
+      |             ^~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:9407:13: error: ‘test_finreg_disabled_ordered_pending’ defined but not used [-Werror=unused-function]
+ 9407 | static void test_finreg_disabled_ordered_pending(lua_State *L, global_State *g)
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:8839:13: error: ‘test_finreg_cdata_telemetry’ defined but not used [-Werror=unused-function]
+ 8839 | static void test_finreg_cdata_telemetry(lua_State *L, global_State *g)
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:8793:13: error: ‘test_finreg_cdata_order_active_retire’ defined but not used [-Werror=unused-function]
+ 8793 | static void test_finreg_cdata_order_active_retire(lua_State *L, global_State *g)
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:8727:13: error: ‘test_finreg_cdata_unproven_unlink_retry’ defined but not used [-Werror=unused-function]
+ 8727 | static void test_finreg_cdata_unproven_unlink_retry(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:8651:13: error: ‘test_finreg_cdata_slot_retry_reopens_weak’ defined but not used [-Werror=unused-function]
+ 8651 | static void test_finreg_cdata_slot_retry_reopens_weak(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:8572:13: error: ‘test_finreg_cdata_preclaim_publish_order’ defined but not used [-Werror=unused-function]
+ 8572 | static void test_finreg_cdata_preclaim_publish_order(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:8530:13: error: ‘test_finreg_userdata_queue_mark’ defined but not used [-Werror=unused-function]
+ 8530 | static void test_finreg_userdata_queue_mark(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:8499:13: error: ‘test_finreg_userdata_inplace_finalizer_behavior’ defined but not used [-Werror=unused-function]
+ 8499 | static void test_finreg_userdata_inplace_finalizer_behavior(lua_State *L)
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:8419:13: error: ‘test_finreg_internal_userdata_telemetry’ defined but not used [-Werror=unused-function]
+ 8419 | static void test_finreg_internal_userdata_telemetry(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:8329:13: error: ‘test_finreg_userdata_telemetry’ defined but not used [-Werror=unused-function]
+ 8329 | static void test_finreg_userdata_telemetry(lua_State *L, global_State *g)
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:8285:13: error: ‘test_finreg_userdata_active_unlink’ defined but not used [-Werror=unused-function]
+ 8285 | static void test_finreg_userdata_active_unlink(lua_State *L, global_State *g)
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:8202:13: error: ‘test_finreg_userdata_lookup_retry’ defined but not used [-Werror=unused-function]
+ 8202 | static void test_finreg_userdata_lookup_retry(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:8143:13: error: ‘test_finreg_userdata_unproven_unlink_retry’ defined but not used [-Werror=unused-function]
+ 8143 | static void test_finreg_userdata_unproven_unlink_retry(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:8083:13: error: ‘test_finreg_userdata_dispatch_defer_retry’ defined but not used [-Werror=unused-function]
+ 8083 | static void test_finreg_userdata_dispatch_defer_retry(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:7945:13: error: ‘test_finalizer_spawn_deferred_state’ defined but not used [-Werror=unused-function]
+ 7945 | static void test_finalizer_spawn_deferred_state(lua_State *L, global_State *g)
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:7896:13: error: ‘test_ffi_loaded_weak_value_barrier’ defined but not used [-Werror=unused-function]
+ 7896 | static void test_ffi_loaded_weak_value_barrier(void)
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:7806:13: error: ‘test_lib_register_weak_value_barrier’ defined but not used [-Werror=unused-function]
+ 7806 | static void test_lib_register_weak_value_barrier(void)
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:7746:13: error: ‘test_userdata’ defined but not used [-Werror=unused-function]
+ 7746 | static void test_userdata(lua_State *L, global_State *g)
+      |             ^~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:7656:13: error: ‘test_thread_needscan_idle_clear’ defined but not used [-Werror=unused-function]
+ 7656 | static void test_thread_needscan_idle_clear(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:7600:13: error: ‘test_executable_root_rescan_dedup’ defined but not used [-Werror=unused-function]
+ 7600 | static void test_executable_root_rescan_dedup(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:7507:13: error: ‘test_thread_needscan_release_race’ defined but not used [-Werror=unused-function]
+ 7507 | static void test_thread_needscan_release_race(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:7476:13: error: ‘test_thread_needscan_exact_count_isolation’ defined but not used [-Werror=unused-function]
+ 7476 | static void test_thread_needscan_exact_count_isolation(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:7332:13: error: ‘test_thread_needscan_owner_release_same_cycle’ defined but not used [-Werror=unused-function]
+ 7332 | static void test_thread_needscan_owner_release_same_cycle(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:7009:13: error: ‘test_stack_admission_tristate’ defined but not used [-Werror=unused-function]
+ 7009 | static void test_stack_admission_tristate(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:6939:13: error: ‘test_meta_tset_admission_retries’ defined but not used [-Werror=unused-function]
+ 6939 | static void test_meta_tset_admission_retries(lua_State *L, global_State *g)
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:6872:13: error: ‘test_meta_metatable_capture_lease’ defined but not used [-Werror=unused-function]
+ 6872 | static void test_meta_metatable_capture_lease(lua_State *L, global_State *g)
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:6835:13: error: ‘test_forjit_nil_key’ defined but not used [-Werror=unused-function]
+ 6835 | static void test_forjit_nil_key(lua_State *L)
+      |             ^~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:6760:13: error: ‘test_forjit_weak_result_lease’ defined but not used [-Werror=unused-function]
+ 6760 | static void test_forjit_weak_result_lease(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:6698:13: error: ‘test_forjit_hash_to_array_retry’ defined but not used [-Werror=unused-function]
+ 6698 | static void test_forjit_hash_to_array_retry(lua_State *L)
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:6661:13: error: ‘test_forjit_current_hash_key_lease’ defined but not used [-Werror=unused-function]
+ 6661 | static void test_forjit_current_hash_key_lease(lua_State *L, global_State *g)
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:6455:13: error: ‘test_sweep_tvalue_edge_tristate’ defined but not used [-Werror=unused-function]
+ 6455 | static void test_sweep_tvalue_edge_tristate(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:6392:13: error: ‘test_tvalue_edge_status’ defined but not used [-Werror=unused-function]
+ 6392 | static void test_tvalue_edge_status(lua_State *L, global_State *g)
+      |             ^~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:6319:13: error: ‘test_weak_record_publication_protocol’ defined but not used [-Werror=unused-function]
+ 6319 | static void test_weak_record_publication_protocol(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:6272:13: error: ‘test_weak_overflow_full_oom_count_bounded’ defined but not used [-Werror=unused-function]
+ 6272 | static void test_weak_overflow_full_oom_count_bounded(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:6242:13: error: ‘test_weak_overflow_headless_reservation_guard’ defined but not used [-Werror=unused-function]
+ 6242 | static void test_weak_overflow_headless_reservation_guard(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:6175:13: error: ‘test_legacy_weak_oom_recovery_quantum’ defined but not used [-Werror=unused-function]
+ 6175 | static void test_legacy_weak_oom_recovery_quantum(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:6083:13: error: ‘test_legacy_weak_oom_requeues’ defined but not used [-Werror=unused-function]
+ 6083 | static void test_legacy_weak_oom_requeues(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:6036:13: error: ‘test_table_token_small_weak_oom_progress’ defined but not used [-Werror=unused-function]
+ 6036 | static void test_table_token_small_weak_oom_progress(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:5973:13: error: ‘test_table_token_small_proof_races’ defined but not used [-Werror=unused-function]
+ 5973 | static void test_table_token_small_proof_races(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:5911:13: error: ‘test_table_token_small_free_no_body’ defined but not used [-Werror=unused-function]
+ 5911 | static void test_table_token_small_free_no_body(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:5840:13: error: ‘test_table_token_huge_reclaiming_owner’ defined but not used [-Werror=unused-function]
+ 5840 | static void test_table_token_huge_reclaiming_owner(global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:5747:13: error: ‘test_table_token_huge_phase_behavior’ defined but not used [-Werror=unused-function]
+ 5747 | static void test_table_token_huge_phase_behavior(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:5681:13: error: ‘test_table_token_huge_live_exact’ defined but not used [-Werror=unused-function]
+ 5681 | static void test_table_token_huge_live_exact(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:5398:13: error: ‘test_table_token_request_observational_stale’ defined but not used [-Werror=unused-function]
+ 5398 | static void test_table_token_request_observational_stale(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:5323:13: error: ‘test_table_token_small_cursor_budget’ defined but not used [-Werror=unused-function]
+ 5323 | static void test_table_token_small_cursor_budget(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:5285:13: error: ‘test_table_token_small_live_exact’ defined but not used [-Werror=unused-function]
+ 5285 | static void test_table_token_small_live_exact(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:5090:13: error: ‘test_table_rescan_queue_admission_retry’ defined but not used [-Werror=unused-function]
+ 5090 | static void test_table_rescan_queue_admission_retry(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:5027:13: error: ‘test_table_rescan_ssb_exact_gate’ defined but not used [-Werror=unused-function]
+ 5027 | static void test_table_rescan_ssb_exact_gate(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:4967:13: error: ‘test_table_rescan_exact_membership’ defined but not used [-Werror=unused-function]
+ 4967 | static void test_table_rescan_exact_membership(lua_State *L, global_State *g)
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:4380:13: error: ‘test_thread’ defined but not used [-Werror=unused-function]
+ 4380 | static void test_thread(lua_State *L, global_State *g, TGState *tg)
+      |             ^~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:4264:13: error: ‘test_minor_root_scan’ defined but not used [-Werror=unused-function]
+ 4264 | static void test_minor_root_scan(lua_State *L, global_State *g, TGState *tg)
+      |             ^~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:4139:13: error: ‘test_pre_ctstate_cdata_edges’ defined but not used [-Werror=unused-function]
+ 4139 | static void test_pre_ctstate_cdata_edges(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:4122:13: error: ‘test_capi_collect_live_values’ defined but not used [-Werror=unused-function]
+ 4122 | static void test_capi_collect_live_values(lua_State *L)
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:3868:13: error: ‘test_tg_thread_roots’ defined but not used [-Werror=unused-function]
+ 3868 | static void test_tg_thread_roots(lua_State *L, global_State *g, TGState *tg)
+      |             ^~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:3847:13: error: ‘test_closure’ defined but not used [-Werror=unused-function]
+ 3847 | static void test_closure(lua_State *L, global_State *g, TGState *tg)
+      |             ^~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:3771:13: error: ‘test_vm_tsetm_range_barrier’ defined but not used [-Werror=unused-function]
+ 3771 | static void test_vm_tsetm_range_barrier(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:3685:13: error: ‘test_vm_weak_newindex_target_write_barrier’ defined but not used [-Werror=unused-function]
+ 3685 | static void test_vm_weak_newindex_target_write_barrier(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:3621:13: error: ‘test_capi_weak_newindex_target_write_barrier’ defined but not used [-Werror=unused-function]
+ 3621 | static void test_capi_weak_newindex_target_write_barrier(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:3579:13: error: ‘test_table_insert_weak_value_array_barrier’ defined but not used [-Werror=unused-function]
+ 3579 | static void test_table_insert_weak_value_array_barrier(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:3541:13: error: ‘test_vm_weak_value_array_barrier’ defined but not used [-Werror=unused-function]
+ 3541 | static void test_vm_weak_value_array_barrier(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:3495:13: error: ‘test_vm_weak_value_hash_key_barrier’ defined but not used [-Werror=unused-function]
+ 3495 | static void test_vm_weak_value_hash_key_barrier(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:3433:13: error: ‘test_peer_weak_key_write_barrier’ defined but not used [-Werror=unused-function]
+ 3433 | static void test_peer_weak_key_write_barrier(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:3387:13: error: ‘test_vm_weak_key_write_barrier’ defined but not used [-Werror=unused-function]
+ 3387 | static void test_vm_weak_key_write_barrier(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:3345:13: error: ‘test_weak_key_write_barrier’ defined but not used [-Werror=unused-function]
+ 3345 | static void test_weak_key_write_barrier(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:3285:13: error: ‘test_capi_rawset_weak_write_barrier’ defined but not used [-Werror=unused-function]
+ 3285 | static void test_capi_rawset_weak_write_barrier(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:3236:13: error: ‘test_vm_weak_post_clear_existing_key_write’ defined but not used [-Werror=unused-function]
+ 3236 | static void test_vm_weak_post_clear_existing_key_write(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:3185:13: error: ‘test_weak_post_clear_resurrection_write’ defined but not used [-Werror=unused-function]
+ 3185 | static void test_weak_post_clear_resurrection_write(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:3138:13: error: ‘test_weak_pre_clear_late_write_survives_drain’ defined but not used [-Werror=unused-function]
+ 3138 | static void test_weak_pre_clear_late_write_survives_drain(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:3108:13: error: ‘test_weak_drain_uses_captured_mode’ defined but not used [-Werror=unused-function]
+ 3108 | static void test_weak_drain_uses_captured_mode(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:1841:13: error: ‘test_jit_profile_registry_weak_barrier’ defined but not used [-Werror=unused-function]
+ 1841 | static void test_jit_profile_registry_weak_barrier(void)
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:1781:13: error: ‘test_jit_tg_executing_trace_root’ defined but not used [-Werror=unused-function]
+ 1781 | static void test_jit_tg_executing_trace_root(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:1708:13: error: ‘test_jit_current_trace_root’ defined but not used [-Werror=unused-function]
+ 1708 | static void test_jit_current_trace_root(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:1652:13: error: ‘test_jit_upvalue_barrier’ defined but not used [-Werror=unused-function]
+ 1652 | static void test_jit_upvalue_barrier(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:1589:13: error: ‘test_jit_weak_array_store_helper_barrier’ defined but not used [-Werror=unused-function]
+ 1589 | static void test_jit_weak_array_store_helper_barrier(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:1519:13: error: ‘test_jit_weak_table_store_helper_barrier’ defined but not used [-Werror=unused-function]
+ 1519 | static void test_jit_weak_table_store_helper_barrier(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:1462:13: error: ‘test_jit_table_store_helper_barrier’ defined but not used [-Werror=unused-function]
+ 1462 | static void test_jit_table_store_helper_barrier(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:1442:13: error: ‘test_jit_hotcall_root’ defined but not used [-Werror=unused-function]
+ 1442 | static void test_jit_hotcall_root(lua_State *L, global_State *g)
+      |             ^~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:1388:13: error: ‘test_buffer_constructor_dict_barrier’ defined but not used [-Werror=unused-function]
+ 1388 | static void test_buffer_constructor_dict_barrier(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:1354:13: error: ‘test_buffer_decode_metatable_barrier’ defined but not used [-Werror=unused-function]
+ 1354 | static void test_buffer_decode_metatable_barrier(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:1317:13: error: ‘test_proto_chunkname_publish_barrier’ defined but not used [-Werror=unused-function]
+ 1317 | static void test_proto_chunkname_publish_barrier(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:1270:13: error: ‘test_lua_closure_constructor_publish_barrier’ defined but not used [-Werror=unused-function]
+ 1270 | static void test_lua_closure_constructor_publish_barrier(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:1227:13: error: ‘test_cclosure_constructor_publish_barrier’ defined but not used [-Werror=unused-function]
+ 1227 | static void test_cclosure_constructor_publish_barrier(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:1162:13: error: ‘test_thread_spawn_constructor_child_barrier’ defined but not used [-Werror=unused-function]
+ 1162 | static void test_thread_spawn_constructor_child_barrier(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:1133:13: error: ‘test_thread_constructor_env_barrier’ defined but not used [-Werror=unused-function]
+ 1133 | static void test_thread_constructor_env_barrier(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:1101:13: error: ‘test_userdata_constructor_publish_barrier’ defined but not used [-Werror=unused-function]
+ 1101 | static void test_userdata_constructor_publish_barrier(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:1046:13: error: ‘test_capi_newindex_target_parent_barrier’ defined but not used [-Werror=unused-function]
+ 1046 | static void test_capi_newindex_target_parent_barrier(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:1012:13: error: ‘test_vm_meta_tset_barrier’ defined but not used [-Werror=unused-function]
+ 1012 | static void test_vm_meta_tset_barrier(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:983:13: error: ‘test_vm_table_barrier’ defined but not used [-Werror=unused-function]
+  983 | static void test_vm_table_barrier(lua_State *L, global_State *g, TGState *tg)
+      |             ^~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:944:13: error: ‘test_vm_upvalue_barrier’ defined but not used [-Werror=unused-function]
+  944 | static void test_vm_upvalue_barrier(lua_State *L, global_State *g, TGState *tg)
+      |             ^~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:891:13: error: ‘test_upval_needscan_preserve_abort’ defined but not used [-Werror=unused-function]
+  891 | static void test_upval_needscan_preserve_abort(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:849:13: error: ‘test_table_rescan_idle_clear’ defined but not used [-Werror=unused-function]
+  849 | static void test_table_rescan_idle_clear(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:822:13: error: ‘test_c_table_rescan_barrier’ defined but not used [-Werror=unused-function]
+  822 | static void test_c_table_rescan_barrier(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:798:13: error: ‘test_c_value_barrier’ defined but not used [-Werror=unused-function]
+  798 | static void test_c_value_barrier(lua_State *L, global_State *g, TGState *tg)
+      |             ^~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:732:13: error: ‘test_fixpoint_round’ defined but not used [-Werror=unused-function]
+  732 | static void test_fixpoint_round(lua_State *L, global_State *g, TGState *tg)
+      |             ^~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:685:13: error: ‘test_worker_leaf_ssb’ defined but not used [-Werror=unused-function]
+  685 | static void test_worker_leaf_ssb(lua_State *L, global_State *g, TGState *tg)
+      |             ^~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:612:13: error: ‘test_worker_drain_race’ defined but not used [-Werror=unused-function]
+  612 | static void test_worker_drain_race(lua_State *L, global_State *g, TGState *tg)
+      |             ^~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:551:13: error: ‘test_worker_drain’ defined but not used [-Werror=unused-function]
+  551 | static void test_worker_drain(lua_State *L, global_State *g, TGState *tg)
+      |             ^~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:493:13: error: ‘test_grey_deque_steal_race’ defined but not used [-Werror=unused-function]
+  493 | static void test_grey_deque_steal_race(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:330:13: error: ‘test_grey_deque_growth’ defined but not used [-Werror=unused-function]
+  330 | static void test_grey_deque_growth(lua_State *L, global_State *g, TGState *tg)
+      |             ^~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:300:13: error: ‘test_huge_false_type_discharge’ defined but not used [-Werror=unused-function]
+  300 | static void test_huge_false_type_discharge(lua_State *L, global_State *g,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:277:13: error: ‘test_cdata_exact_coverage_admission’ defined but not used [-Werror=unused-function]
+  277 | static void test_cdata_exact_coverage_admission(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:249:13: error: ‘test_embedded_empty_string_mark’ defined but not used [-Werror=unused-function]
+  249 | static void test_embedded_empty_string_mark(global_State *g)
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:220:13: error: ‘test_false_candidate_mark_admission’ defined but not used [-Werror=unused-function]
+  220 | static void test_false_candidate_mark_admission(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:182:13: error: ‘test_retired_table_root_cycle_retries’ defined but not used [-Werror=unused-function]
+  182 | static void test_retired_table_root_cycle_retries(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:142:13: error: ‘test_retired_table_owner_nonsemantic’ defined but not used [-Werror=unused-function]
+  142 | static void test_retired_table_owner_nonsemantic(lua_State *L,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c:105:13: error: ‘test_strong_table’ defined but not used [-Werror=unused-function]
+  105 | static void test_strong_table(lua_State *L, global_State *g, TGState *tg)
+      |             ^~~~~~~~~~~~~~~~~
+cc1: all warnings being treated as errors

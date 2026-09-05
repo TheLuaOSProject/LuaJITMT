@@ -1,0 +1,9 @@
+{
+  "verified_baseline_inputs": 225,
+  "promoted_inputs": {
+    "src/lj_gc2.c": "ec466ce270ce2794f53a9b48fe75d1c6e5e4dd90184f6f614ec03b05fab41d27",
+    "tests/t-gc2-traverse.c": "62f08653d0cfbc724b9071d5c326c7b298c519d7e44afd225b9f61eb53604be5",
+    "tests/suites/m3_gc.lua": "df29f851454b26d48c14f73805bbed52b308da8b3a86ff5925dc4b0ebcc29d7a"
+  },
+  "production_fairness_patch_included": false
+}

@@ -1,0 +1,15 @@
+{
+  "source_comparisons": 1125,
+  "isolated_positive_processes": 10,
+  "canonical_positive_processes": 1,
+  "baseline_held_claim_negative": "baseline-controls/results.json: held-claim old helper fails exact worker-busy/refusal assertion",
+  "preexisting_full_traverse_failure": "Unchanged f9ec and corrected-helper full fixtures all assert at original test_stack_admission_tristate:7151, lj_tg_reclaim_dead(g)==1. Not attributed to this helper correction.",
+  "original_fixture_failure": "original-traverse/result.json",
+  "selected_fixture_compile_adjustment": "Existing weak-only selection leaves unused nonweak static helpers; fixture compilation adds -Wno-unused-function. Earlier Werror failure logs retained. Runtime build flags and other warnings unchanged.",
+  "fair_scheduler_integrated": false,
+  "shared_binaries": {
+    "luajit": "398431ae21fdc75474826ddb6747a5a826aaed509229b6e584978d1c95d254c1",
+    "libluajit.a": "e8557a5b53161b4c95f7f5aba65cbe19a190ffefab516b7f6b3d552295a64e79",
+    "libluajit.so": "e68dc7e0a0e3368dd697c8d52823984a64525243f1c16d09c83e4c05e4297ef7"
+  }
+}

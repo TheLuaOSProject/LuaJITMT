@@ -1,0 +1,8 @@
+{
+  "runtime_pass": 0,
+  "runtime_fail": 0,
+  "compilation_fail": 1,
+  "failures": [
+    "weak-only-compile"
+  ]
+}

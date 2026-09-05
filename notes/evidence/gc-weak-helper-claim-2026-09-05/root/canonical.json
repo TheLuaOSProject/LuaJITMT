@@ -1,0 +1,38 @@
+[
+  {
+    "name": "m3_gc2_weak_helper_claim",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/luajit",
+      "/workspaces/lj-lockless/tools/test.lua",
+      "m3_gc2_weak_helper_claim"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "expected_runtime_processes": 1,
+    "environment": {
+      "LJ_TEST_ROOT": "/workspaces/lj-lockless",
+      "JOBS": "4",
+      "MAKE_JOBS": "4",
+      "TMPDIR": "/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/canonical-tmp",
+      "LUA_PATH": "/workspaces/lj-lockless/src/?.lua;;"
+    },
+    "runner_sha256": "914c42cc9565b3b61117de954446da8ca8ffbcab091d338f4cfa036f1443be27",
+    "fixtures": {
+      "t-gc2-traverse.c": "62f08653d0cfbc724b9071d5c326c7b298c519d7e44afd225b9f61eb53604be5"
+    },
+    "suites": {
+      "m3_gc.lua": "df29f851454b26d48c14f73805bbed52b308da8b3a86ff5925dc4b0ebcc29d7a"
+    },
+    "exit": 0,
+    "seconds": 27.944338601999334,
+    "runtime_binaries": {
+      "luajit": "398431ae21fdc75474826ddb6747a5a826aaed509229b6e584978d1c95d254c1",
+      "libluajit.a": "e8557a5b53161b4c95f7f5aba65cbe19a190ffefab516b7f6b3d552295a64e79"
+    },
+    "temporary_files": {
+      "canonical-tmp/lj-t-gc2-weak-helper-claim": "c357216ba53c1db8f85aeaf7b5e1e14ab55f20545da0f64803c435ef2fb598ad"
+    }
+  }
+]

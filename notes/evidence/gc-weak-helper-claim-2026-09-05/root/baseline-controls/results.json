@@ -1,0 +1,118 @@
+[
+  {
+    "stage": "compile",
+    "name": "original",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_APICHECK",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/baseline-controls/original.d",
+      "-I/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src",
+      "-I/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests",
+      "/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/base/tests/t-gc2-traverse.c",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/baseline-controls/original"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "stage": "runtime",
+    "name": "original",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/baseline-controls/original"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/tests/lib/?.lua;;"
+    },
+    "seconds": 0.10581269799877191,
+    "exit": -6,
+    "stdout": "",
+    "stderr": "original: /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/base/tests/t-gc2-traverse.c:7151: test_stack_admission_tristate: Assertion `lj_tg_reclaim_dead(g) == 1u' failed.\n"
+  },
+  {
+    "stage": "compile",
+    "name": "held-claim",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_APICHECK",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/baseline-controls/held-claim.d",
+      "-I/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src",
+      "-I/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests",
+      "/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/candidate/tests/t-gc2-traverse.c",
+      "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/baseline-controls/held-claim"
+    ],
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "stage": "runtime",
+    "name": "held-claim",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/baseline-controls/held-claim"
+    ],
+    "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/tests/lib/?.lua;;"
+    },
+    "seconds": 0.090041878996999,
+    "exit": -6,
+    "stdout": "",
+    "stderr": "held-claim: /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/candidate/tests/t-gc2-traverse.c:2896: test_weak_overflow_retry_stops_bridge: Assertion `gc2_worker_busy_retries_acq(g) == busy0 + 1u' failed.\n"
+  }
+]

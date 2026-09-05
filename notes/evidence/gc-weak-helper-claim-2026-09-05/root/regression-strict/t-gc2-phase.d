@@ -1,0 +1,28 @@
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/regression-strict/t-gc2-phase: \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-phase.c \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/lua.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/luaconf.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/lauxlib.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/lua.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/lualib.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/lib/test_sleep.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/lj_obj.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/lj_def.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/lj_arch.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/lj_atomic.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/lj_gc2token.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/lj_tgregistry.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/lj_tgslot.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/lj_atomic.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/lj_arena.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/lj_gc.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/lj_obj.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/lj_gc2.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/lj_arena.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/lj_thr.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/lj_tg.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/lj_bc.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/lj_ctype.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/lj_gc.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/lj_gc2.h \
+ /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/lib/thread_fixture_helpers.h

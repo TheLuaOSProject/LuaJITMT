@@ -1,0 +1,69 @@
+--- a/tests/t-gc2-traverse.c
++++ b/tests/t-gc2-traverse.c
+@@ -2833,6 +2833,10 @@
+   GCtab *overflow = NULL, *overflow_key = NULL, *overflow_val = NULL;
+   GCtab *bridge = NULL, *bridge_key = NULL, *bridge_val = NULL;
+   GCRef weak_head;
++  GCstr *filler;
++  WorkerDrainCtx ctx = {0};
++  pthread_t worker;
++  uint64_t busy0;
+   MSize cap, i, n;
+ 
+   lua_settop(L, 0);
+@@ -2840,6 +2844,8 @@
+   assert(cap > 0);
+   n = cap + 1u;
+   make_weak_table_batch(L, n);
++  lua_pushliteral(L, "weak overflow bridge claim source");
++  filler = strV(L->top - 1);
+   lj_gc2_mark_begin(g);
+   assert(gc2_weak_capacity_acq(g) == cap);
+   mark_weak_table_batch(L, g, n);
+@@ -2870,14 +2876,45 @@
+   weak_bridge_link(&weak_head, bridge, LJ_GC_WEAKVAL);
+   enter_weak_clear_fixture(g, tg);
+ 
++  /* Keep an actual worker inside its published-SSB consumer. The test
++  ** bridge must refuse that claim without consuming the value retry hook,
++  ** inspecting weak values, or releasing the other actor's ownership. */
++  assert(lj_gc2_test_ssb_empty(g));
++  assert(lj_gc2_test_ssb_push(g, obj2gco(filler)) == 1);
++  assert(lj_gc2_flush_ssb(g, tg) == 1);
++  lj_gc2_test_recovery_pause(LJ_GC2_RECOVERY_TEST_SSB_COMMITTED);
++  ctx.g = g;
++  ctx.limit = 1;
++  assert(pthread_create(&worker, NULL, grey_worker_drain_thread, &ctx) == 0);
++  while (lj_gc2_test_recovery_paused() != LJ_GC2_RECOVERY_TEST_SSB_COMMITTED)
++    la_cpu_pause();
++  assert(gc2_worker_active_acq(g) == 1);
++  assert(gc2_ssb_consumer_active_acq(g) == 1);
++  busy0 = gc2_worker_busy_retries_acq(g);
+   lj_gc2_test_stack_admission_retry_once(obj2gco(overflow_val));
+   assert(!lj_gc2_test_weak_overflow_clear_bridge(g, gcref(weak_head)));
+-  assert(lj_gc2_test_stack_admission_retry_hits() == 1u);
++  assert(gc2_worker_busy_retries_acq(g) == busy0 + 1u);
++  assert(lj_gc2_test_stack_admission_retry_hits() == 0);
+   assert(gc2_weak_clear_cursor_acq(g) == 0);
+   assert(!weak_entry_is_nil(L, overflow, overflow_key));
+   assert(!weak_entry_is_nil(L, bridge, bridge_key));
++  assert(gc2_worker_active_acq(g) == 1);
++  assert(gc2_ssb_consumer_active_acq(g) == 1);
++  lj_gc2_test_recovery_release();
++  assert(pthread_join(worker, NULL) == 0);
++  assert(ctx.drained == 1);
++  assert(gc2_worker_active_acq(g) == 0);
++  assert(gc2_ssb_consumer_active_acq(g) == 0);
++
++  assert(!lj_gc2_test_weak_overflow_clear_bridge(g, gcref(weak_head)));
++  assert(lj_gc2_test_stack_admission_retry_hits() == 1u);
++  assert(gc2_worker_active_acq(g) == 0);
++  assert(gc2_weak_clear_cursor_acq(g) == 0);
++  assert(!weak_entry_is_nil(L, overflow, overflow_key));
++  assert(!weak_entry_is_nil(L, bridge, bridge_key));
+ 
+   assert(lj_gc2_test_weak_overflow_clear_bridge(g, gcref(weak_head)));
++  assert(gc2_worker_active_acq(g) == 0);
+   assert(weak_entry_is_nil(L, overflow, overflow_key));
+   assert(weak_entry_is_nil(L, bridge, bridge_key));
+   setgcrefnull(weak_head);

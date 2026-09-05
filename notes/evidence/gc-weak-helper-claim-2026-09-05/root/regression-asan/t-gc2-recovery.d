@@ -1,0 +1,22 @@
+/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/regression-asan/t-gc2-recovery: \
+  /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/tests/t-gc2-recovery.c \
+  /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/src/lua.h \
+  /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/src/luaconf.h \
+  /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/src/lauxlib.h \
+  /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/src/lualib.h \
+  /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/src/lj_obj.h \
+  /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/src/lj_def.h \
+  /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/src/lj_arch.h \
+  /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/src/lj_atomic.h \
+  /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/src/lj_gc2token.h \
+  /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/src/lj_tgregistry.h \
+  /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/src/lj_tgslot.h \
+  /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/src/lj_arena.h \
+  /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/src/lj_gc.h \
+  /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/src/lj_gc2.h \
+  /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/src/lj_state.h \
+  /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/src/lj_tab.h \
+  /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/src/lj_tg.h \
+  /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/src/lj_bc.h \
+  /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/src/lj_ctype.h \
+  /tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/asan/src/lj_udata.h

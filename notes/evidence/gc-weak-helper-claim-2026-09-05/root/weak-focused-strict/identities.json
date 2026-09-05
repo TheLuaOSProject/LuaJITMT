@@ -1,0 +1,14 @@
+{
+  "/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/luajit": {
+    "sha256": "0b9b4e27fc584f64f097685669a3d79446aa388026011fddf0ac3df1f560e2f4",
+    "bytes": 14171712
+  },
+  "/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/src/libluajit.a": {
+    "sha256": "8c69118cd86129a3ab32efb6104f8ddd8fca9cbdec6670458d3b35881b9cb41b",
+    "bytes": 31176494
+  },
+  "/tmp/lj-gc-weak-helper-claim-20260905-e37ouogg/strict/tests/t-gc2-traverse.c": {
+    "sha256": "62f08653d0cfbc724b9071d5c326c7b298c519d7e44afd225b9f61eb53604be5",
+    "bytes": 340063
+  }
+}
