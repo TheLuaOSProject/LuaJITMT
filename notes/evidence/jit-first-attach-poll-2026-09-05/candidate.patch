@@ -1,0 +1,15 @@
+--- a/src/lj_asm_x86.h
++++ b/src/lj_asm_x86.h
+@@ -4218,6 +4218,12 @@
+ #else
+     emit_gmroi(as, XG_ARITHi(XOg_CMP), RID_DISPATCH, DISPATCH_TG(poll), 0);
+ #endif
++  } else {
++    /* First external attachment publishes a TG poll before MT admission.
++    ** The generic trace-flush handshake does not own the GC phase gate, so
++    ** even a pre-MT trace must observe this request at its backedge. */
++    asm_guardcc(as, CC_NE);
++    emit_gmroi(as, XG_ARITHi(XOg_CMP), RID_DISPATCH, DISPATCH_TG(poll), 0);
+   }
+   /* A SWEEP owner closes this gate before sampling active jit_base/vmstate.
+   ** Loop traces exit asynchronously at their ordinary snapshot; a peer parked

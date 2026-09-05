@@ -1,0 +1,22 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+    "/workspaces/lj-lockless/tools/test.lua",
+    "m6_jit_first_attach_poll",
+    "m6_jit_token",
+    "m6_jit_barrier_xpoll",
+    "m6_jit_xbar_xpoll",
+    "m6_jit_mt_activation_flush",
+    "m6_jit_gcworkers_activation_flush"
+  ],
+  "cwd": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/canonical",
+  "environment": {
+    "LJ_TEST_ROOT": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/canonical",
+    "LJ_TEST_JOBS": "4"
+  },
+  "exit": 1,
+  "seconds": 117.49762107300194
+}

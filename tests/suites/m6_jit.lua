@@ -15,6 +15,7 @@ local shell_quote = utils.shell_quote
 local m6_cases = {
   "m6_dispatch_redispatch",
   "m6_jit_token",
+  "m6_jit_first_attach_poll",
   "m6_jit_stop_admission",
   "m6_jit_root_abort_retire",
   "m6_jit_event_session",
@@ -773,6 +774,19 @@ return function(add)
         cflags = gc2_test_cflags
       })
       print("M6 dispatch redispatch behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_first_attach_poll",
+    description = "first external attachment interrupts pre-MT native backedges",
+    run = function(t)
+      build_default(t)
+      local out = t:tmp("lj_t-jit-first-attach")
+      build_and_run_c(t, out, "t-jit-first-attach.c",
+                      { build = false, timeout = "15s" })
+      t:run({ out, "noloop" }, { timeout = "15s" })
+      print("M6 first-attachment native polling passed")
     end
   })
 

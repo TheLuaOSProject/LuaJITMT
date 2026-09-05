@@ -1,0 +1,25 @@
+{
+  "command": [
+    "cc",
+    "-std=gnu11",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-mcx16",
+    "-I/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src",
+    "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe.c",
+    "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/libluajit.a",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-o",
+    "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-fix"
+  ],
+  "exit": 0,
+  "stdout": "",
+  "stderr": "",
+  "seconds": 0.10778582999773789,
+  "source_sha256": "dce4a012a424fa8dedd6002f7fc8680de367f8ecc8077f5205b48ee310d2a9ee"
+}

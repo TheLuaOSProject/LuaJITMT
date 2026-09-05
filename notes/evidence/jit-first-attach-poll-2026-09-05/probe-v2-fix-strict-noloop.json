@@ -1,0 +1,14 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-fix-strict",
+    "noloop"
+  ],
+  "exit": 0,
+  "seconds": 0.004736664999654749,
+  "probe_sha256": "d44afe586e1549c6f808e6044222c896e0531109461c9af84f9807430774c20a",
+  "archive_sha256": "c64dcf1065485070701c11a2f124fa75eeb7191420a92718ec1c71d0a38c326e",
+  "expected_exit": 0
+}

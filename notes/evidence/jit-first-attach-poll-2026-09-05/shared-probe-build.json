@@ -1,0 +1,23 @@
+{
+  "command": [
+    "cc",
+    "-std=gnu11",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-mcx16",
+    "-I/workspaces/lj-lockless/src",
+    "/workspaces/lj-lockless/tests/t-jit-first-attach.c",
+    "/workspaces/lj-lockless/src/libluajit.a",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-o",
+    "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/shared-first-attach"
+  ],
+  "exit": 0,
+  "stdout": "",
+  "stderr": ""
+}

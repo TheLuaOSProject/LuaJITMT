@@ -81,7 +81,7 @@ are verified reasons the full goal is still open:
 | Descriptor installation | Separate capacity-shadow store can corrupt a winning descriptor before the losing ownership CAS | Publish control and capacity in one atomic pair; deterministic competing-generation test |
 | Automatic GC | Allocation-driven MARK/root/sweep boundaries still execute synchronous handshakes | Persistent asynchronous phase requests and helper-owned completion |
 | Native acknowledgement | Real paused-leader probes hold native return before remote root scan, after action claim, and after all target actions | Distinguish request claim, target action completion, and global completion; replace mutable-root borrowing before removing its hold |
-| First MT attachment | A mode-0 native loop ignores the TG poll while the generic flush leaves the phase gate open; real attachment waits for natural exit | Make pending attachment observable at a native backedge while preserving phase-gate ownership and entry/retirement safety |
+| First MT attachment | Mode-0 traces omitted the TG request poll and real attachment waited for natural exit | Every XPOLL now observes the TG request; the larger attachment/flush ownership dependencies still require asynchronous completion |
 | Worker scheduling | MARK-close ownership loss can be reported as progress and cause repeated drain-loop execution | Return/defer without false progress or peer sleep; preserve durable retry |
 | GC work per mutation | Public SWEEP barriers can repeatedly queue an entire growing table; traversal charges a whole vector as one work unit | Prove redundant barrier elision, bound traversal by slots/bytes, and measure full-suite phase/history amplification |
 | Table scan authority exhaustion | A long-lived table's 32-bit dirty counter saturated into a permanent universe-wide reclamation veto | Persistent wide promotion now preserves collection through that rollover; retain full-namespace containment and current cycle-namespace limits |
@@ -454,7 +454,12 @@ replacement. Then remove global trace exclusion from marking using the exact
 native/trace frame evidence, and distribute marking work among real workers.
 
 The real four-position consumed-ack probe and finite mode-0 attachment probe
-are recorded in `notes/native-progress-boundaries-2026-09-05.md`. A current
+are recorded in `notes/native-progress-boundaries-2026-09-05.md`. The missing
+mode-0 TG poll is repaired in `notes/jit-first-attach-poll-2026-09-05.md`:
+normal and assertion tests now require actual early native exit for both
+optimized and optimizer-disabled loops. Focused paired costs are unchanged
+within these samples. The baseline active-worker `setmetatable` tracing gate
+still reports NYI; it is retained as a separate recorder coverage gap. A current
 `hs_epoch_ack` is an execution claim, not completion: the real SSB action can
 still be paused after it. First prove any early return for the precise
 `SCAN_OWNER_ROOTS|FLUSH_SSB` class, including all later leader accesses,

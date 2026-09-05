@@ -1,0 +1,746 @@
+{
+  "base_commit": "b4e26564542cb8bfa997a11c6a90e5e0017a2f79",
+  "candidate_patch_sha256": "bc142e4172537dcc3bd62ea6d18417a402af367c3038fe271986dfa0abbbed7c",
+  "integration_patch_sha256": "9b2deba0cae516164eb7af162ecbd66a422bbf8ff89e798d2f5f65d32ec28b2d",
+  "source_and_object_comparison_sha256": "f6bbd5881b2b74648d5f7a90ef148db716b56d353d4b149d60ce743d9ee4a749",
+  "review_hashes_verified": true,
+  "scope": "Linux first-attachment poll responsiveness and bounded cost; known baseline metatable-recording failure retained",
+  "artifacts": [
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-lj_asm_x86.h",
+      "sha256": "e5c4bd5411014c84bfc1704f60b24e8efe41bde66ea240908a2af4caaf527742",
+      "bytes": 164630,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "cost",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench-diagnostic-results.json",
+      "sha256": "d473f8b3c5472d667cd2698fec931844b6f2c315dbc5b39ca068f6802b20d503",
+      "bytes": 2638,
+      "storage": "archived_text",
+      "archived_path": "bench/jit-first-attach-poll-2026-09-05/bench-diagnostic-results.json"
+    },
+    {
+      "group": "cost",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench-diagnostic.lua",
+      "sha256": "e42174460036d919bf28565ce88f9faef77ce9c8aa0dd167842d084647145a65",
+      "bytes": 2117,
+      "storage": "archived_text",
+      "archived_path": "bench/jit-first-attach-poll-2026-09-05/bench-diagnostic.lua"
+    },
+    {
+      "group": "cost",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "sha256": "2c0bddf908f20b822ee227866734ac7bbe94da0b856f43038fb0f45839d60255",
+      "bytes": 1473,
+      "storage": "archived_text",
+      "archived_path": "bench/jit-first-attach-poll-2026-09-05/bench.lua"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/build-base-normal.json",
+      "sha256": "e5023ab1113dc18d31c9f0bcddda6dd384bc33554ba1cacf231af00d95205cde",
+      "bytes": 377,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/build-base-normal.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/build-base-normal.stderr",
+      "sha256": "9c69688084bc0523d94dd95b15161dfc09b24669e5ca3182225eaa986f9b4e3f",
+      "bytes": 135,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/build-base-normal.stderr"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/build-base-normal.stdout",
+      "sha256": "a8252072841812dceb8eb71f3dc10b7d366c00a1200e2573956ad7ad38e81a54",
+      "bytes": 4289,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/build-base-normal.stdout"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/build-normal.json",
+      "sha256": "03bedec89d2c77fe0fa8da5c6e585cadbf5226421340c070f4f1be56864af78a",
+      "bytes": 375,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/build-normal.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/build-normal.stderr",
+      "sha256": "9c69688084bc0523d94dd95b15161dfc09b24669e5ca3182225eaa986f9b4e3f",
+      "bytes": 135,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/build-normal.stderr"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/build-normal.stdout",
+      "sha256": "df920a2e07c4f6f49f357e515193510290b844b4c4af6aeb0fb9ee56dda6e48b",
+      "bytes": 4287,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/build-normal.stdout"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/build-strict.json",
+      "sha256": "c91b389c715150277db2808b35cf0ca411fde8059211497a854dbe082273e097",
+      "bytes": 587,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/build-strict.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/build-strict.stderr",
+      "sha256": "9c69688084bc0523d94dd95b15161dfc09b24669e5ca3182225eaa986f9b4e3f",
+      "bytes": 135,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/build-strict.stderr"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/build-strict.stdout",
+      "sha256": "ae010bf26c9d743bdb0102325135a6d9db9a0fef35ffdcbd063865a40dbabfc3",
+      "bytes": 2315,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/build-strict.stdout"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/candidate.patch",
+      "sha256": "bc142e4172537dcc3bd62ea6d18417a402af367c3038fe271986dfa0abbbed7c",
+      "bytes": 668,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/candidate.patch"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/canonical-remainder.json",
+      "sha256": "2f7e983f5dcda520cd898baa4ae86483af4f75c78db090dffdfca77bb9a0d129",
+      "bytes": 507,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/canonical-remainder.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/canonical-remainder.stderr",
+      "sha256": "b619f6d570181af8f6e5f49bb9b7753a8e08817dc45d037631c48c81bc5253d7",
+      "bytes": 7163,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/canonical-remainder.stderr"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/canonical-remainder.stdout",
+      "sha256": "24608216e6821bf0014816e00be9dfdc9f54777552cd69b31b6bd79a2c588e3f",
+      "bytes": 795,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/canonical-remainder.stdout"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/canonical.json",
+      "sha256": "672a59bd99d1a74fc6290b057b9d6662e5a09a69fb72d39b0d8559d13768d4c1",
+      "bytes": 586,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/canonical.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/canonical.stderr",
+      "sha256": "e3077f68af9762092440bd4a0c09b488288645c39a16fdb1e403508227672deb",
+      "bytes": 6491,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/canonical.stderr"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/canonical.stdout",
+      "sha256": "cd5f9a08583e9be63e1bd9c8965600edd5866c0c88ca7afafd5fc904c5e61b57",
+      "bytes": 15304,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/canonical.stdout"
+    },
+    {
+      "group": "cost",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/diagnostic-base-normal-ffi_struct.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "archived_text",
+      "archived_path": "bench/jit-first-attach-poll-2026-09-05/diagnostic-base-normal-ffi_struct.stderr"
+    },
+    {
+      "group": "cost",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/diagnostic-base-normal-ffi_struct.stdout",
+      "sha256": "6c7b3f5cc4d797d749efb3af388b9c6b960ca117fa226f70657b02181b390575",
+      "bytes": 5612,
+      "storage": "archived_text",
+      "archived_path": "bench/jit-first-attach-poll-2026-09-05/diagnostic-base-normal-ffi_struct.stdout"
+    },
+    {
+      "group": "cost",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/diagnostic-base-normal-numeric.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "archived_text",
+      "archived_path": "bench/jit-first-attach-poll-2026-09-05/diagnostic-base-normal-numeric.stderr"
+    },
+    {
+      "group": "cost",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/diagnostic-base-normal-numeric.stdout",
+      "sha256": "6a13bd5dce3754cad5126a2ba1e11fe0a5654284d77a2296ce9a971aeb4f9a50",
+      "bytes": 1701,
+      "storage": "archived_text",
+      "archived_path": "bench/jit-first-attach-poll-2026-09-05/diagnostic-base-normal-numeric.stdout"
+    },
+    {
+      "group": "cost",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/diagnostic-base-normal-table_read.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "archived_text",
+      "archived_path": "bench/jit-first-attach-poll-2026-09-05/diagnostic-base-normal-table_read.stderr"
+    },
+    {
+      "group": "cost",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/diagnostic-base-normal-table_read.stdout",
+      "sha256": "0c44f54dad5c5e68f4081dfc0330309fa2ff4df873aaac14154963ebfd9eade4",
+      "bytes": 3117,
+      "storage": "archived_text",
+      "archived_path": "bench/jit-first-attach-poll-2026-09-05/diagnostic-base-normal-table_read.stdout"
+    },
+    {
+      "group": "cost",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/diagnostic-fix-normal-ffi_struct.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "archived_text",
+      "archived_path": "bench/jit-first-attach-poll-2026-09-05/diagnostic-fix-normal-ffi_struct.stderr"
+    },
+    {
+      "group": "cost",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/diagnostic-fix-normal-ffi_struct.stdout",
+      "sha256": "037f8b9d0ec29e639e65409d31d81458ed5e283733b999f08ad16044890e0c73",
+      "bytes": 5724,
+      "storage": "archived_text",
+      "archived_path": "bench/jit-first-attach-poll-2026-09-05/diagnostic-fix-normal-ffi_struct.stdout"
+    },
+    {
+      "group": "cost",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/diagnostic-fix-normal-numeric.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "archived_text",
+      "archived_path": "bench/jit-first-attach-poll-2026-09-05/diagnostic-fix-normal-numeric.stderr"
+    },
+    {
+      "group": "cost",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/diagnostic-fix-normal-numeric.stdout",
+      "sha256": "9b83cacc6123e5bd273949036065622e8a50270929019072bdbe89f8f83af540",
+      "bytes": 1813,
+      "storage": "archived_text",
+      "archived_path": "bench/jit-first-attach-poll-2026-09-05/diagnostic-fix-normal-numeric.stdout"
+    },
+    {
+      "group": "cost",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/diagnostic-fix-normal-table_read.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "archived_text",
+      "archived_path": "bench/jit-first-attach-poll-2026-09-05/diagnostic-fix-normal-table_read.stderr"
+    },
+    {
+      "group": "cost",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/diagnostic-fix-normal-table_read.stdout",
+      "sha256": "670cbe2833eea2d298f73f874b8d1fa06b02ee924076fddf6d0d3fc601c7ccb8",
+      "bytes": 3229,
+      "storage": "archived_text",
+      "archived_path": "bench/jit-first-attach-poll-2026-09-05/diagnostic-fix-normal-table_read.stdout"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/integration-files.json",
+      "sha256": "281a49c54620f3826a91b3f4a1544975f32261db3dd0e63ee1abae7db1357c0d",
+      "bytes": 511,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/integration-files.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/lua-validation.json",
+      "sha256": "de8487f1307f3352469f569240a5c8db272aa4fa09ba1d8ba711d8e71f1ca91d",
+      "bytes": 7729,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/lua-validation.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-base",
+      "sha256": "3c190b7accf0e57bbad4c7874a968ba0eed46c9bcc5d548031c7ede7f1576ae3",
+      "bytes": 12832664,
+      "storage": "local_binary_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-base-build.json",
+      "sha256": "9567f2c95ce0a55b7c38cd3a6993f0cf7eb44792b20672f0e832bcec71f2ab08",
+      "bytes": 612,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-base-build.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-base.json",
+      "sha256": "495a2e290e6986a3918dc16c9f60f27e83390cabc8d451d2a7533814ce4a3bf7",
+      "bytes": 338,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-base.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-base.stderr",
+      "sha256": "3a503a1f8b44a02f43b5b154de20f000cfa900ec564a8bf82da06aca1602149b",
+      "bytes": 50,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-base.stderr"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-base.stdout",
+      "sha256": "3187593d0cb56df778cecf8ccfe90955a72935be71d70deb33e41804a0555962",
+      "bytes": 183,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-base.stdout"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-fix",
+      "sha256": "64cc237f2c7732e4e417c14b360a5f8a5f0b2e8a12829a984449e419aa7c1f93",
+      "bytes": 1727456,
+      "storage": "local_binary_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-fix-build.json",
+      "sha256": "41fb1d52c69426ea69a65cf75c20d00797ffcd008bed163f2b7c49bee0efb170",
+      "bytes": 597,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-fix-build.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-fix.json",
+      "sha256": "bf2fb98b46afd582961633ac9afc8cb5e9bdba619430fccc8161d157ce2f8614",
+      "bytes": 339,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-fix.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-fix.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-fix.stderr"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-fix.stdout",
+      "sha256": "e7a566a1f4847dcab74c7450e0e25c2d6a64afb75f1c2cea1e6b66404b71e7e0",
+      "bytes": 220,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-fix.stdout"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-base-normal",
+      "sha256": "e29493d6f11911892a77f8111ff7d7b529e3bebd3aea82bc064c8779b97e5432",
+      "bytes": 1728360,
+      "storage": "local_binary_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-base-normal-build.json",
+      "sha256": "afecb909433503d73696dcf4cccf3f1b48931aedacbeb7689f105d4b98150e1d",
+      "bytes": 613,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-v2-base-normal-build.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-base-normal-loop.json",
+      "sha256": "2bb5c17ffc773ba0e3b69333690a76f423bf085a53875d7bf7ba6306b1f5eb9b",
+      "bytes": 369,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-v2-base-normal-loop.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-base-normal-loop.stderr",
+      "sha256": "3a503a1f8b44a02f43b5b154de20f000cfa900ec564a8bf82da06aca1602149b",
+      "bytes": 50,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-v2-base-normal-loop.stderr"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-base-normal-loop.stdout",
+      "sha256": "aaf8932cb93888ff3871e4303b2a63504362b2da1212675d195c7003c4ff858c",
+      "bytes": 191,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-v2-base-normal-loop.stdout"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-base-normal-noloop.json",
+      "sha256": "dc21c56cf5b8a7e81a9e45f4cdbecb926d10d33a22aca7aee39765a3079db301",
+      "bytes": 384,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-v2-base-normal-noloop.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-base-normal-noloop.stderr",
+      "sha256": "3a503a1f8b44a02f43b5b154de20f000cfa900ec564a8bf82da06aca1602149b",
+      "bytes": 50,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-v2-base-normal-noloop.stderr"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-base-normal-noloop.stdout",
+      "sha256": "7137030c0a69be3f4625151a628e23496195af6092250b40a6fe60188a75e6a1",
+      "bytes": 191,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-v2-base-normal-noloop.stdout"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-fix-normal",
+      "sha256": "4ea0ccc70975f3d3ebd7b26e69257c794bd88852e4920a086984338336520bfd",
+      "bytes": 1728352,
+      "storage": "local_binary_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-fix-normal-build.json",
+      "sha256": "fda3a3bee37e309f11195650e654d27c990dd5e1f5ac83334eead45a25b12be6",
+      "bytes": 610,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-v2-fix-normal-build.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-fix-normal-loop.json",
+      "sha256": "80a051e5a262330ffb013fc52fdd42a354011ea21ab082b40a30c90b77e1455c",
+      "bytes": 371,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-v2-fix-normal-loop.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-fix-normal-loop.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-v2-fix-normal-loop.stderr"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-fix-normal-loop.stdout",
+      "sha256": "056b622c2777994ddb11753fec28ae8f2a20c3738ae42c0bbb0687950ffdacff",
+      "bytes": 228,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-v2-fix-normal-loop.stdout"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-fix-normal-noloop.json",
+      "sha256": "653e4afe8dd65c570ee573592eea5ee0bd46ab35a765ae0210f70b9db8e3503c",
+      "bytes": 385,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-v2-fix-normal-noloop.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-fix-normal-noloop.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-v2-fix-normal-noloop.stderr"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-fix-normal-noloop.stdout",
+      "sha256": "597269225830b7a0739090ac13fde43974912454582a041c9c018c696c9d928e",
+      "bytes": 228,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-v2-fix-normal-noloop.stdout"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-fix-strict",
+      "sha256": "d44afe586e1549c6f808e6044222c896e0531109461c9af84f9807430774c20a",
+      "bytes": 14043056,
+      "storage": "local_binary_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-fix-strict-build.json",
+      "sha256": "793b3362c2b59355fa6c8467f1ba4a80c8ac80e8a3a42d188e8279218837b846",
+      "bytes": 784,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-v2-fix-strict-build.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-fix-strict-loop.json",
+      "sha256": "c399fe7df1ad7efeb9741489218e4376ecb24cbe7ecb65ef1d40e6f24bb7abf9",
+      "bytes": 371,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-v2-fix-strict-loop.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-fix-strict-loop.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-v2-fix-strict-loop.stderr"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-fix-strict-loop.stdout",
+      "sha256": "89d51290b17094711a6ac48e09921a1557708c85288411bda2970e49fd47993c",
+      "bytes": 228,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-v2-fix-strict-loop.stdout"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-fix-strict-noloop.json",
+      "sha256": "c3d7dc393ce104817d76efe365553c1565e3a67f0d6aaa12b1b82e01f72d9bd7",
+      "bytes": 385,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-v2-fix-strict-noloop.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-fix-strict-noloop.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-v2-fix-strict-noloop.stderr"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-fix-strict-noloop.stdout",
+      "sha256": "252dc048317e0fde5ec3d2d757876fd88901c3e62468edbbe3bca5c8ea3704ff",
+      "bytes": 228,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-v2-fix-strict-noloop.stdout"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-results.json",
+      "sha256": "1b047f9c13dc187156970402887fed039b3ac936cdd4c5e2ce83a35db2c8f4e2",
+      "bytes": 2436,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-v2-results.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2.c",
+      "sha256": "c3349715c209d9ed267fbadb800a91a1d75c92c3672ef26932c6c35d127cd184",
+      "bytes": 5205,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe-v2.c"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe.c",
+      "sha256": "dce4a012a424fa8dedd6002f7fc8680de367f8ecc8077f5205b48ee310d2a9ee",
+      "bytes": 4852,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/probe.c"
+    },
+    {
+      "group": "cost",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/run-cost.py",
+      "sha256": "1171f610319cc830dfa638109ad172a3eda133fe0749876a10af657cab16fd25",
+      "bytes": 2634,
+      "storage": "archived_text",
+      "archived_path": "bench/jit-first-attach-poll-2026-09-05/run-cost.py"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/shared-build.json",
+      "sha256": "19f25e49b7aa3f45f9a705ea8a1808fccc03527f7b0781871317e644625296f0",
+      "bytes": 462,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/shared-build.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/shared-build.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/shared-build.stderr"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/shared-build.stdout",
+      "sha256": "3e3f86f4314ae47800b7f884147f32c6b4f9e95fa417383dfe1a7eaabe172ee4",
+      "bytes": 4034,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/shared-build.stdout"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/shared-first-attach",
+      "sha256": "62942c1a4d09fd02fe233739f8f1c7f6224d50e7076466ee49789794f85c26d4",
+      "bytes": 1728312,
+      "storage": "local_binary_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/shared-probe-build.json",
+      "sha256": "c127c83555e2fe2d8053cc24b277ac1d445fa2b559d08d0a260e0ee40adede86",
+      "bytes": 432,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/shared-probe-build.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/shared-probe-results.json",
+      "sha256": "c3497df847877bcc3bb5749ddbda1155f2e844f51567f95ace5fa3bc9f2fd235",
+      "bytes": 950,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/shared-probe-results.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/source-and-object-comparison.json",
+      "sha256": "f6bbd5881b2b74648d5f7a90ef148db716b56d353d4b149d60ce743d9ee4a749",
+      "bytes": 115482,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/source-and-object-comparison.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/source-and-tests.patch",
+      "sha256": "9b2deba0cae516164eb7af162ecbd66a422bbf8ff89e798d2f5f65d32ec28b2d",
+      "bytes": 8819,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/source-and-tests.patch"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/source-manifest.json",
+      "sha256": "35e2014e58ae3c672efb5658260013f44e970d8a1df0454def55e26aa5aab9f5",
+      "bytes": 295,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/source-manifest.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/tracked-integration.patch",
+      "sha256": "ff7fac5bd442737645a673eae761c6763cdd11dfa90014bb09e8cb5e9ba1c435",
+      "bytes": 2893,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/tracked-integration.patch"
+    },
+    {
+      "group": "cost",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/cost/metadata.json",
+      "sha256": "5a3550a65c422a084ea16fed0030c0b6685868cebe22742d797038f05e8d46dd",
+      "bytes": 666,
+      "storage": "archived_text",
+      "archived_path": "bench/jit-first-attach-poll-2026-09-05/cost/metadata.json"
+    },
+    {
+      "group": "cost",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/cost/raw.json",
+      "sha256": "f01bb5c0b1ab69ba89848c9072bf19e8f1fb7d594f807805605786aec3aff1a1",
+      "bytes": 34160,
+      "storage": "archived_text",
+      "archived_path": "bench/jit-first-attach-poll-2026-09-05/cost/raw.json"
+    },
+    {
+      "group": "cost",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/cost/summary.json",
+      "sha256": "5fb65da1241fe5716f16207f51629bd50f19c418f9c94383ecb5a784941b7efa",
+      "bytes": 1352,
+      "storage": "archived_text",
+      "archived_path": "bench/jit-first-attach-poll-2026-09-05/cost/summary.json"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/canonical-barrier-failure/canonical.stderr",
+      "sha256": "e3077f68af9762092440bd4a0c09b488288645c39a16fdb1e403508227672deb",
+      "bytes": 6491,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/canonical-barrier-failure/canonical.stderr"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/canonical-barrier-failure/canonical.stdout",
+      "sha256": "cd5f9a08583e9be63e1bd9c8965600edd5866c0c88ca7afafd5fc904c5e61b57",
+      "bytes": 15304,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/canonical-barrier-failure/canonical.stdout"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/canonical-barrier-failure/case.lua",
+      "sha256": "c60b44141c44bbf8031399ed130823032aaa5bf737facb5717cddac7537acfa2",
+      "bytes": 392,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/canonical-barrier-failure/case.lua"
+    },
+    {
+      "group": "validation",
+      "source": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/canonical-barrier-failure/standalone.json",
+      "sha256": "616de74592508aaaaa6054a0267d3b29d6cf335165909c1a41bb1286d6513402",
+      "bytes": 2327,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/canonical-barrier-failure/standalone.json"
+    },
+    {
+      "group": "review",
+      "source": "/tmp/lj-mode0-poll-independent-20260905-2czwp0e_/manifest.json",
+      "sha256": "3a4c900370d82225119e1b4acf6ab42311a2025c540f4fbdc95a510585cb67e2",
+      "bytes": 738,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/independent/manifest.json"
+    },
+    {
+      "group": "review",
+      "source": "/tmp/lj-mode0-poll-independent-20260905-2czwp0e_/review.md",
+      "sha256": "1190eafa15e5f52ae0f215a993fe091585a561110c4d16fa1c0949e2d90576e6",
+      "bytes": 1810,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/independent/review.md"
+    },
+    {
+      "group": "review",
+      "source": "/tmp/lj-mode0-poll-independent-20260905-2czwp0e_/reviewed-candidate.patch",
+      "sha256": "bc142e4172537dcc3bd62ea6d18417a402af367c3038fe271986dfa0abbbed7c",
+      "bytes": 668,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/jit-first-attach-poll-2026-09-05/independent/reviewed-candidate.patch"
+    }
+  ]
+}

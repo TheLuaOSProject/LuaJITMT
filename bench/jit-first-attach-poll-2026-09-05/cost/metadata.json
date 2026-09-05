@@ -1,0 +1,21 @@
+{
+  "date": "2026-09-05",
+  "cpu": 30,
+  "rounds": 7,
+  "samples_per_process": 5,
+  "clock": "os.clock CPU seconds",
+  "GC": "enabled, unchanged defaults",
+  "host": {
+    "system": "Linux",
+    "node": "7f3bd9b38fd8",
+    "release": "7.2.1-ogc4.1.fc44.x86_64",
+    "version": "#1 SMP PREEMPT_DYNAMIC Tue Sep  1 22:10:56 UTC 2026",
+    "machine": "x86_64",
+    "processor": ""
+  },
+  "benchmark_sha256": "2c0bddf908f20b822ee227866734ac7bbe94da0b856f43038fb0f45839d60255",
+  "binaries": {
+    "base-normal": "692a47bfd7e06cd7e62c0746148b3550c020dc30a7c021b1a03303d10d654424",
+    "fix-normal": "4a2fcffb7a64b8e70699175b25421b6e851c43934d7d0f52aa6f5a964509d097"
+  }
+}

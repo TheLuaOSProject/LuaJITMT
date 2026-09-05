@@ -1,0 +1,80 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench-diagnostic.lua",
+      "numeric"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.008279687997855945
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench-diagnostic.lua",
+      "ffi_struct"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.010000849000789458
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench-diagnostic.lua",
+      "table_read"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.008363126002222998
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench-diagnostic.lua",
+      "numeric"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.008147628999722656
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench-diagnostic.lua",
+      "ffi_struct"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.0096651509993535
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench-diagnostic.lua",
+      "table_read"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.008597928001108812
+  }
+]

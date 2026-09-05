@@ -1,0 +1,9 @@
+Independent read-only review of the assembler-only mode-0 TG poll change.
+
+No new blocker found at the exact b4 source and patch identities in manifest.json. No test was rerun for this review.
+
+The added mode-0 pair emits runtime CMP dword TG.poll,0 followed by JNE to the existing XPOLL snapshot. asm_snap_prep runs once for the guard IR in the assembler loop; asm_guardcc uses that snapshot and retains the existing loop-inversion logic. Backwards emission leaves the phase-gate load/compare/exit before the TG poll test in runtime order. The poll memory compare does not use another register; the existing gate scratch was allocated before either guard. The mode-0 sequence is shorter than the already-supported mode-1 aligned qword poll/profile compare, so it adds no new maximum red-zone envelope.
+
+The IR remains a side-effecting guard at the same place. Optimized root backedges retain the LOOP snapshot; non-loop and side-link tails retain the terminal continuation snapshot emitted before XPOLL. The pure pre-MT cdata allowlist remains bounded to successful native iterations: an additional ordinary snapshot exit neither admits a helper nor creates a metadata side effect. Resumed interpreter execution and later native reentry still use their existing root/method guards. This review does not certify the separate activation, profile, native-ack or compiler-scratch lifetime protocols, nor prove wait-free arbitrary Lua execution.
+
+The existing loop_needs_xpoll comment says a loop poll is needed only after activation and attributes flushing to every GC-worker start. It predates this cutover and should describe the literal as selecting the wider profile-aware poll, not absence of a TG poll; the controller-only worker activation path remains phase-gated rather than universally L-based flushed.

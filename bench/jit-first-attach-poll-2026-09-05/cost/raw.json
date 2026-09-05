@@ -1,0 +1,1178 @@
+[
+  {
+    "round": 1,
+    "case": "numeric",
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "numeric"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 1.71682126000087,
+    "stdout": "numeric\t500000000\t0.341814000\t0.341831000,0.341816000,0.341817000,0.341814000,0.341820000\t6\n",
+    "stderr": "",
+    "iterations": 500000000,
+    "best_seconds": 0.341814,
+    "samples": [
+      0.341831,
+      0.341816,
+      0.341817,
+      0.341814,
+      0.34182
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 1,
+    "case": "numeric",
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "numeric"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 1.7176231900011771,
+    "stdout": "numeric\t500000000\t0.341818000\t0.341853000,0.341818000,0.341818000,0.341824000,0.341820000\t6\n",
+    "stderr": "",
+    "iterations": 500000000,
+    "best_seconds": 0.341818,
+    "samples": [
+      0.341853,
+      0.341818,
+      0.341818,
+      0.341824,
+      0.34182
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 1,
+    "case": "ffi_struct",
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "ffi_struct"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.5201387139968574,
+    "stdout": "ffi_struct\t50000000\t0.102551000\t0.102589000,0.102563000,0.102552000,0.102551000,0.102555000\t6\n",
+    "stderr": "",
+    "iterations": 50000000,
+    "best_seconds": 0.102551,
+    "samples": [
+      0.102589,
+      0.102563,
+      0.102552,
+      0.102551,
+      0.102555
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 1,
+    "case": "ffi_struct",
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "ffi_struct"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.5200671259990486,
+    "stdout": "ffi_struct\t50000000\t0.102551000\t0.102596000,0.102554000,0.102551000,0.102554000,0.102551000\t6\n",
+    "stderr": "",
+    "iterations": 50000000,
+    "best_seconds": 0.102551,
+    "samples": [
+      0.102596,
+      0.102554,
+      0.102551,
+      0.102554,
+      0.102551
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 1,
+    "case": "table_read",
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "table_read"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.6899235169985332,
+    "stdout": "table_read\t100000000\t0.136730000\t0.136758000,0.136730000,0.136731000,0.136732000,0.136730000\t6\n",
+    "stderr": "",
+    "iterations": 100000000,
+    "best_seconds": 0.13673,
+    "samples": [
+      0.136758,
+      0.13673,
+      0.136731,
+      0.136732,
+      0.13673
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 1,
+    "case": "table_read",
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "table_read"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.6897847510008432,
+    "stdout": "table_read\t100000000\t0.136728000\t0.136767000,0.136729000,0.136733000,0.136728000,0.136728000\t6\n",
+    "stderr": "",
+    "iterations": 100000000,
+    "best_seconds": 0.136728,
+    "samples": [
+      0.136767,
+      0.136729,
+      0.136733,
+      0.136728,
+      0.136728
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 2,
+    "case": "numeric",
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "numeric"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 1.7171615510014817,
+    "stdout": "numeric\t500000000\t0.341820000\t0.341854000,0.341820000,0.341820000,0.341821000,0.341821000\t6\n",
+    "stderr": "",
+    "iterations": 500000000,
+    "best_seconds": 0.34182,
+    "samples": [
+      0.341854,
+      0.34182,
+      0.34182,
+      0.341821,
+      0.341821
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 2,
+    "case": "numeric",
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "numeric"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 1.7169921079985215,
+    "stdout": "numeric\t500000000\t0.341809000\t0.341843000,0.341821000,0.341815000,0.341809000,0.341817000\t6\n",
+    "stderr": "",
+    "iterations": 500000000,
+    "best_seconds": 0.341809,
+    "samples": [
+      0.341843,
+      0.341821,
+      0.341815,
+      0.341809,
+      0.341817
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 2,
+    "case": "ffi_struct",
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "ffi_struct"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.5198467629998049,
+    "stdout": "ffi_struct\t50000000\t0.102549000\t0.102588000,0.102552000,0.102549000,0.102550000,0.102549000\t6\n",
+    "stderr": "",
+    "iterations": 50000000,
+    "best_seconds": 0.102549,
+    "samples": [
+      0.102588,
+      0.102552,
+      0.102549,
+      0.10255,
+      0.102549
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 2,
+    "case": "ffi_struct",
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "ffi_struct"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.5198925059994508,
+    "stdout": "ffi_struct\t50000000\t0.102551000\t0.102587000,0.102553000,0.102554000,0.102554000,0.102551000\t6\n",
+    "stderr": "",
+    "iterations": 50000000,
+    "best_seconds": 0.102551,
+    "samples": [
+      0.102587,
+      0.102553,
+      0.102554,
+      0.102554,
+      0.102551
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 2,
+    "case": "table_read",
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "table_read"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.6896609409996017,
+    "stdout": "table_read\t100000000\t0.136733000\t0.136763000,0.136735000,0.136733000,0.136733000,0.136734000\t6\n",
+    "stderr": "",
+    "iterations": 100000000,
+    "best_seconds": 0.136733,
+    "samples": [
+      0.136763,
+      0.136735,
+      0.136733,
+      0.136733,
+      0.136734
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 2,
+    "case": "table_read",
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "table_read"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.6897039969990146,
+    "stdout": "table_read\t100000000\t0.136728000\t0.136762000,0.136731000,0.136728000,0.136728000,0.136731000\t6\n",
+    "stderr": "",
+    "iterations": 100000000,
+    "best_seconds": 0.136728,
+    "samples": [
+      0.136762,
+      0.136731,
+      0.136728,
+      0.136728,
+      0.136731
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 3,
+    "case": "numeric",
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "numeric"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 1.7172149479993095,
+    "stdout": "numeric\t500000000\t0.341812000\t0.341845000,0.341812000,0.341816000,0.341815000,0.341821000\t6\n",
+    "stderr": "",
+    "iterations": 500000000,
+    "best_seconds": 0.341812,
+    "samples": [
+      0.341845,
+      0.341812,
+      0.341816,
+      0.341815,
+      0.341821
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 3,
+    "case": "numeric",
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "numeric"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 1.7172293500007072,
+    "stdout": "numeric\t500000000\t0.341817000\t0.341845000,0.341824000,0.341818000,0.341819000,0.341817000\t6\n",
+    "stderr": "",
+    "iterations": 500000000,
+    "best_seconds": 0.341817,
+    "samples": [
+      0.341845,
+      0.341824,
+      0.341818,
+      0.341819,
+      0.341817
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 3,
+    "case": "ffi_struct",
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "ffi_struct"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.5201438730000518,
+    "stdout": "ffi_struct\t50000000\t0.102550000\t0.102584000,0.102550000,0.102554000,0.102554000,0.102552000\t6\n",
+    "stderr": "",
+    "iterations": 50000000,
+    "best_seconds": 0.10255,
+    "samples": [
+      0.102584,
+      0.10255,
+      0.102554,
+      0.102554,
+      0.102552
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 3,
+    "case": "ffi_struct",
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "ffi_struct"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.5200644200012903,
+    "stdout": "ffi_struct\t50000000\t0.102551000\t0.102590000,0.102555000,0.102554000,0.102554000,0.102551000\t6\n",
+    "stderr": "",
+    "iterations": 50000000,
+    "best_seconds": 0.102551,
+    "samples": [
+      0.10259,
+      0.102555,
+      0.102554,
+      0.102554,
+      0.102551
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 3,
+    "case": "table_read",
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "table_read"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.6899629830004415,
+    "stdout": "table_read\t100000000\t0.136730000\t0.136759000,0.136730000,0.136732000,0.136731000,0.136732000\t6\n",
+    "stderr": "",
+    "iterations": 100000000,
+    "best_seconds": 0.13673,
+    "samples": [
+      0.136759,
+      0.13673,
+      0.136732,
+      0.136731,
+      0.136732
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 3,
+    "case": "table_read",
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "table_read"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.6899642789976497,
+    "stdout": "table_read\t100000000\t0.136729000\t0.136763000,0.136733000,0.136730000,0.136730000,0.136729000\t6\n",
+    "stderr": "",
+    "iterations": 100000000,
+    "best_seconds": 0.136729,
+    "samples": [
+      0.136763,
+      0.136733,
+      0.13673,
+      0.13673,
+      0.136729
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 4,
+    "case": "numeric",
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "numeric"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 1.717270526001812,
+    "stdout": "numeric\t500000000\t0.341818000\t0.341839000,0.341825000,0.341819000,0.341819000,0.341818000\t6\n",
+    "stderr": "",
+    "iterations": 500000000,
+    "best_seconds": 0.341818,
+    "samples": [
+      0.341839,
+      0.341825,
+      0.341819,
+      0.341819,
+      0.341818
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 4,
+    "case": "numeric",
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "numeric"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 1.7173033699982625,
+    "stdout": "numeric\t500000000\t0.341816000\t0.341842000,0.341816000,0.341826000,0.341817000,0.341821000\t6\n",
+    "stderr": "",
+    "iterations": 500000000,
+    "best_seconds": 0.341816,
+    "samples": [
+      0.341842,
+      0.341816,
+      0.341826,
+      0.341817,
+      0.341821
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 4,
+    "case": "ffi_struct",
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "ffi_struct"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.5201718730022549,
+    "stdout": "ffi_struct\t50000000\t0.102550000\t0.102590000,0.102566000,0.102551000,0.102550000,0.102554000\t6\n",
+    "stderr": "",
+    "iterations": 50000000,
+    "best_seconds": 0.10255,
+    "samples": [
+      0.10259,
+      0.102566,
+      0.102551,
+      0.10255,
+      0.102554
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 4,
+    "case": "ffi_struct",
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "ffi_struct"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.5198984039998322,
+    "stdout": "ffi_struct\t50000000\t0.102550000\t0.102589000,0.102551000,0.102550000,0.102552000,0.102552000\t6\n",
+    "stderr": "",
+    "iterations": 50000000,
+    "best_seconds": 0.10255,
+    "samples": [
+      0.102589,
+      0.102551,
+      0.10255,
+      0.102552,
+      0.102552
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 4,
+    "case": "table_read",
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "table_read"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.6899391500010097,
+    "stdout": "table_read\t100000000\t0.136729000\t0.136763000,0.136730000,0.136729000,0.136729000,0.136731000\t6\n",
+    "stderr": "",
+    "iterations": 100000000,
+    "best_seconds": 0.136729,
+    "samples": [
+      0.136763,
+      0.13673,
+      0.136729,
+      0.136729,
+      0.136731
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 4,
+    "case": "table_read",
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "table_read"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.6900313680016552,
+    "stdout": "table_read\t100000000\t0.136728000\t0.136761000,0.136730000,0.136728000,0.136749000,0.136729000\t6\n",
+    "stderr": "",
+    "iterations": 100000000,
+    "best_seconds": 0.136728,
+    "samples": [
+      0.136761,
+      0.13673,
+      0.136728,
+      0.136749,
+      0.136729
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 5,
+    "case": "numeric",
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "numeric"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 1.717542632999539,
+    "stdout": "numeric\t500000000\t0.341820000\t0.341847000,0.341821000,0.341820000,0.341828000,0.341833000\t6\n",
+    "stderr": "",
+    "iterations": 500000000,
+    "best_seconds": 0.34182,
+    "samples": [
+      0.341847,
+      0.341821,
+      0.34182,
+      0.341828,
+      0.341833
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 5,
+    "case": "numeric",
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "numeric"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 1.7177996600003098,
+    "stdout": "numeric\t500000000\t0.341822000\t0.341859000,0.341823000,0.341822000,0.341822000,0.341831000\t6\n",
+    "stderr": "",
+    "iterations": 500000000,
+    "best_seconds": 0.341822,
+    "samples": [
+      0.341859,
+      0.341823,
+      0.341822,
+      0.341822,
+      0.341831
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 5,
+    "case": "ffi_struct",
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "ffi_struct"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.5200286010003765,
+    "stdout": "ffi_struct\t50000000\t0.102553000\t0.102597000,0.102556000,0.102553000,0.102553000,0.102556000\t6\n",
+    "stderr": "",
+    "iterations": 50000000,
+    "best_seconds": 0.102553,
+    "samples": [
+      0.102597,
+      0.102556,
+      0.102553,
+      0.102553,
+      0.102556
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 5,
+    "case": "ffi_struct",
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "ffi_struct"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.5200411389996589,
+    "stdout": "ffi_struct\t50000000\t0.102551000\t0.102597000,0.102556000,0.102552000,0.102551000,0.102561000\t6\n",
+    "stderr": "",
+    "iterations": 50000000,
+    "best_seconds": 0.102551,
+    "samples": [
+      0.102597,
+      0.102556,
+      0.102552,
+      0.102551,
+      0.102561
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 5,
+    "case": "table_read",
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "table_read"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.6899189050018322,
+    "stdout": "table_read\t100000000\t0.136730000\t0.136779000,0.136737000,0.136732000,0.136730000,0.136733000\t6\n",
+    "stderr": "",
+    "iterations": 100000000,
+    "best_seconds": 0.13673,
+    "samples": [
+      0.136779,
+      0.136737,
+      0.136732,
+      0.13673,
+      0.136733
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 5,
+    "case": "table_read",
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "table_read"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.6900042669985851,
+    "stdout": "table_read\t100000000\t0.136732000\t0.136772000,0.136732000,0.136734000,0.136733000,0.136732000\t6\n",
+    "stderr": "",
+    "iterations": 100000000,
+    "best_seconds": 0.136732,
+    "samples": [
+      0.136772,
+      0.136732,
+      0.136734,
+      0.136733,
+      0.136732
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 6,
+    "case": "numeric",
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "numeric"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 1.7179599310002232,
+    "stdout": "numeric\t500000000\t0.341832000\t0.341853000,0.341832000,0.341834000,0.341832000,0.341835000\t6\n",
+    "stderr": "",
+    "iterations": 500000000,
+    "best_seconds": 0.341832,
+    "samples": [
+      0.341853,
+      0.341832,
+      0.341834,
+      0.341832,
+      0.341835
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 6,
+    "case": "numeric",
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "numeric"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 1.7182087090004643,
+    "stdout": "numeric\t500000000\t0.341820000\t0.341860000,0.341826000,0.341830000,0.341820000,0.341822000\t6\n",
+    "stderr": "",
+    "iterations": 500000000,
+    "best_seconds": 0.34182,
+    "samples": [
+      0.34186,
+      0.341826,
+      0.34183,
+      0.34182,
+      0.341822
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 6,
+    "case": "ffi_struct",
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "ffi_struct"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.5201571990000957,
+    "stdout": "ffi_struct\t50000000\t0.102552000\t0.102592000,0.102555000,0.102555000,0.102552000,0.102560000\t6\n",
+    "stderr": "",
+    "iterations": 50000000,
+    "best_seconds": 0.102552,
+    "samples": [
+      0.102592,
+      0.102555,
+      0.102555,
+      0.102552,
+      0.10256
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 6,
+    "case": "ffi_struct",
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "ffi_struct"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.5201404809995438,
+    "stdout": "ffi_struct\t50000000\t0.102550000\t0.102588000,0.102554000,0.102552000,0.102550000,0.102551000\t6\n",
+    "stderr": "",
+    "iterations": 50000000,
+    "best_seconds": 0.10255,
+    "samples": [
+      0.102588,
+      0.102554,
+      0.102552,
+      0.10255,
+      0.102551
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 6,
+    "case": "table_read",
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "table_read"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.6904490510023606,
+    "stdout": "table_read\t100000000\t0.136732000\t0.136761000,0.136739000,0.136736000,0.136732000,0.136735000\t6\n",
+    "stderr": "",
+    "iterations": 100000000,
+    "best_seconds": 0.136732,
+    "samples": [
+      0.136761,
+      0.136739,
+      0.136736,
+      0.136732,
+      0.136735
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 6,
+    "case": "table_read",
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "table_read"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.6901808030015673,
+    "stdout": "table_read\t100000000\t0.136734000\t0.136774000,0.136735000,0.136734000,0.136740000,0.136739000\t6\n",
+    "stderr": "",
+    "iterations": 100000000,
+    "best_seconds": 0.136734,
+    "samples": [
+      0.136774,
+      0.136735,
+      0.136734,
+      0.13674,
+      0.136739
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 7,
+    "case": "numeric",
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "numeric"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 1.7176511569996364,
+    "stdout": "numeric\t500000000\t0.341816000\t0.341848000,0.341823000,0.341832000,0.341816000,0.341822000\t6\n",
+    "stderr": "",
+    "iterations": 500000000,
+    "best_seconds": 0.341816,
+    "samples": [
+      0.341848,
+      0.341823,
+      0.341832,
+      0.341816,
+      0.341822
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 7,
+    "case": "numeric",
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "numeric"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 1.7180983979997109,
+    "stdout": "numeric\t500000000\t0.341819000\t0.341857000,0.341820000,0.341825000,0.341830000,0.341819000\t6\n",
+    "stderr": "",
+    "iterations": 500000000,
+    "best_seconds": 0.341819,
+    "samples": [
+      0.341857,
+      0.34182,
+      0.341825,
+      0.34183,
+      0.341819
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 7,
+    "case": "ffi_struct",
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "ffi_struct"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.5202260719997867,
+    "stdout": "ffi_struct\t50000000\t0.102552000\t0.102600000,0.102562000,0.102552000,0.102559000,0.102552000\t6\n",
+    "stderr": "",
+    "iterations": 50000000,
+    "best_seconds": 0.102552,
+    "samples": [
+      0.1026,
+      0.102562,
+      0.102552,
+      0.102559,
+      0.102552
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 7,
+    "case": "ffi_struct",
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "ffi_struct"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.520439740997972,
+    "stdout": "ffi_struct\t50000000\t0.102553000\t0.102596000,0.102556000,0.102553000,0.102562000,0.102553000\t6\n",
+    "stderr": "",
+    "iterations": 50000000,
+    "best_seconds": 0.102553,
+    "samples": [
+      0.102596,
+      0.102556,
+      0.102553,
+      0.102562,
+      0.102553
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 7,
+    "case": "table_read",
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "table_read"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.6903589169996849,
+    "stdout": "table_read\t100000000\t0.136732000\t0.136779000,0.136741000,0.136739000,0.136732000,0.136734000\t6\n",
+    "stderr": "",
+    "iterations": 100000000,
+    "best_seconds": 0.136732,
+    "samples": [
+      0.136779,
+      0.136741,
+      0.136739,
+      0.136732,
+      0.136734
+    ],
+    "native_exits": 6
+  },
+  {
+    "round": 7,
+    "case": "table_read",
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/bench.lua",
+      "table_read"
+    ],
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.6900153079986922,
+    "stdout": "table_read\t100000000\t0.136729000\t0.136772000,0.136735000,0.136740000,0.136729000,0.136741000\t6\n",
+    "stderr": "",
+    "iterations": 100000000,
+    "best_seconds": 0.136729,
+    "samples": [
+      0.136772,
+      0.136735,
+      0.13674,
+      0.136729,
+      0.136741
+    ],
+    "native_exits": 6
+  }
+]

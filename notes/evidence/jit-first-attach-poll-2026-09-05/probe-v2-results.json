@@ -1,0 +1,83 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-base-normal"
+    ],
+    "exit": 3,
+    "seconds": 2.070132641998498,
+    "probe_sha256": "e29493d6f11911892a77f8111ff7d7b529e3bebd3aea82bc064c8779b97e5432",
+    "archive_sha256": "6972e3b5f6a507208eab06dd40317d813df9fb603fe7fc7a7abb68c56bb6ba00",
+    "expected_exit": 3
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-base-normal",
+      "noloop"
+    ],
+    "exit": 3,
+    "seconds": 3.1837989989980997,
+    "probe_sha256": "e29493d6f11911892a77f8111ff7d7b529e3bebd3aea82bc064c8779b97e5432",
+    "archive_sha256": "6972e3b5f6a507208eab06dd40317d813df9fb603fe7fc7a7abb68c56bb6ba00",
+    "expected_exit": 3
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-fix-normal"
+    ],
+    "exit": 0,
+    "seconds": 0.004118951001146343,
+    "probe_sha256": "4ea0ccc70975f3d3ebd7b26e69257c794bd88852e4920a086984338336520bfd",
+    "archive_sha256": "b859198dd956e54d8a33a7a0d7e453f8e93dad3d4140f35fb8cd0bd0c03e15ae",
+    "expected_exit": 0
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-fix-normal",
+      "noloop"
+    ],
+    "exit": 0,
+    "seconds": 0.003993987000285415,
+    "probe_sha256": "4ea0ccc70975f3d3ebd7b26e69257c794bd88852e4920a086984338336520bfd",
+    "archive_sha256": "b859198dd956e54d8a33a7a0d7e453f8e93dad3d4140f35fb8cd0bd0c03e15ae",
+    "expected_exit": 0
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-fix-strict"
+    ],
+    "exit": 0,
+    "seconds": 0.004621939002390718,
+    "probe_sha256": "d44afe586e1549c6f808e6044222c896e0531109461c9af84f9807430774c20a",
+    "archive_sha256": "c64dcf1065485070701c11a2f124fa75eeb7191420a92718ec1c71d0a38c326e",
+    "expected_exit": 0
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-fix-strict",
+      "noloop"
+    ],
+    "exit": 0,
+    "seconds": 0.004736664999654749,
+    "probe_sha256": "d44afe586e1549c6f808e6044222c896e0531109461c9af84f9807430774c20a",
+    "archive_sha256": "c64dcf1065485070701c11a2f124fa75eeb7191420a92718ec1c71d0a38c326e",
+    "expected_exit": 0
+  }
+]

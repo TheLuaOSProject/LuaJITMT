@@ -1,0 +1,134 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "-joff",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/tests/stock/test",
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/tests/lib/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 1.3364157359974342,
+    "stdout": "387 passed\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "-joff",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/tests/t-jit-cdata-basemt-guards.lua"
+    ],
+    "cwd": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal",
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/tests/lib/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.009710066999105038,
+    "stdout": "cdata-base-guard\tcall\twarm-exits\t0\tafter-exits\t0\tcalls\t80\texpected\t80\ncdata-base-guard\tindex\twarm-exits\t0\tafter-exits\t0\tcalls\t160\texpected\t160\ncdata-base-guard\tnewindex\twarm-exits\t0\tafter-exits\t0\tcalls\t160\texpected\t160\ncdata-base-guard\tmissing\twarm-exits\t0\tafter-exits\t0\tcalls\t0\texpected\t0\ncdata-base-guard\tnonfunction\twarm-exits\t0\tafter-exits\t0\tcalls\t0\texpected\t0\ncdata-base-guard\tresize\twarm-exits\t0\tafter-exits\t0\tcalls\t80\texpected\t80\ncdata-base-guard\tmethodlife\twarm-exits\t0\tafter-exits\t0\tcalls\t80\texpected\t80\ncdata-base-guard\treplace\twarm-exits\t0\tafter-exits\t0\tcalls\t80\texpected\t80\ncdata base-table native guards passed\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "-jon",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/tests/stock/test",
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/tests/lib/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 1.878960003999964,
+    "stdout": "509 passed\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/tests/t-jit-cdata-basemt-guards.lua"
+    ],
+    "cwd": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal",
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/tests/lib/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.009402412000781624,
+    "stdout": "cdata-base-guard\tcall\twarm-exits\t1\tafter-exits\t80\tcalls\t80\texpected\t80\ncdata-base-guard\tindex\twarm-exits\t1\tafter-exits\t159\tcalls\t160\texpected\t160\ncdata-base-guard\tnewindex\twarm-exits\t1\tafter-exits\t80\tcalls\t160\texpected\t160\ncdata-base-guard\tmissing\twarm-exits\t1\tafter-exits\t1\tcalls\t0\texpected\t0\ncdata-base-guard\tnonfunction\twarm-exits\t1\tafter-exits\t1\tcalls\t0\texpected\t0\ncdata-base-guard\tresize\twarm-exits\t1\tafter-exits\t80\tcalls\t80\texpected\t80\ncdata-base-guard\tmethodlife\twarm-exits\t1\tafter-exits\t80\tcalls\t80\texpected\t80\ncdata-base-guard\treplace\twarm-exits\t1\tafter-exits\t1\tcalls\t80\texpected\t80\ncdata base-table native guards passed\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/src/luajit",
+      "-joff",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/tests/stock/test",
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/tests/lib/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 1.350390872998105,
+    "stdout": "387 passed\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/src/luajit",
+      "-joff",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/tests/t-jit-cdata-basemt-guards.lua"
+    ],
+    "cwd": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict",
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/tests/lib/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.010463169997819932,
+    "stdout": "cdata-base-guard\tcall\twarm-exits\t0\tafter-exits\t0\tcalls\t80\texpected\t80\ncdata-base-guard\tindex\twarm-exits\t0\tafter-exits\t0\tcalls\t160\texpected\t160\ncdata-base-guard\tnewindex\twarm-exits\t0\tafter-exits\t0\tcalls\t160\texpected\t160\ncdata-base-guard\tmissing\twarm-exits\t0\tafter-exits\t0\tcalls\t0\texpected\t0\ncdata-base-guard\tnonfunction\twarm-exits\t0\tafter-exits\t0\tcalls\t0\texpected\t0\ncdata-base-guard\tresize\twarm-exits\t0\tafter-exits\t0\tcalls\t80\texpected\t80\ncdata-base-guard\tmethodlife\twarm-exits\t0\tafter-exits\t0\tcalls\t80\texpected\t80\ncdata-base-guard\treplace\twarm-exits\t0\tafter-exits\t0\tcalls\t80\texpected\t80\ncdata base-table native guards passed\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/src/luajit",
+      "-jon",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/tests/stock/test",
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/tests/lib/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 1.8135634930004016,
+    "stdout": "509 passed\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/src/luajit",
+      "-jon",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/tests/t-jit-cdata-basemt-guards.lua"
+    ],
+    "cwd": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict",
+    "LUA_PATH": "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/tests/lib/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/src/?.lua;/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/src/?/init.lua;;",
+    "exit": 0,
+    "seconds": 0.009669339000538457,
+    "stdout": "cdata-base-guard\tcall\twarm-exits\t1\tafter-exits\t80\tcalls\t80\texpected\t80\ncdata-base-guard\tindex\twarm-exits\t1\tafter-exits\t159\tcalls\t160\texpected\t160\ncdata-base-guard\tnewindex\twarm-exits\t1\tafter-exits\t80\tcalls\t160\texpected\t160\ncdata-base-guard\tmissing\twarm-exits\t1\tafter-exits\t1\tcalls\t0\texpected\t0\ncdata-base-guard\tnonfunction\twarm-exits\t1\tafter-exits\t1\tcalls\t0\texpected\t0\ncdata-base-guard\tresize\twarm-exits\t1\tafter-exits\t80\tcalls\t80\texpected\t80\ncdata-base-guard\tmethodlife\twarm-exits\t1\tafter-exits\t80\tcalls\t80\texpected\t80\ncdata-base-guard\treplace\twarm-exits\t1\tafter-exits\t1\tcalls\t80\texpected\t80\ncdata base-table native guards passed\n",
+    "stderr": ""
+  }
+]

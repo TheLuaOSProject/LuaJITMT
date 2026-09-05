@@ -1,0 +1,2 @@
+**** WARNING Cannot determine rolling release version from git log.
+**** WARNING The 'git' command must be available during the build.

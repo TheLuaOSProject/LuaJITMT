@@ -1,0 +1,13 @@
+{
+  "base_commit": "b4e26564542cb8bfa997a11c6a90e5e0017a2f79",
+  "patch_sha256": "bc142e4172537dcc3bd62ea6d18417a402af367c3038fe271986dfa0abbbed7c",
+  "sources": {
+    "src/lj_asm_x86.h": "e5c4bd5411014c84bfc1704f60b24e8efe41bde66ea240908a2af4caaf527742",
+    "src/lj_asm.c": "a2250fff6384c19b8d917804c1472ecda33bfc6533727c7a85f3f11da752867b",
+    "src/lj_ir.h": "c1c811b87570b2ade55348b356f9b0331c7fa51af6961433d72194adedd1f0a6",
+    "src/lj_opt_loop.c": "471506229c54e4e7e9b4fd87dd7c143a29f6b11408fc4fc876e10c34d48a5d6c",
+    "src/lj_record.c": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "src/lj_tg.h": "a5cb46bde2868512743795750b5a1da71cd1a581bc037da127e60b36cb994015"
+  },
+  "tests_run_by_reviewer": []
+}

@@ -1,0 +1,13 @@
+make: Entering directory '/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/canonical/src'
+make: Nothing to be done for 'default'.
+make: Leaving directory '/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/canonical/src'
+make: Entering directory '/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/canonical/src'
+make: Nothing to be done for 'default'.
+make: Leaving directory '/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/canonical/src'
+M5 JIT table-store bridge smoke passed
+M6 JIT XBAR/XPOLL alias behavior passed
+make: Entering directory '/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/canonical/src'
+make: Nothing to be done for 'default'.
+make: Leaving directory '/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/canonical/src'
+M6 JIT MT activation flush and retired-slot reuse passed
+M6 JIT GC-worker activation flush behavior passed

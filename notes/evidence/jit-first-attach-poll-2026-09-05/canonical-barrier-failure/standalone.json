@@ -1,0 +1,47 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit",
+      "-jv",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/canonical-barrier-failure/case.lua"
+    ],
+    "variant": "base-normal",
+    "exit": 1,
+    "seconds": 0.00539965600182768,
+    "stdout": "",
+    "stderr": "[TRACE --- case.lua:10 -- NYI: bytecode ISLT  ]\n[TRACE --- case.lua:10 -- NYI: bytecode ISLT  ]\n/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src/luajit: ...fix-20260905-qn7zwzl_/canonical-barrier-failure/case.lua:12: setmetatable loop did not trace\nstack traceback:\n\t[C]: in function 'assert'\n\t...fix-20260905-qn7zwzl_/canonical-barrier-failure/case.lua:12: in main chunk\n\t[C]: at 0x55b548b5d100\n"
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit",
+      "-jv",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/canonical-barrier-failure/case.lua"
+    ],
+    "variant": "fix-normal",
+    "exit": 1,
+    "seconds": 0.005365404998883605,
+    "stdout": "",
+    "stderr": "[TRACE --- case.lua:10 -- NYI: bytecode ISLT  ]\n[TRACE --- case.lua:10 -- NYI: bytecode ISLT  ]\n/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-normal/src/luajit: ...fix-20260905-qn7zwzl_/canonical-barrier-failure/case.lua:12: setmetatable loop did not trace\nstack traceback:\n\t[C]: in function 'assert'\n\t...fix-20260905-qn7zwzl_/canonical-barrier-failure/case.lua:12: in main chunk\n\t[C]: at 0x556bd8246100\n"
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/src/luajit",
+      "-jv",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/canonical-barrier-failure/case.lua"
+    ],
+    "variant": "fix-strict",
+    "exit": 1,
+    "seconds": 0.005241685001237784,
+    "stdout": "",
+    "stderr": "[TRACE --- case.lua:10 -- NYI: bytecode ISLT  ]\n[TRACE --- case.lua:10 -- NYI: bytecode ISLT  ]\n/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/src/luajit: ...fix-20260905-qn7zwzl_/canonical-barrier-failure/case.lua:12: setmetatable loop did not trace\nstack traceback:\n\t[C]: in function 'assert'\n\t...fix-20260905-qn7zwzl_/canonical-barrier-failure/case.lua:12: in main chunk\n\t[C]: at 0x55acab710fc0\n"
+  }
+]

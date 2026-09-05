@@ -1,0 +1,3 @@
+warm native exits	1
+warm root 1: 1 XPOLL instructions, all mode 0; LOOP=1
+first attach: exit trace=1 snap=7 iteration=1000000000 limit=1000000000 result=1000000000 attach-ms=2065.764 early=0

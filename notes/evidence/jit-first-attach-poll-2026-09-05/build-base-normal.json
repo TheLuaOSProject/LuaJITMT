@@ -1,0 +1,15 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/base-normal/src",
+    "-j4"
+  ],
+  "exit": 0,
+  "seconds": 13.101607107000746,
+  "binary_sha256": "692a47bfd7e06cd7e62c0746148b3550c020dc30a7c021b1a03303d10d654424",
+  "archive_sha256": "6972e3b5f6a507208eab06dd40317d813df9fb603fe7fc7a7abb68c56bb6ba00"
+}

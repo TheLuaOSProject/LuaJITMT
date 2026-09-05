@@ -1,0 +1,19 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/src",
+    "-j4",
+    "BUILDMODE=static",
+    "CCDEBUG=-g",
+    "TARGET_STRIP=:",
+    "XCFLAGS=-DLJ_FUNC_TEST_HELPERS -DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLUA_USE_ASSERT"
+  ],
+  "exit": 0,
+  "seconds": 10.293528318001336,
+  "binary_sha256": "bf99a27aeface629c1e23d28233737618ffc227b398798a18ef5d990d86f62fa",
+  "archive_sha256": "c64dcf1065485070701c11a2f124fa75eeb7191420a92718ec1c71d0a38c326e"
+}

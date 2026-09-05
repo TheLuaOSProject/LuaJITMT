@@ -1,0 +1,77 @@
+diff --git a/src/lj_asm_x86.h b/src/lj_asm_x86.h
+index 44eec469..2e252da9 100644
+--- a/src/lj_asm_x86.h
++++ b/src/lj_asm_x86.h
+@@ -4218,6 +4218,12 @@ static void asm_xpoll(ASMState *as, IRIns *ir)
+ #else
+     emit_gmroi(as, XG_ARITHi(XOg_CMP), RID_DISPATCH, DISPATCH_TG(poll), 0);
+ #endif
++  } else {
++    /* First external attachment publishes a TG poll before MT admission.
++    ** The generic trace-flush handshake does not own the GC phase gate, so
++    ** even a pre-MT trace must observe this request at its backedge. */
++    asm_guardcc(as, CC_NE);
++    emit_gmroi(as, XG_ARITHi(XOg_CMP), RID_DISPATCH, DISPATCH_TG(poll), 0);
+   }
+   /* A SWEEP owner closes this gate before sampling active jit_base/vmstate.
+   ** Loop traces exit asynchronously at their ordinary snapshot; a peer parked
+diff --git a/tests/suites/m6_jit.lua b/tests/suites/m6_jit.lua
+index aea659dc..f388c0d1 100644
+--- a/tests/suites/m6_jit.lua
++++ b/tests/suites/m6_jit.lua
+@@ -15,6 +15,7 @@ local shell_quote = utils.shell_quote
+ local m6_cases = {
+   "m6_dispatch_redispatch",
+   "m6_jit_token",
++  "m6_jit_first_attach_poll",
+   "m6_jit_stop_admission",
+   "m6_jit_root_abort_retire",
+   "m6_jit_event_session",
+@@ -776,6 +777,19 @@ return function(add)
+     end
+   })
+ 
++  add({
++    name = "m6_jit_first_attach_poll",
++    description = "first external attachment interrupts pre-MT native backedges",
++    run = function(t)
++      build_default(t)
++      local out = t:tmp("lj_t-jit-first-attach")
++      build_and_run_c(t, out, "t-jit-first-attach.c",
++                      { build = false, timeout = "15s" })
++      t:run({ out, "noloop" }, { timeout = "15s" })
++      print("M6 first-attachment native polling passed")
++    end
++  })
++
+   add({
+     name = "m6_jit_token",
+     description = "M6 JIT recorder token and x64 XPOLL behavior",
+diff --git a/tests/t-jit-token.c b/tests/t-jit-token.c
+index f59381c1..99b60d5a 100644
+--- a/tests/t-jit-token.c
++++ b/tests/t-jit-token.c
+@@ -290,7 +290,7 @@ static uint32_t trace_ir_op_count(GCtrace *T, IROp op)
+   return n;
+ }
+ 
+-static uint32_t trace_ir_xpoll_remote_count(GCtrace *T)
++static uint32_t trace_ir_xpoll_wide_count(GCtrace *T)
+ {
+   IRIns *ir = trace_ir_acq(T);
+   IRRef i, nins = trace_nins_acq(T);
+@@ -410,11 +410,11 @@ static void expect_loop_xpoll_shape(lua_State *L, int want_xpoll)
+   T = first_live_trace(J);
+   assert(T != NULL);
+   assert(trace_ir_op_count(T, IR_LOOP) > 0);
+-  assert(trace_ir_op_count(T, IR_XPOLL) > 0);  /* Gate-only is unconditional. */
++  assert(trace_ir_op_count(T, IR_XPOLL) > 0);  /* Every mode checks the phase gate and TG request. */
+   if (want_xpoll)
+-    assert(trace_ir_xpoll_remote_count(T) > 0);
++    assert(trace_ir_xpoll_wide_count(T) > 0);
+   else
+-    assert(trace_ir_xpoll_remote_count(T) == 0);
++    assert(trace_ir_xpoll_wide_count(T) == 0);
+ }
+ 
+ static void *release_jit_token_after_delay(void *arg)

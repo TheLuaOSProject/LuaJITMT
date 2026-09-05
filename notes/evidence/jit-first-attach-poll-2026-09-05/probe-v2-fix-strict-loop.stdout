@@ -1,0 +1,4 @@
+warm native exits	1
+warm root 1: 1 XPOLL instructions, all mode 0; LOOP=1
+first attach: exit trace=1 snap=4 iteration=36802 limit=1000000000 result=36802 attach-ms=0.060 early=1
+first-attach mode-0 native backedge progress PASS

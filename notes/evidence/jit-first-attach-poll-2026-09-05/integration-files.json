@@ -1,0 +1,18 @@
+[
+  {
+    "path": "src/lj_asm_x86.h",
+    "sha256": "24895bdd88f7c416295a0d85d11d1e283fc8d3223987b9c26c0e4f0b7161dd4d"
+  },
+  {
+    "path": "tests/t-jit-first-attach.c",
+    "sha256": "c306c030c1ec022bc04bec5df6e5a885342cab8af160b4f3c302209e851e05de"
+  },
+  {
+    "path": "tests/t-jit-token.c",
+    "sha256": "1252784e29d4cebdbe9cf2868f4ce7888c8d6ac2cd33ff1e99f19fae82be2005"
+  },
+  {
+    "path": "tests/suites/m6_jit.lua",
+    "sha256": "980180a15f873c1e86f2b35c6a364c78df8d4c6fb07a5cd8adeaa3e2bfd89f43"
+  }
+]

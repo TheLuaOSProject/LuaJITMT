@@ -1,0 +1,27 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/shared-first-attach"
+    ],
+    "exit": 0,
+    "seconds": 0.004281999998056563,
+    "stdout": "warm native exits\t1\nwarm root 1: 1 XPOLL instructions, all mode 0; LOOP=1\nfirst attach: exit trace=1 snap=4 iteration=80259 limit=1000000000 result=80259 attach-ms=0.050 early=1\nfirst-attach mode-0 native backedge progress PASS\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/shared-first-attach",
+      "noloop"
+    ],
+    "exit": 0,
+    "seconds": 0.0038588369970966596,
+    "stdout": "warm native exits\t1\nwarm root 1: 1 XPOLL instructions, all mode 0; LOOP=0\nfirst attach: exit trace=1 snap=4 iteration=23239 limit=1000000000 result=23239 attach-ms=0.049 early=1\nfirst-attach mode-0 native backedge progress PASS\n",
+    "stderr": ""
+  }
+]

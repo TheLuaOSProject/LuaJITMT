@@ -1,0 +1,31 @@
+{
+  "command": [
+    "cc",
+    "-std=gnu11",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-mcx16",
+    "-DLJ_FUNC_TEST_HELPERS",
+    "-DLJ_GC2_TEST_HELPERS",
+    "-DLJ_TAB_TEST_HELPERS",
+    "-DLJ_ARENA_TEST_HELPERS",
+    "-DLJ_TRACE_TEST_HELPERS",
+    "-DLUA_USE_ASSERT",
+    "-I/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/src",
+    "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2.c",
+    "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/fix-strict/src/libluajit.a",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-o",
+    "/tmp/lj-mode0-poll-fix-20260905-qn7zwzl_/probe-v2-fix-strict"
+  ],
+  "exit": 0,
+  "stdout": "",
+  "stderr": "",
+  "seconds": 0.15236997600004543,
+  "source_sha256": "c3349715c209d9ed267fbadb800a91a1d75c92c3672ef26932c6c35d127cd184"
+}

@@ -1,0 +1,85 @@
+case	table_read	nins	32
+1	SLOAD 	6	56
+2	LE    	1	-5
+3	SLOAD 	5	40
+4	SLOAD 	4	4
+5	SLOAD 	3	4
+6	FLOAD 	5	6
+7	FLOAD 	5	8
+8	ABC   	7	-6
+9	AREF  	6	-4
+10	ALOAD 	9	0
+11	ADD   	10	4
+12	AREF  	6	-6
+13	ALOAD 	12	0
+14	ADD   	13	11
+15	ADD   	3	-4
+16	LE    	15	1
+17	LOOP  	0	0
+18	XPOLL 	0	0
+19	FLOAD 	5	6
+20	FLOAD 	5	8
+21	ABC   	20	-6
+22	AREF  	19	-4
+23	ALOAD 	22	0
+24	ADD   	23	14
+25	AREF  	19	-6
+26	ALOAD 	25	0
+27	ADD   	26	24
+28	ADD   	15	-4
+29	LE    	28	1
+30	PHI   	15	28
+31	PHI   	14	27
+32	RENAME	14	4
+mcode	264	loop-offset	160
+55618467fef0  41C7864C08000001. mov dword [r14+0x84c], 0x1
+55618467fefb  F20F107A20        movsd xmm7, [rdx+0x20]
+55618467ff00  F20F2CC7          cvttsd2si eax, xmm7
+55618467ff04  0F57F6            xorps xmm6, xmm6
+55618467ff07  F20F2AF0          cvtsi2sd xmm6, eax
+55618467ff0b  660F2EFE          ucomisd xmm7, xmm6
+55618467ff0f  0F851B02FFFF      jnz 0x556184670130
+55618467ff15  0F8A1502FFFF      jpe 0x556184670130
+55618467ff1b  81F8FEFFFF7F      cmp eax, 0x7ffffffe
+55618467ff21  0F8F0902FFFF      jg 0x556184670130
+55618467ff27  F20F2C6A18        cvttsd2si ebp, [rdx+0x18]
+55618467ff2c  817A140000F9FF    cmp dword [rdx+0x14], 0xfff90000
+55618467ff33  0F83F701FFFF      jnb 0x556184670130
+55618467ff39  F20F107A10        movsd xmm7, [rdx+0x10]
+55618467ff3e  C4E3FBF04A082F    rorx rcx, [rdx+0x8], 0x2f
+55618467ff45  6683F9F4          cmp cx, -0x0c
+55618467ff49  0F85E101FFFF      jnz 0x556184670130
+55618467ff4f  48C1E911          shr rcx, 0x11
+55618467ff53  488B5110          mov rdx, [rcx+0x10]
+55618467ff57  83793002          cmp dword [rcx+0x30], +0x02
+55618467ff5b  0F86D701FFFF      jbe 0x556184670138
+55618467ff61  817A0C0000F9FF    cmp dword [rdx+0xc], 0xfff90000
+55618467ff68  0F83CA01FFFF      jnb 0x556184670138
+55618467ff6e  F20F587A08        addsd xmm7, [rdx+0x8]
+55618467ff73  817A140000F9FF    cmp dword [rdx+0x14], 0xfff90000
+55618467ff7a  0F83C001FFFF      jnb 0x556184670140
+55618467ff80  F20F587A10        addsd xmm7, [rdx+0x10]
+55618467ff85  83C501            add ebp, +0x01
+55618467ff88  3BE8              cmp ebp, eax
+55618467ff8a  0F8FB801FFFF      jg 0x556184670148
+55618467ff90  0F28F7            movaps xmm6, xmm7
+55618467ff93  48BF8405EB1FFC7E. mov rdi, 0x00007efc1feb0584
+55618467ff9d  8B3F              mov edi, [rdi]
+55618467ff9f  83FF00            cmp edi, +0x00
+55618467ffa2  0F84A801FFFF      jz 0x556184670150
+55618467ffa8  4183BE0808000000  cmp dword [r14+0x808], +0x00
+55618467ffb0  0F859A01FFFF      jnz 0x556184670150
+55618467ffb6  488B5910          mov rbx, [rcx+0x10]
+55618467ffba  83793002          cmp dword [rcx+0x30], +0x02
+55618467ffbe  0F869401FFFF      jbe 0x556184670158
+55618467ffc4  817B0C0000F9FF    cmp dword [rbx+0xc], 0xfff90000
+55618467ffcb  0F838701FFFF      jnb 0x556184670158
+55618467ffd1  F20F107B08        movsd xmm7, [rbx+0x8]
+55618467ffd6  F20F58FE          addsd xmm7, xmm6
+55618467ffda  817B140000F9FF    cmp dword [rbx+0x14], 0xfff90000
+55618467ffe1  0F837901FFFF      jnb 0x556184670160
+55618467ffe7  F20F587B10        addsd xmm7, [rbx+0x10]
+55618467ffec  83C501            add ebp, +0x01
+55618467ffef  3BE8              cmp ebp, eax
+55618467fff1  7E9D              jle 0x55618467ff90
+55618467fff3  E97001FFFF        jmp 0x556184670168

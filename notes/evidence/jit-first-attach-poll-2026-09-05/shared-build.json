@@ -1,0 +1,18 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/workspaces/lj-lockless/src",
+    "-j4"
+  ],
+  "exit": 0,
+  "seconds": 11.745237115999771,
+  "binaries": {
+    "src/luajit": "d88c4a1cd8fcbbe38059283cb12b8f8cefe316bbeea75bad644bca53d86c0c67",
+    "src/libluajit.a": "4eeb5cc585c58e9ab30cbac56a7c2e4a46b474053220f82baec83a0e0168f829",
+    "src/libluajit.so": "23ffa8d15782f02375395d3a7b28fcb4a6eb0e63f2a62d78876eb7a0a224c27c"
+  }
+}

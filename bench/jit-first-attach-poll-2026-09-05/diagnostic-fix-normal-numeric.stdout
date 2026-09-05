@@ -1,0 +1,47 @@
+case	numeric	nins	15
+1	SLOAD 	5	56
+2	LE    	1	-5
+3	SLOAD 	4	40
+4	SLOAD 	3	4
+5	ADD   	4	-7
+6	ADD   	3	-4
+7	LE    	6	1
+8	LOOP  	0	0
+9	XPOLL 	0	0
+10	ADD   	5	-7
+11	ADD   	6	-4
+12	LE    	11	1
+13	PHI   	6	11
+14	PHI   	5	10
+15	NOP   	0	0
+mcode	152	loop-offset	101
+55b95107ff5b  41C7864C08000001. mov dword [r14+0x84c], 0x1
+55b95107ff66  F20F1005C201FFFF  movsd xmm0, [rip-0xfe3e]
+55b95107ff6e  F20F107A18        movsd xmm7, [rdx+0x18]
+55b95107ff73  F20F2CC7          cvttsd2si eax, xmm7
+55b95107ff77  0F57F6            xorps xmm6, xmm6
+55b95107ff7a  F20F2AF0          cvtsi2sd xmm6, eax
+55b95107ff7e  660F2EFE          ucomisd xmm7, xmm6
+55b95107ff82  0F858801FFFF      jnz 0x55b951070110
+55b95107ff88  0F8A8201FFFF      jpe 0x55b951070110
+55b95107ff8e  81F8FEFFFF7F      cmp eax, 0x7ffffffe
+55b95107ff94  0F8F7601FFFF      jg 0x55b951070110
+55b95107ff9a  F20F2C6A10        cvttsd2si ebp, [rdx+0x10]
+55b95107ff9f  817A0C0000F9FF    cmp dword [rdx+0xc], 0xfff90000
+55b95107ffa6  0F836401FFFF      jnb 0x55b951070110
+55b95107ffac  F20F107A08        movsd xmm7, [rdx+0x8]
+55b95107ffb1  F20F58F8          addsd xmm7, xmm0
+55b95107ffb5  83C501            add ebp, +0x01
+55b95107ffb8  3BE8              cmp ebp, eax
+55b95107ffba  0F8F5801FFFF      jg 0x55b951070118
+55b95107ffc0  48BF84058672EE7F. mov rdi, 0x00007fee72860584
+55b95107ffca  8B3F              mov edi, [rdi]
+55b95107ffcc  83FF00            cmp edi, +0x00
+55b95107ffcf  0F844B01FFFF      jz 0x55b951070120
+55b95107ffd5  4183BE0808000000  cmp dword [r14+0x808], +0x00
+55b95107ffdd  0F853D01FFFF      jnz 0x55b951070120
+55b95107ffe3  F20F58F8          addsd xmm7, xmm0
+55b95107ffe7  83C501            add ebp, +0x01
+55b95107ffea  3BE8              cmp ebp, eax
+55b95107ffec  7ED2              jle 0x55b95107ffc0
+55b95107ffee  E93501FFFF        jmp 0x55b951070128

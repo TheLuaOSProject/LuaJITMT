@@ -1,0 +1,139 @@
+case	ffi_struct	nins	43
+1	SLOAD 	6	56
+2	LE    	1	-5
+3	SLOAD 	5	40
+4	SLOAD 	3	4
+5	FLOAD 	-1	276
+6	FLOAD 	5	7
+7	HREFK 	6	-10
+8	HLOAD 	7	0
+9	EQ    	8	-14
+10	FLOAD 	4	20
+11	EQ    	10	-15
+12	ADD   	4	-17
+13	XLOAD 	12	0
+14	ADD   	13	-19
+15	HREFK 	6	-22
+16	HLOAD 	15	0
+17	EQ    	16	-26
+18	XSTORE	12	14
+19	ADD   	4	-30
+20	XLOAD 	19	0
+21	ADD   	20	14
+22	SLOAD 	4	4
+23	ADD   	3	-4
+24	LE    	23	1
+25	LOOP  	0	0
+26	XPOLL 	0	0
+27	FLOAD 	-1	276
+28	FLOAD 	27	7
+29	HREFK 	28	-10
+30	HLOAD 	29	0
+31	EQ    	30	-14
+32	ADD   	14	-19
+33	HREFK 	28	-22
+34	HLOAD 	33	0
+35	EQ    	34	-26
+36	XSTORE	12	32
+37	ADD   	32	20
+38	ADD   	23	-4
+39	LE    	38	1
+40	PHI   	23	38
+41	PHI   	14	32
+42	PHI   	21	37
+43	NOP   	0	0
+mcode	514	loop-offset	323
+557ef776fdfe  41C7864C08000001. mov dword [r14+0x84c], 0x1
+557ef776fe09  49B910BFCD56B37F. mov r9, 0x00007fb356cdbf10
+557ef776fe13  48BEE0BECD56B37F. mov rsi, 0x00007fb356cdbee0
+557ef776fe1d  F20F100D3B03FFFF  movsd xmm1, [rip-0xfcc5]
+557ef776fe25  F20F107A20        movsd xmm7, [rdx+0x20]
+557ef776fe2a  F20F2CC7          cvttsd2si eax, xmm7
+557ef776fe2e  0F57F6            xorps xmm6, xmm6
+557ef776fe31  F20F2AF0          cvtsi2sd xmm6, eax
+557ef776fe35  660F2EFE          ucomisd xmm7, xmm6
+557ef776fe39  0F85E902FFFF      jnz 0x557ef7760128
+557ef776fe3f  0F8AE302FFFF      jpe 0x557ef7760128
+557ef776fe45  81F8FEFFFF7F      cmp eax, 0x7ffffffe
+557ef776fe4b  0F8FD702FFFF      jg 0x557ef7760128
+557ef776fe51  F20F2C6A18        cvttsd2si ebp, [rdx+0x18]
+557ef776fe56  C4E3FBF04A082F    rorx rcx, [rdx+0x8], 0x2f
+557ef776fe5d  6683F9F5          cmp cx, -0x0b
+557ef776fe61  0F85C102FFFF      jnz 0x557ef7760128
+557ef776fe67  48C1E911          shr rcx, 0x11
+557ef776fe6b  49BCD004F156B37F. mov r12, 0x00007fb356f104d0
+557ef776fe75  4D8B2424          mov r12, [r12]
+557ef776fe79  4D8B542428        mov r10, [r12+0x28]
+557ef776fe7e  41837AF002        cmp dword [r10-0x10], +0x02
+557ef776fe83  0F82A702FFFF      jb 0x557ef7760130
+557ef776fe89  48BF8027CD56B3FF. mov rdi, 0xfffdffb356cd2780
+557ef776fe93  493B7A38          cmp rdi, [r10+0x38]
+557ef776fe97  0F859302FFFF      jnz 0x557ef7760130
+557ef776fe9d  C443FBF05A302F    rorx r11, [r10+0x30], 0x2f
+557ef776fea4  664183FBF7        cmp r11w, -0x09
+557ef776fea9  0F858102FFFF      jnz 0x557ef7760130
+557ef776feaf  49C1EB11          shr r11, 0x11
+557ef776feb3  4C3BDE            cmp r11, rsi
+557ef776feb6  0F857402FFFF      jnz 0x557ef7760130
+557ef776febc  6683790A66        cmp word [rcx+0xa], +0x66
+557ef776fec1  0F856902FFFF      jnz 0x557ef7760130
+557ef776fec7  F20F107110        movsd xmm6, [rcx+0x10]
+557ef776fecc  F20F58F1          addsd xmm6, xmm1
+557ef776fed0  41837AF003        cmp dword [r10-0x10], +0x03
+557ef776fed5  0F825502FFFF      jb 0x557ef7760130
+557ef776fedb  48BFB027CD56B3FF. mov rdi, 0xfffdffb356cd27b0
+557ef776fee5  493B7A50          cmp rdi, [r10+0x50]
+557ef776fee9  0F854102FFFF      jnz 0x557ef7760130
+557ef776feef  C443FBF042482F    rorx r8, [r10+0x48], 0x2f
+557ef776fef6  664183F8F7        cmp r8w, -0x09
+557ef776fefb  0F852F02FFFF      jnz 0x557ef7760130
+557ef776ff01  49C1E811          shr r8, 0x11
+557ef776ff05  4D3BC1            cmp r8, r9
+557ef776ff08  0F852202FFFF      jnz 0x557ef7760130
+557ef776ff0e  F20F117110        movsd [rcx+0x10], xmm6
+557ef776ff13  F20F104118        movsd xmm0, [rcx+0x18]
+557ef776ff18  0F28F8            movaps xmm7, xmm0
+557ef776ff1b  F20F58FE          addsd xmm7, xmm6
+557ef776ff1f  817A140000F9FF    cmp dword [rdx+0x14], 0xfff90000
+557ef776ff26  0F830C02FFFF      jnb 0x557ef7760138
+557ef776ff2c  48BA10BFCD56B37F. mov rdx, 0x00007fb356cdbf10
+557ef776ff36  83C501            add ebp, +0x01
+557ef776ff39  3BE8              cmp ebp, eax
+557ef776ff3b  0F8FFF01FFFF      jg 0x557ef7760140
+557ef776ff41  48BF8405F156B37F. mov rdi, 0x00007fb356f10584
+557ef776ff4b  8B3F              mov edi, [rdi]
+557ef776ff4d  83FF00            cmp edi, +0x00
+557ef776ff50  0F84F201FFFF      jz 0x557ef7760148
+557ef776ff56  48BBD004F156B37F. mov rbx, 0x00007fb356f104d0
+557ef776ff60  488B1B            mov rbx, [rbx]
+557ef776ff63  488B5B28          mov rbx, [rbx+0x28]
+557ef776ff67  837BF002          cmp dword [rbx-0x10], +0x02
+557ef776ff6b  0F82DF01FFFF      jb 0x557ef7760150
+557ef776ff71  48BF8027CD56B3FF. mov rdi, 0xfffdffb356cd2780
+557ef776ff7b  483B7B38          cmp rdi, [rbx+0x38]
+557ef776ff7f  0F85CB01FFFF      jnz 0x557ef7760150
+557ef776ff85  C463FBF07B302F    rorx r15, [rbx+0x30], 0x2f
+557ef776ff8c  664183FFF7        cmp r15w, -0x09
+557ef776ff91  0F85B901FFFF      jnz 0x557ef7760150
+557ef776ff97  49C1EF11          shr r15, 0x11
+557ef776ff9b  4C3BFE            cmp r15, rsi
+557ef776ff9e  0F85AC01FFFF      jnz 0x557ef7760150
+557ef776ffa4  F20F58F1          addsd xmm6, xmm1
+557ef776ffa8  837BF003          cmp dword [rbx-0x10], +0x03
+557ef776ffac  0F829E01FFFF      jb 0x557ef7760150
+557ef776ffb2  48BFB027CD56B3FF. mov rdi, 0xfffdffb356cd27b0
+557ef776ffbc  483B7B50          cmp rdi, [rbx+0x50]
+557ef776ffc0  0F858A01FFFF      jnz 0x557ef7760150
+557ef776ffc6  C4E3FBF05B482F    rorx rbx, [rbx+0x48], 0x2f
+557ef776ffcd  6683FBF7          cmp bx, -0x09
+557ef776ffd1  0F857901FFFF      jnz 0x557ef7760150
+557ef776ffd7  48C1EB11          shr rbx, 0x11
+557ef776ffdb  483BDA            cmp rbx, rdx
+557ef776ffde  0F856C01FFFF      jnz 0x557ef7760150
+557ef776ffe4  F20F117110        movsd [rcx+0x10], xmm6
+557ef776ffe9  0F28F8            movaps xmm7, xmm0
+557ef776ffec  F20F58FE          addsd xmm7, xmm6
+557ef776fff0  83C501            add ebp, +0x01
+557ef776fff3  3BE8              cmp ebp, eax
+557ef776fff5  0F8E46FFFFFF      jle 0x557ef776ff41
+557ef776fffb  E95801FFFF        jmp 0x557ef7760158
