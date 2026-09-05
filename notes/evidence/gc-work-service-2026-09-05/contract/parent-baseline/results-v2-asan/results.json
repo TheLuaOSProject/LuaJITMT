@@ -1,0 +1,178 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fairness-20260905-atmybi8c/results-v2-asan/fixture",
+      "mark",
+      "1",
+      "0"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fairness-20260905-atmybi8c",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.008258226000180002,
+    "expected_exit": 0,
+    "exit": 0,
+    "stdout": "{\"phase\":\"mark\",\"quota\":1,\"feed\":0,\"calls\":1025,\"early\":1,\"first_service\":1025,\"ssb_drained\":1024,\"recovery_drained\":1,\"recovery_before_cleanup\":0,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fairness-20260905-atmybi8c/results-v2-asan/fixture",
+      "mark",
+      "1",
+      "1"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fairness-20260905-atmybi8c",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.009173434998956509,
+    "expected_exit": 2,
+    "exit": 2,
+    "stdout": "{\"phase\":\"mark\",\"quota\":1,\"feed\":1,\"calls\":4096,\"early\":0,\"first_service\":0,\"ssb_drained\":4096,\"recovery_drained\":0,\"recovery_before_cleanup\":1,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fairness-20260905-atmybi8c/results-v2-asan/fixture",
+      "mark",
+      "64",
+      "0"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fairness-20260905-atmybi8c",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.007578994998766575,
+    "expected_exit": 0,
+    "exit": 0,
+    "stdout": "{\"phase\":\"mark\",\"quota\":64,\"feed\":0,\"calls\":17,\"early\":1,\"first_service\":17,\"ssb_drained\":1024,\"recovery_drained\":1,\"recovery_before_cleanup\":0,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fairness-20260905-atmybi8c/results-v2-asan/fixture",
+      "mark",
+      "64",
+      "1"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fairness-20260905-atmybi8c",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.008610131000750698,
+    "expected_exit": 2,
+    "exit": 2,
+    "stdout": "{\"phase\":\"mark\",\"quota\":64,\"feed\":1,\"calls\":64,\"early\":0,\"first_service\":0,\"ssb_drained\":4096,\"recovery_drained\":0,\"recovery_before_cleanup\":1,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fairness-20260905-atmybi8c/results-v2-asan/fixture",
+      "sweep",
+      "1",
+      "0"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fairness-20260905-atmybi8c",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.007761979999486357,
+    "expected_exit": 0,
+    "exit": 0,
+    "stdout": "{\"phase\":\"sweep\",\"quota\":1,\"feed\":0,\"calls\":1025,\"early\":1,\"first_service\":1025,\"ssb_drained\":1024,\"recovery_drained\":1,\"recovery_before_cleanup\":0,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fairness-20260905-atmybi8c/results-v2-asan/fixture",
+      "sweep",
+      "1",
+      "1"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fairness-20260905-atmybi8c",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.00906511699577095,
+    "expected_exit": 2,
+    "exit": 2,
+    "stdout": "{\"phase\":\"sweep\",\"quota\":1,\"feed\":1,\"calls\":4096,\"early\":0,\"first_service\":0,\"ssb_drained\":4096,\"recovery_drained\":0,\"recovery_before_cleanup\":1,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fairness-20260905-atmybi8c/results-v2-asan/fixture",
+      "sweep",
+      "64",
+      "0"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fairness-20260905-atmybi8c",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.007556039003247861,
+    "expected_exit": 0,
+    "exit": 0,
+    "stdout": "{\"phase\":\"sweep\",\"quota\":64,\"feed\":0,\"calls\":17,\"early\":1,\"first_service\":17,\"ssb_drained\":1024,\"recovery_drained\":1,\"recovery_before_cleanup\":0,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fairness-20260905-atmybi8c/results-v2-asan/fixture",
+      "sweep",
+      "64",
+      "1"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fairness-20260905-atmybi8c",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.00852576600300381,
+    "expected_exit": 2,
+    "exit": 2,
+    "stdout": "{\"phase\":\"sweep\",\"quota\":64,\"feed\":1,\"calls\":64,\"early\":0,\"first_service\":0,\"ssb_drained\":4096,\"recovery_drained\":0,\"recovery_before_cleanup\":1,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  }
+]

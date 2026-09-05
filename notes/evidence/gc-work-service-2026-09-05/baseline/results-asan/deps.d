@@ -1,0 +1,22 @@
+/tmp/lj-gc-workclass-fairness-20260905-atmybi8c/results-asan/fixture: \
+  /tmp/lj-gc-workclass-fairness-20260905-atmybi8c/fixtures/t-gc2-workclass-fairness.c \
+  /tmp/lj-gc-workclass-fairness-20260905-atmybi8c/fixtures/t-gc2-sweep-table-coalescing.c \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lua.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/luaconf.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lauxlib.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_obj.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_def.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_arch.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_atomic.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_gc2token.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_tgregistry.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_tgslot.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_arena.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_gc.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_gc2.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_tab.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_tg.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_bc.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_ctype.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lualib.h \
+  /tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/tests/lib/gc2_wide_fixture_helpers.h

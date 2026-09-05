@@ -1,0 +1,29 @@
+{
+  "command": [
+    "cc",
+    "-std=gnu11",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-mcx16",
+    "-DLJ_GC2_TEST_HELPERS",
+    "-MMD",
+    "-MF",
+    "/tmp/lj-gc-workclass-fairness-20260905-atmybi8c/results-v2-optimized/deps.d",
+    "-I/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src",
+    "-I/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests",
+    "/tmp/lj-gc-workclass-fairness-20260905-atmybi8c/fixtures/t-gc2-workclass-fairness-v2.c",
+    "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/libluajit.a",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-o",
+    "/tmp/lj-gc-workclass-fairness-20260905-atmybi8c/results-v2-optimized/fixture"
+  ],
+  "cwd": "/tmp/lj-gc-workclass-fairness-20260905-atmybi8c",
+  "exit": 0,
+  "stdout": "",
+  "stderr": ""
+}

@@ -1,0 +1,27 @@
+/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/focused-candidate-optimized/fixture: \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/fixtures/t-gc2-workclass-fairness.c \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/lua.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/luaconf.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/lauxlib.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/lua.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/lj_obj.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/lj_def.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/lj_arch.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/lj_atomic.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/lj_gc2token.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/lj_tgregistry.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/lj_tgslot.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/lj_atomic.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/lj_arena.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/lj_gc.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/lj_obj.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/lj_gc2.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/lj_arena.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/lj_tab.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/lj_tg.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/lj_bc.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/lj_ctype.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/lj_gc.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/lj_gc2.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/lualib.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/tests/lib/gc2_wide_fixture_helpers.h

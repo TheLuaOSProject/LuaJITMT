@@ -1,0 +1,1 @@
+t-gc2-sweep-leaf-publication OK: leaves mark without graph work; containers and transient edges retain their obligations

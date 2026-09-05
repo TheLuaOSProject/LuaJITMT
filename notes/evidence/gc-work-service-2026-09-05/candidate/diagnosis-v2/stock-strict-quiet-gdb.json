@@ -1,0 +1,35 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "gdb",
+    "-q",
+    "-batch",
+    "-ex",
+    "set pagination off",
+    "-ex",
+    "set print thread-events off",
+    "-ex",
+    "run",
+    "-ex",
+    "thread apply all bt 24",
+    "-ex",
+    "info registers rip rsp rax rdx rdi rsi",
+    "-ex",
+    "x/12i $pc-16",
+    "--args",
+    "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/luajit",
+    "-jon",
+    "test.lua",
+    "--quiet"
+  ],
+  "cwd": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/tests/stock/test",
+  "environment": {
+    "LUA_PATH": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/?.lua;/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/tests/lib/?.lua;;"
+  },
+  "seconds": 1.838787703003618,
+  "exit": 1,
+  "stdout": "[Thread debugging using libthread_db enabled]\nUsing host libthread_db library \"/lib/x86_64-linux-gnu/libthread_db.so.1\".\n509 passed\n[Inferior 1 (process 482220) exited normally]\n",
+  "stderr": "The program has no registers now.\nNo registers.\n"
+}

@@ -1,0 +1,10 @@
+{
+  "time_utc": "2026-09-05T14:48:36.853099+00:00",
+  "agent": "/root/workclass_stock_lifetime",
+  "requested_task": "Independent diagnosis of the newly observed ordinary stock-JIT/prototype lifetime fault on isolated fairness v2.",
+  "reported_error": "This content was flagged for possible cybersecurity risk.",
+  "exact_rejected_tool_call": null,
+  "status": "No retry, rephrasing or transfer of this rejected investigation. Candidate v2 remains unlanded; independent weak test-helper authority correction and documentation continue.",
+  "pre_block_root_capture": "diagnosis-v2/stock-strict-aslr-gdb.json final record: SIGSEGV in lj_func_newL_gc at proto_uv(pt)[0].",
+  "shared_runtime_changed": false
+}

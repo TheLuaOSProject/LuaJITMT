@@ -1,0 +1,1 @@
+t-gc2-recovery: /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/tests/t-gc2-recovery.c:697: void test_grey_growth_transaction(void): Assertion `gc2_grey_stack_acq(f.g) == f.g->gc2.grey_embedded' failed.

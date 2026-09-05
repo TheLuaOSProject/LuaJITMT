@@ -1,0 +1,11 @@
+{
+  "builds": 0,
+  "checked_entries": 231,
+  "fixture_edits": 0,
+  "manifest_sha256": "8d9bb4a2e6757d479253b58a8a2e879d96af95ccfc730d646730c7b5864b8d3e",
+  "mismatches": [],
+  "package": "/tmp/lj-jit-foreground-design-20260905-hwhdaa4a",
+  "runtime_source_edits": 0,
+  "runtime_tests": 0,
+  "shared_edits": 0
+}

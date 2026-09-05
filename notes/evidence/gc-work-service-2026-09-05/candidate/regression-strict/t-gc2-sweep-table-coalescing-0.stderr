@@ -1,0 +1,1 @@
+t-gc2-sweep-table-coalescing: /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/tests/t-gc2-sweep-table-coalescing.c:311: drain_while_publisher_paused: Assertion `lj_gc2_test_table_scan_current(f->g, f->parent)' failed.

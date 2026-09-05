@@ -1,0 +1,67 @@
+{
+  "status": "unlanded; reject integration pending unresolved stability failures and required fairness controls",
+  "source_checks": {
+    "candidate_trees": 4,
+    "inputs_per_tree": 225,
+    "mismatches": 0
+  },
+  "focused": {
+    "focused-baseline-optimized": {
+      "processes": 20,
+      "passed": 10,
+      "expected_starvation_exit2": 10
+    },
+    "focused-baseline-strict": {
+      "processes": 20,
+      "passed": 10,
+      "expected_starvation_exit2": 10
+    },
+    "focused-baseline-asan": {
+      "processes": 20,
+      "passed": 10,
+      "expected_starvation_exit2": 10
+    },
+    "focused-candidate-optimized": {
+      "processes": 20,
+      "passed": 20,
+      "expected_starvation_exit2": 0
+    },
+    "focused-candidate-strict": {
+      "processes": 20,
+      "passed": 20,
+      "expected_starvation_exit2": 0
+    },
+    "focused-candidate-asan": {
+      "processes": 20,
+      "passed": 20,
+      "expected_starvation_exit2": 0
+    }
+  },
+  "regressions": {
+    "strict": {
+      "runtime_pass": 22,
+      "runtime_fail": 4,
+      "compilation_fail": 0,
+      "failures": [
+        "stock-jon",
+        "t-gc2-recovery-0",
+        "t-gc2-traverse-0",
+        "t-gc2-sweep-table-coalescing-0"
+      ]
+    },
+    "asan": {
+      "runtime_pass": 22,
+      "runtime_fail": 4,
+      "compilation_fail": 0,
+      "failures": [
+        "stock-jon",
+        "t-gc2-recovery-0",
+        "t-gc2-traverse-0",
+        "t-gc2-sweep-table-coalescing-0"
+      ]
+    }
+  },
+  "production_fairness_changes_in_shared_workspace": false,
+  "cost_runs": 0,
+  "automatic_review_stop": "stock-lifetime-review-stop.json"
+}

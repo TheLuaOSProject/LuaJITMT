@@ -1,0 +1,29 @@
+{
+  "command": [
+    "cc",
+    "-std=gnu11",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-mcx16",
+    "-DLJ_GC2_TEST_HELPERS",
+    "-MMD",
+    "-MF",
+    "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/focused-candidate-optimized/deps.d",
+    "-I/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src",
+    "-I/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/tests",
+    "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/fixtures/t-gc2-workclass-fairness.c",
+    "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/optimized/src/libluajit.a",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-o",
+    "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/focused-candidate-optimized/fixture"
+  ],
+  "cwd": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd",
+  "exit": 0,
+  "stdout": "",
+  "stderr": ""
+}

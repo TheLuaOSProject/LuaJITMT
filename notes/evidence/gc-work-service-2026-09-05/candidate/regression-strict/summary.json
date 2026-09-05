@@ -1,0 +1,11 @@
+{
+  "runtime_pass": 22,
+  "runtime_fail": 4,
+  "compilation_fail": 0,
+  "failures": [
+    "stock-jon",
+    "t-gc2-recovery-0",
+    "t-gc2-traverse-0",
+    "t-gc2-sweep-table-coalescing-0"
+  ]
+}

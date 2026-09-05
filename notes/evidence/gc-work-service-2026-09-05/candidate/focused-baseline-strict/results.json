@@ -1,0 +1,442 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/focused-baseline-strict/fixture",
+      "mark",
+      "1",
+      "0",
+      "worker"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/?.lua;;"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.0028142079972894862,
+    "expected_exit": 0,
+    "exit": 0,
+    "stdout": "{\"phase\":\"mark\",\"quota\":1,\"feed\":0,\"calls\":1025,\"early\":1,\"first_service\":1025,\"ssb_drained\":1024,\"recovery_drained\":1,\"recovery_before_cleanup\":0,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/focused-baseline-strict/fixture",
+      "mark",
+      "1",
+      "1",
+      "worker"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/?.lua;;"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.002827667005476542,
+    "expected_exit": 2,
+    "exit": 2,
+    "stdout": "{\"phase\":\"mark\",\"quota\":1,\"feed\":1,\"calls\":4096,\"early\":0,\"first_service\":0,\"ssb_drained\":4096,\"recovery_drained\":0,\"recovery_before_cleanup\":1,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/focused-baseline-strict/fixture",
+      "mark",
+      "64",
+      "0",
+      "worker"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/?.lua;;"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.002368559995375108,
+    "expected_exit": 0,
+    "exit": 0,
+    "stdout": "{\"phase\":\"mark\",\"quota\":64,\"feed\":0,\"calls\":17,\"early\":1,\"first_service\":17,\"ssb_drained\":1024,\"recovery_drained\":1,\"recovery_before_cleanup\":0,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/focused-baseline-strict/fixture",
+      "mark",
+      "64",
+      "1",
+      "worker"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/?.lua;;"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.0023821840004529804,
+    "expected_exit": 2,
+    "exit": 2,
+    "stdout": "{\"phase\":\"mark\",\"quota\":64,\"feed\":1,\"calls\":64,\"early\":0,\"first_service\":0,\"ssb_drained\":4096,\"recovery_drained\":0,\"recovery_before_cleanup\":1,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/focused-baseline-strict/fixture",
+      "weak",
+      "1",
+      "0",
+      "worker"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/?.lua;;"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.0026364329969510436,
+    "expected_exit": 0,
+    "exit": 0,
+    "stdout": "{\"phase\":\"weak\",\"quota\":1,\"feed\":0,\"calls\":1025,\"early\":1,\"first_service\":1025,\"ssb_drained\":1024,\"recovery_drained\":1,\"recovery_before_cleanup\":0,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/focused-baseline-strict/fixture",
+      "weak",
+      "1",
+      "1",
+      "worker"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/?.lua;;"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.0028801619992009364,
+    "expected_exit": 2,
+    "exit": 2,
+    "stdout": "{\"phase\":\"weak\",\"quota\":1,\"feed\":1,\"calls\":4096,\"early\":0,\"first_service\":0,\"ssb_drained\":4096,\"recovery_drained\":0,\"recovery_before_cleanup\":1,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/focused-baseline-strict/fixture",
+      "weak",
+      "64",
+      "0",
+      "worker"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/?.lua;;"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.0021883299996261485,
+    "expected_exit": 0,
+    "exit": 0,
+    "stdout": "{\"phase\":\"weak\",\"quota\":64,\"feed\":0,\"calls\":17,\"early\":1,\"first_service\":17,\"ssb_drained\":1024,\"recovery_drained\":1,\"recovery_before_cleanup\":0,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/focused-baseline-strict/fixture",
+      "weak",
+      "64",
+      "1",
+      "worker"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/?.lua;;"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.0024027789986575954,
+    "expected_exit": 2,
+    "exit": 2,
+    "stdout": "{\"phase\":\"weak\",\"quota\":64,\"feed\":1,\"calls\":64,\"early\":0,\"first_service\":0,\"ssb_drained\":4096,\"recovery_drained\":0,\"recovery_before_cleanup\":1,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/focused-baseline-strict/fixture",
+      "sweep",
+      "1",
+      "0",
+      "worker"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/?.lua;;"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.0022665360011160374,
+    "expected_exit": 0,
+    "exit": 0,
+    "stdout": "{\"phase\":\"sweep\",\"quota\":1,\"feed\":0,\"calls\":1025,\"early\":1,\"first_service\":1025,\"ssb_drained\":1024,\"recovery_drained\":1,\"recovery_before_cleanup\":0,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/focused-baseline-strict/fixture",
+      "sweep",
+      "1",
+      "1",
+      "worker"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/?.lua;;"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.0026679630027501844,
+    "expected_exit": 2,
+    "exit": 2,
+    "stdout": "{\"phase\":\"sweep\",\"quota\":1,\"feed\":1,\"calls\":4096,\"early\":0,\"first_service\":0,\"ssb_drained\":4096,\"recovery_drained\":0,\"recovery_before_cleanup\":1,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/focused-baseline-strict/fixture",
+      "sweep",
+      "64",
+      "0",
+      "worker"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/?.lua;;"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.0020523120037978515,
+    "expected_exit": 0,
+    "exit": 0,
+    "stdout": "{\"phase\":\"sweep\",\"quota\":64,\"feed\":0,\"calls\":17,\"early\":1,\"first_service\":17,\"ssb_drained\":1024,\"recovery_drained\":1,\"recovery_before_cleanup\":0,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/focused-baseline-strict/fixture",
+      "sweep",
+      "64",
+      "1",
+      "worker"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/?.lua;;"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.0023502650001319125,
+    "expected_exit": 2,
+    "exit": 2,
+    "stdout": "{\"phase\":\"sweep\",\"quota\":64,\"feed\":1,\"calls\":64,\"early\":0,\"first_service\":0,\"ssb_drained\":4096,\"recovery_drained\":0,\"recovery_before_cleanup\":1,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/focused-baseline-strict/fixture",
+      "mark",
+      "1",
+      "0",
+      "assist"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/?.lua;;"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.002247103999252431,
+    "expected_exit": 0,
+    "exit": 0,
+    "stdout": "{\"phase\":\"mark\",\"quota\":1,\"feed\":0,\"calls\":1025,\"early\":1,\"first_service\":1025,\"ssb_drained\":1024,\"recovery_drained\":1,\"recovery_before_cleanup\":0,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/focused-baseline-strict/fixture",
+      "mark",
+      "1",
+      "1",
+      "assist"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/?.lua;;"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.0027584350027609617,
+    "expected_exit": 2,
+    "exit": 2,
+    "stdout": "{\"phase\":\"mark\",\"quota\":1,\"feed\":1,\"calls\":4096,\"early\":0,\"first_service\":0,\"ssb_drained\":4096,\"recovery_drained\":0,\"recovery_before_cleanup\":1,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/focused-baseline-strict/fixture",
+      "mark",
+      "64",
+      "0",
+      "assist"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/?.lua;;"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.002026826005021576,
+    "expected_exit": 0,
+    "exit": 0,
+    "stdout": "{\"phase\":\"mark\",\"quota\":64,\"feed\":0,\"calls\":17,\"early\":1,\"first_service\":17,\"ssb_drained\":1024,\"recovery_drained\":1,\"recovery_before_cleanup\":0,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/focused-baseline-strict/fixture",
+      "mark",
+      "64",
+      "1",
+      "assist"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/?.lua;;"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.0025026000002981164,
+    "expected_exit": 2,
+    "exit": 2,
+    "stdout": "{\"phase\":\"mark\",\"quota\":64,\"feed\":1,\"calls\":64,\"early\":0,\"first_service\":0,\"ssb_drained\":4096,\"recovery_drained\":0,\"recovery_before_cleanup\":1,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/focused-baseline-strict/fixture",
+      "weak",
+      "1",
+      "0",
+      "assist"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/?.lua;;"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.0022043040007702075,
+    "expected_exit": 0,
+    "exit": 0,
+    "stdout": "{\"phase\":\"weak\",\"quota\":1,\"feed\":0,\"calls\":1025,\"early\":1,\"first_service\":1025,\"ssb_drained\":1024,\"recovery_drained\":1,\"recovery_before_cleanup\":0,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/focused-baseline-strict/fixture",
+      "weak",
+      "1",
+      "1",
+      "assist"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/?.lua;;"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.002716064998821821,
+    "expected_exit": 2,
+    "exit": 2,
+    "stdout": "{\"phase\":\"weak\",\"quota\":1,\"feed\":1,\"calls\":4096,\"early\":0,\"first_service\":0,\"ssb_drained\":4096,\"recovery_drained\":0,\"recovery_before_cleanup\":1,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/focused-baseline-strict/fixture",
+      "weak",
+      "64",
+      "0",
+      "assist"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/?.lua;;"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.0020746349982800893,
+    "expected_exit": 0,
+    "exit": 0,
+    "stdout": "{\"phase\":\"weak\",\"quota\":64,\"feed\":0,\"calls\":17,\"early\":1,\"first_service\":17,\"ssb_drained\":1024,\"recovery_drained\":1,\"recovery_before_cleanup\":0,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/focused-baseline-strict/fixture",
+      "weak",
+      "64",
+      "1",
+      "assist"
+    ],
+    "cwd": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/?.lua;;"
+    },
+    "timeout_seconds": 25,
+    "seconds": 0.002313224998943042,
+    "expected_exit": 2,
+    "exit": 2,
+    "stdout": "{\"phase\":\"weak\",\"quota\":64,\"feed\":1,\"calls\":64,\"early\":0,\"first_service\":0,\"ssb_drained\":4096,\"recovery_drained\":0,\"recovery_before_cleanup\":1,\"cleanup_graph\":true}\n",
+    "stderr": ""
+  }
+]

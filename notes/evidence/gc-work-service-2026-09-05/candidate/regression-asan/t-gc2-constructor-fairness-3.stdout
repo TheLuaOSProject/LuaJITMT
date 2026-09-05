@@ -1,0 +1,13 @@
+TAIL tid=2 fillers=1159 cell=4093 cells=4096 size=48
+TAIL tid=3 fillers=1159 cell=4093 cells=4096 size=48
+TAIL tid=4 fillers=1159 cell=4093 cells=4096 size=48
+INITIAL result=0 ns=1948446 count=3 quota=64 workers=2 cycle=1 main_tid=1 hint=2 eligible_epoch=0 cursor=616
+STATE initial-blocker phase=3 cycle=1 deferred=1 owner_runs=6 arenas=0 ptr=0x7f9e021a0000 cell=4093 block=1 root=1 life=2 ready=0 mark=1 flags=25 cursor=616 late=0 retire=36 quarantine=0x7f9e021a0000 owned=(nil)
+STATE initial-blocker phase=3 cycle=1 deferred=1 owner_runs=6 arenas=0 ptr=0x7f9e02110000 cell=4093 block=1 root=1 life=2 ready=0 mark=1 flags=25 cursor=1192 late=0 retire=36 quarantine=0x7f9e02110000 owned=(nil)
+STATE initial-blocker phase=3 cycle=1 deferred=1 owner_runs=6 arenas=0 ptr=0x7f9e01f80000 cell=4093 block=1 root=1 life=2 ready=0 mark=1 flags=25 cursor=616 late=0 retire=36 quarantine=0x7f9e01f80000 owned=(nil)
+HELD count=3 quota=64 workers=2 ns=157532030 events=215 parks=282 runs=647 eligible_done=1 first_done_call=0 first_done_owner_call=0 eligible_turns=0 first_turn=0 max_gap=0 fairness=1 reset=0,0,0 hint=6 detach_saved=0
+STATE held-blocker phase=3 cycle=1 deferred=216 owner_runs=653 arenas=1 ptr=0x7f9e021a0000 cell=4093 block=1 root=1 life=2 ready=0 mark=1 flags=25 cursor=616 late=0 retire=36 quarantine=0x7f9e021a0000 owned=(nil)
+STATE held-blocker phase=3 cycle=1 deferred=216 owner_runs=653 arenas=1 ptr=0x7f9e02110000 cell=4093 block=1 root=1 life=2 ready=0 mark=1 flags=25 cursor=616 late=0 retire=36 quarantine=0x7f9e02110000 owned=(nil)
+STATE held-blocker phase=3 cycle=1 deferred=216 owner_runs=653 arenas=1 ptr=0x7f9e01f80000 cell=4093 block=1 root=1 life=2 ready=0 mark=1 flags=25 cursor=616 late=0 retire=36 quarantine=0x7f9e01f80000 owned=(nil)
+RELEASED result=1 phase=0 ns=2073485 hint=6 main_tid=1
+t-fair-owner OK

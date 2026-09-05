@@ -1,0 +1,27 @@
+/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/focused-baseline-optimized/fixture: \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/fixtures/t-gc2-workclass-fairness.c \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lua.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/luaconf.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lauxlib.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lua.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_obj.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_def.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_arch.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_atomic.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_gc2token.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_tgregistry.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_tgslot.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_atomic.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_arena.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_gc.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_obj.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_gc2.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_arena.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_tab.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_tg.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_bc.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_ctype.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_gc.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lj_gc2.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/src/lualib.h \
+ /tmp/lj-scalar-next-combined-20260905-ufftrr0s/optimized/tests/lib/gc2_wide_fixture_helpers.h

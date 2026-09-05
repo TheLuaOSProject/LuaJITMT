@@ -1,0 +1,98 @@
+{
+  "/tmp/lj-gc-workclass-fairness-20260905-atmybi8c/fixtures/t-gc2-workclass-fairness.c": {
+    "sha256": "23b3ce49fe9e3c05fb384d2b56d6480fb9094b698170d98b045ab6e282099f39",
+    "bytes": 4089
+  },
+  "/tmp/lj-gc-workclass-fairness-20260905-atmybi8c/fixtures/t-gc2-sweep-table-coalescing.c": {
+    "sha256": "95b6a2097ad3e05bd64292a26b1bb765f502edacfec0a08b04cdafc9f9be3a32",
+    "bytes": 29311
+  },
+  "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lua.h": {
+    "sha256": "5bcec229da426c785982dffe2f832a5dc83dac0024a09e40a6b725b1968b8a6b",
+    "bytes": 12323
+  },
+  "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/luaconf.h": {
+    "sha256": "a70c46233a56ea0c74d4df2e88e45371bf94df9b10ef9d2a81cbe18758c1ceff",
+    "bytes": 4792
+  },
+  "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lauxlib.h": {
+    "sha256": "7093ea70fb38341d10475814b90961cec22f9643c11e3ea4c2ddc2cd4b03164e",
+    "bytes": 6028
+  },
+  "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_obj.h": {
+    "sha256": "d0266776612462413025cea536a088a9178a972b3b5f0e6ed5e201375fbd03f4",
+    "bytes": 221336
+  },
+  "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_def.h": {
+    "sha256": "625089c379122ad13e4b8078e073512da41ebfe80173f806abb0d1e4d3b66858",
+    "bytes": 12263
+  },
+  "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_arch.h": {
+    "sha256": "d21ad3f86b2f7651de5ab1dcfc4a3c504deae83d8b2b77d5ccbf75394a98ca7b",
+    "bytes": 18650
+  },
+  "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_atomic.h": {
+    "sha256": "0a7bbdc91ae21c4dcbe09cd7de500e0aeb341173f5059f43659678e5be53fac1",
+    "bytes": 13030
+  },
+  "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_gc2token.h": {
+    "sha256": "3c1ccf57ef4dd5f5a9a251e0472569939bd0bca8d21260f0497a0d1f84aa29b6",
+    "bytes": 56496
+  },
+  "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_tgregistry.h": {
+    "sha256": "e97c3112f34628eec2a0e10e7722e0b85f92f94aec92c3ab1e7f93a7bdd4ec99",
+    "bytes": 26565
+  },
+  "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_tgslot.h": {
+    "sha256": "f11ac945f5a0d12026bea04a07fc35dedd0571cd3c21a737c508d3e973384b6f",
+    "bytes": 19875
+  },
+  "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_arena.h": {
+    "sha256": "c1e19e04c5a65aa05f7f37a195864995988610f06b4fb9ec897405982a4cd1c8",
+    "bytes": 71525
+  },
+  "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_gc.h": {
+    "sha256": "877512faa2e699d12ee233777f9280bd0d5e8ded4bccc66e723bcf8d491a4a38",
+    "bytes": 24042
+  },
+  "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_gc2.h": {
+    "sha256": "244b10c49ad036b661a08adc178e6b8247d8ff1b18ed63bc035d3440df16a9f9",
+    "bytes": 37421
+  },
+  "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_tab.h": {
+    "sha256": "24309f7eef00a37f338fbc53acb3aa563f32532ffc1d73ed9de36960003396d8",
+    "bytes": 33452
+  },
+  "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_tg.h": {
+    "sha256": "a5cb46bde2868512743795750b5a1da71cd1a581bc037da127e60b36cb994015",
+    "bytes": 50068
+  },
+  "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_bc.h": {
+    "sha256": "e0ba29a7f70141876b2a071483db1d489b2b7b57cd6f6dc879ecb3cea0f283fa",
+    "bytes": 10419
+  },
+  "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lj_ctype.h": {
+    "sha256": "8ee89b4adca50452d429e57ae528568ee9a2ac185eb15922f88e4007d0fd5e7d",
+    "bytes": 51704
+  },
+  "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/lualib.h": {
+    "sha256": "10fd6bccc4ae40cc9094b10d8d8de5a8d3febb90668cde599c253bec04bf4546",
+    "bytes": 1165
+  },
+  "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/tests/lib/gc2_wide_fixture_helpers.h": {
+    "sha256": "7f95396eb8ba1503e02d4924ac6a0b4faa96faf992cef32394ec99589fa29eb2",
+    "bytes": 994
+  },
+  "/tmp/lj-gc-workclass-fairness-20260905-atmybi8c/results-asan/fixture": {
+    "sha256": "99b80d09085b9126a95fb2448a9f714985d807bfac4a41cd56f30c1a0e8b0102",
+    "bytes": 20190704
+  },
+  "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/asan/src/libluajit.a": {
+    "sha256": "077a04f0d2b9a18196cb3881f179637656416a6cf17aa215d5989541b6e76ea4",
+    "bytes": 27526448
+  },
+  "/tmp/lj-gc-workclass-fairness-20260905-atmybi8c/run.py": {
+    "sha256": "4ebc2a2c9ad1bb6f3ab00149b3209e215dc7fd61e59e7a471fd207546ef0fc31",
+    "bytes": 2667
+  }
+}

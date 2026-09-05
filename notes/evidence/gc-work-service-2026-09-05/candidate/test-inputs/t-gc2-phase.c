@@ -1,0 +1,1469 @@
+/*
+** Focused test for the GC2 phase bridge scaffold.
+*/
+
+#include <assert.h>
+#include <pthread.h>
+#include <stdio.h>
+
+#include "lua.h"
+#include "lauxlib.h"
+#include "lualib.h"
+
+#include "lib/test_sleep.h"
+
+#include "lj_obj.h"
+#include "lj_atomic.h"
+#include "lj_arena.h"
+#include "lj_gc.h"
+#include "lj_gc2.h"
+#include "lj_thr.h"
+#include "lj_tg.h"
+
+#include "lib/thread_fixture_helpers.h"
+
+static int arena_list_contains(GCArena *a, GCArena *needle)
+{
+  while (a) {
+    if (a == needle)
+      return 1;
+    a = lj_arena_next_acq(a);
+  }
+  return 0;
+}
+
+static void assert_idle(global_State *g, TGState *tg)
+{
+  assert(g->gc2.phase == LJ_GC2_IDLE);
+  assert(tg->mark_active == 0);
+  assert(tg->alloc.alloc_black == 0);
+}
+
+typedef struct PeerRelease {
+  global_State *g;
+  TGState *wait_tg;
+  long delay_ns;
+  uint32_t saw_native;
+} PeerRelease;
+
+typedef struct FinalizerProducer {
+  global_State *g;
+  GCobj **objs;
+  int start;
+  int count;
+  ljt_barrier_t *barrier;
+} FinalizerProducer;
+
+static uint32_t finalizer_state_claim_dispatch_called;
+
+#if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
+typedef struct FinalizerDrainer {
+  global_State *g;
+  uint32_t finished;
+} FinalizerDrainer;
+
+typedef struct FinalizerScanRelease {
+  global_State *g;
+  uint32_t scan_returned;
+  uint32_t release_allowed;
+  uint32_t timed_out;
+} FinalizerScanRelease;
+#endif
+
+
+static void peer_release_wait_native(PeerRelease *rel)
+{
+  uint64_t start = lj_thr_now_ns();
+  uint64_t deadline = start + (uint64_t)rel->delay_ns;
+  uint64_t now = start;
+  while (rel->wait_tg && now < deadline) {
+    if (lj_tg_in_native_acq(rel->wait_tg)) {
+      rel->saw_native = 1;
+      break;
+    }
+    la_cpu_pause();
+    now = lj_thr_now_ns();
+  }
+  now = lj_thr_now_ns();
+  if (now < deadline)
+    sleep_ns((long)(deadline - now));
+}
+
+static void *release_worker_active(void *arg)
+{
+  PeerRelease *rel = (PeerRelease *)arg;
+  peer_release_wait_native(rel);
+  gc2_worker_active_rel(rel->g, 0);
+  return NULL;
+}
+
+static void *release_assist_active(void *arg)
+{
+  PeerRelease *rel = (PeerRelease *)arg;
+  peer_release_wait_native(rel);
+  gc2_assist_active_rel(rel->g, 0);
+  return NULL;
+}
+
+static void *release_assist_worker_active(void *arg)
+{
+  PeerRelease *rel = (PeerRelease *)arg;
+  peer_release_wait_native(rel);
+  gc2_assist_active_rel(rel->g, 0);
+  gc2_worker_active_rel(rel->g, 0);
+  la_futex_wake(&rel->g->gc2.worker_active, 0x7fffffff);
+  return NULL;
+}
+
+static void *finalizer_enqueue_worker(void *arg)
+{
+  FinalizerProducer *fp = (FinalizerProducer *)arg;
+  int rc, i;
+  rc = ljt_barrier_wait(fp->barrier);
+  assert(rc == 0 || rc == LJT_BARRIER_SERIAL_THREAD);
+  for (i = 0; i < fp->count; i++)
+    lj_gc2_test_finalizer_enqueue(fp->g, fp->objs[fp->start + i]);
+  return NULL;
+}
+
+#if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
+static void *finalizer_drain_worker(void *arg)
+{
+  FinalizerDrainer *fd = (FinalizerDrainer *)arg;
+  lj_gc2_test_finalizer_drain(fd->g);
+  la_store32_rel(&fd->finished, 1);
+  return NULL;
+}
+
+static void *finalizer_scan_release_worker(void *arg)
+{
+  FinalizerScanRelease *rel = (FinalizerScanRelease *)arg;
+  uint64_t deadline = lj_thr_now_ns() + 500000000u;
+  while (la_load32_acq(&rel->scan_returned) == 0 &&
+	 lj_thr_now_ns() < deadline)
+    sleep_ns(100000L);
+  if (la_load32_acq(&rel->scan_returned) == 0) {
+    la_store32_rel(&rel->timed_out, 1);
+  } else {
+    while (la_load32_acq(&rel->release_allowed) == 0)
+      sleep_ns(100000L);
+  }
+  gc2_finalizer_drain_test_release_rel(rel->g, 1);
+  return NULL;
+}
+#endif
+
+static int finalizer_churn(lua_State *L)
+{
+  int status = luaL_dostring(L,
+    "local hold = {}\n"
+    "for i = 1, 96 do\n"
+    "  local t = {i, i+1, i+2}\n"
+    "  for j = 4, 48 do t[j] = j end\n"
+    "  hold[i] = t\n"
+    "end\n");
+  if (status != LUA_OK)
+    lua_pop(L, 1);
+  return 0;
+}
+
+static int finalizer_state_claim_dispatch(lua_State *L, global_State *g,
+					  GCobj *o)
+{
+  UNUSED(L); UNUSED(g); UNUSED(o);
+  la_store32_rel(&finalizer_state_claim_dispatch_called, 1);
+  return 1;
+}
+
+static int unlink_root_object(global_State *g, GCobj *target)
+{
+  GCRef *p = &g->gc.root;
+  GCobj *o;
+  (void)lj_gc_flush_root_pending(g);
+  while ((o = gcref(*p)) != NULL) {
+    if (o == target) {
+      setgcrefr(*p, *lj_obj_gcwref(o));
+      lj_obj_setgcwnull(o);
+      return 1;
+    }
+    p = lj_obj_gcwref(o);
+  }
+  return 0;
+}
+
+static void relink_root_object(global_State *g, GCobj *o)
+{
+  lj_obj_setgcwr(o, g->gc.root);
+  setgcref(g->gc.root, o);
+}
+
+static void phase_flush_and_drain(global_State *g, TGState *tg)
+{
+  (void)lj_gc2_flush_ssb(g, tg);
+  (void)lj_gc2_test_ssb_drain(g);
+  assert(lj_gc2_test_ssb_empty(g));
+}
+
+static GCtab *make_weak_value_table(lua_State *L)
+{
+  lua_newtable(L);
+  lua_newtable(L);
+  lua_pushliteral(L, "__mode");
+  lua_pushliteral(L, "v");
+  lua_settable(L, -3);
+  lua_setmetatable(L, -2);
+  lua_newtable(L);
+  lua_newtable(L);
+  lua_pushvalue(L, -2);
+  lua_pushvalue(L, -2);
+  lua_settable(L, -5);
+  lua_pop(L, 2);  /* Keep only the weak table rooted. */
+  return tabV(L->top - 1);
+}
+
+static void test_finalizer_consumer_ring(lua_State *L, global_State *g)
+{
+  GCobj *a, *b, *c, *d, *e;
+  uint64_t queued0, dequeued0, drained0, wakes0;
+  lua_settop(L, 0);
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
+  lua_newtable(L);
+  a = obj2gco(tabV(L->top - 1));
+  lua_newtable(L);
+  b = obj2gco(tabV(L->top - 1));
+  lua_newtable(L);
+  c = obj2gco(tabV(L->top - 1));
+  lua_newtable(L);
+  d = obj2gco(tabV(L->top - 1));
+  lua_newtable(L);
+  e = obj2gco(tabV(L->top - 1));
+  assert(unlink_root_object(g, a));
+  assert(unlink_root_object(g, b));
+  assert(unlink_root_object(g, c));
+  assert(unlink_root_object(g, d));
+  assert(unlink_root_object(g, e));
+
+  queued0 = gc2_finalizer_queued_acq(g);
+  dequeued0 = gc2_finalizer_dequeued_acq(g);
+  drained0 = gc2_finalizer_mpsc_drained_acq(g);
+  assert(lj_gc2_workers_set(g, 1) == 1);
+  wakes0 = gc2_worker_wakes_acq(g);
+  lj_gc2_test_finalizer_enqueue(g, a);
+  lj_gc2_test_finalizer_enqueue(g, b);
+  lj_gc2_test_finalizer_enqueue(g, c);
+  assert(gc2_finalizer_queued_acq(g) == queued0 + 3u);
+  /* The first empty-to-nonempty publication must wake a worker. A live worker
+  ** may splice that stack into the consumer ring between producer pushes,
+  ** making a later push another legitimate transition and wake. */
+  assert(gc2_worker_wakes_acq(g) - wakes0 >= 1u);
+  lj_gc2_worker_stop(g);
+  /* The joined worker may or may not have completed the MPSC-to-ring splice. */
+  assert(gc2_finalizer_mpsc_acq(g) != NULL ||
+         gc2_finalizer_tail_acq(g) != NULL);
+
+  lj_gc2_test_finalizer_drain(g);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == drained0 + 3u);
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) != NULL);
+  lj_gc2_test_finalizer_enqueue(g, d);
+  lj_gc2_test_finalizer_enqueue(g, e);
+  assert(gc2_finalizer_queued_acq(g) == queued0 + 5u);
+  assert(gc2_finalizer_mpsc_acq(g) != NULL);
+  lj_gc2_test_finalizer_drain(g);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == drained0 + 5u);
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) != NULL);
+  assert(lj_gc2_test_finalizer_dequeue(g) == a);
+  assert(lj_gc2_test_finalizer_dequeue(g) == b);
+  assert(lj_gc2_test_finalizer_dequeue(g) == c);
+  assert(lj_gc2_test_finalizer_dequeue(g) == d);
+  assert(lj_gc2_test_finalizer_dequeue(g) == e);
+  assert(lj_gc2_test_finalizer_dequeue(g) == NULL);
+  assert(gc2_finalizer_dequeued_acq(g) == dequeued0 + 5u);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
+
+  relink_root_object(g, e);
+  relink_root_object(g, d);
+  relink_root_object(g, c);
+  relink_root_object(g, b);
+  relink_root_object(g, a);
+  lua_settop(L, 0);
+}
+
+static void test_finalizer_queue_preserves_object_link(lua_State *L,
+						       global_State *g)
+{
+  GCobj *sentinel, *queued;
+  lua_settop(L, 0);
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
+  lua_newtable(L);
+  sentinel = obj2gco(tabV(L->top - 1));
+  lua_newtable(L);
+  queued = obj2gco(tabV(L->top - 1));
+  assert(unlink_root_object(g, queued));
+  assert(unlink_root_object(g, sentinel));
+
+  lj_obj_setgcw(queued, sentinel);
+  lj_gc2_test_finalizer_enqueue(g, queued);
+  assert(lj_obj_gcw_acq(queued) == sentinel);
+  lj_gc2_test_finalizer_drain(g);
+  assert(lj_obj_gcw_acq(queued) == sentinel);
+  assert(lj_gc2_test_finalizer_dequeue(g) == queued);
+  assert(lj_obj_gcw_acq(queued) == sentinel);
+  assert(lj_gc2_test_finalizer_dequeue(g) == NULL);
+
+  lj_obj_setgcwnull(queued);
+  relink_root_object(g, queued);
+  relink_root_object(g, sentinel);
+  lua_settop(L, 0);
+}
+
+#if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
+static void test_finalizer_drain_concurrent_consumers(lua_State *L,
+						      global_State *g)
+{
+  FinalizerDrainer fd = {0};
+  pthread_t thread;
+  GCobj *a, *b, *o;
+  uint64_t drained0, dequeued0;
+  int seen_a = 0, seen_b = 0, n = 0;
+
+  lua_settop(L, 0);
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
+  lua_newtable(L);
+  a = obj2gco(tabV(L->top - 1));
+  lua_newtable(L);
+  b = obj2gco(tabV(L->top - 1));
+  assert(unlink_root_object(g, a));
+  assert(unlink_root_object(g, b));
+
+  drained0 = gc2_finalizer_mpsc_drained_acq(g);
+  dequeued0 = gc2_finalizer_dequeued_acq(g);
+  lj_gc2_test_finalizer_drain_pause(g);
+  lj_gc2_test_finalizer_enqueue(g, a);
+  assert(gc2_finalizer_mpsc_acq(g) != NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
+
+  fd.g = g;
+  assert(pthread_create(&thread, NULL, finalizer_drain_worker, &fd) == 0);
+  while (gc2_finalizer_drain_test_paused_acq(g) == 0)
+    la_cpu_pause();
+  assert(la_load32_acq(&fd.finished) == 0);
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == drained0);
+  lj_gc2_test_finalizer_enqueue(g, b);
+
+  if (lj_gc2_test_finalizer_try_enter(g)) {
+    lj_gc2_test_finalizer_drain_owned(g);
+    lj_gc2_test_finalizer_leave(g);
+  }
+  gc2_finalizer_drain_test_release_rel(g, 1);
+
+  assert(pthread_join(thread, NULL) == 0);
+  assert(la_load32_acq(&fd.finished) == 1);
+  lj_gc2_test_finalizer_drain(g);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == drained0 + 2u);
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) != NULL);
+  while ((o = lj_gc2_test_finalizer_dequeue(g)) != NULL) {
+    if (o == a) {
+      assert(seen_a == 0);
+      seen_a = 1;
+    } else if (o == b) {
+      assert(seen_b == 0);
+      seen_b = 1;
+    } else {
+      assert(0);
+    }
+    n++;
+  }
+  assert(n == 2);
+  assert(seen_a == 1);
+  assert(seen_b == 1);
+  assert(gc2_finalizer_dequeued_acq(g) == dequeued0 + 2u);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
+
+  relink_root_object(g, b);
+  relink_root_object(g, a);
+  lua_settop(L, 0);
+}
+
+static void test_finalizer_scan_retries_busy_owner(lua_State *L,
+						   global_State *g)
+{
+  FinalizerDrainer fd = {0};
+  FinalizerScanRelease rel = {0};
+  pthread_t drain_thread, release_thread;
+  GCobj *a, *o;
+  uint64_t drained0, marks0;
+
+  lua_settop(L, 0);
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
+  lua_newtable(L);
+  a = obj2gco(tabV(L->top - 1));
+  assert(unlink_root_object(g, a));
+  lua_pop(L, 1);
+
+  lj_gc2_mark_begin(g);
+  assert(g->gc2.phase == LJ_GC2_MARK);
+  assert(lj_gc2_ismarked(g, a) == 0);
+
+  drained0 = gc2_finalizer_mpsc_drained_acq(g);
+  lj_gc2_test_finalizer_drain_pause(g);
+  lj_gc2_test_finalizer_enqueue(g, a);
+  fd.g = g;
+  assert(pthread_create(&drain_thread, NULL, finalizer_drain_worker, &fd) == 0);
+  while (gc2_finalizer_drain_test_paused_acq(g) == 0)
+    la_cpu_pause();
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == drained0);
+  assert(lj_gc2_ismarked(g, a) == 0);
+
+  /* Model a completed MARK root certificate. The foreign drainer owns the
+  ** only reference to `a` while paused, so a nonblocking snapshot must revoke
+  ** the certificate and return without pretending that queue was covered. A
+  ** watchdog releases the owner only after the scan returns, or after 500 ms
+  ** to make the former blocking implementation fail instead of hanging. */
+  gc2_mark_root_scanned_rel(g, 1);
+  marks0 = gc2_marks_this_round_acq(g);
+  rel.g = g;
+  assert(pthread_create(&release_thread, NULL, finalizer_scan_release_worker,
+			&rel) == 0);
+  lj_gc2_test_scan_roots(g, L);
+  la_store32_rel(&rel.scan_returned, 1);
+  assert(la_load32_acq(&rel.timed_out) == 0);
+  assert(gc2_mark_root_scanned_acq(g) == 0);
+  assert(gc2_marks_this_round_acq(g) > marks0);
+  assert(lj_gc2_ismarked(g, a) == 0);
+  assert(gc2_finalizer_active_acq(g) == 1);
+  assert(la_load32_acq(&fd.finished) == 0);
+  la_store32_rel(&rel.release_allowed, 1);
+  assert(pthread_join(release_thread, NULL) == 0);
+  assert(pthread_join(drain_thread, NULL) == 0);
+  assert(la_load32_acq(&rel.timed_out) == 0);
+  assert(la_load32_acq(&fd.finished) == 1);
+  assert(gc2_finalizer_mpsc_drained_acq(g) == drained0 + 1u);
+
+  /* Once the foreign owner leaves, the next root scan owns and marks the
+  ** completed FIFO normally. */
+  lj_gc2_test_scan_roots(g, L);
+  assert(lj_gc2_ismarked(g, a) == 1);
+
+  o = lj_gc2_test_finalizer_dequeue(g);
+  assert(o == a);
+  assert(lj_gc2_test_finalizer_dequeue(g) == NULL);
+  relink_root_object(g, a);
+  lj_gc2_preserve_abort_to_idle(g);
+  assert(g->gc2.phase == LJ_GC2_IDLE);
+}
+#endif
+
+static void test_finalizer_mpsc_concurrent_producers(lua_State *L,
+						     global_State *g)
+{
+  enum { NPROD = 4, PER_PROD = 24, NTOTAL = NPROD * PER_PROD };
+  GCobj *objs[NTOTAL];
+  uint8_t seen[NTOTAL];
+  pthread_t threads[NPROD];
+  FinalizerProducer prod[NPROD];
+  ljt_barrier_t barrier;
+  uint64_t queued0, dequeued0, drained0;
+  int i, j, n = 0;
+
+  lua_settop(L, 0);
+  lua_gc(L, LUA_GCSTOP, 0);
+  assert(lua_checkstack(L, NTOTAL));
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
+  for (i = 0; i < NTOTAL; i++) {
+    lua_newtable(L);
+    objs[i] = obj2gco(tabV(L->top - 1));
+    seen[i] = 0;
+    assert(unlink_root_object(g, objs[i]));
+  }
+
+  queued0 = gc2_finalizer_queued_acq(g);
+  dequeued0 = gc2_finalizer_dequeued_acq(g);
+  drained0 = gc2_finalizer_mpsc_drained_acq(g);
+  assert(ljt_barrier_init(&barrier, NPROD) == 0);
+  for (i = 0; i < NPROD; i++) {
+    prod[i].g = g;
+    prod[i].objs = objs;
+    prod[i].start = i * PER_PROD;
+    prod[i].count = PER_PROD;
+    prod[i].barrier = &barrier;
+    assert(pthread_create(&threads[i], NULL, finalizer_enqueue_worker,
+			  &prod[i]) == 0);
+  }
+  for (i = 0; i < NPROD; i++)
+    assert(pthread_join(threads[i], NULL) == 0);
+  assert(ljt_barrier_destroy(&barrier) == 0);
+
+  assert(gc2_finalizer_queued_acq(g) ==
+	 queued0 + (uint64_t)NTOTAL);
+  assert(gc2_finalizer_mpsc_acq(g) != NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
+
+  lj_gc2_test_finalizer_drain(g);
+  assert(gc2_finalizer_mpsc_drained_acq(g) ==
+	 drained0 + (uint64_t)NTOTAL);
+  for (;;) {
+    GCobj *o = lj_gc2_test_finalizer_dequeue(g);
+    if (!o)
+      break;
+    for (i = 0; i < NTOTAL && objs[i] != o; i++)
+      ;
+    assert(i < NTOTAL);
+    assert(seen[i] == 0);
+    seen[i] = 1;
+    n++;
+  }
+  assert(n == NTOTAL);
+  assert(gc2_finalizer_dequeued_acq(g) ==
+	 dequeued0 + (uint64_t)NTOTAL);
+  assert(gc2_finalizer_mpsc_acq(g) == NULL);
+  assert(gc2_finalizer_tail_acq(g) == NULL);
+  for (i = 0; i < NTOTAL; i++)
+    assert(seen[i] == 1);
+
+  for (j = NTOTAL - 1; j >= 0; j--)
+    relink_root_object(g, objs[j]);
+  lua_settop(L, 0);
+}
+
+static void test_phase_transition_guards(lua_State *L, global_State *g,
+					 TGState *tg)
+{
+  uint64_t mark_to_weak0, weak_to_sweep0;
+
+  assert_idle(g, tg);
+  mark_to_weak0 = gc2_mark_to_weak_acq(g);
+  weak_to_sweep0 = gc2_weak_to_sweep_acq(g);
+  lj_gc2_mark_to_weak(g);
+  assert(g->gc2.phase == LJ_GC2_IDLE);
+  assert(gc2_mark_to_weak_acq(g) == mark_to_weak0);
+  lj_gc2_weak_to_sweep(g, L);
+  assert(g->gc2.phase == LJ_GC2_IDLE);
+  assert(gc2_weak_to_sweep_acq(g) == weak_to_sweep0);
+
+  la_store32_rel(&g->gc2.phase, LJ_GC2_MARK);
+  lj_gc2_weak_to_sweep(g, L);
+  assert(g->gc2.phase == LJ_GC2_MARK);
+  assert(gc2_weak_to_sweep_acq(g) == weak_to_sweep0);
+
+  la_store32_rel(&g->gc2.phase, LJ_GC2_WEAK);
+  lj_gc2_mark_to_weak(g);
+  assert(g->gc2.phase == LJ_GC2_WEAK);
+  assert(gc2_mark_to_weak_acq(g) == mark_to_weak0);
+
+  la_store32_rel(&g->gc2.phase, LJ_GC2_IDLE);
+  assert_idle(g, tg);
+}
+
+static void test_mark_complete_defers_to_peer(lua_State *L, global_State *g,
+					      TGState *tg)
+{
+  GCtab *parent, *child;
+  PeerRelease rel;
+  pthread_t thread;
+  uint64_t runs0, hits0, waits0, roots0;
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  lua_pushvalue(L, -1);
+  lua_rawseti(L, -3, 1);
+  lua_pop(L, 1);
+
+  lj_gc2_mark_begin(g);
+  setgcrefnull(g->gc.gray);
+  setgcrefnull(g->gc.grayagain);
+  setgcrefnull(g->gc.weak);
+  g->gc.state = GCSpropagate;
+  assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+  (void)lj_gc2_flush_ssb(g, tg);
+  assert(!lj_gc2_test_ssb_empty(g));
+
+  gc2_worker_active_rel(g, 1);
+  rel.g = g;
+  rel.wait_tg = tg;
+  rel.delay_ns = 20000000L;
+  rel.saw_native = 0;
+  runs0 = gc2_mark_complete_runs_acq(g);
+  hits0 = gc2_mark_complete_hits_acq(g);
+  waits0 = gc2_mark_complete_peer_waits_acq(g);
+  roots0 = gc2_major_root_scans_acq(g);
+  assert(pthread_create(&thread, NULL, release_worker_active, &rel) == 0);
+  /* All userdata is now an ordinary traversable GC2 object, so the full root
+  ** graph can legitimately need more than two bounded closure rounds. */
+  assert(lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0) == 0);
+  assert(pthread_join(thread, NULL) == 0);
+  assert(rel.saw_native == 0);
+  assert(gc2_worker_active_acq(g) == 0);
+  assert(gc2_major_root_scans_acq(g) == roots0);
+  assert(lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0) == 1);
+  assert(gc2_mark_close_intent_acq(g) == 0);
+  assert(gc2_phase_acq(g) == LJ_GC2_WEAK);
+  /* One fair close owns the worker token and root fixpoint. It may need several
+  ** bounded rounds, but cannot multiply snapshots across millions of retries. */
+  assert(gc2_major_root_scans_acq(g) - roots0 <= 64u);
+  assert(gc2_mark_complete_runs_acq(g) == runs0 + 2u);
+  assert(gc2_mark_complete_hits_acq(g) == hits0 + 1u);
+  assert(gc2_mark_complete_peer_waits_acq(g) == waits0);
+  assert(lj_gc2_test_ssb_empty(g));
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+
+  g->gc.state = GCSpause;
+  lj_gc2_cycle_to_idle(g);
+  lua_pop(L, 1);
+}
+
+static void test_mark_complete_defers_to_assist(lua_State *L, global_State *g,
+						TGState *tg)
+{
+  GCtab *parent, *child;
+  PeerRelease rel;
+  pthread_t thread;
+  uint64_t runs0, hits0, waits0;
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  lua_pushvalue(L, -1);
+  lua_rawseti(L, -3, 1);
+  lua_pop(L, 1);
+
+  lj_gc2_mark_begin(g);
+  setgcrefnull(g->gc.gray);
+  setgcrefnull(g->gc.grayagain);
+  setgcrefnull(g->gc.weak);
+  g->gc.state = GCSpropagate;
+  assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+  phase_flush_and_drain(g, tg);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+
+  gc2_assist_active_rel(g, 1);
+  gc2_worker_active_rel(g, 1);
+  rel.g = g;
+  rel.wait_tg = tg;
+  rel.delay_ns = 20000000L;
+  rel.saw_native = 0;
+  runs0 = gc2_mark_complete_runs_acq(g);
+  hits0 = gc2_mark_complete_hits_acq(g);
+  waits0 = gc2_mark_complete_peer_waits_acq(g);
+  assert(pthread_create(&thread, NULL,
+		       release_assist_worker_active, &rel) == 0);
+  assert(lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0) == 0);
+  assert(pthread_join(thread, NULL) == 0);
+  assert(rel.saw_native == 0);
+  assert(gc2_assist_active_acq(g) == 0);
+  assert(gc2_worker_active_acq(g) == 0);
+  assert(lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0) == 1);
+  assert(gc2_mark_close_intent_acq(g) == 0);
+  assert(gc2_phase_acq(g) == LJ_GC2_WEAK);
+  assert(gc2_mark_complete_runs_acq(g) == runs0 + 2u);
+  assert(gc2_mark_complete_hits_acq(g) == hits0 + 1u);
+  assert(gc2_mark_complete_peer_waits_acq(g) == waits0);
+
+  g->gc.state = GCSpause;
+  lj_gc2_cycle_to_idle(g);
+  lua_pop(L, 1);
+}
+
+static void test_stale_mark_intent_does_not_block_weak(lua_State *L,
+						       global_State *g,
+						       TGState *tg)
+{
+  GCtab *parent, *child;
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  lua_rawseti(L, -2, 1);
+
+  lj_gc2_mark_begin(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+  assert(lj_gc2_flush_ssb(g, tg) == 1);
+  assert(!lj_gc2_test_ssb_empty(g));
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+
+  gc2_worker_active_rel(g, 1);
+  gc2_mark_close_intent_rel(g, 1);
+  lj_gc2_mark_to_weak(g);
+  gc2_worker_active_rel(g, 0);
+  assert(gc2_phase_acq(g) == LJ_GC2_WEAK);
+
+  /* Model preemption after the close helper's MARK->WEAK publication and
+  ** worker-token release, but before its advisory intent clear. WEAK work must
+  ** still acquire/release worker_active instead of parking forever behind a
+  ** phase-local bit. Keep the bit set here to prove claim routing, not cleanup,
+  ** supplies progress. */
+  assert(lj_gc2_worker_drain(g, 64) > 0);
+  assert(gc2_worker_active_acq(g) == 0);
+  assert(gc2_mark_close_intent_acq(g) == 1);
+  assert(lj_gc2_test_ssb_empty(g));
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+
+  lj_gc2_cycle_to_idle(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  assert(gc2_mark_close_intent_acq(g) == 0);
+  lua_pop(L, 1);
+}
+
+static void test_weak_complete_waits_for_assist(lua_State *L, global_State *g,
+						TGState *tg)
+{
+  GCtab *weak;
+  PeerRelease rel;
+  pthread_t thread;
+  uint64_t runs0, progress0;
+  int complete = 0, i;
+
+  lua_settop(L, 0);
+  weak = make_weak_value_table(L);
+  lj_gc2_mark_begin(g);
+  setgcrefnull(g->gc.gray);
+  setgcrefnull(g->gc.grayagain);
+  setgcrefnull(g->gc.weak);
+  g->gc.state = GCSpropagate;
+  assert(lj_gc2_markobj(g, obj2gco(weak)) == 1);
+  phase_flush_and_drain(g, tg);
+  assert(lj_gc2_test_weak_snapshot_count(g) == 1u);
+  lj_gc2_mark_to_weak(g);
+
+  gc2_assist_active_rel(g, 1);
+  rel.g = g;
+  rel.wait_tg = tg;
+  rel.delay_ns = 20000000L;
+  rel.saw_native = 0;
+  runs0 = gc2_weak_complete_runs_acq(g);
+  progress0 = gc2_weak_complete_progress_acq(g);
+  assert(pthread_create(&thread, NULL, release_assist_active, &rel) == 0);
+  assert(lj_gc2_weak_complete(g, L, NULL,
+				      LJ_GC2_WEAK_DRAIN_BATCH) == 0);
+  assert(pthread_join(thread, NULL) == 0);
+  assert(gc2_assist_active_acq(g) == 0);
+  for (i = 0; i < 128 && !complete; i++)
+    complete = lj_gc2_weak_complete(g, L, NULL,
+					    LJ_GC2_WEAK_DRAIN_BATCH);
+  assert(complete);
+  assert(gc2_weak_complete_runs_acq(g) > runs0);
+  assert(gc2_weak_complete_progress_acq(g) > progress0);
+
+  g->gc.state = GCSpause;
+  lj_gc2_cycle_to_idle(g);
+  lua_pop(L, 1);
+}
+
+static void test_incremental_worker_step(lua_State *L, global_State *g,
+					 TGState *tg)
+{
+  GCtab *parent, *child, *grandchild;
+  uint64_t worker_runs0, worker_grey0, worker_ssb0;
+  uint32_t old_stepmul = g->gc.stepmul;
+  int i;
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  lua_newtable(L);
+  grandchild = tabV(L->top - 1);
+  lua_pushvalue(L, -1);
+  lua_rawseti(L, -3, 1);  /* child[1] = grandchild. */
+  lua_pushvalue(L, -2);
+  lua_rawseti(L, -4, 1);  /* parent[1] = child. */
+
+  lj_gc2_mark_begin(g);
+  /* This fixture asserts the accounting of the first direct worker batch,
+  ** not the production pre-dispatch native turn. Close the fresh cooperative
+  ** MARK lease so lj_gc2_step_explicit() reaches that worker batch instead of
+  ** taking its equally valid mark-complete fallback path. */
+  lj_gc2_jit_mark_request_exit(g);
+  assert(gc2_jit_phase_gate_acq(g) == 0);
+  gc2_jit_mark_resume_rel(g, 0);  /* Keep later synthetic drains closed, too. */
+  setgcrefnull(g->gc.gray);
+  setgcrefnull(g->gc.grayagain);
+  setgcrefnull(g->gc.weak);
+  g->gc.state = GCSpropagate;
+  assert(lj_gc2_markobj(g, obj2gco(parent)) == 1);
+  /* Earlier guarded stores may already have published the active suffix. */
+  (void)lj_gc2_flush_ssb(g, tg);
+  assert(!lj_gc2_test_ssb_empty(g));
+
+  worker_runs0 = gc2_worker_runs_acq(g);
+  worker_grey0 = gc2_worker_grey_drained_acq(g);
+  worker_ssb0 = gc2_worker_ssb_converted_acq(g);
+  g->gc.stepmul = 1;
+  g->gc.debt = 0;
+  lj_gc_threshold_store(g, g->gc.total);
+  assert(lj_gc2_step_explicit(L, 1) == 0);
+  assert(g->gc.state == GCSpropagate);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
+  assert(gc2_worker_runs_acq(g) == worker_runs0 + 1u);
+  /* Cycle start deliberately preserves exact grey/SSB identities carried by
+  ** an earlier bounded abort. One explicit step consumes at most one worker
+  ** batch, so the three-table fixture is guaranteed to make progress but is
+  ** not guaranteed to be the only graph work in that batch. Table traversal
+  ** can also publish fresh owner-local SSB rescans for a later worker pass. */
+  assert(gc2_worker_grey_drained_acq(g) > worker_grey0 ||
+	 gc2_worker_ssb_converted_acq(g) > worker_ssb0);
+  for (i = 0; i < 128 && !lj_gc2_test_ssb_empty(g); i++)
+    (void)lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH);
+  assert(lj_gc2_test_ssb_empty(g));
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
+  assert(gc2_worker_grey_drained_acq(g) >= worker_grey0 + 3u);
+  assert(gc2_worker_ssb_converted_acq(g) > worker_ssb0);
+
+  g->gc.stepmul = old_stepmul;
+  g->gc.state = GCSpause;
+  lj_gc2_cycle_to_idle(g);
+  lua_pop(L, 3);
+}
+
+static void test_incremental_fixpoint_round(lua_State *L, global_State *g)
+{
+  GCtab *parent, *child, *grandchild;
+  uint64_t rounds0, hits0, worker_runs0, worker_grey0, worker_ssb0;
+  uint32_t old_stepmul = g->gc.stepmul;
+  int i;
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  parent = tabV(L->top - 1);
+  lua_newtable(L);
+  child = tabV(L->top - 1);
+  lua_newtable(L);
+  grandchild = tabV(L->top - 1);
+  lua_pushvalue(L, -1);
+  lua_rawseti(L, -3, 1);  /* child[1] = grandchild. */
+  lua_pushvalue(L, -2);
+  lua_rawseti(L, -4, 1);  /* parent[1] = child. */
+  lua_pop(L, 2);  /* Keep only parent as the stack root. */
+
+  lj_gc2_mark_begin(g);
+  setgcrefnull(g->gc.gray);
+  setgcrefnull(g->gc.grayagain);
+  setgcrefnull(g->gc.weak);
+  g->gc.state = GCSpropagate;
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 0);
+  /* Guarded pre-cycle stores may already retain exact rescan identities for
+  ** this graph. They are valid fixpoint inputs, not evidence of prior marking. */
+
+  rounds0 = gc2_fixpoint_rounds_acq(g);
+  hits0 = gc2_fixpoint_hits_acq(g);
+  worker_runs0 = gc2_worker_runs_acq(g);
+  worker_grey0 = gc2_worker_grey_drained_acq(g);
+  worker_ssb0 = gc2_worker_ssb_converted_acq(g);
+  g->gc.stepmul = 1;
+  g->gc.debt = 0;
+  lj_gc_threshold_store(g, g->gc.total);
+  assert(lj_gc2_fixpoint_round(g, L, 64) == 0);
+  assert(g->gc2.phase == LJ_GC2_MARK);
+  assert(g->gc.state == GCSpropagate);
+  assert(gc2_fixpoint_rounds_acq(g) == rounds0 + 1u);
+  assert(gc2_fixpoint_hits_acq(g) == hits0);
+  assert(lj_gc2_ismarked(g, obj2gco(parent)) == 1);
+  /*
+  ** The first round is intentionally bounded. A full root scan can queue
+  ** unrelated library/FFI roots before this stack table, so one round only
+  ** promises progress, not full closure of every newly discovered edge.
+  */
+  if (lj_gc2_ismarked(g, obj2gco(child)) == 0 ||
+      lj_gc2_ismarked(g, obj2gco(grandchild)) == 0)
+    assert(!lj_gc2_test_ssb_empty(g));
+  for (i = 0; i < 128 &&
+	 (lj_gc2_ismarked(g, obj2gco(child)) == 0 ||
+	  lj_gc2_ismarked(g, obj2gco(grandchild)) == 0); i++) {
+    assert(g->gc2.phase == LJ_GC2_MARK);
+    assert(g->gc.state == GCSpropagate);
+    (void)lj_gc2_fixpoint_round(g, L, 64);
+  }
+  assert(lj_gc2_ismarked(g, obj2gco(child)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(grandchild)) == 1);
+  assert(gc2_worker_runs_acq(g) > worker_runs0);
+  assert(gc2_worker_grey_drained_acq(g) > worker_grey0);
+  assert(gc2_worker_ssb_converted_acq(g) >= worker_ssb0);
+
+  g->gc.stepmul = old_stepmul;
+  g->gc.state = GCSpause;
+  lj_gc2_cycle_to_idle(g);
+  lua_pop(L, 1);
+}
+
+static void test_isolated_weak_skip_case(const char *mode)
+{
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  TGState *tg;
+  uint64_t skipped0, fallbacks0, weak_clear_tables0, weak_clear_cleared0;
+
+  assert(L != NULL);
+  g = G(L);
+  tg = G2TG(g);
+  assert(tg != NULL);
+  assert_idle(g, tg);
+
+  lua_newtable(L);
+  lua_newtable(L);
+  lua_pushliteral(L, "__mode");
+  lua_pushstring(L, mode);
+  lua_settable(L, -3);
+  lua_setmetatable(L, -2);
+  lua_newtable(L);
+  lua_newtable(L);
+  lua_pushvalue(L, -2);
+  lua_pushvalue(L, -2);
+  lua_settable(L, 1);
+  lua_pop(L, 2);  /* Keep only the weak table as a stack root. */
+
+  skipped0 = gc2_weak_bridge_skipped_acq(g);
+  fallbacks0 = gc2_weak_bridge_fallbacks_acq(g);
+  weak_clear_tables0 = gc2_weak_clear_tables_acq(g);
+  weak_clear_cleared0 = gc2_weak_clear_cleared_acq(g);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(gc2_weak_clear_tables_acq(g) > weak_clear_tables0);
+  assert(gc2_weak_clear_cleared_acq(g) > weak_clear_cleared0);
+  assert(gc2_weak_bridge_skipped_acq(g) == skipped0 + 1u);
+  assert(gc2_weak_bridge_fallbacks_acq(g) == fallbacks0);
+  assert_idle(g, tg);
+
+  lua_close(L);
+}
+
+static void test_finalizer_step_defers_busy_callback_state(lua_State *L,
+							   global_State *g)
+{
+  GCtab *t;
+  GCSize cost = 0;
+  uint32_t saved_owner;
+  uint32_t fake_owner = 0x70000000u;
+
+  if (fake_owner == lj_thr_current_id(g) || fake_owner == LJ_THREAD_GCSCAN)
+    fake_owner--;
+
+  lua_settop(L, 0);
+  lua_newtable(L);
+  t = tabV(L->top - 1);
+  saved_owner = lj_state_owner_acq(L);
+  assert(saved_owner != fake_owner);
+  assert(!lj_gc2_test_finalizer_queue_pending(g));
+  lj_gc2_test_finalizer_enqueue(g, obj2gco(t));
+  assert(lj_gc2_test_finalizer_queue_pending(g));
+
+  lj_state_owner_rel(L, fake_owner);
+  la_store32_rel(&finalizer_state_claim_dispatch_called, 0);
+  assert(lj_gc2_test_finalizer_step_dispatch(L, finalizer_state_claim_dispatch,
+					     1, &cost) == -1);
+  assert(cost == LJ_MAX_MEM);
+  assert(la_load32_acq(&finalizer_state_claim_dispatch_called) == 0);
+  assert(lj_state_owner_acq(L) == fake_owner);
+  assert(lj_gc2_test_finalizer_queue_pending(g));
+
+  lj_state_owner_rel(L, saved_owner);
+  assert(lj_gc2_test_finalizer_dequeue(g) == obj2gco(t));
+  assert(!lj_gc2_test_finalizer_queue_pending(g));
+  lua_pop(L, 1);
+}
+
+int main(void)
+{
+  lua_State *L;
+  global_State *g;
+  TGState *tg;
+  TGState peer_tg, *saved_tg;
+  GCtab *phase_tab, *phase_child;
+  uint32_t cycle0;
+  uint32_t ssb_published0;
+  uint64_t grey_pushed0, grey_drained0;
+  uint64_t fixpoint_rounds0, fixpoint_hits0;
+  uint64_t mark_complete_runs0, mark_complete_hits0, mark_to_weak0;
+  uint64_t weak_complete_runs0, weak_complete_progress0, weak_to_sweep0;
+  uint64_t sweep_to_idle0, preserve_abort_to_idle0;
+  uint64_t sweep_live_updates0, live_estimate, trigger_bytes;
+  uint64_t weak_clear_tables0, weak_clear_cleared0;
+  uint64_t weak_bridge_fallbacks0;
+  uint64_t weak_bridge_skipped0, weak_bridge_backfills0;
+  uint64_t weak_bridge_backfill_tables0, weak_bridge_backfill_cleared0;
+  uint64_t finalizer_enters0, finalizer_leaves0, finalizer_blocks0;
+  uint64_t finalizer_queued0, finalizer_dequeued0, finalizer_mpsc_drained0;
+  MSize weak_n;
+  void *pre_mark_plain, *pre_mark_trav, *phase_plain, *phase_trav;
+  GCArena *pre_mark_plain_a, *pre_mark_trav_a;
+  GCArena *phase_plain_a, *phase_trav_a;
+  LJGC2ActivationSnap act_idle, act_mark, act_weak, act_sweep, act_close;
+  int i, done = 0, saw_mark = 0, saw_sweep = 0;
+
+  test_isolated_weak_skip_case("v");
+  test_isolated_weak_skip_case("k");
+  test_isolated_weak_skip_case("kv");
+
+  L = luaL_newstate();
+  assert(L != NULL);
+  luaL_openlibs(L);
+  g = G(L);
+  tg = G2TG(g);
+  assert(tg != NULL);
+  assert(g->gc2.tg_list == tg);
+  assert(g->gc2.n_threads == 1);
+  assert_idle(g, tg);
+
+  test_finalizer_consumer_ring(L, g);
+  test_finalizer_queue_preserves_object_link(L, g);
+#if defined(LUA_USE_ASSERT) || LJ_GC2_PARANOIA
+  test_finalizer_drain_concurrent_consumers(L, g);
+  test_finalizer_scan_retries_busy_owner(L, g);
+#endif
+  test_finalizer_mpsc_concurrent_producers(L, g);
+  test_finalizer_step_defers_busy_callback_state(L, g);
+  test_phase_transition_guards(L, g, tg);
+  test_incremental_worker_step(L, g, tg);
+  test_incremental_fixpoint_round(L, g);
+  test_mark_complete_defers_to_peer(L, g, tg);
+  test_mark_complete_defers_to_assist(L, g, tg);
+  test_stale_mark_intent_does_not_block_weak(L, g, tg);
+  test_weak_complete_waits_for_assist(L, g, tg);
+
+  lua_newtable(L);
+  phase_tab = tabV(L->top - 1);
+  lua_newtable(L);
+  phase_child = tabV(L->top - 1);
+  lua_pushvalue(L, -1);
+  lua_setfield(L, -3, "child");
+  pre_mark_plain = lj_arena_alloc(&tg->alloc, &tg->prng, 64, 0);
+  pre_mark_trav = lj_arena_alloc(&tg->alloc, &tg->prng, 64,
+				 LJ_AF_TRAVERSABLE);
+  assert(pre_mark_plain != NULL);
+  assert(pre_mark_trav != NULL);
+  pre_mark_plain_a = lj_arena_of(pre_mark_plain);
+  pre_mark_trav_a = lj_arena_of(pre_mark_trav);
+  act_idle = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(act_idle.state == LJ_GC2_ACT_IDLE);
+  assert(act_idle.gate == LJ_GC2_ROOT_GATE_OPEN);
+  assert(!lj_gc2_activation_reclaim_veto(g));
+  cycle0 = g->gc2.cycle;
+  lj_gc2_mark_begin(g);
+  assert(g->gc2.phase == LJ_GC2_MARK);
+  act_mark = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(act_mark.state == LJ_GC2_ACT_MARK);
+  assert(act_mark.gate == LJ_GC2_ROOT_GATE_OPEN);
+  assert(act_mark.generation == act_idle.generation + 1u);
+  assert(act_mark.mark_epoch == act_idle.mark_epoch + 1u);
+  assert(!lj_gc2_activation_reclaim_veto(g));
+  assert(g->gc2.cycle == cycle0 + 1u);
+  assert(la_load64_acq(&g->gc2.marks_this_round) == 0);
+  assert(tg->mark_active == 1);
+  assert(tg->alloc.alloc_black == 1);
+  assert(arena_list_contains(tg->alloc.owned[LJ_ARENAK_PLAIN],
+			     pre_mark_plain_a));
+  assert(arena_list_contains(tg->alloc.owned[LJ_ARENAK_TRAVERSABLE],
+			     pre_mark_trav_a));
+  assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
+  assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
+  assert((pre_mark_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
+  assert((pre_mark_trav_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
+  lj_arena_free(&tg->alloc, pre_mark_plain, 64);
+  lj_arena_free(&tg->alloc, pre_mark_trav, 64);
+  assert(lj_gc2_ismarked(g, obj2gco(phase_tab)) == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(phase_child)) == 0);
+  assert(lj_gc2_markobj(g, obj2gco(phase_tab)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(phase_tab)) == 1);
+  assert(!lj_gc2_test_ssb_empty(g));
+  ssb_published0 = gc2_ssb_published_acq(g);
+  grey_pushed0 = gc2_grey_pushed_acq(g);
+  grey_drained0 = gc2_grey_drained_acq(g);
+  phase_plain = lj_arena_alloc(&tg->alloc, &tg->prng, 64, 0);
+  phase_trav = lj_arena_alloc(&tg->alloc, &tg->prng, 64,
+			      LJ_AF_TRAVERSABLE);
+  assert(phase_plain != NULL);
+  assert(phase_trav != NULL);
+  phase_plain_a = lj_arena_of(phase_plain);
+  phase_trav_a = lj_arena_of(phase_trav);
+  lj_gc2_mark_to_weak(g);
+  assert(g->gc2.phase == LJ_GC2_WEAK);
+  act_weak = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(act_weak.state == LJ_GC2_ACT_WEAK);
+  assert(act_weak.gate == LJ_GC2_ROOT_GATE_OPEN);
+  assert(act_weak.generation == act_mark.generation + 1u);
+  assert(act_weak.mark_epoch == act_mark.mark_epoch);
+  assert(!lj_gc2_activation_reclaim_veto(g));
+  assert(tg->mark_active == 1);
+  assert(tg->alloc.alloc_black == 1);
+  done = 0;
+  for (i = 0; i < 10000 && !done; i++) {
+    done = lj_gc2_weak_complete(g, L, NULL, LJ_GC2_WEAK_DRAIN_BATCH);
+    if (!done)
+      (void)lj_thr_retry_yield(L);
+  }
+  assert(done);
+  lj_gc2_weak_to_sweep(g, L);
+  assert(g->gc2.phase == LJ_GC2_SWEEP);
+  act_sweep = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(act_sweep.state == LJ_GC2_ACT_SWEEP_OPEN);
+  assert(act_sweep.gate == LJ_GC2_ROOT_GATE_OPEN);
+  assert(act_sweep.generation == act_weak.generation + 1u);
+  assert(act_sweep.mark_epoch == act_weak.mark_epoch);
+  assert(!lj_gc2_activation_reclaim_veto(g));
+  assert(tg->mark_active == 0);
+  assert(tg->alloc.alloc_black == 1);
+  /* Root closure may refill and publish the main SSB more than once. Every
+  ** transition publication must be drained; the exact buffer count is not a
+  ** semantic invariant. */
+  assert(gc2_ssb_published_acq(g) > ssb_published0);
+  assert(tg->ssb_next == tg->ssb_base);
+  assert(gc2_ssb_drained_acq(g) == gc2_ssb_published_acq(g));
+  assert(lj_gc2_test_ssb_empty(g));
+  assert(lj_gc2_ismarked(g, obj2gco(phase_tab)) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(phase_child)) == 1);
+  assert(gc2_grey_pushed_acq(g) > grey_pushed0);
+  assert(gc2_grey_drained_acq(g) > grey_drained0);
+  assert(gc2_grey_pushed_acq(g) - grey_pushed0 ==
+	 gc2_grey_drained_acq(g) - grey_drained0);
+  assert(tg->alloc.bump[LJ_ARENAK_PLAIN].a == phase_plain_a);
+  assert(tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].a == phase_trav_a);
+  assert(arena_list_contains(tg->alloc.owned[LJ_ARENAK_PLAIN],
+				     phase_plain_a));
+  assert(arena_list_contains(tg->alloc.owned[LJ_ARENAK_TRAVERSABLE],
+				     phase_trav_a));
+  assert((phase_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
+  assert((phase_trav_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
+  /* The raw READY latch is fail-closed until the mandatory SWEEP root
+  ** certificate exists. In particular, it must not open native admission and
+  ** strand READY=1/root_scanned=0 if an internal caller arrives early. */
+  assert(gc2_sweep_root_scanned_acq(g) == 0);
+  assert(gc2_jit_phase_gate_acq(g) == 0);
+  lj_gc2_sweep_bridge_ready(g);
+  assert(gc2_sweep_bridge_ready_acq(g) == 0);
+  assert(gc2_jit_phase_gate_acq(g) == 0);
+  /* Bridge preparation is bounded and may lose the worker token to the parked
+  ** collector. Drive it to its published boundary instead of assuming one
+  ** scheduling attempt completes all root-spine work. */
+  for (i = 0; !gc2_sweep_bridge_ready_acq(g) && i < 10000; i++) {
+    lj_gc2_sweep_prepare_bridge_boundary(g, NULL);
+    if (!gc2_sweep_bridge_ready_acq(g))
+      (void)lj_thr_retry_yield(L);
+  }
+  assert(gc2_sweep_bridge_ready_acq(g));
+  while (lj_gc2_test_sweep_owner_progress(g, tg, LJ_GC2_SWEEP_BATCH) != 0)
+    ;
+  assert(!lj_gc2_sweep_needs_prepare(g));
+  assert(!lj_gc2_sweep_pending(g));
+  assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
+  assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
+  sweep_to_idle0 = gc2_sweep_to_idle_acq(g);
+  sweep_live_updates0 = la_load64_acq(&g->gc2.sweep_live_updates);
+  finalizer_blocks0 = gc2_finalizer_sweep_blocks_acq(g);
+  finalizer_enters0 = gc2_finalizer_enters_acq(g);
+  finalizer_leaves0 = gc2_finalizer_leaves_acq(g);
+  lj_gc2_test_finalizer_enter(g);
+  assert(gc2_finalizer_active_acq(g) == 1);
+  assert(gc2_finalizer_owner_acq(g) == lj_thr_actor_current());
+  assert(gc2_finalizer_enters_acq(g) ==
+	 finalizer_enters0 + 1u);
+  assert(gc2_finalizer_leaves_acq(g) == finalizer_leaves0);
+  assert(!lj_gc2_test_finalizer_queue_pending(g));
+  assert(lj_gc2_test_finalizer_pending(g));
+  assert(!lj_gc2_test_finalizer_sweep_pending(g));
+  saved_tg = lj_thr_get_tg();
+  lj_tg_init_thread(g, &peer_tg, NULL, 0);
+  peer_tg.tid = tg->tid + 5000u;
+  if (peer_tg.tid == 0 || peer_tg.tid == LJ_THREAD_GCSCAN)
+    peer_tg.tid = 5000u;
+  peer_tg.alloc.owner_tid = peer_tg.tid;
+  peer_tg.cur_L = L;
+  lj_thr_set_tg(&peer_tg);
+  /* A logical TG switch on one OS thread is physically reentrant. */
+  assert(lj_gc2_test_finalizer_try_enter(g));
+  assert(gc2_finalizer_active_acq(g) == 2);
+  assert(!lj_gc2_test_finalizer_sweep_pending(g));
+  lj_gc2_test_finalizer_leave(g);
+  lj_thr_set_tg(saved_tg);
+  assert(lj_thr_tg_handoff_current(&peer_tg));
+  lj_tg_fini_thread(g, &peer_tg);
+  assert(lj_gc2_test_finalizer_try_enter(g));
+  assert(gc2_finalizer_active_acq(g) == 2);
+  assert(gc2_finalizer_owner_acq(g) == lj_thr_actor_current());
+  assert(gc2_finalizer_enters_acq(g) ==
+	 finalizer_enters0 + 3u);
+  lj_gc2_test_finalizer_leave(g);
+  assert(gc2_finalizer_active_acq(g) == 1);
+  assert(gc2_finalizer_owner_acq(g) == lj_thr_actor_current());
+  assert(gc2_finalizer_leaves_acq(g) ==
+	 finalizer_leaves0 + 2u);
+  lj_gc2_test_finalizer_leave(g);
+  assert(gc2_finalizer_active_acq(g) == 0);
+  assert(gc2_finalizer_owner_acq(g) == 0);
+  assert(gc2_finalizer_enters_acq(g) ==
+	 finalizer_enters0 + 3u);
+  assert(gc2_finalizer_leaves_acq(g) ==
+	 finalizer_leaves0 + 3u);
+  assert(!lj_gc2_test_finalizer_queue_pending(g));
+  assert(!lj_gc2_test_finalizer_pending(g));
+  assert(unlink_root_object(g, obj2gco(phase_tab)));
+  lj_gc2_test_finalizer_enqueue(g, obj2gco(phase_tab));
+  assert(lj_gc2_test_finalizer_queue_pending(g));
+  assert(lj_gc2_test_finalizer_pending(g));
+  assert(lj_gc2_test_finalizer_sweep_pending(g));
+  lj_gc2_sweep_bridge_ready(g);
+  assert(lj_gc2_sweep_to_idle(g) == 0);
+  assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
+  assert(gc2_sweep_to_idle_acq(g) == sweep_to_idle0);
+  assert(gc2_finalizer_sweep_blocks_acq(g) ==
+	 finalizer_blocks0 + 1u);
+  assert(lj_gc2_test_finalizer_dequeue(g) == obj2gco(phase_tab));
+  relink_root_object(g, obj2gco(phase_tab));
+  assert(!lj_gc2_test_finalizer_queue_pending(g));
+  assert(!lj_gc2_test_finalizer_pending(g));
+  assert(!lj_gc2_test_finalizer_sweep_pending(g));
+  phase_flush_and_drain(g, tg);
+  while (lj_gc2_worker_drain(g, LJ_GC2_SWEEP_BATCH) != 0)
+    ;
+  lj_gc2_sweep_bridge_ready(g);
+  assert(lj_gc2_sweep_to_idle(g) == 1);
+  assert(gc2_sweep_to_idle_acq(g) == sweep_to_idle0 + 1u);
+  assert(la_load64_acq(&g->gc2.sweep_live_updates) ==
+	 sweep_live_updates0 + 1u);
+  assert_idle(g, tg);
+  act_close = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(act_close.state == LJ_GC2_ACT_IDLE);
+  assert(act_close.gate == LJ_GC2_ROOT_GATE_OPEN);
+  assert(act_close.generation == act_sweep.generation + 1u);
+  assert(act_close.mark_epoch == act_sweep.mark_epoch);
+  assert(!lj_gc2_activation_reclaim_veto(g));
+  lua_pop(L, 2);
+  lj_arena_free(&tg->alloc, phase_plain, 64);
+  lj_arena_free(&tg->alloc, phase_trav, 64);
+
+  /* Drive a second complete legacy cycle. Its four semantic writes must each
+  ** advance the veto-only generation and return to coherent IDLE/OPEN. */
+  act_idle = act_close;
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert_idle(g, tg);
+  act_close = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(act_close.state == LJ_GC2_ACT_IDLE);
+  assert(act_close.gate == LJ_GC2_ROOT_GATE_OPEN);
+  assert(act_close.generation == act_idle.generation + 4u);
+  assert(act_close.mark_epoch == act_idle.mark_epoch + 1u);
+  assert(!lj_gc2_activation_reclaim_veto(g));
+
+  lj_gc2_mark_begin(g);
+  assert(g->gc2.phase == LJ_GC2_MARK);
+  assert(tg->mark_active == 1);
+  assert(tg->alloc.alloc_black == 1);
+  lj_gc2_mark_to_weak(g);
+  assert(g->gc2.phase == LJ_GC2_WEAK);
+  act_weak = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(tg->mark_active == 1);
+  assert(tg->alloc.alloc_black == 1);
+  preserve_abort_to_idle0 = gc2_preserve_abort_to_idle_acq(g);
+  lj_gc2_preserve_abort_to_idle(g);
+  assert(gc2_preserve_abort_to_idle_acq(g) ==
+	 preserve_abort_to_idle0 + 1u);
+  assert_idle(g, tg);
+  act_close = lj_gc2_activation_snapshot(&g->gc2.activation);
+  assert(act_close.state == LJ_GC2_ACT_IDLE);
+  assert(act_close.gate == LJ_GC2_ROOT_GATE_OPEN);
+  assert(act_close.generation == act_weak.generation + 1u);
+  assert(act_close.mark_epoch == act_weak.mark_epoch);
+  assert(!lj_gc2_activation_reclaim_veto(g));
+
+  assert(luaL_dostring(L,
+    "hold = {}\n"
+    "for i = 1, 2600 do\n"
+    "  local t = {}\n"
+    "  for j = 1, 18 do t[j] = i + j end\n"
+    "  hold[i] = t\n"
+    "end\n") == LUA_OK);
+  fixpoint_rounds0 = gc2_fixpoint_rounds_acq(g);
+  fixpoint_hits0 = gc2_fixpoint_hits_acq(g);
+  mark_complete_runs0 = gc2_mark_complete_runs_acq(g);
+  mark_complete_hits0 = gc2_mark_complete_hits_acq(g);
+  mark_to_weak0 = gc2_mark_to_weak_acq(g);
+  weak_complete_runs0 = gc2_weak_complete_runs_acq(g);
+  weak_to_sweep0 = gc2_weak_to_sweep_acq(g);
+  sweep_live_updates0 = la_load64_acq(&g->gc2.sweep_live_updates);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(gc2_fixpoint_rounds_acq(g) > fixpoint_rounds0);
+  assert(gc2_fixpoint_hits_acq(g) > fixpoint_hits0);
+  assert(gc2_mark_complete_runs_acq(g) > mark_complete_runs0);
+  assert(gc2_mark_complete_hits_acq(g) > mark_complete_hits0);
+  assert(gc2_mark_to_weak_acq(g) > mark_to_weak0);
+  assert(gc2_weak_complete_runs_acq(g) > weak_complete_runs0);
+  assert(gc2_weak_to_sweep_acq(g) > weak_to_sweep0);
+  assert(la_load64_acq(&g->gc2.sweep_live_updates) > sweep_live_updates0);
+  live_estimate = la_load64_acq(&g->gc2.live_estimate);
+  trigger_bytes = la_load64_acq(&g->gc2.trigger_bytes);
+  assert(live_estimate > 0);
+  assert(trigger_bytes >= LJ_GC2_TRIGGER_MIN);
+  /*
+  ** Pending-root scans are bounded by allocation since the previous cycle, so
+  ** pacing deliberately caps the automatic trigger even when the live heap is
+  ** larger than that cap.
+  */
+  if (live_estimate <= LJ_GC2_PENDING_ROOT_TRIGGER_MAX)
+    assert(trigger_bytes >= live_estimate);
+  else
+    assert(trigger_bytes == LJ_GC2_PENDING_ROOT_TRIGGER_MAX);
+  assert_idle(g, tg);
+
+  assert(luaL_dostring(L,
+    "weakcase = setmetatable({}, {__mode = 'v'})\n"
+    "do\n"
+    "  local k = {}\n"
+    "  weakcase[k] = {}\n"
+    "end\n") == LUA_OK);
+  weak_complete_progress0 = gc2_weak_complete_progress_acq(g);
+  weak_clear_tables0 = gc2_weak_clear_tables_acq(g);
+  weak_clear_cleared0 = gc2_weak_clear_cleared_acq(g);
+  weak_bridge_fallbacks0 = gc2_weak_bridge_fallbacks_acq(g);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(gc2_weak_complete_progress_acq(g) >
+	 weak_complete_progress0);
+  assert(gc2_weak_clear_tables_acq(g) > weak_clear_tables0);
+  assert(gc2_weak_clear_cleared_acq(g) > weak_clear_cleared0);
+  assert(gc2_weak_bridge_fallbacks_acq(g) >=
+	 weak_bridge_fallbacks0);
+  assert_idle(g, tg);
+  lua_pushnil(L);
+  lua_setglobal(L, "weakcase");
+
+  weak_n = g->gc2.weak_capacity + 1u;
+  lua_pushinteger(L, (lua_Integer)weak_n);
+  lua_setglobal(L, "weak_n");
+  assert(luaL_dostring(L,
+    "weakmany = {}\n"
+    "for i = 1, weak_n do\n"
+    "  local w = setmetatable({}, {__mode = 'v'})\n"
+    "  do\n"
+    "    local k = {}\n"
+    "    w[k] = {}\n"
+    "  end\n"
+    "  weakmany[i] = w\n"
+    "end\n") == LUA_OK);
+  weak_bridge_fallbacks0 = gc2_weak_bridge_fallbacks_acq(g);
+  weak_bridge_skipped0 = gc2_weak_bridge_skipped_acq(g);
+  weak_bridge_backfills0 = gc2_weak_bridge_backfills_acq(g);
+  weak_bridge_backfill_tables0 =
+    gc2_weak_bridge_backfill_tables_acq(g);
+  weak_bridge_backfill_cleared0 =
+    gc2_weak_bridge_backfill_cleared_acq(g);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(luaL_dostring(L,
+    "for i = 1, weak_n do\n"
+    "  assert(next(weakmany[i]) == nil)\n"
+    "end\n") == LUA_OK);
+  assert(gc2_weak_bridge_fallbacks_acq(g) ==
+	 weak_bridge_fallbacks0);
+  /*
+  ** Full GC may close more than one weak bridge round before returning to
+  ** pause, so the scheduler-visible "skipped fallback" count is monotonic but
+  ** not a single-step contract. Snapshot/overflow clearing may also clear the
+  ** weak slots before bridge backfill revisits the color weak list; the
+  ** required invariant is that fallback stays unused, the bridge backfill path
+  ** runs, and Lua-visible weak entries are gone.
+  */
+  assert(gc2_weak_bridge_skipped_acq(g) > weak_bridge_skipped0);
+  assert(gc2_weak_bridge_backfills_acq(g) >
+	 weak_bridge_backfills0);
+  assert(gc2_weak_bridge_backfill_tables_acq(g) >
+	 weak_bridge_backfill_tables0);
+  assert(gc2_weak_bridge_backfill_cleared_acq(g) >=
+	 weak_bridge_backfill_cleared0);
+  assert_idle(g, tg);
+  lua_pushnil(L);
+  lua_setglobal(L, "weakmany");
+  lua_pushnil(L);
+  lua_setglobal(L, "weak_n");
+
+  g->gc.stepmul = 1;
+  g->gc.threshold = 0;
+  mark_to_weak0 = gc2_mark_to_weak_acq(g);
+  weak_to_sweep0 = gc2_weak_to_sweep_acq(g);
+  sweep_live_updates0 = la_load64_acq(&g->gc2.sweep_live_updates);
+  i = lj_gc_step(L);
+  /* One bounded automatic step may now leave the larger traversable userdata
+  ** root graph active and report -1; phase/counter invariants below decide
+  ** whether it completed synchronously. */
+  assert(g->gc2.phase != LJ_GC2_IDLE ||
+	 (gc2_mark_to_weak_acq(g) > mark_to_weak0 &&
+	  gc2_weak_to_sweep_acq(g) > weak_to_sweep0 &&
+	  la_load64_acq(&g->gc2.sweep_live_updates) > sweep_live_updates0));
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert_idle(g, tg);
+
+  g->gc.stepmul = 1;
+  g->gc.threshold = 0;
+  mark_to_weak0 = gc2_mark_to_weak_acq(g);
+  weak_to_sweep0 = gc2_weak_to_sweep_acq(g);
+  sweep_live_updates0 = la_load64_acq(&g->gc2.sweep_live_updates);
+  done = 0;
+  saw_mark = 0;
+  saw_sweep = 0;
+  for (i = 0; i < 100000; i++) {
+    int rc = lj_gc_step(L);
+    if (g->gc2.phase == LJ_GC2_MARK ||
+	gc2_mark_to_weak_acq(g) > mark_to_weak0)
+      saw_mark = 1;
+    if (g->gc2.phase == LJ_GC2_SWEEP ||
+	gc2_weak_to_sweep_acq(g) > weak_to_sweep0 ||
+	la_load64_acq(&g->gc2.sweep_live_updates) > sweep_live_updates0)
+      saw_sweep = 1;
+    if (rc > 0) {
+      done = 1;
+      break;
+    }
+  }
+  assert(done);
+  assert(saw_mark);
+  assert(saw_sweep);
+  assert_idle(g, tg);
+
+  lua_pushnil(L);
+  lua_setglobal(L, "hold");
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert_idle(g, tg);
+
+  lua_newuserdata(L, 1);
+  lua_newtable(L);
+  lua_pushcfunction(L, finalizer_churn);
+  lua_setfield(L, -2, "__gc");
+  lua_setmetatable(L, -2);
+  lua_pop(L, 1);
+  finalizer_enters0 = gc2_finalizer_enters_acq(g);
+  finalizer_leaves0 = gc2_finalizer_leaves_acq(g);
+  finalizer_queued0 = gc2_finalizer_queued_acq(g);
+  finalizer_dequeued0 = gc2_finalizer_dequeued_acq(g);
+  finalizer_mpsc_drained0 = gc2_finalizer_mpsc_drained_acq(g);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(gc2_finalizer_active_acq(g) == 0);
+  assert(gc2_finalizer_queued_acq(g) > finalizer_queued0);
+  assert(gc2_finalizer_dequeued_acq(g) > finalizer_dequeued0);
+  assert(gc2_finalizer_mpsc_drained_acq(g) >
+	 finalizer_mpsc_drained0);
+  assert(gc2_finalizer_enters_acq(g) > finalizer_enters0);
+  assert(gc2_finalizer_leaves_acq(g) > finalizer_leaves0);
+  assert(gc2_finalizer_enters_acq(g) ==
+	 gc2_finalizer_leaves_acq(g));
+  assert_idle(g, tg);
+
+  lua_close(L);
+  printf("t-gc2-phase OK: GC2 phase bridge and mirrors verified\n");
+  return 0;
+}

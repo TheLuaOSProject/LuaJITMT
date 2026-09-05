@@ -1,0 +1,32 @@
+{
+  "source_comparisons": 675,
+  "source_head": "f9ec0a7217fc1a7eca61e17ab783bf32b9be1c61",
+  "matrices": {
+    "results-strict": {
+      "quiet_passes": 4,
+      "feed_counterexamples": 4
+    },
+    "results-asan": {
+      "quiet_passes": 4,
+      "feed_counterexamples": 4
+    },
+    "results-v2-optimized": {
+      "quiet_passes": 4,
+      "feed_counterexamples": 4
+    },
+    "results-v2-strict": {
+      "quiet_passes": 4,
+      "feed_counterexamples": 4
+    },
+    "results-v2-asan": {
+      "quiet_passes": 4,
+      "feed_counterexamples": 4
+    }
+  },
+  "total_runtime_processes": 40,
+  "quiet_passes": 20,
+  "intended_feed_counterexamples": 20,
+  "unexpected_runtime_failures": 0,
+  "unrelated_fixture_compile_failure": "results-optimized/compile.json",
+  "production_changes": 0
+}

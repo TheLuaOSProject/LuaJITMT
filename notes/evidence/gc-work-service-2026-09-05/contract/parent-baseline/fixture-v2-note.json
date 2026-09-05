@@ -1,0 +1,6 @@
+{
+  "reason": "Optimized v1 fixture included unrelated coalescing cases whose arena-test allocation-failure helper is absent from the GC2-only build. V2 copies only setup, cleanup and graph helpers and the same measured loop; the helper bodies remain byte-identical except removal of the unused watched reset. Runtime sources/build flags are unchanged.",
+  "original_optimized_compile": "results-optimized/compile.json",
+  "original_strict_and_asan": "16 completed measurements remain immutable; 8 quiet controls passed and 8 feeders exited2 after normal cleanup.",
+  "v2_runs": "Run and report all three builds independently."
+}

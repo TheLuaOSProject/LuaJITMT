@@ -1,0 +1,37 @@
+/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/regression-strict/t-gc2-alloc-account: \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/tests/t-gc2-alloc-account.c \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lua.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/luaconf.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lauxlib.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lua.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lualib.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_obj.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_def.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_arch.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_atomic.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_gc2token.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_tgregistry.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_tgslot.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_atomic.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_cdata.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_obj.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_gc.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_ctype.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_gc2.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_arena.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_err.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_errmsg.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_oserr.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_gc.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_gc2.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_meta.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_safepoint.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_tg.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_bc.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_tab.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_thr.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_tg.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_dispatch.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_jit.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_ir.h \
+ /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/strict/src/lj_jit.h

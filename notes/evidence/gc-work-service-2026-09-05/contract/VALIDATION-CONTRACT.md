@@ -1,0 +1,21 @@
+# Focused validation required of the implementation owner
+
+No runtime validation is performed in this package. ROOT owns all candidate fixtures, runs and cost comparisons. The original witnesses and bounds remain evidence even when a later fixture generation changes a quota assumption.
+
+| Control | Necessary observation |
+| --- | --- |
+| Original continuous ordinary-string SSB feeder, MARK/pre-READY SWEEP, quota1/64 | The exact otherwise eligible parent recovery identity receives service before the unchanged4096-source bound; its child→grandchild graph is preserved and the recovery count retires under the original cleanup. Quiet controls remain positive. An attempted or incremented counter alone is insufficient for this eligible-payload oracle. |
+| Assist and bounded closure feeders | Recovery receives a turn under continued SSB or grey work. Assist active SSB cannot indefinitely exclude published SSB. Exercise quota1 as well as the existing larger quantum. Use actual caller admission; raw field writes must not substitute for an owned service call. |
+| Four classes available for one owner | Repeated admitted quota1 calls exercise each distinct source class. Record exact source counts; do not require an SSB conversion to scan its new grey entry within the same unit. Grey opportunity is separate from an old object's FIFO service. |
+| Worker with active private suffix | Keep worker selector TG=NULL. The normal logical-owner flush/handshake makes eligible private work visible. An unrelated TG's private cursor must not move because the selector chose ACTIVE. |
+| Retained published/active SSB head | Failed admission keeps the exact source slot, count/cursor and lifetime coverage; defer ends the call. The next admitted call starts at the following class and independent eligible work can proceed. No same-quantum pop/retry loop. |
+| Grey RETRY and REQUEUED | Retained/requeued locator survives before claim release. RETRY remains count0, REQUEUED count1, both with defer. Later independent classes get a turn; preserved payload graph eventually closes after the real owner releases. |
+| Main/small/Huge recovery retained or REDIRTY | Source count/CLAIMED ownership and lifetime scope survive retries and late publication. A recovery attempt can count1 and remain PENDING; do not relabel it completion. At least one eligible independent graph class should still receive later turns. |
+| Reserve-before-publish and sticky-failure recovery | Nonzero reserved count with no claimable locator cannot authorize SWEEP/READY/destruction on a selector zero. Sticky failure with exact count0 does not trigger directory scans and remains a close veto. |
+| Thread NEEDSCAN handoff | Bounded closure stops after the handoff and preserves the owner's durable scan obligation. No marks/source-unit count substitutes for owner scan completion. |
+| Claim, phase and native refusals | Failed worker/assist claim, GCSCAN leader, SMR reclaim, native lease/frame and relevant recorder/finalizer checks retain their existing result and hint. No borrowed mainL or new native wait. |
+| STOP/FINPAUSE, cycle changes, worker lifecycle | Existing automatic admission controls stay intact; active-phase direct worker semantics remain unchanged. Hint persistence across cycle and worker generations carries no stale permission or pointer. |
+| Test overflow bridge ownership | Original retry-then-success and headless reservation cases pass through a real test-wrapper claim. Busy claim returns0 without reading/traversing the bridge; every acquired result path releases. Preserve v2's exact assertion artifact. |
+| Telemetry and cost | Global grey increments once per helper count, worker-specific grey remains separate, and SWEEP global-grey coverage change is explicit. Measure the stricter per-source quota's throughput/cost; don't edit old assumptions merely until they pass. |
+
+Retain strict and ASan results as separate generations, including the exact original coalescing/recovery quota-sensitive failures and any unresolved stock/JIT signal. Parent-reported focused successes do not classify those failures. Full drains, same-TG arena rotation, pending-root EOF cost and the previously preserved no-worker JIT scheduling deficit remain separate work.

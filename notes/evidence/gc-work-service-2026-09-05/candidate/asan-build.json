@@ -1,0 +1,40 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "24-27",
+    "make",
+    "-C",
+    "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/src",
+    "-j4",
+    "BUILDMODE=static",
+    "CCDEBUG=-g",
+    "TARGET_STRIP=:",
+    "XCFLAGS=-DLUA_USE_APICHECK -DLUA_USE_ASSERT -DLJ_FUNC_TEST_HELPERS -DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLJ_XSAVE_TEST_HELPERS -DLJ_UDATA_TEST_HELPERS -DLJ_STR_TEST_HELPERS",
+    "CC=clang",
+    "CCOPT=-O1",
+    "TARGET_CFLAGS=-fsanitize=address -fno-omit-frame-pointer",
+    "TARGET_LDFLAGS=-fsanitize=address"
+  ],
+  "cwd": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan",
+  "flags": [
+    "-DLUA_USE_APICHECK",
+    "-DLUA_USE_ASSERT",
+    "-DLJ_FUNC_TEST_HELPERS",
+    "-DLJ_GC2_TEST_HELPERS",
+    "-DLJ_TAB_TEST_HELPERS",
+    "-DLJ_ARENA_TEST_HELPERS",
+    "-DLJ_TRACE_TEST_HELPERS",
+    "-DLJ_XSAVE_TEST_HELPERS",
+    "-DLJ_UDATA_TEST_HELPERS",
+    "-DLJ_STR_TEST_HELPERS"
+  ],
+  "environment": {
+    "LUA_PATH": "/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/src/?.lua;/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/tests/lib/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  "seconds": 19.474780632997863,
+  "exit": 0,
+  "stdout": "make: Entering directory '/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/src'\nHOSTCC    host/minilua.o\nHOSTCC    host/buildvm_asm.o\nHOSTCC    host/buildvm_peobj.o\nHOSTCC    host/buildvm_lib.o\nHOSTCC    host/buildvm_fold.o\nHOSTLINK  host/minilua\nVERSION   luajit.h\nDYNASM    host/buildvm_arch.h\nCC        luajit.o\nHOSTCC    host/buildvm.o\nHOSTLINK  host/buildvm\nBUILDVM   lj_vm.S\nBUILDVM   lj_bcdef.h\nBUILDVM   lj_ffdef.h\nBUILDVM   lj_libdef.h\nBUILDVM   lj_recdef.h\nBUILDVM   lj_folddef.h\nBUILDVM   jit/vmdef.lua\nASM       lj_vm.o\nCC        lj_assert.o\nCC        lj_gc.o\nCC        lj_gc2.o\nCC        lj_safepoint.o\nCC        lj_err.o\nCC        lj_char.o\nCC        lj_bc.o\nCC        lj_obj.o\nCC        lj_buf.o\nCC        lj_str.o\nCC        lj_tab.o\nCC        lj_func.o\nCC        lj_udata.o\nCC        lj_meta.o\nCC        lj_debug.o\nCC        lj_prng.o\nCC        lj_state.o\nCC        lj_dispatch.o\nCC        lj_tg.o\nCC        lj_thr.o\nCC        lj_chan.o\nCC        lj_arena.o\nCC        lj_vmevent.o\nCC        lj_vmmath.o\nCC        lj_strscan.o\nCC        lj_strfmt.o\nCC        lj_strfmt_num.o\nCC        lj_serialize.o\nCC        lj_api.o\nCC        lj_profile.o\nCC        lj_lex.o\nCC        lj_parse.o\nCC        lj_bcread.o\nCC        lj_bcwrite.o\nCC        lj_load.o\nCC        lj_ir.o\nCC        lj_opt_mem.o\nCC        lj_opt_fold.o\nCC        lj_opt_narrow.o\nCC        lj_opt_dce.o\nCC        lj_opt_loop.o\nCC        lj_opt_split.o\nCC        lj_opt_sink.o\nCC        lj_mcode.o\nCC        lj_snap.o\nCC        lj_record.o\nCC        lj_crecord.o\nCC        lj_ffrecord.o\nCC        lj_asm.o\nCC        lj_trace.o\nCC        lj_gdbjit.o\nCC        lj_ctype.o\nCC        lj_cdata.o\nCC        lj_cconv.o\nCC        lj_ccall.o\nCC        lj_ccallback.o\nCC        lj_carith.o\nCC        lj_clib.o\nCC        lj_cparse.o\nCC        lj_lib.o\nCC        lj_alloc.o\nCC        lib_aux.o\nCC        lib_base.o\nCC        lib_math.o\nCC        lib_bit.o\nCC        lib_string.o\nCC        lib_table.o\nCC        lib_io.o\nCC        lib_os.o\nCC        lib_package.o\nCC        lib_debug.o\nCC        lib_jit.o\nCC        lib_ffi.o\nCC        lib_buffer.o\nCC        lib_threading.o\nCC        lib_init.o\nAR        libluajit.a\nLINK      luajit\nOK        Successfully built LuaJIT\nmake: Leaving directory '/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/src'\n",
+  "stderr": "**** WARNING Cannot determine rolling release version from git log.\n**** WARNING The 'git' command must be available during the build.\n"
+}

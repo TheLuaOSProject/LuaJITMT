@@ -1,0 +1,6 @@
+STATE birth phase=0 cycle=0 deferred=0 owner_runs=0 arenas=0 ptr=0x7f2232250000 cell=2203 block=1 root=1 life=2 ready=0 mark=0 flags=9 cursor=0 late=0 retire=0 quarantine=(nil) owned=0x7f2232250000
+STATE nested-return phase=3 cycle=1 deferred=1 owner_runs=2 arenas=0 ptr=0x7f2232250000 cell=2203 block=1 root=1 life=2 ready=0 mark=1 flags=25 cursor=2214 late=0 retire=8 quarantine=0x7f2232250000 owned=(nil)
+COLLECT result=0 elapsed_ns=300144 defer_delta=1
+STATE published phase=3 cycle=1 deferred=1 owner_runs=2 arenas=0 ptr=0x7f2232250000 cell=2203 block=1 root=3 life=1 ready=1 mark=1 flags=25 cursor=2214 late=0 retire=8 quarantine=0x7f2232250000 owned=(nil)
+TERMINAL result=1 elapsed_ns=396178 phase=0 quarantine=(nil)
+t-owner-defer OK

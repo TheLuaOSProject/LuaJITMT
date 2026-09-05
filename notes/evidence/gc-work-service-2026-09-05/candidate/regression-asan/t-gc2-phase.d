@@ -1,0 +1,22 @@
+/tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/regression-asan/t-gc2-phase: \
+  /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/tests/t-gc2-phase.c \
+  /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/src/lua.h \
+  /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/src/luaconf.h \
+  /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/src/lauxlib.h \
+  /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/src/lualib.h \
+  /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/tests/lib/test_sleep.h \
+  /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/src/lj_obj.h \
+  /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/src/lj_def.h \
+  /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/src/lj_arch.h \
+  /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/src/lj_atomic.h \
+  /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/src/lj_gc2token.h \
+  /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/src/lj_tgregistry.h \
+  /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/src/lj_tgslot.h \
+  /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/src/lj_arena.h \
+  /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/src/lj_gc.h \
+  /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/src/lj_gc2.h \
+  /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/src/lj_thr.h \
+  /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/src/lj_tg.h \
+  /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/src/lj_bc.h \
+  /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/src/lj_ctype.h \
+  /tmp/lj-gc-workclass-fair-repair-20260905-q5riyfsd/asan/tests/lib/thread_fixture_helpers.h

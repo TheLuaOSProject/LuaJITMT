@@ -1,0 +1,19 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "8-15",
+    "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/luajit",
+    "-jon",
+    "test.lua",
+    "--quiet"
+  ],
+  "cwd": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/tests/stock/test",
+  "environment": {
+    "LUA_PATH": "/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/src/?.lua;/tmp/lj-scalar-next-combined-20260905-ufftrr0s/strict/tests/lib/?.lua;;"
+  },
+  "seconds": 1.8580227169950376,
+  "exit": 0,
+  "stdout": "509 passed\n",
+  "stderr": ""
+}
