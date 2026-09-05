@@ -1,0 +1,16 @@
+{
+  "kind": "normal",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/normal/src",
+    "-j8",
+    "BUILDMODE=static"
+  ],
+  "exit": 0,
+  "seconds": 5.076762211001551,
+  "binary_sha256": "c69a8c5e59189b33a0a8ef0f0f75ddd9d336098f1d17daded34a48b7cf906e24"
+}

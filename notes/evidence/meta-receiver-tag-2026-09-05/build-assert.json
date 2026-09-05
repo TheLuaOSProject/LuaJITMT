@@ -1,0 +1,17 @@
+{
+  "kind": "assert",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-meta-receiver-tag-20260905-rbaz3ayb/assert/src",
+    "-j8",
+    "BUILDMODE=static",
+    "XCFLAGS=-DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLUA_USE_ASSERT"
+  ],
+  "exit": 0,
+  "seconds": 5.581726630000048,
+  "binary_sha256": "1c7df63685f9fca009a82d7a5420e5b54894a339369025e99d5adffcf04f1246"
+}

@@ -1,0 +1,8 @@
+{
+  "base": "28de50a622e489019fa22845d6454e029b210582",
+  "overlay": "src/lj_meta.c",
+  "sha256": "12c71e7b97d2680f96f1513f50fdfa0d047ea5b4354ef588cf5f2301f3d50bac",
+  "blob": "61d3581888ed313dc8348fc7f7effdee98416c63",
+  "patch_sha256": "52aff76fb956fead07f6c155e1d3fe9d3995557ee06a6157770eff857f1db840",
+  "normal_source_base_qualification": "FNEW fixture repair uncommitted in shared tree is deliberately excluded. This is exact28de50a6 plus receiver-tag patch."
+}

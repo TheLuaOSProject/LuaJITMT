@@ -1,0 +1,2 @@
+benchmark               total_s      ns/op
+tab_read_existing        0.0947     631.39
