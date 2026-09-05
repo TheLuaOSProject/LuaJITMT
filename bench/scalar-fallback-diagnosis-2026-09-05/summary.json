@@ -1,0 +1,34 @@
+{
+  "tab_store_existing": {
+    "median_ns_per_op": {
+      "before": 652.79,
+      "after": 733.41
+    },
+    "paired_geomean_after_over_before": 1.1155299028394317,
+    "pairs": 7
+  },
+  "tab_hash_read": {
+    "median_ns_per_op": {
+      "before": 455.37,
+      "after": 571.37
+    },
+    "paired_geomean_after_over_before": 1.25499090836077,
+    "pairs": 7
+  },
+  "tab_read_existing": {
+    "median_ns_per_op": {
+      "before": 1074.16,
+      "after": 1267.79
+    },
+    "paired_geomean_after_over_before": 1.1781232859615465,
+    "pairs": 7
+  },
+  "tab_array": {
+    "median_ns_per_op": {
+      "before": 248.56,
+      "after": 167.99
+    },
+    "paired_geomean_after_over_before": 0.6723252519127465,
+    "pairs": 7
+  }
+}

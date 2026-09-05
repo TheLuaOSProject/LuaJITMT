@@ -1,0 +1,79 @@
+{
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 553,
+      "sha256": "334cf3e6c04f3e68f77f6bf6387a40051ccb99ed17316fc3b1440642a16acacc"
+    },
+    {
+      "path": "benchmark.py",
+      "bytes": 4052,
+      "sha256": "0bc78a3c9a0d6478de31f60b38c19b92e7c1b377bbac8b623e74a40fcee2ef55"
+    },
+    {
+      "path": "build.py",
+      "bytes": 996,
+      "sha256": "8172cf55ed0bd9fe86e67fafb2394c06a44578e27a36c29670a9dc1ea97ee6fd"
+    },
+    {
+      "path": "comparison.csv",
+      "bytes": 1327,
+      "sha256": "7bc3c56469f9c94bda15021c522c9c7b1cb1d60d16c8127f1a315ebc1793d56e"
+    },
+    {
+      "path": "fork-joff.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "fork-joff.stdout",
+      "bytes": 302,
+      "sha256": "18a487043d3b923a7fef5ae3f2f0a161ca9d6dfdaf084925037904b06cb7675c"
+    },
+    {
+      "path": "fork-jon.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "fork-jon.stdout",
+      "bytes": 688,
+      "sha256": "8c25efadd72da08d9aa088f1ff9a2c57be2fc36daa1714c4f7abe77192958a74"
+    },
+    {
+      "path": "metadata.json",
+      "bytes": 26681,
+      "sha256": "1d1f499b8667fdb44492bc4ee83ffa27126e460c7a3cf7c9ea5c5318205bb224"
+    },
+    {
+      "path": "runs.json",
+      "bytes": 7305,
+      "sha256": "562c285b911e17eacd358721114c6d4ddc2af224e98d9968fdaa74873eab8e45"
+    },
+    {
+      "path": "stock-joff.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "stock-joff.stdout",
+      "bytes": 689,
+      "sha256": "e49b8a1892c7e76f577185b395792cb08fb2174830156c1c0dfc0ee3637cb8cb"
+    },
+    {
+      "path": "stock-jon.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "stock-jon.stdout",
+      "bytes": 688,
+      "sha256": "d0a68909f4482463e9834ef73bca1ac4d34b1182f090b0991c75ff5fd1a539e6"
+    },
+    {
+      "path": "summary.json",
+      "bytes": 242,
+      "sha256": "87733bbfc4cfbce004de48cab7b1bab8785877e8afa722a31fa42f6565ad6a7e"
+    }
+  ]
+}

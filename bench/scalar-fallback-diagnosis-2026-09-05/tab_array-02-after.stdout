@@ -1,0 +1,2 @@
+benchmark               total_s      ns/op
+tab_array                0.0252     167.85

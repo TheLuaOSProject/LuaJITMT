@@ -1,0 +1,16 @@
+benchmark               total_s      ns/op
+arith_loop               0.0342       0.68
+fib30                    0.0062 6151000.00
+tab_hash_write           0.0504      25.21
+tab_store_existing       0.0396       1.98
+tab_insert_newkey        0.0229     114.67
+tab_hash_read            0.4516      22.58
+tab_read_existing        0.0615       2.05
+tab_array                0.0820       2.73
+alloc_tables             0.0034       0.68
+string_intern            0.1475      73.74
+closures_upval           0.3662      73.24
+upval_hot                0.0342       0.68
+ffi_struct               0.0205       0.68
+coroutine_switch         0.0801      26.69
+sbuf_format              0.1437      71.87
