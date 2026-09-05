@@ -1,0 +1,3 @@
+Function "lj_trace_err_info" not defined.
+/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/abort-stack.gdb:5: Error in sourced command file:
+Argument required (one or more breakpoint numbers).

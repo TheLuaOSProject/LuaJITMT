@@ -1,0 +1,49 @@
+[
+  {
+    "name": "relink",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "gcc",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/baseline-unstripped",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/src/luajit.o",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02258487900144246
+  },
+  {
+    "name": "symbols-gdb",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "gdb",
+      "--batch",
+      "-x",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/abort-stack-symbols.gdb",
+      "--args",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/baseline-unstripped",
+      "-jon",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/tests/t-ffi-cdata-shared-hammer.lua"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.053433053000844666
+  }
+]

@@ -1,0 +1,24 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+    "-joff",
+    "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/canonical/tools/test.lua",
+    "m6_jit_cdata_basemt_guards"
+  ],
+  "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/canonical",
+  "environment_overrides": {
+    "LJ_TEST_ROOT": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/canonical",
+    "JOBS": "4",
+    "TMPDIR": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/final-canonical-tmp",
+    "LJ_TEST_DISABLE_BUILD_CACHE": "1"
+  },
+  "exit": 0,
+  "seconds": 0.08744440499867778,
+  "source_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+  "fixture_sha256": "956817711d803fa47de872b023fa6eead9c86d168c071f62d1cbb76addaf0497",
+  "suite_sha256": "46788878337b2c91ed0ec562c9adb052cecbe4e00b042d01932e165a1f7c717a",
+  "runtime_sha256": "20f4cfcdd2e00943493b897d4b10a9ad815c4ed599afd5306fc0415f7d8dacd9"
+}

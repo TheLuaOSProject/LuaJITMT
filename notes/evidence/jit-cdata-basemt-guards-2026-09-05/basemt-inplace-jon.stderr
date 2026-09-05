@@ -1,0 +1,5 @@
+/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/src/luajit: /tmp/lj-ffi-owned-trace-20260905-pmxukjxp/basemt-native.lua:96: /tmp/lj-ffi-owned-trace-20260905-pmxukjxp/basemt-native.lua:85: post-mutation native code skipped current __call method
+stack traceback:
+	[C]: in function 'assert'
+	/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/basemt-native.lua:96: in main chunk
+	[C]: at 0x55b91f149100

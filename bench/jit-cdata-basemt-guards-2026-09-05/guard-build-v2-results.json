@@ -1,0 +1,45 @@
+[
+  {
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-C",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src",
+      "-j4",
+      "BUILDMODE=static",
+      "CCDEBUG=-g",
+      "TARGET_STRIP=:"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "exit": 0,
+    "seconds": 0.9011734349987819,
+    "source_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "archive_sha256": "4a27a02e96b5d1a3dfb013f56122762234ea584706572ab6854c25c670e051cb"
+  },
+  {
+    "variant": "fix-assert",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-C",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert/src",
+      "-j4",
+      "BUILDMODE=static",
+      "CCDEBUG=-g",
+      "TARGET_STRIP=:",
+      "XCFLAGS=-DLUA_USE_ASSERT -DLJ_GC2_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLJ_TAB_TEST_HELPERS"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert",
+    "exit": 0,
+    "seconds": 1.0979939780008863,
+    "source_sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "runtime_sha256": "31bc78140ead77a21fbed95887065f7e4bb4502595ceef434aa2c2e89debd3d1",
+    "archive_sha256": "ba2bad00177debdcc6eef72cc6e1188c7c61d2b064fba5465f76ec85681f43db"
+  }
+]

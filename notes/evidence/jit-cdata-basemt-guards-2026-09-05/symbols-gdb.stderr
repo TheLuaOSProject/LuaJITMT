@@ -1,0 +1,5 @@
+/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/baseline-unstripped: ...0905-e3t1w0fw/before/tests/t-ffi-cdata-shared-hammer.lua:80: active-MT trace-owned cdata allocation loop should trace
+stack traceback:
+	[C]: in function 'assert'
+	...0905-e3t1w0fw/before/tests/t-ffi-cdata-shared-hammer.lua:80: in main chunk
+	[C]: at 0x55555555f100

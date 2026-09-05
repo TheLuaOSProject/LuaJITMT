@@ -1,0 +1,171 @@
+---- TRACE flush
+
+---- TRACE 1 start constructor-cost.lua:8
+---- TRACE 1 abort constructor-cost.lua:10 -- error thrown or hook called during recording
+
+---- TRACE 1 start constructor-cost.lua:8
+---- TRACE 1 IR
+0001 >  [35mint[m SLOAD  #5    CRI
+0002 >  [35mint[m LE     0001  [35m+2147483646[m
+0003    [35mint[m SLOAD  #4    CI
+0004    [1mfun[m SLOAD  #0    R
+0005 >  [1mfun[m EQ     0004  [1mconstructor-cost.lua:6[m
+0006 >  [35mint[m ADDOV  0003  [35m+1  [m
+0007    [31mtab[m FLOAD  nil   #276
+0008    p64 FLOAD  0007  tab.node
+0009 >  p64 HREFK  0008  [32m"__call"[m @11
+0010 >  [1mfun[m HLOAD  0009
+0011 >  [1mfun[m EQ     0010  [1mffi.meta.__call[m
+0012 }  [33mcdt[m CNEW   [35m+102[m
+0013    p64 ADD    0012  [35m+16 [m
+0014    [34mnum[m CONV   0003  [34mnum[m.[35mint[m
+0015 }  [34mnum[m XSTORE 0013  0014
+0016    p64 ADD    0012  [35m+24 [m
+0017    [34mnum[m CONV   0006  [34mnum[m.[35mint[m
+0018 }  [34mnum[m XSTORE 0016  0017
+0019 >  [34mnum[m SLOAD  #3    T
+0020 >  p64 HREFK  0008  [32m"__index"[m @2
+0021 >  [1mfun[m HLOAD  0020
+0022 >  [1mfun[m EQ     0021  [1mffi.meta.__index[m
+0023    [34mnum[m ADD    0019  0014
+0024  + [34mnum[m ADD    0023  0017
+0025  + [35mint[m ADD    0003  [35m+1  [m
+0026 >  [35mint[m LE     0025  0001
+0027 ------ LOOP ------------
+0028 >  nil XPOLL  #0  
+0029 >  [35mint[m ADDOV  0025  [35m+1  [m
+0030    [31mtab[m FLOAD  nil   #276
+0031    p64 FLOAD  0030  tab.node
+0032 >  p64 HREFK  0031  [32m"__call"[m @11
+0033 >  [1mfun[m HLOAD  0032
+0034 >  [1mfun[m EQ     0033  [1mffi.meta.__call[m
+0035 }  [33mcdt[m CNEW   [35m+102[m
+0036    p64 ADD    0035  [35m+16 [m
+0037    [34mnum[m CONV   0025  [34mnum[m.[35mint[m
+0038 }  [34mnum[m XSTORE 0036  0037
+0039    p64 ADD    0035  [35m+24 [m
+0040    [34mnum[m CONV   0029  [34mnum[m.[35mint[m
+0041 }  [34mnum[m XSTORE 0039  0040
+0042 >  p64 HREFK  0031  [32m"__index"[m @2
+0043 >  [1mfun[m HLOAD  0042
+0044 >  [1mfun[m EQ     0043  [1mffi.meta.__index[m
+0045    [34mnum[m ADD    0037  0024
+0046  + [34mnum[m ADD    0045  0040
+0047  + [35mint[m ADD    0025  [35m+1  [m
+0048 >  [35mint[m LE     0047  0001
+0049    [35mint[m PHI    0025  0047
+0050    [34mnum[m PHI    0024  0046
+---- TRACE 1 mcode 551
+556bd495fdd9  mov dword [r14+0x84c], 0x1
+556bd495fde4  mov r11, 0x00007fec71b955c0
+556bd495fdee  mov rsi, 0x00007fec71b96080
+556bd495fdf8  mov rcx, 0x00007fec71b95470
+556bd495fe02  movsd xmm7, [rdx+0x18]
+556bd495fe07  cvttsd2si eax, xmm7
+556bd495fe0b  xorps xmm6, xmm6
+556bd495fe0e  cvtsi2sd xmm6, eax
+556bd495fe12  ucomisd xmm7, xmm6
+556bd495fe16  jnz 0x556bd4950130
+556bd495fe1c  jpe 0x556bd4950130
+556bd495fe22  cmp eax, 0x7ffffffe
+556bd495fe28  jg 0x556bd4950130
+556bd495fe2e  cvttsd2si ebp, [rdx+0x10]
+556bd495fe33  rorx rbx, [rdx-0x10], 0x2f
+556bd495fe3a  shr rbx, 0x11
+556bd495fe3e  cmp rbx, rsi
+556bd495fe41  jnz 0x556bd4950130
+556bd495fe47  mov r9d, ebp
+556bd495fe4a  add r9d, +0x01
+556bd495fe4e  jo 0x556bd4950138
+556bd495fe54  mov r12, 0x00007fec71ed04d0
+556bd495fe5e  mov r12, [r12]
+556bd495fe62  mov r8, [r12+0x28]
+556bd495fe67  cmp dword [r8-0x10], +0x0b
+556bd495fe6c  jb 0x556bd4950138
+556bd495fe72  mov rdi, 0xfffdffec71c92930
+556bd495fe7c  cmp rdi, [r8+0x110]
+556bd495fe83  jnz 0x556bd4950138
+556bd495fe89  rorx r10, [r8+0x108], 0x2f
+556bd495fe93  cmp r10w, -0x09
+556bd495fe98  jnz 0x556bd4950138
+556bd495fe9e  shr r10, 0x11
+556bd495fea2  cmp r10, r11
+556bd495fea5  jnz 0x556bd4950138
+556bd495feab  xorps xmm7, xmm7
+556bd495feae  cvtsi2sd xmm7, ebp
+556bd495feb2  xorps xmm0, xmm0
+556bd495feb5  cvtsi2sd xmm0, r9d
+556bd495feba  cmp dword [rdx+0xc], 0xfff90000
+556bd495fec1  jnb 0x556bd4950138
+556bd495fec7  movsd xmm1, [rdx+0x8]
+556bd495fecc  cmp dword [r8-0x10], +0x02
+556bd495fed1  jb 0x556bd4950140
+556bd495fed7  mov rdi, 0xfffdffec71c92780
+556bd495fee1  cmp rdi, [r8+0x38]
+556bd495fee5  jnz 0x556bd4950140
+556bd495feeb  rorx rsi, [r8+0x30], 0x2f
+556bd495fef2  cmp si, -0x09
+556bd495fef6  jnz 0x556bd4950140
+556bd495fefc  shr rsi, 0x11
+556bd495ff00  cmp rsi, rcx
+556bd495ff03  jnz 0x556bd4950140
+556bd495ff09  addsd xmm7, [rdx+0x8]
+556bd495ff0e  mov rdx, 0x00007fec71b955c0
+556bd495ff18  addsd xmm7, xmm0
+556bd495ff1c  add ebp, +0x01
+556bd495ff1f  cmp ebp, eax
+556bd495ff21  jg 0x556bd4950148
+->LOOP:
+556bd495ff27  mov rdi, 0x00007fec71ed0584
+556bd495ff31  mov edi, [rdi]
+556bd495ff33  cmp edi, +0x00
+556bd495ff36  jz 0x556bd4950150
+556bd495ff3c  mov r15d, ebp
+556bd495ff3f  add r15d, +0x01
+556bd495ff43  jo 0x556bd4950158
+556bd495ff49  mov rbx, 0x00007fec71ed04d0
+556bd495ff53  mov rbx, [rbx]
+556bd495ff56  mov rbx, [rbx+0x28]
+556bd495ff5a  cmp dword [rbx-0x10], +0x0b
+556bd495ff5e  jb 0x556bd4950158
+556bd495ff64  mov rdi, 0xfffdffec71c92930
+556bd495ff6e  cmp rdi, [rbx+0x110]
+556bd495ff75  jnz 0x556bd4950158
+556bd495ff7b  rorx r13, [rbx+0x108], 0x2f
+556bd495ff85  cmp r13w, -0x09
+556bd495ff8a  jnz 0x556bd4950158
+556bd495ff90  shr r13, 0x11
+556bd495ff94  cmp r13, rdx
+556bd495ff97  jnz 0x556bd4950158
+556bd495ff9d  xorps xmm5, xmm5
+556bd495ffa0  cvtsi2sd xmm5, ebp
+556bd495ffa4  xorps xmm6, xmm6
+556bd495ffa7  cvtsi2sd xmm6, r15d
+556bd495ffac  cmp dword [rbx-0x10], +0x02
+556bd495ffb0  jb 0x556bd4950160
+556bd495ffb6  mov rdi, 0xfffdffec71c92780
+556bd495ffc0  cmp rdi, [rbx+0x38]
+556bd495ffc4  jnz 0x556bd4950160
+556bd495ffca  rorx rbx, [rbx+0x30], 0x2f
+556bd495ffd1  cmp bx, -0x09
+556bd495ffd5  jnz 0x556bd4950160
+556bd495ffdb  shr rbx, 0x11
+556bd495ffdf  cmp rbx, rcx
+556bd495ffe2  jnz 0x556bd4950160
+556bd495ffe8  addsd xmm7, xmm5
+556bd495ffec  addsd xmm7, xmm6
+556bd495fff0  add ebp, +0x01
+556bd495fff3  cmp ebp, eax
+556bd495fff5  jle 0x556bd495ff27	->LOOP
+556bd495fffb  jmp 0x556bd4950168
+---- TRACE 1 stop -> loop
+
+constructor	sink	iterations	80	warm-native-exits	1
+sample 1 0.000016000 200.000000000
+sample 2 0.000015000 187.500000000
+---- TRACE 2 start constructor-cost.lua:6
+---- TRACE 2 abort constructor-cost.lua:6 -- NYI: bytecode ISLT  
+
+sample 3 0.000068000 850.000000000
+sample 4 0.000015000 187.500000000
+sample 5 0.000014000 175.000000000

@@ -1,0 +1,5 @@
+/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit: ...ed-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua:140: ...ed-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua:120: native code skipped the current absent/nonfunction __call
+stack traceback:
+	[C]: in function 'assert'
+	...ed-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua:140: in main chunk
+	[C]: at 0x55d632378100

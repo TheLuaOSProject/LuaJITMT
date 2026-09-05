@@ -29,6 +29,7 @@ local m6_cases = {
   "m6_jit_fnew_bump",
   "m6_jit_barrier_xpoll",
   "m6_jit_xbar_xpoll",
+  "m6_jit_cdata_basemt_guards",
   "m6_jit_xsave",
   "m6_jit_table_store_helper",
   "m6_jit_rooted_table_len",
@@ -1094,6 +1095,21 @@ assert(threading.gcworkers(0) == 1)
         })
       end)
       print("M6 JIT XSAVE snapshot behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_cdata_basemt_guards",
+    description = "native cdata dispatch guards mutable base-table methods",
+    run = function(t)
+      build_default(t)
+      runtime.luajit_script(t, "t-jit-cdata-basemt-guards.lua", nil, {
+        joff = true, timeout = "20s"
+      })
+      runtime.luajit_script(t, "t-jit-cdata-basemt-guards.lua", nil, {
+        jon = true, timeout = "20s"
+      })
+      print("M6 cdata base-table native method guards passed")
     end
   })
 

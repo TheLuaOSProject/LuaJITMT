@@ -1,0 +1,18 @@
+{
+  "command": [
+    "git",
+    "apply",
+    "--check",
+    "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/pre-mt-cdata-guards-review.patch"
+  ],
+  "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/patch-check",
+  "exit": 0,
+  "stdout": "",
+  "stderr": "",
+  "patch_sha256": "b99b514961dffca4f696cc9b1ba72586e1273f4a6cc367a7d4cdfcb40107b8a9",
+  "reconstructed_sha256": {
+    "src/lj_record.c": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "tests/suites/m6_jit.lua": "46788878337b2c91ed0ec562c9adb052cecbe4e00b042d01932e165a1f7c717a",
+    "tests/t-jit-cdata-basemt-guards.lua": "956817711d803fa47de872b023fa6eead9c86d168c071f62d1cbb76addaf0497"
+  }
+}

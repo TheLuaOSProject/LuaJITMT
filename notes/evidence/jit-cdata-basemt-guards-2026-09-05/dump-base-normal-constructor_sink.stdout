@@ -1,0 +1,101 @@
+---- TRACE flush
+
+---- TRACE 1 start constructor-cost.lua:8
+---- TRACE 1 abort constructor-cost.lua:10 -- error thrown or hook called during recording
+
+---- TRACE 1 start constructor-cost.lua:8
+---- TRACE 1 IR
+0001 >  [35mint[m SLOAD  #5    CRI
+0002 >  [35mint[m LE     0001  [35m+2147483646[m
+0003    [35mint[m SLOAD  #4    CI
+0004    [1mfun[m SLOAD  #0    R
+0005 >  [1mfun[m EQ     0004  [1mconstructor-cost.lua:6[m
+0006 >  [35mint[m ADDOV  0003  [35m+1  [m
+0007 }  [33mcdt[m CNEW   [35m+102[m
+0008    p64 ADD    0007  [35m+16 [m
+0009    [34mnum[m CONV   0003  [34mnum[m.[35mint[m
+0010 }  [34mnum[m XSTORE 0008  0009
+0011    p64 ADD    0007  [35m+24 [m
+0012    [34mnum[m CONV   0006  [34mnum[m.[35mint[m
+0013 }  [34mnum[m XSTORE 0011  0012
+0014 >  [34mnum[m SLOAD  #3    T
+0015    [34mnum[m ADD    0014  0009
+0016  + [34mnum[m ADD    0015  0012
+0017  + [35mint[m ADD    0003  [35m+1  [m
+0018 >  [35mint[m LE     0017  0001
+0019 ------ LOOP ------------
+0020 >  nil XPOLL  #0  
+0021 >  [35mint[m ADDOV  0017  [35m+1  [m
+0022 }  [33mcdt[m CNEW   [35m+102[m
+0023    p64 ADD    0022  [35m+16 [m
+0024    [34mnum[m CONV   0017  [34mnum[m.[35mint[m
+0025 }  [34mnum[m XSTORE 0023  0024
+0026    p64 ADD    0022  [35m+24 [m
+0027    [34mnum[m CONV   0021  [34mnum[m.[35mint[m
+0028 }  [34mnum[m XSTORE 0026  0027
+0029    [34mnum[m ADD    0024  0016
+0030  + [34mnum[m ADD    0029  0027
+0031  + [35mint[m ADD    0017  [35m+1  [m
+0032 >  [35mint[m LE     0031  0001
+0033    [35mint[m PHI    0017  0031
+0034    [34mnum[m PHI    0016  0030
+---- TRACE 1 mcode 214
+5591ef89ff1c  mov dword [r14+0x84c], 0x1
+5591ef89ff27  mov r8, 0x00007fd744946080
+5591ef89ff31  movsd xmm7, [rdx+0x18]
+5591ef89ff36  cvttsd2si eax, xmm7
+5591ef89ff3a  xorps xmm6, xmm6
+5591ef89ff3d  cvtsi2sd xmm6, eax
+5591ef89ff41  ucomisd xmm7, xmm6
+5591ef89ff45  jnz 0x5591ef890120
+5591ef89ff4b  jpe 0x5591ef890120
+5591ef89ff51  cmp eax, 0x7ffffffe
+5591ef89ff57  jg 0x5591ef890120
+5591ef89ff5d  cvttsd2si ebp, [rdx+0x10]
+5591ef89ff62  rorx rsi, [rdx-0x10], 0x2f
+5591ef89ff69  shr rsi, 0x11
+5591ef89ff6d  cmp rsi, r8
+5591ef89ff70  jnz 0x5591ef890120
+5591ef89ff76  mov ecx, ebp
+5591ef89ff78  add ecx, +0x01
+5591ef89ff7b  jo 0x5591ef890128
+5591ef89ff81  xorps xmm7, xmm7
+5591ef89ff84  cvtsi2sd xmm7, ebp
+5591ef89ff88  xorps xmm0, xmm0
+5591ef89ff8b  cvtsi2sd xmm0, ecx
+5591ef89ff8f  cmp dword [rdx+0xc], 0xfff90000
+5591ef89ff96  jnb 0x5591ef890128
+5591ef89ff9c  addsd xmm7, [rdx+0x8]
+5591ef89ffa1  addsd xmm7, xmm0
+5591ef89ffa5  add ebp, +0x01
+5591ef89ffa8  cmp ebp, eax
+5591ef89ffaa  jg 0x5591ef890130
+->LOOP:
+5591ef89ffb0  mov rdi, 0x00007fd744c80584
+5591ef89ffba  mov edi, [rdi]
+5591ef89ffbc  cmp edi, +0x00
+5591ef89ffbf  jz 0x5591ef890138
+5591ef89ffc5  mov ebx, ebp
+5591ef89ffc7  add ebx, +0x01
+5591ef89ffca  jo 0x5591ef890140
+5591ef89ffd0  xorps xmm5, xmm5
+5591ef89ffd3  cvtsi2sd xmm5, ebp
+5591ef89ffd7  xorps xmm6, xmm6
+5591ef89ffda  cvtsi2sd xmm6, ebx
+5591ef89ffde  addsd xmm7, xmm5
+5591ef89ffe2  addsd xmm7, xmm6
+5591ef89ffe6  add ebp, +0x01
+5591ef89ffe9  cmp ebp, eax
+5591ef89ffeb  jle 0x5591ef89ffb0	->LOOP
+5591ef89ffed  jmp 0x5591ef890148
+---- TRACE 1 stop -> loop
+
+constructor	sink	iterations	80	warm-native-exits	1
+sample 1 0.000023000 287.500000000
+sample 2 0.000019000 237.500000000
+---- TRACE 2 start constructor-cost.lua:6
+---- TRACE 2 abort constructor-cost.lua:6 -- NYI: bytecode ISLT  
+
+sample 3 0.000072000 900.000000000
+sample 4 0.000017000 212.500000000
+sample 5 0.000016000 200.000000000

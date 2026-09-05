@@ -1,0 +1,17 @@
+{
+  "base": "dd2c439179b1e12564710484d8511e4cee617f7f",
+  "files": {
+    "src/lj_record.c": {
+      "sha256": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+      "git_blob": "6c4118c417b1c075c47b200129577bb201040fff"
+    },
+    "tests/suites/m6_jit.lua": {
+      "sha256": "46788878337b2c91ed0ec562c9adb052cecbe4e00b042d01932e165a1f7c717a",
+      "git_blob": "aea659dc11bab443d14681a73f036d55521424aa"
+    },
+    "tests/t-jit-cdata-basemt-guards.lua": {
+      "sha256": "956817711d803fa47de872b023fa6eead9c86d168c071f62d1cbb76addaf0497",
+      "git_blob": "1305754bacea291596bf3c27069645316fecda6f"
+    }
+  }
+}

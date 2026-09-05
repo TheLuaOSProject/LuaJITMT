@@ -1,0 +1,4 @@
+== m6_jit_cdata_basemt_guards ==
++ LUA_PATH='/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/canonical/tests/lib/?.lua;/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/canonical/src/?.lua;/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/canonical/src/jit/?.lua;;' timeout '20s' '/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/canonical/src/luajit' '-joff' '/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/canonical/tests/t-jit-cdata-basemt-guards.lua'
++ LUA_PATH='/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/canonical/tests/lib/?.lua;/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/canonical/src/?.lua;/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/canonical/src/jit/?.lua;;' timeout '20s' '/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/canonical/src/luajit' '-jon' '/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/canonical/tests/t-jit-cdata-basemt-guards.lua'
+ok m6_jit_cdata_basemt_guards

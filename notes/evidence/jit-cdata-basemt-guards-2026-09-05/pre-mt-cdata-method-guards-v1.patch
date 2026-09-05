@@ -1,0 +1,16 @@
+--- a/src/lj_record.c
++++ b/src/lj_record.c
+@@ -1549,11 +1549,8 @@
+       ix->mt = TREF_NIL;
+       return 0;  /* No metamethod. */
+     }
+-    /* The cdata metatable is treated as immutable. */
+-    if (LJ_HASFFI && tref_iscdata(ix->tab)) {
+-      mix.tab = TREF_NIL;
+-      goto immutable_mt;
+-    }
++    /* Cdata uses the same method guards: its base table's entries can change
++    ** without replacing the base root or flushing existing native traces. */
+     ix->mt = mix.tab = lj_ir_ggfload(J, IRT_TAB,
+       GG_OFS(g.gcroot[GCROOT_BASEMT+itypemap(&ix->tabv)]));
+     goto nocheck;

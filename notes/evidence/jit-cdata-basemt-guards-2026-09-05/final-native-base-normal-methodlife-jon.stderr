@@ -1,0 +1,5 @@
+/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit: ...ed-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua:154: ...ed-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua:139: native code skipped the current cdata base-table method
+stack traceback:
+	[C]: in function 'assert'
+	...ed-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua:154: in main chunk
+	[C]: at 0x562647ee8100

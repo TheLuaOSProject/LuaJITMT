@@ -1,0 +1,8 @@
+{
+  "base": "dd2c439179b1e12564710484d8511e4cee617f7f",
+  "files": {
+    "src/lj_record.c": "e5d872f8fc9af3fe10643f6a328084d0d582c3a9753bb70bcccced1a0e65ef6e",
+    "tests/suites/m6_jit.lua": "46788878337b2c91ed0ec562c9adb052cecbe4e00b042d01932e165a1f7c717a",
+    "tests/t-jit-cdata-basemt-guards.lua": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  }
+}

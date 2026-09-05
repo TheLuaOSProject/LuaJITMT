@@ -1,0 +1,4 @@
+lj_record.c: In function ‘lj_record_mm_lookup’:
+lj_record.c:1528:3: warning: label ‘immutable_mt’ defined but not used [-Wunused-label]
+ 1528 |   immutable_mt:
+      |   ^~~~~~~~~~~~

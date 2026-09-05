@@ -1,0 +1,3 @@
+flush_callback_traces=0
+mode=reentrant before_traces=1 before_native_exits=1 after_mutation_traces=0 after_run_traces=1 after_native_exits=1 observed_calls=80 expected_calls=80 value=6560
+basemt native mutation control passed

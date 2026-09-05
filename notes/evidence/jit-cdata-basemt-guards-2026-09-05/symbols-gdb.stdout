@@ -1,0 +1,50 @@
+Breakpoint 1 at 0x55ca0
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+[New Thread 0x7ffff77af6c0 (LWP 151797)]
+RECORDER NYI error=7
+#0  0x00005555555a9ca0 in lj_trace_err_info ()
+#1  0x000055555563a37c in lj_record_mm_lookup ()
+#2  0x0000555555638b0b in lj_record_idx ()
+#3  0x000055555563c43c in lj_record_ins ()
+#4  0x00005555555ab632 in trace_state ()
+#5  0x00005555555d65d7 in lj_vm_cpcall_asm ()
+#6  0x000055555556c020 in lj_vm_cpcall ()
+#7  0x00005555555b122f in lj_trace_ins ()
+#8  0x000055555556f6c3 in lj_dispatch_ins ()
+#9  0x00005555555d83e0 in lj_vm_inshook ()
+RECORDER NYI error=7
+#0  0x00005555555a9ca0 in lj_trace_err_info ()
+#1  0x000055555563a37c in lj_record_mm_lookup ()
+#2  0x0000555555638b0b in lj_record_idx ()
+#3  0x000055555563c43c in lj_record_ins ()
+#4  0x00005555555ab632 in trace_state ()
+#5  0x00005555555d65d7 in lj_vm_cpcall_asm ()
+#6  0x000055555556c020 in lj_vm_cpcall ()
+#7  0x00005555555b122f in lj_trace_ins ()
+#8  0x000055555556f6c3 in lj_dispatch_ins ()
+#9  0x00005555555d83e0 in lj_vm_inshook ()
+RECORDER NYI error=7
+#0  0x00005555555a9ca0 in lj_trace_err_info ()
+#1  0x000055555563a37c in lj_record_mm_lookup ()
+#2  0x000055555563a8ca in rec_call_setup ()
+#3  0x000055555563ab80 in lj_record_call ()
+#4  0x000055555563c8ad in lj_record_ins ()
+#5  0x00005555555ab632 in trace_state ()
+#6  0x00005555555d65d7 in lj_vm_cpcall_asm ()
+#7  0x000055555556c020 in lj_vm_cpcall ()
+#8  0x00005555555b122f in lj_trace_ins ()
+#9  0x000055555556f6c3 in lj_dispatch_ins ()
+RECORDER NYI error=7
+#0  0x00005555555a9ca0 in lj_trace_err_info ()
+#1  0x000055555563a37c in lj_record_mm_lookup ()
+#2  0x000055555563a8ca in rec_call_setup ()
+#3  0x000055555563ab80 in lj_record_call ()
+#4  0x000055555563c8ad in lj_record_ins ()
+#5  0x00005555555ab632 in trace_state ()
+#6  0x00005555555d65d7 in lj_vm_cpcall_asm ()
+#7  0x000055555556c020 in lj_vm_cpcall ()
+#8  0x00005555555b122f in lj_trace_ins ()
+#9  0x000055555556f6c3 in lj_dispatch_ins ()
+[Thread 0x7ffff77af6c0 (LWP 151797) exited]
+[Inferior 1 (process 151794) exited with code 01]

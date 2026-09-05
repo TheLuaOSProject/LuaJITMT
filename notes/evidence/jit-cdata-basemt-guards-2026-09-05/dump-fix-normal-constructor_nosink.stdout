@@ -1,0 +1,231 @@
+---- TRACE flush
+
+---- TRACE 1 start constructor-cost.lua:8
+---- TRACE 1 abort constructor-cost.lua:10 -- error thrown or hook called during recording
+
+---- TRACE 1 start constructor-cost.lua:8
+---- TRACE 1 IR
+0001 >  [35mint[m SLOAD  #5    CRI
+0002 >  [35mint[m LE     0001  [35m+2147483646[m
+0003    [35mint[m SLOAD  #4    CI
+0004    [1mfun[m SLOAD  #0    R
+0005 >  [1mfun[m EQ     0004  [1mconstructor-cost.lua:6[m
+0006 >  [35mint[m ADDOV  0003  [35m+1  [m
+0007    [31mtab[m FLOAD  nil   #276
+0008    p64 FLOAD  0007  tab.node
+0009 >  p64 HREFK  0008  [32m"__call"[m @11
+0010 >  [1mfun[m HLOAD  0009
+0011 >  [1mfun[m EQ     0010  [1mffi.meta.__call[m
+0012 >  [33mcdt[m CNEW   [35m+102[m
+0013    p64 ADD    0012  [35m+16 [m
+0014    [34mnum[m CONV   0003  [34mnum[m.[35mint[m
+0015    [34mnum[m XSTORE 0013  0014
+0016    p64 ADD    0012  [35m+24 [m
+0017    [34mnum[m CONV   0006  [34mnum[m.[35mint[m
+0018    [34mnum[m XSTORE 0016  0017
+0019 >  [34mnum[m SLOAD  #3    T
+0020 >  p64 HREFK  0008  [32m"__index"[m @2
+0021 >  [1mfun[m HLOAD  0020
+0022 >  [1mfun[m EQ     0021  [1mffi.meta.__index[m
+0023    [34mnum[m ADD    0019  0014
+0024  + [34mnum[m ADD    0023  0017
+0025  + [35mint[m ADD    0003  [35m+1  [m
+0026 >  [35mint[m LE     0025  0001
+0027 ------ LOOP ------------
+0028 >  nil XPOLL  #0  
+0029 >  [35mint[m ADDOV  0025  [35m+1  [m
+0030    [31mtab[m FLOAD  nil   #276
+0031    p64 FLOAD  0030  tab.node
+0032 >  p64 HREFK  0031  [32m"__call"[m @11
+0033 >  [1mfun[m HLOAD  0032
+0034 >  [1mfun[m EQ     0033  [1mffi.meta.__call[m
+0035 >  [33mcdt[m CNEW   [35m+102[m
+0036    p64 ADD    0035  [35m+16 [m
+0037    [34mnum[m CONV   0025  [34mnum[m.[35mint[m
+0038    [34mnum[m XSTORE 0036  0037
+0039    p64 ADD    0035  [35m+24 [m
+0040    [34mnum[m CONV   0029  [34mnum[m.[35mint[m
+0041    [34mnum[m XSTORE 0039  0040
+0042 >  p64 HREFK  0031  [32m"__index"[m @2
+0043 >  [1mfun[m HLOAD  0042
+0044 >  [1mfun[m EQ     0043  [1mffi.meta.__index[m
+0045    [34mnum[m ADD    0037  0024
+0046  + [34mnum[m ADD    0045  0040
+0047  + [35mint[m ADD    0025  [35m+1  [m
+0048 >  [35mint[m LE     0047  0001
+0049    [35mint[m PHI    0025  0047
+0050    [34mnum[m PHI    0024  0046
+---- TRACE 1 mcode 833
+562fc828fcbf  add rsp, -0x20
+562fc828fcc3  mov dword [r14+0x84c], 0x1
+562fc828fcce  mov r12, 0x00007fb16d685470
+562fc828fcd8  mov rdi, 0x00007fb16d9c0178
+562fc828fce2  mov rdi, [rdi]
+562fc828fce5  push rax
+562fc828fce6  mov rax, 0x00007fb16d9c0180
+562fc828fcf0  cmp rdi, [rax]
+562fc828fcf3  pop rax
+562fc828fcf4  jnb 0x562fc828fd14
+562fc828fcf6  mov rdi, 0x00007fb16d9c0978
+562fc828fd00  mov rdi, [rdi]
+562fc828fd03  push rax
+562fc828fd04  mov rax, 0x00007fb16d9c0998
+562fc828fd0e  cmp rdi, [rax]
+562fc828fd11  pop rax
+562fc828fd12  jbe 0x562fc828fd2d
+562fc828fd14  mov esi, 0x1
+562fc828fd19  mov rdi, [r14+0x818]
+562fc828fd20  call 0x562fb33f7bd0	->lj_gc_step_jit
+562fc828fd25  test eax, eax
+562fc828fd27  jnz 0x562fc8280130
+562fc828fd2d  mov rdi, [r14+0x820]
+562fc828fd34  mov rdx, [r14+0x830]
+562fc828fd3b  mov rcx, 0x00007fb16d686080
+562fc828fd45  movsd xmm7, [rdx+0x18]
+562fc828fd4a  cvttsd2si ebx, xmm7
+562fc828fd4e  xorps xmm6, xmm6
+562fc828fd51  cvtsi2sd xmm6, ebx
+562fc828fd55  ucomisd xmm7, xmm6
+562fc828fd59  jnz 0x562fc8280130
+562fc828fd5f  jpe 0x562fc8280130
+562fc828fd65  cmp ebx, 0x7ffffffe
+562fc828fd6b  jg 0x562fc8280130
+562fc828fd71  cvttsd2si ebp, [rdx+0x10]
+562fc828fd76  rorx rax, [rdx-0x10], 0x2f
+562fc828fd7d  shr rax, 0x11
+562fc828fd81  cmp rax, rcx
+562fc828fd84  jnz 0x562fc8280130
+562fc828fd8a  mov esi, ebp
+562fc828fd8c  add esi, +0x01
+562fc828fd8f  jo 0x562fc8280138
+562fc828fd95  mov [rsp+0x18], esi
+562fc828fd99  mov rax, 0x00007fb16d9c04d0
+562fc828fda3  mov rax, [rax]
+562fc828fda6  mov rcx, [rax+0x28]
+562fc828fdaa  mov [rsp+0x10], rcx
+562fc828fdaf  cmp dword [rcx-0x10], +0x0b
+562fc828fdb3  jb 0x562fc8280138
+562fc828fdb9  mov rsi, 0xfffdffb16d782930
+562fc828fdc3  cmp rsi, [rcx+0x110]
+562fc828fdca  jnz 0x562fc8280138
+562fc828fdd0  rorx rax, [rcx+0x108], 0x2f
+562fc828fdda  cmp ax, -0x09
+562fc828fdde  jnz 0x562fc8280138
+562fc828fde4  shr rax, 0x11
+562fc828fde8  mov rcx, 0x00007fb16d6855c0
+562fc828fdf2  cmp rax, rcx
+562fc828fdf5  jnz 0x562fc8280138
+562fc828fdfb  mov edx, 0x10
+562fc828fe00  mov esi, 0x66
+562fc828fe05  call 0x562fb3470e90	->lj_cdata_new_forjit
+562fc828fe0a  mov esi, [rsp+0x18]
+562fc828fe0e  mov rdx, [r14+0x830]
+562fc828fe15  mov rcx, [rsp+0x10]
+562fc828fe1a  xorps xmm7, xmm7
+562fc828fe1d  cvtsi2sd xmm7, ebp
+562fc828fe21  movsd [rax+0x10], xmm7
+562fc828fe26  xorps xmm0, xmm0
+562fc828fe29  cvtsi2sd xmm0, esi
+562fc828fe2d  movsd [rax+0x18], xmm0
+562fc828fe32  cmp dword [rdx+0xc], 0xfff90000
+562fc828fe39  jnb 0x562fc8280138
+562fc828fe3f  movsd xmm1, [rdx+0x8]
+562fc828fe44  cmp dword [rcx-0x10], +0x02
+562fc828fe48  jb 0x562fc8280140
+562fc828fe4e  mov rdi, 0xfffdffb16d782780
+562fc828fe58  cmp rdi, [rcx+0x38]
+562fc828fe5c  jnz 0x562fc8280140
+562fc828fe62  rorx rcx, [rcx+0x30], 0x2f
+562fc828fe69  cmp cx, -0x09
+562fc828fe6d  jnz 0x562fc8280140
+562fc828fe73  shr rcx, 0x11
+562fc828fe77  cmp rcx, r12
+562fc828fe7a  jnz 0x562fc8280140
+562fc828fe80  addsd xmm7, [rdx+0x8]
+562fc828fe85  addsd xmm7, xmm0
+562fc828fe89  movsd [rsp+0x8], xmm7
+562fc828fe8f  add ebp, +0x01
+562fc828fe92  cmp ebp, ebx
+562fc828fe94  jg 0x562fc8280148
+->LOOP:
+562fc828fe9a  movsd [rsp+0x8], xmm7
+562fc828fea0  mov rdi, 0x00007fb16d9c0178
+562fc828feaa  mov rdi, [rdi]
+562fc828fead  push rax
+562fc828feae  mov rax, 0x00007fb16d9c0180
+562fc828feb8  cmp rdi, [rax]
+562fc828febb  pop rax
+562fc828febc  jnb 0x562fc828fedc
+562fc828febe  mov rdi, 0x00007fb16d9c0978
+562fc828fec8  mov rdi, [rdi]
+562fc828fecb  push rax
+562fc828fecc  mov rax, 0x00007fb16d9c0998
+562fc828fed6  cmp rdi, [rax]
+562fc828fed9  pop rax
+562fc828feda  jbe 0x562fc828fef5
+562fc828fedc  mov esi, 0x1
+562fc828fee1  mov rdi, [r14+0x818]
+562fc828fee8  call 0x562fb33f7bd0	->lj_gc_step_jit
+562fc828feed  test eax, eax
+562fc828feef  jnz 0x562fc8280150
+562fc828fef5  mov rdi, [r14+0x820]
+562fc828fefc  mov rax, 0x00007fb16d6855c0
+562fc828ff06  mov rsi, 0x00007fb16d9c0584
+562fc828ff10  mov esi, [rsi]
+562fc828ff12  cmp esi, +0x00
+562fc828ff15  jz 0x562fc8280150
+562fc828ff1b  mov r13d, ebp
+562fc828ff1e  add r13d, +0x01
+562fc828ff22  jo 0x562fc8280158
+562fc828ff28  mov r15, 0x00007fb16d9c04d0
+562fc828ff32  mov r15, [r15]
+562fc828ff35  mov r15, [r15+0x28]
+562fc828ff39  cmp dword [r15-0x10], +0x0b
+562fc828ff3e  jb 0x562fc8280158
+562fc828ff44  mov rsi, 0xfffdffb16d782930
+562fc828ff4e  cmp rsi, [r15+0x110]
+562fc828ff55  jnz 0x562fc8280158
+562fc828ff5b  rorx rsi, [r15+0x108], 0x2f
+562fc828ff65  cmp si, -0x09
+562fc828ff69  jnz 0x562fc8280158
+562fc828ff6f  shr rsi, 0x11
+562fc828ff73  cmp rsi, rax
+562fc828ff76  jnz 0x562fc8280158
+562fc828ff7c  mov edx, 0x10
+562fc828ff81  mov esi, 0x66
+562fc828ff86  call 0x562fb3470e90	->lj_cdata_new_forjit
+562fc828ff8b  movsd xmm7, [rsp+0x8]
+562fc828ff91  xorps xmm5, xmm5
+562fc828ff94  cvtsi2sd xmm5, ebp
+562fc828ff98  movsd [rax+0x10], xmm5
+562fc828ff9d  xorps xmm6, xmm6
+562fc828ffa0  cvtsi2sd xmm6, r13d
+562fc828ffa5  movsd [rax+0x18], xmm6
+562fc828ffaa  cmp dword [r15-0x10], +0x02
+562fc828ffaf  jb 0x562fc8280160
+562fc828ffb5  mov rdi, 0xfffdffb16d782780
+562fc828ffbf  cmp rdi, [r15+0x38]
+562fc828ffc3  jnz 0x562fc8280160
+562fc828ffc9  rorx r15, [r15+0x30], 0x2f
+562fc828ffd0  cmp r15w, -0x09
+562fc828ffd5  jnz 0x562fc8280160
+562fc828ffdb  shr r15, 0x11
+562fc828ffdf  cmp r15, r12
+562fc828ffe2  jnz 0x562fc8280160
+562fc828ffe8  addsd xmm7, xmm5
+562fc828ffec  addsd xmm7, xmm6
+562fc828fff0  add ebp, +0x01
+562fc828fff3  cmp ebp, ebx
+562fc828fff5  jle 0x562fc828fe9a	->LOOP
+562fc828fffb  jmp 0x562fc8280168
+---- TRACE 1 stop -> loop
+
+constructor	nosink	iterations	80	warm-native-exits	1
+sample 1 0.000033000 412.500000000
+sample 2 0.000028000 350.000000000
+---- TRACE 2 start constructor-cost.lua:6
+---- TRACE 2 abort constructor-cost.lua:6 -- NYI: bytecode ISLT  
+
+sample 3 0.000077000 962.500000000
+sample 4 0.000025000 312.500000000
+sample 5 0.000024000 300.000000000

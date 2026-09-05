@@ -1,0 +1,128 @@
+[
+  {
+    "name": "fix-normal-replace",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/basemt-native.lua",
+      "replace"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.004063364001922309,
+    "stdout": "mode=replace before_traces=1 before_native_exits=1 after_mutation_traces=0 after_run_traces=1 after_native_exits=1 observed_calls=80 expected_calls=80 value=6560\nbasemt native mutation control passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "fix-normal-reentrant",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/basemt-native.lua",
+      "reentrant"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.00394073200004641,
+    "stdout": "flush_callback_traces=0\nmode=reentrant before_traces=1 before_native_exits=1 after_mutation_traces=0 after_run_traces=1 after_native_exits=1 observed_calls=80 expected_calls=80 value=6560\nbasemt native mutation control passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "fix-normal-inplace",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/basemt-native.lua",
+      "inplace"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.004097044002264738,
+    "stdout": "mode=inplace before_traces=1 before_native_exits=1 after_mutation_traces=1 after_run_traces=1 after_native_exits=79 observed_calls=80 expected_calls=80 value=6560\nbasemt native mutation control passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "fix-assert-replace",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/basemt-native.lua",
+      "replace"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert/src/?.lua;/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.003797460998612223,
+    "stdout": "mode=replace before_traces=1 before_native_exits=1 after_mutation_traces=0 after_run_traces=1 after_native_exits=1 observed_calls=80 expected_calls=80 value=6560\nbasemt native mutation control passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "fix-assert-reentrant",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/basemt-native.lua",
+      "reentrant"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert/src/?.lua;/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.004077341000083834,
+    "stdout": "flush_callback_traces=0\nmode=reentrant before_traces=1 before_native_exits=1 after_mutation_traces=0 after_run_traces=1 after_native_exits=1 observed_calls=80 expected_calls=80 value=6560\nbasemt native mutation control passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "fix-assert-inplace",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/basemt-native.lua",
+      "inplace"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert/src/?.lua;/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.0038941880011407193,
+    "stdout": "mode=inplace before_traces=1 before_native_exits=1 after_mutation_traces=1 after_run_traces=1 after_native_exits=79 observed_calls=80 expected_calls=80 value=6560\nbasemt native mutation control passed\n",
+    "stderr": ""
+  }
+]

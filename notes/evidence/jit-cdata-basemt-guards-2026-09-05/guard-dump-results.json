@@ -1,0 +1,174 @@
+[
+  {
+    "name": "dump-base-normal-ffi_struct",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "-jdump=im",
+      "aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "0.00001"
+    },
+    "exit": 0,
+    "seconds": 0.024518067999451887,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048"
+  },
+  {
+    "name": "dump-base-normal-constructor_sink",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "-jdump=im",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "sink",
+      "80"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "0.00001"
+    },
+    "exit": 0,
+    "seconds": 0.01921840200157021,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048"
+  },
+  {
+    "name": "dump-base-normal-constructor_nosink",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "-jdump=im",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "nosink",
+      "80"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "0.00001"
+    },
+    "exit": 0,
+    "seconds": 0.02151538800171693,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048"
+  },
+  {
+    "name": "dump-base-normal-native_call",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "-jdump=im",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "call"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "0.00001"
+    },
+    "exit": 1,
+    "seconds": 0.015189011999609647,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048"
+  },
+  {
+    "name": "dump-fix-normal-ffi_struct",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "-jdump=im",
+      "aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "0.00001"
+    },
+    "exit": 0,
+    "seconds": 0.02757115900021745,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2"
+  },
+  {
+    "name": "dump-fix-normal-constructor_sink",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "-jdump=im",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "sink",
+      "80"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "0.00001"
+    },
+    "exit": 0,
+    "seconds": 0.022467144997790456,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2"
+  },
+  {
+    "name": "dump-fix-normal-constructor_nosink",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "-jdump=im",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "nosink",
+      "80"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "0.00001"
+    },
+    "exit": 0,
+    "seconds": 0.024823978001222713,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2"
+  },
+  {
+    "name": "dump-fix-normal-native_call",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "-jdump=im",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "call"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "0.00001"
+    },
+    "exit": 0,
+    "seconds": 0.01828054100042209,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2"
+  }
+]

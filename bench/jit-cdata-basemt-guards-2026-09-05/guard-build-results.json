@@ -1,0 +1,69 @@
+{
+  "base": "dd2c439179b1e12564710484d8511e4cee617f7f",
+  "results": [
+    {
+      "variant": "base-normal",
+      "command": [
+        "taskset",
+        "-c",
+        "0-15",
+        "make",
+        "-C",
+        "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src",
+        "-j4",
+        "BUILDMODE=static",
+        "CCDEBUG=-g",
+        "TARGET_STRIP=:"
+      ],
+      "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+      "exit": 0,
+      "status": "complete",
+      "seconds": 12.655805177997536,
+      "source_sha256": "20342611b92edd92dc29ca1caa1b0773b6f29f51f93a36a5c6c4ef3f2c84df40",
+      "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048"
+    },
+    {
+      "variant": "fix-normal",
+      "command": [
+        "taskset",
+        "-c",
+        "0-15",
+        "make",
+        "-C",
+        "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src",
+        "-j4",
+        "BUILDMODE=static",
+        "CCDEBUG=-g",
+        "TARGET_STRIP=:"
+      ],
+      "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+      "exit": 0,
+      "status": "complete",
+      "seconds": 12.485015884998575,
+      "source_sha256": "83bf86e974831621dab889ead81349625fb29be3d381e49f5083714867bb44cb",
+      "runtime_sha256": "aafa67a9b021a979d02de89022cb48f71aa14b0d25531a27228d5029b1f61321"
+    },
+    {
+      "variant": "fix-assert",
+      "command": [
+        "taskset",
+        "-c",
+        "0-15",
+        "make",
+        "-C",
+        "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert/src",
+        "-j4",
+        "BUILDMODE=static",
+        "CCDEBUG=-g",
+        "TARGET_STRIP=:",
+        "XCFLAGS=-DLUA_USE_ASSERT -DLJ_GC2_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLJ_TAB_TEST_HELPERS"
+      ],
+      "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert",
+      "exit": 0,
+      "status": "complete",
+      "seconds": 13.312861333997716,
+      "source_sha256": "83bf86e974831621dab889ead81349625fb29be3d381e49f5083714867bb44cb",
+      "runtime_sha256": "7082b88fc1d551db81cd400c7d43d251a599210798111cf2bc2afa05bc68b54f"
+    }
+  ]
+}

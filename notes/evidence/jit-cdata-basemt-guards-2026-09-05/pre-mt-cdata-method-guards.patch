@@ -1,0 +1,24 @@
+--- a/src/lj_record.c
++++ b/src/lj_record.c
+@@ -1525,7 +1525,6 @@
+ 	TRef tr = emitir(IRT(IR_FLOAD, IRT_U8), ix->tab, IRFL_UDATA_UDTYPE);
+ 	emitir(IRTGI(IR_EQ), tr, lj_ir_kint(J, udtype));
+       }
+-  immutable_mt:
+       mo = lj_tab_getstr(mt, mmname_str(J2G(J), mm));
+       ix->mt = mix.tab;
+       ix->mtv = mt;
+@@ -1549,11 +1548,8 @@
+       ix->mt = TREF_NIL;
+       return 0;  /* No metamethod. */
+     }
+-    /* The cdata metatable is treated as immutable. */
+-    if (LJ_HASFFI && tref_iscdata(ix->tab)) {
+-      mix.tab = TREF_NIL;
+-      goto immutable_mt;
+-    }
++    /* Cdata uses the same method guards: its base table's entries can change
++    ** without replacing the base root or flushing existing native traces. */
+     ix->mt = mix.tab = lj_ir_ggfload(J, IRT_TAB,
+       GG_OFS(g.gcroot[GCROOT_BASEMT+itypemap(&ix->tabv)]));
+     goto nocheck;

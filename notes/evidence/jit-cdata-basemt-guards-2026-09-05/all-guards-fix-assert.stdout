@@ -1,0 +1,8 @@
+cdata-base-guard	call	warm-exits	1	after-exits	80	calls	80	expected	80
+cdata-base-guard	index	warm-exits	1	after-exits	159	calls	160	expected	160
+cdata-base-guard	newindex	warm-exits	1	after-exits	80	calls	160	expected	160
+cdata-base-guard	missing	warm-exits	1	after-exits	1	calls	0	expected	0
+cdata-base-guard	nonfunction	warm-exits	1	after-exits	1	calls	0	expected	0
+cdata-base-guard	resize	warm-exits	1	after-exits	80	calls	80	expected	80
+cdata-base-guard	replace	warm-exits	1	after-exits	1	calls	80	expected	80
+cdata base-table native guards passed

@@ -1,0 +1,15 @@
+[TRACE flush]
+[TRACE   1 t-ffi-cdata-shared-hammer.lua:32 loop]
+[TRACE --- (1/7) t-ffi-cdata-shared-hammer.lua:41 -- JIT compilation disabled for function at jit_harness.lua:5]
+[TRACE --- thread_harness.lua:29 -- leaving loop in root trace at thread_harness.lua:33]
+[TRACE flush]
+[TRACE --- t-ffi-cdata-shared-hammer.lua:32 -- NYI: bytecode ? at t-ffi-cdata-shared-hammer.lua:33]
+[TRACE --- t-ffi-cdata-shared-hammer.lua:32 -- NYI: bytecode ? at t-ffi-cdata-shared-hammer.lua:33]
+[TRACE flush]
+[TRACE --- t-ffi-cdata-shared-hammer.lua:46 -- NYI: bytecode ? at t-ffi-cdata-shared-hammer.lua:47]
+[TRACE --- t-ffi-cdata-shared-hammer.lua:46 -- NYI: bytecode ? at t-ffi-cdata-shared-hammer.lua:47]
+/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/src/luajit: ...0905-e3t1w0fw/before/tests/t-ffi-cdata-shared-hammer.lua:80: active-MT trace-owned cdata allocation loop should trace
+stack traceback:
+	[C]: in function 'assert'
+	...0905-e3t1w0fw/before/tests/t-ffi-cdata-shared-hammer.lua:80: in main chunk
+	[C]: at 0x55b0db368100

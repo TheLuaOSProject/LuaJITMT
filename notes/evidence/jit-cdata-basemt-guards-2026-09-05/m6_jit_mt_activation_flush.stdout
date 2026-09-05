@@ -1,0 +1,4 @@
+make: Entering directory '/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/canonical/src'
+make: Nothing to be done for 'default'.
+make: Leaving directory '/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/canonical/src'
+M6 JIT MT activation flush and retired-slot reuse passed

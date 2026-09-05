@@ -1,0 +1,89 @@
+---- TRACE flush
+
+---- TRACE 1 start t-jit-cdata-basemt-guards.lua:16
+---- TRACE 1 IR
+0001 >  [35mint[m SLOAD  #5    CRI
+0002 >  [35mint[m LE     0001  [35m+2147483646[m
+0003    [35mint[m SLOAD  #4    CI
+0004 >  [35mint[m GT     0003  [35m+0  [m
+0005    [1mfun[m SLOAD  #0    R
+0006 >  [1mfun[m EQ     0005  [1mt-jit-cdata-basemt-guards.lua:12[m
+0007 }  [33mcdt[m CNEW   [35m+102[m
+0008    p64 ADD    0007  [35m+16 [m
+0010    p64 ADD    0007  [35m+20 [m
+0011 }  [35mint[m XSTORE 0010  [35m+0  [m
+0012 }  [35mint[m XSTORE 0008  0003
+0014  + [35mint[m ADD    0003  [35m+1  [m
+0015 }  [35mint[m XSTORE 0010  0014
+0016 >  [34mnum[m SLOAD  #3    T
+0017    [34mnum[m CONV   0003  [34mnum[m.[35mint[m
+0018    [34mnum[m ADD    0017  0016
+0019  + [34mnum[m CONV   0014  [34mnum[m.[35mint[m
+0020  + [34mnum[m ADD    0019  0018
+0021 >  [35mint[m LE     0014  0001
+0022 ------ LOOP ------------
+0023 >  nil XPOLL  #0  
+0024 >  [35mint[m GT     0014  [35m+0  [m
+0025 }  [33mcdt[m CNEW   [35m+102[m
+0026    p64 ADD    0025  [35m+16 [m
+0027    p64 ADD    0025  [35m+20 [m
+0029 }  [35mint[m XSTORE 0026  0014
+0030  + [35mint[m ADD    0014  [35m+1  [m
+0031 }  [35mint[m XSTORE 0027  0030
+0032    [34mnum[m ADD    0020  0019
+0033  + [34mnum[m CONV   0030  [34mnum[m.[35mint[m
+0034  + [34mnum[m ADD    0033  0032
+0035 >  [35mint[m LE     0030  0001
+0036    [35mint[m PHI    0014  0030
+0037    [34mnum[m PHI    0020  0034
+0038    [34mnum[m PHI    0019  0033
+---- TRACE 1 mcode 201
+5585bf83ff2f  mov dword [r14+0x84c], 0x1
+5585bf83ff3a  mov rsi, 0x00007fb560be7e30
+5585bf83ff44  movsd xmm7, [rdx+0x18]
+5585bf83ff49  cvttsd2si eax, xmm7
+5585bf83ff4d  xorps xmm6, xmm6
+5585bf83ff50  cvtsi2sd xmm6, eax
+5585bf83ff54  ucomisd xmm7, xmm6
+5585bf83ff58  jnz 0x5585bf830140
+5585bf83ff5e  jpe 0x5585bf830140
+5585bf83ff64  cmp eax, 0x7ffffffe
+5585bf83ff6a  jg 0x5585bf830140
+5585bf83ff70  cvttsd2si ecx, [rdx+0x10]
+5585bf83ff75  test ecx, ecx
+5585bf83ff77  jle 0x5585bf830148
+5585bf83ff7d  rorx rbx, [rdx-0x10], 0x2f
+5585bf83ff84  shr rbx, 0x11
+5585bf83ff88  cmp rbx, rsi
+5585bf83ff8b  jnz 0x5585bf830150
+5585bf83ff91  lea ebp, [rcx+0x1]
+5585bf83ff94  cmp dword [rdx+0xc], 0xfff90000
+5585bf83ff9b  jnb 0x5585bf830160
+5585bf83ffa1  xorps xmm6, xmm6
+5585bf83ffa4  cvtsi2sd xmm6, ecx
+5585bf83ffa8  addsd xmm6, [rdx+0x8]
+5585bf83ffad  xorps xmm7, xmm7
+5585bf83ffb0  cvtsi2sd xmm7, ebp
+5585bf83ffb4  addsd xmm6, xmm7
+5585bf83ffb8  cmp ebp, eax
+5585bf83ffba  jg 0x5585bf830168
+->LOOP:
+5585bf83ffc0  mov rdi, 0x00007fb560f20584
+5585bf83ffca  mov edi, [rdi]
+5585bf83ffcc  cmp edi, +0x00
+5585bf83ffcf  jz 0x5585bf830170
+5585bf83ffd5  test ebp, ebp
+5585bf83ffd7  jle 0x5585bf830178
+5585bf83ffdd  add ebp, +0x01
+5585bf83ffe0  addsd xmm6, xmm7
+5585bf83ffe4  xorps xmm7, xmm7
+5585bf83ffe7  cvtsi2sd xmm7, ebp
+5585bf83ffeb  addsd xmm6, xmm7
+5585bf83ffef  cmp ebp, eax
+5585bf83fff1  jle 0x5585bf83ffc0	->LOOP
+5585bf83fff3  jmp 0x5585bf830188
+---- TRACE 1 stop -> loop
+
+cdata-base-guard	call	warm-exits	1	after-exits	1	calls	0	expected	80
+---- TRACE flush
+

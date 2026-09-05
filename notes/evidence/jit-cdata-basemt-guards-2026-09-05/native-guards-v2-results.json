@@ -1,0 +1,562 @@
+[
+  {
+    "name": "native-guards-v2-base-normal-call-jon",
+    "variant": "base-normal",
+    "mode": "call",
+    "jit": "jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "call"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "exit": 1,
+    "seconds": 0.004886914000962861,
+    "exe_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-base-normal-index-jon",
+    "variant": "base-normal",
+    "mode": "index",
+    "jit": "jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "index"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "exit": 1,
+    "seconds": 0.004740696000226308,
+    "exe_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-base-normal-newindex-jon",
+    "variant": "base-normal",
+    "mode": "newindex",
+    "jit": "jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "newindex"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "exit": 1,
+    "seconds": 0.005032482000387972,
+    "exe_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-base-normal-missing-jon",
+    "variant": "base-normal",
+    "mode": "missing",
+    "jit": "jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "missing"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "exit": 1,
+    "seconds": 0.004809854999621166,
+    "exe_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-base-normal-nonfunction-jon",
+    "variant": "base-normal",
+    "mode": "nonfunction",
+    "jit": "jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "nonfunction"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "exit": 1,
+    "seconds": 0.004924511998979142,
+    "exe_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-base-normal-resize-jon",
+    "variant": "base-normal",
+    "mode": "resize",
+    "jit": "jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "resize"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "exit": 1,
+    "seconds": 0.005780681996839121,
+    "exe_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-base-normal-replace-jon",
+    "variant": "base-normal",
+    "mode": "replace",
+    "jit": "jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "replace"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "exit": 0,
+    "seconds": 0.004715044000477064,
+    "exe_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-fix-normal-call-jon",
+    "variant": "fix-normal",
+    "mode": "call",
+    "jit": "jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "call"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "exit": 0,
+    "seconds": 0.004487832000449998,
+    "exe_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-fix-normal-call-joff",
+    "variant": "fix-normal",
+    "mode": "call",
+    "jit": "joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-joff",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "call"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "exit": 0,
+    "seconds": 0.004303950998291839,
+    "exe_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-fix-normal-index-jon",
+    "variant": "fix-normal",
+    "mode": "index",
+    "jit": "jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "index"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "exit": 0,
+    "seconds": 0.004411189998791087,
+    "exe_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-fix-normal-index-joff",
+    "variant": "fix-normal",
+    "mode": "index",
+    "jit": "joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-joff",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "index"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "exit": 0,
+    "seconds": 0.004414915001689224,
+    "exe_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-fix-normal-newindex-jon",
+    "variant": "fix-normal",
+    "mode": "newindex",
+    "jit": "jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "newindex"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "exit": 0,
+    "seconds": 0.004822809001780115,
+    "exe_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-fix-normal-newindex-joff",
+    "variant": "fix-normal",
+    "mode": "newindex",
+    "jit": "joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-joff",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "newindex"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "exit": 0,
+    "seconds": 0.004519760997936828,
+    "exe_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-fix-normal-missing-jon",
+    "variant": "fix-normal",
+    "mode": "missing",
+    "jit": "jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "missing"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "exit": 0,
+    "seconds": 0.004271612997399643,
+    "exe_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-fix-normal-missing-joff",
+    "variant": "fix-normal",
+    "mode": "missing",
+    "jit": "joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-joff",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "missing"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "exit": 0,
+    "seconds": 0.004348562000814127,
+    "exe_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-fix-normal-nonfunction-jon",
+    "variant": "fix-normal",
+    "mode": "nonfunction",
+    "jit": "jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "nonfunction"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "exit": 0,
+    "seconds": 0.004284382001060294,
+    "exe_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-fix-normal-nonfunction-joff",
+    "variant": "fix-normal",
+    "mode": "nonfunction",
+    "jit": "joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-joff",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "nonfunction"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "exit": 0,
+    "seconds": 0.004298030999052571,
+    "exe_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-fix-normal-resize-jon",
+    "variant": "fix-normal",
+    "mode": "resize",
+    "jit": "jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "resize"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "exit": 0,
+    "seconds": 0.005860877998202341,
+    "exe_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-fix-normal-resize-joff",
+    "variant": "fix-normal",
+    "mode": "resize",
+    "jit": "joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-joff",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "resize"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "exit": 0,
+    "seconds": 0.005894851998164086,
+    "exe_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-fix-normal-replace-jon",
+    "variant": "fix-normal",
+    "mode": "replace",
+    "jit": "jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "replace"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "exit": 0,
+    "seconds": 0.004747661998408148,
+    "exe_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-fix-normal-replace-joff",
+    "variant": "fix-normal",
+    "mode": "replace",
+    "jit": "joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-joff",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "replace"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "exit": 0,
+    "seconds": 0.0046327900017786305,
+    "exe_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-fix-assert-call-jon",
+    "variant": "fix-assert",
+    "mode": "call",
+    "jit": "jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "call"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert",
+    "exit": 0,
+    "seconds": 0.004704420000052778,
+    "exe_sha256": "31bc78140ead77a21fbed95887065f7e4bb4502595ceef434aa2c2e89debd3d1",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-fix-assert-index-jon",
+    "variant": "fix-assert",
+    "mode": "index",
+    "jit": "jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "index"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert",
+    "exit": 0,
+    "seconds": 0.0047750960002304055,
+    "exe_sha256": "31bc78140ead77a21fbed95887065f7e4bb4502595ceef434aa2c2e89debd3d1",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-fix-assert-newindex-jon",
+    "variant": "fix-assert",
+    "mode": "newindex",
+    "jit": "jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "newindex"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert",
+    "exit": 0,
+    "seconds": 0.004620834002707852,
+    "exe_sha256": "31bc78140ead77a21fbed95887065f7e4bb4502595ceef434aa2c2e89debd3d1",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-fix-assert-missing-jon",
+    "variant": "fix-assert",
+    "mode": "missing",
+    "jit": "jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "missing"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert",
+    "exit": 0,
+    "seconds": 0.004488825001317309,
+    "exe_sha256": "31bc78140ead77a21fbed95887065f7e4bb4502595ceef434aa2c2e89debd3d1",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-fix-assert-nonfunction-jon",
+    "variant": "fix-assert",
+    "mode": "nonfunction",
+    "jit": "jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "nonfunction"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert",
+    "exit": 0,
+    "seconds": 0.004551944002741948,
+    "exe_sha256": "31bc78140ead77a21fbed95887065f7e4bb4502595ceef434aa2c2e89debd3d1",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-fix-assert-resize-jon",
+    "variant": "fix-assert",
+    "mode": "resize",
+    "jit": "jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "resize"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert",
+    "exit": 0,
+    "seconds": 0.005626397996820742,
+    "exe_sha256": "31bc78140ead77a21fbed95887065f7e4bb4502595ceef434aa2c2e89debd3d1",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  },
+  {
+    "name": "native-guards-v2-fix-assert-replace-jon",
+    "variant": "fix-assert",
+    "mode": "replace",
+    "jit": "jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua",
+      "replace"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-assert",
+    "exit": 0,
+    "seconds": 0.0042805929988389835,
+    "exe_sha256": "31bc78140ead77a21fbed95887065f7e4bb4502595ceef434aa2c2e89debd3d1",
+    "fixture_sha256": "7177c48690604e0e7b687695bfe575543bd02c5fba9cec86df6a78776ffcb36e"
+  }
+]

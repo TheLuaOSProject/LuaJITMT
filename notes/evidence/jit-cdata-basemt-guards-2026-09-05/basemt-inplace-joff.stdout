@@ -1,0 +1,2 @@
+mode=inplace before_traces=0 before_native_exits=0 after_mutation_traces=0 after_run_traces=0 after_native_exits=0 observed_calls=80 expected_calls=80 value=6560
+basemt native mutation control passed

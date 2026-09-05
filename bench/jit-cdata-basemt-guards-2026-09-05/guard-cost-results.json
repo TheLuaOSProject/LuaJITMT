@@ -1,0 +1,1416 @@
+[
+  {
+    "name": "ffi_struct-pair1-base-normal",
+    "workload": "ffi_struct",
+    "pair": 1,
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.1138003909982217,
+    "samples_cpu_seconds": [
+      0.0206
+    ],
+    "best_cpu_seconds": 0.0206,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair1-base-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair1-base-normal.stderr"
+  },
+  {
+    "name": "ffi_struct-pair1-fix-normal",
+    "workload": "ffi_struct",
+    "pair": 1,
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.3534913330004201,
+    "samples_cpu_seconds": [
+      0.0684
+    ],
+    "best_cpu_seconds": 0.0684,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair1-fix-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair1-fix-normal.stderr"
+  },
+  {
+    "name": "constructor_sink-pair1-base-normal",
+    "workload": "constructor_sink",
+    "pair": 1,
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "sink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.03130288899774314,
+    "samples_cpu_seconds": [
+      0.004172,
+      0.004147,
+      0.004146,
+      0.004145,
+      0.004144
+    ],
+    "best_cpu_seconds": 0.004144,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair1-base-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair1-base-normal.stderr"
+  },
+  {
+    "name": "constructor_sink-pair1-fix-normal",
+    "workload": "constructor_sink",
+    "pair": 1,
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "sink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.044653698001638986,
+    "samples_cpu_seconds": [
+      0.006916,
+      0.006883,
+      0.006881,
+      0.00688,
+      0.00688
+    ],
+    "best_cpu_seconds": 0.00688,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair1-fix-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair1-fix-normal.stderr"
+  },
+  {
+    "name": "constructor_nosink-pair1-base-normal",
+    "workload": "constructor_nosink",
+    "pair": 1,
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "nosink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.7908438930026023,
+    "samples_cpu_seconds": [
+      0.051356,
+      0.044701,
+      0.044455,
+      0.044426,
+      0.044556
+    ],
+    "best_cpu_seconds": 0.044426,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair1-base-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair1-base-normal.stderr"
+  },
+  {
+    "name": "constructor_nosink-pair1-fix-normal",
+    "workload": "constructor_nosink",
+    "pair": 1,
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "nosink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.7929690159980964,
+    "samples_cpu_seconds": [
+      0.051472,
+      0.045145,
+      0.044969,
+      0.044943,
+      0.044893
+    ],
+    "best_cpu_seconds": 0.044893,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair1-fix-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair1-fix-normal.stderr"
+  },
+  {
+    "name": "ffi_struct-pair2-fix-normal",
+    "workload": "ffi_struct",
+    "pair": 2,
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.3539572169975145,
+    "samples_cpu_seconds": [
+      0.0684
+    ],
+    "best_cpu_seconds": 0.0684,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair2-fix-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair2-fix-normal.stderr"
+  },
+  {
+    "name": "ffi_struct-pair2-base-normal",
+    "workload": "ffi_struct",
+    "pair": 2,
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.11470221399940783,
+    "samples_cpu_seconds": [
+      0.0206
+    ],
+    "best_cpu_seconds": 0.0206,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair2-base-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair2-base-normal.stderr"
+  },
+  {
+    "name": "constructor_sink-pair2-fix-normal",
+    "workload": "constructor_sink",
+    "pair": 2,
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "sink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.04478445300264866,
+    "samples_cpu_seconds": [
+      0.006907,
+      0.006882,
+      0.00688,
+      0.00688,
+      0.00688
+    ],
+    "best_cpu_seconds": 0.00688,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair2-fix-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair2-fix-normal.stderr"
+  },
+  {
+    "name": "constructor_sink-pair2-base-normal",
+    "workload": "constructor_sink",
+    "pair": 2,
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "sink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.030942353001591982,
+    "samples_cpu_seconds": [
+      0.004175,
+      0.004149,
+      0.004147,
+      0.004146,
+      0.004145
+    ],
+    "best_cpu_seconds": 0.004145,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair2-base-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair2-base-normal.stderr"
+  },
+  {
+    "name": "constructor_nosink-pair2-fix-normal",
+    "workload": "constructor_nosink",
+    "pair": 2,
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "nosink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.7929900199997064,
+    "samples_cpu_seconds": [
+      0.051758,
+      0.045181,
+      0.044971,
+      0.044943,
+      0.044938
+    ],
+    "best_cpu_seconds": 0.044938,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair2-fix-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair2-fix-normal.stderr"
+  },
+  {
+    "name": "constructor_nosink-pair2-base-normal",
+    "workload": "constructor_nosink",
+    "pair": 2,
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "nosink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.7906777460011654,
+    "samples_cpu_seconds": [
+      0.050885,
+      0.044565,
+      0.044434,
+      0.04446,
+      0.044437
+    ],
+    "best_cpu_seconds": 0.044434,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair2-base-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair2-base-normal.stderr"
+  },
+  {
+    "name": "ffi_struct-pair3-base-normal",
+    "workload": "ffi_struct",
+    "pair": 3,
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.11413862300105393,
+    "samples_cpu_seconds": [
+      0.0206
+    ],
+    "best_cpu_seconds": 0.0206,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair3-base-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair3-base-normal.stderr"
+  },
+  {
+    "name": "ffi_struct-pair3-fix-normal",
+    "workload": "ffi_struct",
+    "pair": 3,
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.35390892199939117,
+    "samples_cpu_seconds": [
+      0.0684
+    ],
+    "best_cpu_seconds": 0.0684,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair3-fix-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair3-fix-normal.stderr"
+  },
+  {
+    "name": "constructor_sink-pair3-base-normal",
+    "workload": "constructor_sink",
+    "pair": 3,
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "sink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.03110249599922099,
+    "samples_cpu_seconds": [
+      0.004172,
+      0.004148,
+      0.004147,
+      0.004148,
+      0.004146
+    ],
+    "best_cpu_seconds": 0.004146,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair3-base-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair3-base-normal.stderr"
+  },
+  {
+    "name": "constructor_sink-pair3-fix-normal",
+    "workload": "constructor_sink",
+    "pair": 3,
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "sink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.04468709900174872,
+    "samples_cpu_seconds": [
+      0.006915,
+      0.006883,
+      0.00688,
+      0.00688,
+      0.006879
+    ],
+    "best_cpu_seconds": 0.006879,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair3-fix-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair3-fix-normal.stderr"
+  },
+  {
+    "name": "constructor_nosink-pair3-base-normal",
+    "workload": "constructor_nosink",
+    "pair": 3,
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "nosink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.7902910060001886,
+    "samples_cpu_seconds": [
+      0.051135,
+      0.044661,
+      0.044453,
+      0.044406,
+      0.044381
+    ],
+    "best_cpu_seconds": 0.044381,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair3-base-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair3-base-normal.stderr"
+  },
+  {
+    "name": "constructor_nosink-pair3-fix-normal",
+    "workload": "constructor_nosink",
+    "pair": 3,
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "nosink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.7929994980004267,
+    "samples_cpu_seconds": [
+      0.051528,
+      0.045127,
+      0.044933,
+      0.045001,
+      0.044922
+    ],
+    "best_cpu_seconds": 0.044922,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair3-fix-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair3-fix-normal.stderr"
+  },
+  {
+    "name": "ffi_struct-pair4-fix-normal",
+    "workload": "ffi_struct",
+    "pair": 4,
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.354598073001398,
+    "samples_cpu_seconds": [
+      0.0684
+    ],
+    "best_cpu_seconds": 0.0684,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair4-fix-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair4-fix-normal.stderr"
+  },
+  {
+    "name": "ffi_struct-pair4-base-normal",
+    "workload": "ffi_struct",
+    "pair": 4,
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.11433587600186002,
+    "samples_cpu_seconds": [
+      0.0206
+    ],
+    "best_cpu_seconds": 0.0206,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair4-base-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair4-base-normal.stderr"
+  },
+  {
+    "name": "constructor_sink-pair4-fix-normal",
+    "workload": "constructor_sink",
+    "pair": 4,
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "sink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.04473724600029527,
+    "samples_cpu_seconds": [
+      0.006908,
+      0.006884,
+      0.006885,
+      0.006881,
+      0.00688
+    ],
+    "best_cpu_seconds": 0.00688,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair4-fix-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair4-fix-normal.stderr"
+  },
+  {
+    "name": "constructor_sink-pair4-base-normal",
+    "workload": "constructor_sink",
+    "pair": 4,
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "sink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.031269250001059845,
+    "samples_cpu_seconds": [
+      0.004171,
+      0.004147,
+      0.004147,
+      0.004145,
+      0.004144
+    ],
+    "best_cpu_seconds": 0.004144,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair4-base-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair4-base-normal.stderr"
+  },
+  {
+    "name": "constructor_nosink-pair4-fix-normal",
+    "workload": "constructor_nosink",
+    "pair": 4,
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "nosink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.7929499480014783,
+    "samples_cpu_seconds": [
+      0.051806,
+      0.04524,
+      0.045058,
+      0.044937,
+      0.044949
+    ],
+    "best_cpu_seconds": 0.044937,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair4-fix-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair4-fix-normal.stderr"
+  },
+  {
+    "name": "constructor_nosink-pair4-base-normal",
+    "workload": "constructor_nosink",
+    "pair": 4,
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "nosink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.7904924209979072,
+    "samples_cpu_seconds": [
+      0.050924,
+      0.044546,
+      0.044404,
+      0.044451,
+      0.044405
+    ],
+    "best_cpu_seconds": 0.044404,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair4-base-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair4-base-normal.stderr"
+  },
+  {
+    "name": "ffi_struct-pair5-base-normal",
+    "workload": "ffi_struct",
+    "pair": 5,
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.11428955099836458,
+    "samples_cpu_seconds": [
+      0.0206
+    ],
+    "best_cpu_seconds": 0.0206,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair5-base-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair5-base-normal.stderr"
+  },
+  {
+    "name": "ffi_struct-pair5-fix-normal",
+    "workload": "ffi_struct",
+    "pair": 5,
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.3538730360014597,
+    "samples_cpu_seconds": [
+      0.0684
+    ],
+    "best_cpu_seconds": 0.0684,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair5-fix-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair5-fix-normal.stderr"
+  },
+  {
+    "name": "constructor_sink-pair5-base-normal",
+    "workload": "constructor_sink",
+    "pair": 5,
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "sink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.03129306200207793,
+    "samples_cpu_seconds": [
+      0.00418,
+      0.004148,
+      0.004146,
+      0.004145,
+      0.004145
+    ],
+    "best_cpu_seconds": 0.004145,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair5-base-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair5-base-normal.stderr"
+  },
+  {
+    "name": "constructor_sink-pair5-fix-normal",
+    "workload": "constructor_sink",
+    "pair": 5,
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "sink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.044821894996857736,
+    "samples_cpu_seconds": [
+      0.006908,
+      0.006883,
+      0.00688,
+      0.006879,
+      0.00688
+    ],
+    "best_cpu_seconds": 0.006879,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair5-fix-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair5-fix-normal.stderr"
+  },
+  {
+    "name": "constructor_nosink-pair5-base-normal",
+    "workload": "constructor_nosink",
+    "pair": 5,
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "nosink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.7900201360025676,
+    "samples_cpu_seconds": [
+      0.05077,
+      0.044593,
+      0.044462,
+      0.044365,
+      0.044363
+    ],
+    "best_cpu_seconds": 0.044363,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair5-base-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair5-base-normal.stderr"
+  },
+  {
+    "name": "constructor_nosink-pair5-fix-normal",
+    "workload": "constructor_nosink",
+    "pair": 5,
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "nosink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.7932370680027816,
+    "samples_cpu_seconds": [
+      0.051202,
+      0.045192,
+      0.045017,
+      0.045071,
+      0.045005
+    ],
+    "best_cpu_seconds": 0.045005,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair5-fix-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair5-fix-normal.stderr"
+  },
+  {
+    "name": "ffi_struct-pair6-fix-normal",
+    "workload": "ffi_struct",
+    "pair": 6,
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.35102560100131086,
+    "samples_cpu_seconds": [
+      0.066
+    ],
+    "best_cpu_seconds": 0.066,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair6-fix-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair6-fix-normal.stderr"
+  },
+  {
+    "name": "ffi_struct-pair6-base-normal",
+    "workload": "ffi_struct",
+    "pair": 6,
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.11395898899718304,
+    "samples_cpu_seconds": [
+      0.0206
+    ],
+    "best_cpu_seconds": 0.0206,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair6-base-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair6-base-normal.stderr"
+  },
+  {
+    "name": "constructor_sink-pair6-fix-normal",
+    "workload": "constructor_sink",
+    "pair": 6,
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "sink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.044628224000916816,
+    "samples_cpu_seconds": [
+      0.006907,
+      0.006882,
+      0.006881,
+      0.006879,
+      0.006879
+    ],
+    "best_cpu_seconds": 0.006879,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair6-fix-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair6-fix-normal.stderr"
+  },
+  {
+    "name": "constructor_sink-pair6-base-normal",
+    "workload": "constructor_sink",
+    "pair": 6,
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "sink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.031007027999294223,
+    "samples_cpu_seconds": [
+      0.004172,
+      0.004148,
+      0.004147,
+      0.004145,
+      0.004145
+    ],
+    "best_cpu_seconds": 0.004145,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair6-base-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair6-base-normal.stderr"
+  },
+  {
+    "name": "constructor_nosink-pair6-fix-normal",
+    "workload": "constructor_nosink",
+    "pair": 6,
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "nosink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.7926430319967039,
+    "samples_cpu_seconds": [
+      0.051286,
+      0.045222,
+      0.044998,
+      0.044977,
+      0.044957
+    ],
+    "best_cpu_seconds": 0.044957,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair6-fix-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair6-fix-normal.stderr"
+  },
+  {
+    "name": "constructor_nosink-pair6-base-normal",
+    "workload": "constructor_nosink",
+    "pair": 6,
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "nosink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.7908866860016133,
+    "samples_cpu_seconds": [
+      0.050941,
+      0.044646,
+      0.044463,
+      0.044371,
+      0.044474
+    ],
+    "best_cpu_seconds": 0.044371,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair6-base-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair6-base-normal.stderr"
+  },
+  {
+    "name": "ffi_struct-pair7-base-normal",
+    "workload": "ffi_struct",
+    "pair": 7,
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.11432284300099127,
+    "samples_cpu_seconds": [
+      0.0206
+    ],
+    "best_cpu_seconds": 0.0206,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair7-base-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair7-base-normal.stderr"
+  },
+  {
+    "name": "ffi_struct-pair7-fix-normal",
+    "workload": "ffi_struct",
+    "pair": 7,
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.353790298999229,
+    "samples_cpu_seconds": [
+      0.0684
+    ],
+    "best_cpu_seconds": 0.0684,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair7-fix-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/ffi_struct-pair7-fix-normal.stderr"
+  },
+  {
+    "name": "constructor_sink-pair7-base-normal",
+    "workload": "constructor_sink",
+    "pair": 7,
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "sink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.031145516000833595,
+    "samples_cpu_seconds": [
+      0.004174,
+      0.004148,
+      0.004146,
+      0.004145,
+      0.004145
+    ],
+    "best_cpu_seconds": 0.004145,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair7-base-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair7-base-normal.stderr"
+  },
+  {
+    "name": "constructor_sink-pair7-fix-normal",
+    "workload": "constructor_sink",
+    "pair": 7,
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "sink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.04485511999882874,
+    "samples_cpu_seconds": [
+      0.006909,
+      0.006883,
+      0.00688,
+      0.00688,
+      0.006878
+    ],
+    "best_cpu_seconds": 0.006878,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair7-fix-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_sink-pair7-fix-normal.stderr"
+  },
+  {
+    "name": "constructor_nosink-pair7-base-normal",
+    "workload": "constructor_nosink",
+    "pair": 7,
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "nosink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.7906647300005716,
+    "samples_cpu_seconds": [
+      0.051228,
+      0.044702,
+      0.044394,
+      0.044439,
+      0.044396
+    ],
+    "best_cpu_seconds": 0.044394,
+    "runtime_sha256": "7162b0d76abd4dc82df211e6a724162828a3a25d5addea505667357cd8050048",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair7-base-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair7-base-normal.stderr"
+  },
+  {
+    "name": "constructor_nosink-pair7-fix-normal",
+    "workload": "constructor_nosink",
+    "pair": 7,
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/constructor-cost.lua",
+      "nosink"
+    ],
+    "cwd": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "exit": 0,
+    "status": "complete",
+    "wall_seconds": 0.7924195470004634,
+    "samples_cpu_seconds": [
+      0.051153,
+      0.045164,
+      0.044961,
+      0.044942,
+      0.044928
+    ],
+    "best_cpu_seconds": 0.044928,
+    "runtime_sha256": "ccb5921e786eaf22a5e0859d437f89eaf78ba4c0b7e157f6087270e9f22a48e2",
+    "fixture_sha256": "47cbb0076d5e74e49ec08e645f5aa0efc4c7e10df2bb7b09100abd0b871445ee",
+    "stdout": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair7-fix-normal.stdout",
+    "stderr": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/cost/constructor_nosink-pair7-fix-normal.stderr"
+  }
+]

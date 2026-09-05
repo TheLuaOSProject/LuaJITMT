@@ -1,0 +1,90 @@
+[
+  {
+    "name": "basemt-replace-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/basemt-native.lua",
+      "replace"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.004453309997188626,
+    "stdout_path": "basemt-replace-jon.stdout",
+    "stderr_path": "basemt-replace-jon.stderr",
+    "source_sha256": "d114e82793e2dfba7d05cc6366e150cba10905c916b1e12993025a906708ce94"
+  },
+  {
+    "name": "basemt-reentrant-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/basemt-native.lua",
+      "reentrant"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.004223740001179976,
+    "stdout_path": "basemt-reentrant-jon.stdout",
+    "stderr_path": "basemt-reentrant-jon.stderr",
+    "source_sha256": "d114e82793e2dfba7d05cc6366e150cba10905c916b1e12993025a906708ce94"
+  },
+  {
+    "name": "basemt-inplace-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/src/luajit",
+      "-jon",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/basemt-native.lua",
+      "inplace"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/tests/lib/?.lua;;"
+    },
+    "exit": 1,
+    "status": "complete",
+    "seconds": 0.004430466000485467,
+    "stdout_path": "basemt-inplace-jon.stdout",
+    "stderr_path": "basemt-inplace-jon.stderr",
+    "source_sha256": "d114e82793e2dfba7d05cc6366e150cba10905c916b1e12993025a906708ce94"
+  },
+  {
+    "name": "basemt-inplace-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/src/luajit",
+      "-joff",
+      "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/basemt-native.lua",
+      "inplace"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before",
+    "environment_overrides": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.004159240997978486,
+    "stdout_path": "basemt-inplace-joff.stdout",
+    "stderr_path": "basemt-inplace-joff.stderr",
+    "source_sha256": "d114e82793e2dfba7d05cc6366e150cba10905c916b1e12993025a906708ce94"
+  }
+]

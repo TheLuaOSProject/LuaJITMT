@@ -1,0 +1,5 @@
+/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/src/luajit: ...ed-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua:135: ...ed-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua:118: post-mutation cdata field semantics
+stack traceback:
+	[C]: in function 'assert'
+	...ed-trace-20260905-pmxukjxp/t-jit-cdata-basemt-guards.lua:135: in main chunk
+	[C]: at 0x55cf3ed15100

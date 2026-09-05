@@ -1,0 +1,22 @@
+make: Entering directory '/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/canonical/src'
+make: Nothing to be done for 'default'.
+make: Leaving directory '/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/canonical/src'
+cdata-base-guard	call	warm-exits	0	after-exits	0	calls	80	expected	80
+cdata-base-guard	index	warm-exits	0	after-exits	0	calls	160	expected	160
+cdata-base-guard	newindex	warm-exits	0	after-exits	0	calls	160	expected	160
+cdata-base-guard	missing	warm-exits	0	after-exits	0	calls	0	expected	0
+cdata-base-guard	nonfunction	warm-exits	0	after-exits	0	calls	0	expected	0
+cdata-base-guard	resize	warm-exits	0	after-exits	0	calls	80	expected	80
+cdata-base-guard	methodlife	warm-exits	0	after-exits	0	calls	80	expected	80
+cdata-base-guard	replace	warm-exits	0	after-exits	0	calls	80	expected	80
+cdata base-table native guards passed
+cdata-base-guard	call	warm-exits	1	after-exits	80	calls	80	expected	80
+cdata-base-guard	index	warm-exits	1	after-exits	159	calls	160	expected	160
+cdata-base-guard	newindex	warm-exits	1	after-exits	80	calls	160	expected	160
+cdata-base-guard	missing	warm-exits	1	after-exits	1	calls	0	expected	0
+cdata-base-guard	nonfunction	warm-exits	1	after-exits	1	calls	0	expected	0
+cdata-base-guard	resize	warm-exits	1	after-exits	80	calls	80	expected	80
+cdata-base-guard	methodlife	warm-exits	1	after-exits	80	calls	80	expected	80
+cdata-base-guard	replace	warm-exits	1	after-exits	1	calls	80	expected	80
+cdata base-table native guards passed
+M6 cdata base-table native method guards passed

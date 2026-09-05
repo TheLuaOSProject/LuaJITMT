@@ -1,0 +1,6 @@
+make: Entering directory '/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src'
+CC        lj_record.o
+AR        libluajit.a
+LINK      luajit
+OK        Successfully built LuaJIT
+make: Leaving directory '/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/fix-normal/src'

@@ -1,0 +1,74 @@
+benchmark               total_s      ns/op
+---- TRACE 1 start bench.lua:145
+---- TRACE 1 IR
+0001 >  [35mint[m SLOAD  #7    CRI
+0002 >  [35mint[m LE     0001  [35m+2147483646[m
+0003    [35mint[m SLOAD  #6    CI
+0004 >  [33mcdt[m SLOAD  #4    T
+0005 >  [34mnum[m SLOAD  #5    T
+0006    [35mu16[m FLOAD  0004  cdata.ctypeid
+0007 >  [35mint[m EQ     0006  [35m+102[m
+0008    p64 ADD    0004  [35m+16 [m
+0009    [34mnum[m XLOAD  0008  
+0010  + [34mnum[m ADD    0009  [34m+1  [m
+0011    [34mnum[m XSTORE 0008  0010
+0012    p64 ADD    0004  [35m+24 [m
+0013    [34mnum[m XLOAD  0012  
+0014  + [34mnum[m ADD    0013  0005
+0015  + [35mint[m ADD    0003  [35m+1  [m
+0016 >  [35mint[m LE     0015  0001
+0017 ------ LOOP ------------
+0018 >  nil XPOLL  #0  
+0019  + [34mnum[m ADD    0010  [34m+1  [m
+0020    [34mnum[m XSTORE 0008  0019
+0021  + [34mnum[m ADD    0014  0013
+0022  + [35mint[m ADD    0015  [35m+1  [m
+0023 >  [35mint[m LE     0022  0001
+0024    [35mint[m PHI    0015  0022
+0025    [34mnum[m PHI    0014  0021
+0026    [34mnum[m PHI    0010  0019
+---- TRACE 1 mcode 198
+55ea390cff38  mov dword [r14+0x84c], 0x1
+55ea390cff43  movsd xmm1, [rip-0xfe0b]
+55ea390cff4b  movsd xmm7, [rdx+0x28]
+55ea390cff50  cvttsd2si eax, xmm7
+55ea390cff54  xorps xmm6, xmm6
+55ea390cff57  cvtsi2sd xmm6, eax
+55ea390cff5b  ucomisd xmm7, xmm6
+55ea390cff5f  jnz 0x55ea390c0118
+55ea390cff65  jpe 0x55ea390c0118
+55ea390cff6b  cmp eax, 0x7ffffffe
+55ea390cff71  jg 0x55ea390c0118
+55ea390cff77  cvttsd2si ebp, [rdx+0x20]
+55ea390cff7c  rorx rcx, [rdx+0x10], 0x2f
+55ea390cff83  cmp cx, -0x0b
+55ea390cff87  jnz 0x55ea390c0118
+55ea390cff8d  shr rcx, 0x11
+55ea390cff91  cmp dword [rdx+0x1c], 0xfff90000
+55ea390cff98  jnb 0x55ea390c0118
+55ea390cff9e  movsd xmm6, [rdx+0x18]
+55ea390cffa3  cmp word [rcx+0xa], +0x66
+55ea390cffa8  jnz 0x55ea390c0120
+55ea390cffae  movsd xmm7, [rcx+0x10]
+55ea390cffb3  addsd xmm7, xmm1
+55ea390cffb7  movsd [rcx+0x10], xmm7
+55ea390cffbc  movsd xmm0, [rcx+0x18]
+55ea390cffc1  addsd xmm6, xmm0
+55ea390cffc5  add ebp, +0x01
+55ea390cffc8  cmp ebp, eax
+55ea390cffca  jg 0x55ea390c0128
+->LOOP:
+55ea390cffd0  mov rdi, 0x00007fcd7c5d0584
+55ea390cffda  mov edi, [rdi]
+55ea390cffdc  cmp edi, +0x00
+55ea390cffdf  jz 0x55ea390c0130
+55ea390cffe5  addsd xmm7, xmm1
+55ea390cffe9  movsd [rcx+0x10], xmm7
+55ea390cffee  addsd xmm6, xmm0
+55ea390cfff2  add ebp, +0x01
+55ea390cfff5  cmp ebp, eax
+55ea390cfff7  jle 0x55ea390cffd0	->LOOP
+55ea390cfff9  jmp 0x55ea390c0138
+---- TRACE 1 stop -> loop
+
+ffi_struct               0.0000      73.33
