@@ -1,0 +1,7 @@
+{"stage":"long_chain_ready","count":262144,"mode":0,"ordinary":262144,"after_main":0,"cycle":2,"root_scanned":1,"root_done":0,"ready":0,"needscan":0,"workers":0}
+{"stage":"real_prune_unit","cycle":2,"ns":25876,"unlinked":256,"pending_flushed":0,"root_done":0,"cursor_changed":0}
+{"stage":"real_prune_unit","cycle":2,"ns":33888,"unlinked":256,"pending_flushed":0,"root_done":0,"cursor_changed":0}
+{"stage":"real_prune_unit","cycle":2,"ns":24050,"unlinked":256,"pending_flushed":0,"root_done":0,"cursor_changed":0}
+{"stage":"real_prune_unit","cycle":2,"ns":5412454,"unlinked":204,"pending_flushed":262144,"root_done":0,"cursor_changed":0}
+{"stage":"verified_eof_unit","count":262144,"mode":0,"eof_ns":5412454,"flushed":262144,"prune_calls":4,"root_nodes":262149,"exact_identities":262144,"after_main_identities":0}
+PASS exact pending chain and graph survived real EOF flush and completed GC

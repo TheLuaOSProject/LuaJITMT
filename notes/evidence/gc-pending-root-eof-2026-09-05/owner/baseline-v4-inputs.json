@@ -1,0 +1,14 @@
+{
+  "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/t-pending-root-eof.c": {
+    "sha256": "0e2cf3e8dda8d43c39a6b2ee9dd2c4bc24fffd057751ae983b95d1a7579e31cd",
+    "bytes": 10032
+  },
+  "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline-v4-eof": {
+    "sha256": "a5db434e6a79a4d130c9e4845791cabfdde3a43822eb0fc21ef2995bae4382cd",
+    "bytes": 1758080
+  },
+  "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/libluajit.a": {
+    "sha256": "cbc7e955549f291850dd5693dce77ce1d1f56461ced87eacc77e069603880343",
+    "bytes": 2360716
+  }
+}

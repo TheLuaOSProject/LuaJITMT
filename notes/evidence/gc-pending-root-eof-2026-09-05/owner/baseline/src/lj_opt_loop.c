@@ -1,0 +1,588 @@
+/*
+** LOOP: Loop Optimizations.
+** Copyright (C) 2005-2026 Mike Pall. See Copyright Notice in luajit.h
+*/
+
+#define lj_opt_loop_c
+#define LUA_CORE
+
+#include "lj_obj.h"
+
+#if LJ_HASJIT
+
+#include "lj_err.h"
+#include "lj_buf.h"
+#include "lj_ir.h"
+#include "lj_jit.h"
+#include "lj_iropt.h"
+#include "lj_profile.h"
+#include "lj_record.h"
+#include "lj_trace.h"
+#include "lj_snap.h"
+#include "lj_vm.h"
+
+/* Loop optimization:
+**
+** Traditional Loop-Invariant Code Motion (LICM) splits the instructions
+** of a loop into invariant and variant instructions. The invariant
+** instructions are hoisted out of the loop and only the variant
+** instructions remain inside the loop body.
+**
+** Unfortunately LICM is mostly useless for compiling dynamic languages.
+** The IR has many guards and most of the subsequent instructions are
+** control-dependent on them. The first non-hoistable guard would
+** effectively prevent hoisting of all subsequent instructions.
+**
+** That's why we use a special form of unrolling using copy-substitution,
+** combined with redundancy elimination:
+**
+** The recorded instruction stream is re-emitted to the compiler pipeline
+** with substituted operands. The substitution table is filled with the
+** refs returned by re-emitting each instruction. This can be done
+** on-the-fly, because the IR is in strict SSA form, where every ref is
+** defined before its use.
+**
+** This aproach generates two code sections, separated by the LOOP
+** instruction:
+**
+** 1. The recorded instructions form a kind of pre-roll for the loop. It
+** contains a mix of invariant and variant instructions and performs
+** exactly one loop iteration (but not necessarily the 1st iteration).
+**
+** 2. The loop body contains only the variant instructions and performs
+** all remaining loop iterations.
+**
+** On first sight that looks like a waste of space, because the variant
+** instructions are present twice. But the key insight is that the
+** pre-roll honors the control-dependencies for *both* the pre-roll itself
+** *and* the loop body!
+**
+** It also means one doesn't have to explicitly model control-dependencies
+** (which, BTW, wouldn't help LICM much). And it's much easier to
+** integrate sparse snapshotting with this approach.
+**
+** One of the nicest aspects of this approach is that all of the
+** optimizations of the compiler pipeline (FOLD, CSE, FWD, etc.) can be
+** reused with only minor restrictions (e.g. one should not fold
+** instructions across loop-carried dependencies).
+**
+** But in general all optimizations can be applied which only need to look
+** backwards into the generated instruction stream. At any point in time
+** during the copy-substitution process this contains both a static loop
+** iteration (the pre-roll) and a dynamic one (from the to-be-copied
+** instruction up to the end of the partial loop body).
+**
+** Since control-dependencies are implicitly kept, CSE also applies to all
+** kinds of guards. The major advantage is that all invariant guards can
+** be hoisted, too.
+**
+** Load/store forwarding works across loop iterations, too. This is
+** important if loop-carried dependencies are kept in upvalues or tables.
+** E.g. 'self.idx = self.idx + 1' deep down in some OO-style method may
+** become a forwarded loop-recurrence after inlining.
+**
+** Since the IR is in SSA form, loop-carried dependencies have to be
+** modeled with PHI instructions. The potential candidates for PHIs are
+** collected on-the-fly during copy-substitution. After eliminating the
+** redundant ones, PHI instructions are emitted *below* the loop body.
+**
+** Note that this departure from traditional SSA form doesn't change the
+** semantics of the PHI instructions themselves. But it greatly simplifies
+** on-the-fly generation of the IR and the machine code.
+*/
+
+/* Some local macros to save typing. Undef'd at the end. */
+#define IR(ref)		(&J->cur.ir[(ref)])
+
+/* Pass IR on to next optimization in chain (FOLD). */
+#define emitir(ot, a, b)	(lj_ir_set(J, (ot), (a), (b)), lj_opt_fold(J))
+
+/* Emit raw IR without passing through optimizations. */
+#define emitir_raw(ot, a, b)	(lj_ir_set(J, (ot), (a), (b)), lj_ir_emit(J))
+
+static IRRef loop_subst_ref(jit_State *J, IRRef1 *subst, IRRef ref,
+			    IRRef invar)
+{
+  IRRef s;
+  if (LJ_UNLIKELY(ref < REF_BIAS || ref >= invar))
+    lj_trace_err(J, LJ_TRERR_RETRY);
+  s = subst[ref];
+  if (LJ_UNLIKELY(s == REF_DROP))
+    lj_trace_err(J, LJ_TRERR_RETRY);
+  return s;
+}
+
+/* -- PHI elimination ----------------------------------------------------- */
+
+/* Emit or eliminate collected PHIs. */
+static void loop_emit_phi(jit_State *J, IRRef1 *subst, IRRef1 *phi, IRRef nphi,
+			  SnapNo onsnap)
+{
+  int passx = 0;
+  IRRef i, j, nslots;
+  IRRef invar = J->chain[IR_LOOP];
+  /* Pass #1: mark redundant and potentially redundant PHIs. */
+  for (i = 0, j = 0; i < nphi; i++) {
+    IRRef lref = phi[i];
+    IRRef rref = subst[lref];
+    if (lref == rref || rref == REF_DROP) {  /* Invariants are redundant. */
+      irt_clearphi(IR(lref)->t);
+    } else {
+      phi[j++] = (IRRef1)lref;
+      if (!(IR(rref)->op1 == lref || IR(rref)->op2 == lref)) {
+	/* Quick check for simple recurrences failed, need pass2. */
+	irt_setmark(IR(lref)->t);
+	passx = 1;
+      }
+    }
+  }
+  nphi = j;
+  /* Pass #2: traverse variant part and clear marks of non-redundant PHIs. */
+  if (passx) {
+    SnapNo s;
+    for (i = J->cur.nins-1; i > invar; i--) {
+      IRIns *ir = IR(i);
+      if (!irref_isk(ir->op2)) irt_clearmark(IR(ir->op2)->t);
+      if (!irref_isk(ir->op1)) {
+	irt_clearmark(IR(ir->op1)->t);
+	if (ir->op1 < invar &&
+	    ir->o >= IR_CALLN && ir->o <= IR_CARG) {  /* ORDER IR */
+	  ir = IR(ir->op1);
+	  while (ir->o == IR_CARG) {
+	    if (!irref_isk(ir->op2)) irt_clearmark(IR(ir->op2)->t);
+	    if (irref_isk(ir->op1)) break;
+	    ir = IR(ir->op1);
+	    irt_clearmark(ir->t);
+	  }
+	}
+      }
+    }
+    for (s = J->cur.nsnap-1; s >= onsnap; s--) {
+      SnapShot *snap = &J->cur.snap[s];
+      SnapEntry *map = &J->cur.snapmap[snap->mapofs];
+      MSize n, nent = snap->nent;
+      for (n = 0; n < nent; n++) {
+	IRRef ref = snap_ref(map[n]);
+	if (!irref_isk(ref)) irt_clearmark(IR(ref)->t);
+      }
+    }
+  }
+  /* Pass #3: add PHIs for variant slots without a corresponding SLOAD. */
+  nslots = J->baseslot+J->maxslot;
+  for (i = 1; i < nslots; i++) {
+    IRRef ref = tref_ref(J->slot[i]);
+    while (!irref_isk(ref) && ref != subst[ref]) {
+      IRIns *ir = IR(ref);
+      irt_clearmark(ir->t);  /* Unmark potential uses, too. */
+      if (irt_isphi(ir->t) || irt_ispri(ir->t))
+	break;
+      irt_setphi(ir->t);
+      if (nphi >= LJ_MAX_PHI)
+	lj_trace_err(J, LJ_TRERR_PHIOV);
+      phi[nphi++] = (IRRef1)ref;
+      ref = subst[ref];
+      if (ref > invar)
+	break;
+    }
+  }
+  /* Pass #4: propagate non-redundant PHIs. */
+  while (passx) {
+    passx = 0;
+    for (i = 0; i < nphi; i++) {
+      IRRef lref = phi[i];
+      IRIns *ir = IR(lref);
+      if (!irt_ismarked(ir->t)) {  /* Propagate only from unmarked PHIs. */
+	IRIns *irr = IR(subst[lref]);
+	if (irt_ismarked(irr->t)) {  /* Right ref points to other PHI? */
+	  irt_clearmark(irr->t);  /* Mark that PHI as non-redundant. */
+	  passx = 1;  /* Retry. */
+	}
+      }
+    }
+  }
+  /* Pass #5: emit PHI instructions or eliminate PHIs. */
+  for (i = 0; i < nphi; i++) {
+    IRRef lref = phi[i];
+    IRIns *ir = IR(lref);
+    if (!irt_ismarked(ir->t)) {  /* Emit PHI if not marked. */
+      IRRef rref = subst[lref];
+      if (rref > invar)
+	irt_setphi(IR(rref)->t);
+      emitir_raw(IRT(IR_PHI, irt_type(ir->t)), lref, rref);
+    } else {  /* Otherwise eliminate PHI. */
+      irt_clearmark(ir->t);
+      irt_clearphi(ir->t);
+    }
+  }
+}
+
+/* -- Loop unrolling using copy-substitution ------------------------------ */
+
+/* Copy-substitute snapshot. */
+static void loop_subst_snap(jit_State *J, SnapShot *osnap,
+			    SnapEntry *loopmap, IRRef1 *subst, IRRef invar)
+{
+  SnapEntry *nmap, *omap = &J->cur.snapmap[osnap->mapofs];
+  SnapEntry *nextmap = &J->cur.snapmap[snap_nextofs(&J->cur, osnap)];
+  MSize nmapofs;
+  MSize on, ln, nn, onent = osnap->nent;
+  BCReg nslots = osnap->nslots;
+  SnapShot *snap = &J->cur.snap[J->cur.nsnap];
+  int keep_xsave = 0;
+  if (J->cur.nsnap != 0) {
+    SnapShot *prev = &J->cur.snap[J->cur.nsnap-1];
+    IRRef pref = prev->ref;
+    keep_xsave = pref >= REF_FIRST && pref < J->cur.nins &&
+		 IR(pref)->o == IR_XSAVE;
+  }
+  if (irt_isguard(J->guardemit) || keep_xsave) {
+    /* XSAVE snapshots are materialization boundaries even without an
+    ** intervening guard. Never let a later copied snapshot overwrite the
+    ** assembler-position identity of the copied marker. */
+    nmapofs = J->cur.nsnapmap;
+    J->cur.nsnap++;  /* Add new snapshot. */
+  } else {  /* Otherwise overwrite previous snapshot. */
+    snap--;
+    nmapofs = snap->mapofs;
+  }
+  J->guardemit.irt = 0;
+  /* Setup new snapshot. */
+  snap->mapofs = (uint32_t)nmapofs;
+  snap->ref = (IRRef1)J->cur.nins;
+  snap->mcofs = 0;
+  snap->nslots = nslots;
+  snap->topslot = osnap->topslot;
+  /* SNAPCOUNT_DONE is also an explicit "never record this exit" marker for
+  ** native-call boundaries which must not link directly to side code. Preserve
+  ** that semantic marker when LOOP copies/reindexes snapshots, but never copy
+  ** an ordinary runtime hot-exit count into a new trace. */
+  snap->count = osnap->count == SNAPCOUNT_DONE ? SNAPCOUNT_DONE : 0;
+  nmap = &J->cur.snapmap[nmapofs];
+  /* Substitute snapshot slots. */
+  on = ln = nn = 0;
+  while (on < onent) {
+    SnapEntry osn = omap[on], lsn = loopmap[ln];
+    if (snap_slot(lsn) < snap_slot(osn)) {  /* Copy slot from loop map. */
+      nmap[nn++] = lsn;
+      ln++;
+    } else {  /* Copy substituted slot from snapshot map. */
+      if (snap_slot(lsn) == snap_slot(osn)) ln++;  /* Shadowed loop slot. */
+      if (!irref_isk(snap_ref(osn))) {
+	SnapEntry oldsn = osn;
+	IRRef ref = loop_subst_ref(J, subst, snap_ref(osn), invar);
+	osn = snap_setref(osn, ref);
+	/*
+	** Local-cell source slots use SNAP_NORESTORE for internal cell refs:
+	** the helper has already written the real TUPVAL stack slot. Loop
+	** substitution may replace the helper ref with a PHI, but it is still
+	** an internal cell ref and must not be restored as a Lua value.
+	*/
+	if ((oldsn & SNAP_NORESTORE) && !irref_isk(ref)) {
+	  IRType t = irt_type(IR(ref)->t);
+	  if (t == IRT_PGC || t == IRT_P32)
+	    osn |= SNAP_NORESTORE;
+	}
+      }
+      nmap[nn++] = osn;
+      on++;
+    }
+  }
+  while (snap_slot(loopmap[ln]) < nslots)  /* Copy remaining loop slots. */
+    nmap[nn++] = loopmap[ln++];
+  snap->nent = (uint8_t)nn;
+  omap += onent;
+  nmap += nn;
+  while (omap < nextmap)  /* Copy PC + frame links. */
+    *nmap++ = *omap++;
+  J->cur.nsnapmap = (uint32_t)(nmap - J->cur.snapmap);
+}
+
+typedef struct LoopState {
+  jit_State *J;
+  IRRef1 *subst;
+  MSize sizesubst;
+} LoopState;
+
+#if LJ_TARGET_X64 && LJ_GC64
+/* Only a direct scalar payload store is admitted. Pointer-based/indirect FFI
+** stores and every Lua-object store remain outside this first optimization. */
+static int loop_cdata_scalar_store(jit_State *J, IRIns *ir)
+{
+  IRIns *addr = IR(ir->op1), *base, *ofs;
+  if (!(irt_isnum(ir->t) || irt_isint(ir->t)) || addr->o != IR_ADD)
+    return 0;
+  base = IR(addr->op1);
+  ofs = IR(addr->op2);
+  if (!irt_iscdata(base->t) ||
+      (base->o != IR_SLOAD && base->o != IR_KGC))
+    return 0;
+  /* x64 records native address offsets as KINT64. Keep both representations
+  ** within the same positive int32 payload-offset range. */
+  if (ofs->o == IR_KINT)
+    return ofs->i >= (int32_t)sizeof(GCcdata);
+  return ofs->o == IR_KINT64 &&
+    ir_kint64(ofs)->u64 >= (uint64_t)sizeof(GCcdata) &&
+    ir_kint64(ofs)->u64 <= INT32_MAX;
+}
+
+/* Classify the complete original body, including operations after a candidate
+** lookup. The copied prefix alone cannot exclude a previous iteration's late
+** mutation. No opaque/helper operation or allocation is presumed pure. */
+static int loop_cdata_fload_pure(jit_State *J, IRRef end)
+{
+  IRRef ref;
+  if (J->parent != 0 || J->cur.link != J->cur.traceno ||
+      lj_record_mt_runtime_shared(J2G(J), J->L))
+    return 0;
+  for (ref = REF_FIRST; ref < end; ref++) {
+    IRIns *ir = IR(ref);
+    switch (ir->o) {
+    case IR_NOP: case IR_SLOAD: case IR_FLOAD:
+    case IR_HREFK: case IR_HLOAD: case IR_XLOAD:
+    case IR_ADD: case IR_ADDOV: case IR_EQ: case IR_NE:
+      break;
+    case IR_LT: case IR_GE: case IR_LE: case IR_GT:
+    case IR_ULT: case IR_UGE: case IR_ULE: case IR_UGT:
+      if (!(irt_isnum(ir->t) || irt_isint(ir->t)))
+        return 0;
+      break;
+    case IR_CONV:
+      if (ir->op2 != IRCONV_NUM_INT &&
+          ir->op2 != (IRCONV_INT_NUM|IRCONV_CHECK))
+        return 0;
+      break;
+    case IR_XSTORE:
+      if (!loop_cdata_scalar_store(J, ir))
+        return 0;
+      break;
+    default:
+      return 0;
+    }
+  }
+  return 1;
+}
+
+static LJ_AINLINE int loop_needs_xpoll(jit_State *J)
+{
+  global_State *g = J2G(J);
+  /* The literal selects the combined poll/profile-request test. Owner-L policy
+  ** activation flushes traces around publication; global workers_set(g, n)
+  ** may publish a pool without that flush. Native entry and collector payload/
+  ** reclaim safety use the independent phase-gate/jit_base protocol instead.
+  ** Do not infer worker activation responsiveness from this literal.
+  */
+  return gc2_n_threads_acq(g) > 1 || gc2_n_workers_acq(g) != 0 ||
+	 mt_active_or_entering_acq(g)
+#if LJ_HASPROFILE
+	 || lj_profile_poll_required(g)
+#endif
+	 ;
+}
+#endif
+
+/* Unroll loop. */
+static void loop_unroll(LoopState *lps)
+{
+  jit_State *J = lps->J;
+  IRRef1 phi[LJ_MAX_PHI];
+  uint32_t nphi = 0;
+  IRRef1 *subst;
+  SnapNo onsnap;
+  SnapShot *osnap, *loopsnap;
+  SnapEntry *loopmap, *psentinel;
+  IRRef ins, invar;
+
+  /* Allocate substitution table.
+  ** Only non-constant refs in [REF_BIAS,invar) are valid indexes.
+  */
+  invar = J->cur.nins;
+  lps->sizesubst = invar - REF_BIAS;
+  lps->subst = lj_mem_newvec(J->L, lps->sizesubst, IRRef1);
+  subst = lps->subst - REF_BIAS;
+  subst[REF_BASE] = REF_BASE;
+
+  /* LOOP separates the pre-roll from the loop body. */
+  emitir_raw(IRTG(IR_LOOP, IRT_NIL), 0, 0);
+#if LJ_TARGET_X64 && LJ_GC64
+  {
+    int needs_poll = loop_needs_xpoll(J);
+    J->loop_cdata_fload = !needs_poll && loop_cdata_fload_pure(J, invar);
+    emitir_raw(IRTG(IR_XPOLL, IRT_NIL), needs_poll, 0);
+  }
+#endif
+
+  /* Grow snapshot buffer and map for copy-substituted snapshots.
+  ** Need up to twice the number of snapshots minus #0 and loop snapshot.
+  ** Need up to twice the number of entries plus fallback substitutions
+  ** from the loop snapshot entries for each new snapshot.
+  ** Caveat: both calls may reallocate J->cur.snap and J->cur.snapmap!
+  */
+  onsnap = J->cur.nsnap;
+  lj_snap_grow_buf(J, 2*onsnap-2);
+  lj_snap_grow_map(J, J->cur.nsnapmap*2+(onsnap-2)*J->cur.snap[onsnap-1].nent);
+
+  /* The loop snapshot is used for fallback substitutions. */
+  loopsnap = &J->cur.snap[onsnap-1];
+  loopmap = &J->cur.snapmap[loopsnap->mapofs];
+  /* The PC of snapshot #0 and the loop snapshot must match. */
+  psentinel = &loopmap[loopsnap->nent];
+  lj_assertJ(*psentinel == J->cur.snapmap[J->cur.snap[0].nent],
+	     "mismatched PC for loop snapshot");
+  *psentinel = SNAP(255, 0, 0);  /* Replace PC with temporary sentinel. */
+
+  /* Start substitution with snapshot #1 (#0 is empty for root traces). */
+  osnap = &J->cur.snap[1];
+
+  /* Copy and substitute all recorded instructions and snapshots. */
+  for (ins = REF_FIRST; ins < invar; ins++) {
+    IRIns *ir;
+    IRRef op1, op2;
+
+    /* Several recorder snapshots may name the same original IR ref. XSAVE
+    ** requires its copied snapshot to name the copied marker exactly, so drain
+    ** every snapshot due before re-emitting that instruction. With no copied
+    ** guard/IR between equal-ref snapshots, loop_subst_snap() deliberately
+    ** merges them and retains the last state, just like lj_snap_add(). */
+    while (osnap < loopsnap && ins >= osnap->ref)
+      loop_subst_snap(J, osnap++, loopmap, subst, invar);
+
+    /* Substitute instruction operands. */
+    ir = IR(ins);
+    op1 = ir->op1;
+    if (!irref_isk(op1)) op1 = loop_subst_ref(J, subst, op1, invar);
+    op2 = ir->op2;
+    if (!irref_isk(op2)) op2 = loop_subst_ref(J, subst, op2, invar);
+    if (irm_kind(lj_ir_mode[ir->o]) == IRM_N &&
+	op1 == ir->op1 && op2 == ir->op2) {  /* Regular invariant ins? */
+      subst[ins] = (IRRef1)ins;  /* Shortcut. */
+    } else {
+      /* Re-emit substituted instruction to the FOLD/CSE/etc. pipeline. */
+      IRType1 t = ir->t;  /* Get this first, since emitir may invalidate ir. */
+      IRRef ref = tref_ref(emitir(ir->ot & ~IRT_ISPHI, op1, op2));
+      subst[ins] = (IRRef1)ref;
+      if (ref != ins) {
+	IRIns *irr = IR(ref);
+	if (ref < invar) {  /* Loop-carried dependency? */
+	  /* Potential PHI? */
+	  if (!irref_isk(ref) && !irt_isphi(irr->t) && !irt_ispri(irr->t)) {
+	    irt_setphi(irr->t);
+	    if (nphi >= LJ_MAX_PHI)
+	      lj_trace_err(J, LJ_TRERR_PHIOV);
+	    phi[nphi++] = (IRRef1)ref;
+	  }
+	  /* Check all loop-carried dependencies for type instability. */
+	  if (!irt_sametype(t, irr->t)) {
+	    if (irt_isinteger(t) && irt_isinteger(irr->t))
+	      continue;
+	    else if (irt_isnum(t) && irt_isinteger(irr->t))  /* Fix int->num. */
+	      ref = tref_ref(emitir(IRTN(IR_CONV), ref, IRCONV_NUM_INT));
+	    else if (irt_isnum(irr->t) && irt_isinteger(t))  /* Fix num->int. */
+	      ref = tref_ref(emitir(IRTGI(IR_CONV), ref,
+				    IRCONV_INT_NUM|IRCONV_CHECK));
+	    else
+	      lj_trace_err(J, LJ_TRERR_TYPEINS);
+	    subst[ins] = (IRRef1)ref;
+	    irr = IR(ref);
+	    goto phiconv;
+	  }
+	} else if (ref != REF_DROP && ref > invar &&
+		   ((irr->o == IR_CONV && irr->op1 < invar) ||
+		    (irr->o == IR_ALEN && irr->op2 < invar &&
+					  irr->op2 != REF_NIL))) {
+	  /* May need an extra PHI for a CONV or ALEN hint. */
+	  ref = irr->o == IR_CONV ? irr->op1 : irr->op2;
+	  irr = IR(ref);
+	phiconv:
+	  if (ref < invar && !irref_isk(ref) && !irt_isphi(irr->t)) {
+	    irt_setphi(irr->t);
+	    if (nphi >= LJ_MAX_PHI)
+	      lj_trace_err(J, LJ_TRERR_PHIOV);
+	    phi[nphi++] = (IRRef1)ref;
+	  }
+	}
+      }
+    }
+  }
+  if (!irt_isguard(J->guardemit))  /* Drop redundant snapshot. */
+    J->cur.nsnapmap = (uint32_t)J->cur.snap[--J->cur.nsnap].mapofs;
+  lj_assertJ(J->cur.nsnapmap <= J->sizesnapmap, "bad snapshot map index");
+  *psentinel = J->cur.snapmap[J->cur.snap[0].nent];  /* Restore PC. */
+
+  loop_emit_phi(J, subst, phi, nphi, onsnap);
+}
+
+/* Undo any partial changes made by the loop optimization. */
+static void loop_undo(jit_State *J, IRRef ins, SnapNo nsnap, MSize nsnapmap)
+{
+  ptrdiff_t i;
+  SnapShot *snap = &J->cur.snap[nsnap-1];
+  SnapEntry *map = J->cur.snapmap;
+  map[snap->mapofs + snap->nent] = map[J->cur.snap[0].nent];  /* Restore PC. */
+  J->cur.nsnapmap = (uint32_t)nsnapmap;
+  J->cur.nsnap = nsnap;
+  J->guardemit.irt = 0;
+  lj_ir_rollback(J, ins);
+  for (i = 0; i < BPROP_SLOTS; i++) {  /* Remove backprop. cache entries. */
+    BPropEntry *bp = &J->bpropcache[i];
+    if (bp->val >= ins)
+      bp->key = 0;
+  }
+  for (ins--; ins >= REF_FIRST; ins--) {  /* Remove flags. */
+    IRIns *ir = IR(ins);
+    irt_clearphi(ir->t);
+    irt_clearmark(ir->t);
+  }
+}
+
+/* Protected callback for loop optimization. */
+static TValue *cploop_opt(lua_State *L, lua_CFunction dummy, void *ud)
+{
+  UNUSED(L); UNUSED(dummy);
+  loop_unroll((LoopState *)ud);
+  return NULL;
+}
+
+/* Loop optimization. */
+int lj_opt_loop(jit_State *J)
+{
+  IRRef nins = J->cur.nins;
+  SnapNo nsnap = J->cur.nsnap;
+  MSize nsnapmap = J->cur.nsnapmap;
+  LoopState lps;
+  int errcode;
+  lps.J = J;
+  lps.subst = NULL;
+  lps.sizesubst = 0;
+  J->loop_cdata_fload = 0;
+  errcode = lj_vm_cpcall(J->L, NULL, &lps, cploop_opt);
+  /* The protected callback owns the flag on every success/error path. Never
+  ** carry eligibility into loop retry, another trace, or later optimizer work. */
+  J->loop_cdata_fload = 0;
+  lj_mem_freevec(J2G(J), lps.subst, lps.sizesubst, IRRef1);
+  if (LJ_UNLIKELY(errcode)) {
+    lua_State *L = J->L;
+    if (errcode == LUA_ERRRUN && tvisnumber(L->top-1)) {  /* Trace error? */
+      int32_t e = numberVint(L->top-1);
+      switch ((TraceError)e) {
+      case LJ_TRERR_TYPEINS:  /* Type instability. */
+      case LJ_TRERR_GFAIL:  /* Guard would always fail. */
+	/* Unrolling via recording fixes many cases, e.g. a flipped boolean. */
+	if (--J->instunroll < 0)  /* But do not unroll forever. */
+	  break;
+	L->top--;  /* Remove error object. */
+	loop_undo(J, nins, nsnap, nsnapmap);
+	return 1;  /* Loop optimization failed, continue recording. */
+      default:
+	break;
+      }
+    }
+    lj_err_throw(L, errcode);  /* Propagate all other errors. */
+  }
+  return 0;  /* Loop optimization is ok. */
+}
+
+#undef IR
+#undef emitir
+#undef emitir_raw
+
+#endif

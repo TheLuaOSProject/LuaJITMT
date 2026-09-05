@@ -1,0 +1,38 @@
+{
+  "argv": [
+    "make",
+    "-C",
+    "src",
+    "-j2",
+    "BUILDMODE=static",
+    "CC=clang",
+    "HOST_CC=clang",
+    "CCOPT=-O1",
+    "CCDEBUG=-g",
+    "TARGET_STRIP=:",
+    "XCFLAGS=-DLUA_USE_ASSERT -DLUA_USE_APICHECK",
+    "TARGET_CFLAGS=-fsanitize=address -fno-omit-frame-pointer",
+    "TARGET_LDFLAGS=-fsanitize=address"
+  ],
+  "cwd": "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline-asan",
+  "exit_code": 0,
+  "seconds": 17.508545484000933,
+  "binaries": {
+    "luajit": {
+      "sha256": "addab0a85e6f5ea37593dc1098d051e54e4277bf2a706c652ec6d6774e43058c",
+      "bytes": 19514768
+    },
+    "libluajit.a": {
+      "sha256": "9d48cb6e3ef391de797c2082c0a87c103116470d6b1f54bd549d59d7e440a264",
+      "bytes": 26705160
+    },
+    "host/buildvm": {
+      "sha256": "dddd42538a0c17d4aa5f758b71cb3fd8dc444d3d21bbc93134b8ce9905e57282",
+      "bytes": 247312
+    },
+    "host/minilua": {
+      "sha256": "8899f393b0b812cd528a8dff3bdf205fa74ef06717cd6f56a03f034fded97589",
+      "bytes": 550944
+    }
+  }
+}

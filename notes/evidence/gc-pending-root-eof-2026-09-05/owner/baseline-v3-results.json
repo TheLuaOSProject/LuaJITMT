@@ -1,0 +1,29 @@
+[
+  {
+    "exit_code": 1,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src",
+      "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/t-pending-root-eof.c",
+      "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_gc_sweep_gc2_unmarked",
+      "-o",
+      "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline-v3-eof"
+    ],
+    "case": "compile",
+    "cwd": "/tmp/lj-gc-pending-root-design-20260905-blju2qsh",
+    "seconds": 0.06381145000341348,
+    "LUA_PATH": "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  }
+]

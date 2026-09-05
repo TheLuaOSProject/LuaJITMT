@@ -1,0 +1,18 @@
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+{"stage":"long_chain_ready","count":4096,"mode":0,"ordinary":4096,"after_main":0,"cycle":2,"root_scanned":1,"root_done":0,"ready":0,"needscan":0,"workers":0}
+
+Program received signal SIGABRT, Aborted.
+0x00007ffff7d3795c in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+$1 = 3
+$2 = 3961
+$3 = 0
+$4 = 1
+$5 = 4
+$6 = 4
+$7 = 0
+#0  0x00007ffff7d3795c in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#1  0x00007ffff7ce2cc2 in raise () from /lib/x86_64-linux-gnu/libc.so.6
+#2  0x00007ffff7ccb4ac in abort () from /lib/x86_64-linux-gnu/libc.so.6
+#3  0x00007ffff7ccb420 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#4  0x000055555555d8f6 in main (argc=<optimized out>, argv=<optimized out>) at /tmp/lj-gc-pending-root-design-20260905-blju2qsh/t-pending-root-eof.c:212

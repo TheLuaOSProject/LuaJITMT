@@ -1,0 +1,38 @@
+{
+  "fixture-v2/t-pending-root-eof.c": {
+    "sha256": "3910d0b8d077d251f52a56b15e3e38a45c26686ff07d1071b1f51c4a75118db0",
+    "bytes": 8811
+  },
+  "fixture-v2/run.py": {
+    "sha256": "0ca469fa90def7c904b8d2bade2fdf1f9a9257fa0d98f6b55305ae84a726da6f",
+    "bytes": 1717
+  },
+  "fixture-v2/baseline-v2-results.json": {
+    "sha256": "a51e6e1dbc7fedb321ff65b09222d0bb4a8a22d491aecbac45128bfbcb146b4d",
+    "bytes": 1582
+  },
+  "fixture-v2/baseline-v2-inputs.json": {
+    "sha256": "dc23c930ce3cf24069e81772cbe69c031af6e73f00f4561c90694628f6d3785f",
+    "bytes": 554
+  },
+  "fixture-v2/baseline-v2-4096-0.stdout": {
+    "sha256": "afb276bdb62a8d53498ea1a0af1a6ffcc95bdb6a10049f4e6e44b1b66d98c07f",
+    "bytes": 158
+  },
+  "fixture-v2/baseline-v2-4096-0.stderr": {
+    "sha256": "8a9d5bb8c20f0799badd13bf5440f4c47a32c92b83a2a2da8e01d5dad73b5d87",
+    "bytes": 133
+  },
+  "fixture-v2/baseline-v2-0-0.stdout": {
+    "sha256": "ecbf1f1297f56882674acccc33cf08fe018b8a40a3ff73e9a1c228be5224e38e",
+    "bytes": 850
+  },
+  "fixture-v2/baseline-v2-0-0.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "fixture-v2/baseline-v2-eof": {
+    "sha256": "c1fcd9cca105c6ee4c5d6786577c6f7cba19b335d9e06f0fb825a254eddef843",
+    "bytes": 1749584
+  }
+}

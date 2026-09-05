@@ -374,6 +374,13 @@ controls and post-fix completion tests:
   checks remain. Eight owner, four current-runtime and eleven registered
   processes pass. Runtime acknowledgement rules are unchanged. See
   `notes/gc-native-duplicate-fixture-2026-09-05.md`.
+- The ownership-spine EOF call still flushes a whole pending chain despite the
+  ordinary prune budget: one real call handles 262,144 exact identities, taking
+  about 5–6 ms in three normal observations. Ten normal/ASan controls retain
+  payloads, userdata placement and real collection. A whole-chain continuation
+  needs shared-consumer ownership, incarnation retention and reentrancy proofs;
+  prefix cutting conflicts with unfinished constructor link reads. No runtime
+  implementation is ready. See `notes/gc-pending-root-eof-2026-09-05.md`.
 - `1bce0fa5`: promote exhausted inline table dirty authority into pre-reserved
   persistent wide proof, retaining common stamp/token geometry. Small mappings
   use a dense sidecar plane and Huge mappings use checked tail reservation.

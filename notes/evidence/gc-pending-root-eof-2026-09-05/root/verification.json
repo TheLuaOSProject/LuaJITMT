@@ -1,0 +1,7 @@
+{
+  "owner": "/tmp/lj-gc-pending-root-design-20260905-blju2qsh",
+  "owner_manifest_sha256": "a585b1be68eb073ab8da7eb3d921c6eed3910084d131825d9233c1ef97e28213",
+  "owner_artifacts_verified": 541,
+  "runtime_generator_inputs_checked": 450,
+  "runtime_base": "eb8a5b2f9ce2fd6128f4dbeef25b03896b81cfcd"
+}

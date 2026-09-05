@@ -1,0 +1,98 @@
+[
+  {
+    "exit_code": 0,
+    "argv": [
+      "clang",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline-asan/src",
+      "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/t-pending-root-eof.c",
+      "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline-asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_gc_sweep_gc2_unmarked",
+      "-o",
+      "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline-asan-final-eof"
+    ],
+    "case": "compile",
+    "cwd": "/tmp/lj-gc-pending-root-design-20260905-blju2qsh",
+    "seconds": 0.26458674400055315,
+    "LUA_PATH": "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline-asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline-asan-final-eof",
+      "0",
+      "0"
+    ],
+    "case": "0-0",
+    "cwd": "/tmp/lj-gc-pending-root-design-20260905-blju2qsh",
+    "seconds": 0.03201231899583945,
+    "LUA_PATH": "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline-asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline-asan-final-eof",
+      "4096",
+      "0"
+    ],
+    "case": "4096-0",
+    "cwd": "/tmp/lj-gc-pending-root-design-20260905-blju2qsh",
+    "seconds": 0.06383399900369113,
+    "LUA_PATH": "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline-asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline-asan-final-eof",
+      "262144",
+      "0"
+    ],
+    "case": "262144-0",
+    "cwd": "/tmp/lj-gc-pending-root-design-20260905-blju2qsh",
+    "seconds": 2.166178593004588,
+    "LUA_PATH": "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline-asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline-asan-final-eof",
+      "262144",
+      "1"
+    ],
+    "case": "262144-1",
+    "cwd": "/tmp/lj-gc-pending-root-design-20260905-blju2qsh",
+    "seconds": 2.019200221002393,
+    "LUA_PATH": "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline-asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline-asan-final-eof",
+      "262144",
+      "2"
+    ],
+    "case": "262144-2",
+    "cwd": "/tmp/lj-gc-pending-root-design-20260905-blju2qsh",
+    "seconds": 2.0704496119942633,
+    "LUA_PATH": "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline-asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  }
+]

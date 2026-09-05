@@ -1,0 +1,2 @@
+baseline-v2-eof: /tmp/lj-gc-pending-root-design-20260905-blju2qsh/t-pending-root-eof.c:212: main: Assertion `eof_calls == 1' failed.
+There is no member named ssb_index.

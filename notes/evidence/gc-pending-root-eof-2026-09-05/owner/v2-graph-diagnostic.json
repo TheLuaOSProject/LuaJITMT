@@ -1,0 +1,32 @@
+{
+  "argv": [
+    "gdb",
+    "-nx",
+    "-batch",
+    "-ex",
+    "set pagination off",
+    "-ex",
+    "run 4096 0",
+    "-ex",
+    "p probe_g->gc2.phase",
+    "-ex",
+    "p probe_g->gc2.recovery_items",
+    "-ex",
+    "p probe_g->gc2.recovery_failed",
+    "-ex",
+    "p probe_g->gc2.table_rescan_pending",
+    "-ex",
+    "p probe_g->gc2.grey_top",
+    "-ex",
+    "p probe_g->gc2.grey_bottom",
+    "-ex",
+    "p probe_g->gc2.worker_active",
+    "-ex",
+    "p probe_g->main_tg->ssb_index",
+    "-ex",
+    "bt",
+    "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline-v2-eof"
+  ],
+  "exit_code": 0,
+  "seconds": 0.11398039399500703
+}
