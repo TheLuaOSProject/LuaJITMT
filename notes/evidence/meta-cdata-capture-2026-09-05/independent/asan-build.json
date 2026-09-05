@@ -1,0 +1,24 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/asan/src",
+    "-j8",
+    "BUILDMODE=static",
+    "CC=clang",
+    "XCFLAGS=-DLJ_FUNC_TEST_HELPERS -DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLUA_USE_ASSERT",
+    "TARGET_CFLAGS=-O1 -g -fno-omit-frame-pointer -fsanitize=address",
+    "TARGET_LDFLAGS=-fsanitize=address"
+  ],
+  "exit": 0,
+  "seconds": 6.626775946002454,
+  "target_only_asan": true,
+  "source": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert",
+  "meta_sha256": "c355b30c7978b31b499b8fe41fff1c03e8ff00f4a2a8293e1e4c74ee3823161e",
+  "script_source": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/lua-semantics/t-meta-cdata-capture.lua",
+  "script_sha256": "0774a146476acbf4887481f18c8b82a4b5674d7ab0592dd1105a75cc5e41eb14",
+  "archive_sha256": "a9797ff8c0124c8c4f7ffea72dfc2d198819bf32bbfe34a986bff423965336ff"
+}

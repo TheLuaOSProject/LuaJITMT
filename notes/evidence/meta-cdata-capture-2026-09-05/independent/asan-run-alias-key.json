@@ -1,0 +1,13 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "10,11",
+    "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/probe-asan",
+    "alias-key"
+  ],
+  "exit": 0,
+  "seconds": 0.013459144996886607,
+  "timeout_seconds": 15,
+  "ASAN_OPTIONS": "detect_leaks=0:abort_on_error=1"
+}

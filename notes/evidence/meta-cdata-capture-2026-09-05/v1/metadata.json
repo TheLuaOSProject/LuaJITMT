@@ -1,0 +1,7 @@
+{
+  "base": "dd2c439179b1e12564710484d8511e4cee617f7f",
+  "source_sha256": "5854c55684a94b1a1f3ec848a88ca01d877dfb35f7c181e273e6d88ffbc4ce12",
+  "source_blob": "1e7d435f32823d6812905265ad280fbeee5bb488",
+  "patch_sha256": "843f67b07099d3359496f4d7d9605bc19cf4920b9bac407b5c59622a941c6dba",
+  "scope": "First-hop function-valued cdata method capture; default internal allocator policy only. Includes committed receiver-tag guard and FNEWfixture repair in both inputs."
+}

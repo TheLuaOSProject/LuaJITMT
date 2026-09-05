@@ -1,0 +1,1 @@
+PASS mode=retry-mt source/key/mt/method_admissions=2/1/2/1 waits_after_release=0 callback_after_full_gc=11 pause_capacity=0 pause_bytes=0 pause_recovery=0

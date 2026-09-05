@@ -1,0 +1,8 @@
+{
+  "base": "dd2c439179b1e12564710484d8511e4cee617f7f",
+  "files": {
+    "src/lj_meta.c": "c355b30c7978b31b499b8fe41fff1c03e8ff00f4a2a8293e1e4c74ee3823161e",
+    "tests/t-meta-cdata-capture.lua": "0774a146476acbf4887481f18c8b82a4b5674d7ab0592dd1105a75cc5e41eb14",
+    "tests/suites/m5_tables.lua": "bcc4c357e295833e2d21a74f484583cb95465cbc5f428efab4af3f38b1462433"
+  }
+}

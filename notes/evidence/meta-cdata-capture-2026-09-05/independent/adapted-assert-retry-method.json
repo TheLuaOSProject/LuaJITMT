@@ -1,0 +1,13 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "10,11",
+    "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/t-meta-cdata-capture-assert",
+    "retry-method"
+  ],
+  "exit": 0,
+  "seconds": 0.005285773000650806,
+  "timeout_seconds": 15,
+  "ASAN_OPTIONS": null
+}

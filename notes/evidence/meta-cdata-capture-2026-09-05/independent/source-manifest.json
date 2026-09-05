@@ -1,0 +1,115 @@
+{
+  "runtime_base": "dd2c439179b1e12564710484d8511e4cee617f7f",
+  "frozen_revision": "v2",
+  "frozen_root": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert",
+  "production_patch": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/cdata-capture.patch",
+  "patch_sha256": "6ec423ac4a70e0437f193897472e92ac81fca735c6a66fd2825019e8ff958b48",
+  "sources": [
+    {
+      "path": "src/lj_meta.c",
+      "frozen": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src/lj_meta.c",
+      "sha256": "c355b30c7978b31b499b8fe41fff1c03e8ff00f4a2a8293e1e4c74ee3823161e",
+      "git_blob": "c2a59f2a0b113c4f1284ff672cd6a20fda278cd9",
+      "asan_copy_identical": true
+    },
+    {
+      "path": "src/lj_meta.h",
+      "frozen": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src/lj_meta.h",
+      "sha256": "da0ea0cce5a729d8cd9fd417f7d36f044445c16f8fad6f9dae3a2f89c26d4501",
+      "git_blob": "e992cf99cb76c2fbf9a93da1da91a5d5c95143b8",
+      "asan_copy_identical": true
+    },
+    {
+      "path": "src/lj_gc.c",
+      "frozen": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src/lj_gc.c",
+      "sha256": "7ceb24d2c755325c7c3d4113330bbb4fce6d3c893dd22fc1ef8bf924590ab4cb",
+      "git_blob": "5aebc1a0fc484e5683ec4e78cf6b88b03b724967",
+      "asan_copy_identical": true
+    },
+    {
+      "path": "src/lj_gc2.c",
+      "frozen": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src/lj_gc2.c",
+      "sha256": "4d66c49ef385ff23cf6017559addc43f57cb7212e6fab8205abbed2ef9cba2d7",
+      "git_blob": "8cfdceba49e1d01e86a5e5ec8dae885b484ba9de",
+      "asan_copy_identical": true
+    },
+    {
+      "path": "src/lj_gc2.h",
+      "frozen": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src/lj_gc2.h",
+      "sha256": "feb4003d78f8f1a965d2a4d3e94a964b545b37791c34517ace440996aae12e41",
+      "git_blob": "cc3129bf9344559dc88fbf4120ad3195d8adc070",
+      "asan_copy_identical": true
+    },
+    {
+      "path": "src/lj_tab.c",
+      "frozen": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src/lj_tab.c",
+      "sha256": "28b2eac3dc6c0734d131cf33d3f34826ae758c9b3deb437c6bd154e0cd2fd48f",
+      "git_blob": "4c60ff26e7c00404654158f9ae780ec2390e7969",
+      "asan_copy_identical": true
+    },
+    {
+      "path": "src/lj_tab.h",
+      "frozen": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src/lj_tab.h",
+      "sha256": "2f9f61003cfdd252c306f3bc7a12e176483dc879b1adbc6653754ccc88478cf2",
+      "git_blob": "e205833586dd5680ce1f422517ff864e11fb3f26",
+      "asan_copy_identical": true
+    },
+    {
+      "path": "src/lj_arena.c",
+      "frozen": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src/lj_arena.c",
+      "sha256": "98fc9a9af8f8949fe8259d278bb6308790755a06f8f6bcebdcc4a949ec8efbc5",
+      "git_blob": "4a55c2e5367cef0e4c5b774e36d2854bbb63672d",
+      "asan_copy_identical": true
+    },
+    {
+      "path": "src/lj_arena.h",
+      "frozen": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src/lj_arena.h",
+      "sha256": "6ab384112c74e400a9092ec38f491107b2c9b5510c18f84e4c7aa02e1c2231f2",
+      "git_blob": "0971b02565feb93af0bfe6be8905f4e052b1a1f5",
+      "asan_copy_identical": true
+    },
+    {
+      "path": "src/lj_state.c",
+      "frozen": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src/lj_state.c",
+      "sha256": "80d2fa440b4b81e0d460d485dcbe2fc478e2f158c2f79504e44b1a89ffc2bf64",
+      "git_blob": "975279be85d715dcd5dce3c0390c3a2ec35988b5",
+      "asan_copy_identical": true
+    },
+    {
+      "path": "src/lj_state.h",
+      "frozen": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src/lj_state.h",
+      "sha256": "b4f27d321bb82ffaa9ba446700a7a95cf29b87c4b114140c17ad5c47d55664f2",
+      "git_blob": "e503d2d7999c7994969d5944256a0eb2d598e6a8",
+      "asan_copy_identical": true
+    },
+    {
+      "path": "src/lj_api.c",
+      "frozen": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src/lj_api.c",
+      "sha256": "c2b43c2839509c8403c51729c72083be2701bdfc4b5efc9f116540d9c105d6af",
+      "git_blob": "afe804378316e0ce38745376df327ab5827bdadc",
+      "asan_copy_identical": true
+    },
+    {
+      "path": "src/lj_obj.h",
+      "frozen": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src/lj_obj.h",
+      "sha256": "4dddf105f8b3006efb495259340ea4acaae9579e283b769ff9e683810beb435b",
+      "git_blob": "fe79e4f3a02f5180f3586388f988ea0863ca80b7",
+      "asan_copy_identical": true
+    },
+    {
+      "path": "src/lj_cdata.c",
+      "frozen": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src/lj_cdata.c",
+      "sha256": "2b15f27e2f30836fccd5a92d5448ccd3cb8947614983a1e7a48d1c95d4eb4b9c",
+      "git_blob": "3364a3a0c14f2dbefa9f359e4782938a22ddc153",
+      "asan_copy_identical": true
+    }
+  ],
+  "shared_production_or_test_edits": false,
+  "new_runtime_test_hooks": false,
+  "benchmarks_run": false,
+  "runtime_build_affinity": "0-15",
+  "functional_affinity": "10,11",
+  "asan_policy": "Target-only Clang ASan. Initial runtime tests detect_leaks=0:abort_on_error=1; separate unchanged-binary final repeat detect_leaks=1:abort_on_error=1. Renamed durable C candidate also rerun with leak detection enabled.",
+  "lua_script_source": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/lua-semantics/t-meta-cdata-capture.lua",
+  "lua_script_sha256": "0774a146476acbf4887481f18c8b82a4b5674d7ab0592dd1105a75cc5e41eb14"
+}

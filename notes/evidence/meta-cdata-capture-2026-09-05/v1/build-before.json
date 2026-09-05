@@ -1,0 +1,16 @@
+{
+  "kind": "before",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/src",
+    "-j8",
+    "BUILDMODE=static"
+  ],
+  "exit": 0,
+  "seconds": 5.075148095000259,
+  "binary_sha256": "c3f40399858bca604bde9949f47381f515fcd951a3dc3b821663c969615c56ba"
+}

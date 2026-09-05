@@ -1,0 +1,46 @@
+{
+  "case": "m5_meta_cdata_capture_protocol",
+  "fixture": "tests/t-meta-cdata-capture.c",
+  "fixture_source_sha256": "1fe666138fc253fe5a70d0e6a8ebe98a454d40bb1c0a27e1029037d9b68e46d8",
+  "fixture_identical_to_validated_probe": true,
+  "platform": "Linux x64",
+  "runtime_xcflags": "-DLJ_FUNC_TEST_HELPERS -DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLUA_USE_ASSERT",
+  "cflags": "-D_GNU_SOURCE -std=gnu11 -O2 -g -Wall -Wextra -Werror -mcx16 -DLJ_FUNC_TEST_HELPERS -DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLUA_USE_ASSERT",
+  "libraries": [
+    "-lm",
+    "-ldl",
+    "-pthread"
+  ],
+  "wrappers": [
+    "lj_gc2_tv_lease_acquire",
+    "lj_gc2_lease_release",
+    "lj_tab_wait_l",
+    "lj_gc2_smr_read_enter",
+    "lj_vm_call",
+    "lj_vm_pcall",
+    "lj_vm_cpcall",
+    "lj_vm_resume"
+  ],
+  "modes": [
+    "basic",
+    "alias-source",
+    "alias-key",
+    "same-source-key",
+    "set-alias",
+    "retry-source",
+    "retry-key",
+    "retry-mt",
+    "retry-method",
+    "replace",
+    "growth",
+    "fail-growth",
+    "throw"
+  ],
+  "timeout_each": "15s",
+  "compile_count": 1,
+  "process_count": 13,
+  "runtime_builds": "One helper build before all modes, then existing with_default_build_restore restores defaults even on error.",
+  "base_suite_sha256": "bcc4c357e295833e2d21a74f484583cb95465cbc5f428efab4af3f38b1462433",
+  "patch_sha256": "70c8a69837a80e956bbae9a1f9d528c419a43abebbb2832d235626db586964ac",
+  "shared_edits": false
+}

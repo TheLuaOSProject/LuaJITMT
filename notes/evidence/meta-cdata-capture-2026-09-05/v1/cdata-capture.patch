@@ -1,0 +1,159 @@
+diff --git a/src/lj_meta.c b/src/lj_meta.c
+index 61d35818..1e7d435f 100644
+--- a/src/lj_meta.c
++++ b/src/lj_meta.c
+@@ -494,9 +494,48 @@ static void meta_chain_roots_fini(MetaChainRoots *roots)
+     lj_tg_root_anchor_pop(roots->tg, roots->idx[i]);
+ }
+ 
+-/* Capture the caller's authoritative receiver/key pair before any semantic
+-** lookup. Source SMR starts before both mutable-root loads, and both exact
++/* Opportunistically capture the first callable cdata method while source SMR
++** and the receiver/key leases are already held. A successful caller owns both
++** extra leases until the method anchor is published. Refusal owns neither;
++** the ordinary lookup can retry after input capture releases its scopes. */
++static int meta_chain_cdata_method_try(global_State *g, cTValue *receiver,
++				     MMS mm, TValue *method,
++				     LJGC2Lease *mtlease,
++				     LJGC2Lease *methodlease)
++{
++#if LJ_HASFFI && LJ_GC2_INTERNAL_ALLOCATOR_ONLY
++  GCtab *mt = lj_basemt_obj_acq(g, receiver);
++  TValue mtv;
++  int status;
++  meta_test_pause_after_mt_capture(receiver, mt);
++  if (!mt)
++    return 0;
++  setgcVraw(&mtv, obj2gco(mt), LJ_TTAB);
++  status = lj_gc2_tv_lease_acquire(g, &mtv, mtlease);
++  if (status != LJ_GC2_TV_EDGE_VALID)
++    return 0;
++  meta_test_pause_after_mt_lease(mt);
++  status = lj_tab_getstr_held_try(g, mt, mmname_str(g, mm), method);
++  if (status == LJ_TAB_GC_LOOKUP_FOUND && tvisfunc(method) &&
++      lj_gc2_tv_lease_acquire(g, method, methodlease) == LJ_GC2_TV_EDGE_VALID)
++    return 1;
++  lj_gc2_lease_release(mtlease);
++  return 0;
++#else
++  /* The default allocator's queue growth cannot throw. Configurations which
++  ** permit arbitrary allocator callbacks keep the original publication path
++  ** until that callback boundary has its own exact lease-unwind contract. */
++  UNUSED(g); UNUSED(receiver); UNUSED(mm); UNUSED(method);
++  UNUSED(mtlease); UNUSED(methodlease);
++  return 0;
++#endif
++}
++
++/* Capture the caller's authoritative receiver/key pair. Source SMR starts
++** before both mutable-root loads, and both exact
+ ** leases survive release-publication into owner-private enumerated anchors.
++** A callable first cdata method can share this admission and is published
++** before all its extra scopes close; other lookups follow normal capture.
+ ** VM stack roots and VM scratch/constant roots satisfy this contract. A C
+ ** caller which first copied a replaceable registry/upvalue edge into a local
+ ** has already lost source authority and must root that edge at its call site.
+@@ -505,14 +544,16 @@ static void meta_chain_roots_fini(MetaChainRoots *roots)
+ ** every lease and SMR interval is closed before servicing the retry. */
+ static int meta_chain_capture_inputs(lua_State *L, MetaChainRoots *roots,
+ 				     const MetaSourceRef *oref,
+-				     const MetaSourceRef *kref)
++				     const MetaSourceRef *kref,
++				     MMS mm, int *method_ready)
+ {
+   global_State *g = G(L);
++  *method_ready = 0;
+   for (;;) {
+-    LJGC2Lease olease, envlease, klease;
+-    TValue osnap, ksnap;
++    LJGC2Lease olease, envlease, klease, mtlease, methodlease;
++    TValue osnap, ksnap, method;
+     cTValue *o, *k;
+-    int ostatus, envstatus, kstatus;
++    int ostatus, envstatus, kstatus, captured_method;
+     if (LJ_UNLIKELY(!lj_gc2_smr_read_try(g))) {
+       lj_tab_wait_l(L);
+       continue;
+@@ -568,15 +609,26 @@ static int meta_chain_capture_inputs(lua_State *L, MetaChainRoots *roots,
+       }
+       return META_CAPTURE_KEY_STALE;
+     }
++    captured_method = !oref->funcenv && tviscdata(&osnap) &&
++      meta_chain_cdata_method_try(g, &osnap, mm, &method,
++				 &mtlease, &methodlease);
+     copyTVrel(L, meta_chain_root(roots, META_CHAIN_RECEIVER), &osnap);
+     copyTVrel(L, meta_chain_root(roots, META_CHAIN_KEY), &ksnap);
++    if (captured_method)
++      copyTVrel(L, meta_chain_root(roots, META_CHAIN_METHOD), &method);
+     lj_gc2_smr_read_leave(g);
+     lj_gc_pubroot(L, meta_chain_root(roots, META_CHAIN_RECEIVER));
+     lj_gc_pubroot(L, meta_chain_root(roots, META_CHAIN_KEY));
++    if (captured_method) {
++      lj_gc_pubroot(L, meta_chain_root(roots, META_CHAIN_METHOD));
++      lj_gc2_lease_release(&methodlease);
++      lj_gc2_lease_release(&mtlease);
++    }
+     lj_gc2_lease_release(&klease);
+     if (oref->funcenv)
+       lj_gc2_lease_release(&envlease);
+     lj_gc2_lease_release(&olease);
++    *method_ready = captured_method;
+     return META_CAPTURE_VALID;
+   }
+ }
+@@ -701,7 +753,7 @@ static cTValue *meta_tget_rooted_mode(lua_State *L, cTValue *o, cTValue *k,
+   MetaOutputRef outref = meta_output_ref(L, out);
+   TValue *receiver, *key, *result, *method;
+   cTValue *ret;
+-  int capture;
++  int capture, method_ready;
+   int loop;
+ 
+   /* Scalar hits can complete even while global SMR is closed. Broader hits
+@@ -719,7 +771,8 @@ static cTValue *meta_tget_rooted_mode(lua_State *L, cTValue *o, cTValue *k,
+       return out;
+   }
+   meta_chain_roots_init(L, &roots);
+-  capture = meta_chain_capture_inputs(L, &roots, &oref, &kref);
++  capture = meta_chain_capture_inputs(L, &roots, &oref, &kref,
++				      MM_index, &method_ready);
+   if (LJ_UNLIKELY(capture != META_CAPTURE_VALID)) {
+     ret = meta_chain_value_publish(L, &roots, META_CHAIN_RESULT, &outref);
+     meta_chain_roots_fini(&roots);
+@@ -748,7 +801,8 @@ static cTValue *meta_tget_rooted_mode(lua_State *L, cTValue *o, cTValue *k,
+ 	return ret;
+       }
+     } else {
+-      (void)lj_meta_lookuptv(L, method, receiver, MM_index);
++      if (loop != 0 || !method_ready)
++	(void)lj_meta_lookuptv(L, method, receiver, MM_index);
+       method = meta_chain_root(&roots, META_CHAIN_METHOD);
+       if (tvisnil(method)) {
+         TValue *errslot = meta_chain_error_operand(L, &roots, &oref, &kref);
+@@ -812,13 +866,14 @@ static TValue *meta_tset_rooted_mode(lua_State *L, cTValue *o, cTValue *k,
+ 				 meta_source_ref(L, o);
+   MetaSourceRef kref = meta_source_ref(L, k);
+   TValue *receiver, *key, *result, *method;
+-  int capture;
++  int capture, method_ready;
+   int loop;
+   if (owner)
+     *owner = NULL;
+ 
+   meta_chain_roots_init(L, roots);
+-  capture = meta_chain_capture_inputs(L, roots, &oref, &kref);
++  capture = meta_chain_capture_inputs(L, roots, &oref, &kref,
++				      MM_newindex, &method_ready);
+   if (LJ_UNLIKELY(capture == META_CAPTURE_RECEIVER_STALE)) {
+     TValue *errslot = meta_stale_error_operand(L, &oref, &kref);
+     meta_chain_roots_fini(roots);
+@@ -880,7 +935,8 @@ static TValue *meta_tset_rooted_mode(lua_State *L, cTValue *o, cTValue *k,
+ 	return result;
+       }
+     } else {
+-      (void)lj_meta_lookuptv(L, method, receiver, MM_newindex);
++      if (loop != 0 || !method_ready)
++	(void)lj_meta_lookuptv(L, method, receiver, MM_newindex);
+       method = meta_chain_root(roots, META_CHAIN_METHOD);
+       if (tvisnil(method)) {
+         TValue *errslot = meta_chain_error_operand(L, roots, &oref, &kref);

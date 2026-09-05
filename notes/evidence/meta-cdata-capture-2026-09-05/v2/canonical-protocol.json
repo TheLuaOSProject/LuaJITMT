@@ -1,0 +1,18 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/luajit",
+    "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/canonical-protocol/tools/test.lua",
+    "m5_meta_cdata_capture_protocol"
+  ],
+  "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/canonical-protocol",
+  "env": {
+    "LJ_TEST_ROOT": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/canonical-protocol",
+    "JOBS": "4"
+  },
+  "exit": 0,
+  "seconds": 27.64682860800167,
+  "limit_seconds": 120
+}

@@ -1,0 +1,1 @@
+t-gc2-recovery OK: no-drop SSB/recovery, exact huge-lane accounting/skip, SWEEP-stable late/saturated admission, retryable Huge destructors, held-reader SMR bypass, bounded terminal free, cyclic private/metadata edges, free/lifetime races, constructor overlap, closure vetoes, empty-string SWEEP, sticky failure, and REDIRTY replay verified

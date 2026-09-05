@@ -1,0 +1,8 @@
+== m5_meta_cdata_capture_joff ==
++ LUA_PATH='/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/canonical-lua/tests/lib/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/canonical-lua/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/canonical-lua/src/jit/?.lua;;' timeout '30s' '/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/canonical-lua/src/luajit' '-joff' '/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/canonical-lua/tests/t-meta-cdata-capture.lua'
+ok m5_meta_cdata_capture_joff
+== m5_meta_cdata_capture ==
+fatal: not a git repository (or any of the parent directories): .git
+fatal: not a git repository (or any of the parent directories): .git
++ LUA_PATH='/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/canonical-lua/tests/lib/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/canonical-lua/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/canonical-lua/src/jit/?.lua;;' timeout '30s' '/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/canonical-lua/src/luajit' '/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/canonical-lua/tests/t-meta-cdata-capture.lua'
+ok m5_meta_cdata_capture

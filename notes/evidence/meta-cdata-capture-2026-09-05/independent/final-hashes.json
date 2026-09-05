@@ -1,0 +1,62 @@
+{
+  "fixture": {
+    "path": "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/t-meta-cdata-capture.c",
+    "bytes": 17600,
+    "sha256": "1fe666138fc253fe5a70d0e6a8ebe98a454d40bb1c0a27e1029037d9b68e46d8"
+  },
+  "patch": {
+    "path": "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/durable-fixture.patch",
+    "bytes": 20292,
+    "sha256": "70c8a69837a80e956bbae9a1f9d528c419a43abebbb2832d235626db586964ac"
+  },
+  "assert_archive": {
+    "path": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src/libluajit.a",
+    "bytes": 2975048,
+    "sha256": "b2227be79b96cf6f832aec53e93e45859b8f07726fd554f97bac2ad507231ce5"
+  },
+  "asan_archive": {
+    "path": "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/asan/src/libluajit.a",
+    "bytes": 27328974,
+    "sha256": "a9797ff8c0124c8c4f7ffea72dfc2d198819bf32bbfe34a986bff423965336ff"
+  },
+  "asan_cli": {
+    "path": "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/asan/src/luajit",
+    "bytes": 6401352,
+    "sha256": "227847555d2a7bb00f1b4ba1a8bb5243ae8fdc43b6b8874f5e0fd8a69003239f"
+  },
+  "original_assert_probe": {
+    "path": "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/probe",
+    "bytes": 2087240,
+    "sha256": "736695c3b0e29afaa94e3493d0de0639cad036b7b5a2c29c52b64e5578e90542"
+  },
+  "original_asan_probe": {
+    "path": "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/probe-asan",
+    "bytes": 19961408,
+    "sha256": "20acbe66596fcfe440c5fd993a312b88b05e3d94f61b06d5d492e6458494a84b"
+  },
+  "durable_assert_probe": {
+    "path": "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/t-meta-cdata-capture-assert",
+    "bytes": 2087312,
+    "sha256": "544fcf59223acaa41f82028c3e40e4d797dd5b0c5e8ad246078f3409d8f6049b"
+  },
+  "durable_asan_lsan_probe": {
+    "path": "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/t-meta-cdata-capture-asan-lsan",
+    "bytes": 19961464,
+    "sha256": "1e5dde227dfc6d186c13421c45c3ef8ab4fb50e385a77842150ceb89b98fbb73"
+  },
+  "root_lua_script": {
+    "path": "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/t-meta-cdata-capture.lua",
+    "bytes": 3666,
+    "sha256": "0774a146476acbf4887481f18c8b82a4b5674d7ab0592dd1105a75cc5e41eb14"
+  },
+  "older_negative_archive": {
+    "path": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert/src/libluajit.a",
+    "bytes": 2965686,
+    "sha256": "9695d469b23d70e5ff4740a635a66c7997445d1703afff0e58e78b42e6a36589"
+  },
+  "older_negative_probe": {
+    "path": "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/probe-before",
+    "bytes": 2080888,
+    "sha256": "46484160933ec048bf5974392ff892e6f061cdfbc313ac972595eb787421723d"
+  }
+}

@@ -1,0 +1,1 @@
+probe-before: /tmp/lj-cdata-capture-independent-20260905-pigor7_a/probe.c:374: driver: Assertion `p->source_calls == (p->same_key ? 2u : 1u)' failed.

@@ -1,0 +1,12 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "10,11",
+    "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/probe",
+    "same-source-key"
+  ],
+  "exit": 0,
+  "seconds": 0.00545671600048081,
+  "timeout_seconds": 15
+}

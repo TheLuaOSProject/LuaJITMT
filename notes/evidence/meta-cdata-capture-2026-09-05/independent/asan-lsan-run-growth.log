@@ -1,0 +1,1 @@
+PASS mode=growth source/key/mt/method_admissions=1/1/1/1 waits_after_release=0 callback_after_full_gc=11 pause_capacity=512 pause_bytes=4096 pause_recovery=0

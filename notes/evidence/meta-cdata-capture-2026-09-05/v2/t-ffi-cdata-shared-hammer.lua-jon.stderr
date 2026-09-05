@@ -1,0 +1,5 @@
+/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/luajit: ...5-e3t1w0fw/v2/normal/tests/t-ffi-cdata-shared-hammer.lua:80: active-MT trace-owned cdata allocation loop should trace
+stack traceback:
+	[C]: in function 'assert'
+	...5-e3t1w0fw/v2/normal/tests/t-ffi-cdata-shared-hammer.lua:80: in main chunk
+	[C]: at 0x55a51473e100

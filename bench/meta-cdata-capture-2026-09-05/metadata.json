@@ -1,0 +1,17 @@
+{
+  "roots": {
+    "before": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before",
+    "after": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal"
+  },
+  "base": "dd2c439179b1e12564710484d8511e4cee617f7f",
+  "binary_sha256": {
+    "before": "c3f40399858bca604bde9949f47381f515fcd951a3dc3b821663c969615c56ba",
+    "after": "c3d703f67616c19315d7b987c4639e4f6dc5746fd0460e596f71e6a01276b9ec"
+  },
+  "harness_sha256": "ebd0b8d53b6e7a340c90c45ad33d9bdd47acbd5418890d593d6aae127ef926a9",
+  "protocol": "Seven alternating fresh process pairs per case, default normal static builds, exactdd2 base with only lj_meta.c body difference. Unmodified filtered harness, JIT off,scale.005,GC enabled,CPU30,5internal minimum rounds. Shared host; functional0-15,tail costs31.",
+  "source_differences": [
+    "src/lj_meta.c"
+  ],
+  "compared_source_files": 224
+}

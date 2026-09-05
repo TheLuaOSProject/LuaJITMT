@@ -1,0 +1,8 @@
+{
+  "base": "dd2c439179b1e12564710484d8511e4cee617f7f",
+  "source_sha256": "c355b30c7978b31b499b8fe41fff1c03e8ff00f4a2a8293e1e4c74ee3823161e",
+  "source_blob": "c2a59f2a0b113c4f1284ff672cd6a20fda278cd9",
+  "patch_sha256": "6ec423ac4a70e0437f193897472e92ac81fca735c6a66fd2825019e8ff958b48",
+  "prior_revision": "../metadata.json",
+  "revision_reason": "Release method/mt after publishing callable anchor, before unchanged receiver/arbitrary-key root barriers. Original prototype builds preserved; no prior tests or timings are treated as final evidence."
+}

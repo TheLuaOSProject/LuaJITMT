@@ -1,0 +1,545 @@
+--- /dev/null
++++ b/tests/t-meta-cdata-capture.c
+@@ -0,0 +1,490 @@
++#include <assert.h>
++#include <inttypes.h>
++#include <pthread.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <time.h>
++#include "lua.h"
++#include "lauxlib.h"
++#include "lualib.h"
++#include "lj_arena.h"
++#include "lj_gc.h"
++#include "lj_gc2.h"
++#include "lj_meta.h"
++#include "lj_obj.h"
++#include "lj_state.h"
++#include "lj_tab.h"
++#include "lj_tg.h"
++#include "lj_vm.h"
++
++typedef struct Probe {
++  lua_State *L;
++  global_State *g;
++  TGState *tg;
++  const char *mode;
++  GCcdata *receiver;
++  GCstr *key;
++  GCtab *mt, *replacement_mt;
++  GCfunc *method, *replacement_method, *filler;
++  GCArena *ra, *ka, *ma, *fa;
++  TValue *method_slot;
++  uint64_t receiver_word, key_word, method_word, replacement_word;
++  uint32_t watch, done, observed, capture_seen, mt_seen;
++  uint32_t source_calls, key_calls, mt_calls, method_calls, callback_calls;
++  uint32_t waits, blocked_smr, reentry, bad_throw;
++  uint32_t anchor0, expected_method_calls;
++  int setter, alias, same_key, pressure, fail_growth, replace;
++  LJGC2Lease *extra[4];
++  uint32_t extra_count;
++  uint64_t total0, pause_delta, pause_recovery;
++  uint32_t cap0, pause_cap;
++  GC2SSBNode *published;
++} Probe;
++
++static Probe *current;
++
++static double now(void)
++{
++  struct timespec ts;
++  assert(clock_gettime(CLOCK_MONOTONIC, &ts) == 0);
++  return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
++}
++
++static uint64_t readers(GCArena *a)
++{
++  return lj_arena_remote_active_acq(a) & LJ_ARENA_REMOTE_COUNT_MASK;
++}
++
++static void no_scopes(Probe *p)
++{
++  assert(p->extra_count == 0);
++  assert(readers(p->ra) == 0 && readers(p->ka) == 0);
++  assert(readers(p->ma) == 0 && readers(p->fa) == 0);
++  assert(gc2_smr_readers_acq(p->g) == 0);
++}
++
++int __real_lj_gc2_tv_lease_acquire(global_State *, cTValue *, LJGC2Lease *);
++int __wrap_lj_gc2_tv_lease_acquire(global_State *g, cTValue *tv,
++                                LJGC2Lease *lease)
++{
++  Probe *p = current;
++  GCobj *o = tvisgcv(tv) ? gcV(tv) : NULL;
++  int status = __real_lj_gc2_tv_lease_acquire(g, tv, lease);
++  if (p && la_load32_acq(&p->watch)) {
++    int extra = 0;
++    if (o == obj2gco(p->receiver)) p->source_calls++;
++    if (o == obj2gco(p->key)) p->key_calls++;
++    if (o == obj2gco(p->mt) || o == obj2gco(p->replacement_mt)) {
++      p->mt_calls++; extra = 1;
++    }
++    if (o == obj2gco(p->method) || o == obj2gco(p->replacement_method)) {
++      p->method_calls++; extra = 1;
++    }
++    if (extra && status == LJ_GC2_TV_EDGE_VALID) {
++      assert(p->extra_count < 4u);
++      p->extra[p->extra_count++] = lease;
++    }
++  }
++  return status;
++}
++
++void __real_lj_gc2_lease_release(LJGC2Lease *);
++void __wrap_lj_gc2_lease_release(LJGC2Lease *lease)
++{
++  Probe *p = current;
++  if (p && la_load32_acq(&p->watch)) {
++    uint32_t i;
++    for (i = 0; i < p->extra_count; i++) {
++      if (p->extra[i] == lease) {
++        p->extra[i] = p->extra[--p->extra_count];
++        break;
++      }
++    }
++  }
++  __real_lj_gc2_lease_release(lease);
++}
++
++void __real_lj_tab_wait_l(lua_State *);
++void __wrap_lj_tab_wait_l(lua_State *L)
++{
++  Probe *p = current;
++  if (p && la_load32_acq(&p->watch)) {
++    no_scopes(p); p->waits++;
++  }
++  __real_lj_tab_wait_l(L);
++}
++
++void __real_lj_gc2_smr_read_enter(global_State *);
++void __wrap_lj_gc2_smr_read_enter(global_State *g)
++{
++  Probe *p = current;
++  if (p && la_load32_acq(&p->watch)) {
++    p->blocked_smr++;
++    fprintf(stderr, "blocking SMR during watched capture\n"); abort();
++  }
++  __real_lj_gc2_smr_read_enter(g);
++}
++
++static void no_reentry(void)
++{
++  Probe *p = current;
++  if (p && la_load32_acq(&p->watch)) {
++    p->reentry++; no_scopes(p);
++    fprintf(stderr, "VM call during watched capture\n"); abort();
++  }
++}
++
++void __real_lj_vm_call(lua_State *, TValue *, int);
++void __wrap_lj_vm_call(lua_State *L, TValue *base, int nres1)
++{
++  no_reentry(); __real_lj_vm_call(L, base, nres1);
++}
++int __real_lj_vm_pcall(lua_State *, TValue *, int, ptrdiff_t);
++int __wrap_lj_vm_pcall(lua_State *L, TValue *base, int nres1, ptrdiff_t ef)
++{
++  no_reentry(); return __real_lj_vm_pcall(L, base, nres1, ef);
++}
++int __real_lj_vm_cpcall(lua_State *, lua_CFunction, void *, lua_CPFunction);
++int __wrap_lj_vm_cpcall(lua_State *L, lua_CFunction fn, void *ud, lua_CPFunction cp)
++{
++  no_reentry(); return __real_lj_vm_cpcall(L, fn, ud, cp);
++}
++int __real_lj_vm_resume(lua_State *, TValue *, int, ptrdiff_t);
++int __wrap_lj_vm_resume(lua_State *L, TValue *base, int nres1, ptrdiff_t ef)
++{
++  no_reentry(); return __real_lj_vm_resume(L, base, nres1, ef);
++}
++
++static int method_common(lua_State *L, int answer)
++{
++  Probe *p = current;
++  assert(p && !la_load32_acq(&p->watch));
++  no_scopes(p);
++  assert(lj_tg_root_anchor_top_acq(p->tg) == p->anchor0);
++  assert(tv_rawload_acq(L->base) == p->receiver_word);
++  assert(tv_rawload_acq(L->base + 1) ==
++         (p->same_key ? p->receiver_word : p->key_word));
++  if (p->setter)
++    assert(tv_rawload_acq(L->base + 2) == p->receiver_word);
++  p->callback_calls++;
++  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
++  if (strcmp(p->mode, "throw") == 0)
++    return luaL_error(L, "expected cdata callback error");
++  lua_pushinteger(L, answer);
++  return 1;
++}
++static int method_one(lua_State *L) { return method_common(L, 11); }
++static int method_two(lua_State *L) { return method_common(L, 22); }
++static int method_three(lua_State *L) { return method_common(L, 33); }
++static int filler(lua_State *L) { UNUSED(L); abort(); return 0; }
++
++static void wait_hook(uint32_t (*query)(void), uint32_t value, Probe *p)
++{
++  double deadline = now() + 5.0;
++  while (query() != value) {
++    assert(now() < deadline && !la_load32_acq(&p->done));
++    la_cpu_pause();
++  }
++}
++
++static void *observe(void *arg)
++{
++  Probe *p = (Probe *)arg;
++  if (p->replace) {
++    wait_hook(lj_meta_test_mt_capture_paused, 1, p);
++    assert(gc2_phase_acq(p->g) == LJ_GC2_IDLE);
++    assert(gc2_smr_readers_acq(p->g) != 0);
++    assert(readers(p->ra) == 1 && readers(p->ka) == 1);
++    assert(readers(p->ma) == 0 && readers(p->fa) == 0);
++    assert(p->source_calls == 1 && p->mt_calls == 0);
++    /* These replace preexisting global/table roots at IDLE. No allocation,
++     * frame, foreign TG SSB append, or source incarnation is manufactured. */
++    lj_basemt_it_rel(p->g, LJ_TCDATA, p->replacement_mt);
++    la_store32_rel(&p->capture_seen, 1);
++    lj_meta_test_mt_capture_release();
++    wait_hook(lj_meta_test_mt_lease_paused, 1, p);
++    assert(gc2_smr_readers_acq(p->g) != 0);
++    assert(readers(p->ma) == 1);
++    assert(p->extra_count == 1 && p->mt_calls == 1);
++    assert(!lj_gc2_test_idle_reclaim_enter(p->g));
++    tv_rawstore_rel(p->method_slot, p->replacement_word);
++    la_store32_rel(&p->mt_seen, 1);
++    lj_meta_test_mt_lease_release();
++  } else {
++    wait_hook(lj_gc2_test_recovery_paused,
++              LJ_GC2_RECOVERY_TEST_SSB_COMMITTED, p);
++    assert(p->extra_count == 2);
++    assert(p->source_calls == 1 && p->key_calls == 1);
++    assert(p->mt_calls == 1 && p->method_calls == 1);
++    assert(readers(p->ra) == 1 && readers(p->ka) == 1);
++    assert(readers(p->ma) == 1 && readers(p->fa) == 2);
++    assert(gc2_smr_readers_acq(p->g) == 0);
++    assert(gc2_worker_active_acq(p->g) == 1);
++    assert(gc2_ssb_consumer_active_acq(p->g) == 1);
++    assert(lj_tg_root_anchor_top_acq(p->tg) == p->anchor0 + 4u);
++    assert(tv_rawload_acq(lj_tg_root_anchor_slot_acq(p->tg, p->anchor0)) ==
++           p->receiver_word);
++    assert(tv_rawload_acq(lj_tg_root_anchor_slot_acq(p->tg, p->anchor0 + 1)) ==
++           p->key_word);
++    assert(tv_rawload_acq(lj_tg_root_anchor_slot_acq(p->tg, p->anchor0 + 3)) ==
++           p->method_word);
++    p->pause_cap = gc2_grey_capacity_acq(p->g);
++    p->pause_delta = lj_gc_total_load(p->g) - p->total0;
++    p->pause_recovery = gc2_recovery_items_acq(p->g);
++    if (p->fail_growth) {
++      assert(p->pause_cap == p->cap0 && p->pause_recovery == 1);
++      assert(p->pause_delta == 0);
++    } else {
++      assert(p->pause_cap == 2u * p->cap0 && p->pause_recovery == 0);
++      assert(p->pause_delta == (uint64_t)p->pause_cap * sizeof(GCRef));
++    }
++    assert(lj_gc2_ssb_count_acq(p->published) == TG_GC2_SSB_SLOTS);
++    assert(lj_tg_ssb_free_acq(p->tg) == NULL);
++    assert(lj_tg_ssb_next_acq(p->tg) == lj_tg_ssb_end_acq(p->tg));
++    assert(lj_gc2_ismarked(p->g, obj2gco(p->method)) == 1);
++    /* Remove both original edges after function root publication starts. The
++     * private method anchor and exact leases are now its handoff authority. */
++    lj_basemt_it_rel(p->g, LJ_TCDATA, NULL);
++    {
++      TValue nilv; setnilV(&nilv); tv_rawstore_rel(p->method_slot, nilv.u64);
++    }
++    la_store32_rel(&p->observed, 1);
++    lj_gc2_test_recovery_release();
++  }
++  return NULL;
++}
++
++static void warm_roots(lua_State *L, Probe *p)
++{
++  uint32_t i, idx[4]; TValue nilv;
++  setnilV(&nilv);
++  for (i = 0; i < 4; i++)
++    assert(lj_tg_root_anchor_push(L, p->tg, &nilv, &idx[i]));
++  while (i) { i--; lj_tg_root_anchor_pop(p->tg, idx[i]); }
++}
++
++static void fill_ssb(Probe *p)
++{
++  uint32_t i = 0;
++  assert(lj_tg_ssb_next_acq(p->tg) == lj_tg_ssb_base_acq(p->tg));
++  while (lj_tg_ssb_next_acq(p->tg) != lj_tg_ssb_end_acq(p->tg)) {
++    assert(i++ < TG_GC2_SSB_SLOTS);
++    assert(lj_gc2_test_ssb_push(p->g, obj2gco(p->filler)));
++  }
++  assert(i == TG_GC2_SSB_SLOTS);
++}
++
++static void pressure_setup(Probe *p)
++{
++  uint32_t i;
++  lj_gc2_mark_begin(p->g);
++  (void)lj_gc2_flush_ssb(p->g, p->tg);
++  for (i = 0; i < 64 && !lj_gc2_test_ssb_empty(p->g); i++)
++    (void)lj_gc2_test_ssb_drain(p->g);
++  assert(lj_gc2_test_ssb_empty(p->g));
++  assert(lj_gc2_ismarked(p->g, obj2gco(p->method)) == 0);
++  assert(gc2_grey_top_acq(p->g) == gc2_grey_bottom_acq(p->g));
++  assert(gc2_grey_stack_acq(p->g) == p->g->gc2.grey_embedded);
++  p->cap0 = gc2_grey_capacity_acq(p->g);
++  assert(p->cap0 == LJ_GC2_GREY_EMBEDDED);
++  for (i = 0; i < p->cap0; i++)
++    assert(lj_gc2_test_grey_push(p->g, obj2gco(p->filler)));
++  fill_ssb(p);
++  assert(lj_gc2_flush_ssb(p->g, p->tg) == TG_GC2_SSB_SLOTS);
++  p->published = gc2_ssb_head_acq(p->g);
++  assert(p->published != NULL && lj_tg_ssb_free_acq(p->tg) == NULL);
++  fill_ssb(p);
++  p->total0 = lj_gc_total_load(p->g);
++  if (p->fail_growth)
++    lj_gc2_test_recovery_fail_grey_grow(1);
++  lj_gc2_test_recovery_pause(LJ_GC2_RECOVERY_TEST_SSB_COMMITTED);
++}
++
++static int driver(lua_State *L)
++{
++  Probe *p = current;
++  pthread_t observer;
++  cTValue *ret;
++  TValue *source, *key, *output, *frame;
++  ptrdiff_t topofs;
++  uint64_t outword, keyword;
++  int expected = p->replace ? 33 : 11;
++  int rc;
++  assert(lua_checkstack(L, 24));
++  assert(lua_gettop(L) == 3);
++  warm_roots(L, p);
++  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
++  assert(gc2_phase_acq(p->g) == LJ_GC2_IDLE);
++  lua_gc(L, LUA_GCRESTART, -1);
++  p->anchor0 = lj_tg_root_anchor_top_acq(p->tg);
++  no_scopes(p);
++  if (p->pressure) pressure_setup(p);
++  if (p->replace) {
++    lj_meta_test_mt_capture_pause(obj2gco(p->receiver));
++    lj_meta_test_mt_lease_pause(obj2gco(p->mt));
++  }
++  if (strcmp(p->mode, "retry-source") == 0)
++    lj_gc2_test_stack_admission_retry_once(obj2gco(p->receiver));
++  if (strcmp(p->mode, "retry-key") == 0)
++    lj_gc2_test_stack_admission_retry_once(obj2gco(p->key));
++  if (strcmp(p->mode, "retry-mt") == 0)
++    lj_gc2_test_stack_admission_retry_once(obj2gco(p->mt));
++  if (strcmp(p->mode, "retry-method") == 0)
++    lj_gc2_test_stack_admission_retry_once(obj2gco(p->method));
++  if (p->replace || p->pressure)
++    assert(pthread_create(&observer, NULL, observe, p) == 0);
++  source = L->base;
++  key = p->same_key ? source : L->base + 1;
++  output = p->alias == 1 ? source : p->alias == 2 ? key : L->base + 2;
++  outword = tv_rawload_acq(output); keyword = tv_rawload_acq(key);
++  topofs = savestack(L, L->top);
++  la_store32_rel(&p->watch, 1);
++  if (p->setter)
++    ret = lj_meta_tsettv_pair(L, source, key, source);
++  else
++    ret = lj_meta_tgettv_rooted(L, source, key, output);
++  la_store32_rel(&p->watch, 0);
++  la_store32_rel(&p->done, 1);
++  if (p->replace || p->pressure)
++    assert(pthread_join(observer, NULL) == 0);
++  assert(ret == NULL);
++  no_scopes(p);
++  assert(lj_tg_root_anchor_top_acq(p->tg) == p->anchor0);
++  assert(tv_rawload_acq(source) == p->receiver_word);
++  assert(tv_rawload_acq(key) == keyword);
++  assert(tv_rawload_acq(output) == outword);
++  frame = L->top;
++  assert(tv_rawload_acq(frame) == p->receiver_word);
++  assert(tv_rawload_acq(frame + 1) == keyword);
++  assert(tv_rawload_acq(frame - 1 - LJ_FR2) ==
++         (p->replace ? p->replacement_word : p->method_word));
++  assert(p->blocked_smr == 0 && p->reentry == 0);
++  assert(p->callback_calls == 0);
++  if (strncmp(p->mode, "retry-", 6) == 0) {
++    assert(lj_gc2_test_stack_admission_retry_hits() == 1);
++    assert(p->source_calls == 2);
++    assert(p->mt_calls ==
++           (strcmp(p->mode, "retry-mt") == 0 ||
++            strcmp(p->mode, "retry-method") == 0 ? 2u : 1u));
++    assert(p->method_calls ==
++           (strcmp(p->mode, "retry-method") == 0 ? 2u : 1u));
++  } else {
++    assert(p->source_calls == (p->same_key ? 2u : 1u));
++    assert(p->mt_calls == 1 && p->method_calls == 1);
++    assert(p->waits == 0);
++  }
++  if (p->replace)
++    assert(p->capture_seen == 1 && p->mt_seen == 1);
++  if (p->pressure) assert(p->observed == 1);
++  /* The ordinary helper's exact frame is complete. Transfer its callable into
++   * a real output stack root before discarding this fixture's unused frame;
++   * execute via a real protected call after checking all scopes closed. */
++  copyTVrel(L, L->base + 2, frame - 1 - LJ_FR2);
++  lj_state_stack_pubtv(L, L, L->base + 2);
++  L->top = restorestack(L, topofs);
++  if (!p->pressure && !p->replace) {
++    lua_getmetatable(L, 1);
++    lua_pushnil(L); lua_setfield(L, -2, "__index");
++    lua_pushnil(L); lua_setfield(L, -2, "__newindex");
++    lua_pop(L, 1);
++    lua_pushnil(L); assert(lua_setmetatable(L, 1));
++  }
++  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
++  assert(gc2_phase_acq(p->g) == LJ_GC2_IDLE);
++  assert(gc2_recovery_items_acq(p->g) == 0);
++  no_scopes(p);
++  lua_pushvalue(L, 3);
++  lua_pushvalue(L, 1);
++  lua_pushvalue(L, p->same_key ? 1 : 2);
++  if (p->setter) lua_pushvalue(L, 1);
++  rc = lua_pcall(L, p->setter ? 3 : 2, 1, 0);
++  if (strcmp(p->mode, "throw") == 0) {
++    assert(rc != 0);
++    assert(strstr(lua_tostring(L, -1), "expected cdata callback error"));
++  } else {
++    assert(rc == 0 && lua_tointeger(L, -1) == expected);
++  }
++  assert(p->callback_calls == 1);
++  no_scopes(p);
++  assert(lj_tg_root_anchor_top_acq(p->tg) == p->anchor0);
++  printf("PASS mode=%s source/key/mt/method_admissions=%u/%u/%u/%u "
++         "waits_after_release=%u callback_after_full_gc=%d "
++         "pause_capacity=%u pause_bytes=%" PRIu64 " pause_recovery=%" PRIu64 "\n",
++         p->mode, p->source_calls, p->key_calls, p->mt_calls, p->method_calls,
++         p->waits, expected, p->pause_cap, p->pause_delta, p->pause_recovery);
++  return 0;
++}
++
++int main(int argc, char **argv)
++{
++  Probe p = {0};
++  uint32_t i;
++  char keybuf[64];
++  assert(argc == 2);
++  setvbuf(stdout, NULL, _IONBF, 0);
++  p.mode = argv[1];
++  p.setter = strcmp(p.mode, "set-alias") == 0;
++  p.alias = strcmp(p.mode, "alias-source") == 0 ? 1 :
++            strcmp(p.mode, "alias-key") == 0 ? 2 : 0;
++  p.same_key = strcmp(p.mode, "same-source-key") == 0;
++  p.replace = strcmp(p.mode, "replace") == 0;
++  p.pressure = strcmp(p.mode, "growth") == 0 || strcmp(p.mode, "fail-growth") == 0;
++  p.fail_growth = strcmp(p.mode, "fail-growth") == 0;
++  p.L = luaL_newstate(); assert(p.L);
++  luaL_openlibs(p.L);
++  p.g = G(p.L); p.tg = L2TG(p.L);
++  assert(gc2_n_workers_acq(p.g) == 0);
++  lua_gc(p.L, LUA_GCSTOP, 0);
++  assert(luaL_dostring(p.L,
++    "local ffi=require('ffi'); require('jit').off(); return ffi.new('int[1]')") == 0);
++  p.receiver = cdataV(p.L->top - 1); p.ra = lj_arena_of(p.receiver);
++  p.receiver_word = tv_rawload_acq(p.L->top - 1);
++  for (i = 0; i < 8192; i++) {
++    snprintf(keybuf, sizeof(keybuf), "cdata capture distinct key %u", i);
++    lua_pushstring(p.L, keybuf); p.key = strV(p.L->top - 1);
++    p.ka = lj_arena_of(p.key);
++    if (p.ka != p.ra) break;
++    lua_pop(p.L, 1);
++  }
++  assert(i < 8192); p.key_word = tv_rawload_acq(p.L->top - 1);
++  for (i = 0; i < 8192; i++) {
++    lua_createtable(p.L, 0, 2); p.mt = tabV(p.L->top - 1);
++    p.ma = lj_arena_of(p.mt);
++    if (p.ma != p.ra && p.ma != p.ka) break;
++    lua_pop(p.L, 1);
++  }
++  assert(i < 8192);
++  for (i = 0; i < 8192; i++) {
++    lua_pushcfunction(p.L, method_one); p.method = funcV(p.L->top - 1);
++    p.fa = lj_arena_of(p.method);
++    if (p.fa != p.ra && p.fa != p.ka && p.fa != p.ma) break;
++    lua_pop(p.L, 1);
++  }
++  assert(i < 8192); p.method_word = tv_rawload_acq(p.L->top - 1);
++  lua_pushvalue(p.L, 4); lua_setfield(p.L, 3, p.setter ? "__newindex" : "__index");
++  lua_pop(p.L, 1);  /* Method survives solely through metatable edge. */
++  p.method_slot = (TValue *)(void *)lj_tab_getstr(p.mt,
++                    mmname_str(p.g, p.setter ? MM_newindex : MM_index));
++  assert(p.method_slot && tv_rawload_acq(p.method_slot) == p.method_word);
++  lua_pushvalue(p.L, 3); assert(lua_setmetatable(p.L, 1));
++  lua_remove(p.L, 3);  /* Old metatable survives solely through base root. */
++  if (p.replace) {
++    lua_newtable(p.L); p.replacement_mt = tabV(p.L->top - 1);
++    lua_pushcfunction(p.L, method_two); lua_setfield(p.L, -2, "__index");
++    lua_pushcfunction(p.L, method_three);
++    p.replacement_method = funcV(p.L->top - 1);
++    p.replacement_word = tv_rawload_acq(p.L->top - 1);
++  }
++  lua_pushcfunction(p.L, filler); p.filler = funcV(p.L->top - 1);
++  current = &p;
++  lua_pushcfunction(p.L, driver);
++  lua_pushvalue(p.L, 1); lua_pushvalue(p.L, 2); lua_pushnil(p.L);
++  if (lua_pcall(p.L, 3, 0, 0) != 0) {
++    fprintf(stderr, "driver error: %s\n", lua_tostring(p.L, -1)); abort();
++  }
++  current = NULL;
++  lua_close(p.L);
++  return 0;
++}
+--- a/tests/suites/m5_tables.lua
++++ b/tests/suites/m5_tables.lua
+@@ -241,6 +241,49 @@
+                               "t-tab-next-snapshot.c",
+                               build.tab_helper_c_opts({ timeout = "20s" }))
+       print("M5 table next snapshot behavior passed")
++    end
++  })
++
++  add({
++    name = "m5_meta_cdata_capture_protocol",
++    description = "cdata method capture replacement, refusal and queue pressure",
++    run = function(t)
++      if jit.os ~= "Linux" or jit.arch ~= "x64" then
++        print("M5 cdata method capture protocol fixture requires Linux x64")
++        return
++      end
++      local flags = "-DLJ_FUNC_TEST_HELPERS -DLJ_GC2_TEST_HELPERS" ..
++        " -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS" ..
++        " -DLJ_TRACE_TEST_HELPERS -DLUA_USE_ASSERT"
++      local modes = {
++        "basic", "alias-source", "alias-key", "same-source-key", "set-alias",
++        "retry-source", "retry-key", "retry-mt", "retry-method",
++        "replace", "growth", "fail-growth", "throw"
++      }
++      build.with_default_build_restore(t, function()
++        build.clean_build(t, { quiet = true, xcflags = flags })
++        local out = t:tmp("lj_t-meta-cdata-capture")
++        t:cc(out, { t:path("tests", "t-meta-cdata-capture.c") }, {
++          default_cflags = false,
++          cflags = "-D_GNU_SOURCE -std=gnu11 -O2 -g -Wall -Wextra -Werror" ..
++                   " -mcx16 " .. flags,
++          link_luajit = true,
++          libs = {
++            "-lm", "-ldl", "-pthread",
++            "-Wl,--wrap=lj_gc2_tv_lease_acquire",
++            "-Wl,--wrap=lj_gc2_lease_release",
++            "-Wl,--wrap=lj_tab_wait_l",
++            "-Wl,--wrap=lj_gc2_smr_read_enter",
++            "-Wl,--wrap=lj_vm_call", "-Wl,--wrap=lj_vm_pcall",
++            "-Wl,--wrap=lj_vm_cpcall", "-Wl,--wrap=lj_vm_resume"
++          }
++        })
++        -- Global one-shot hooks start fresh in each independently bounded mode.
++        for i = 1, #modes do
++          t:run({ out, modes[i] }, { timeout = "15s" })
++        end
++      end)
++      print("M5 cdata method capture protocol schedules passed")
+     end
+   })
+ 

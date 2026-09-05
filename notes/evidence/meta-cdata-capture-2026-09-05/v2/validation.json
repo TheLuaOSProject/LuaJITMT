@@ -1,0 +1,416 @@
+[
+  {
+    "label": "t-tab-rooted-get-try-compile",
+    "command": [
+      "gcc",
+      "-O2",
+      "-g",
+      "-std=gnu11",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/tests/t-tab-rooted-get-try.c",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/t-tab-rooted-get-try"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.2139208589996997,
+    "limit_seconds": 60
+  },
+  {
+    "label": "t-tab-rooted-get-try",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/t-tab-rooted-get-try"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.007546320999608724,
+    "limit_seconds": 60
+  },
+  {
+    "label": "t-tab-scalar-hit-compile",
+    "command": [
+      "gcc",
+      "-O2",
+      "-g",
+      "-std=gnu11",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/tests/t-tab-scalar-hit.c",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/t-tab-scalar-hit"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.2140035299998999,
+    "limit_seconds": 60
+  },
+  {
+    "label": "t-tab-scalar-hit",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/t-tab-scalar-hit"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.015643028998965747,
+    "limit_seconds": 60
+  },
+  {
+    "label": "t-gc2-traverse-compile",
+    "command": [
+      "gcc",
+      "-O2",
+      "-g",
+      "-std=gnu11",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/tests/t-gc2-traverse.c",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/t-gc2-traverse"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 2.1697353729996394,
+    "limit_seconds": 60
+  },
+  {
+    "label": "t-gc2-traverse",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/t-gc2-traverse"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.16400882599918987,
+    "limit_seconds": 60
+  },
+  {
+    "label": "t-gc2-recovery-compile",
+    "command": [
+      "gcc",
+      "-O2",
+      "-g",
+      "-std=gnu11",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/tests/t-gc2-recovery.c",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/t-gc2-recovery"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.6157000299990614,
+    "limit_seconds": 60
+  },
+  {
+    "label": "t-gc2-recovery",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/t-gc2-recovery"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.21432510200065735,
+    "limit_seconds": 60
+  },
+  {
+    "label": "t-jit-fnew-bump-compile",
+    "command": [
+      "gcc",
+      "-O2",
+      "-g",
+      "-std=gnu11",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/tests/t-jit-fnew-bump.c",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/t-jit-fnew-bump"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.6652137560013216,
+    "limit_seconds": 60
+  },
+  {
+    "label": "t-jit-fnew-bump",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/t-jit-fnew-bump"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/assert",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.06378990099983639,
+    "limit_seconds": 60
+  },
+  {
+    "label": "stock-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/luajit",
+      "-joff",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/stock/test",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 1.3679601959993306,
+    "limit_seconds": 60
+  },
+  {
+    "label": "stock-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/luajit",
+      "-jon",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/stock/test",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 1.7195570620006038,
+    "limit_seconds": 60
+  },
+  {
+    "label": "t-ffi-cdata-get-l.lua-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/t-ffi-cdata-get-l.lua"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.06418387499979872,
+    "limit_seconds": 60
+  },
+  {
+    "label": "t-ffi-cdata-set-l.lua-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/t-ffi-cdata-set-l.lua"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.11395498499950918,
+    "limit_seconds": 60
+  },
+  {
+    "label": "t-ffi-cdata-shared-hammer.lua-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/t-ffi-cdata-shared-hammer.lua"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 2.2185246810004173,
+    "limit_seconds": 60
+  },
+  {
+    "label": "t-ffi-cdata-get-l.lua-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/t-ffi-cdata-get-l.lua"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.11432504000003973,
+    "limit_seconds": 60
+  },
+  {
+    "label": "t-ffi-cdata-set-l.lua-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/t-ffi-cdata-set-l.lua"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/lib/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.11402157300108229,
+    "limit_seconds": 60
+  },
+  {
+    "label": "t-ffi-cdata-shared-hammer.lua-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/t-ffi-cdata-shared-hammer.lua"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/lib/?.lua;;"
+    },
+    "exit": 1,
+    "status": "complete",
+    "seconds": 0.015719794999313308,
+    "limit_seconds": 60
+  }
+]

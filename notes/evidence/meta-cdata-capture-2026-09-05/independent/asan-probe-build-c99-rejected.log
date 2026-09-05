@@ -1,0 +1,22 @@
+In file included from /tmp/lj-cdata-capture-independent-20260905-pigor7_a/probe.c:13:
+/tmp/lj-cdata-capture-independent-20260905-pigor7_a/asan/src/lj_gc.h:11:24: error: redefinition of typedef 'GCArena' is a C11 feature [-Werror,-Wtypedef-redefinition]
+   11 | typedef struct GCArena GCArena;
+      |                        ^
+/tmp/lj-cdata-capture-independent-20260905-pigor7_a/asan/src/lj_arena.h:82:24: note: previous definition is here
+   82 | typedef struct GCArena GCArena;
+      |                        ^
+In file included from /tmp/lj-cdata-capture-independent-20260905-pigor7_a/probe.c:13:
+/tmp/lj-cdata-capture-independent-20260905-pigor7_a/asan/src/lj_gc.h:12:27: error: redefinition of typedef 'LJHugeInfo' is a C11 feature [-Werror,-Wtypedef-redefinition]
+   12 | typedef struct LJHugeInfo LJHugeInfo;
+      |                           ^
+/tmp/lj-cdata-capture-independent-20260905-pigor7_a/asan/src/lj_arena.h:89:27: note: previous definition is here
+   89 | typedef struct LJHugeInfo LJHugeInfo;
+      |                           ^
+In file included from /tmp/lj-cdata-capture-independent-20260905-pigor7_a/probe.c:17:
+/tmp/lj-cdata-capture-independent-20260905-pigor7_a/asan/src/lj_state.h:11:27: error: redefinition of typedef 'LJGC2Lease' is a C11 feature [-Werror,-Wtypedef-redefinition]
+   11 | typedef struct LJGC2Lease LJGC2Lease;
+      |                           ^
+/tmp/lj-cdata-capture-independent-20260905-pigor7_a/asan/src/lj_gc2.h:30:3: note: previous definition is here
+   30 | } LJGC2Lease;
+      |   ^
+3 errors generated.

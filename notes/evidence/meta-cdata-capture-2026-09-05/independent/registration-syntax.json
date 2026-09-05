@@ -1,0 +1,9 @@
+{
+  "command": [
+    "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/luajit",
+    "-e",
+    "assert(loadfile([[/tmp/lj-cdata-capture-independent-20260905-pigor7_a/m5_tables-candidate.lua]]))"
+  ],
+  "exit": 0,
+  "output": ""
+}

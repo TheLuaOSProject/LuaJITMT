@@ -1,0 +1,14 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "10,11",
+    "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/asan/src/luajit",
+    "-joff",
+    "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/t-meta-cdata-capture.lua"
+  ],
+  "exit": 0,
+  "seconds": 0.3336482660015463,
+  "timeout_seconds": 60,
+  "ASAN_OPTIONS": "detect_leaks=0:abort_on_error=1"
+}

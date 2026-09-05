@@ -1,0 +1,44 @@
+[
+  {
+    "label": "resize-metadispatch",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/lib/?.lua;;",
+      "LJ_M5_TAB_RESIZE_STRESS_CASES": "metatable,metadispatch,weakmeta"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.3645987600011722,
+    "limit_seconds": 60
+  },
+  {
+    "label": "canonical",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/luajit",
+      "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/canonical/tools/test.lua",
+      "m5_meta_rooted_chain",
+      "m5_x64_rooted_reads"
+    ],
+    "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/canonical",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/tests/lib/?.lua;;",
+      "LJ_TEST_ROOT": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/canonical",
+      "JOBS": "4"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 26.901123616000405,
+    "limit_seconds": 180
+  }
+]

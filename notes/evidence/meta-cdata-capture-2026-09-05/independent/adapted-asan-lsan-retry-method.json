@@ -1,0 +1,13 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "10,11",
+    "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/t-meta-cdata-capture-asan-lsan",
+    "retry-method"
+  ],
+  "exit": 0,
+  "seconds": 0.014418759001273429,
+  "timeout_seconds": 15,
+  "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+}

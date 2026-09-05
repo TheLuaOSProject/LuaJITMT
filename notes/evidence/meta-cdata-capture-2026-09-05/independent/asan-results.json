@@ -1,0 +1,198 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "10,11",
+      "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/probe-asan",
+      "basic"
+    ],
+    "exit": 0,
+    "seconds": 0.013975555000797613,
+    "timeout_seconds": 15,
+    "ASAN_OPTIONS": "detect_leaks=0:abort_on_error=1"
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "10,11",
+      "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/probe-asan",
+      "alias-source"
+    ],
+    "exit": 0,
+    "seconds": 0.013767210999503732,
+    "timeout_seconds": 15,
+    "ASAN_OPTIONS": "detect_leaks=0:abort_on_error=1"
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "10,11",
+      "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/probe-asan",
+      "alias-key"
+    ],
+    "exit": 0,
+    "seconds": 0.013459144996886607,
+    "timeout_seconds": 15,
+    "ASAN_OPTIONS": "detect_leaks=0:abort_on_error=1"
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "10,11",
+      "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/probe-asan",
+      "same-source-key"
+    ],
+    "exit": 0,
+    "seconds": 0.013255655998364091,
+    "timeout_seconds": 15,
+    "ASAN_OPTIONS": "detect_leaks=0:abort_on_error=1"
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "10,11",
+      "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/probe-asan",
+      "set-alias"
+    ],
+    "exit": 0,
+    "seconds": 0.013346976000320865,
+    "timeout_seconds": 15,
+    "ASAN_OPTIONS": "detect_leaks=0:abort_on_error=1"
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "10,11",
+      "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/probe-asan",
+      "retry-source"
+    ],
+    "exit": 0,
+    "seconds": 0.013487168002029648,
+    "timeout_seconds": 15,
+    "ASAN_OPTIONS": "detect_leaks=0:abort_on_error=1"
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "10,11",
+      "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/probe-asan",
+      "retry-key"
+    ],
+    "exit": 0,
+    "seconds": 0.013372940000408562,
+    "timeout_seconds": 15,
+    "ASAN_OPTIONS": "detect_leaks=0:abort_on_error=1"
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "10,11",
+      "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/probe-asan",
+      "retry-mt"
+    ],
+    "exit": 0,
+    "seconds": 0.013339877001271816,
+    "timeout_seconds": 15,
+    "ASAN_OPTIONS": "detect_leaks=0:abort_on_error=1"
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "10,11",
+      "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/probe-asan",
+      "retry-method"
+    ],
+    "exit": 0,
+    "seconds": 0.013416065001365496,
+    "timeout_seconds": 15,
+    "ASAN_OPTIONS": "detect_leaks=0:abort_on_error=1"
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "10,11",
+      "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/probe-asan",
+      "replace"
+    ],
+    "exit": 0,
+    "seconds": 0.013953865000075893,
+    "timeout_seconds": 15,
+    "ASAN_OPTIONS": "detect_leaks=0:abort_on_error=1"
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "10,11",
+      "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/probe-asan",
+      "growth"
+    ],
+    "exit": 0,
+    "seconds": 0.01607511499969405,
+    "timeout_seconds": 15,
+    "ASAN_OPTIONS": "detect_leaks=0:abort_on_error=1"
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "10,11",
+      "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/probe-asan",
+      "fail-growth"
+    ],
+    "exit": 0,
+    "seconds": 0.015989288000128,
+    "timeout_seconds": 15,
+    "ASAN_OPTIONS": "detect_leaks=0:abort_on_error=1"
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "10,11",
+      "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/probe-asan",
+      "throw"
+    ],
+    "exit": 0,
+    "seconds": 0.013704383000003872,
+    "timeout_seconds": 15,
+    "ASAN_OPTIONS": "detect_leaks=0:abort_on_error=1"
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "10,11",
+      "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/t-meta-cdata-capture.lua"
+    ],
+    "exit": 0,
+    "seconds": 0.3336482660015463,
+    "timeout_seconds": 60,
+    "ASAN_OPTIONS": "detect_leaks=0:abort_on_error=1"
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "10,11",
+      "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/asan/src/luajit",
+      "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/t-meta-cdata-capture.lua"
+    ],
+    "exit": 0,
+    "seconds": 0.3379433219997736,
+    "timeout_seconds": 60,
+    "ASAN_OPTIONS": "detect_leaks=0:abort_on_error=1"
+  }
+]

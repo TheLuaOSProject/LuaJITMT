@@ -1,0 +1,15 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/src/luajit",
+    "-jon",
+    "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/tests/t-ffi-cdata-shared-hammer.lua"
+  ],
+  "cwd": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before",
+  "LUA_PATH": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/src/?.lua;/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/before/tests/lib/?.lua;;",
+  "exit": 1,
+  "seconds": 0.007546134000222082,
+  "limit_seconds": 60
+}

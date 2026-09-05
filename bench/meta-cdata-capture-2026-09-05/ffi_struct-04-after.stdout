@@ -1,0 +1,2 @@
+benchmark               total_s      ns/op
+ffi_struct               0.1858    1238.39

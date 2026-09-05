@@ -1,0 +1,17 @@
+{
+  "kind": "assert",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/assert/src",
+    "-j8",
+    "BUILDMODE=static",
+    "XCFLAGS=-DLJ_FUNC_TEST_HELPERS -DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLUA_USE_ASSERT"
+  ],
+  "exit": 0,
+  "seconds": 5.5287643570009095,
+  "binary_sha256": "8fad2845eba44085f030a1856ee1ad41efc002281447f3d88ef61f9632bb95e7"
+}

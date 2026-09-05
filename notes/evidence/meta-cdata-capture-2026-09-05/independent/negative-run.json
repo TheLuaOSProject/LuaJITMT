@@ -1,0 +1,13 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "10,11",
+    "/tmp/lj-cdata-capture-independent-20260905-pigor7_a/probe-before",
+    "basic"
+  ],
+  "exit": -6,
+  "seconds": 0.1566784380011086,
+  "timeout_seconds": 15,
+  "expected": "assertion requiring one source admission fails on unchanged older meta path"
+}

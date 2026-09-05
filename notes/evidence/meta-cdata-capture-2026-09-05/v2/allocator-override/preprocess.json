@@ -1,0 +1,13 @@
+{
+  "command": [
+    "cc",
+    "-E",
+    "-P",
+    "-DLJ_GC2_INTERNAL_ALLOCATOR_ONLY=0",
+    "-I/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src",
+    "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/lj_meta.c"
+  ],
+  "exit": 0,
+  "helper_sha256": "9886a887e64f3dcd1ef36eb35833b1088eea06442fd9806f3855b2c6be86bf6e",
+  "scope": "Compile/preprocessor evidence only; no runtime claim for overridden allocator policy."
+}

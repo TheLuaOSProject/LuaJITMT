@@ -1,0 +1,22 @@
+{
+  "command": [
+    "cc",
+    "-O2",
+    "-std=gnu11",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-Wno-unused-parameter",
+    "-mcx16",
+    "-DLJ_GC2_INTERNAL_ALLOCATOR_ONLY=0",
+    "-I/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src",
+    "-c",
+    "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/lj_meta.c",
+    "-o",
+    "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/allocator-override/lj_meta.o"
+  ],
+  "exit": 0,
+  "stdout": "",
+  "stderr": "",
+  "qualification": "The library default uses -Wall; the first extra -Wextra/-Werror compile surfaced existing assertion-only unused parameters in three older cache helpers. This repeat suppresses only that diagnostic and retains the other strict warnings. Both attempts are preserved."
+}

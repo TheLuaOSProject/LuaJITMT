@@ -1,0 +1,16 @@
+{
+  "kind": "normal",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src",
+    "-j8",
+    "BUILDMODE=static"
+  ],
+  "exit": 0,
+  "seconds": 5.074643351001214,
+  "binary_sha256": "c3d703f67616c19315d7b987c4639e4f6dc5746fd0460e596f71e6a01276b9ec"
+}

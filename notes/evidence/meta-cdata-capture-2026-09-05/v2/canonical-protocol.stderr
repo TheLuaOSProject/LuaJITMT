@@ -1,0 +1,16 @@
+== m5_meta_cdata_capture_protocol ==
++ cc -D_GNU_SOURCE -std=gnu11 -O2 -g -Wall -Wextra -Werror -mcx16 -DLJ_FUNC_TEST_HELPERS -DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLUA_USE_ASSERT -I'/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/canonical-protocol/src' '/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/canonical-protocol/tests/t-meta-cdata-capture.c' '/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/canonical-protocol/src/libluajit.a' -lm -ldl -pthread -Wl,--wrap=lj_gc2_tv_lease_acquire -Wl,--wrap=lj_gc2_lease_release -Wl,--wrap=lj_tab_wait_l -Wl,--wrap=lj_gc2_smr_read_enter -Wl,--wrap=lj_vm_call -Wl,--wrap=lj_vm_pcall -Wl,--wrap=lj_vm_cpcall -Wl,--wrap=lj_vm_resume -o '/tmp/lj_t-meta-cdata-capture'
++ timeout '15s' '/tmp/lj_t-meta-cdata-capture' 'basic'
++ timeout '15s' '/tmp/lj_t-meta-cdata-capture' 'alias-source'
++ timeout '15s' '/tmp/lj_t-meta-cdata-capture' 'alias-key'
++ timeout '15s' '/tmp/lj_t-meta-cdata-capture' 'same-source-key'
++ timeout '15s' '/tmp/lj_t-meta-cdata-capture' 'set-alias'
++ timeout '15s' '/tmp/lj_t-meta-cdata-capture' 'retry-source'
++ timeout '15s' '/tmp/lj_t-meta-cdata-capture' 'retry-key'
++ timeout '15s' '/tmp/lj_t-meta-cdata-capture' 'retry-mt'
++ timeout '15s' '/tmp/lj_t-meta-cdata-capture' 'retry-method'
++ timeout '15s' '/tmp/lj_t-meta-cdata-capture' 'replace'
++ timeout '15s' '/tmp/lj_t-meta-cdata-capture' 'growth'
++ timeout '15s' '/tmp/lj_t-meta-cdata-capture' 'fail-growth'
++ timeout '15s' '/tmp/lj_t-meta-cdata-capture' 'throw'
+ok m5_meta_cdata_capture_protocol

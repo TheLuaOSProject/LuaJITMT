@@ -1,0 +1,20 @@
+{
+  "command": [
+    "cc",
+    "-O2",
+    "-std=gnu11",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-mcx16",
+    "-DLJ_GC2_INTERNAL_ALLOCATOR_ONLY=0",
+    "-I/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src",
+    "-c",
+    "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/lj_meta.c",
+    "-o",
+    "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/allocator-override/lj_meta.o"
+  ],
+  "exit": 1,
+  "stdout": "",
+  "stderr": "/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/lj_meta.c: In function \u2018lj_meta_cache\u2019:\n/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/lj_meta.c:134:39: error: unused parameter \u2018mm\u2019 [-Werror=unused-parameter]\n  134 | cTValue *lj_meta_cache(GCtab *mt, MMS mm, GCstr *name)\n      |                                   ~~~~^~\n/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/lj_meta.c: In function \u2018lj_meta_cachetv\u2019:\n/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/lj_meta.c:154:41: error: unused parameter \u2018mm\u2019 [-Werror=unused-parameter]\n  154 | cTValue *lj_meta_cachetv(GCtab *mt, MMS mm, GCstr *name, TValue *out)\n      |                                     ~~~~^~\n/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/lj_meta.c: In function \u2018lj_meta_cachetv_l\u2019:\n/tmp/lj-meta-cdata-capture-20260905-e3t1w0fw/v2/normal/src/lj_meta.c:164:57: error: unused parameter \u2018mm\u2019 [-Werror=unused-parameter]\n  164 | cTValue *lj_meta_cachetv_l(lua_State *L, GCtab *mt, MMS mm, GCstr *name,\n      |                                                     ~~~~^~\ncc1: all warnings being treated as errors\n"
+}
