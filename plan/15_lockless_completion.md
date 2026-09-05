@@ -1,7 +1,7 @@
 # Lockless completion plan
 
 Reviewed: 2026-09-04, starting at `a649f737`.
-Updated: 2026-09-05 after cdata correctness, interpreter admission and GC overflow integration.
+Updated: 2026-09-05 after cdata/GC fixes and real native progress probes.
 
 This is the operative continuation of the original plan. It preserves the
 requested end state: one shared Lua heap, safe ordinary racy Lua programs,
@@ -80,7 +80,8 @@ are verified reasons the full goal is still open:
 | Table resize | Structural owner plus source `FORWARD` can strand the only value in an owner's local variable; descriptor migration is dormant | Durable exact payloads, helpable migration/publication, GC and native grace |
 | Descriptor installation | Separate capacity-shadow store can corrupt a winning descriptor before the losing ownership CAS | Publish control and capacity in one atomic pair; deterministic competing-generation test |
 | Automatic GC | Allocation-driven MARK/root/sweep boundaries still execute synchronous handshakes | Persistent asynchronous phase requests and helper-owned completion |
-| Native acknowledgement | Native return can wait for a leader to clear a consumed poll/ack | Immutable scan evidence and independently completable acknowledgement; preserve stack exclusion |
+| Native acknowledgement | Real paused-leader probes hold native return before remote root scan, after action claim, and after all target actions | Distinguish request claim, target action completion, and global completion; replace mutable-root borrowing before removing its hold |
+| First MT attachment | A mode-0 native loop ignores the TG poll while the generic flush leaves the phase gate open; real attachment waits for natural exit | Make pending attachment observable at a native backedge while preserving phase-gate ownership and entry/retirement safety |
 | Worker scheduling | MARK-close ownership loss can be reported as progress and cause repeated drain-loop execution | Return/defer without false progress or peer sleep; preserve durable retry |
 | GC work per mutation | Public SWEEP barriers can repeatedly queue an entire growing table; traversal charges a whole vector as one work unit | Prove redundant barrier elision, bound traversal by slots/bytes, and measure full-suite phase/history amplification |
 | Table scan authority exhaustion | A long-lived table's 32-bit dirty counter saturated into a permanent universe-wide reclamation veto | Persistent wide promotion now preserves collection through that rollover; retain full-namespace containment and current cycle-namespace limits |
@@ -451,6 +452,21 @@ detach, native return, STOPREQ, active finalizers, nested GC, and saturation.
 Do not remove consumed-ack waits until the scanner's stack access has a safe
 replacement. Then remove global trace exclusion from marking using the exact
 native/trace frame evidence, and distribute marking work among real workers.
+
+The real four-position consumed-ack probe and finite mode-0 attachment probe
+are recorded in `notes/native-progress-boundaries-2026-09-05.md`. A current
+`hs_epoch_ack` is an execution claim, not completion: the real SSB action can
+still be paused after it. First prove any early return for the precise
+`SCAN_OWNER_ROOTS|FLUSH_SSB` class, including all later leader accesses,
+late root/SSB work, and epoch/poll races. Full global root scans still read
+recorder scratch geometry, and trace/allocator/phase actions retain separate
+holds. Introduce completion state together with its proven consumer.
+
+Automatic phase conversion additionally needs durable MARK initialization
+with no early worker admission or reset replay, a persistent exact-cycle root
+snapshot continuation, and a SWEEP retirement frontier tied to completed
+grace. Releasing `worker_active` around the existing synchronous calls without
+those replacements would discard their current exclusion proof.
 
 ### D. Complete table resize in production
 

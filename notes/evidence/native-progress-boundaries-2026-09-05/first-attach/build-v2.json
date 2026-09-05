@@ -1,0 +1,26 @@
+{
+  "command": [
+    "cc",
+    "-std=gnu11",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-mcx16",
+    "-I/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/normal/src",
+    "/tmp/lj-first-attach-mode0-20260905-root/probe-v2.c",
+    "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/normal/src/libluajit.a",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-o",
+    "/tmp/lj-first-attach-mode0-20260905-root/probe-v2"
+  ],
+  "exit": 0,
+  "stdout": "",
+  "stderr": "",
+  "seconds": 0.15468262899958063,
+  "source_sha256": "83f5a70b3e936c32fa79830f840bc6b5ada0f30ce2efb06c4cecdabd2ba8b79f",
+  "archive_sha256": "9e491c5d64b1fea961c22c64d269586efa7fb2856023f373e3cb1ddb71ef7e9d"
+}

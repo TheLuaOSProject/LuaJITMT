@@ -1,0 +1,267 @@
+{
+  "scope": "Read-only protocol review plus linker-wrapper functional probe; no modified runtime and no performance claim",
+  "review_date": "2026-09-05",
+  "shared_git_head": "b4e26564542cb8bfa997a11c6a90e5e0017a2f79",
+  "shared_git_status": "?? .luarc.json\n?? RELEASE_NOTES-b1.1.1.md\n?? asm\n?? closures_upval\n?? compat53-0.14.3-1.linux-x86_64.rock\n?? dist/\n?? dynasm/semaphore.lua\n?? example/\n?? im\n?? ir\n?? libs\n?? lj_profile.plist\n?? lj_thr.plist\n?? loop\n?? m\n?? m5_concurrent_objects\n?? mcode\n?? perf-loop.data\n?? perf.data.old\n?? quiet\n?? rs\n?? snap\n?? src/st2ghsJW\n?? src/stCc0Sln\n?? t\n?? tab_insert_newkey\n?? tests/stock-hot-source.lua\n?? tests/t-jit-flush-live-exec-diag.lua\n?? tests/t-jit-flush-once-diag.lua\n?? tests/t-jit-flush-rerecord-once-diag.lua\n?? tests/t-jit-flush-root-only-diag.lua\n?? trace\n?? vgcore.2054254\n?? vgcore.2055535\n?? vgcore.2057128\n?? vgcore.2057944\n?? vgcore.2058021\n?? vgcore.2058580\n?? vgcore.2068182\n?? vgcore.59415\n?? vgcore.72516\n",
+  "uname": [
+    "Linux",
+    "7f3bd9b38fd8",
+    "7.2.1-ogc4.1.fc44.x86_64",
+    "#1 SMP PREEMPT_DYNAMIC Tue Sep  1 22:10:56 UTC 2026",
+    "x86_64",
+    ""
+  ],
+  "affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31
+  ],
+  "runtime_archive": {
+    "path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/src/libluajit.a",
+    "sha256": "5d404c4a30b19e7b2781caa797675b4b400e55fdba058f228ff6083664134225"
+  },
+  "runtime_build_metadata": {
+    "path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/build-strict.json",
+    "sha256": "ae63eebab9534f77f50d5324f75a0b6a3090605c919682e6c21e37c49497dee1"
+  },
+  "reviewed_files": [
+    {
+      "path": "/workspaces/lj-lockless/src/lj_safepoint.c",
+      "sha256": "975d637cad5cd83110b0151a736dece72bb93ae6c44be6bfd06ea8a2928e7f4e",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/src/lj_safepoint.c",
+      "frozen_sha256": "975d637cad5cd83110b0151a736dece72bb93ae6c44be6bfd06ea8a2928e7f4e",
+      "matches_frozen": true
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_safepoint.h",
+      "sha256": "099a350c56ddefd2cd992815e2a41a5035f061a378008c0031e00800660d7d40",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/src/lj_safepoint.h",
+      "frozen_sha256": "099a350c56ddefd2cd992815e2a41a5035f061a378008c0031e00800660d7d40",
+      "matches_frozen": true
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_gc2.c",
+      "sha256": "5557bc243f94f5d310287494cc3560d91931455eaa8338ba480f84a33edf45a1",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/src/lj_gc2.c",
+      "frozen_sha256": "5557bc243f94f5d310287494cc3560d91931455eaa8338ba480f84a33edf45a1",
+      "matches_frozen": true
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_gc2.h",
+      "sha256": "244b10c49ad036b661a08adc178e6b8247d8ff1b18ed63bc035d3440df16a9f9",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/src/lj_gc2.h",
+      "frozen_sha256": "244b10c49ad036b661a08adc178e6b8247d8ff1b18ed63bc035d3440df16a9f9",
+      "matches_frozen": true
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_tg.c",
+      "sha256": "16064ba7946becbbc5cc1be2ee00eae4be39f1496c6ab85c5f4cf60f64146406",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/src/lj_tg.c",
+      "frozen_sha256": "16064ba7946becbbc5cc1be2ee00eae4be39f1496c6ab85c5f4cf60f64146406",
+      "matches_frozen": true
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_tg.h",
+      "sha256": "a5cb46bde2868512743795750b5a1da71cd1a581bc037da127e60b36cb994015",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/src/lj_tg.h",
+      "frozen_sha256": "a5cb46bde2868512743795750b5a1da71cd1a581bc037da127e60b36cb994015",
+      "matches_frozen": true
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_state.c",
+      "sha256": "80d2fa440b4b81e0d460d485dcbe2fc478e2f158c2f79504e44b1a89ffc2bf64",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/src/lj_state.c",
+      "frozen_sha256": "80d2fa440b4b81e0d460d485dcbe2fc478e2f158c2f79504e44b1a89ffc2bf64",
+      "matches_frozen": true
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_state.h",
+      "sha256": "b4f27d321bb82ffaa9ba446700a7a95cf29b87c4b114140c17ad5c47d55664f2",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/src/lj_state.h",
+      "frozen_sha256": "b4f27d321bb82ffaa9ba446700a7a95cf29b87c4b114140c17ad5c47d55664f2",
+      "matches_frozen": true
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_ccall.c",
+      "sha256": "5d6dfc2842eff5a2da451d66c03f5b5cc54a62a913047e84a1ca7696f9f76184",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/src/lj_ccall.c",
+      "frozen_sha256": "5d6dfc2842eff5a2da451d66c03f5b5cc54a62a913047e84a1ca7696f9f76184",
+      "matches_frozen": true
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_ccall.h",
+      "sha256": "401dbdd20f5fa0e6a911a6607ee81618c296a68f5ebf1c21909b39bc0a009daa",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/src/lj_ccall.h",
+      "frozen_sha256": "401dbdd20f5fa0e6a911a6607ee81618c296a68f5ebf1c21909b39bc0a009daa",
+      "matches_frozen": true
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_trace.c",
+      "sha256": "22727958fb2df4c3ed07126193a260f2243630ac4fc6d98d133712bd40503feb",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/src/lj_trace.c",
+      "frozen_sha256": "22727958fb2df4c3ed07126193a260f2243630ac4fc6d98d133712bd40503feb",
+      "matches_frozen": true
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_ir.c",
+      "sha256": "7f352d38af2424d917d2c5095019e73a43e1cd6f53c71d0eb7d375d33c34c5d7",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/src/lj_ir.c",
+      "frozen_sha256": "7f352d38af2424d917d2c5095019e73a43e1cd6f53c71d0eb7d375d33c34c5d7",
+      "matches_frozen": true
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_mcode.c",
+      "sha256": "c658b71c17ffcf5f892fc2c360f0ee5e80c297498b7fc168813882eca6c336fa",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/src/lj_mcode.c",
+      "frozen_sha256": "c658b71c17ffcf5f892fc2c360f0ee5e80c297498b7fc168813882eca6c336fa",
+      "matches_frozen": true
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_tab.c",
+      "sha256": "28b2eac3dc6c0734d131cf33d3f34826ae758c9b3deb437c6bd154e0cd2fd48f",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/src/lj_tab.c",
+      "frozen_sha256": "28b2eac3dc6c0734d131cf33d3f34826ae758c9b3deb437c6bd154e0cd2fd48f",
+      "matches_frozen": true
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_str.c",
+      "sha256": "a256c39e9f2f05e6c6d96e2aa140d0f6e04bad5e1e7966cbff15ba08d4959975",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/src/lj_str.c",
+      "frozen_sha256": "a256c39e9f2f05e6c6d96e2aa140d0f6e04bad5e1e7966cbff15ba08d4959975",
+      "matches_frozen": true
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_ctype.c",
+      "sha256": "63990b7796d93a7c4c8659e61c2f0ec43dd766a2972ed679f8f46a4237b2171b",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/src/lj_ctype.c",
+      "frozen_sha256": "63990b7796d93a7c4c8659e61c2f0ec43dd766a2972ed679f8f46a4237b2171b",
+      "matches_frozen": true
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/vm_x64.dasc",
+      "sha256": "ad48405b4793e8514307cd4efc15238dcd3a29b0d1970b452ee77952b921d64b",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/src/vm_x64.dasc",
+      "frozen_sha256": "ad48405b4793e8514307cd4efc15238dcd3a29b0d1970b452ee77952b921d64b",
+      "matches_frozen": true
+    },
+    {
+      "path": "/workspaces/lj-lockless/tests/t-safepoint-handshake.c",
+      "sha256": "741fdc48c8f0ff09c4ac026fed0ff1981da86b2acaafb359fa3d3c366bd1448b",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/tests/t-safepoint-handshake.c",
+      "frozen_sha256": "741fdc48c8f0ff09c4ac026fed0ff1981da86b2acaafb359fa3d3c366bd1448b",
+      "matches_frozen": true
+    },
+    {
+      "path": "/workspaces/lj-lockless/notes/safepoint-consumed-native-ack.md",
+      "sha256": "c47d0f98f86f8b0091518eabea6b046382a8c7f80ffa57683fbdb9f9631d2799",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/notes/safepoint-consumed-native-ack.md",
+      "frozen_sha256": "c47d0f98f86f8b0091518eabea6b046382a8c7f80ffa57683fbdb9f9631d2799",
+      "matches_frozen": true
+    },
+    {
+      "path": "/workspaces/lj-lockless/notes/safepoint-remote-ack-liveness.md",
+      "sha256": "895c4170d74975c7a0a9fb76f4eeaa0c7c7d6394ed661ef5835a8f0d461970cc",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/notes/safepoint-remote-ack-liveness.md",
+      "frozen_sha256": "895c4170d74975c7a0a9fb76f4eeaa0c7c7d6394ed661ef5835a8f0d461970cc",
+      "matches_frozen": true
+    },
+    {
+      "path": "/workspaces/lj-lockless/notes/safepoint-poll-wake.md",
+      "sha256": "198803e80071cca21baba15f01fd20773920ab52ef63d07629eff224ed9a3e11",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/notes/safepoint-poll-wake.md",
+      "frozen_sha256": "198803e80071cca21baba15f01fd20773920ab52ef63d07629eff224ed9a3e11",
+      "matches_frozen": true
+    },
+    {
+      "path": "/workspaces/lj-lockless/notes/ffi-generated-call-remote-flush-2026-07-18.md",
+      "sha256": "c410b33b25a111e6a569fa5ff8f496451526647c1e043d44770a1dc085b0eac8",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/notes/ffi-generated-call-remote-flush-2026-07-18.md",
+      "frozen_sha256": "c410b33b25a111e6a569fa5ff8f496451526647c1e043d44770a1dc085b0eac8",
+      "matches_frozen": true
+    },
+    {
+      "path": "/workspaces/lj-lockless/notes/jit-sticky-mt-trace-slot-reuse-2026-07-10.md",
+      "sha256": "8796ad0e9b212ffd6bdfe9ed96e6a4ddc150e7887109cf4b5f9265f2b6c05406",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/notes/jit-sticky-mt-trace-slot-reuse-2026-07-10.md",
+      "frozen_sha256": "8796ad0e9b212ffd6bdfe9ed96e6a4ddc150e7887109cf4b5f9265f2b6c05406",
+      "matches_frozen": true
+    },
+    {
+      "path": "/workspaces/lj-lockless/notes/runtime-gc-review-2026-09-04.md",
+      "sha256": "0794925b718a7d6fb8b3714325604bc73b9970e2635ffafd3fe22ef520aa3857",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/notes/runtime-gc-review-2026-09-04.md",
+      "frozen_sha256": "0794925b718a7d6fb8b3714325604bc73b9970e2635ffafd3fe22ef520aa3857",
+      "matches_frozen": true
+    },
+    {
+      "path": "/workspaces/lj-lockless/plan/15_lockless_completion.md",
+      "sha256": "77001f80f44e60fda091c1186e8a589cc2b33254e177ff620d1ce6382ad7221d",
+      "frozen_path": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict/plan/15_lockless_completion.md",
+      "frozen_sha256": "c84845a357744b0c80752b7fff60a2765d29606466c9a802a0b60e8145be4911",
+      "matches_frozen": false
+    }
+  ],
+  "probe_artifacts": [
+    {
+      "path": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/probe.c",
+      "sha256": "e7993ffdfd42218236986f960d95765b865d7a3f05b4637dbf4c7b33be8b5946"
+    },
+    {
+      "path": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/probe",
+      "sha256": "2af72f7c1be6dc5423caba5993b6ba908ed5267e12183c76557c8a6e4516b4ad"
+    },
+    {
+      "path": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/compile.json",
+      "sha256": "a3ecee754d2240e6dfef41311c0e782f4a7008888de5468f48f0b0a0562b3143"
+    },
+    {
+      "path": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/mode-0.json",
+      "sha256": "db63b190e2aee62dad5e47dd3e284746532b0c444142f78a9f27d628d98667a0"
+    },
+    {
+      "path": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/mode-1.json",
+      "sha256": "acdf7f03e791fc3c49e649d5966ad610722494333deca7e10fd70613c42e4edc"
+    },
+    {
+      "path": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/mode-2.json",
+      "sha256": "08585259864881838ab72329e2c1d4b4f0ffdd5a9107de0e8ed40aa9612fb2a7"
+    },
+    {
+      "path": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/mode-3.json",
+      "sha256": "8ac0946bb6b8dbbf5ce23cb70fc95ae8eacc8dcb3c1b696f7fb167b530a14e66"
+    }
+  ],
+  "review": {
+    "path": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/review.md",
+    "sha256": "0d49de18fd6588ac983bbba19a9e72a9824bad512d9777e550ef5e9567179040"
+  }
+}

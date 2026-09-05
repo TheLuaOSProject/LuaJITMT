@@ -1,0 +1,4 @@
+warm native exits	1
+warm root 1: 1 XPOLL instructions, all mode 0
+pending first attach for 200.146 ms: native=1 poll=1 reqmask=640 leader=2 gate=1 entering=1 active=0
+loop 3521.757 ms; attach 3521.647 ms; observed=1 saw_pending=1

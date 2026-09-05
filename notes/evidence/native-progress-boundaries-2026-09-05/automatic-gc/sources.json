@@ -1,0 +1,11 @@
+{
+  "base": "b4e26564542cb8bfa997a11c6a90e5e0017a2f79",
+  "files": {
+    "src/lj_gc.c": "7ceb24d2c755325c7c3d4113330bbb4fce6d3c893dd22fc1ef8bf924590ab4cb",
+    "src/lj_gc2.c": "5557bc243f94f5d310287494cc3560d91931455eaa8338ba480f84a33edf45a1",
+    "src/lj_gc2.h": "244b10c49ad036b661a08adc178e6b8247d8ff1b18ed63bc035d3440df16a9f9",
+    "src/lj_safepoint.c": "975d637cad5cd83110b0151a736dece72bb93ae6c44be6bfd06ea8a2928e7f4e",
+    "src/lj_safepoint.h": "099a350c56ddefd2cd992815e2a41a5035f061a378008c0031e00800660d7d40",
+    "src/lj_tg.h": "a5cb46bde2868512743795750b5a1da71cd1a581bc037da127e60b36cb994015"
+  }
+}

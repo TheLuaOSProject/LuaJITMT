@@ -1,0 +1,13 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-native-ack-review-20260905-lg2ml_eq/probe",
+    "3"
+  ],
+  "exit_code": 0,
+  "elapsed_s": 0.0034828349998861086,
+  "stdout": "mode=3 actual_kernel_wait=202 0x7fba6a8535a8 0x80 0x1 0x0 0x0 0x0 0x7ffe333be618 0x7fba6a97b7b9\nheld: native=0 reqmask=0 poll=1 pending=2 ack=20 epoch=20 returned=0 scan_calls=1\nrelease: leader completed, native return resumed, exact root still marked and source unchanged\nreal consumed native acknowledgement probe PASS\n",
+  "stderr": ""
+}

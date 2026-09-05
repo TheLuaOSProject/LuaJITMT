@@ -1,0 +1,12 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-first-attach-mode0-20260905-root/probe"
+  ],
+  "exit": 0,
+  "seconds": 3.5227250389980327,
+  "bound_seconds": 30,
+  "probe_sha256": "bd4b1ca2db3b71a9e74fe4f1b628ec021e1e34701ffd64e5714f9fb04b976ee2"
+}

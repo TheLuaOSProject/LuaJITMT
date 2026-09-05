@@ -1,0 +1,3 @@
+warm native exits	1
+pending first attach for 200.004 ms: native=1 poll=1 reqmask=640 leader=2 gate=1 entering=1 active=0
+loop 3479.155 ms; attach 3479.043 ms; observed=1 saw_pending=1

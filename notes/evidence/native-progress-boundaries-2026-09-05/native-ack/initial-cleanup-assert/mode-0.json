@@ -1,0 +1,14 @@
+{
+  "cmd": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-native-ack-review-20260905-lg2ml_eq/probe",
+    "0"
+  ],
+  "exit": -6,
+  "status": "complete",
+  "seconds": 0.10674132900021505,
+  "stdout": "mode=0 actual_kernel_wait=202 0x7f3f4ceb35a8 0x80 0x1 0x0 0x0 0x0 0x7fffc5ca4cd8 0x7f3f4cfdf7b9\nheld: native=0 reqmask=0 poll=1 pending=2 ack=19 epoch=20 returned=0 scan_calls=1\n",
+  "stderr": "probe: /tmp/lj-native-ack-review-20260905-lg2ml_eq/probe.c:181: native_probe: Assertion `lj_tg_reclaim_dead(ctx.g)==1' failed.\n"
+}

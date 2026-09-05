@@ -1,0 +1,638 @@
+{
+  "base_commit": "b4e26564542cb8bfa997a11c6a90e5e0017a2f79",
+  "scope": "Read-only Linux progress probes and source review; no runtime fix or performance claim",
+  "verified_manifest_entries": 35,
+  "reviewed_source_reconstruct": "git show b4e26564:<relative path after reviewed-source/>; hashes verified",
+  "artifacts": [
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/compile.json",
+      "relative_path": "compile.json",
+      "sha256": "a3ecee754d2240e6dfef41311c0e782f4a7008888de5468f48f0b0a0562b3143",
+      "bytes": 858,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/compile.json"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/four-mode-before-live-root-collection-check/compile.json",
+      "relative_path": "four-mode-before-live-root-collection-check/compile.json",
+      "sha256": "a3ecee754d2240e6dfef41311c0e782f4a7008888de5468f48f0b0a0562b3143",
+      "bytes": 858,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/four-mode-before-live-root-collection-check/compile.json"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/four-mode-before-live-root-collection-check/mode-0.json",
+      "relative_path": "four-mode-before-live-root-collection-check/mode-0.json",
+      "sha256": "e42dfd3af6fba87bee7c0c5d527a1e46d9bc9f7fe1bb3b8ad498e4e1e7d6376f",
+      "bytes": 537,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/four-mode-before-live-root-collection-check/mode-0.json"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/four-mode-before-live-root-collection-check/mode-1.json",
+      "relative_path": "four-mode-before-live-root-collection-check/mode-1.json",
+      "sha256": "053f688e5fc919a8d10c103ef9cbf84f164b504002c2182407b3a4f183a8b68e",
+      "bytes": 538,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/four-mode-before-live-root-collection-check/mode-1.json"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/four-mode-before-live-root-collection-check/mode-2.json",
+      "relative_path": "four-mode-before-live-root-collection-check/mode-2.json",
+      "sha256": "279e5f266b4eef1e5e379d9d37be213593b80c3123d2db6c104529f16f99ca80",
+      "bytes": 537,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/four-mode-before-live-root-collection-check/mode-2.json"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/four-mode-before-live-root-collection-check/mode-3.json",
+      "relative_path": "four-mode-before-live-root-collection-check/mode-3.json",
+      "sha256": "28b1745a1990b7bbfb3ae0fb7c50cbf53e2c771619f59ee3177eeddd1e4e0a23",
+      "bytes": 538,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/four-mode-before-live-root-collection-check/mode-3.json"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/four-mode-before-live-root-collection-check/probe",
+      "relative_path": "four-mode-before-live-root-collection-check/probe",
+      "sha256": "d7c01da2e6b44fd6a3fcf309d09d5fb01bd32ce92461c891da8b2b99f54e724d",
+      "bytes": 14054440,
+      "storage": "local_binary_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/four-mode-before-live-root-collection-check/probe.c",
+      "relative_path": "four-mode-before-live-root-collection-check/probe.c",
+      "sha256": "e60b8e98e59fe092219662c0a63349490bed8ab1a6f8ab3abf52fd4710c7a7fe",
+      "bytes": 8049,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/four-mode-before-live-root-collection-check/probe.c"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/initial-cleanup-assert/compile.json",
+      "relative_path": "initial-cleanup-assert/compile.json",
+      "sha256": "f6b1e1aecfc8862d4eded6d98618262052ed4144d74ac4c17069a16d2dc1eb06",
+      "bytes": 848,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/initial-cleanup-assert/compile.json"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/initial-cleanup-assert/mode-0.json",
+      "relative_path": "initial-cleanup-assert/mode-0.json",
+      "sha256": "d321af473497ca314903e9e1e3e9927ee54b3c941a0bddcb3e9e85d7ae814f5b",
+      "bytes": 533,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/initial-cleanup-assert/mode-0.json"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/initial-cleanup-assert/probe",
+      "relative_path": "initial-cleanup-assert/probe",
+      "sha256": "a1aa5206c01aaadd10f37a50635b97066621e42b961fbfde19d05592085a7b49",
+      "bytes": 14052872,
+      "storage": "local_binary_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/initial-cleanup-assert/probe.c",
+      "relative_path": "initial-cleanup-assert/probe.c",
+      "sha256": "7bfc071c6cf6fe4c89a0e2054ac02578d4c59dc044821cd671cc6d2362746cd4",
+      "bytes": 7257,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/initial-cleanup-assert/probe.c"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/location.json",
+      "relative_path": "location.json",
+      "sha256": "cdc611dc93ed0b2d399ab2167c76cbbe9868c492657308a44e31e2f30921eddb",
+      "bytes": 263,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/location.json"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/manifest.json",
+      "relative_path": "manifest.json",
+      "sha256": "51de31931f4394aa12a2513ac49eba67a44348c55c34556baa8c729733f8f144",
+      "bytes": 12879,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/manifest.json"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/mode-0.json",
+      "relative_path": "mode-0.json",
+      "sha256": "db63b190e2aee62dad5e47dd3e284746532b0c444142f78a9f27d628d98667a0",
+      "bytes": 537,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/mode-0.json"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/mode-1.json",
+      "relative_path": "mode-1.json",
+      "sha256": "acdf7f03e791fc3c49e649d5966ad610722494333deca7e10fd70613c42e4edc",
+      "bytes": 537,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/mode-1.json"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/mode-2.json",
+      "relative_path": "mode-2.json",
+      "sha256": "08585259864881838ab72329e2c1d4b4f0ffdd5a9107de0e8ed40aa9612fb2a7",
+      "bytes": 537,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/mode-2.json"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/mode-3.json",
+      "relative_path": "mode-3.json",
+      "sha256": "8ac0946bb6b8dbbf5ce23cb70fc95ae8eacc8dcb3c1b696f7fb167b530a14e66",
+      "bytes": 536,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/mode-3.json"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/postcheck-wrapper-rearm/compile.json",
+      "relative_path": "postcheck-wrapper-rearm/compile.json",
+      "sha256": "ca42eb8571ecadf5bbe42f03bee5103452c52e5a6413d57fbebf620a125032ed",
+      "bytes": 848,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/postcheck-wrapper-rearm/compile.json"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/postcheck-wrapper-rearm/mode-2.json",
+      "relative_path": "postcheck-wrapper-rearm/mode-2.json",
+      "sha256": "e15483ebbfd4fef173e18ad5129b880e5b75a0d76c6bef81844804ec735f3676",
+      "bytes": 626,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/postcheck-wrapper-rearm/mode-2.json"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/postcheck-wrapper-rearm/probe",
+      "relative_path": "postcheck-wrapper-rearm/probe",
+      "sha256": "620513e5b690f0652c1c923acb75209e34bd9b306961007bc32dad24b9674546",
+      "bytes": 14052704,
+      "storage": "local_binary_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/postcheck-wrapper-rearm/probe.c",
+      "relative_path": "postcheck-wrapper-rearm/probe.c",
+      "sha256": "87ae04d65dbce4bb3ab47bd9e62e22e8d34172f2bafccf1dafdd1695161721c7",
+      "bytes": 7334,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/postcheck-wrapper-rearm/probe.c"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/probe",
+      "relative_path": "probe",
+      "sha256": "2af72f7c1be6dc5423caba5993b6ba908ed5267e12183c76557c8a6e4516b4ad",
+      "bytes": 14054440,
+      "storage": "local_binary_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/probe.c",
+      "relative_path": "probe.c",
+      "sha256": "e7993ffdfd42218236986f960d95765b865d7a3f05b4637dbf4c7b33be8b5946",
+      "bytes": 8076,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/probe.c"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/review.md",
+      "relative_path": "review.md",
+      "sha256": "0d49de18fd6588ac983bbba19a9e72a9824bad512d9777e550ef5e9567179040",
+      "bytes": 18366,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/review.md"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/notes/ffi-generated-call-remote-flush-2026-07-18.md",
+      "relative_path": "reviewed-source/notes/ffi-generated-call-remote-flush-2026-07-18.md",
+      "sha256": "c410b33b25a111e6a569fa5ff8f496451526647c1e043d44770a1dc085b0eac8",
+      "bytes": 4624,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/notes/jit-sticky-mt-trace-slot-reuse-2026-07-10.md",
+      "relative_path": "reviewed-source/notes/jit-sticky-mt-trace-slot-reuse-2026-07-10.md",
+      "sha256": "8796ad0e9b212ffd6bdfe9ed96e6a4ddc150e7887109cf4b5f9265f2b6c05406",
+      "bytes": 6487,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/notes/runtime-gc-review-2026-09-04.md",
+      "relative_path": "reviewed-source/notes/runtime-gc-review-2026-09-04.md",
+      "sha256": "0794925b718a7d6fb8b3714325604bc73b9970e2635ffafd3fe22ef520aa3857",
+      "bytes": 15825,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/notes/safepoint-consumed-native-ack.md",
+      "relative_path": "reviewed-source/notes/safepoint-consumed-native-ack.md",
+      "sha256": "c47d0f98f86f8b0091518eabea6b046382a8c7f80ffa57683fbdb9f9631d2799",
+      "bytes": 1905,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/notes/safepoint-poll-wake.md",
+      "relative_path": "reviewed-source/notes/safepoint-poll-wake.md",
+      "sha256": "198803e80071cca21baba15f01fd20773920ab52ef63d07629eff224ed9a3e11",
+      "bytes": 784,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/notes/safepoint-remote-ack-liveness.md",
+      "relative_path": "reviewed-source/notes/safepoint-remote-ack-liveness.md",
+      "sha256": "895c4170d74975c7a0a9fb76f4eeaa0c7c7d6394ed661ef5835a8f0d461970cc",
+      "bytes": 994,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/plan/15_lockless_completion.md",
+      "relative_path": "reviewed-source/plan/15_lockless_completion.md",
+      "sha256": "77001f80f44e60fda091c1186e8a589cc2b33254e177ff620d1ce6382ad7221d",
+      "bytes": 39890,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/src/lj_ccall.c",
+      "relative_path": "reviewed-source/src/lj_ccall.c",
+      "sha256": "5d6dfc2842eff5a2da451d66c03f5b5cc54a62a913047e84a1ca7696f9f76184",
+      "bytes": 89633,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/src/lj_ccall.h",
+      "relative_path": "reviewed-source/src/lj_ccall.h",
+      "sha256": "401dbdd20f5fa0e6a911a6607ee81618c296a68f5ebf1c21909b39bc0a009daa",
+      "bytes": 8763,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/src/lj_ctype.c",
+      "relative_path": "reviewed-source/src/lj_ctype.c",
+      "sha256": "63990b7796d93a7c4c8659e61c2f0ec43dd766a2972ed679f8f46a4237b2171b",
+      "bytes": 91557,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/src/lj_gc2.c",
+      "relative_path": "reviewed-source/src/lj_gc2.c",
+      "sha256": "5557bc243f94f5d310287494cc3560d91931455eaa8338ba480f84a33edf45a1",
+      "bytes": 767682,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/src/lj_gc2.h",
+      "relative_path": "reviewed-source/src/lj_gc2.h",
+      "sha256": "244b10c49ad036b661a08adc178e6b8247d8ff1b18ed63bc035d3440df16a9f9",
+      "bytes": 37421,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/src/lj_ir.c",
+      "relative_path": "reviewed-source/src/lj_ir.c",
+      "sha256": "7f352d38af2424d917d2c5095019e73a43e1cd6f53c71d0eb7d375d33c34c5d7",
+      "bytes": 12958,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/src/lj_mcode.c",
+      "relative_path": "reviewed-source/src/lj_mcode.c",
+      "sha256": "c658b71c17ffcf5f892fc2c360f0ee5e80c297498b7fc168813882eca6c336fa",
+      "bytes": 26218,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/src/lj_safepoint.c",
+      "relative_path": "reviewed-source/src/lj_safepoint.c",
+      "sha256": "975d637cad5cd83110b0151a736dece72bb93ae6c44be6bfd06ea8a2928e7f4e",
+      "bytes": 32319,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/src/lj_safepoint.h",
+      "relative_path": "reviewed-source/src/lj_safepoint.h",
+      "sha256": "099a350c56ddefd2cd992815e2a41a5035f061a378008c0031e00800660d7d40",
+      "bytes": 2457,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/src/lj_state.c",
+      "relative_path": "reviewed-source/src/lj_state.c",
+      "sha256": "80d2fa440b4b81e0d460d485dcbe2fc478e2f158c2f79504e44b1a89ffc2bf64",
+      "bytes": 51955,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/src/lj_state.h",
+      "relative_path": "reviewed-source/src/lj_state.h",
+      "sha256": "b4f27d321bb82ffaa9ba446700a7a95cf29b87c4b114140c17ad5c47d55664f2",
+      "bytes": 6403,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/src/lj_str.c",
+      "relative_path": "reviewed-source/src/lj_str.c",
+      "sha256": "a256c39e9f2f05e6c6d96e2aa140d0f6e04bad5e1e7966cbff15ba08d4959975",
+      "bytes": 74125,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/src/lj_tab.c",
+      "relative_path": "reviewed-source/src/lj_tab.c",
+      "sha256": "28b2eac3dc6c0734d131cf33d3f34826ae758c9b3deb437c6bd154e0cd2fd48f",
+      "bytes": 287989,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/src/lj_tg.c",
+      "relative_path": "reviewed-source/src/lj_tg.c",
+      "sha256": "16064ba7946becbbc5cc1be2ee00eae4be39f1496c6ab85c5f4cf60f64146406",
+      "bytes": 45600,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/src/lj_tg.h",
+      "relative_path": "reviewed-source/src/lj_tg.h",
+      "sha256": "a5cb46bde2868512743795750b5a1da71cd1a581bc037da127e60b36cb994015",
+      "bytes": 50068,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/src/lj_trace.c",
+      "relative_path": "reviewed-source/src/lj_trace.c",
+      "sha256": "22727958fb2df4c3ed07126193a260f2243630ac4fc6d98d133712bd40503feb",
+      "bytes": 247545,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/src/vm_x64.dasc",
+      "relative_path": "reviewed-source/src/vm_x64.dasc",
+      "sha256": "ad48405b4793e8514307cd4efc15238dcd3a29b0d1970b452ee77952b921d64b",
+      "bytes": 192489,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/reviewed-source/tests/t-safepoint-handshake.c",
+      "relative_path": "reviewed-source/tests/t-safepoint-handshake.c",
+      "sha256": "741fdc48c8f0ff09c4ac026fed0ff1981da86b2acaafb359fa3d3c366bd1448b",
+      "bytes": 63603,
+      "storage": "git_source_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/three-mode-passing/compile.json",
+      "relative_path": "three-mode-passing/compile.json",
+      "sha256": "e4f99c9a0bca33bf898053fe9c3341a1333266bef75af0807942c0db4836401a",
+      "bytes": 823,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/three-mode-passing/compile.json"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/three-mode-passing/mode-0.json",
+      "relative_path": "three-mode-passing/mode-0.json",
+      "sha256": "a8f1b40b59791deb38dcc739dc268d37da8595fb245dff649e77abb865af417f",
+      "bytes": 537,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/three-mode-passing/mode-0.json"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/three-mode-passing/mode-1.json",
+      "relative_path": "three-mode-passing/mode-1.json",
+      "sha256": "6dc0c1413f5b859335ff270113adc0feb394dd7a18d3e26ff2325162d89f1395",
+      "bytes": 537,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/three-mode-passing/mode-1.json"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/three-mode-passing/mode-2.json",
+      "relative_path": "three-mode-passing/mode-2.json",
+      "sha256": "2b30a5c013cd6980c9ce5694cfde72a45f9826d0907596de6f11e106b5823cdb",
+      "bytes": 537,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/three-mode-passing/mode-2.json"
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/three-mode-passing/probe",
+      "relative_path": "three-mode-passing/probe",
+      "sha256": "aa44c8331f9d8ef4ec72ea5d7c75dfa8105cf34514879482963c7af4261a3fc0",
+      "bytes": 14053208,
+      "storage": "local_binary_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "native-ack",
+      "source": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/three-mode-passing/probe.c",
+      "relative_path": "three-mode-passing/probe.c",
+      "sha256": "b2126c9e6bc23d739f9778da6d2eb12a7804f920f08315a433c653937bde5494",
+      "bytes": 7464,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/native-ack/three-mode-passing/probe.c"
+    },
+    {
+      "group": "first-attach",
+      "source": "/tmp/lj-first-attach-mode0-20260905-root/build-v2.json",
+      "relative_path": "build-v2.json",
+      "sha256": "a8dcd93da71760086afad85652867efaa565fb338446eba48a6ab26352a4dcd1",
+      "bytes": 701,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/first-attach/build-v2.json"
+    },
+    {
+      "group": "first-attach",
+      "source": "/tmp/lj-first-attach-mode0-20260905-root/build.json",
+      "relative_path": "build.json",
+      "sha256": "04100097e06ec6332dd6d5d313081fbeb7382f14bdc48832b9841111458ba3fd",
+      "bytes": 695,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/first-attach/build.json"
+    },
+    {
+      "group": "first-attach",
+      "source": "/tmp/lj-first-attach-mode0-20260905-root/probe",
+      "relative_path": "probe",
+      "sha256": "bd4b1ca2db3b71a9e74fe4f1b628ec021e1e34701ffd64e5714f9fb04b976ee2",
+      "bytes": 12827840,
+      "storage": "local_binary_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "first-attach",
+      "source": "/tmp/lj-first-attach-mode0-20260905-root/probe-v2",
+      "relative_path": "probe-v2",
+      "sha256": "113e66825754015d8d45b006266b9029a2bf7f1999c10f2ee9a2d4df4603a462",
+      "bytes": 12834096,
+      "storage": "local_binary_hash_only",
+      "archived_path": null
+    },
+    {
+      "group": "first-attach",
+      "source": "/tmp/lj-first-attach-mode0-20260905-root/probe-v2.c",
+      "relative_path": "probe-v2.c",
+      "sha256": "83f5a70b3e936c32fa79830f840bc6b5ada0f30ce2efb06c4cecdabd2ba8b79f",
+      "bytes": 5302,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/first-attach/probe-v2.c"
+    },
+    {
+      "group": "first-attach",
+      "source": "/tmp/lj-first-attach-mode0-20260905-root/probe.c",
+      "relative_path": "probe.c",
+      "sha256": "72ea020ead0a56c52932382161e1139dc2346c3451462ebeb581f9b584c47ceb",
+      "bytes": 4801,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/first-attach/probe.c"
+    },
+    {
+      "group": "first-attach",
+      "source": "/tmp/lj-first-attach-mode0-20260905-root/run-v2.json",
+      "relative_path": "run-v2.json",
+      "sha256": "dfbac5d90bab9c233714bb67095f8266dc01ba6a53a6e0c914915dd1e2ba0fb7",
+      "bytes": 271,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/first-attach/run-v2.json"
+    },
+    {
+      "group": "first-attach",
+      "source": "/tmp/lj-first-attach-mode0-20260905-root/run-v2.stderr",
+      "relative_path": "run-v2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/first-attach/run-v2.stderr"
+    },
+    {
+      "group": "first-attach",
+      "source": "/tmp/lj-first-attach-mode0-20260905-root/run-v2.stdout",
+      "relative_path": "run-v2.stdout",
+      "sha256": "67b64127be0eb4615f46513de5d54ddf99f4631b87eddeb154cbb6c3879da883",
+      "bytes": 230,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/first-attach/run-v2.stdout"
+    },
+    {
+      "group": "first-attach",
+      "source": "/tmp/lj-first-attach-mode0-20260905-root/run.json",
+      "relative_path": "run.json",
+      "sha256": "959a3c10094b9c37ea089ddb60f9ca54db633ebe5efef5d18fd1aa56fc081a24",
+      "bytes": 268,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/first-attach/run.json"
+    },
+    {
+      "group": "first-attach",
+      "source": "/tmp/lj-first-attach-mode0-20260905-root/run.stderr",
+      "relative_path": "run.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/first-attach/run.stderr"
+    },
+    {
+      "group": "first-attach",
+      "source": "/tmp/lj-first-attach-mode0-20260905-root/run.stdout",
+      "relative_path": "run.stdout",
+      "sha256": "f6767102f8227c67bd334a6cb315a976e9ff545c04d68dc43e17c81bec4e3002",
+      "bytes": 184,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/first-attach/run.stdout"
+    },
+    {
+      "group": "automatic-gc",
+      "source": "/tmp/lj-auto-gc-boundary-review-20260905-ylxtfho2/review.txt",
+      "relative_path": "review.txt",
+      "sha256": "20a65142776e2327080ec1b13c075aeddd1974a4d4b2a35b1b4260371b206bc7",
+      "bytes": 3583,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/automatic-gc/review.txt"
+    },
+    {
+      "group": "automatic-gc",
+      "source": "/tmp/lj-auto-gc-boundary-review-20260905-ylxtfho2/sources.json",
+      "relative_path": "sources.json",
+      "sha256": "72a4d915a89938cc23b3facb2a15c939f9d7e7dff122a41f77bdd5e0792ede63",
+      "bytes": 612,
+      "storage": "archived_text",
+      "archived_path": "notes/evidence/native-progress-boundaries-2026-09-05/automatic-gc/sources.json"
+    }
+  ]
+}

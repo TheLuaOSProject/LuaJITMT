@@ -1,0 +1,8 @@
+{
+  "runtime": "/tmp/lj-wide-cdata-final-combined-20260905-95fv5ii6/strict",
+  "modes": {
+    "0": "before real remote root scan",
+    "1": "after real remote root scan, before epoch claim/apply",
+    "2": "after per-TG completion, before global root pass"
+  }
+}

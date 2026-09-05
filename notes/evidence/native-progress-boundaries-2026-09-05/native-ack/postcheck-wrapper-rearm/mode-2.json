@@ -1,0 +1,14 @@
+{
+  "cmd": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-native-ack-review-20260905-lg2ml_eq/probe",
+    "2"
+  ],
+  "exit": -6,
+  "status": "complete",
+  "seconds": 0.18063396800062037,
+  "stdout": "mode=2 actual_kernel_wait=202 0x7f4ea20635a8 0x80 0x1 0x0 0x0 0x0 0x7ffd67ff3378 0x7f4ea21867b9\nheld: native=0 reqmask=0 poll=1 pending=0 ack=20 epoch=20 returned=0 scan_calls=1\nrelease: leader completed, native return resumed, exact root still marked and source unchanged\n",
+  "stderr": "probe: /tmp/lj-native-ack-review-20260905-lg2ml_eq/probe.c:45: pause_owner: Assertion `lj_thr_get_tg() == &p->peer' failed.\n"
+}
