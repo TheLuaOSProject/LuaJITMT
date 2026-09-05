@@ -1,0 +1,67 @@
+{
+  "build_commands": [
+    [
+      "make",
+      "-C",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide-asan/src",
+      "clean"
+    ],
+    [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-C",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide-asan/src",
+      "-j4",
+      "BUILDMODE=static",
+      "CC=clang",
+      "CCOPT=-O1 -fno-omit-frame-pointer",
+      "CCDEBUG=-g",
+      "XCFLAGS=-DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLUA_USE_ASSERT -fsanitize=address",
+      "LDFLAGS=-fsanitize=address"
+    ]
+  ],
+  "compile_command": [
+    "clang",
+    "-std=gnu11",
+    "-O1",
+    "-g",
+    "-fno-omit-frame-pointer",
+    "-fsanitize=address",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-mcx16",
+    "-DLJ_GC2_TEST_HELPERS",
+    "-DLJ_TAB_TEST_HELPERS",
+    "-DLUA_USE_ASSERT",
+    "-I/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide-asan/src",
+    "/tmp/lj-wide-stamp-20260905-_gc0aoyc/t-wide-stamp.c",
+    "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide-asan/src/libluajit.a",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-o",
+    "/tmp/lj-wide-stamp-20260905-_gc0aoyc/fixture-wide-asan"
+  ],
+  "environment": {
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  "runs": [
+    {
+      "mode": "all",
+      "rc": 0,
+      "elapsed": 0.04060019299868145,
+      "stdout": "wide-stamp prototype: old-era proof rejected; small/huge collection continues after rollover\n",
+      "stderr": ""
+    },
+    {
+      "mode": "existing",
+      "rc": 0,
+      "elapsed": 0.1113278739994712,
+      "stdout": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n",
+      "stderr": ""
+    }
+  ]
+}

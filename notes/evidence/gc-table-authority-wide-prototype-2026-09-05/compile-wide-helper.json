@@ -1,0 +1,25 @@
+{
+  "command": [
+    "gcc",
+    "-std=gnu11",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-mcx16",
+    "-DLJ_GC2_TEST_HELPERS",
+    "-DLJ_TAB_TEST_HELPERS",
+    "-DLUA_USE_ASSERT",
+    "-I/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide-helper/src",
+    "/tmp/lj-wide-stamp-20260905-_gc0aoyc/t-wide-stamp.c",
+    "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide-helper/src/libluajit.a",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-o",
+    "/tmp/lj-wide-stamp-20260905-_gc0aoyc/fixture-wide-helper"
+  ],
+  "rc": 0,
+  "output": ""
+}

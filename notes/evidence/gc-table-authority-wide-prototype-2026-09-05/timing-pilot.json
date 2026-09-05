@@ -1,0 +1,44 @@
+[
+  {
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "32",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.1",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 1,
+    "elapsed": 0.000999174999378738,
+    "stdout": "",
+    "stderr": "taskset: failed to set pid 89780's affinity: Invalid argument\n"
+  },
+  {
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "32",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.1",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 1,
+    "elapsed": 0.0008788240011199377,
+    "stdout": "",
+    "stderr": "taskset: failed to set pid 89781's affinity: Invalid argument\n"
+  }
+]

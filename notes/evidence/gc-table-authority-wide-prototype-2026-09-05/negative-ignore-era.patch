@@ -1,0 +1,16 @@
+--- a/src/lj_gc2.c
++++ b/src/lj_gc2.c
+@@ -15564,11 +15564,10 @@
+   old = lj_arena_gc2_stamp_snapshot(s);
+   for (;;) {
+     la_u128 next;
+-    if (old.hi != captured.hi ||
+-        gc2_tabstamp_dirty(old.lo) != gc2_tabstamp_dirty(captured.lo))
++    if (gc2_tabstamp_dirty(old.lo) != gc2_tabstamp_dirty(captured.lo))
+       return 0;
+     next.lo = gc2_tabstamp_pack(cycle, gc2_tabstamp_dirty(captured.lo));
+-    next.hi = captured.hi;
++    next.hi = old.hi;
+     if (la_cas128(&s->proof, &old, next))
+       return 1;
+   }

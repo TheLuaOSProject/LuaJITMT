@@ -1,0 +1,2186 @@
+[
+  {
+    "mode": "-joff",
+    "case": "tab_store_existing",
+    "pair": 0,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 1.4036755619999894,
+    "ns_per_op": 668.42,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.2674     668.42\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_store_existing",
+    "pair": 0,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 1.4034592780008097,
+    "ns_per_op": 669.15,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.2677     669.15\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_store_existing",
+    "pair": 1,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 1.3843394220002665,
+    "ns_per_op": 659.47,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.2638     659.47\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_store_existing",
+    "pair": 1,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 1.4041730689987162,
+    "ns_per_op": 667.43,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.2670     667.43\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_store_existing",
+    "pair": 2,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 1.4065767789998063,
+    "ns_per_op": 670.16,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.2681     670.16\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_store_existing",
+    "pair": 2,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 1.4059903680008574,
+    "ns_per_op": 669.4,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.2678     669.40\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_store_existing",
+    "pair": 3,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 1.4049525630016433,
+    "ns_per_op": 669.4,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.2678     669.40\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_store_existing",
+    "pair": 3,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 1.4093891130014526,
+    "ns_per_op": 671.72,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.2687     671.72\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_store_existing",
+    "pair": 4,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 1.4103849359999003,
+    "ns_per_op": 672.56,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.2690     672.56\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_store_existing",
+    "pair": 4,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 1.3873486720003712,
+    "ns_per_op": 659.14,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.2637     659.14\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_store_existing",
+    "pair": 5,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 1.4055423509998946,
+    "ns_per_op": 669.26,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.2677     669.26\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_store_existing",
+    "pair": 5,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 1.3937934740006312,
+    "ns_per_op": 663.66,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.2655     663.66\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_store_existing",
+    "pair": 6,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 1.4111457809995045,
+    "ns_per_op": 671.6,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.2686     671.60\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_store_existing",
+    "pair": 6,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 1.408051307000278,
+    "ns_per_op": 670.72,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.2683     670.72\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_insert_newkey",
+    "pair": 0,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.08760582600007183,
+    "ns_per_op": 984.5,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0039     984.50\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_insert_newkey",
+    "pair": 0,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.09054585599915299,
+    "ns_per_op": 1055.25,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0042    1055.25\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_insert_newkey",
+    "pair": 1,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.08973271200011368,
+    "ns_per_op": 1047.0,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0042    1047.00\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_insert_newkey",
+    "pair": 1,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.08773213099993882,
+    "ns_per_op": 986.25,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0039     986.25\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_insert_newkey",
+    "pair": 2,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.08773233899955812,
+    "ns_per_op": 988.0,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0040     988.00\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_insert_newkey",
+    "pair": 2,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.08981864300039888,
+    "ns_per_op": 1050.25,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0042    1050.25\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_insert_newkey",
+    "pair": 3,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.08945223499904387,
+    "ns_per_op": 1046.75,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0042    1046.75\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_insert_newkey",
+    "pair": 3,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.08782623300066916,
+    "ns_per_op": 983.75,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0039     983.75\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_insert_newkey",
+    "pair": 4,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.08794509900144476,
+    "ns_per_op": 984.0,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0039     984.00\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_insert_newkey",
+    "pair": 4,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.0908868149999762,
+    "ns_per_op": 1050.0,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0042    1050.00\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_insert_newkey",
+    "pair": 5,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.08968708600150421,
+    "ns_per_op": 1046.75,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0042    1046.75\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_insert_newkey",
+    "pair": 5,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.08779409700036922,
+    "ns_per_op": 986.5,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0039     986.50\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_insert_newkey",
+    "pair": 6,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.08799445499971625,
+    "ns_per_op": 988.0,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0040     988.00\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "tab_insert_newkey",
+    "pair": 6,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.09013660100026755,
+    "ns_per_op": 1049.0,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0042    1049.00\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "closures_upval",
+    "pair": 0,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.9396254069997667,
+    "ns_per_op": 1572.29,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1572    1572.29\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "closures_upval",
+    "pair": 0,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.9813270350005041,
+    "ns_per_op": 1593.74,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1594    1593.74\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "closures_upval",
+    "pair": 1,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.9704123040010018,
+    "ns_per_op": 1593.53,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1594    1593.53\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "closures_upval",
+    "pair": 1,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.9315518170005817,
+    "ns_per_op": 1568.68,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1569    1568.68\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "closures_upval",
+    "pair": 2,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.9311205590001919,
+    "ns_per_op": 1566.98,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1567    1566.98\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "closures_upval",
+    "pair": 2,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.9439846140012378,
+    "ns_per_op": 1580.5,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1580    1580.50\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "closures_upval",
+    "pair": 3,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.9449490589995548,
+    "ns_per_op": 1581.42,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1581    1581.42\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "closures_upval",
+    "pair": 3,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.9309062150005047,
+    "ns_per_op": 1566.95,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1567    1566.95\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "closures_upval",
+    "pair": 4,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.9285188220001146,
+    "ns_per_op": 1561.7,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1562    1561.70\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "closures_upval",
+    "pair": 4,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.943901337999705,
+    "ns_per_op": 1578.67,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1579    1578.67\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "closures_upval",
+    "pair": 5,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.9449444240017328,
+    "ns_per_op": 1581.29,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1581    1581.29\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "closures_upval",
+    "pair": 5,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.9305929479996848,
+    "ns_per_op": 1563.52,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1564    1563.52\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "closures_upval",
+    "pair": 6,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.9305411100012861,
+    "ns_per_op": 1565.2,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1565    1565.20\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-joff",
+    "case": "closures_upval",
+    "pair": 6,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-joff",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.9452067089987395,
+    "ns_per_op": 1581.66,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1582    1581.66\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_store_existing",
+    "pair": 0,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06408081399968069,
+    "ns_per_op": 2.06,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.0008       2.06\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_store_existing",
+    "pair": 0,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06318574599936255,
+    "ns_per_op": 2.06,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.0008       2.06\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_store_existing",
+    "pair": 1,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06292250499973306,
+    "ns_per_op": 2.07,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.0008       2.07\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_store_existing",
+    "pair": 1,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06206286899941915,
+    "ns_per_op": 2.06,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.0008       2.06\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_store_existing",
+    "pair": 2,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06199134999951639,
+    "ns_per_op": 2.06,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.0008       2.06\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_store_existing",
+    "pair": 2,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06318240099972172,
+    "ns_per_op": 2.07,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.0008       2.07\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_store_existing",
+    "pair": 3,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06284578800114105,
+    "ns_per_op": 2.06,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.0008       2.06\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_store_existing",
+    "pair": 3,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06417811699975573,
+    "ns_per_op": 2.07,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.0008       2.07\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_store_existing",
+    "pair": 4,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06198043299991696,
+    "ns_per_op": 2.06,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.0008       2.06\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_store_existing",
+    "pair": 4,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06286720900061482,
+    "ns_per_op": 2.06,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.0008       2.06\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_store_existing",
+    "pair": 5,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06262586200136866,
+    "ns_per_op": 2.06,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.0008       2.06\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_store_existing",
+    "pair": 5,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.061835843000153545,
+    "ns_per_op": 2.07,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.0008       2.07\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_store_existing",
+    "pair": 6,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06187934400077211,
+    "ns_per_op": 2.06,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.0008       2.06\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_store_existing",
+    "pair": 6,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06378745900110516,
+    "ns_per_op": 2.07,
+    "stdout": "benchmark               total_s      ns/op\ntab_store_existing       0.0008       2.07\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_insert_newkey",
+    "pair": 0,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06559894000019995,
+    "ns_per_op": 103.25,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0004     103.25\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_insert_newkey",
+    "pair": 0,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06649655100045493,
+    "ns_per_op": 105.5,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0004     105.50\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_insert_newkey",
+    "pair": 1,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06645144999856711,
+    "ns_per_op": 104.5,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0004     104.50\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_insert_newkey",
+    "pair": 1,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06564355000045907,
+    "ns_per_op": 102.5,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0004     102.50\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_insert_newkey",
+    "pair": 2,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06573574699905294,
+    "ns_per_op": 102.25,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0004     102.25\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_insert_newkey",
+    "pair": 2,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06660628499957966,
+    "ns_per_op": 107.0,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0004     107.00\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_insert_newkey",
+    "pair": 3,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.0663124679995235,
+    "ns_per_op": 105.5,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0004     105.50\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_insert_newkey",
+    "pair": 3,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.0655778830005147,
+    "ns_per_op": 102.5,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0004     102.50\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_insert_newkey",
+    "pair": 4,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06550557499940624,
+    "ns_per_op": 103.0,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0004     103.00\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_insert_newkey",
+    "pair": 4,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06692581000061182,
+    "ns_per_op": 104.25,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0004     104.25\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_insert_newkey",
+    "pair": 5,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06646625299981679,
+    "ns_per_op": 104.25,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0004     104.25\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_insert_newkey",
+    "pair": 5,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06551044100160652,
+    "ns_per_op": 101.75,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0004     101.75\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_insert_newkey",
+    "pair": 6,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06566253800156119,
+    "ns_per_op": 100.75,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0004     100.75\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "tab_insert_newkey",
+    "pair": 6,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "tab_insert_newkey"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.06655595099982747,
+    "ns_per_op": 105.25,
+    "stdout": "benchmark               total_s      ns/op\ntab_insert_newkey        0.0004     105.25\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "closures_upval",
+    "pair": 0,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.8732765290005773,
+    "ns_per_op": 1577.58,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1578    1577.58\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "closures_upval",
+    "pair": 0,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.880634948000079,
+    "ns_per_op": 1593.35,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1593    1593.35\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "closures_upval",
+    "pair": 1,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.880371336999815,
+    "ns_per_op": 1589.5,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1589    1589.50\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "closures_upval",
+    "pair": 1,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.8721289250006521,
+    "ns_per_op": 1571.33,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1571    1571.33\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "closures_upval",
+    "pair": 2,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.8729954129994439,
+    "ns_per_op": 1574.66,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1575    1574.66\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "closures_upval",
+    "pair": 2,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.8812458620013786,
+    "ns_per_op": 1591.28,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1591    1591.28\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "closures_upval",
+    "pair": 3,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.8804339449998224,
+    "ns_per_op": 1589.19,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1589    1589.19\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "closures_upval",
+    "pair": 3,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.8728993200002151,
+    "ns_per_op": 1571.52,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1572    1571.52\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "closures_upval",
+    "pair": 4,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.8729267879989493,
+    "ns_per_op": 1572.85,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1573    1572.85\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "closures_upval",
+    "pair": 4,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.8808573120004439,
+    "ns_per_op": 1592.06,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1592    1592.06\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "closures_upval",
+    "pair": 5,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.8808582569999999,
+    "ns_per_op": 1591.03,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1591    1591.03\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "closures_upval",
+    "pair": 5,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.8731524640006683,
+    "ns_per_op": 1575.78,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1576    1575.78\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "closures_upval",
+    "pair": 6,
+    "kind": "base",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.8723592050009756,
+    "ns_per_op": 1570.64,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1571    1570.64\n",
+    "stderr": ""
+  },
+  {
+    "mode": "-jon",
+    "case": "closures_upval",
+    "pair": 6,
+    "kind": "wide",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-jon",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.02",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/?.lua;;"
+    },
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.88072777600064,
+    "ns_per_op": 1594.36,
+    "stdout": "benchmark               total_s      ns/op\nclosures_upval           0.1594    1594.36\n",
+    "stderr": ""
+  }
+]

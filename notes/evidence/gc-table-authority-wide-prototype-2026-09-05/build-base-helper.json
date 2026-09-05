@@ -1,0 +1,18 @@
+{
+  "kind": "base-helper",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base-helper/src",
+    "-j4",
+    "BUILDMODE=static",
+    "XCFLAGS=-DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLUA_USE_ASSERT"
+  ],
+  "rc": 0,
+  "elapsed": 12.686341099999481,
+  "binary_sha256": "01e325884abd07a84b20368af4c2034b684a23c7ae3e6caedd2c2e9825f0cf5f",
+  "archive_sha256": "3d25d1614378efc054aa54bbcefaa2d6ceac01b43d4aecade420cdb470eebb6f"
+}

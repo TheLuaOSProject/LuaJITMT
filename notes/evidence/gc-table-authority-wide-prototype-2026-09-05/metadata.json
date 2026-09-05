@@ -1,0 +1,31 @@
+{
+  "base_commit": "d680421c4cb50b85437d88255bc89358c5e3a6b1",
+  "source_repository": "/workspaces/lj-lockless",
+  "layout": "AoS, isolated prototype only",
+  "timing_cpu": 32,
+  "cpu_used": 31,
+  "setup_failure": "CPU32 outside sched_getaffinity (0\u201331), preserved timing-pilot.json",
+  "compiler": "gcc (Debian 14.2.0-19) 14.2.0",
+  "asan_compiler": "Debian clang version 19.1.7 (3+b1)",
+  "tree_manifest": "source-binary-manifest.json",
+  "prototype_source_files": [
+    "src/lj_arena.c",
+    "src/lj_arena.h",
+    "src/lj_gc2.c"
+  ],
+  "artifact_hashes": {
+    "build.py": "e2a6acf0cffc858cf8f1c481e916397efd5726eb0c42d12807bf35041d2caff1",
+    "coalescing-adapter.c": "f61e4b366797dc028e9897e660c9cdcf88d987ec6cb9274844c34881817b54f9",
+    "t-wide-stamp.c": "84e4d01b334038179d2966f345a7517bc827864b1b0d8a071227b8d1bc9e1db2",
+    "fixture-wide-helper": "9cc3387b7567371c3e23edc74dd7d4ad0c551223fe024b24c48faf70cde25481",
+    "fixture-base-helper": "f9951e469fe8b5f6002185c6b94690bb23d18a265c99ba436fa1b83b0d93f4c0",
+    "traverse-adapter.c": "4bf6e0f28d3805d339588787cdc8359d45752c64e3018ea67a7efa136cdc6a7c",
+    "validate.py": "d55477d250905844663dd6aa6c5217d3509921db86f2091c3f2c6285053fba09",
+    "validate-asan.py": "61dc9acc594c4eddb42a80a594c9f035e7467d40a9cc1fee2184323db39fb47f",
+    "validate-negative.py": "79cd0a2f5c63e7372ad40763a5d91d7cae4d18f7a4b42dd6654407cca78a5941",
+    "fixture-ignore-era": "7ba97bc732b25f99c190078984fa30403730a326db35920642219301b17b4b65",
+    "fixture-wide-asan": "728d8e9b7027aa6184af3751294e168ab350bfb69a09a297927b2c29c172025c",
+    "benchmark.py": "d109fa08c63b63d0c3b1b927d6d650cb2494902219ad3f15bec7b40dabae7ff2",
+    "layout.c": "55aa704613fe28a07dbf222abe33812dcb5a790434c3563609e3814379298487"
+  }
+}

@@ -1,0 +1,185 @@
+[
+  {
+    "name": "stock-base-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-joff",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/tests/stock/test",
+    "rc": 0,
+    "elapsed": 2.5132593430007546,
+    "stdout": "387 passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "stock-base-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src/luajit",
+      "-jon",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/tests/stock/test",
+    "rc": 0,
+    "elapsed": 2.5348987149991444,
+    "stdout": "509 passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "stock-wide-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-joff",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/tests/stock/test",
+    "rc": 0,
+    "elapsed": 2.396490538998478,
+    "stdout": "387 passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "stock-wide-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit",
+      "-jon",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/tests/stock/test",
+    "rc": 0,
+    "elapsed": 2.312672449001184,
+    "stdout": "509 passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-traverse",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide-helper/src",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/traverse-adapter.c",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide-helper/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/related-traverse"
+    ],
+    "cwd": null,
+    "rc": 1,
+    "elapsed": 0.07090021100157173,
+    "stdout": "",
+    "stderr": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/traverse-adapter.c:40:10: fatal error: lib/thread_fixture_helpers.h: No such file or directory\n   40 | #include \"lib/thread_fixture_helpers.h\"\n      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\ncompilation terminated.\n"
+  },
+  {
+    "name": "compile-recovery",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide-helper/src",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide-helper/tests/t-gc2-recovery.c",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide-helper/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/related-recovery"
+    ],
+    "cwd": null,
+    "rc": 0,
+    "elapsed": 0.7192266940000991,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "recovery",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/related-recovery"
+    ],
+    "cwd": null,
+    "rc": 0,
+    "elapsed": 0.3146045800003776,
+    "stdout": "t-gc2-recovery OK: no-drop SSB/recovery, exact huge-lane accounting/skip, SWEEP-stable late/saturated admission, retryable Huge destructors, held-reader SMR bypass, bounded terminal free, cyclic private/metadata edges, free/lifetime races, constructor overlap, closure vetoes, empty-string SWEEP, sticky failure, and REDIRTY replay verified\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-guard",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide-helper/src",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide-helper/tests/t-gc2-table-store-guard.c",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide-helper/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/related-guard"
+    ],
+    "cwd": null,
+    "rc": 0,
+    "elapsed": 0.6960455230000662,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "guard",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/related-guard"
+    ],
+    "cwd": null,
+    "rc": 0,
+    "elapsed": 0.05114193599911232,
+    "stdout": "t-gc2-table-store-guard OK: root-gate store guard substrate\n",
+    "stderr": ""
+  }
+]

@@ -1,0 +1,36 @@
+{
+  "compile_command": [
+    "gcc",
+    "-std=gnu11",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-mcx16",
+    "-DLJ_GC2_TEST_HELPERS",
+    "-DLJ_TAB_TEST_HELPERS",
+    "-DLUA_USE_ASSERT",
+    "-I/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide-helper/src",
+    "-I/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide-helper/tests",
+    "/tmp/lj-wide-stamp-20260905-_gc0aoyc/traverse-adapter.c",
+    "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide-helper/src/libluajit.a",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-o",
+    "/tmp/lj-wide-stamp-20260905-_gc0aoyc/related-traverse"
+  ],
+  "compile_rc": 0,
+  "compile_stderr": "",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-wide-stamp-20260905-_gc0aoyc/related-traverse"
+  ],
+  "rc": 0,
+  "elapsed": 0.15238526900066063,
+  "stdout": "t-gc2-traverse OK: SSB grey traversal verified\n",
+  "stderr": ""
+}

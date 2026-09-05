@@ -1,0 +1,17 @@
+{
+  "kind": "base",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src",
+    "-j4",
+    "BUILDMODE=static"
+  ],
+  "rc": 0,
+  "elapsed": 12.18847858999925,
+  "binary_sha256": "47445ca81b1e4ef4b6e9c965b076843a63dd7d88743b446fa775c11c9b24dd88",
+  "archive_sha256": "0caa0fd2d5e485e7c8bc70f41e6909499b6cdf08fd95d64f2dae999b5368415b"
+}

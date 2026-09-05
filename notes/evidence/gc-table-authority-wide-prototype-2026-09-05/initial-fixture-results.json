@@ -1,0 +1,34 @@
+[
+  {
+    "kind": "wide-helper",
+    "mode": "pause",
+    "rc": 0,
+    "elapsed": 0.003853133999655256,
+    "stdout": "wide-stamp prototype: old-era proof rejected; small/huge collection continues after rollover\n",
+    "stderr": ""
+  },
+  {
+    "kind": "wide-helper",
+    "mode": "collect",
+    "rc": 0,
+    "elapsed": 0.012980719000552199,
+    "stdout": "wide-stamp prototype: old-era proof rejected; small/huge collection continues after rollover\n",
+    "stderr": ""
+  },
+  {
+    "kind": "wide-helper",
+    "mode": "existing",
+    "rc": 0,
+    "elapsed": 0.040180469999540946,
+    "stdout": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n",
+    "stderr": ""
+  },
+  {
+    "kind": "base-helper",
+    "mode": "collect",
+    "rc": -6,
+    "elapsed": 0.21279088799929013,
+    "stdout": "",
+    "stderr": "fixture-base-helper: /tmp/lj-wide-stamp-20260905-_gc0aoyc/t-wide-stamp.c:85: test_continued_collection: Assertion `!lj_gc2_activation_reclaim_veto(f.g)' failed.\n"
+  }
+]

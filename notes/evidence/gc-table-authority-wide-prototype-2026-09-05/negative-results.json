@@ -1,0 +1,45 @@
+{
+  "build_command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-wide-stamp-20260905-_gc0aoyc/negative-ignore-era/src",
+    "-j2",
+    "BUILDMODE=static",
+    "XCFLAGS=-DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLUA_USE_ASSERT"
+  ],
+  "compile_command": [
+    "gcc",
+    "-std=gnu11",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-mcx16",
+    "-DLJ_GC2_TEST_HELPERS",
+    "-DLJ_TAB_TEST_HELPERS",
+    "-DLUA_USE_ASSERT",
+    "-I/tmp/lj-wide-stamp-20260905-_gc0aoyc/negative-ignore-era/src",
+    "/tmp/lj-wide-stamp-20260905-_gc0aoyc/t-wide-stamp.c",
+    "/tmp/lj-wide-stamp-20260905-_gc0aoyc/negative-ignore-era/src/libluajit.a",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-o",
+    "/tmp/lj-wide-stamp-20260905-_gc0aoyc/fixture-ignore-era"
+  ],
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-wide-stamp-20260905-_gc0aoyc/fixture-ignore-era",
+    "pause"
+  ],
+  "rc": -6,
+  "elapsed": 0.12294108900096035,
+  "stdout": "",
+  "stderr": "fixture-ignore-era: /tmp/lj-wide-stamp-20260905-_gc0aoyc/coalescing-adapter.c:244: assert_graph: Assertion `lj_gc2_ismarked(f->g, obj2gco(f->child)) == 1' failed.\n"
+}

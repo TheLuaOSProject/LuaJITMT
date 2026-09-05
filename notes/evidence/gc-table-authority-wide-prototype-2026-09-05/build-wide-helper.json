@@ -1,0 +1,18 @@
+{
+  "kind": "wide-helper",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide-helper/src",
+    "-j4",
+    "BUILDMODE=static",
+    "XCFLAGS=-DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLUA_USE_ASSERT"
+  ],
+  "rc": 0,
+  "elapsed": 12.696598544999688,
+  "binary_sha256": "175961bf8ae0ad5c626b479aeb5b28f04a094adfd6527b396057e2548999f355",
+  "archive_sha256": "c061c4f3c83f83f626ac6e149cb7e00f39820334c7c90d11d7c40218bd49ca3a"
+}

@@ -1,0 +1,40 @@
+{
+  "base": {
+    "compile_command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-mcx16",
+      "-I/tmp/lj-wide-stamp-20260905-_gc0aoyc/base/src",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/layout.c",
+      "-o",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/layout-base"
+    ],
+    "measurements": {
+      "stamp_bytes": 16,
+      "sidecar_bytes": 65536,
+      "arena_header_bytes": 128,
+      "first_cell": 616,
+      "token_offset": 8
+    }
+  },
+  "wide": {
+    "compile_command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-mcx16",
+      "-I/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/layout.c",
+      "-o",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/layout-wide"
+    ],
+    "measurements": {
+      "stamp_bytes": 32,
+      "sidecar_bytes": 131072,
+      "arena_header_bytes": 160,
+      "first_cell": 618,
+      "token_offset": 16
+    }
+  }
+}

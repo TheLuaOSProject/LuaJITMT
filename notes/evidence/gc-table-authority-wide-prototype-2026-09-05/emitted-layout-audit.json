@@ -1,0 +1,72 @@
+{
+  "status": "original_prototype_invalid_for_integrated_correctness_or_design_selection_timing",
+  "source_commit": "d680421c4cb50b85437d88255bc89358c5e3a6b1",
+  "tree": "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide",
+  "finding": "Four hard-coded SHL 4 sidecar index operations were not adapted to the 32-byte AoS stamp. Odd-cell low-word reset aliases another cell token; even-cell reset aliases another proof.",
+  "omitted_source_sites": [
+    {
+      "file": "src/vm_x64.dasc",
+      "line": 4541,
+      "operation": "TNEW precheck cell SHL 4"
+    },
+    {
+      "file": "src/vm_x64.dasc",
+      "line": 4654,
+      "operation": "TNEW post-claim check/reset cell SHL 4"
+    },
+    {
+      "file": "src/lj_asm_x86.h",
+      "line": 1582,
+      "operation": "FNEW post-claim check/reset stamp base SHL 4"
+    },
+    {
+      "file": "src/lj_asm_x86.h",
+      "line": 1643,
+      "operation": "FNEW precheck stamp base SHL 4"
+    }
+  ],
+  "source_binary_sha256": {
+    "src/vm_x64.dasc": "ad48405b4793e8514307cd4efc15238dcd3a29b0d1970b452ee77952b921d64b",
+    "src/lj_asm_x86.h": "e5c4bd5411014c84bfc1704f60b24e8efe41bde66ea240908a2af4caaf527742",
+    "src/lj_arena.c": "fc067e1a887fb876ccc7b893cd0c91a1295efb2593d04f8fd89e9c2118bb2f2f",
+    "src/lj_arena.h": "634adf2745ce8f4d979f1927712451249ac87f77ab1f2c6593b1c16df4c83390",
+    "src/lj_gc2.c": "1b6c7121b2eab80886aa62a540458733cece6281cc2f6c337e88617067b32c78",
+    "src/lj_vm.o": "1ca10480ffc227735116f43a69b5474b10dbc1b0a9c31c69bb96c9410087065a",
+    "src/lj_asm.o": "dec61d4eb5201880d8296e319f1774d7f7f59de24a7110466d1c95fb3115ff2a",
+    "src/luajit": "94b089895196c108d0603db804a8ae78f9187ab8a951ad7a650048d80cbdb4f5",
+    "src/libluajit.a": "16557f80ebdb7ead7238e5f552c8c36db20520754b0e7873eedfd7f374d6a05e"
+  },
+  "object_check": {
+    "command": [
+      "objdump",
+      "-d",
+      "--disassemble=lj_BC_TNEW",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/lj_vm.o"
+    ],
+    "rc": 0,
+    "output": "wide-tnew.disasm",
+    "sha256": "c5e8a8e22845e870cd2d110cfc638d5a3a402d44a17a38b807f0aadd5c80bc3e",
+    "instructions": {
+      "0xf57": "49 c1 e3 04; shl $4,%r11",
+      "0xf5b": "42 f6 44 18 10 03; testb $3,+0x10(%rax,%r11)",
+      "0x10ee": "49 c1 e1 04; shl $4,%r9",
+      "0x10f5": "f6 41 10 03; testb $3,+0x10(%rcx)",
+      "0x11e3": "48 c7 01 00 00 00 00; movq $0,(%rcx)"
+    }
+  },
+  "inspection_setup_failure": {
+    "command": [
+      "nm",
+      "/tmp/lj-wide-stamp-20260905-_gc0aoyc/wide/src/luajit"
+    ],
+    "rc": 1,
+    "stderr": "nm: src/luajit: no symbols",
+    "resolution": "Inspect existing unstripped src/lj_vm.o; no binary rebuilt."
+  },
+  "evidence_impact": {
+    "runtime_runs": "Preserved; cannot establish correct integrated AoS prototype. Original controls did not cover emitted-path reused/promoted sidecar identities.",
+    "timing": "All wide/baseline ratios withdrawn as design-selection evidence; no corrected measurement exists.",
+    "layout": "Compiled sizeof/offset and allocation-size measurements remain valid.",
+    "source_changes": "No shared production or frozen prototype runtime source edits during this audit."
+  }
+}
