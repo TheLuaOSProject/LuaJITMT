@@ -1,0 +1,30 @@
+--- a/tests/t-tab-resize-stress.lua
++++ b/tests/t-tab-resize-stress.lua
+@@ -605,11 +605,26 @@
+   if okjit and jitmod.status() then
+     jitmod.opt.start("hotloop=1", "hotexit=1")
+   end
++  local starts, stops, aborts, exits = 0, 0, 0, 0
++  local function record_event(what)
++    if what == "start" then starts = starts + 1 end
++    if what == "stop" then stops = stops + 1 end
++    if what == "abort" then aborts = aborts + 1 end
++  end
++  local function exit_event() exits = exits + 1 end
++  jitmod.off(record_event, true)
++  jitmod.off(exit_event, true)
++  jitmod.attach(record_event, "trace")
++  jitmod.attach(exit_event, "texit")
+   local traces0 = jith.trace_count(256)
+   for warm = 1, 128 do
+     tbl[key] = warm
+   end
+-  local traced = jith.trace_count(256) > traces0
++  local traces1 = jith.trace_count(256)
++  jitmod.attach(record_event)
++  jitmod.attach(exit_event)
++  local traced = traces1 > traces0
++  print("jit-store-diagnostic", key, tostring(jitmod.status()), traces0, traces1, starts, stops, aborts, exits)
+   assert(ready:send(true, 10) == true)
+   local _, ok = start:recv(10)
+   assert(ok == true)

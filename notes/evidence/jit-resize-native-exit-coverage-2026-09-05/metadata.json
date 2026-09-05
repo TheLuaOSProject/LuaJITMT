@@ -1,0 +1,16 @@
+{
+  "source_tree": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf",
+  "production_commit": "d680421c",
+  "normal_binary_sha256": "981164c388957d9dbfc8d63665a0403a2fb76942a8e387dea9711558850e9a2a",
+  "assert_archive_sha256": "d390236098789ccbe80b674de4c96c6bf6f80c946660b24732622a8a5ce6c839",
+  "tests": {
+    "tests/t-tab-rooted-get-try.c": "ef44dd4fb8cbece95933e6dd10257f97a6aff07d13ea18c5be4b134d6f217d8b",
+    "tests/t-tab-rooted-len-try.c": "0d2840f7dbcdef692199a844e31aa35cb1ae0f5c9d497d3d04e9c326d844fa9e",
+    "tests/t-tab-resize-stress.lua": "40896998d152d0a36eb8ceb6166055e8e0e0e1679f3c1aa3c6e88a1278672813",
+    "tests/t-strtab-gc-stress.lua": "4d7b5ccfab5460dccf26363067a27f9b27aa469b60862722c6531bc6dcee8c49",
+    "tests/t-buffer-thread-safety.lua": "de6e1f387081af862fff69b022569ca3888f39800304addd2832d4fbf214eed5",
+    "tests/t-jit-trace-gc-pressure.lua": "9d9d0165e3b425ba121e1fd01f4363b22f59add22b54d081cbc715ca0d8eb0cd"
+  },
+  "purpose": "Broader Linux concurrency stability check of landed coalescing/JIT code. No pending allocator/scalar changes.",
+  "all_tracked_production_files_match": true
+}

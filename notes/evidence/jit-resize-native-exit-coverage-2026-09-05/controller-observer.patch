@@ -1,0 +1,121 @@
+--- a/tests/t-tab-resize-stress.lua
++++ b/tests/t-tab-resize-stress.lua
+@@ -600,16 +600,42 @@
+ 	 "metatable __index probe changed after resize")
+ end
+ 
++-- Live trace counts are shared and can fall during collection; traceinfo also
++-- returns no snapshot when a peer owns the recorder. Observe native exits in
++-- the workers' actual resize loops instead of subtracting two global counts.
++-- Attachments are universe-wide: the controller installs one stable handler
++-- after every worker is ready and keeps it through every join. The monotone
++-- per-worker witnesses exclude native execution by the controller itself.
++local function watch_worker_jit_exits(workers)
++  local seen = {}
++  for i = 1, #workers do seen[workers[i]:id()] = false end
++  local function onexit()
++    local id = th.current():id()
++    if seen[id] ~= nil then seen[id] = true end
++  end
++  local function finish()
++    jit.attach(onexit)
++    local exits = 0
++    for _, hit in pairs(seen) do
++      if hit then exits = exits + 1 end
++    end
++    return exits
++  end
++  jit.off(onexit, true)
++  jit.off(finish, true)
++  jit.attach(onexit, "texit")
++  return finish
++end
++jit.off(watch_worker_jit_exits, true)
++
+ local function jit_store_worker(tbl, ready, start, key, n)
+   local okjit, jitmod = pcall(require, "jit")
+   if okjit and jitmod.status() then
+     jitmod.opt.start("hotloop=1", "hotexit=1")
+   end
+-  local traces0 = jith.trace_count(256)
+   for warm = 1, 128 do
+     tbl[key] = warm
+   end
+-  local traced = jith.trace_count(256) > traces0
+   assert(ready:send(true, 10) == true)
+   local _, ok = start:recv(10)
+   assert(ok == true)
+@@ -619,7 +645,7 @@
+     if i % 257 == 0 then tbl[key + 64] = nil end
+     i = i + 1
+   end
+-  return true, traced and 1 or 0
++  return true
+ end
+ 
+ local function exercise_jit_store_resize()
+@@ -632,6 +658,7 @@
+     workers[i] = th.spawn(jit_store_worker, t, ready, start, i, jit_reps)
+   end
+   harness.wait_ready(ready, nworkers, 10, "jit resize")
++  local finish_exits = watch_worker_jit_exits(workers)
+   harness.release_start(start, nworkers, 10)
+   for i = 1, reps do
+     local k = 10000 + i
+@@ -639,12 +666,11 @@
+     if i % 3 == 0 then t[k - 1] = nil end
+     if i % 32 == 0 then collectgarbage("step") end
+   end
+-  local store_traces = 0
+-  harness.join_each(workers, function(result, _, traces)
++  harness.join_each(workers, function(result)
+     assert(result == true, tostring(result))
+-    store_traces = store_traces + (traces or 0)
+   end, 30)
+-  assert(store_traces > 0, "JIT resize store workers did not trace")
++  assert(finish_exits() > 0,
++	 "JIT resize store workers did not execute native code")
+   for i = 1, nworkers do
+     assert(t[i] == jit_reps, "traced store lost update across resize")
+     assert_lua_value(t[i], "jit resize")
+@@ -658,7 +684,6 @@
+   if okjit and jitmod.status() then
+     jitmod.opt.start("hotloop=1", "hotexit=1")
+   end
+-  local traces0 = jith.trace_count(256)
+   assertf(ready:send(true, 10) == true)
+   local _, ok = start:recv(10)
+   assertf(ok == true)
+@@ -675,7 +700,7 @@
+     if i % 251 == 0 then collect("step") end
+     i = i + 1
+   end
+-  return true, jith.trace_count(256) - traces0
++  return true
+ end
+ 
+ local function exercise_jit_read_resize()
+@@ -692,6 +717,7 @@
+ 			  "read:" .. i, i, jit_read_reps)
+   end
+   harness.wait_ready(ready, nreaders, 10, "jit read resize")
++  local finish_exits = watch_worker_jit_exits(workers)
+   harness.release_start(start, nreaders, 10)
+   for i = 1, reps do
+     local k = 20000 + i
+@@ -700,12 +726,11 @@
+     if i > 8 and i % 5 == 0 then t["grow:" .. (i - 4)] = nil end
+     if i % 32 == 0 then collectgarbage("step") end
+   end
+-  local read_traces = 0
+-  harness.join_each(workers, function(result, _, traces)
++  harness.join_each(workers, function(result)
+     assert(result == true, tostring(result))
+-    read_traces = read_traces + (traces or 0)
+   end, 30)
+-  assert(read_traces > 0, "JIT resize read workers did not trace")
++  assert(finish_exits() > 0,
++	 "JIT resize read workers did not execute native code")
+   for i = 1, nreaders do
+     assert(t[i] == i, "stable array key changed after traced resize reads")
+     assert(t["read:" .. i] == i, "stable hash key changed after traced resize reads")

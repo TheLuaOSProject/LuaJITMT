@@ -1,0 +1,15 @@
+{
+  "base_commit": "d680421c4cb50b85437d88255bc89358c5e3a6b1",
+  "source_sha256": {
+    "base": "40896998d152d0a36eb8ceb6166055e8e0e0e1679f3c1aa3c6e88a1278672813",
+    "jitstore-diagnostic.lua": "8c8c72ddf451b337c9e7dcd64cea321a8fd7ec6f649a5b1d9124c18f78019bde",
+    "jitstore-diagnostic-complete.lua": "4da37c8fff0b9735609f0156dd04e402f901a74a3ae90c8c48fa29b2c197e4e1",
+    "resize-native-exit.lua": "1ad862b489c9859d2f243e586711c4e29b78b8b5d37881b779a88bcf08cef5c0",
+    "resize-no-worker-jit.lua": "c04e1d99c00fd44b006d7a714738930fd9058c43c74fa84da9fd7cccec00b4b2",
+    "resize-native-exit-v2.lua": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "resize-no-worker-jit-v2.lua": "d3b16c370fe4be5e7ef549b080cecb333544710c949e8d9accce182af0160c27",
+    "resize-final.lua": "d42f9e5e618c8cb225ee76f61f2296eb5c447cef0c5de94619231122c285feff",
+    "resize-final-no-worker-jit.lua": "0838f33a549c2d7cc31091b03e6693a2c74cefd7635bd005664fc942adab39bb"
+  },
+  "final_shared_git_blob": "eb615239b11f44afff65652e8c1b7095614532a5"
+}

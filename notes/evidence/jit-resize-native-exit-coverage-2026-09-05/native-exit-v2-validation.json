@@ -1,0 +1,1682 @@
+[
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.02435539299949596,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.0232990519998566,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 3,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.020450405001611216,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 4,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.02311464500053262,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 5,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.023428464999597054,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 6,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.020242614999006037,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 7,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.022113783999884618,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 8,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.020133214000452426,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 9,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.02018411599965475,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 10,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.01850050699977146,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 11,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.021571638999375864,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 12,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.02140933200098516,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 13,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.022014100999513175,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 14,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.01879405200088513,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 15,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.018839853999452316,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 16,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.022482450998722925,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 17,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.02049693099979777,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 18,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.021131330000571324,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 19,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.020797689001483377,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 20,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.02106833800098684,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 21,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.01873156600049697,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 22,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.02095295799881569,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 23,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.018370873000094434,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 24,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.02208893699935288,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 25,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.01909881299980043,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 26,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.022715020000759978,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 27,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.02054344700081856,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 28,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.021352895000745775,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 29,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.018944559998999466,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 30,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.020397635000335868,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 31,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.01745389899951988,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 32,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.019858097000906128,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 33,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.02077265600019018,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 34,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.02122077100102615,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 35,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.019426169999860576,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 36,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.022480465999251464,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 37,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.02236734099824389,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 38,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.02288290299838991,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 39,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.018158442000640207,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 40,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.02205013099955977,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 41,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.02029682400097954,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 42,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.019437795999692753,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 43,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.020148305999100558,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 44,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.021375729000283172,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 45,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.020430541000678204,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 46,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.021220639999228297,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 47,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.021065046001240262,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 48,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.02182004600035725,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 49,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.01832821599964518,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 50,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.02260112000112713,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.02966876500067883,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.026999346000593505,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 3,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.04000050899958296,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 4,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.03488707699943916,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 5,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.029002368999499595,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 6,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.03517718500006595,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 7,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.030938742000216735,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 8,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.028540719000375248,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 9,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.033289622000665986,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 10,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.04179319399918313,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 11,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.027810114001113106,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 12,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.029853244001060375,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 13,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.02949735000038345,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 14,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.028501769000286004,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 15,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.028342666000753525,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 16,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.049429591999796685,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 17,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.02721477699924435,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 18,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.02807114300048852,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 19,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.03392559299936693,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 20,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.027496855000208598,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore,jitread,jititer",
+    "attempt": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 1.1543249169990304,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore,jitread,jititer",
+    "attempt": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 1.1819903810010146,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore,jitread,jititer",
+    "attempt": 3,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 1.1378841329988063,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore,jitread,jititer",
+    "attempt": 4,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 1.193552061000446,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore,jitread,jititer",
+    "attempt": 5,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 1.2397715960014466,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore,jitread",
+    "attempt": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.07017724700017425,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore,jitread",
+    "attempt": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.06926880100036215,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore,jitread",
+    "attempt": 3,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.07040657300058228,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore,jitread",
+    "attempt": 4,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.06968106500062277,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore,jitread",
+    "attempt": 5,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.06960543200148095,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "joff",
+    "case": "jitstore",
+    "attempt": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 1,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.012766117000865052,
+    "stdout": "",
+    "stderr": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit: ...mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua:672: JIT resize store workers did not execute native code\nstack traceback:\n\t[C]: in function 'assert'\n\t...mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua:672: in function 'fn'\n\t...mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua:51: in function 'run_case'\n\t...mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua:1717: in main chunk\n\t[C]: at 0x55664857b100\n"
+  },
+  {
+    "variant": "joff",
+    "case": "jitread",
+    "attempt": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua"
+    ],
+    "fixture_sha256": "c6bec5eda4035acc69407f5d27c44d2e105a6b80c7716b108be8e746d2099751",
+    "exit": 1,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.03703874199891288,
+    "stdout": "",
+    "stderr": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit: ...mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua:732: JIT resize read workers did not execute native code\nstack traceback:\n\t[C]: in function 'assert'\n\t...mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua:732: in function 'fn'\n\t...mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua:51: in function 'run_case'\n\t...mt-stability-20260905-kuhlxghc/resize-native-exit-v2.lua:1718: in main chunk\n\t[C]: at 0x556efc4e4100\n"
+  },
+  {
+    "variant": "no-worker-jit",
+    "case": "jitstore",
+    "attempt": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-no-worker-jit-v2.lua"
+    ],
+    "fixture_sha256": "d3b16c370fe4be5e7ef549b080cecb333544710c949e8d9accce182af0160c27",
+    "exit": 1,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.012556874000438256,
+    "stdout": "",
+    "stderr": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit: ...-stability-20260905-kuhlxghc/resize-no-worker-jit-v2.lua:673: JIT resize store workers did not execute native code\nstack traceback:\n\t[C]: in function 'assert'\n\t...-stability-20260905-kuhlxghc/resize-no-worker-jit-v2.lua:673: in function 'fn'\n\t...-stability-20260905-kuhlxghc/resize-no-worker-jit-v2.lua:51: in function 'run_case'\n\t...-stability-20260905-kuhlxghc/resize-no-worker-jit-v2.lua:1719: in main chunk\n\t[C]: at 0x558151376100\n"
+  },
+  {
+    "variant": "no-worker-jit",
+    "case": "jitread",
+    "attempt": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-no-worker-jit-v2.lua"
+    ],
+    "fixture_sha256": "d3b16c370fe4be5e7ef549b080cecb333544710c949e8d9accce182af0160c27",
+    "exit": 1,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.03253065300123126,
+    "stdout": "",
+    "stderr": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit: ...-stability-20260905-kuhlxghc/resize-no-worker-jit-v2.lua:734: JIT resize read workers did not execute native code\nstack traceback:\n\t[C]: in function 'assert'\n\t...-stability-20260905-kuhlxghc/resize-no-worker-jit-v2.lua:734: in function 'fn'\n\t...-stability-20260905-kuhlxghc/resize-no-worker-jit-v2.lua:51: in function 'run_case'\n\t...-stability-20260905-kuhlxghc/resize-no-worker-jit-v2.lua:1720: in main chunk\n\t[C]: at 0x555d4eb28100\n"
+  }
+]

@@ -1,0 +1,97 @@
+[
+  {
+    "variant": "positive",
+    "case": "jitstore,jitread,jititer",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-final.lua"
+    ],
+    "fixture_sha256": "d42f9e5e618c8cb225ee76f61f2296eb5c447cef0c5de94619231122c285feff",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 1.131108731000495,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "negative",
+    "case": "jitstore",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-final.lua"
+    ],
+    "fixture_sha256": "d42f9e5e618c8cb225ee76f61f2296eb5c447cef0c5de94619231122c285feff",
+    "exit": 1,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.01221742199959408,
+    "stdout": "",
+    "stderr": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit: ...alescing-mt-stability-20260905-kuhlxghc/resize-final.lua:674: no native exit observed from JIT resize store workers\nstack traceback:\n\t[C]: in function 'assert'\n\t...alescing-mt-stability-20260905-kuhlxghc/resize-final.lua:674: in function 'fn'\n\t...alescing-mt-stability-20260905-kuhlxghc/resize-final.lua:51: in function 'run_case'\n\t...alescing-mt-stability-20260905-kuhlxghc/resize-final.lua:1719: in main chunk\n\t[C]: at 0x55aecc07b100\n"
+  },
+  {
+    "variant": "negative",
+    "case": "jitread",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-final.lua"
+    ],
+    "fixture_sha256": "d42f9e5e618c8cb225ee76f61f2296eb5c447cef0c5de94619231122c285feff",
+    "exit": 1,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.020516216000032728,
+    "stdout": "",
+    "stderr": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit: ...alescing-mt-stability-20260905-kuhlxghc/resize-final.lua:734: no native exit observed from JIT resize read workers\nstack traceback:\n\t[C]: in function 'assert'\n\t...alescing-mt-stability-20260905-kuhlxghc/resize-final.lua:734: in function 'fn'\n\t...alescing-mt-stability-20260905-kuhlxghc/resize-final.lua:51: in function 'run_case'\n\t...alescing-mt-stability-20260905-kuhlxghc/resize-final.lua:1720: in main chunk\n\t[C]: at 0x5556a6aec100\n"
+  },
+  {
+    "variant": "no-worker-jit",
+    "case": "jitstore",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-final-no-worker-jit.lua"
+    ],
+    "fixture_sha256": "0838f33a549c2d7cc31091b03e6693a2c74cefd7635bd005664fc942adab39bb",
+    "exit": 1,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.013006829000005382,
+    "stdout": "",
+    "stderr": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit: ...ability-20260905-kuhlxghc/resize-final-no-worker-jit.lua:675: no native exit observed from JIT resize store workers\nstack traceback:\n\t[C]: in function 'assert'\n\t...ability-20260905-kuhlxghc/resize-final-no-worker-jit.lua:675: in function 'fn'\n\t...ability-20260905-kuhlxghc/resize-final-no-worker-jit.lua:51: in function 'run_case'\n\t...ability-20260905-kuhlxghc/resize-final-no-worker-jit.lua:1721: in main chunk\n\t[C]: at 0x55724d375100\n"
+  },
+  {
+    "variant": "no-worker-jit",
+    "case": "jitread",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-final-no-worker-jit.lua"
+    ],
+    "fixture_sha256": "0838f33a549c2d7cc31091b03e6693a2c74cefd7635bd005664fc942adab39bb",
+    "exit": 1,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.03369820499938214,
+    "stdout": "",
+    "stderr": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit: ...ability-20260905-kuhlxghc/resize-final-no-worker-jit.lua:736: no native exit observed from JIT resize read workers\nstack traceback:\n\t[C]: in function 'assert'\n\t...ability-20260905-kuhlxghc/resize-final-no-worker-jit.lua:736: in function 'fn'\n\t...ability-20260905-kuhlxghc/resize-final-no-worker-jit.lua:51: in function 'run_case'\n\t...ability-20260905-kuhlxghc/resize-final-no-worker-jit.lua:1722: in main chunk\n\t[C]: at 0x56005ed74100\n"
+  }
+]

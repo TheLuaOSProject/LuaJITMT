@@ -1,0 +1,162 @@
+[
+  {
+    "attempt": 1,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.025425173000257928,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t1\t1\t0\t0\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 2,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.024456780998661998,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t1\t1\t0\t0\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 3,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02616091299933032,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 4,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.020997767000153544,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 5,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02277382800093619,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 6,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.023202796999612474,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 7,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02704931300104363,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 8,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.019648516999950516,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 9,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02633548500125471,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 10,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02536805199997616,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t1\t1\t0\t0\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 11,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02305029899980582,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 12,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.020945397000105004,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 13,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.025791828000365058,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 14,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.027121848999740905,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 15,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.027029627999581862,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 16,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.026143331999264774,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 17,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.029163187000449398,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 18,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.024235794000560418,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t1\t1\t0\t0\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 19,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.0235973480012035,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t1\t1\t0\t0\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 20,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02307635999932245,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  }
+]

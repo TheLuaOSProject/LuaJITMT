@@ -1,0 +1,260 @@
+[
+  {
+    "name": "t-tab-rooted-get-try-compile",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/assert/src",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/assert/tests/t-tab-rooted-get-try.c",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/assert/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/t-tab-rooted-get-try"
+    ],
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "name": "t-tab-rooted-get-try",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/t-tab-rooted-get-try"
+    ],
+    "cwd": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/assert",
+    "env_overrides": {},
+    "lua_path": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/?.lua;/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/lib/?.lua;;",
+    "seconds": 0.003505020000375225,
+    "limit_seconds": 30,
+    "status": "complete",
+    "exit": 0,
+    "stdout": "t-tab-rooted-get-try OK\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-tab-rooted-len-try-compile",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/assert/src",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/assert/tests/t-tab-rooted-len-try.c",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/assert/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/t-tab-rooted-len-try"
+    ],
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "name": "t-tab-rooted-len-try",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/t-tab-rooted-len-try"
+    ],
+    "cwd": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/assert",
+    "env_overrides": {},
+    "lua_path": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/?.lua;/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/lib/?.lua;;",
+    "seconds": 0.007615184000314912,
+    "limit_seconds": 30,
+    "status": "complete",
+    "exit": 0,
+    "stdout": "t-tab-rooted-len-try OK\n",
+    "stderr": ""
+  },
+  {
+    "name": "resize-general",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "cwd": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal",
+    "env_overrides": {
+      "LJ_M5_TAB_RESIZE_STRESS_CASES": "weak,gcmark,gckey,weakkey,weakmeta,finalizer,metatable,len,traversal,nextchurn,nextinvalid,tableclear,tablelib,tablelibshift,metadispatch"
+    },
+    "lua_path": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/?.lua;/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/lib/?.lua;;",
+    "seconds": 4.472862321999855,
+    "limit_seconds": 30,
+    "status": "complete",
+    "exit": 0,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "name": "resize-jit",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "cwd": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal",
+    "env_overrides": {
+      "LJ_M5_TAB_RESIZE_STRESS_CASES": "jitstore,jitread,jititer"
+    },
+    "lua_path": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/?.lua;/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/lib/?.lua;;",
+    "seconds": 0.03182597999966674,
+    "limit_seconds": 30,
+    "status": "complete",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit: ...l-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua:647: JIT resize store workers did not trace\nstack traceback:\n\t[C]: in function 'assert'\n\t...l-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua:647: in function 'fn'\n\t...l-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua:51: in function 'run_case'\n\t...l-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua:1692: in main chunk\n\t[C]: at 0x55f52d5df100\n"
+  },
+  {
+    "name": "resize-weakfinjit",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "cwd": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal",
+    "env_overrides": {
+      "LJ_M5_TAB_RESIZE_STRESS_CASES": "weakfinjit"
+    },
+    "lua_path": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/?.lua;/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/lib/?.lua;;",
+    "seconds": 0.21437320900076884,
+    "limit_seconds": 20,
+    "status": "complete",
+    "exit": 0,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "name": "resize-remote-stack",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "cwd": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal",
+    "env_overrides": {
+      "LJ_M5_TAB_RESIZE_STRESS_CASES": "remotejitgc"
+    },
+    "lua_path": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/?.lua;/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/lib/?.lua;;",
+    "seconds": 0.06378992299960373,
+    "limit_seconds": 20,
+    "status": "complete",
+    "exit": 0,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "name": "strtab-gc",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-strtab-gc-stress.lua"
+    ],
+    "cwd": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal",
+    "env_overrides": {},
+    "lua_path": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/?.lua;/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/lib/?.lua;;",
+    "seconds": 0.16409953400034283,
+    "limit_seconds": 30,
+    "status": "complete",
+    "exit": 0,
+    "stdout": "t-strtab-gc-stress OK: 4 workers x 5000 interns, 384 GC rounds\n",
+    "stderr": ""
+  },
+  {
+    "name": "buffer-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-buffer-thread-safety.lua"
+    ],
+    "cwd": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal",
+    "env_overrides": {},
+    "lua_path": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/?.lua;/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/lib/?.lua;;",
+    "seconds": 0.16406326499964052,
+    "limit_seconds": 30,
+    "status": "complete",
+    "exit": 0,
+    "stdout": "t-buffer-thread-safety OK\n",
+    "stderr": ""
+  },
+  {
+    "name": "buffer-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-buffer-thread-safety.lua"
+    ],
+    "cwd": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal",
+    "env_overrides": {},
+    "lua_path": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/?.lua;/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/lib/?.lua;;",
+    "seconds": 0.16437167599997338,
+    "limit_seconds": 30,
+    "status": "complete",
+    "exit": 0,
+    "stdout": "t-buffer-thread-safety OK\n",
+    "stderr": ""
+  },
+  {
+    "name": "jit-trace-pressure",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-jit-trace-gc-pressure.lua"
+    ],
+    "cwd": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal",
+    "env_overrides": {},
+    "lua_path": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/?.lua;/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/lib/?.lua;;",
+    "seconds": 0.015598136999869894,
+    "limit_seconds": 20,
+    "status": "complete",
+    "exit": 0,
+    "stdout": "JIT trace-slot GC2 pressure behavior passed\n",
+    "stderr": ""
+  }
+]

@@ -1,0 +1,642 @@
+[
+  {
+    "attempt": 1,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02161884499946609,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 2,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.028650416000346013,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 3,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.023275945000023057,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 4,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.021614536999550182,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 5,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.020037485000102606,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 6,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.026728941000328632,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 7,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.020154299000751053,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 8,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02371512999980041,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 9,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.022717492999618116,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 10,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.021437587999571406,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 11,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.024478115999954753,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 12,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.018796439999277936,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 13,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02029407000009087,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 14,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.022492884000712365,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 15,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.026897362999989127,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 16,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.022279167000306188,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 17,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02618957600043359,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 18,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02123293900058343,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 19,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.026175698999395536,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 20,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.023741711999718973,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 21,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.01818890999948053,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 22,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02973346499948093,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 23,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02408783000009862,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 24,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.025794166999730805,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 25,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02599695599928964,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 26,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.026258339999913005,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 27,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02587988300001598,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 28,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.025019450999934634,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 29,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.021765672000583436,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 30,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02374460699957126,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 31,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.023024733999591263,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 32,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02290887299932365,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 33,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.019852311999784433,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 34,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02174680299958709,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 35,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02328817000034178,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 36,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.020997192000322684,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 37,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.025504221000119287,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 38,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02276034499936941,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 39,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.024731675000111863,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 40,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02277586199943471,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 41,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.020913477999783936,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 42,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.025328591000288725,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 43,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.025894255999446614,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 44,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.025119789999735076,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 45,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.0212266250000539,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 46,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.023905418000140344,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 47,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.026715656999840576,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 48,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.020006591999845114,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 49,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.01985677700031374,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 50,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.0224871959999291,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 51,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.024899469000047247,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 52,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02719179600080679,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 53,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.023910126000373566,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 54,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.018424781000248913,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 55,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.01906546700047329,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 56,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.022552129000359855,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 57,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02574296900002082,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 58,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02578266300042742,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 59,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02055608899991057,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 60,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.01844565200008219,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 61,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02104008399965096,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 62,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02576065399989602,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 63,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.022084904000621464,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 64,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.01830931199947372,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 65,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02020760799950949,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 66,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.019724382999811496,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 67,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02292689200021414,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 68,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.0256518979995235,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 69,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02145394800027134,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 70,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02005819399983011,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 71,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.021955315999548475,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 72,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02680215100008354,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 73,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.023031202999845846,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 74,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02507442699970852,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 75,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02029984900036652,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 76,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.023347741999714344,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 77,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.024351555000066583,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 78,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02099985699987883,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 79,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.01982919999954902,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "attempt": 80,
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.022256916000515048,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  }
+]

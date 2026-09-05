@@ -1,0 +1,29 @@
+--- a/tests/t-tab-resize-stress.lua
++++ b/tests/t-tab-resize-stress.lua
+@@ -606,6 +606,8 @@
+ -- Attachments are universe-wide: the controller installs one stable handler
+ -- after every worker is ready and keeps it through every join. The monotone
+ -- per-worker witnesses exclude native execution by the controller itself.
++-- Events may be dropped on admission/observer contention. A positive witness
++-- proves coverage; zero reports missing evidence, not absent native execution.
+ local function watch_worker_jit_exits(workers)
+   local seen = {}
+   for i = 1, #workers do seen[workers[i]:id()] = false end
+@@ -670,7 +672,7 @@
+     assert(result == true, tostring(result))
+   end, 30)
+   assert(finish_exits() > 0,
+-	 "JIT resize store workers did not execute native code")
++	 "no native exit observed from JIT resize store workers")
+   for i = 1, nworkers do
+     assert(t[i] == jit_reps, "traced store lost update across resize")
+     assert_lua_value(t[i], "jit resize")
+@@ -730,7 +732,7 @@
+     assert(result == true, tostring(result))
+   end, 30)
+   assert(finish_exits() > 0,
+-	 "JIT resize read workers did not execute native code")
++	 "no native exit observed from JIT resize read workers")
+   for i = 1, nreaders do
+     assert(t[i] == i, "stable array key changed after traced resize reads")
+     assert(t["read:" .. i] == i, "stable hash key changed after traced resize reads")

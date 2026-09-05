@@ -1,0 +1,1022 @@
+[
+  {
+    "variant": "original-cpu0",
+    "attempt": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.016498267999850214,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "original-cpu0",
+    "attempt": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.016047986000558012,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "original-cpu0",
+    "attempt": 3,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.017462941999838222,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "original-cpu0",
+    "attempt": 4,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.01589835199956724,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "original-cpu0",
+    "attempt": 5,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.017367165000905516,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "original-cpu0",
+    "attempt": 6,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.01589244500064524,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "original-cpu0",
+    "attempt": 7,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.017357533000904368,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "original-cpu0",
+    "attempt": 8,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.015917773000182933,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "original-cpu0",
+    "attempt": 9,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.015983626000888762,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "original-cpu0",
+    "attempt": 10,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.01599825399898691,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "original-cpu0",
+    "attempt": 11,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.017461355000705225,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "original-cpu0",
+    "attempt": 12,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.01599148300010711,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "original-cpu0",
+    "attempt": 13,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.017456560999562498,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "original-cpu0",
+    "attempt": 14,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.016233996999289957,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "original-cpu0",
+    "attempt": 15,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.016040156999224564,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "original-cpu0",
+    "attempt": 16,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.016257619001407875,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "original-cpu0",
+    "attempt": 17,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.01756423100050597,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "original-cpu0",
+    "attempt": 18,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.01588140400053817,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "original-cpu0",
+    "attempt": 19,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.01608746800047811,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "original-cpu0",
+    "attempt": 20,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.017650554998908774,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-cpu0",
+    "attempt": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.01772855000126583,
+    "stdout": "jit-store-diagnostic\t2\ttrue\t1\t1\t1\t0\t1\t1\njit-store-diagnostic\t3\ttrue\t1\t1\t8\t3\t5\t10\njit-store-diagnostic\t1\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-cpu0",
+    "attempt": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.017688301999442047,
+    "stdout": "jit-store-diagnostic\t2\ttrue\t1\t1\t1\t0\t1\t1\njit-store-diagnostic\t3\ttrue\t1\t1\t8\t3\t5\t10\njit-store-diagnostic\t1\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-cpu0",
+    "attempt": 3,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.01668583500031673,
+    "stdout": "jit-store-diagnostic\t3\ttrue\t1\t1\t4\t0\t4\t0\njit-store-diagnostic\t1\ttrue\t0\t1\t1\t1\t0\t0\njit-store-diagnostic\t2\ttrue\t1\t1\t0\t0\t0\t0\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-cpu0",
+    "attempt": 4,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.016748273999837693,
+    "stdout": "jit-store-diagnostic\t3\ttrue\t1\t1\t4\t0\t4\t0\njit-store-diagnostic\t2\ttrue\t1\t1\t0\t0\t0\t0\njit-store-diagnostic\t1\ttrue\t0\t1\t1\t1\t0\t0\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-cpu0",
+    "attempt": 5,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.01746693499990215,
+    "stdout": "jit-store-diagnostic\t2\ttrue\t1\t1\t1\t0\t1\t1\njit-store-diagnostic\t3\ttrue\t1\t1\t8\t3\t5\t10\njit-store-diagnostic\t1\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-cpu0",
+    "attempt": 6,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.016102980998766725,
+    "stdout": "jit-store-diagnostic\t2\ttrue\t1\t1\t1\t0\t1\t1\njit-store-diagnostic\t3\ttrue\t1\t1\t9\t3\t6\t10\njit-store-diagnostic\t1\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-cpu0",
+    "attempt": 7,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.016279337000014493,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t1\t1\t1\t0\t0\njit-store-diagnostic\t3\ttrue\t1\t1\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t1\t1\t0\t0\t0\t0\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-cpu0",
+    "attempt": 8,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.01636983699972916,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t1\t1\t1\t0\t0\njit-store-diagnostic\t3\ttrue\t1\t1\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t1\t1\t0\t0\t0\t0\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-cpu0",
+    "attempt": 9,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.016889464000996668,
+    "stdout": "jit-store-diagnostic\t2\ttrue\t1\t1\t1\t0\t1\t1\njit-store-diagnostic\t3\ttrue\t1\t1\t8\t3\t5\t10\njit-store-diagnostic\t1\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-cpu0",
+    "attempt": 10,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.016270873000394204,
+    "stdout": "jit-store-diagnostic\t2\ttrue\t1\t1\t1\t0\t1\t1\njit-store-diagnostic\t3\ttrue\t1\t1\t9\t3\t6\t10\njit-store-diagnostic\t1\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-cpu0",
+    "attempt": 11,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.017177215000629076,
+    "stdout": "jit-store-diagnostic\t3\ttrue\t1\t1\t5\t0\t5\t0\njit-store-diagnostic\t2\ttrue\t1\t0\t0\t0\t0\t0\njit-store-diagnostic\t1\ttrue\t0\t1\t1\t1\t0\t0\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-cpu0",
+    "attempt": 12,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.016818636999232695,
+    "stdout": "jit-store-diagnostic\t2\ttrue\t1\t1\t1\t0\t1\t1\njit-store-diagnostic\t3\ttrue\t1\t1\t8\t3\t5\t10\njit-store-diagnostic\t1\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-cpu0",
+    "attempt": 13,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.016377924001062638,
+    "stdout": "jit-store-diagnostic\t2\ttrue\t1\t1\t1\t0\t1\t1\njit-store-diagnostic\t1\ttrue\t0\t1\t2\t1\t1\t1\njit-store-diagnostic\t3\ttrue\t1\t1\t9\t3\t6\t17\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-cpu0",
+    "attempt": 14,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.016647256999931415,
+    "stdout": "jit-store-diagnostic\t2\ttrue\t1\t1\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t1\t1\t0\t0\t0\t0\njit-store-diagnostic\t1\ttrue\t0\t1\t1\t1\t0\t0\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-cpu0",
+    "attempt": 15,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.01635438400080602,
+    "stdout": "jit-store-diagnostic\t2\ttrue\t1\t1\t1\t0\t1\t1\njit-store-diagnostic\t3\ttrue\t1\t1\t9\t3\t6\t10\njit-store-diagnostic\t1\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-cpu0",
+    "attempt": 16,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.017888714000946493,
+    "stdout": "jit-store-diagnostic\t2\ttrue\t1\t1\t1\t0\t1\t1\njit-store-diagnostic\t3\ttrue\t1\t1\t8\t3\t5\t10\njit-store-diagnostic\t1\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-cpu0",
+    "attempt": 17,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.017841173001215793,
+    "stdout": "jit-store-diagnostic\t2\ttrue\t1\t1\t1\t0\t1\t1\njit-store-diagnostic\t3\ttrue\t1\t1\t8\t3\t5\t10\njit-store-diagnostic\t1\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-cpu0",
+    "attempt": 18,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.01648723099970084,
+    "stdout": "jit-store-diagnostic\t2\ttrue\t1\t1\t1\t0\t1\t1\njit-store-diagnostic\t3\ttrue\t1\t1\t9\t3\t6\t10\njit-store-diagnostic\t1\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-cpu0",
+    "attempt": 19,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.016614165000646608,
+    "stdout": "jit-store-diagnostic\t2\ttrue\t1\t1\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t1\t1\t0\t0\t0\t0\njit-store-diagnostic\t1\ttrue\t0\t1\t1\t1\t0\t0\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-cpu0",
+    "attempt": 20,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.01686341300046479,
+    "stdout": "jit-store-diagnostic\t2\ttrue\t1\t1\t1\t0\t1\t1\njit-store-diagnostic\t3\ttrue\t1\t1\t8\t3\t5\t10\njit-store-diagnostic\t1\ttrue\t0\t1\t2\t1\t1\t1\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-parallel",
+    "attempt": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.026500763999138144,
+    "stdout": "jit-store-diagnostic\t3\ttrue\t0\t1\t4\t2\t2\t21\njit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-parallel",
+    "attempt": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02143038699978206,
+    "stdout": "jit-store-diagnostic\t3\ttrue\t0\t1\t3\t2\t1\t19\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-parallel",
+    "attempt": 3,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.021690173000024515,
+    "stdout": "jit-store-diagnosticjit-store-diagnostic\t3\ttrue\t0\t1\t4\t2\t2\t18\n\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-parallel",
+    "attempt": 4,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.0212313339998218,
+    "stdout": "jit-store-diagnosticjit-store-diagnostic\t2\ttrue\t0\t\t10\t\t0\ttrue0\t\t00\t0\t\t00\n\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t6\t2\t4\t25\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-parallel",
+    "attempt": 5,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02427900899965607,
+    "stdout": "jit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t4\t2\t2\t13\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-parallel",
+    "attempt": 6,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02482635700107494,
+    "stdout": "jit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t5\t2\t3\t24\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-parallel",
+    "attempt": 7,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.02187575900097727,
+    "stdout": "jit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t5\t3\t2\t17\njit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-parallel",
+    "attempt": 8,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.0196162699994602,
+    "stdout": "jit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t3\t2\t1\t22\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-parallel",
+    "attempt": 9,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.024800084998787497,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t4\t3\t1\t23\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-parallel",
+    "attempt": 10,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.023181858001407818,
+    "stdout": "jit-store-diagnostic\t3\ttrue\t0\t1\t4\t2\t2\t23\njit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-parallel",
+    "attempt": 11,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.024639109000418102,
+    "stdout": "jit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t3\t2\t1\t19\njit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-parallel",
+    "attempt": 12,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.021854412001630408,
+    "stdout": "jit-store-diagnostic\t3\ttrue\t0\t1\t4\t2\t2\t16\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-parallel",
+    "attempt": 13,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.028138925999883213,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t5\t2\t3\t21\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-parallel",
+    "attempt": 14,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.021262060001390637,
+    "stdout": "jit-store-diagnostic\t3\ttrue\t0\t1\t5\t2\t3\t24\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-parallel",
+    "attempt": 15,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.020319674998972914,
+    "stdout": "jit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t5\t2\t2\t16\njit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-parallel",
+    "attempt": 16,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.025827104000200052,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t5\t2\t3\t27\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-parallel",
+    "attempt": 17,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.020364155001516338,
+    "stdout": "jit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t4\t2\t2\t20\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-parallel",
+    "attempt": 18,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.024248064000857994,
+    "stdout": "jit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t3\t2\t1\t18\njit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-parallel",
+    "attempt": 19,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.022567383999557933,
+    "stdout": "jit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t4\t2\t2\t28\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "events-parallel",
+    "attempt": 20,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/jitstore-diagnostic-complete.lua"
+    ],
+    "exit": 0,
+    "status": "complete",
+    "seconds": 0.023285303999728058,
+    "stdout": "jit-store-diagnostic\t2\ttrue\t0\t0\t0\t0\t0\t0\njit-store-diagnostic\t3\ttrue\t0\t1\t5\t2\t3\t19\njit-store-diagnostic\t1\ttrue\t0\t0\t0\t0\t0\t0\nt-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  }
+]

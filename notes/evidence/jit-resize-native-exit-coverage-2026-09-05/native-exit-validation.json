@@ -1,0 +1,402 @@
+[
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit.lua"
+    ],
+    "fixture_sha256": "1ad862b489c9859d2f243e586711c4e29b78b8b5d37881b779a88bcf08cef5c0",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.018264296999404905,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit.lua"
+    ],
+    "fixture_sha256": "1ad862b489c9859d2f243e586711c4e29b78b8b5d37881b779a88bcf08cef5c0",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.017121081000368576,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore",
+    "attempt": 3,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit.lua"
+    ],
+    "fixture_sha256": "1ad862b489c9859d2f243e586711c4e29b78b8b5d37881b779a88bcf08cef5c0",
+    "exit": 1,
+    "expected_result": false,
+    "status": "complete",
+    "seconds": 0.013578521999079385,
+    "stdout": "",
+    "stderr": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit: ...ng-mt-stability-20260905-kuhlxghc/resize-native-exit.lua:663: JIT resize store workers did not execute native code\nstack traceback:\n\t[C]: in function 'assert'\n\t...ng-mt-stability-20260905-kuhlxghc/resize-native-exit.lua:663: in function 'fn'\n\t...ng-mt-stability-20260905-kuhlxghc/resize-native-exit.lua:51: in function 'run_case'\n\t...ng-mt-stability-20260905-kuhlxghc/resize-native-exit.lua:1708: in main chunk\n\t[C]: at 0x56088a1a0100\n"
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit.lua"
+    ],
+    "fixture_sha256": "1ad862b489c9859d2f243e586711c4e29b78b8b5d37881b779a88bcf08cef5c0",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.04045906799910881,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit.lua"
+    ],
+    "fixture_sha256": "1ad862b489c9859d2f243e586711c4e29b78b8b5d37881b779a88bcf08cef5c0",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.04662878700037254,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 3,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit.lua"
+    ],
+    "fixture_sha256": "1ad862b489c9859d2f243e586711c4e29b78b8b5d37881b779a88bcf08cef5c0",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.06247035300111747,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 4,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit.lua"
+    ],
+    "fixture_sha256": "1ad862b489c9859d2f243e586711c4e29b78b8b5d37881b779a88bcf08cef5c0",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.042089990000022226,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 5,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit.lua"
+    ],
+    "fixture_sha256": "1ad862b489c9859d2f243e586711c4e29b78b8b5d37881b779a88bcf08cef5c0",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.04643252800087794,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 6,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit.lua"
+    ],
+    "fixture_sha256": "1ad862b489c9859d2f243e586711c4e29b78b8b5d37881b779a88bcf08cef5c0",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.0613014699993073,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 7,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit.lua"
+    ],
+    "fixture_sha256": "1ad862b489c9859d2f243e586711c4e29b78b8b5d37881b779a88bcf08cef5c0",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.0584042539994698,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 8,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit.lua"
+    ],
+    "fixture_sha256": "1ad862b489c9859d2f243e586711c4e29b78b8b5d37881b779a88bcf08cef5c0",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.04316993499924138,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 9,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit.lua"
+    ],
+    "fixture_sha256": "1ad862b489c9859d2f243e586711c4e29b78b8b5d37881b779a88bcf08cef5c0",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.03356830000120681,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitread",
+    "attempt": 10,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit.lua"
+    ],
+    "fixture_sha256": "1ad862b489c9859d2f243e586711c4e29b78b8b5d37881b779a88bcf08cef5c0",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.05204876500101818,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore,jitread,jititer",
+    "attempt": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit.lua"
+    ],
+    "fixture_sha256": "1ad862b489c9859d2f243e586711c4e29b78b8b5d37881b779a88bcf08cef5c0",
+    "exit": 0,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 1.2542707920001703,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore,jitread,jititer",
+    "attempt": 2,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit.lua"
+    ],
+    "fixture_sha256": "1ad862b489c9859d2f243e586711c4e29b78b8b5d37881b779a88bcf08cef5c0",
+    "exit": 1,
+    "expected_result": false,
+    "status": "complete",
+    "seconds": 0.014991207999628386,
+    "stdout": "",
+    "stderr": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit: ...ng-mt-stability-20260905-kuhlxghc/resize-native-exit.lua:663: JIT resize store workers did not execute native code\nstack traceback:\n\t[C]: in function 'assert'\n\t...ng-mt-stability-20260905-kuhlxghc/resize-native-exit.lua:663: in function 'fn'\n\t...ng-mt-stability-20260905-kuhlxghc/resize-native-exit.lua:51: in function 'run_case'\n\t...ng-mt-stability-20260905-kuhlxghc/resize-native-exit.lua:1708: in main chunk\n\t[C]: at 0x56407c22e100\n"
+  },
+  {
+    "variant": "positive",
+    "case": "jitstore,jitread",
+    "attempt": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "0",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit.lua"
+    ],
+    "fixture_sha256": "1ad862b489c9859d2f243e586711c4e29b78b8b5d37881b779a88bcf08cef5c0",
+    "exit": 1,
+    "expected_result": false,
+    "status": "complete",
+    "seconds": 0.030648205000034068,
+    "stdout": "",
+    "stderr": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit: ...ng-mt-stability-20260905-kuhlxghc/resize-native-exit.lua:724: JIT resize read workers did not execute native code\nstack traceback:\n\t[C]: in function 'assert'\n\t...ng-mt-stability-20260905-kuhlxghc/resize-native-exit.lua:724: in function 'fn'\n\t...ng-mt-stability-20260905-kuhlxghc/resize-native-exit.lua:51: in function 'run_case'\n\t...ng-mt-stability-20260905-kuhlxghc/resize-native-exit.lua:1709: in main chunk\n\t[C]: at 0x55f5f235d100\n"
+  },
+  {
+    "variant": "joff",
+    "case": "jitstore",
+    "attempt": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit.lua"
+    ],
+    "fixture_sha256": "1ad862b489c9859d2f243e586711c4e29b78b8b5d37881b779a88bcf08cef5c0",
+    "exit": 1,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.016655243000059272,
+    "stdout": "",
+    "stderr": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit: ...ng-mt-stability-20260905-kuhlxghc/resize-native-exit.lua:663: JIT resize store workers did not execute native code\nstack traceback:\n\t[C]: in function 'assert'\n\t...ng-mt-stability-20260905-kuhlxghc/resize-native-exit.lua:663: in function 'fn'\n\t...ng-mt-stability-20260905-kuhlxghc/resize-native-exit.lua:51: in function 'run_case'\n\t...ng-mt-stability-20260905-kuhlxghc/resize-native-exit.lua:1708: in main chunk\n\t[C]: at 0x55b12ec3b100\n"
+  },
+  {
+    "variant": "joff",
+    "case": "jitread",
+    "attempt": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-native-exit.lua"
+    ],
+    "fixture_sha256": "1ad862b489c9859d2f243e586711c4e29b78b8b5d37881b779a88bcf08cef5c0",
+    "exit": 1,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.025159217999316752,
+    "stdout": "",
+    "stderr": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit: ...ng-mt-stability-20260905-kuhlxghc/resize-native-exit.lua:724: JIT resize read workers did not execute native code\nstack traceback:\n\t[C]: in function 'assert'\n\t...ng-mt-stability-20260905-kuhlxghc/resize-native-exit.lua:724: in function 'fn'\n\t...ng-mt-stability-20260905-kuhlxghc/resize-native-exit.lua:51: in function 'run_case'\n\t...ng-mt-stability-20260905-kuhlxghc/resize-native-exit.lua:1709: in main chunk\n\t[C]: at 0x55737a2c6100\n"
+  },
+  {
+    "variant": "no-worker-jit",
+    "case": "jitstore",
+    "attempt": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-no-worker-jit.lua"
+    ],
+    "fixture_sha256": "c04e1d99c00fd44b006d7a714738930fd9058c43c74fa84da9fd7cccec00b4b2",
+    "exit": 1,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.013480736000929028,
+    "stdout": "",
+    "stderr": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit: ...-mt-stability-20260905-kuhlxghc/resize-no-worker-jit.lua:664: JIT resize store workers did not execute native code\nstack traceback:\n\t[C]: in function 'assert'\n\t...-mt-stability-20260905-kuhlxghc/resize-no-worker-jit.lua:664: in function 'fn'\n\t...-mt-stability-20260905-kuhlxghc/resize-no-worker-jit.lua:51: in function 'run_case'\n\t...-mt-stability-20260905-kuhlxghc/resize-no-worker-jit.lua:1710: in main chunk\n\t[C]: at 0x556e118d0100\n"
+  },
+  {
+    "variant": "no-worker-jit",
+    "case": "jitread",
+    "attempt": 1,
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-mt-stability-20260905-kuhlxghc/resize-no-worker-jit.lua"
+    ],
+    "fixture_sha256": "c04e1d99c00fd44b006d7a714738930fd9058c43c74fa84da9fd7cccec00b4b2",
+    "exit": 1,
+    "expected_result": true,
+    "status": "complete",
+    "seconds": 0.030831064001176856,
+    "stdout": "",
+    "stderr": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit: ...-mt-stability-20260905-kuhlxghc/resize-no-worker-jit.lua:726: JIT resize read workers did not execute native code\nstack traceback:\n\t[C]: in function 'assert'\n\t...-mt-stability-20260905-kuhlxghc/resize-no-worker-jit.lua:726: in function 'fn'\n\t...-mt-stability-20260905-kuhlxghc/resize-no-worker-jit.lua:51: in function 'run_case'\n\t...-mt-stability-20260905-kuhlxghc/resize-no-worker-jit.lua:1711: in main chunk\n\t[C]: at 0x55874a129100\n"
+  }
+]

@@ -1,0 +1,218 @@
+[
+  {
+    "case": "jitstore",
+    "threads": 3,
+    "attempt": 1,
+    "seconds": 0.021951423000245995,
+    "exit": 0,
+    "status": "complete",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "case": "jitstore",
+    "threads": 3,
+    "attempt": 2,
+    "seconds": 0.02572932899965963,
+    "exit": 0,
+    "status": "complete",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "case": "jitstore",
+    "threads": 3,
+    "attempt": 3,
+    "seconds": 0.02345391099970584,
+    "exit": 0,
+    "status": "complete",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "case": "jitstore",
+    "threads": 3,
+    "attempt": 4,
+    "seconds": 0.021430495999993582,
+    "exit": 0,
+    "status": "complete",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "case": "jitstore",
+    "threads": 3,
+    "attempt": 5,
+    "seconds": 0.025199004999194585,
+    "exit": 0,
+    "status": "complete",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "case": "jitstore",
+    "threads": 1,
+    "attempt": 1,
+    "seconds": 0.01319533700007014,
+    "exit": 0,
+    "status": "complete",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "stdout": "t-tab-resize-stress OK: 1 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "case": "jitstore",
+    "threads": 1,
+    "attempt": 2,
+    "seconds": 0.013334745999600273,
+    "exit": 0,
+    "status": "complete",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "stdout": "t-tab-resize-stress OK: 1 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "case": "jitstore",
+    "threads": 1,
+    "attempt": 3,
+    "seconds": 0.013407268999799271,
+    "exit": 0,
+    "status": "complete",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "stdout": "t-tab-resize-stress OK: 1 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "case": "jitread",
+    "threads": 3,
+    "attempt": 1,
+    "seconds": 0.07861758500075666,
+    "exit": 0,
+    "status": "complete",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "case": "jitread",
+    "threads": 3,
+    "attempt": 2,
+    "seconds": 0.03941220299930137,
+    "exit": 0,
+    "status": "complete",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "case": "jititer",
+    "threads": 3,
+    "attempt": 1,
+    "seconds": 1.0572266530007255,
+    "exit": 0,
+    "status": "complete",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "case": "jititer",
+    "threads": 3,
+    "attempt": 2,
+    "seconds": 1.1406130550003581,
+    "exit": 0,
+    "status": "complete",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  }
+]

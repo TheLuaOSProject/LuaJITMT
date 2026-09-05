@@ -1,0 +1,18 @@
+--- a/tests/t-tab-resize-stress.lua
++++ b/tests/t-tab-resize-stress.lua
+@@ -618,6 +618,7 @@
+ jit.off(watch_worker_jit_exits, true)
+ 
+ local function jit_store_worker(tbl, ready, start, key, n)
++  jit.off(debug.getinfo(1, "f").func, true)
+   local okjit, jitmod = pcall(require, "jit")
+   if okjit and jitmod.status() then
+     jitmod.opt.start("hotloop=1", "hotexit=1")
+@@ -669,6 +670,7 @@
+ end
+ 
+ local function jit_read_worker(tbl, ready, start, array_key, hash_key, want, n)
++  jit.off(debug.getinfo(1, "f").func, true)
+   local assertf, typef, collect = assert, type, collectgarbage
+   local okjit, jitmod = pcall(require, "jit")
+   if okjit and jitmod.status() then
