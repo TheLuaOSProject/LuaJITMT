@@ -16,6 +16,7 @@ local m6_cases = {
   "m6_dispatch_redispatch",
   "m6_jit_token",
   "m6_jit_stop_admission",
+  "m6_jit_root_abort_retire",
   "m6_jit_event_session",
   "m6_jit_event_callback_owner",
   "m6_jit_flush_stream_gate",
@@ -711,6 +712,26 @@ print("jit-env-mutation-flush OK")
 end
 
 return function(add)
+  add({
+    name = "m6_jit_root_abort_retire",
+    description = "Linux root ABORT defers cleanup without waiting for SMR",
+    run = function(t)
+      if jit.os ~= "Linux" then
+        print("M6 root-ABORT reclaimer fixture requires Linux")
+        return
+      end
+      local flags = "-DLJ_GC2_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLUA_USE_ASSERT"
+      build.with_default_build_restore(t, function()
+        clean_build(t, { quiet = true, xcflags = flags })
+        build_and_run_c(t, t:tmp("lj_t-jit-root-abort-retire"),
+                        "t-jit-root-abort-retire.c", {
+          build = false, cflags = flags, timeout = "90s"
+        })
+      end)
+      print("M6 root-ABORT deferred retirement passed")
+    end
+  })
+
   add({
     name = "m6_jit_stop_admission",
     description = "Linux side publication completes with a paused IDLE reclaimer",

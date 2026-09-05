@@ -406,8 +406,18 @@ typedef struct GCtrace {
 #define TRACE_SCOPE_FLUSH_PENDING	0x02
 #define TRACE_ENTRY_INVALIDATED		0x04
 #define TRACE_RETIRED_UNPUBLISHED	0x08
+#define TRACE_RETIRE_PENDING		0x10
 #define TRACE_ENTRY_GATED \
   (TRACE_SCOPE_FLUSH_PENDING|TRACE_ENTRY_INVALIDATED)
+
+/* A committed root which lost its bytecode CAS remains inspectable in its
+** exact public slot until an IDLE recorder-token owner consumes this request.
+** The slot is a semantic GC root while pending; it is not a retire-list node
+** until ordinary preserved retirement claims a nonzero epoch. */
+static LJ_AINLINE int trace_retire_pending_acq(const GCtrace *T)
+{
+  return (la_load8_acq(&T->unused1) & TRACE_RETIRE_PENDING) != 0;
+}
 
 /* An assembler scratch copy is never a semantic trace body. Once this bit is
 ** published it is immutable until the retire-list owner destroys the exact

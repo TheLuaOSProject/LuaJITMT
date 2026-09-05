@@ -294,6 +294,8 @@ static int trace_entry_mark_invalidated(GCtrace *T)
 ** the body first, then disconnects every semantic entry edge while the same
 ** recorder-token owner still excludes assembler/link publication. */
 static void trace_retire_disconnect(jit_State *J, GCtrace *T);
+static void trace_scope_clear_slot(jit_State *J, TraceNo traceno, GCtrace *T,
+				  uint64_t epoch);
 
 /* -- Error handling ------------------------------------------------------ */
 
@@ -2803,6 +2805,9 @@ static void trace_retire_claim_at_epoch(global_State *g, GCtrace *T,
   }
   (void)la_cas64(&T->retire_epoch, &expect, stamp, LA_ACQ_REL, LA_ACQ);
   trace_native_pin_close(T);
+  /* The nonzero epoch takes over the pending slot's semantic-root duty.
+  ** Root readers load the pending flag before rechecking the epoch. */
+  (void)la_and8_acqrel(&T->unused1, (uint8_t)~TRACE_RETIRE_PENDING);
 }
 
 static int trace_retire_discoverable_acq(jit_State *J, GCtrace *T)
@@ -3959,14 +3964,57 @@ static LJ_AINLINE int trace_root_cycle_step(TraceRootCycleGuard *guard,
   return 1;
 }
 
+/* The caller retains an outer SMR reader through this complete transaction.
+** Normal preservation/disconnection may nest readers, but a nested reader
+** reuses that admitted thread depth and cannot wait behind a later closer.
+** A pending ABORT must remain inspectable until its active recorder finishes;
+** token/recorder refusal preserves the graph and asks the root pass to retry. */
+static int trace_retire_pending_consume(jit_State *J, TraceNo traceno,
+					GCtrace *T)
+{
+  int token = 0;
+  if (lj_trace_state_load(J) != LJ_TRACE_IDLE)
+    return 0;
+  if (!lj_jit_token_held(J)) {
+    if (!lj_jit_token_try(J))
+      return 0;
+    token = 1;
+  }
+  if (lj_trace_state_load(J) != LJ_TRACE_IDLE) {
+    if (token)
+      lj_jit_token_release(J);
+    return 0;
+  }
+  /* A peer flush may have completed the request before token admission.
+  ** Neither a stale body nor a replacement at the same number is ours. */
+  if (traceref_safe(J, traceno) == T && trace_retire_pending_acq(T)) {
+    lj_assertJ(trace_traceno_acq(T) == traceno &&
+	       trace_root_acq(T) == 0 &&
+	       !trace_runnable_acq(T, traceno) &&
+	       la_load64_acq(&T->retire_epoch) == 0,
+	       "invalid deferred root-abort retirement");
+    trace_scope_clear_slot(J, traceno, T, lj_gc2_retire_epoch(J2G(J)));
+  }
+  if (token)
+    lj_jit_token_release(J);
+  return 1;
+}
+
 int lj_trace_markvecs(global_State *g, int gc2)
 {
   jit_State *J = G2J(g);
-  TraceVec *tv = tracevec_acq(J);
+  TraceVec *tv;
   GCtrace *rt, *nextrt;
   TraceVec *nexttv;
   TraceRootCycleGuard guard;
+  int complete = 1;
   UNUSED(gc2);  /* Compatibility argument: GC2 is the sole runtime collector. */
+  /* Production root scans already own a reader. Require tracked same-universe
+  ** depth as well: an independent-universe fallback count does not authorize
+  ** the nested reader elision used by preservation and disconnection. */
+  if (!lj_gc2_smr_read_tracked_try(g))
+    return 0;
+  tv = tracevec_acq(J);
   if (tv) {
     (void)lj_gc2_markmem(g, tv);
     /*
@@ -3986,8 +4034,15 @@ int lj_trace_markvecs(global_State *g, int gc2)
       */
       for (i = 1; i < sizetrace; i++) {
 	GCtrace *T = traceref_safe(J, i);
-	if (T && la_load64_acq(&T->retire_epoch) != 0)
-	  trace_preserve_retired_body(g, T);
+	if (T) {
+	  /* Pending loads precede epoch loads: clearing the request after its
+	  ** epoch claim must not leave a root-preservation handoff gap. */
+	  int pending = trace_retire_pending_acq(T);
+	  if (pending || la_load64_acq(&T->retire_epoch) != 0)
+	    trace_preserve_retired_body(g, T);
+	  if (pending && !trace_retire_pending_consume(J, i, T))
+	    complete = 0;
+	}
       }
     }
   }
@@ -3998,10 +4053,10 @@ int lj_trace_markvecs(global_State *g, int gc2)
     (void)lj_gc2_markmem_registered(g, tv);
     tv = nexttv;
     if (LJ_UNLIKELY(!trace_root_cycle_step(&guard, tv)))
-      return 0;
+      goto incomplete;
   }
   if (LJ_UNLIKELY(tv != NULL))
-    return 0;
+    goto incomplete;
   rt = trace_retired_head_acq(J);
   trace_root_cycle_init(&guard, rt);
   while (rt != NULL && lj_gc2_mem_registered(g, rt)) {
@@ -4009,9 +4064,15 @@ int lj_trace_markvecs(global_State *g, int gc2)
     trace_preserve_retired_body(g, rt);
     rt = nextrt;
     if (LJ_UNLIKELY(!trace_root_cycle_step(&guard, rt)))
-      return 0;
+      goto incomplete;
   }
-  return rt == NULL;
+  if (rt != NULL)
+    goto incomplete;
+  lj_gc2_smr_read_leave(g);
+  return complete;
+incomplete:
+  lj_gc2_smr_read_leave(g);
+  return 0;
 }
 
 /* Find a free trace number. */
@@ -5822,7 +5883,6 @@ static void trace_stop_admit(jit_State *J, TraceNo parentno, TraceNo rootno,
 /* Stop tracing. */
 static int trace_stop(jit_State *J)
 {
-  global_State *g = J2G(J);
   BCIns *pc = mref(J->cur.startpc, BCIns);
   BCOp op = bc_op(J->cur.startins);
   GCproto *pt = trace_startpt_acq(&J->cur);
@@ -5919,6 +5979,17 @@ static int trace_stop(jit_State *J)
 	BCIns observed = lj_bc_publish_cas_vm(patchpc, J->cur.startins,
 					    patchins);
 	root_patch_lost = observed != patchins;
+	if (LJ_UNLIKELY(root_patch_lost)) {
+	  /* Publish the exact reserved-slot cleanup request before optional
+	  ** metadata or Lua can reenter. This newly committed body has never
+	  ** enabled entry, and this uninterrupted recorder token excludes peer
+	  ** retirement until the descriptor is visible. IDLE/MARK recording
+	  ** and current-trace root retry exclude sweep before publication;
+	  ** future root scans preserve pending slots until ordinary retirement
+	  ** transfers ownership to the existing epoch/list protocol. */
+	  (void)la_or8_acqrel(&T->unused1,
+	    TRACE_ENTRY_INVALIDATED|TRACE_RETIRE_PENDING);
+	}
       }
     }
     break;
@@ -5957,12 +6028,9 @@ static int trace_stop(jit_State *J)
 #endif
 
   if (LJ_UNLIKELY(root_patch_lost)) {
-    /* trace_save() already published the body and prototype root. Preserve it
-    ** for abort-event inspection, but gate native entry before invoking user
-    ** code. Ordinary abort consumers (notably jit.dump's aborted-IR mode) expect
-    ** jit.util.trace* to resolve the trace during the callback. The callback may
-    ** reentrantly flush it, so resolve the exact slot again before cleanup. */
-    (void)trace_entry_mark_invalidated(T);
+    /* Keep ordinary abort inspection while the recorder is active. Cleanup is
+    ** already a durable reserved-slot request, so this callback may flush,
+    ** collect or reuse the number without any later raw T access here. */
     lj_vmevent_send_l(J->L, TRACE,
       setstrV(V, V->top++, lj_str_newlit(V, "abort"));
       setintV(V->top++, traceno);
@@ -5971,13 +6039,6 @@ static int trace_stop(jit_State *J)
       setintV(V->top++, LJ_TRERR_RETRY);
       setnilV(V->top++);
     );
-    lj_gc2_smr_read_enter(g);
-    {
-      GCtrace *live = traceref_safe(J, traceno);
-      if (live == T && trace_traceno_acq(live) == traceno)
-	trace_scope_clear_slot(J, traceno, live, lj_gc2_retire_epoch(g));
-    }
-    lj_gc2_smr_read_leave(g);
     return 0;
   }
 

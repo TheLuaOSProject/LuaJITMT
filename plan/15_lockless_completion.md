@@ -88,7 +88,7 @@ are verified reasons the full goal is still open:
 | CType state | General FFI readers wait for the parser sequence, including existing user-defined types | Private parser transactions with immutable committed versions |
 | Foreign callbacks | Same callback slot shares one hidden carrier and waits for that state owner | Independently admitted per-actor or per-invocation carriers |
 | FINREG | Owner-only claim states and scans of unrelated claims block registration/clear | Persistent registration, ordering, and finalization transactions |
-| Trace lifecycle | Side publication admission is now bounded; committed root-abort cleanup and automatic pressure flush still wait | Durable post-publication cleanup and asynchronous retirement/flush |
+| Trace lifecycle | Side publication and root-CAS-loser abort cleanup now avoid SMR waits; automatic pressure flush still handshakes synchronously | Extend durable completion to general asynchronous retirement/flush |
 | Trace stitching | Production stitch probe rejects every edge and the stitch entry returns immediately | Prove C/VM return and snapshot lifetime before enabling real executed stitched traces |
 | VM events | START/STOP/ABORT/RECORD callbacks still retain recorder ownership | Exact event/continuation sessions with callbacks outside shared ownership |
 | Generic FFI traces | CALLXS is live, with incomplete aggregate ABI and caller topology | Extend generic ABI lowering and no-replay frame lifecycle |
@@ -150,8 +150,8 @@ controls and post-fix completion tests:
   so same-owner GC cannot invalidate that lifetime proof. Real paused-reclaimer
   schedules, inspectable RETRY events, GDB allocation failure, and both restored
   wait negative controls are covered in
-  `notes/jit-stop-admission-nonwaiting-2026-09-04.md`. The committed root-abort
-  retirement wait and disabled stitching remain open.
+  `notes/jit-stop-admission-nonwaiting-2026-09-04.md`. The root-abort follow-up
+  below addresses post-publication cleanup; disabled stitching remains open.
 - `09d09e63`: preserve public SWEEP table requests after raw writes, and make
   FINREG membership inspection observational with explicit RETRY propagation.
   Available-buffer lost-edge controls, cyclic child graphs, real admission
@@ -172,6 +172,15 @@ controls and post-fix completion tests:
   with the old reader and pass with the scalar reader. Counter transitions,
   rollback, transfer, bootstrap, and partial teardown are covered in
   `notes/gc-stats-arena-publication-2026-09-04.md`.
+- Root-CAS-loser cleanup now publishes a pending request on its exact reserved
+  slot before the ABORT callback. An eligible root scan consumes it under
+  tracked SMR and one-shot recorder admission. Paused-reclaimer completion,
+  ordinary trace inspection, callback flush/GC, graph preservation on refusal,
+  repeated capacity flushes, real reclamation/slot reuse, close, and the old-wait
+  negative control pass. See
+  `notes/jit-root-abort-deferred-retirement-2026-09-05.md`. A resumed table read
+  still waits on that same paused reclaimer; its stopped stack is preserved as
+  a separate core-operation progress defect.
 
 The combined normal Linux runtime passes the default stock suite (387 tests
 with JIT off, 509 with JIT on). That is semantic regression coverage, not
