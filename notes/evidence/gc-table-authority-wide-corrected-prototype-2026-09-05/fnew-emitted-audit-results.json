@@ -1,0 +1,99 @@
+[
+  {
+    "kind": "compile",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/src",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/tests",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/t-wide-fnew-emitted-audit.c",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-fnew-emitted-audit"
+    ],
+    "rc": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "kind": "run",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-fnew-emitted-audit",
+      "1536"
+    ],
+    "env": {
+      "LJ_WIDE_MCODE_FILE": "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/fnew-1536.mcode"
+    },
+    "rc": 0,
+    "elapsed": 0.005927636999331298,
+    "stdout": "FNEW cell 1536: both full resets, exact pending-token vetoes and neighbor guards passed\n",
+    "stderr": "emitted proof reset offsets: state=1409,1416 era=1423,1431 header=1920,1975 bytes=6103\n"
+  },
+  {
+    "kind": "disassemble",
+    "command": [
+      "objdump",
+      "-b",
+      "binary",
+      "-m",
+      "i386:x86-64",
+      "-D",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/fnew-1536.mcode"
+    ],
+    "rc": 0,
+    "stdout_file": "fnew-1536.disasm",
+    "stderr": "",
+    "mcode_sha256": "870ab89a72d20fa34321168e725180e3c3b3928a6e66b358bf29004377f6392b"
+  },
+  {
+    "kind": "run",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-fnew-emitted-audit",
+      "1537"
+    ],
+    "env": {
+      "LJ_WIDE_MCODE_FILE": "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/fnew-1537.mcode"
+    },
+    "rc": 0,
+    "elapsed": 0.005960207998214173,
+    "stdout": "FNEW cell 1537: both full resets, exact pending-token vetoes and neighbor guards passed\n",
+    "stderr": "emitted proof reset offsets: state=1409,1416 era=1423,1431 header=1920,1975 bytes=6103\n"
+  },
+  {
+    "kind": "disassemble",
+    "command": [
+      "objdump",
+      "-b",
+      "binary",
+      "-m",
+      "i386:x86-64",
+      "-D",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/fnew-1537.mcode"
+    ],
+    "rc": 0,
+    "stdout_file": "fnew-1537.disasm",
+    "stderr": "",
+    "mcode_sha256": "dabce0911372772dbae4fb80971a44529130eb84ffe4d776fae734388d2716ed"
+  }
+]

@@ -1,0 +1,332 @@
+[
+  {
+    "name": "compile-strict-tnew",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/src",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/tests",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/t-wide-tnew.c",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-tnew"
+    ],
+    "cwd": null,
+    "status": "complete",
+    "rc": 0,
+    "elapsed": 0.3676494339997589,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "strict-tnew-1536",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-tnew",
+      "1536"
+    ],
+    "cwd": null,
+    "status": "complete",
+    "rc": 0,
+    "elapsed": 0.0032084819995361613,
+    "stdout": "TNEW cell 1536 pending 0: exact full reset/token preservation/neighbor guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "strict-tnew-1537",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-tnew",
+      "1537"
+    ],
+    "cwd": null,
+    "status": "complete",
+    "rc": 0,
+    "elapsed": 0.003017001001353492,
+    "stdout": "TNEW cell 1537 pending 0: exact full reset/token preservation/neighbor guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "strict-tnew-1536-1",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-tnew",
+      "1536",
+      "1"
+    ],
+    "cwd": null,
+    "status": "complete",
+    "rc": 0,
+    "elapsed": 0.003016521000972716,
+    "stdout": "TNEW cell 1536 pending 1: exact full reset/token preservation/neighbor guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "strict-tnew-1537-1",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-tnew",
+      "1537",
+      "1"
+    ],
+    "cwd": null,
+    "status": "complete",
+    "rc": 0,
+    "elapsed": 0.0030624309983977582,
+    "stdout": "TNEW cell 1537 pending 1: exact full reset/token preservation/neighbor guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-strict-fnew",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/src",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/tests",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/t-wide-fnew.c",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-fnew"
+    ],
+    "cwd": null,
+    "status": "complete",
+    "rc": 0,
+    "elapsed": 0.6711934129998554,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "strict-fnew-1536",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-fnew",
+      "1536"
+    ],
+    "cwd": null,
+    "status": "complete",
+    "rc": 0,
+    "elapsed": 0.005744197000240092,
+    "stdout": "FNEW cell 1536: both full resets, exact pending-token vetoes and neighbor guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "strict-fnew-1537",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-fnew",
+      "1537"
+    ],
+    "cwd": null,
+    "status": "complete",
+    "rc": 0,
+    "elapsed": 0.00549142700037919,
+    "stdout": "FNEW cell 1537: both full resets, exact pending-token vetoes and neighbor guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-control-tnew",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/control/src",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/control/tests",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/t-wide-tnew.c",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/control/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/control-tnew"
+    ],
+    "cwd": null,
+    "status": "complete",
+    "rc": 0,
+    "elapsed": 0.36066103800112614,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "control-tnew-1536",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/control-tnew",
+      "1536"
+    ],
+    "cwd": null,
+    "status": "complete",
+    "rc": -6,
+    "elapsed": 0.05551145799836377,
+    "stdout": "",
+    "stderr": "control-tnew: /tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/wide-guards.h:41: wide_guards_check: Assertion `p.lo == wide_guards[i].proof.lo' failed.\n"
+  },
+  {
+    "name": "control-tnew-1537",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/control-tnew",
+      "1537"
+    ],
+    "cwd": null,
+    "status": "complete",
+    "rc": -6,
+    "elapsed": 0.05304496800090419,
+    "stdout": "",
+    "stderr": "control-tnew: /tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/wide-guards.h:40: wide_guards_check: Assertion `la_load64_acq(&wide_guards[i].stamp->token.control) == wide_guards[i].token' failed.\n"
+  },
+  {
+    "name": "compile-control-fnew",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/control/src",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/control/tests",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/t-wide-fnew.c",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/control/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/control-fnew"
+    ],
+    "cwd": null,
+    "status": "complete",
+    "rc": 0,
+    "elapsed": 0.6607256370007235,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "control-fnew-1536",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/control-fnew",
+      "1536"
+    ],
+    "cwd": null,
+    "status": "complete",
+    "rc": -6,
+    "elapsed": 0.05121335900003032,
+    "stdout": "",
+    "stderr": "control-fnew: /tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/wide-guards.h:41: wide_guards_check: Assertion `p.lo == wide_guards[i].proof.lo' failed.\n"
+  },
+  {
+    "name": "control-fnew-1537",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/control-fnew",
+      "1537"
+    ],
+    "cwd": null,
+    "status": "complete",
+    "rc": -6,
+    "elapsed": 0.05596427400087123,
+    "stdout": "",
+    "stderr": "control-fnew: /tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/wide-guards.h:40: wide_guards_check: Assertion `la_load64_acq(&wide_guards[i].stamp->token.control) == wide_guards[i].token' failed.\n"
+  },
+  {
+    "name": "strict-tnew-existing",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-tnew",
+      "existing"
+    ],
+    "cwd": null,
+    "status": "complete",
+    "rc": 0,
+    "elapsed": 0.002757659000053536,
+    "stdout": "t-x64-tnew-empty-inline OK: interpreter empty TNEW inline/fallback paths verified\n",
+    "stderr": ""
+  },
+  {
+    "name": "strict-fnew-existing",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-fnew",
+      "existing"
+    ],
+    "cwd": null,
+    "status": "complete",
+    "rc": -6,
+    "elapsed": 0.05694168499940133,
+    "stdout": "",
+    "stderr": "strict-fnew: /tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/t-wide-fnew.c:2252: test_fnew_certificate_ssb_boundary: Assertion `lj_tg_ssb_next_acq(tg) >= base && end >= lj_tg_ssb_next_acq(tg) + 2' failed.\n"
+  }
+]

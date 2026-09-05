@@ -1,0 +1,22 @@
+--- tests/t-gc2-sweep-table-coalescing.c
++++ coalescing-adapter.c
+@@ -343,6 +343,9 @@
+   publish(&f, 0);
+   if (saturated)
+     la_store64_rel(&f.stamp->state, UINT32_MAX);
++#ifdef LJ_GC2_WIDE_STAMP
++  if (saturated) la_store64_rel(&f.stamp->era, UINT64_MAX);
++#endif
+   assert(lj_gc2_flush_ssb(f.g, f.tg) == 1);
+   watch(&f, LJ_GC2_TABLE_COALESCE_TEST_PRE_PROOF);
+   assert(pthread_create(&worker, NULL, scan_to_proof, &f) == 0);
+@@ -560,6 +563,9 @@
+   Fixture f = open_fixture_phase(0, 1, 0);
+   lj_gc2_barrier_tab_g(f.g, f.parent);
+   la_store64_rel(&f.stamp->state, UINT32_MAX);
++#ifdef LJ_GC2_WIDE_STAMP
++  la_store64_rel(&f.stamp->era, UINT64_MAX);
++#endif
+   assert(lj_gc2_flush_ssb(f.g, f.tg) == 1);
+   watch(&f, LJ_GC2_TABLE_COALESCE_TEST_PRE_PROOF);
+   assert(pthread_create(&old_scanner, NULL, scan_to_proof, &f) == 0);

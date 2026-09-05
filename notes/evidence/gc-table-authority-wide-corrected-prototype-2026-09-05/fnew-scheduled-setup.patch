@@ -1,0 +1,22 @@
+--- a/tests/t-jit-fnew-bump.c
++++ b/tests/t-jit-fnew-bump.c
+@@ -2236,6 +2236,9 @@
+   assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+   begin_open_fnew_mark(g, tg);
+   cycle = gc2_cycle_acq(g);
++  /* Preserve-abort carries real producer work. Publish that old buffer
++  ** before setting up the next capacity boundary; never rewind its cursor. */
++  (void)lj_gc2_flush_ssb(g, tg);
+   node = lj_tg_ssb_active_acq(tg);
+   base = lj_tg_ssb_base_acq(tg);
+   end = lj_tg_ssb_end_acq(tg);
+@@ -2301,6 +2304,9 @@
+   ** rooted graph leaves post-snapshot work and forces a bounded MARK reopen. */
+   for (i = 0; i < 64u && gc2_mark_root_scanned_acq(g) != 1; i++) {
+     assert(gc2_phase_acq(g) == LJ_GC2_MARK);
++    /* This C-only fixture schedules its close quantum explicitly instead of
++    ** racing the newly granted native turn deadline. */
++    lj_gc2_jit_mark_request_exit(g);
+     assert(!lj_gc2_mark_complete(g, L, 1, 1));
+   }
+   assert(gc2_phase_acq(g) == LJ_GC2_MARK);

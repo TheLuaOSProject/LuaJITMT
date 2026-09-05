@@ -1,0 +1,25 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-fnew-prerequisites"
+  ],
+  "gdb_command": [
+    "gdb",
+    "-q",
+    "-batch",
+    "-ex",
+    "set pagination off",
+    "-ex",
+    "thread apply all bt",
+    "-ex",
+    "info registers",
+    "-p",
+    "116417"
+  ],
+  "gdb_rc": 0,
+  "pid": 116417,
+  "final_rc": -9,
+  "status": "sampled_then_stopped"
+}

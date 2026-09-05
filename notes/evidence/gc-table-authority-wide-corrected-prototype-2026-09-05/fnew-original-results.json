@@ -1,0 +1,92 @@
+[
+  {
+    "variant": "baseline-strict",
+    "kind": "compile",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/baseline-strict/src",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/baseline-strict/tests/t-jit-fnew-bump.c",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/baseline-strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/baseline-strict-fnew-original"
+    ],
+    "rc": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "variant": "baseline-strict",
+    "kind": "run",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/baseline-strict-fnew-original"
+    ],
+    "rc": -6,
+    "elapsed": 0.09087835700120195,
+    "stdout": "",
+    "stderr": "baseline-strict-fnew-original: /tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/baseline-strict/tests/t-jit-fnew-bump.c:2244: test_fnew_certificate_ssb_boundary: Assertion `lj_tg_ssb_next_acq(tg) >= base && end >= lj_tg_ssb_next_acq(tg) + 2' failed.\n"
+  },
+  {
+    "variant": "strict",
+    "kind": "compile",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/src",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/tests/t-jit-fnew-bump.c",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-fnew-original"
+    ],
+    "rc": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "variant": "strict",
+    "kind": "run",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-fnew-original"
+    ],
+    "rc": -6,
+    "elapsed": 0.0913300900010654,
+    "stdout": "",
+    "stderr": "strict-fnew-original: /tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/tests/t-jit-fnew-bump.c:2244: test_fnew_certificate_ssb_boundary: Assertion `lj_tg_ssb_next_acq(tg) >= base && end >= lj_tg_ssb_next_acq(tg) + 2' failed.\n"
+  }
+]

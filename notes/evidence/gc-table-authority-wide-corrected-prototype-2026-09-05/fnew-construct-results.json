@@ -1,0 +1,96 @@
+[
+  {
+    "variant": "baseline-strict",
+    "kind": "compile",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/baseline-strict/src",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/baseline-strict/tests",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/fnew-construct-diag.c",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/baseline-strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/baseline-strict-fnew-construct-diag"
+    ],
+    "rc": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "variant": "baseline-strict",
+    "kind": "run",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/baseline-strict-fnew-construct-diag"
+    ],
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.057773152000663686,
+    "stdout": "t-jit-fnew-bump OK\n",
+    "stderr": "AT test_vm_tnew_root_member phase 1 cycle 1\nAT test_vm_tnew_branch_targets phase 1 cycle 1\n  list0 a0x7f3033860000 cell657 life2 root1 block1 ready1 gct11\n  list0 a0x7f3033860000 cell662 life2 root1 block1 ready1 gct7\n  list0 a0x7f3033860000 cell671 life2 root1 block1 ready1 gct8\n  list0 a0x7f3033860000 cell674 life2 root1 block1 ready1 gct11\nAT test_uvcell_bump_direct phase 1 cycle 1\n  list0 a0x7f3033860000 cell657 life2 root1 block1 ready1 gct11\n  list0 a0x7f3033860000 cell662 life2 root1 block1 ready1 gct7\n  list0 a0x7f3033860000 cell671 life2 root1 block1 ready1 gct8\n  list0 a0x7f3033860000 cell674 life2 root1 block1 ready1 gct11\nAT test_bump_allocator_gate_direct phase 1 cycle 1\n  list0 a0x7f3033860000 cell657 life2 root1 block1 ready1 gct11\n  list0 a0x7f3033860000 cell662 life2 root1 block1 ready1 gct7\n  list0 a0x7f3033860000 cell671 life2 root1 block1 ready1 gct8\n  list0 a0x7f3033860000 cell674 life2 root1 block1 ready1 gct11\n  list0 a0x7f3033860000 cell762 life2 root1 block1 ready1 gct8\n  list0 a0x7f3033860000 cell765 life2 root1 block1 ready1 gct5\nAT test_interpreter_numeric_fast_path phase 1 cycle 1\n  list0 a0x7f3033860000 cell657 life2 root1 block1 ready1 gct11\n  list0 a0x7f3033860000 cell662 life2 root1 block1 ready1 gct7\n  list0 a0x7f3033860000 cell671 life2 root1 block1 ready1 gct8\n  list0 a0x7f3033860000 cell674 life2 root1 block1 ready1 gct11\n  list0 a0x7f3033860000 cell762 life2 root1 block1 ready1 gct8\n  list0 a0x7f3033860000 cell765 life2 root1 block1 ready1 gct5\nAT test_accounting_fast_direct phase 1 cycle 1\n  list0 a0x7f3033860000 cell657 life2 root1 block1 ready1 gct11\n  list0 a0x7f3033860000 cell662 life2 root1 block1 ready1 gct7\n  list0 a0x7f3033860000 cell671 life2 root1 block1 ready1 gct8\n  list0 a0x7f3033860000 cell674 life2 root1 block1 ready1 gct11\n  list0 a0x7f3033860000 cell762 life2 root1 block1 ready1 gct8\n  list0 a0x7f3033860000 cell765 life2 root1 block1 ready1 gct5\nAT test_white_bump_clears_seeded_marks phase 0 cycle 2\nAT test_fnew_certificate_ssb_boundary phase 0 cycle 4\nAT test_active_black_direct_publishes_typed phase 0 cycle 7\nAT test_active_black_direct_keeps_exact_cells phase 0 cycle 8\nAT test_accounting_checkpoint phase 0 cycle 8\nAT test_interpreter_generic_oneuv_chain phase 0 cycle 8\nAT test_interpreter_multiuv_afterfn phase 0 cycle 8\nAT test_interpreter_no_upvalue_fast_path phase 0 cycle 8\nAT test_no_upvalue_forjit_fast_direct phase 0 cycle 8\nAT test_traced_immutable_numeric_inline phase 0 cycle 11\nAT test_traced_active_mark_certificate phase 0 cycle 13\n"
+  },
+  {
+    "variant": "strict",
+    "kind": "compile",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/src",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/tests",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/fnew-construct-diag.c",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-fnew-construct-diag"
+    ],
+    "rc": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "variant": "strict",
+    "kind": "run",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-fnew-construct-diag"
+    ],
+    "rc": -9,
+    "status": "timeout",
+    "elapsed": 5.006573161999768,
+    "stdout": "",
+    "stderr": "AT test_vm_tnew_root_member phase 1 cycle 1\nAT test_vm_tnew_branch_targets phase 1 cycle 1\n  list0 a0x7f0b14cf0000 cell659 life2 root1 block1 ready1 gct11\n  list0 a0x7f0b14cf0000 cell664 life2 root1 block1 ready1 gct7\n  list0 a0x7f0b14cf0000 cell673 life2 root1 block1 ready1 gct8\n  list0 a0x7f0b14cf0000 cell676 life2 root1 block1 ready1 gct11\nAT test_uvcell_bump_direct phase 1 cycle 1\n  list0 a0x7f0b14cf0000 cell659 life2 root1 block1 ready1 gct11\n  list0 a0x7f0b14cf0000 cell664 life2 root1 block1 ready1 gct7\n  list0 a0x7f0b14cf0000 cell673 life2 root1 block1 ready1 gct8\n  list0 a0x7f0b14cf0000 cell676 life2 root1 block1 ready1 gct11\nAT test_bump_allocator_gate_direct phase 1 cycle 1\n  list0 a0x7f0b14cf0000 cell659 life2 root1 block1 ready1 gct11\n  list0 a0x7f0b14cf0000 cell664 life2 root1 block1 ready1 gct7\n  list0 a0x7f0b14cf0000 cell673 life2 root1 block1 ready1 gct8\n  list0 a0x7f0b14cf0000 cell676 life2 root1 block1 ready1 gct11\n  list0 a0x7f0b14cf0000 cell764 life2 root1 block1 ready1 gct8\n  list0 a0x7f0b14cf0000 cell767 life2 root1 block1 ready1 gct5\nAT test_interpreter_numeric_fast_path phase 1 cycle 1\n  list0 a0x7f0b14cf0000 cell659 life2 root1 block1 ready1 gct11\n  list0 a0x7f0b14cf0000 cell664 life2 root1 block1 ready1 gct7\n  list0 a0x7f0b14cf0000 cell673 life2 root1 block1 ready1 gct8\n  list0 a0x7f0b14cf0000 cell676 life2 root1 block1 ready1 gct11\n  list0 a0x7f0b14cf0000 cell764 life2 root1 block1 ready1 gct8\n  list0 a0x7f0b14cf0000 cell767 life2 root1 block1 ready1 gct5\nAT test_accounting_fast_direct phase 1 cycle 1\n  list0 a0x7f0b14cf0000 cell659 life2 root1 block1 ready1 gct11\n  list0 a0x7f0b14cf0000 cell664 life2 root1 block1 ready1 gct7\n  list0 a0x7f0b14cf0000 cell673 life2 root1 block1 ready1 gct8\n  list0 a0x7f0b14cf0000 cell676 life2 root1 block1 ready1 gct11\n  list0 a0x7f0b14cf0000 cell764 life2 root1 block1 ready1 gct8\n  list0 a0x7f0b14cf0000 cell767 life2 root1 block1 ready1 gct5\nAT test_white_bump_clears_seeded_marks phase 0 cycle 2\nAT test_fnew_certificate_ssb_boundary phase 0 cycle 4\n"
+  }
+]

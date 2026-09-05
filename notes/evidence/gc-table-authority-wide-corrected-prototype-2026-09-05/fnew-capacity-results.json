@@ -1,0 +1,64 @@
+[
+  {
+    "variant": "baseline-strict",
+    "kind": "compile",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/baseline-strict/src",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/baseline-strict/tests",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/fnew-capacity-setup.c",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/baseline-strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/baseline-strict-fnew-capacity"
+    ],
+    "rc": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "variant": "baseline-strict",
+    "kind": "run",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/baseline-strict-fnew-capacity"
+    ],
+    "rc": -6,
+    "elapsed": 0.11501360799957183,
+    "stdout": "",
+    "stderr": "baseline-strict-fnew-capacity: /tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/fnew-capacity-setup.c:2310: establish_persistent_fnew_root_snapshot: Assertion `gc2_mark_root_scanned_acq(g) == 1' failed.\n"
+  },
+  {
+    "variant": "strict",
+    "kind": "run",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-fnew-capacity"
+    ],
+    "status": "timeout",
+    "timeout_seconds": 50,
+    "rc": null,
+    "stdout": "",
+    "stderr": "",
+    "exception": "subprocess.TimeoutExpired from subprocess.run(timeout=50), preserved from initial tool result"
+  }
+]

@@ -1,0 +1,33 @@
+[
+  {
+    "kind": "compile",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/src",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/tests",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/t-wide-fnew-emitted-audit.c",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-fnew-emitted-audit"
+    ],
+    "rc": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/t-wide-fnew-emitted-audit.c: In function \u2018assert_traced_fnew_descriptor_order\u2019:\n/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/t-wide-fnew-emitted-audit.c:1337:17: error: too few arguments to function \u2018find_mem_qword_zero_store\u2019\n 1337 |     era_zero1 = find_mem_qword_zero_store(mc, len, stamp_zero2 + 1u,\n      |                 ^~~~~~~~~~~~~~~~~~~~~~~~~\n/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/t-wide-fnew-emitted-audit.c:519:15: note: declared here\n  519 | static size_t find_mem_qword_zero_store(const uint8_t *mc, size_t len,\n      |               ^~~~~~~~~~~~~~~~~~~~~~~~~\n/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/t-wide-fnew-emitted-audit.c:1340:7: error: too few arguments to function \u2018find_mem_qword_zero_store\u2019\n 1340 |       find_mem_qword_zero_store(mc, len, era_zero1 + 1u,\n      |       ^~~~~~~~~~~~~~~~~~~~~~~~~\n/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/t-wide-fnew-emitted-audit.c:519:15: note: declared here\n  519 | static size_t find_mem_qword_zero_store(const uint8_t *mc, size_t len,\n      |               ^~~~~~~~~~~~~~~~~~~~~~~~~\n"
+  }
+]

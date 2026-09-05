@@ -1,0 +1,35 @@
+--- t-wide-fnew.c
++++ t-wide-fnew-emitted-audit.c
+@@ -1094,7 +1094,7 @@
+     size_t cert_pt_guard, cert_env_guard, env_load, env_store, helper_call;
+     size_t cert_fallback = (size_t)-1, target = (size_t)-1;
+     size_t token_check[4], token_target[4];
+-    size_t stamp_zero1, stamp_zero2;
++    size_t stamp_zero1, stamp_zero2, era_zero1, era_zero2;
+     size_t dtor_check[LJ_ARENA_DTOR_PLANES][2];
+     size_t dtor_check_bad[LJ_ARENA_DTOR_PLANES][2];
+     X64MemInsn dtor_check_insn[LJ_ARENA_DTOR_PLANES][2];
+@@ -1334,6 +1334,23 @@
+ 	   token_target[2] <= pair_rollback);
+     assert(token_check[3] < stamp_zero1 && stamp_zero1 < stamp_zero2 &&
+ 	   stamp_zero2 < fn_header && stamp_zero2 < uv_header);
++    era_zero1 = find_mem_qword_zero_store(mc, len, stamp_zero2 + 1u,
++                                         offsetof(LJGC2TabStamp, era), -1, NULL);
++    era_zero2 = era_zero1 == (size_t)-1 ? (size_t)-1 :
++      find_mem_qword_zero_store(mc, len, era_zero1 + 1u,
++                               offsetof(LJGC2TabStamp, era), -1, NULL);
++    assert(era_zero1 != (size_t)-1 && era_zero2 != (size_t)-1);
++    assert(stamp_zero2 < era_zero1 && era_zero1 < era_zero2 &&
++           era_zero2 < fn_header && era_zero2 < uv_header);
++    {
++      const char *path = getenv("LJ_WIDE_MCODE_FILE");
++      if (path) {
++        FILE *fp = fopen(path, "wb"); assert(fp);
++        assert(fwrite(mc, 1, len, fp) == len); assert(fclose(fp) == 0);
++        fprintf(stderr, "emitted proof reset offsets: state=%zu,%zu era=%zu,%zu header=%zu,%zu bytes=%zu\n",
++                stamp_zero1, stamp_zero2, era_zero1, era_zero2, fn_header, uv_header, len);
++      }
++    }
+     assert(env_load < mark_guard && mark_guard < phase_guard &&
+ 	   phase_guard < allocblack_guard && allocblack_guard < gate_guard &&
+ 	   gate_guard < cycle_load && cycle_load < cycle_nonzero &&

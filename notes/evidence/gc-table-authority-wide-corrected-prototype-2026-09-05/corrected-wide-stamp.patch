@@ -1,0 +1,300 @@
+diff --git a/src/lj_arena.c b/src/lj_arena.c
+--- a/src/lj_arena.c
++++ b/src/lj_arena.c
+@@ -385,7 +385,9 @@
+   if (!stamp || lj_gc2_table_token_state(
+ 	la_load64_acq(&stamp->token.control)) != LJ_GC2_TABLE_TOKEN_NONE)
+     return 0;
++  /* Private incarnation: no old body observer may retain this proof. */
+   la_store64_rel(&stamp->state, 0);
++  la_store64_rel(&stamp->era, 0);
+   return 1;
+ }
+ 
+diff --git a/src/lj_arena.h b/src/lj_arena.h
+--- a/src/lj_arena.h
++++ b/src/lj_arena.h
+@@ -93,10 +93,26 @@
+ ** allocate one entry for every possible cell before publication; huge
+ ** allocations use the identical layout embedded in their mapping header.
+ ** Token generations deliberately survive small-cell free/reuse. */
++#define LJ_GC2_WIDE_STAMP 1
++#define LJ_GC2_TABSTAMP_SHIFT 5u
+ typedef struct LJGC2TabStamp {
+-  uint64_t state;  /* Low 32 bits: dirty epoch, high 32 bits: scan cycle. */
++  union {
++    la_u128 proof;
++    struct {
++      uint64_t state;  /* Low 32: dirty serial, high 32: covered cycle. */
++      uint64_t era;    /* Non-wrapping authority for serial renewal. */
++    };
++  };
+   LJGC2TableToken token;
+ } LJGC2TabStamp;
++
++/* Prototype: exact CX16 snapshot, with no mixed-width read optimization. */
++static LJ_AINLINE la_u128 lj_arena_gc2_stamp_snapshot(LJGC2TabStamp *stamp)
++{
++  la_u128 exact = { 0, 0 }, zero = { 0, 0 };
++  (void)la_cas128(&stamp->proof, &exact, zero);
++  return exact;
++}
+ 
+ typedef struct LJGC2TabStampArena {
+   LJGC2TabStamp cell[LJ_ARENA_CELLS];
+@@ -1585,16 +1601,17 @@
+ LJ_STATIC_ASSERT(LJ_ARENA_LIFETIME_MUTATING <= 15);
+ LJ_STATIC_ASSERT((LJ_AF_ROOT_CONSTRUCT & LJ_AF_FLAG_MASK) == 0);
+ LJ_STATIC_ASSERT((LJ_AF_DTOR_CONSTRUCT & LJ_AF_FLAG_MASK) == 0);
+-LJ_STATIC_ASSERT(sizeof(GCAhdr) == 128u);
+-LJ_STATIC_ASSERT(sizeof(LJGC2TabStamp) == 16u);
+-LJ_STATIC_ASSERT(offsetof(LJGC2TabStamp, token) == 8u);
+-LJ_STATIC_ASSERT(sizeof(LJGC2TabStampArena) == LJ_ARENA_SIZE);
+-LJ_STATIC_ASSERT(offsetof(GCAhdr, huge_tabstamp) == 104u);
+-LJ_STATIC_ASSERT(offsetof(GCAhdr, gc2_tabledesc) == 120u);
++LJ_STATIC_ASSERT(sizeof(GCAhdr) == 160u);
++LJ_STATIC_ASSERT(sizeof(LJGC2TabStamp) == 32u);
++LJ_STATIC_ASSERT(sizeof(LJGC2TabStamp) == (1u << LJ_GC2_TABSTAMP_SHIFT));
++LJ_STATIC_ASSERT(offsetof(LJGC2TabStamp, token) == 16u);
++LJ_STATIC_ASSERT(sizeof(LJGC2TabStampArena) == 2u * LJ_ARENA_SIZE);
++LJ_STATIC_ASSERT(offsetof(GCAhdr, huge_tabstamp) == 112u);
++LJ_STATIC_ASSERT(offsetof(GCAhdr, gc2_tabledesc) == 144u);
+ LJ_STATIC_ASSERT(offsetof(GCAhdr, remote_active) == 56u);
+ LJ_STATIC_ASSERT((offsetof(GCAhdr, remote_active) & 7u) == 0);
+ LJ_STATIC_ASSERT(offsetof(GCAhdr, remote_free) == 64u);
+-LJ_STATIC_ASSERT(offsetof(GCArena, block) == 128u);
++LJ_STATIC_ASSERT(offsetof(GCArena, block) == 160u);
+ LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->block) == 512u);
+ LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->mark) == 512u);
+ LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->sweep) == 1024u);
+@@ -1603,7 +1620,7 @@
+ LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->lifetime) == 2048u);
+ LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->dtor) == 2048u);
+ LJ_STATIC_ASSERT(sizeof(((GCArena *)0)->late) == 512u);
+-LJ_STATIC_ASSERT(LJ_AFIRST_CELL == 616u);
++LJ_STATIC_ASSERT(LJ_AFIRST_CELL == 618u);
+ LJ_STATIC_ASSERT(sizeof(LJArenaFreeRun) == LJ_CELL_SIZE);
+ LJ_STATIC_ASSERT(sizeof(LJArenaRemoteFree) == LJ_CELL_SIZE);
+ 
+diff --git a/src/lj_gc2.c b/src/lj_gc2.c
+--- a/src/lj_gc2.c
++++ b/src/lj_gc2.c
+@@ -15538,29 +15538,38 @@
+   return lj_arena_gc2_stamp_acq(t);
+ }
+ 
+-static LJ_AINLINE uint32_t gc2_table_dirty_epoch(global_State *g, GCtab *t,
+-						 int *stamped)
++static LJ_AINLINE la_u128 gc2_table_dirty_epoch(global_State *g, GCtab *t,
++                                               int *stamped)
+ {
+   LJGC2TabStamp *s = gc2_table_stamp(g, t);
++  la_u128 empty = { 0, 0 };
+   if (stamped)
+     *stamped = s != NULL;
+-  return s ? gc2_tabstamp_dirty(la_load64_acq(&s->state)) : 0;
++  return s ? lj_arena_gc2_stamp_snapshot(s) : empty;
++}
++
++static LJ_AINLINE int gc2_table_stamp_terminal(global_State *g, GCtab *t)
++{
++  la_u128 stamp = gc2_table_dirty_epoch(g, t, NULL);
++  return stamp.hi == UINT64_MAX && gc2_tabstamp_dirty(stamp.lo) == UINT32_MAX;
+ }
+ 
+ static LJ_AINLINE int gc2_table_scan_publish(global_State *g, GCtab *t,
+-					     uint32_t cycle, uint32_t dirty)
++                                             uint32_t cycle, la_u128 captured)
+ {
+   LJGC2TabStamp *s = gc2_table_stamp(g, t);
+-  uint64_t old;
++  la_u128 old;
+   if (!s)
+     return 0;
+-  old = la_load64_acq(&s->state);
++  old = lj_arena_gc2_stamp_snapshot(s);
+   for (;;) {
+-    uint64_t next;
+-    if (gc2_tabstamp_dirty(old) != dirty)
++    la_u128 next;
++    if (old.hi != captured.hi ||
++        gc2_tabstamp_dirty(old.lo) != gc2_tabstamp_dirty(captured.lo))
+       return 0;
+-    next = gc2_tabstamp_pack(cycle, dirty);
+-    if (la_cas64(&s->state, &old, next, LA_ACQ_REL, LA_ACQ))
++    next.lo = gc2_tabstamp_pack(cycle, gc2_tabstamp_dirty(captured.lo));
++    next.hi = captured.hi;
++    if (la_cas128(&s->proof, &old, next))
+       return 1;
+   }
+ }
+@@ -15568,35 +15577,31 @@
+ static LJ_AINLINE void gc2_table_dirty_bump(global_State *g, GCtab *t)
+ {
+   LJGC2TabStamp *s = gc2_table_stamp(g, t);
+-  uint64_t old;
++  la_u128 old;
+   if (!s)
+     return;
+-  old = la_load64_acq(&s->state);
++  old = lj_arena_gc2_stamp_snapshot(s);
+   for (;;) {
+-    uint32_t old_dirty = gc2_tabstamp_dirty(old);
+-    uint32_t dirty;
+-    uint64_t next;
+-    if (old_dirty == ~(uint32_t)0) {
+-      /* Dirty epochs share the scan-proof word and therefore must not ABA.
+-      ** Clear the covered cycle while retaining the absorbing maximum, then
+-      ** pin global reclamation. Mutator writes continue normally; only false
+-      ** reclamation authority is forbidden after this practically unreachable
+-      ** saturation edge. */
+-      next = gc2_tabstamp_pack(0, old_dirty);
+-      if (la_cas64(&s->state, &old, next, LA_ACQ_REL, LA_ACQ)) {
+-	gc2_activation_pin_no_reclaim(g);
+-	return;
++    uint32_t dirty = gc2_tabstamp_dirty(old.lo);
++    la_u128 next;
++    next.hi = old.hi;
++    if (dirty == UINT32_MAX) {
++      if (old.hi == UINT64_MAX) {
++        next.lo = gc2_tabstamp_pack(0, UINT32_MAX);
++        if (la_cas128(&s->proof, &old, next)) {
++          gc2_activation_pin_no_reclaim(g);
++          return;
++        }
++        continue;
+       }
+-      continue;
+-    }
+-    dirty = old_dirty + 1u;
+-    /*
+-    ** Dirtying a table invalidates its same-cycle scan proof in the same atomic
+-    ** word used by the scanner. The scanner's post-clear check repairs the
+-    ** remaining NEEDSCAN lost-clear race.
+-    */
+-    next = gc2_tabstamp_pack(0, dirty);
+-    if (la_cas64(&s->state, &old, next, LA_ACQ_REL, LA_ACQ))
++      next.hi = old.hi + 1u;
++      dirty = 1u;
++    } else {
++      dirty++;
++    }
++    /* Renewal and invalidation share the exact update LP. */
++    next.lo = gc2_tabstamp_pack(0, dirty);
++    if (la_cas128(&s->proof, &old, next))
+       return;
+   }
+ }
+@@ -15779,7 +15784,7 @@
+   gc2_table_coalesce_test_at(g, t, LJ_GC2_TABLE_COALESCE_TEST_PRE_DIRTY);
+   gc2_table_dirty_bump(g, t);
+   gc2_table_coalesce_test_at(g, t, LJ_GC2_TABLE_COALESCE_TEST_POST_DIRTY);
+-  if (gc2_table_dirty_epoch(g, t, NULL) == ~(uint32_t)0) {
++  if (gc2_table_stamp_terminal(g, t)) {
+     /* An old scanner can republish the absorbing maximum after this write.
+     ** Do not let the legacy rescan helper's current-stamp shortcut consume
+     ** the request before it reaches the saturation-aware SSB converter. */
+@@ -18338,19 +18343,19 @@
+   if (cycle == 0)
+     return 0;
+   s = gc2_table_stamp(g, t);
+-  return s && gc2_tabstamp_cycle(la_load64_acq(&s->state)) == cycle;
++  return s && gc2_tabstamp_cycle(lj_arena_gc2_stamp_snapshot(s).lo) == cycle;
+ }
+ 
+ static LJ_AINLINE int gc2_table_scan_coalescible(global_State *g, GCtab *t)
+ {
+   LJGC2TabStamp *s = gc2_table_stamp(g, t);
+   uint32_t cycle = gc2_cycle_acq(g);
+-  uint64_t state;
++  la_u128 state;
+   if (!s || cycle == 0)
+     return 0;
+-  state = la_load64_acq(&s->state);
+-  return gc2_tabstamp_cycle(state) == cycle &&
+-    gc2_tabstamp_dirty(state) != ~(uint32_t)0;
++  state = lj_arena_gc2_stamp_snapshot(s);
++  return gc2_tabstamp_cycle(state.lo) == cycle &&
++    !(state.hi == UINT64_MAX && gc2_tabstamp_dirty(state.lo) == UINT32_MAX);
+ }
+ 
+ #if defined(LJ_GC2_TEST_HELPERS)
+@@ -18782,7 +18787,8 @@
+   MSize asize = 0, acap = 0, hmask = 0;
+   Node *node = NULL;
+   int array_status, node_status;
+-  uint32_t cycle, dirty0;
++  uint32_t cycle;
++  la_u128 dirty0;
+   int stamped, tabstatus, weak_retry = 0, weak_recorded = 1;
+   GC2TabProofResult result = GC2_TAB_PROOF_RETRY;
+   gc2_mark_scope_init(&scope);
+diff --git a/src/vm_x64.dasc b/src/vm_x64.dasc
+--- a/src/vm_x64.dasc
++++ b/src/vm_x64.dasc
+@@ -347,6 +347,8 @@
+ #define ARENA_READY_OFS		((int)offsetof(GCArena, ready))
+ #define ARENA_GC2_TABSTAMP_OFS	((int)offsetof(GCAhdr, gc2_tabstamp))
+ #define TABSTAMP_STATE_OFS	((int)offsetof(LJGC2TabStamp, state))
++#define TABSTAMP_ERA_OFS		((int)offsetof(LJGC2TabStamp, era))
++#define TABSTAMP_STRIDE_SHIFT	((int)LJ_GC2_TABSTAMP_SHIFT)
+ #define TABSTAMP_TOKEN_CONTROL_OFS \
+   ((int)(offsetof(LJGC2TabStamp, token) + \
+ 	 offsetof(LJGC2TableToken, control)))
+@@ -4538,7 +4540,7 @@
+     |  test RC, RC
+     |  jz >7
+     |  mov ITYPEd, RAd
+-    |  shl ITYPE, 4
++    |  shl ITYPE, TABSTAMP_STRIDE_SHIFT
+     |  test byte [RC+ITYPE+TABSTAMP_TOKEN_CONTROL_OFS], TABSTAMP_TOKEN_STATE_MASK
+     |  jnz >7
+     |  mov dword [DISPATCH+DISPATCH_TG(alloc.bump[LJ_ARENAK_TRAVERSABLE].cell)], r9d
+@@ -4651,7 +4653,7 @@
+     |  test RA, RA
+     |  jz >8
+     |  mov r9, ITYPE
+-    |  shl r9, 4
++    |  shl r9, TABSTAMP_STRIDE_SHIFT
+     |  add RA, r9
+     |  test byte [RA+TABSTAMP_TOKEN_CONTROL_OFS], TABSTAMP_TOKEN_STATE_MASK
+     |  jz >4
+@@ -4720,6 +4722,7 @@
+     |  // token generation deliberately survives. This precedes body, READY
+     |  // and block publication and is release-ordered by x64 TSO.
+     |  mov qword [RA+TABSTAMP_STATE_OFS], 0
++    |  mov qword [RA+TABSTAMP_ERA_OFS], 0
+     |  movzx r9d, byte [TMPR+GL_OFS(gc.currentwhite)]
+     |  and r9d, LJ_GC_WHITES
+     |  mov byte TAB:RC->marked, r9b
+diff --git a/src/lj_asm_x86.h b/src/lj_asm_x86.h
+--- a/src/lj_asm_x86.h
++++ b/src/lj_asm_x86.h
+@@ -1565,6 +1565,9 @@
+   checkmclim(as);
+ 
+   emit_jmp(as, l_stamp_ok);
++  /* Private exact incarnations: clear the complete era/serial proof. */
++  asm_fnew1num_movi64zero(as, tmp, offsetof(LJGC2TabStamp, era));
++  asm_fnew1num_movi64zero(as, root, offsetof(LJGC2TabStamp, era));
+   asm_fnew1num_movi64zero(as, tmp, offsetof(LJGC2TabStamp, state));
+   asm_fnew1num_movi64zero(as, root, offsetof(LJGC2TabStamp, state));
+   asm_fnew1num_testi8(as, tmp,
+@@ -1579,7 +1582,7 @@
+ 		  offsetof(LJGC2TableToken, control)),
+ 	(int32_t)LJ_GC2_TABLE_TOKEN_STATE_MASK, CC_NZ, l_stamp_rollback);
+   emit_rr(as, XO_ARITH(XOg_ADD), root|REX_64, tmp|REX_64);
+-  emit_shifti(as, XOg_SHL|REX_64, tmp, 4);
++  emit_shifti(as, XOg_SHL|REX_64, tmp, LJ_GC2_TABSTAMP_SHIFT);
+   emit_rr(as, XO_MOV, tmp, cell);
+   emit_jcc(as, CC_Z, l_stamp_rollback);
+   emit_rr(as, XO_TEST, root|REX_64, root|REX_64);
+@@ -1640,7 +1643,7 @@
+ 		  offsetof(LJGC2TableToken, control)),
+ 	(int32_t)LJ_GC2_TABLE_TOKEN_STATE_MASK, CC_NZ, l_fallback);
+   emit_rr(as, XO_ARITH(XOg_ADD), root|REX_64, uv|REX_64);
+-  emit_shifti(as, XOg_SHL|REX_64, root, 4);
++  emit_shifti(as, XOg_SHL|REX_64, root, LJ_GC2_TABSTAMP_SHIFT);
+   emit_rr(as, XO_MOV, root, cell);
+   emit_jcc(as, CC_Z, l_fallback);
+   emit_rr(as, XO_TEST, uv|REX_64, uv|REX_64);

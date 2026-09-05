@@ -1,0 +1,36 @@
+[
+  {
+    "name": "compile-strict-tnew",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/src",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/tests",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/t-wide-tnew.c",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-tnew"
+    ],
+    "cwd": null,
+    "status": "complete",
+    "rc": 1,
+    "elapsed": 0.3237580289987818,
+    "stdout": "",
+    "stderr": "In file included from /tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/src/lj_obj.h:16,\n                 from /tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/tnew-original.c:13,\n                 from /tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/t-wide-tnew.c:2:\nIn function \u2018lj_gc2_table_token_generation\u2019,\n    inlined from \u2018lj_gc2_table_token_complete\u2019 at /tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/src/lj_gc2token.h:802:16,\n    inlined from \u2018high_cell_case\u2019 at /tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/t-wide-tnew.c:61:5:\n/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/src/lj_gc2token.h:614:18: error: \u2018ticket.control\u2019 may be used uninitialized [-Werror=maybe-uninitialized]\n  614 |   return control >> LJ_GC2_TABLE_TOKEN_STATE_BITS;\n      |                  ^\n/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/t-wide-tnew.c: In function \u2018high_cell_case\u2019:\n/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/t-wide-tnew.c:16:25: note: \u2018ticket.control\u2019 was declared here\n   16 |   LJGC2TableTokenTicket ticket;\n      |                         ^~~~~~\ncc1: all warnings being treated as errors\n"
+  }
+]

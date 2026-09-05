@@ -1,0 +1,31 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-fnew-prerequisites"
+  ],
+  "gdb_command": [
+    "gdb",
+    "-q",
+    "-batch",
+    "-ex",
+    "set pagination off",
+    "-ex",
+    "bt",
+    "-ex",
+    "frame function test_active_black_direct_publishes_typed",
+    "-ex",
+    "set print pretty on",
+    "-ex",
+    "p g->gc2",
+    "-ex",
+    "p tg->alloc",
+    "-p",
+    "118524"
+  ],
+  "gdb_rc": 0,
+  "pid": 118524,
+  "final_rc": -9,
+  "status": "sampled_then_stopped"
+}

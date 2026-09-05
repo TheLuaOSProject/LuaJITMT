@@ -1,0 +1,465 @@
+
+/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/normal/src/lj_vm.o:     file format elf64-x86-64
+
+
+Disassembly of section .text:
+
+0000000000000e38 <lj_BC_TNEW>:
+     e38:	48 8b 6c 24 10       	mov    0x10(%rsp),%rbp
+     e3d:	48 89 55 20          	mov    %rdx,0x20(%rbp)
+     e41:	48 89 5c 24 18       	mov    %rbx,0x18(%rsp)
+     e46:	4d 8b 96 18 08 00 00 	mov    0x818(%r14),%r10
+     e4d:	4d 8b 5a 48          	mov    0x48(%r10),%r11
+     e51:	4d 3b 5a 50          	cmp    0x50(%r10),%r11
+     e55:	0f 83 54 07 00 00    	jae    15af <lj_BC_TNEW+0x777>
+     e5b:	4d 8b 9a 48 08 00 00 	mov    0x848(%r10),%r11
+     e62:	4d 3b 9a 60 08 00 00 	cmp    0x860(%r10),%r11
+     e69:	76 22                	jbe    e8d <lj_BC_TNEW+0x55>
+     e6b:	49 81 ba 60 08 00 00 	cmpq   $0x8000,0x860(%r10)
+     e72:	00 80 00 00 
+     e76:	0f 82 33 07 00 00    	jb     15af <lj_BC_TNEW+0x777>
+     e7c:	49 81 be 18 6d 00 00 	cmpq   $0x8000,0x6d18(%r14)
+     e83:	00 80 00 00 
+     e87:	0f 83 22 07 00 00    	jae    15af <lj_BC_TNEW+0x777>
+     e8d:	85 c0                	test   %eax,%eax
+     e8f:	0f 85 c4 06 00 00    	jne    1559 <lj_BC_TNEW+0x721>
+     e95:	41 83 ba a0 15 00 00 	cmpl   $0x0,0x15a0(%r10)
+     e9c:	00 
+     e9d:	0f 85 ac 06 00 00    	jne    154f <lj_BC_TNEW+0x717>
+     ea3:	41 83 ba a8 15 00 00 	cmpl   $0x0,0x15a8(%r10)
+     eaa:	00 
+     eab:	0f 85 9e 06 00 00    	jne    154f <lj_BC_TNEW+0x717>
+     eb1:	41 83 ba 28 11 00 00 	cmpl   $0x0,0x1128(%r10)
+     eb8:	00 
+     eb9:	0f 85 90 06 00 00    	jne    154f <lj_BC_TNEW+0x717>
+     ebf:	41 83 7a 10 00       	cmpl   $0x0,0x10(%r10)
+     ec4:	0f 84 85 06 00 00    	je     154f <lj_BC_TNEW+0x717>
+     eca:	4d 8d 46 80          	lea    -0x80(%r14),%r8
+     ece:	4d 39 82 00 04 00 00 	cmp    %r8,0x400(%r10)
+     ed5:	0f 85 74 06 00 00    	jne    154f <lj_BC_TNEW+0x717>
+     edb:	41 f6 86 ae 08 00 00 	testb  $0x4,0x8ae(%r14)
+     ee2:	04 
+     ee3:	0f 85 66 06 00 00    	jne    154f <lj_BC_TNEW+0x717>
+     ee9:	41 f6 86 ae 08 00 00 	testb  $0x1,0x8ae(%r14)
+     ef0:	01 
+     ef1:	0f 84 58 06 00 00    	je     154f <lj_BC_TNEW+0x717>
+     ef7:	4d 8d 8e 70 0b 00 00 	lea    0xb70(%r14),%r9
+     efe:	4d 39 4a 08          	cmp    %r9,0x8(%r10)
+     f02:	0f 85 47 06 00 00    	jne    154f <lj_BC_TNEW+0x717>
+     f08:	4d 8b 8e 18 6d 00 00 	mov    0x6d18(%r14),%r9
+     f0f:	49 81 f9 b0 7f 00 00 	cmp    $0x7fb0,%r9
+     f16:	0f 83 33 06 00 00    	jae    154f <lj_BC_TNEW+0x717>
+     f1c:	4d 8b 86 c0 08 00 00 	mov    0x8c0(%r14),%r8
+     f23:	4d 85 c0             	test   %r8,%r8
+     f26:	0f 84 23 06 00 00    	je     154f <lj_BC_TNEW+0x717>
+     f2c:	41 8b 8e c8 08 00 00 	mov    0x8c8(%r14),%ecx
+     f33:	45 8b 9e cc 08 00 00 	mov    0x8cc(%r14),%r11d
+     f3a:	44 8d 49 05          	lea    0x5(%rcx),%r9d
+     f3e:	45 39 d9             	cmp    %r11d,%r9d
+     f41:	0f 87 08 06 00 00    	ja     154f <lj_BC_TNEW+0x717>
+     f47:	49 8b 40 20          	mov    0x20(%r8),%rax
+     f4b:	48 85 c0             	test   %rax,%rax
+     f4e:	0f 84 fb 05 00 00    	je     154f <lj_BC_TNEW+0x717>
+     f54:	41 89 cb             	mov    %ecx,%r11d
+     f57:	49 c1 e3 05          	shl    $0x5,%r11
+     f5b:	42 f6 44 18 10 03    	testb  $0x3,0x10(%rax,%r11,1)
+     f61:	0f 85 e8 05 00 00    	jne    154f <lj_BC_TNEW+0x717>
+     f67:	45 89 8e c8 08 00 00 	mov    %r9d,0x8c8(%r14)
+     f6e:	41 89 cb             	mov    %ecx,%r11d
+     f71:	48 c1 e1 04          	shl    $0x4,%rcx
+     f75:	49 8d 04 08          	lea    (%r8,%rcx,1),%rax
+     f79:	48 89 04 24          	mov    %rax,(%rsp)
+     f7d:	45 89 d9             	mov    %r11d,%r9d
+     f80:	41 83 e1 0f          	and    $0xf,%r9d
+     f84:	41 c1 e1 02          	shl    $0x2,%r9d
+     f88:	41 c1 eb 04          	shr    $0x4,%r11d
+     f8c:	4f 8d 04 d8          	lea    (%r8,%r11,8),%r8
+     f90:	49 8b 80 a0 10 00 00 	mov    0x10a0(%r8),%rax
+     f97:	49 89 c3             	mov    %rax,%r11
+     f9a:	4d 0f ab cb          	bts    %r9,%r11
+     f9e:	0f 82 a8 05 00 00    	jb     154c <lj_BC_TNEW+0x714>
+     fa4:	4d 0f b3 cb          	btr    %r9,%r11
+     fa8:	41 83 c1 01          	add    $0x1,%r9d
+     fac:	4d 0f ab cb          	bts    %r9,%r11
+     fb0:	0f 82 96 05 00 00    	jb     154c <lj_BC_TNEW+0x714>
+     fb6:	41 83 c1 01          	add    $0x1,%r9d
+     fba:	4d 0f ab cb          	bts    %r9,%r11
+     fbe:	0f 82 88 05 00 00    	jb     154c <lj_BC_TNEW+0x714>
+     fc4:	4d 0f b3 cb          	btr    %r9,%r11
+     fc8:	41 83 c1 01          	add    $0x1,%r9d
+     fcc:	4d 0f ab cb          	bts    %r9,%r11
+     fd0:	0f 82 76 05 00 00    	jb     154c <lj_BC_TNEW+0x714>
+     fd6:	4d 0f b3 cb          	btr    %r9,%r11
+     fda:	41 83 e9 03          	sub    $0x3,%r9d
+     fde:	f0 4d 0f b1 98 a0 10 	lock cmpxchg %r11,0x10a0(%r8)
+     fe5:	00 00 
+     fe7:	75 ae                	jne    f97 <lj_BC_TNEW+0x15f>
+     fe9:	4c 8b 04 24          	mov    (%rsp),%r8
+     fed:	49 81 e0 00 00 ff ff 	and    $0xffffffffffff0000,%r8
+     ff4:	4c 8b 1c 24          	mov    (%rsp),%r11
+     ff8:	4d 29 c3             	sub    %r8,%r11
+     ffb:	49 c1 eb 04          	shr    $0x4,%r11
+     fff:	45 89 d9             	mov    %r11d,%r9d
+    1002:	41 83 e1 1f          	and    $0x1f,%r9d
+    1006:	41 d1 e1             	shl    $1,%r9d
+    1009:	41 c1 eb 05          	shr    $0x5,%r11d
+    100d:	4f 8d 04 d8          	lea    (%r8,%r11,8),%r8
+    1011:	49 8b 80 a0 0c 00 00 	mov    0xca0(%r8),%rax
+    1018:	49 89 c3             	mov    %rax,%r11
+    101b:	4d 0f ab cb          	bts    %r9,%r11
+    101f:	72 22                	jb     1043 <lj_BC_TNEW+0x20b>
+    1021:	41 83 c1 01          	add    $0x1,%r9d
+    1025:	4d 0f ab cb          	bts    %r9,%r11
+    1029:	72 18                	jb     1043 <lj_BC_TNEW+0x20b>
+    102b:	4d 0f b3 cb          	btr    %r9,%r11
+    102f:	41 83 e9 01          	sub    $0x1,%r9d
+    1033:	f0 4d 0f b1 98 a0 0c 	lock cmpxchg %r11,0xca0(%r8)
+    103a:	00 00 
+    103c:	75 da                	jne    1018 <lj_BC_TNEW+0x1e0>
+    103e:	e9 87 00 00 00       	jmp    10ca <lj_BC_TNEW+0x292>
+    1043:	4c 8b 04 24          	mov    (%rsp),%r8
+    1047:	49 81 e0 00 00 ff ff 	and    $0xffffffffffff0000,%r8
+    104e:	4c 8b 1c 24          	mov    (%rsp),%r11
+    1052:	4d 29 c3             	sub    %r8,%r11
+    1055:	49 c1 eb 04          	shr    $0x4,%r11
+    1059:	45 89 d9             	mov    %r11d,%r9d
+    105c:	41 83 e1 0f          	and    $0xf,%r9d
+    1060:	41 c1 e1 02          	shl    $0x2,%r9d
+    1064:	41 c1 eb 04          	shr    $0x4,%r11d
+    1068:	4f 8d 04 d8          	lea    (%r8,%r11,8),%r8
+    106c:	49 8b 80 a0 10 00 00 	mov    0x10a0(%r8),%rax
+    1073:	49 89 c3             	mov    %rax,%r11
+    1076:	4d 0f ab cb          	bts    %r9,%r11
+    107a:	0f 82 cc 04 00 00    	jb     154c <lj_BC_TNEW+0x714>
+    1080:	4d 0f b3 cb          	btr    %r9,%r11
+    1084:	41 83 c1 01          	add    $0x1,%r9d
+    1088:	4d 0f b3 cb          	btr    %r9,%r11
+    108c:	0f 83 ba 04 00 00    	jae    154c <lj_BC_TNEW+0x714>
+    1092:	41 83 c1 01          	add    $0x1,%r9d
+    1096:	4d 0f ab cb          	bts    %r9,%r11
+    109a:	0f 82 ac 04 00 00    	jb     154c <lj_BC_TNEW+0x714>
+    10a0:	4d 0f b3 cb          	btr    %r9,%r11
+    10a4:	41 83 c1 01          	add    $0x1,%r9d
+    10a8:	4d 0f ab cb          	bts    %r9,%r11
+    10ac:	0f 82 9a 04 00 00    	jb     154c <lj_BC_TNEW+0x714>
+    10b2:	4d 0f b3 cb          	btr    %r9,%r11
+    10b6:	41 83 e9 03          	sub    $0x3,%r9d
+    10ba:	f0 4d 0f b1 98 a0 10 	lock cmpxchg %r11,0x10a0(%r8)
+    10c1:	00 00 
+    10c3:	75 ae                	jne    1073 <lj_BC_TNEW+0x23b>
+    10c5:	e9 82 04 00 00       	jmp    154c <lj_BC_TNEW+0x714>
+    10ca:	48 8b 04 24          	mov    (%rsp),%rax
+    10ce:	49 89 c0             	mov    %rax,%r8
+    10d1:	49 81 e0 00 00 ff ff 	and    $0xffffffffffff0000,%r8
+    10d8:	49 89 c3             	mov    %rax,%r11
+    10db:	4d 29 c3             	sub    %r8,%r11
+    10de:	49 c1 eb 04          	shr    $0x4,%r11
+    10e2:	49 8b 48 20          	mov    0x20(%r8),%rcx
+    10e6:	48 85 c9             	test   %rcx,%rcx
+    10e9:	74 14                	je     10ff <lj_BC_TNEW+0x2c7>
+    10eb:	4d 89 d9             	mov    %r11,%r9
+    10ee:	49 c1 e1 05          	shl    $0x5,%r9
+    10f2:	4c 01 c9             	add    %r9,%rcx
+    10f5:	f6 41 10 03          	testb  $0x3,0x10(%rcx)
+    10f9:	0f 84 e4 00 00 00    	je     11e3 <lj_BC_TNEW+0x3ab>
+    10ff:	4c 8b 04 24          	mov    (%rsp),%r8
+    1103:	49 81 e0 00 00 ff ff 	and    $0xffffffffffff0000,%r8
+    110a:	4c 8b 1c 24          	mov    (%rsp),%r11
+    110e:	4d 29 c3             	sub    %r8,%r11
+    1111:	49 c1 eb 04          	shr    $0x4,%r11
+    1115:	45 89 d9             	mov    %r11d,%r9d
+    1118:	41 83 e1 1f          	and    $0x1f,%r9d
+    111c:	41 d1 e1             	shl    $1,%r9d
+    111f:	41 c1 eb 05          	shr    $0x5,%r11d
+    1123:	4f 8d 04 d8          	lea    (%r8,%r11,8),%r8
+    1127:	49 8b 80 a0 0c 00 00 	mov    0xca0(%r8),%rax
+    112e:	49 89 c3             	mov    %rax,%r11
+    1131:	4d 0f b3 cb          	btr    %r9,%r11
+    1135:	0f 83 11 04 00 00    	jae    154c <lj_BC_TNEW+0x714>
+    113b:	41 83 c1 01          	add    $0x1,%r9d
+    113f:	4d 0f ab cb          	bts    %r9,%r11
+    1143:	0f 82 03 04 00 00    	jb     154c <lj_BC_TNEW+0x714>
+    1149:	4d 0f b3 cb          	btr    %r9,%r11
+    114d:	41 83 e9 01          	sub    $0x1,%r9d
+    1151:	f0 4d 0f b1 98 a0 0c 	lock cmpxchg %r11,0xca0(%r8)
+    1158:	00 00 
+    115a:	75 d2                	jne    112e <lj_BC_TNEW+0x2f6>
+    115c:	4c 8b 04 24          	mov    (%rsp),%r8
+    1160:	49 81 e0 00 00 ff ff 	and    $0xffffffffffff0000,%r8
+    1167:	4c 8b 1c 24          	mov    (%rsp),%r11
+    116b:	4d 29 c3             	sub    %r8,%r11
+    116e:	49 c1 eb 04          	shr    $0x4,%r11
+    1172:	45 89 d9             	mov    %r11d,%r9d
+    1175:	41 83 e1 0f          	and    $0xf,%r9d
+    1179:	41 c1 e1 02          	shl    $0x2,%r9d
+    117d:	41 c1 eb 04          	shr    $0x4,%r11d
+    1181:	4f 8d 04 d8          	lea    (%r8,%r11,8),%r8
+    1185:	49 8b 80 a0 10 00 00 	mov    0x10a0(%r8),%rax
+    118c:	49 89 c3             	mov    %rax,%r11
+    118f:	4d 0f ab cb          	bts    %r9,%r11
+    1193:	0f 82 b3 03 00 00    	jb     154c <lj_BC_TNEW+0x714>
+    1199:	4d 0f b3 cb          	btr    %r9,%r11
+    119d:	41 83 c1 01          	add    $0x1,%r9d
+    11a1:	4d 0f b3 cb          	btr    %r9,%r11
+    11a5:	0f 83 a1 03 00 00    	jae    154c <lj_BC_TNEW+0x714>
+    11ab:	41 83 c1 01          	add    $0x1,%r9d
+    11af:	4d 0f ab cb          	bts    %r9,%r11
+    11b3:	0f 82 93 03 00 00    	jb     154c <lj_BC_TNEW+0x714>
+    11b9:	4d 0f b3 cb          	btr    %r9,%r11
+    11bd:	41 83 c1 01          	add    $0x1,%r9d
+    11c1:	4d 0f ab cb          	bts    %r9,%r11
+    11c5:	0f 82 81 03 00 00    	jb     154c <lj_BC_TNEW+0x714>
+    11cb:	4d 0f b3 cb          	btr    %r9,%r11
+    11cf:	41 83 e9 03          	sub    $0x3,%r9d
+    11d3:	f0 4d 0f b1 98 a0 10 	lock cmpxchg %r11,0x10a0(%r8)
+    11da:	00 00 
+    11dc:	75 ae                	jne    118c <lj_BC_TNEW+0x354>
+    11de:	e9 6c 03 00 00       	jmp    154f <lj_BC_TNEW+0x717>
+    11e3:	48 c7 01 00 00 00 00 	movq   $0x0,(%rcx)
+    11ea:	48 c7 41 08 00 00 00 	movq   $0x0,0x8(%rcx)
+    11f1:	00 
+    11f2:	45 0f b6 4a 58       	movzbl 0x58(%r10),%r9d
+    11f7:	41 83 e1 03          	and    $0x3,%r9d
+    11fb:	44 88 48 08          	mov    %r9b,0x8(%rax)
+    11ff:	c6 40 09 0b          	movb   $0xb,0x9(%rax)
+    1203:	c6 40 0a ff          	movb   $0xff,0xa(%rax)
+    1207:	c6 40 0b 00          	movb   $0x0,0xb(%rax)
+    120b:	48 c7 40 10 00 00 00 	movq   $0x0,0x10(%rax)
+    1212:	00 
+    1213:	48 c7 40 20 00 00 00 	movq   $0x0,0x20(%rax)
+    121a:	00 
+    121b:	c7 40 30 00 00 00 00 	movl   $0x0,0x30(%rax)
+    1222:	c7 40 34 00 00 00 00 	movl   $0x0,0x34(%rax)
+    1229:	48 c7 40 40 00 00 00 	movq   $0x0,0x40(%rax)
+    1230:	00 
+    1231:	48 c7 40 48 00 00 00 	movq   $0x0,0x48(%rax)
+    1238:	00 
+    1239:	c6 40 0c 00          	movb   $0x0,0xc(%rax)
+    123d:	4d 8d 8a e8 01 00 00 	lea    0x1e8(%r10),%r9
+    1244:	4c 89 48 28          	mov    %r9,0x28(%rax)
+    1248:	4c 89 48 38          	mov    %r9,0x38(%rax)
+    124c:	41 80 be 58 0b 00 00 	cmpb   $0x0,0xb58(%r14)
+    1253:	00 
+    1254:	74 0b                	je     1261 <lj_BC_TNEW+0x429>
+    1256:	f0 4d 0f ab 98 a0 02 	lock bts %r11,0x2a0(%r8)
+    125d:	00 00 
+    125f:	eb 09                	jmp    126a <lj_BC_TNEW+0x432>
+    1261:	f0 4d 0f b3 98 a0 02 	lock btr %r11,0x2a0(%r8)
+    1268:	00 00 
+    126a:	4d 0f ab 98 a0 24 00 	bts    %r11,0x24a0(%r8)
+    1271:	00 
+    1272:	4d 0f ab 98 a0 00 00 	bts    %r11,0xa0(%r8)
+    1279:	00 
+    127a:	49 83 42 48 50       	addq   $0x50,0x48(%r10)
+    127f:	49 83 86 18 6d 00 00 	addq   $0x50,0x6d18(%r14)
+    1286:	50 
+    1287:	49 89 c0             	mov    %rax,%r8
+    128a:	49 8b 86 18 4c 00 00 	mov    0x4c18(%r14),%rax
+    1291:	49 89 00             	mov    %rax,(%r8)
+    1294:	41 c7 82 08 04 00 00 	movl   $0x1,0x408(%r10)
+    129b:	01 00 00 00 
+    129f:	f0 4d 0f b1 86 18 4c 	lock cmpxchg %r8,0x4c18(%r14)
+    12a6:	00 00 
+    12a8:	75 e7                	jne    1291 <lj_BC_TNEW+0x459>
+    12aa:	41 c7 82 08 04 00 00 	movl   $0x1,0x408(%r10)
+    12b1:	01 00 00 00 
+    12b5:	4c 89 c1             	mov    %r8,%rcx
+    12b8:	48 81 e1 00 00 ff ff 	and    $0xffffffffffff0000,%rcx
+    12bf:	4d 89 c3             	mov    %r8,%r11
+    12c2:	49 29 cb             	sub    %rcx,%r11
+    12c5:	49 c1 eb 04          	shr    $0x4,%r11
+    12c9:	45 89 d9             	mov    %r11d,%r9d
+    12cc:	41 83 e1 0f          	and    $0xf,%r9d
+    12d0:	41 c1 e1 02          	shl    $0x2,%r9d
+    12d4:	41 c1 eb 04          	shr    $0x4,%r11d
+    12d8:	4a 8d 0c d9          	lea    (%rcx,%r11,8),%rcx
+    12dc:	48 8b 81 a0 10 00 00 	mov    0x10a0(%rcx),%rax
+    12e3:	49 89 c3             	mov    %rax,%r11
+    12e6:	4d 0f ab cb          	bts    %r9,%r11
+    12ea:	72 5e                	jb     134a <lj_BC_TNEW+0x512>
+    12ec:	45 8d 49 01          	lea    0x1(%r9),%r9d
+    12f0:	4d 0f b3 cb          	btr    %r9,%r11
+    12f4:	0f 83 52 02 00 00    	jae    154c <lj_BC_TNEW+0x714>
+    12fa:	45 8d 49 ff          	lea    -0x1(%r9),%r9d
+    12fe:	45 8d 49 02          	lea    0x2(%r9),%r9d
+    1302:	4d 0f ab cb          	bts    %r9,%r11
+    1306:	45 8d 49 fe          	lea    -0x2(%r9),%r9d
+    130a:	0f 82 3c 02 00 00    	jb     154c <lj_BC_TNEW+0x714>
+    1310:	45 8d 49 02          	lea    0x2(%r9),%r9d
+    1314:	4d 0f b3 cb          	btr    %r9,%r11
+    1318:	45 8d 49 fe          	lea    -0x2(%r9),%r9d
+    131c:	45 8d 49 03          	lea    0x3(%r9),%r9d
+    1320:	4d 0f ab cb          	bts    %r9,%r11
+    1324:	45 8d 49 fd          	lea    -0x3(%r9),%r9d
+    1328:	0f 82 1e 02 00 00    	jb     154c <lj_BC_TNEW+0x714>
+    132e:	45 8d 49 03          	lea    0x3(%r9),%r9d
+    1332:	4d 0f b3 cb          	btr    %r9,%r11
+    1336:	45 8d 49 fd          	lea    -0x3(%r9),%r9d
+    133a:	f0 4c 0f b1 99 a0 10 	lock cmpxchg %r11,0x10a0(%rcx)
+    1341:	00 00 
+    1343:	75 9e                	jne    12e3 <lj_BC_TNEW+0x4ab>
+    1345:	e9 bf 00 00 00       	jmp    1409 <lj_BC_TNEW+0x5d1>
+    134a:	49 89 c3             	mov    %rax,%r11
+    134d:	4d 0f b3 cb          	btr    %r9,%r11
+    1351:	0f 83 f5 01 00 00    	jae    154c <lj_BC_TNEW+0x714>
+    1357:	45 8d 49 01          	lea    0x1(%r9),%r9d
+    135b:	4d 0f b3 cb          	btr    %r9,%r11
+    135f:	45 8d 49 ff          	lea    -0x1(%r9),%r9d
+    1363:	73 32                	jae    1397 <lj_BC_TNEW+0x55f>
+    1365:	45 8d 49 02          	lea    0x2(%r9),%r9d
+    1369:	4d 0f ab cb          	bts    %r9,%r11
+    136d:	45 8d 49 fe          	lea    -0x2(%r9),%r9d
+    1371:	0f 82 d5 01 00 00    	jb     154c <lj_BC_TNEW+0x714>
+    1377:	45 8d 49 02          	lea    0x2(%r9),%r9d
+    137b:	4d 0f b3 cb          	btr    %r9,%r11
+    137f:	45 8d 49 fe          	lea    -0x2(%r9),%r9d
+    1383:	45 8d 49 03          	lea    0x3(%r9),%r9d
+    1387:	4d 0f ab cb          	bts    %r9,%r11
+    138b:	45 8d 49 fd          	lea    -0x3(%r9),%r9d
+    138f:	0f 82 b7 01 00 00    	jb     154c <lj_BC_TNEW+0x714>
+    1395:	eb 72                	jmp    1409 <lj_BC_TNEW+0x5d1>
+    1397:	45 8d 49 02          	lea    0x2(%r9),%r9d
+    139b:	4d 0f ab cb          	bts    %r9,%r11
+    139f:	45 8d 49 fe          	lea    -0x2(%r9),%r9d
+    13a3:	0f 82 a3 01 00 00    	jb     154c <lj_BC_TNEW+0x714>
+    13a9:	45 8d 49 03          	lea    0x3(%r9),%r9d
+    13ad:	4d 0f ab cb          	bts    %r9,%r11
+    13b1:	45 8d 49 fd          	lea    -0x3(%r9),%r9d
+    13b5:	0f 82 91 01 00 00    	jb     154c <lj_BC_TNEW+0x714>
+    13bb:	4c 89 c1             	mov    %r8,%rcx
+    13be:	48 81 e1 00 00 ff ff 	and    $0xffffffffffff0000,%rcx
+    13c5:	4d 89 c3             	mov    %r8,%r11
+    13c8:	49 29 cb             	sub    %rcx,%r11
+    13cb:	49 c1 eb 04          	shr    $0x4,%r11
+    13cf:	45 89 d9             	mov    %r11d,%r9d
+    13d2:	41 83 e1 1f          	and    $0x1f,%r9d
+    13d6:	41 d1 e1             	shl    $1,%r9d
+    13d9:	41 c1 eb 05          	shr    $0x5,%r11d
+    13dd:	4a 8d 0c d9          	lea    (%rcx,%r11,8),%rcx
+    13e1:	48 8b 81 a0 0c 00 00 	mov    0xca0(%rcx),%rax
+    13e8:	49 89 c3             	mov    %rax,%r11
+    13eb:	4d 0f b3 cb          	btr    %r9,%r11
+    13ef:	0f 83 57 01 00 00    	jae    154c <lj_BC_TNEW+0x714>
+    13f5:	45 8d 49 01          	lea    0x1(%r9),%r9d
+    13f9:	4d 0f b3 cb          	btr    %r9,%r11
+    13fd:	0f 83 49 01 00 00    	jae    154c <lj_BC_TNEW+0x714>
+    1403:	45 8d 49 ff          	lea    -0x1(%r9),%r9d
+    1407:	eb 5b                	jmp    1464 <lj_BC_TNEW+0x62c>
+    1409:	4c 89 c1             	mov    %r8,%rcx
+    140c:	48 81 e1 00 00 ff ff 	and    $0xffffffffffff0000,%rcx
+    1413:	4d 89 c3             	mov    %r8,%r11
+    1416:	49 29 cb             	sub    %rcx,%r11
+    1419:	49 c1 eb 04          	shr    $0x4,%r11
+    141d:	45 89 d9             	mov    %r11d,%r9d
+    1420:	41 83 e1 1f          	and    $0x1f,%r9d
+    1424:	41 d1 e1             	shl    $1,%r9d
+    1427:	41 c1 eb 05          	shr    $0x5,%r11d
+    142b:	4a 8d 0c d9          	lea    (%rcx,%r11,8),%rcx
+    142f:	48 8b 81 a0 0c 00 00 	mov    0xca0(%rcx),%rax
+    1436:	49 89 c3             	mov    %rax,%r11
+    1439:	4d 0f b3 cb          	btr    %r9,%r11
+    143d:	0f 83 09 01 00 00    	jae    154c <lj_BC_TNEW+0x714>
+    1443:	4d 0f ab cb          	bts    %r9,%r11
+    1447:	45 8d 49 01          	lea    0x1(%r9),%r9d
+    144b:	4d 0f ab cb          	bts    %r9,%r11
+    144f:	0f 82 f7 00 00 00    	jb     154c <lj_BC_TNEW+0x714>
+    1455:	45 8d 49 ff          	lea    -0x1(%r9),%r9d
+    1459:	f0 4c 0f b1 99 a0 0c 	lock cmpxchg %r11,0xca0(%rcx)
+    1460:	00 00 
+    1462:	75 d2                	jne    1436 <lj_BC_TNEW+0x5fe>
+    1464:	4c 89 c1             	mov    %r8,%rcx
+    1467:	48 81 e1 00 00 ff ff 	and    $0xffffffffffff0000,%rcx
+    146e:	4d 89 c3             	mov    %r8,%r11
+    1471:	49 29 cb             	sub    %rcx,%r11
+    1474:	49 c1 eb 04          	shr    $0x4,%r11
+    1478:	45 89 d9             	mov    %r11d,%r9d
+    147b:	41 83 e1 0f          	and    $0xf,%r9d
+    147f:	41 c1 e1 02          	shl    $0x2,%r9d
+    1483:	41 c1 eb 04          	shr    $0x4,%r11d
+    1487:	4a 8d 0c d9          	lea    (%rcx,%r11,8),%rcx
+    148b:	48 8b 81 a0 10 00 00 	mov    0x10a0(%rcx),%rax
+    1492:	49 89 c3             	mov    %rax,%r11
+    1495:	4d 0f ab cb          	bts    %r9,%r11
+    1499:	72 5b                	jb     14f6 <lj_BC_TNEW+0x6be>
+    149b:	45 8d 49 01          	lea    0x1(%r9),%r9d
+    149f:	4d 0f b3 cb          	btr    %r9,%r11
+    14a3:	45 8d 49 ff          	lea    -0x1(%r9),%r9d
+    14a7:	0f 83 9f 00 00 00    	jae    154c <lj_BC_TNEW+0x714>
+    14ad:	45 8d 49 02          	lea    0x2(%r9),%r9d
+    14b1:	4d 0f ab cb          	bts    %r9,%r11
+    14b5:	45 8d 49 fe          	lea    -0x2(%r9),%r9d
+    14b9:	0f 82 8d 00 00 00    	jb     154c <lj_BC_TNEW+0x714>
+    14bf:	45 8d 49 02          	lea    0x2(%r9),%r9d
+    14c3:	4d 0f b3 cb          	btr    %r9,%r11
+    14c7:	45 8d 49 fe          	lea    -0x2(%r9),%r9d
+    14cb:	45 8d 49 03          	lea    0x3(%r9),%r9d
+    14cf:	4d 0f ab cb          	bts    %r9,%r11
+    14d3:	45 8d 49 fd          	lea    -0x3(%r9),%r9d
+    14d7:	0f 82 6f 00 00 00    	jb     154c <lj_BC_TNEW+0x714>
+    14dd:	45 8d 49 03          	lea    0x3(%r9),%r9d
+    14e1:	4d 0f b3 cb          	btr    %r9,%r11
+    14e5:	45 8d 49 fd          	lea    -0x3(%r9),%r9d
+    14e9:	f0 4c 0f b1 99 a0 10 	lock cmpxchg %r11,0x10a0(%rcx)
+    14f0:	00 00 
+    14f2:	75 9e                	jne    1492 <lj_BC_TNEW+0x65a>
+    14f4:	eb 51                	jmp    1547 <lj_BC_TNEW+0x70f>
+    14f6:	49 89 c3             	mov    %rax,%r11
+    14f9:	4d 0f b3 cb          	btr    %r9,%r11
+    14fd:	73 4d                	jae    154c <lj_BC_TNEW+0x714>
+    14ff:	45 8d 49 01          	lea    0x1(%r9),%r9d
+    1503:	4d 0f b3 cb          	btr    %r9,%r11
+    1507:	45 8d 49 ff          	lea    -0x1(%r9),%r9d
+    150b:	73 1e                	jae    152b <lj_BC_TNEW+0x6f3>
+    150d:	45 8d 49 02          	lea    0x2(%r9),%r9d
+    1511:	4d 0f ab cb          	bts    %r9,%r11
+    1515:	45 8d 49 fe          	lea    -0x2(%r9),%r9d
+    1519:	72 31                	jb     154c <lj_BC_TNEW+0x714>
+    151b:	45 8d 49 03          	lea    0x3(%r9),%r9d
+    151f:	4d 0f ab cb          	bts    %r9,%r11
+    1523:	45 8d 49 fd          	lea    -0x3(%r9),%r9d
+    1527:	72 23                	jb     154c <lj_BC_TNEW+0x714>
+    1529:	eb 1c                	jmp    1547 <lj_BC_TNEW+0x70f>
+    152b:	45 8d 49 02          	lea    0x2(%r9),%r9d
+    152f:	4d 0f ab cb          	bts    %r9,%r11
+    1533:	45 8d 49 fe          	lea    -0x2(%r9),%r9d
+    1537:	72 13                	jb     154c <lj_BC_TNEW+0x714>
+    1539:	45 8d 49 03          	lea    0x3(%r9),%r9d
+    153d:	4d 0f ab cb          	bts    %r9,%r11
+    1541:	45 8d 49 fd          	lea    -0x3(%r9),%r9d
+    1545:	72 05                	jb     154c <lj_BC_TNEW+0x714>
+    1547:	4c 89 c0             	mov    %r8,%rax
+    154a:	eb 28                	jmp    1574 <lj_BC_TNEW+0x73c>
+    154c:	cc                   	int3
+    154d:	eb fd                	jmp    154c <lj_BC_TNEW+0x714>
+    154f:	48 89 ef             	mov    %rbp,%rdi
+    1552:	e8 00 00 00 00       	call   1557 <lj_BC_TNEW+0x71f>
+    1557:	eb 1b                	jmp    1574 <lj_BC_TNEW+0x73c>
+    1559:	89 c2                	mov    %eax,%edx
+    155b:	25 ff 07 00 00       	and    $0x7ff,%eax
+    1560:	c1 ea 0b             	shr    $0xb,%edx
+    1563:	3d ff 07 00 00       	cmp    $0x7ff,%eax
+    1568:	74 3e                	je     15a8 <lj_BC_TNEW+0x770>
+    156a:	48 89 ef             	mov    %rbp,%rdi
+    156d:	89 c6                	mov    %eax,%esi
+    156f:	e8 00 00 00 00       	call   1574 <lj_BC_TNEW+0x73c>
+    1574:	48 8b 55 20          	mov    0x20(%rbp),%rdx
+    1578:	0f b6 4b fd          	movzbl -0x3(%rbx),%ecx
+    157c:	49 bb 00 00 00 00 00 	movabs $0xfffa000000000000,%r11
+    1583:	00 fa ff 
+    1586:	4c 09 d8             	or     %r11,%rax
+    1589:	48 89 04 ca          	mov    %rax,(%rdx,%rcx,8)
+    158d:	49 83 86 20 6d 00 00 	addq   $0x1,0x6d20(%r14)
+    1594:	01 
+    1595:	8b 03                	mov    (%rbx),%eax
+    1597:	0f b6 cc             	movzbl %ah,%ecx
+    159a:	0f b6 e8             	movzbl %al,%ebp
+    159d:	48 83 c3 04          	add    $0x4,%rbx
+    15a1:	c1 e8 10             	shr    $0x10,%eax
+    15a4:	41 ff 24 ee          	jmp    *(%r14,%rbp,8)
+    15a8:	b8 01 08 00 00       	mov    $0x801,%eax
+    15ad:	eb bb                	jmp    156a <lj_BC_TNEW+0x732>
+    15af:	48 89 ef             	mov    %rbp,%rdi
+    15b2:	e8 00 00 00 00       	call   15b7 <lj_BC_TNEW+0x77f>
+    15b7:	0f b7 43 fe          	movzwl -0x2(%rbx),%eax
+    15bb:	4d 8b 96 18 08 00 00 	mov    0x818(%r14),%r10
+    15c2:	e9 c6 f8 ff ff       	jmp    e8d <lj_BC_TNEW+0x55>

@@ -1,0 +1,122 @@
+{
+  "base": "d680421c4cb50b85437d88255bc89358c5e3a6b1",
+  "source_files": {
+    "src/lj_arena.c": {
+      "sha256": "fc067e1a887fb876ccc7b893cd0c91a1295efb2593d04f8fd89e9c2118bb2f2f",
+      "git_blob": "82c76710d7211473e34d0bf6762c38ffddd42248"
+    },
+    "src/lj_arena.h": {
+      "sha256": "6d234038f06a4be20c6613a946db643ffc83f41d3de81e1dd7079a8e38823acc",
+      "git_blob": "5ba1116c3e846de0b8c5a2905fec1522ba8410d6"
+    },
+    "src/lj_gc2.c": {
+      "sha256": "1b6c7121b2eab80886aa62a540458733cece6281cc2f6c337e88617067b32c78",
+      "git_blob": "f4a3d317235047ff89b01b1ce26db1601f0e7ea4"
+    },
+    "src/vm_x64.dasc": {
+      "sha256": "36a93b08dd654f4f0a063e8a8df32285d5750e61263197e7921c6759328bd924",
+      "git_blob": "d979db756fb44e883dc3647c4f8500438b2dc90b"
+    },
+    "src/lj_asm_x86.h": {
+      "sha256": "6c09b28f0a00ed1d537069695c619fc448f5eaffa6e0cd76c7546ff7165f7864",
+      "git_blob": "104a7ffb54f1062fe77e7585547fcbc41b817cc6"
+    }
+  },
+  "vm_checks": {
+    "strict": {
+      "command": [
+        "objdump",
+        "-d",
+        "--disassemble=lj_BC_TNEW",
+        "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/src/lj_vm.o"
+      ],
+      "object_sha256": "434953b8850e2b949c17a61b787ecde8beeed0705736a611f3904aa8d4b3b284",
+      "disassembly": "strict-tnew.disasm",
+      "disassembly_sha256": "0e727e81fb8cc3a3093f90b99602af5c2647bce1aec5cd14bd0eaa04a1bbadd2",
+      "instructions": {
+        "0xf57": "SHL 5 r11",
+        "0x10ee": "SHL 5 r9",
+        "0xf5b/0x10f5": "token at +16",
+        "0x11e3": "qword state=0 at entry+0",
+        "0x11ea": "qword era=0 at entry+8"
+      }
+    },
+    "normal": {
+      "command": [
+        "objdump",
+        "-d",
+        "--disassemble=lj_BC_TNEW",
+        "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/normal/src/lj_vm.o"
+      ],
+      "object_sha256": "0609feb842d79e9b8bc65bc9061ae77f06b726c55472c8244c02c7c3eef1d978",
+      "disassembly": "normal-tnew.disasm",
+      "disassembly_sha256": "16c2162b539ff34a9b1dcb81fee749e51b59f2aab051b0b1feca27aef77910b6",
+      "instructions": {
+        "0xf57": "SHL 5 r11",
+        "0x10ee": "SHL 5 r9",
+        "0xf5b/0x10f5": "token at +16",
+        "0x11e3": "qword state=0 at entry+0",
+        "0x11ea": "qword era=0 at entry+8"
+      }
+    }
+  },
+  "jit_mcode_records": "fnew-emitted-audit-results.json",
+  "source_sites": [
+    {
+      "file": "src/lj_arena.h",
+      "lines": [
+        97,
+        98,
+        100,
+        106,
+        110,
+        118,
+        1604,
+        1605,
+        1606,
+        1607,
+        1608,
+        1609,
+        1610,
+        1623
+      ],
+      "proof_bytes": 16,
+      "entry_bytes": 32,
+      "token_offset": 16,
+      "purpose": "Layout/stride definition and static checks"
+    },
+    {
+      "file": "src/lj_arena.c",
+      "lines": [
+        379,
+        389,
+        390
+      ],
+      "purpose": "Private C reincarnation clears both proof halves; token generation survives"
+    },
+    {
+      "file": "src/vm_x64.dasc",
+      "lines": [
+        350,
+        351,
+        4543,
+        4656,
+        4724,
+        4725
+      ],
+      "purpose": "Both 32-byte index shifts; full TNEW reset after exact claims/token NONE"
+    },
+    {
+      "file": "src/lj_asm_x86.h",
+      "lines": [
+        1569,
+        1570,
+        1571,
+        1572,
+        1585,
+        1646
+      ],
+      "purpose": "Both 32-byte FNEW index shifts; full function/upvalue reset after exact claims/token NONE"
+    }
+  ]
+}

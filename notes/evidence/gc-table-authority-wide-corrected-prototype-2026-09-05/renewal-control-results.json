@@ -1,0 +1,248 @@
+[
+  {
+    "name": "build-negative-era",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-C",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/negative-era/src",
+      "-j4",
+      "BUILDMODE=static",
+      "XCFLAGS=-DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_FUNC_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLUA_USE_ASSERT"
+    ],
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.02169367799979227,
+    "stdout": "make: Entering directory '/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/negative-era/src'\nmake: Nothing to be done for 'default'.\nmake: Leaving directory '/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/negative-era/src'\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-strict",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/src",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/tests",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/t-wide-stamp-controls.c",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-renewal-controls"
+    ],
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.2861047149999649,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "strict-pause-0",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-renewal-controls",
+      "pause",
+      "0"
+    ],
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.002740064001045539,
+    "stdout": "wide-stamp focused control OK\n",
+    "stderr": ""
+  },
+  {
+    "name": "strict-collect-0",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-renewal-controls",
+      "collect",
+      "0"
+    ],
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.006778995000786381,
+    "stdout": "wide-stamp focused control OK\n",
+    "stderr": ""
+  },
+  {
+    "name": "strict-pause-1",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-renewal-controls",
+      "pause",
+      "1"
+    ],
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.002308306000486482,
+    "stdout": "wide-stamp focused control OK\n",
+    "stderr": ""
+  },
+  {
+    "name": "strict-collect-1",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/strict-renewal-controls",
+      "collect",
+      "1"
+    ],
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.007457140000042273,
+    "stdout": "wide-stamp focused control OK\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-negative-era",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/negative-era/src",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/negative-era/tests",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/t-wide-stamp-controls.c",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/negative-era/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/negative-era-renewal-controls"
+    ],
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.289844605998951,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "negative-era-pause-0",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/negative-era-renewal-controls",
+      "pause",
+      "0"
+    ],
+    "rc": -6,
+    "status": "complete",
+    "elapsed": 0.06594814700110874,
+    "stdout": "",
+    "stderr": "negative-era-renewal-controls: /tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/coalescing-adapter.c:244: assert_graph: Assertion `lj_gc2_ismarked(f->g, obj2gco(f->child)) == 1' failed.\n"
+  },
+  {
+    "name": "negative-era-pause-1",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/negative-era-renewal-controls",
+      "pause",
+      "1"
+    ],
+    "rc": -6,
+    "status": "complete",
+    "elapsed": 0.06493620499895769,
+    "stdout": "",
+    "stderr": "negative-era-renewal-controls: /tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/coalescing-adapter.c:244: assert_graph: Assertion `lj_gc2_ismarked(f->g, obj2gco(f->child)) == 1' failed.\n"
+  },
+  {
+    "name": "compile-baseline-strict",
+    "command": [
+      "gcc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/baseline-strict/src",
+      "-I/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/baseline-strict/tests",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/t-wide-stamp-controls.c",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/baseline-strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/baseline-strict-renewal-controls"
+    ],
+    "rc": 0,
+    "status": "complete",
+    "elapsed": 0.27512948799994774,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "baseline-strict-collect-0",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/baseline-strict-renewal-controls",
+      "collect",
+      "0"
+    ],
+    "rc": -6,
+    "status": "complete",
+    "elapsed": 0.05303453300075489,
+    "stdout": "",
+    "stderr": "baseline-strict-renewal-controls: /tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/t-wide-stamp-controls.c:85: test_continued_collection: Assertion `!lj_gc2_activation_reclaim_veto(f.g)' failed.\n"
+  },
+  {
+    "name": "baseline-strict-collect-1",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/baseline-strict-renewal-controls",
+      "collect",
+      "1"
+    ],
+    "rc": -6,
+    "status": "complete",
+    "elapsed": 0.07119010799942771,
+    "stdout": "",
+    "stderr": "baseline-strict-renewal-controls: /tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/t-wide-stamp-controls.c:85: test_continued_collection: Assertion `!lj_gc2_activation_reclaim_veto(f.g)' failed.\n"
+  }
+]

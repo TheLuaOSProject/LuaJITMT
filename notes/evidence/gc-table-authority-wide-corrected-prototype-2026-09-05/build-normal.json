@@ -1,0 +1,20 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-wide-stamp-corrected-20260905-cqq3p87i/normal/src",
+    "-j4",
+    "BUILDMODE=static"
+  ],
+  "rc": 0,
+  "elapsed": 7.581003100000089,
+  "binaries": {
+    "src/luajit": "ef493d1dfec730c9f0650aa0eda033e6cbc13ee0adb02fe836141d8ef575e599",
+    "src/libluajit.a": "3faef9b800370594acb8f7cb27048880a60c3777ce4b7a73b75d6339b24a87cc",
+    "src/lj_vm.o": "0609feb842d79e9b8bc65bc9061ae77f06b726c55472c8244c02c7c3eef1d978",
+    "src/lj_asm.o": "d5eab62c3ce0d767289044843fd50579f72d309e0b4d6a2deb3d1f2f8f0e4da2"
+  }
+}

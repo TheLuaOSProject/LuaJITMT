@@ -1,0 +1,12 @@
+--- tests/t-gc2-traverse.c
++++ traverse-adapter.c
+@@ -4787,6 +4787,9 @@
+   lua_newtable(L);
+   t = tabV(L->top - 1);
+   stamp = table_token_test_stamp(t);
++#ifdef LJ_GC2_WIDE_STAMP
++  la_store64_rel(&stamp->era, UINT64_MAX);
++#endif
+   la_store64_rel(&stamp->state,
+ 		 ((uint64_t)UINT32_C(17) << 32) | (UINT32_MAX - 1u));
+   lj_gc2_test_table_dirty_bump(g, t);
