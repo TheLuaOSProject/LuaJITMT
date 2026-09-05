@@ -1,0 +1,1 @@
+t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable

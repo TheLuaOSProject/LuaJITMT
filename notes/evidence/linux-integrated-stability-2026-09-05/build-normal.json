@@ -1,0 +1,16 @@
+{
+  "kind": "normal",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src",
+    "-j8",
+    "BUILDMODE=static"
+  ],
+  "exit": 0,
+  "seconds": 7.461460978000105,
+  "executable_sha256": "4914c147ac254179610c3aeb8ba847fdc215febcbb96af81afb365487b2a1c37"
+}

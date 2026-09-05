@@ -1,0 +1,7 @@
+root ABORT mode=2 OK
+root ABORT mode=1 OK
+root ABORT mode=0 OK
+root ABORT mode=3 OK
+root ABORT terminal pending-slot cleanup OK
+root ABORT capacity and eventual drain OK
+t-jit-root-abort-retire OK

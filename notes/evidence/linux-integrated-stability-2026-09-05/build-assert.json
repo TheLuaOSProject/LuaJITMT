@@ -1,0 +1,17 @@
+{
+  "kind": "assert",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/assert/src",
+    "-j8",
+    "BUILDMODE=static",
+    "XCFLAGS=-DLJ_GC2_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLUA_USE_ASSERT"
+  ],
+  "exit": 0,
+  "seconds": 7.931244188999699,
+  "executable_sha256": "959115a356730c488bf4067fa78f811fd5ea31a2e47377a809cb643fad7e3e21"
+}

@@ -1,6 +1,7 @@
 # Lockless completion plan
 
 Reviewed: 2026-09-04, starting at `a649f737`.
+Updated: 2026-09-05 after integrated arena, scalar-read, and JIT coverage review.
 
 This is the operative continuation of the original plan. It preserves the
 requested end state: one shared Lua heap, safe ordinary racy Lua programs,
@@ -181,7 +182,8 @@ controls and post-fix completion tests:
   negative control pass. See
   `notes/jit-root-abort-deferred-retirement-2026-09-05.md`. A resumed table read
   still waits on that same paused reclaimer; its stopped stack is preserved as
-  a separate core-operation progress defect.
+  a separate core-operation progress defect. The small scalar-hit path below
+  addresses one ordinary case; the general read path remains open.
 - Semantic table requests now invalidate their scan proof under retained
   admission before publication, allowing covered duplicates to share one
   completed SWEEP scan. The public MARK helper also retains exact admission
@@ -190,6 +192,27 @@ controls and post-fix completion tests:
   negative controls pass. Independent review and the integrated assertion/
   ASan runs are recorded in
   `notes/gc-sweep-table-coalescing-2026-09-05.md`.
+- `bec8cd2d`: certify physically empty CLOSED traversable spares and retain
+  them on a separate atomic reclaimed head. Skipping repeated preparation
+  preserves late publisher/reader evidence; allocation still tries only one
+  adoption. The first revision was rejected for growing retained capacity.
+  Final reuse, paused head-CAS, plain-kind routing, destructor, registry, and
+  terminal controls pass, with stable retained capacity in the real workload.
+  See `notes/arena-empty-reclaimed-reuse-2026-09-05.md`.
+- `23c0c753`: complete positive small number/boolean table hits through exact
+  mapping/body leases before general SMR admission. Ordinary interpreted field
+  reads finish while the real unrelated IDLE reclaimer is paused. Source and
+  vector confirmation, protected pages, aliasing, retirement, ASan, and the
+  restored old-wait negative are covered. Huge/GC-result/general meta paths
+  and the local plain-arena writer gate remain open. See
+  `notes/tab-scalar-hit-admission-2026-09-05.md`.
+- `cf1770dd`: strengthen JIT resize coverage with one controller-owned native
+  exit observer and exact worker IDs after the concurrent phase starts.
+  Global trace-count deltas and per-worker global attachments are unsuitable
+  oracles. Eighty positive processes and four required negative controls pass;
+  an initial old-oracle failure remains unreproduced and is not claimed as a
+  diagnosed JIT defect. See
+  `notes/jit-resize-native-exit-coverage-2026-09-05.md`.
 
 The combined normal Linux runtime passes the default stock suite (387 tests
 with JIT off, 509 with JIT on). That is semantic regression coverage, not
@@ -206,6 +229,13 @@ The final coalescing plus deferred JIT retirement normal build completes the
 same unchanged state-churn fixture in 5.625 seconds and again passes both stock
 suites. These are integrated functional completion observations; use the
 separately frozen benchmarks for performance comparisons.
+The final arena/scalar combination passes all 30 recorded Linux functional
+processes, including 18 helper/assert C fixtures, normal lifecycle/state
+churn, both stock modes, concurrent table/JIT/weak/finalizer cases, strings,
+and buffers. Unchanged state churn completes in 5.379 seconds. Exact production
+and fixture identities, build flags, bounds, and results are in
+`notes/linux-integrated-stability-2026-09-05.md`. These functional timings are
+not paired performance measurements.
 
 These repairs do not constitute production resize or asynchronous GC
 completion. Continue keeping each protocol change and its exact validation in
@@ -224,6 +254,17 @@ Retain the safe veto until replacement authority is proven. The replacement
 must account for suspended publishers/scanners, exact rescan tokens, cycle
 identity, and cell reuse, and demonstrate eventual collection after forced
 exhaustion without dropping completed writes.
+The first isolated wide-stamp experiment is invalid as design-selection
+evidence: C stamps grew from 16 to 32 bytes, but four VM/emitted FNEW index
+operations retained the old stride and could overwrite a different entry's
+exact token. All original records and generated-object evidence are preserved
+in `notes/gc-table-authority-wide-prototype-2026-09-05.md`; its passing suites
+and timings do not establish a correct integrated wide design. Revalidate
+every allocation/reset path in a fresh corrected prototype. Compare a design
+with separately reserved wider proof storage and unchanged common CAS64
+cost only after proving scanner rollover, reuse, publication, and allocation
+failure behavior. Do not drop invalidations or remove the existing safe veto
+to avoid a slow path.
 
 ### B. Remove measured algorithmic performance cliffs
 
@@ -266,12 +307,23 @@ Filtered closures remain about 28 times stock with the harness's permanent
 8,192-key graph, while an insertion prefix doubles fork closure time. Weak
 watchers, string/root counts, and bitmap observations show the large insertion
 graph is gone, but hundreds of empty reclaimed arenas repeat preparation and
-quarantine each cycle. Keep exactly certified empty CLOSED spares available
-for reuse while excluding redundant full-plane work; an advisory live-cell
-count is insufficient. Measure that change before adjusting pacing. The
+quarantine each cycle. `bec8cd2d` now retains exactly certified empty CLOSED
+spares for reuse while excluding redundant full-plane work. The final paired
+closure measurements drop from 3,976.11 to 1,530.41 ns after the insertion
+prefix, while all five settled rounds retain exactly 320 arenas. Filtered
+closures fall from 1,740.75 to 1,523.25 ns. The control predates the MARK-scope
+repair and excludes scalar reads; those boundaries are explicit in the note.
+The rejected first revision's capacity growth remains archived. The
 384-KiB allocation trigger cap also needs a separate pending-root/progress
 audit. Profiles, controls, raw counts, and required proofs are in
 `notes/closure-upvalue-performance-diagnosis-2026-09-04.md`.
+
+`23c0c753` reduces the measured positive scalar interpreter paths by about
+35–45% in seven alternating fresh-process pairs per case, with exact old-path
+controls, GC enabled, and validated results. This establishes the new helper's
+cost for small field/array hits, not general table performance or stock parity.
+The separate combined full harness must still report all missing rows and
+remaining cliffs before selecting the next performance change.
 
 Continue removing demonstrably redundant publications while preserving receiver
 roots and exact post-CAS key/value handoff. Then replace unbounded whole-object
