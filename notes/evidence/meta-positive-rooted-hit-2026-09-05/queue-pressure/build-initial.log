@@ -1,0 +1,27 @@
+/tmp/lj-rooted-hit-queue-growth-20260905-nhG4iM9e/probe.c: In function ‘__wrap_lj_gc2_smr_read_enter’:
+/tmp/lj-rooted-hit-queue-growth-20260905-nhG4iM9e/probe.c:29:11: error: implicit declaration of function ‘la_fetch_add32’ [-Wimplicit-function-declaration]
+   29 |     (void)la_fetch_add32(&blocking_smr_calls, 1, LA_RELAXED);
+      |           ^~~~~~~~~~~~~~
+/tmp/lj-rooted-hit-queue-growth-20260905-nhG4iM9e/probe.c:29:50: error: ‘LA_RELAXED’ undeclared (first use in this function)
+   29 |     (void)la_fetch_add32(&blocking_smr_calls, 1, LA_RELAXED);
+      |                                                  ^~~~~~~~~~
+/tmp/lj-rooted-hit-queue-growth-20260905-nhG4iM9e/probe.c:29:50: note: each undeclared identifier is reported only once for each function it appears in
+/tmp/lj-rooted-hit-queue-growth-20260905-nhG4iM9e/probe.c: In function ‘result_function’:
+/tmp/lj-rooted-hit-queue-growth-20260905-nhG4iM9e/probe.c:60:42: error: ‘LA_RELAXED’ undeclared (first use in this function)
+   60 |   (void)la_fetch_add32(&result_calls, 1, LA_RELAXED);
+      |                                          ^~~~~~~~~~
+/tmp/lj-rooted-hit-queue-growth-20260905-nhG4iM9e/probe.c: In function ‘filler_function’:
+/tmp/lj-rooted-hit-queue-growth-20260905-nhG4iM9e/probe.c:68:42: error: ‘LA_RELAXED’ undeclared (first use in this function)
+   68 |   (void)la_fetch_add32(&filler_calls, 1, LA_RELAXED);
+      |                                          ^~~~~~~~~~
+/tmp/lj-rooted-hit-queue-growth-20260905-nhG4iM9e/probe.c: In function ‘main’:
+/tmp/lj-rooted-hit-queue-growth-20260905-nhG4iM9e/probe.c:274:10: error: format ‘%u’ expects argument of type ‘unsigned int’, but argument 5 has type ‘long unsigned int’ [-Werror=format=]
+  274 |   printf("before grey_capacity=%u grey_items=%" PRIu64
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/lj-rooted-hit-queue-growth-20260905-nhG4iM9e/probe.c:275:41: note: format string is defined here
+  275 |          " ssb_published=%u ssb_active=%u total=%" PRIu64 "\n",
+      |                                        ~^
+      |                                         |
+      |                                         unsigned int
+      |                                        %lu
+cc1: all warnings being treated as errors

@@ -1,0 +1,2 @@
+benchmark               total_s      ns/op
+tab_hash_read            0.0573     573.14

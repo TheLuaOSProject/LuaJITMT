@@ -1,0 +1,69 @@
+{
+  "base": "5411209f5a5ba701f72bdfe2894beae3e09839e2",
+  "head": "e5b1019d6090ae52d6b6a5fa6622caf6394cf82b",
+  "scope": "Independent read-only source/provenance review. No builds/tests/performance runs; root owns execution. Linux x64 and supported internal allocator path. No shared edits.",
+  "production": {
+    "src/lj_meta.c": {
+      "git_blob": "ad02c75c233c9869bddc0dd87763ec70b2d86aca",
+      "sha256": "dfbcd351d8aabc36580bf933f42583108f66fd723cfcb1f0afb6b32bd1b94909"
+    },
+    "src/lj_tab.c": {
+      "git_blob": "4c60ff26e7c00404654158f9ae780ec2390e7969",
+      "sha256": "28b2eac3dc6c0734d131cf33d3f34826ae758c9b3deb437c6bd154e0cd2fd48f"
+    },
+    "src/lj_tab.h": {
+      "git_blob": "ffb22a3fb13dc1605dda004e0b930c272253f5f3",
+      "sha256": "ec8031318d242ec1eb36d823d3c4617df3b56c38f05936b8b7254a71758e7c21"
+    }
+  },
+  "supporting_source": {
+    "src/lj_api.c": {
+      "git_blob": "afe804378316e0ce38745376df327ab5827bdadc",
+      "sha256": "c2b43c2839509c8403c51729c72083be2701bdfc4b5efc9f116540d9c105d6af"
+    },
+    "src/lib_ffi.c": {
+      "git_blob": "96e4bce4a4a2ebd895a6f964798d71d745c85b13",
+      "sha256": "d168201fbebddb60e11475b90c50c60f74088dc7ed6aaf5de437199e85965153"
+    },
+    "src/lj_ctype.c": {
+      "git_blob": "8fd8395e1e78005fbd7c98681f9fe2c0fabac3bc",
+      "sha256": "63990b7796d93a7c4c8659e61c2f0ec43dd766a2972ed679f8f46a4237b2171b"
+    },
+    "src/vm_x64.dasc": {
+      "git_blob": "06e5a8466c5d31b622d6909807b7b61d854e6a03",
+      "sha256": "ad48405b4793e8514307cd4efc15238dcd3a29b0d1970b452ee77952b921d64b"
+    },
+    "src/lj_gc.c": {
+      "git_blob": "5aebc1a0fc484e5683ec4e78cf6b88b03b724967",
+      "sha256": "7ceb24d2c755325c7c3d4113330bbb4fce6d3c893dd22fc1ef8bf924590ab4cb"
+    },
+    "src/lj_gc2.c": {
+      "git_blob": "8cfdceba49e1d01e86a5e5ec8dae885b484ba9de",
+      "sha256": "4d66c49ef385ff23cf6017559addc43f57cb7212e6fab8205abbed2ef9cba2d7"
+    },
+    "src/lj_state.c": {
+      "git_blob": "975279be85d715dcd5dce3c0390c3a2ec35988b5",
+      "sha256": "80d2fa440b4b81e0d460d485dcbe2fc478e2f158c2f79504e44b1a89ffc2bf64"
+    },
+    "src/lj_tg.h": {
+      "git_blob": "ff6a8ba530600a89b908d6f6a0e04c1fbab63c05",
+      "sha256": "a5cb46bde2868512743795750b5a1da71cd1a581bc037da127e60b36cb994015"
+    },
+    "tests/t-tab-rooted-get-try.c": {
+      "git_blob": "d7783b6f5c45873719df22e438cb09104dfdf2dc",
+      "sha256": "f6b2b337b6c97156b7049d7d7c4527615af2d3664e6566c7454220f91141f5ad"
+    },
+    "tests/t-tab-scalar-hit.c": {
+      "git_blob": "ac74d35586699d5e20ad438eaae36dfac4cbb404",
+      "sha256": "3f22601cdf84eaafec855d25b82ab7fac71d7111afcf97d63b1ac04400c6df20"
+    },
+    "tests/t-meta-rooted-chain.c": {
+      "git_blob": "05718542309245d75aca0e6ac6a51c2fee9a7ff3",
+      "sha256": "a8db629c2c8d335cb4ee6c63865a54deb7bdb838ef6bff1cded47a207d790358"
+    },
+    "tests/t-x64-rooted-reads.c": {
+      "git_blob": "94250c947767457568a8a964b389fea49bc33fd7",
+      "sha256": "2176546210f7e62d70620c092f519d0a916cb5bb53c75b16319208e55ba32c23"
+    }
+  }
+}

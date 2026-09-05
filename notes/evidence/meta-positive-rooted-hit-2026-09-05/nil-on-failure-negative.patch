@@ -1,0 +1,11 @@
+--- a/src/lj_tab.c
++++ b/src/lj_tab.c
+@@ -5016,7 +5016,7 @@
+   /* Meta callers have not allocated their chain roots yet. A miss/refusal
+   ** must preserve both original inputs, including an aliased output, so the
+   ** general chain can capture them after this complete retaining interval. */
+-  return tab_gettv_rooted_try_impl(L, tabroot, keyroot, NULL, outroot, 1) ==
++  return tab_gettv_rooted_try_impl(L, tabroot, keyroot, NULL, outroot, 0) ==
+ 	 LJ_TAB_ROOTED_GET_FOUND;
+ }
+ 

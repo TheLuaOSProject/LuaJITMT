@@ -1,0 +1,1 @@
+negative-t-tab-rooted-get-try: /tmp/lj-rooted-positive-hit-20260905-34e9qs5t/negative/tests/t-tab-rooted-get-try.c:113: bounded_hit: Assertion `tv_rawload_acq(outroot) == outword' failed.

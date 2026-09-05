@@ -1,0 +1,3 @@
+setup keypads=825 resultpads=1157 source_arena=0x7fe3d8900000 key_arena=0x7fe3d88e0000 result_arena=0x7fe3d88c0000
+probe: /tmp/lj-rooted-hit-queue-growth-20260905-nhG4iM9e/probe.c:252: main: Assertion `lj_gc2_ismarked(p.g, obj2gco(p.result)) == 0' failed.
+timeout: the monitored command dumped core

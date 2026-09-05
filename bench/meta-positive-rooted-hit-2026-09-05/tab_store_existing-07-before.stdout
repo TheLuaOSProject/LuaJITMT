@@ -1,0 +1,2 @@
+benchmark               total_s      ns/op
+tab_store_existing       0.0728     727.59

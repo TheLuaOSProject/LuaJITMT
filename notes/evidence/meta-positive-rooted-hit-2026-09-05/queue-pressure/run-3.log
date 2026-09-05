@@ -1,0 +1,6 @@
+setup keypads=825 resultpads=1157 source_arena=0x7f6373f10000 key_arena=0x7f6373ef0000 result_arena=0x7f6373ed0000
+before grey_capacity=256 grey_items=256 ssb_published=1024 ssb_active=1024 total=122988
+paused grey_capacity=512 total_delta=4096 source/key/result_readers=1/1/2 smr_readers=0 worker=1 consumer=1
+returned hit=1 grey_capacity=2048 grey_items=1280 total_delta=16384 result_ssb_items=1 all_leases_released=1
+survival source_edge=nil full_gc=IDLE returned_function=12345 callbacks_during_hit=0 table_waits=0 blocking_smr_calls=0
+PASS

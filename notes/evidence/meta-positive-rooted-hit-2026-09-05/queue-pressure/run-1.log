@@ -1,0 +1,2 @@
+probe: /tmp/lj-rooted-hit-queue-growth-20260905-nhG4iM9e/probe.c:232: main: Assertion `p.table_arena != p.key_arena' failed.
+timeout: the monitored command dumped core

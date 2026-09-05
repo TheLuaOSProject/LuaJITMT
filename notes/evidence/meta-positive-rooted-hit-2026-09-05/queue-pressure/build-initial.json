@@ -1,0 +1,31 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "cc",
+    "-D_GNU_SOURCE",
+    "-std=c99",
+    "-O2",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-DLJ_GC2_TEST_HELPERS",
+    "-DLJ_TAB_TEST_HELPERS",
+    "-DLJ_ARENA_TEST_HELPERS",
+    "-DLJ_TRACE_TEST_HELPERS",
+    "-DLUA_USE_ASSERT",
+    "-I/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert/src",
+    "/tmp/lj-rooted-hit-queue-growth-20260905-nhG4iM9e/probe.c",
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert/src/libluajit.a",
+    "-Wl,--wrap=lj_gc2_smr_read_enter",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-o",
+    "/tmp/lj-rooted-hit-queue-growth-20260905-nhG4iM9e/probe"
+  ],
+  "exit": 1,
+  "seconds": 0.05405443599920545,
+  "archive_sha256": "9695d469b23d70e5ff4740a635a66c7997445d1703afff0e58e78b42e6a36589"
+}

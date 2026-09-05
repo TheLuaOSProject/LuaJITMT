@@ -1,0 +1,336 @@
+[
+  {
+    "label": "assert-t-tab-rooted-get-try",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert-t-tab-rooted-get-try"
+    ],
+    "cwd": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert/src/?.lua;/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert/tests/lib/?.lua;;"
+    },
+    "seconds": 0.0036487150009634206,
+    "limit_seconds": 45,
+    "status": "complete",
+    "exit": 0,
+    "expected_negative": false,
+    "expected_result": true,
+    "stdout": "t-tab-rooted-get-try OK\n",
+    "stderr": ""
+  },
+  {
+    "label": "assert-t-tab-scalar-hit",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert-t-tab-scalar-hit"
+    ],
+    "cwd": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert/src/?.lua;/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert/tests/lib/?.lua;;"
+    },
+    "seconds": 0.015615898000760353,
+    "limit_seconds": 45,
+    "status": "complete",
+    "exit": 0,
+    "expected_negative": false,
+    "expected_result": true,
+    "stdout": "simple/nonmarking/aliases/misses passed\nsource replacement/real resize/retirement passed\nprotected candidates/collision keys/vector bounds passed\nHuge fallback/custom allocator preflight passed\nreal IDLE reclaimer paused; entering ordinary scalar field loop\nordinary scalar field loop completed before reclaimer release\npaused unrelated plain-arena writer remains a bounded refusal\nscalar table-hit tests passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "assert-t-tab-rooted-len-try",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert-t-tab-rooted-len-try"
+    ],
+    "cwd": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert/src/?.lua;/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert/tests/lib/?.lua;;"
+    },
+    "seconds": 0.0035596069992607227,
+    "limit_seconds": 45,
+    "status": "complete",
+    "exit": 0,
+    "expected_negative": false,
+    "expected_result": true,
+    "stdout": "t-tab-rooted-len-try OK\n",
+    "stderr": ""
+  },
+  {
+    "label": "assert-t-tab-rooted-reader",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert-t-tab-rooted-reader"
+    ],
+    "cwd": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert/src/?.lua;/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert/tests/lib/?.lua;;"
+    },
+    "seconds": 0.015696853999543237,
+    "limit_seconds": 45,
+    "status": "complete",
+    "exit": 0,
+    "expected_negative": false,
+    "expected_result": true,
+    "stdout": "t-tab-rooted-reader OK: rooted table snapshots preserve parent/key/result lifetimes\n",
+    "stderr": ""
+  },
+  {
+    "label": "asan-t-tab-rooted-get-try",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/asan-t-tab-rooted-get-try"
+    ],
+    "cwd": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/asan/src/?.lua;/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.015758317998916027,
+    "limit_seconds": 45,
+    "status": "complete",
+    "exit": 0,
+    "expected_negative": false,
+    "expected_result": true,
+    "stdout": "t-tab-rooted-get-try OK\n",
+    "stderr": ""
+  },
+  {
+    "label": "asan-t-tab-scalar-hit",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/asan-t-tab-scalar-hit"
+    ],
+    "cwd": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/asan/src/?.lua;/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.06382273000053829,
+    "limit_seconds": 45,
+    "status": "complete",
+    "exit": 0,
+    "expected_negative": false,
+    "expected_result": true,
+    "stdout": "simple/nonmarking/aliases/misses passed\nsource replacement/real resize/retirement passed\nprotected candidates/collision keys/vector bounds passed\nHuge fallback/custom allocator preflight passed\nreal IDLE reclaimer paused; entering ordinary scalar field loop\nordinary scalar field loop completed before reclaimer release\npaused unrelated plain-arena writer remains a bounded refusal\nscalar table-hit tests passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "asan-t-tab-rooted-len-try",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/asan-t-tab-rooted-len-try"
+    ],
+    "cwd": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/asan/src/?.lua;/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.01570005699977628,
+    "limit_seconds": 45,
+    "status": "complete",
+    "exit": 0,
+    "expected_negative": false,
+    "expected_result": true,
+    "stdout": "t-tab-rooted-len-try OK\n",
+    "stderr": ""
+  },
+  {
+    "label": "asan-t-tab-rooted-reader",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/asan-t-tab-rooted-reader"
+    ],
+    "cwd": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/asan/src/?.lua;/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.031853133001277456,
+    "limit_seconds": 45,
+    "status": "complete",
+    "exit": 0,
+    "expected_negative": false,
+    "expected_result": true,
+    "stdout": "t-tab-rooted-reader OK: rooted table snapshots preserve parent/key/result lifetimes\n",
+    "stderr": ""
+  },
+  {
+    "label": "negative-t-tab-rooted-get-try",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/negative-t-tab-rooted-get-try"
+    ],
+    "cwd": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/negative",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/negative/src/?.lua;/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/negative/tests/lib/?.lua;;"
+    },
+    "seconds": 0.06388941099976364,
+    "limit_seconds": 45,
+    "status": "complete",
+    "exit": -6,
+    "expected_negative": true,
+    "expected_result": true,
+    "stdout": "",
+    "stderr": "negative-t-tab-rooted-get-try: /tmp/lj-rooted-positive-hit-20260905-34e9qs5t/negative/tests/t-tab-rooted-get-try.c:113: bounded_hit: Assertion `tv_rawload_acq(outroot) == outword' failed.\n"
+  },
+  {
+    "label": "stock-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "test.lua"
+    ],
+    "cwd": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/stock/test",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/stock/test/src/?.lua;/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/stock/test/tests/lib/?.lua;;"
+    },
+    "seconds": 1.3676629769997817,
+    "limit_seconds": 60,
+    "status": "complete",
+    "exit": 0,
+    "expected_negative": false,
+    "expected_result": true,
+    "stdout": "[  1/387] lang/andor.lua --- smoke\n[  2/387] lang/andor.lua --- allcases\n[  3/387] lang/andor.lua --- tracefib\n[  4/387] lang/assignment.lua --- local\n[  5/387] lang/assignment.lua --- global\n[  6/387] lang/assignment.lua --- local lhs in key on lhs\n[  7/387] lang/assignment.lua --- global lhs in key on lhs\n[  8/387] lang/compare.lua --- 1,2\n[  9/387] lang/compare.lua --- 2,1\n[ 10/387] lang/compare.lua --- 1,1\n[ 11/387] lang/compare.lua --- 2\n[ 12/387] lang/compare.lua --- 1\n[ 13/387] lang/compare.lua --- 0\n[ 14/387] lang/compare.lua --- pcall\n[ 15/387] lang/compare.lua --- bit\n[ 16/387] lang/compare.lua --- string 1 255\n[ 17/387] lang/compare.lua --- String comparisons:\n[ 18/387] lang/compare.lua --- obj_eq/ne\n[ 19/387] lang/compare_nan.lua --- nan nan\n[ 20/387] lang/compare_nan.lua --- nan one\n[ 21/387] lang/compare_nan.lua --- one nan\n[ 22/387] lang/compare_nan.lua --- nan 1\n[ 23/387] lang/compare_nan.lua --- 1 nan\n[ 24/387] lang/compare_nan.lua --- not nan nan\n[ 25/387] lang/compare_nan.lua --- not nan one\n[ 26/387] lang/compare_nan.lua --- not one nan\n[ 27/387] lang/compare_nan.lua --- not nan 1\n[ 28/387] lang/compare_nan.lua --- not 1 nan\n[ 29/387] lang/constant/number.lua --- exp\n[ 30/387] lang/constant/number.lua --- hex exp\n[ 31/387] lang/constant/table.lua --- tnew\n[ 32/387] lang/constant/table.lua --- tdup\n[ 33/387] lang/for.lua --- direction\n[ 34/387] lang/for.lua --- coerce to integer at 13\n[ 35/387] lang/for.lua --- coerce to integer at 10\n[ 36/387] lang/for.lua --- cannot coerce to integer at 10\n[ 37/387] lang/length.lua --- length increasing and decreasing in loop\n[ 38/387] lang/length.lua --- length increasing in loop with existing element\n[ 39/387] lang/length.lua --- length decreasing in loop with erased element\n[ 40/387] lang/modulo.lua --- integer equivalence\n[ 41/387] lang/modulo.lua --- fractional equivalence\n[ 42/387] lang/modulo.lua --- jit constant RHS\n[ 43/387] lang/modulo.lua --- jit constant LHS, with exit\n[ 44/387] lang/modulo.lua --- divide by zero\n[ 45/387] lang/concat.lua --- Constant folding\n[ 46/387] lang/concat.lua --- Fuse conversions to strings\n[ 47/387] lang/concat.lua --- Fuse string construction\n[ 48/387] lang/concat.lua --- CSE, sink\n[ 49/387] lang/concat.lua --- CSE, two buffers in parallel, no sink\n[ 50/387] lang/concat.lua --- Append, CSE\n[ 51/387] lang/concat.lua --- Append, FOLD\n[ 52/387] lang/concat.lua --- Append to buffer, sink\n[ 53/387] lang/concat.lua --- Append to two buffers in parallel, no append, no sink\n[ 54/387] lang/concat.lua --- Sink into side-exit\n[ 55/387] lang/concat.lua --- Very long strings\n[ 56/387] lang/self.lua --- trivial setget\n[ 57/387] lang/table.lua --- tables as keys in tables\n[ 58/387] lang/table.lua --- some tables as keys in tables\n[ 59/387] lang/upvalue/closure.lua --- for\n[ 60/387] lang/upvalue/closure.lua --- while\n[ 61/387] lang/upvalue/closure.lua --- repeat\n[ 62/387] lang/upvalue/closure.lua --- func\n[ 63/387] lang/upvalue/closure.lua --- recursive type change\n[ 64/387] lang/upvalue/closure.lua --- Don't mark upvalue as immutable if written to after prototype definition\n[ 65/387] lang/coroutine.lua --- traceback\n[ 66/387] lang/tail_recursion.lua --- self\n[ 67/387] lang/tail_recursion.lua --- mutual\n[ 68/387] lang/vararg_jit.lua --- 1\n[ 69/387] lang/vararg_jit.lua --- 2\n[ 70/387] lang/vararg_jit.lua --- 3\n[ 71/387] lang/vararg_jit.lua --- 4\n[ 72/387] lang/vararg_jit.lua --- 5\n[ 73/387] lang/vararg_jit.lua --- 6\n[ 74/387] lang/vararg_jit.lua --- 7\n[ 75/387] lang/gc.lua --- rechain\n[ 76/387] lang/gc.lua --- TSETM gc\n[ 77/387] lang/goto.lua --- Basic goto and label semantics.\n[ 78/387] lang/goto.lua --- Goto is not a keyword.\n[ 79/387] lang/goto.lua --- Trailing label is considered to be out of scope.\n[ 80/387] lang/goto.lua --- Simple loop with cross-jumping.\n[ 81/387] lang/goto.lua --- Backwards goto must close upval.\n[ 82/387] lang/goto.lua --- Break must close upval, even if closure is parsed after break.\n[ 83/387] lang/goto.lua --- Label prevents joining to KNIL.\n[ 84/387] lang/goto.lua --- Break resolved from the right scope.\n[ 85/387] lang/goto.lua --- Do not join twice with UCLO.\n[ 86/387] lang/meta/arith.lua --- op\n[ 87/387] lang/meta/arith.lua --- lhs\n[ 88/387] lang/meta/arith.lua --- rhs\n[ 89/387] lang/meta/arith.lua --- meta only lhs\n[ 90/387] lang/meta/arith.lua --- meta only rhs\n[ 91/387] lang/meta/arith.lua --- defaults string, int\n[ 92/387] lang/meta/arith.lua --- defaults int, string\n[ 93/387] lang/meta/arith.lua --- defaults string, string\n[ 94/387] lang/meta/arith.lua --- defaults string, kint\n[ 95/387] lang/meta/arith.lua --- defaults kint, string\n[ 96/387] lang/meta/arith_jit.lua --- assert rhs\n[ 97/387] lang/meta/arith_jit.lua --- assert lhs\n[ 98/387] lang/meta/arith_jit.lua --- assert both sides\n[ 99/387] lang/meta/arith_jit.lua --- adjust no result to one result\n[100/387] lang/meta/call.lua --- table\n[101/387] lang/meta/call.lua --- userdata\n[102/387] lang/meta/call.lua --- number\n[103/387] lang/meta/call.lua --- table with changing metamethod\n[104/387] lang/meta/call.lua --- jit table\n[105/387] lang/meta/call.lua --- jit table rawget as metamethod\n[106/387] lang/meta/call.lua --- jit number\n[107/387] lang/meta/call.lua --- jit newindex pcall\n[108/387] lang/meta/call.lua --- jit index pcall\n[109/387] lang/meta/cat.lua --- default\n[110/387] lang/meta/cat.lua --- lhs\n[111/387] lang/meta/cat.lua --- rhs\n[112/387] lang/meta/cat.lua --- mixed types\n[113/387] lang/meta/cat.lua --- jit mixed types\n[114/387] lang/meta/comp.lua --- __lt and __le xop\n[115/387] lang/meta/comp.lua --- __lt and __le values\n[116/387] lang/meta/comp_jit.lua --- coverage\n[117/387] lang/meta/comp_jit.lua --- Mixed metamethods for ordered comparisons.\n[118/387] lang/meta/eq.lua --- __eq xop\n[119/387] lang/meta/eq.lua --- __eq values\n[120/387] lang/meta/eq_jit.lua --- coverage\n[121/387] lang/meta/eq_jit.lua --- non-constant objects\n[122/387] lang/meta/framegap.lua --- untitled\n[123/387] lang/meta/index.lua --- table 1\n[124/387] lang/meta/index.lua --- table 2\n[125/387] lang/meta/index.lua --- userdata\n[126/387] lang/meta/index.lua --- string\n[127/387] lang/meta/len.lua --- table\n[128/387] lang/meta/len.lua --- userdata\n[129/387] lang/meta/len.lua --- number\n[130/387] lang/meta/newindex.lua --- table 1\n[131/387] lang/meta/newindex.lua --- jit gaining href\n[132/387] lang/meta/newindex.lua --- jit gaining aref\n[133/387] lang/meta/newindex.lua --- resize\n[134/387] lang/meta/newindex.lua --- str\n[135/387] lang/meta/nomm.lua --- untitled\n[136/387] lang/meta/debuginfo.lua --- table metamethods\n[137/387] lang/meta/debuginfo.lua --- userdata metamethods\n[138/387] lib/base/assert.lua --- pass through one\n[139/387] lib/base/assert.lua --- pass through many\n[140/387] lib/base/assert.lua --- raise on nil\n[141/387] lib/base/assert.lua --- raise on false\n[142/387] lib/base/error.lua --- no message\n[143/387] lib/base/error.lua --- level 0\n[144/387] lib/base/error.lua --- default level\n[145/387] lib/base/error.lua --- default level in xpcall\n[146/387] lib/base/error.lua --- level 2 in xpcall\n[147/387] lib/base/getfenv.lua --- untitled\n[148/387] lib/base/getsetmetatable.lua --- get __metatable\n[149/387] lib/base/getsetmetatable.lua --- jit smoke\n[150/387] lib/base/getsetmetatable.lua --- jit assorted\n[151/387] lib/base/getsetmetatable.lua --- jit get primitive metatable\n[152/387] lib/base/ipairs.lua --- small integer values\n[153/387] lib/base/ipairs.lua --- jit key=value\n[154/387] lib/base/ipairs.lua --- untitled\n[155/387] lib/base/next.lua --- _G 1\n[156/387] lib/base/next.lua --- as iterator\n[157/387] lib/base/pairs.lua --- nometatable\n[158/387] lib/base/pairs.lua --- empty metatable\n[159/387] lib/base/pairs.lua --- _G\n[160/387] lib/base/pairs.lua --- count\n[161/387] lib/base/pcall_jit.lua --- square sum\n[162/387] lib/base/pcall_jit.lua --- sqrt square sum\n[163/387] lib/base/pcall_jit.lua --- sum with error\n[164/387] lib/base/pcall_jit.lua --- sum or square\n[165/387] lib/base/pcall_jit.lua --- sum or square with error\n[166/387] lib/base/select.lua --- select #\n[167/387] lib/base/select.lua --- select modf\n[168/387] lib/base/select.lua --- select 1 \n[169/387] lib/base/select.lua --- select 2\n[170/387] lib/base/select.lua --- select vararg #\n[171/387] lib/base/select.lua --- select vararg i\n[172/387] lib/base/select.lua --- select vararg 4\n[173/387] lib/base/select.lua --- varg-select specialisation requires guard against select\n[174/387] lib/base/tonumber_tostring.lua --- tonumber int\n[175/387] lib/base/tonumber_tostring.lua --- tonumber float\n[176/387] lib/base/tonumber_tostring.lua --- tostring int / tonumber\n[177/387] lib/base/tonumber_tostring.lua --- tostring float / tonumber\n[178/387] lib/base/tonumber_tostring.lua --- tonumber table\n[179/387] lib/base/tonumber_tostring.lua --- tostring int / tostring\n[180/387] lib/base/tonumber_tostring.lua --- tostring table __tostring\n[181/387] lib/base/tonumber_tostring.lua --- tostring table __tostring __call\n[182/387] lib/base/tonumber_tostring.lua --- print calls overridden tostring\n[183/387] lib/base/tonumber_tostring.lua --- tonumber base 2\n[184/387] lib/base/tonumber_tostring.lua --- __tostring must be callable\n[185/387] lib/bit.lua --- Minimal sanity checks.\n[186/387] lib/bit.lua --- Basic argument processing.\n[187/387] lib/bit.lua --- unop test vectors\n[188/387] lib/bit.lua --- binop test vectors\n[189/387] lib/bit.lua --- shift test vectors\n[190/387] lib/bit.lua --- tohex test vectors\n[191/387] lib/bit.lua --- Don't propagate TOBIT narrowing across two conversions.\n[192/387] lib/math/abs.lua --- smoke\n[193/387] lib/math/abs.lua --- argcheck\n[194/387] lib/math/constants.lua --- pi\n[195/387] lib/math/constants.lua --- huge\n[196/387] lib/math/random.lua --- generally uniform in range [0, 1)\n[197/387] lib/math/random.lua --- all in range [1, 10]\n[198/387] lib/math/random.lua --- all in range [-3, 11]\n[199/387] lib/string/metatable.lua --- __index metamethod is string library\n[200/387] lib/string/byte.lua --- simple\n[201/387] lib/string/byte.lua --- Fixed slice [i,i+k] or overflow\n[202/387] lib/string/byte.lua --- Positive slice [i,len] or overflow\n[203/387] lib/string/byte.lua --- Negative slice [-i,len] or underflow\n[204/387] lib/string/byte.lua --- Positive slice [1,i] or overflow\n[205/387] lib/string/byte.lua --- Negative slice [1,-i] or underflow\n[206/387] lib/string/byte.lua --- Check for slot stack overflow\n[207/387] lib/string/char.lua --- jit one char\n[208/387] lib/string/char.lua --- jit until out of bounds\n[209/387] lib/string/char.lua --- jit five chars\n[210/387] lib/string/dump.lua --- Must unpatch modified bytecode with ILOOP/JLOOP etc.\n[211/387] lib/string/dump.lua --- roundtrip constants\n[212/387] lib/string/format/num.lua --- small denormals at low precision\n[213/387] lib/string/format/num.lua --- smoke\n[214/387] lib/string/format/num.lua --- easily enumerable cases of %a, %A\n[215/387] lib/string/format/num.lua --- easily enumerable cases of %f\n[216/387] lib/string/format/num.lua --- easily enumerable cases of %e\n[217/387] lib/string/format/num.lua --- assorted\n[218/387] lib/string/format/num.lua --- assorted %a\n[219/387] lib/string/format/num.lua --- Cases where inprecision can easily affect rounding\n[220/387] lib/string/format/num.lua --- ExploringBinary.com/print-precision-of-dyadic-fractions-varies-by-language/\n[221/387] lib/string/format/num.lua --- ExploringBinary.com/incorrect-floating-point-to-decimal-conversions/\n[222/387] lib/string/format/num.lua --- big f\n[223/387] lib/string/format/num.lua --- RandomASCII.wordpress.com/2013/02/07/\n[224/387] lib/string/len.lua --- smoke\n[225/387] lib/string/len.lua --- argcheck\n[226/387] lib/string/lower_upper.lua --- smoke\n[227/387] lib/string/lower_upper.lua --- repeated\n[228/387] lib/string/lower_upper.lua --- repeated with growing string\n[229/387] lib/string/lower_upper.lua --- misc upper\n[230/387] lib/string/lower_upper.lua --- misc lower\n[231/387] lib/string/multiple_functions.lua --- string_op\n[232/387] lib/string/rep.lua --- smoke\n[233/387] lib/string/rep.lua --- versus concat\n[234/387] lib/string/rep.lua --- misc\n[235/387] lib/string/rep.lua --- separator\n[236/387] lib/string/rep.lua --- iterate to table\n[237/387] lib/string/rep.lua --- iterate to table with sep\n[238/387] lib/string/rep.lua --- iterate and concat\n[239/387] lib/string/reverse.lua --- misc\n[240/387] lib/string/sub.lua --- smoke\n[241/387] lib/string/sub.lua --- argcheck\n[242/387] lib/string/sub.lua --- all bar substrings\n[243/387] lib/string/sub.lua --- Positive slice [i,len] or overflow\n[244/387] lib/string/sub.lua --- Negative slice [-i,len] or underflow\n[245/387] lib/string/sub.lua --- Positive slice [1,i] or overflow\n[246/387] lib/string/sub.lua --- Negative slice [1,-i] or underflow\n[247/387] lib/string/sub.lua --- jit sub 1 eq\n[248/387] lib/string/sub.lua --- jit sub 1 ne (contents)\n[249/387] lib/string/sub.lua --- jit sub 1 ne (rhs too long)\n[250/387] lib/string/sub.lua --- jit sub 1,2 ne\n[251/387] lib/string/sub.lua --- jit sub 1,k eq\n[252/387] lib/string/sub.lua --- jit sub 1,k ne (contents)\n[253/387] lib/string/sub.lua --- jit sub 1,k ne (rhs too long)\n[254/387] lib/string/sub.lua --- jit sub 1,2 eq\n[255/387] lib/string/sub.lua --- jit sub 1,3 eq\n[256/387] lib/string/sub.lua --- jit sub 1,4 eq\n[257/387] lib/string/sub.lua --- jit sub i,i\n[258/387] lib/table/concat.lua --- table.concat\n[259/387] lib/table/concat.lua --- table.concat must inhibit CSE and DSE\n[260/387] lib/table/concat.lua --- table.concat must inhibit CSE and DSE 2\n[261/387] lib/table/concat.lua --- table.concat must inhibit CSE and DSE 3\n[262/387] lib/table/insert.lua --- table.insert(t,i)\n[263/387] lib/table/insert.lua --- table.insert(t,i,i)\n[264/387] lib/table/new.lua --- table.new\n[265/387] lib/table/remove.lua --- table.remove(t) removes correct entries\n[266/387] lib/table/remove.lua --- table.remove(t) returns the removed entry\n[267/387] lib/table/remove.lua --- table.remove(t, 1) removes and returns the first entry\n[268/387] lib/table/remove.lua --- TSETR hash part\n[269/387] lib/table/remove.lua --- TSETR write barrier\n[270/387] lib/table/sort.lua --- numbers\n[271/387] lib/table/sort.lua --- strings\n[272/387] lib/table/sort.lua --- tables\n[273/387] lib/coroutine/yield.lua --- Stack overflow on return (create)\n[274/387] lib/coroutine/yield.lua --- Stack overflow on return (wrap)\n[275/387] lib/coroutine/yield.lua --- cogen\n[276/387] lib/coroutine/yield.lua --- cofunc\n[277/387] lib/coroutine/yield.lua --- assorted\n[278/387] lib/ffi/bit64.lua --- smoke tobit\n[279/387] lib/ffi/bit64.lua --- smoke band\n[280/387] lib/ffi/bit64.lua --- smoke shl\n[281/387] lib/ffi/bit64.lua --- smoke tohex\n[282/387] lib/ffi/bit64.lua --- tobit/band assorted C types\n[283/387] lib/ffi/bit64.lua --- tobit/band negative unsigned enum\n[284/387] lib/ffi/bit64.lua --- jit band/bor/bxor\n[285/387] lib/ffi/bit64.lua --- jit shift/xor\n[286/387] lib/ffi/bit64.lua --- jit rotate/xor\n[287/387] lib/ffi/bit64.lua --- jit all ops\n[288/387] lib/ffi/cdata_var.lua --- byte array allocations\n[289/387] lib/ffi/cdata_var.lua --- int array allocations\n[290/387] lib/ffi/copy_fill.lua --- misc\n[291/387] lib/ffi/copy_fill.lua --- jit char[10]\n[292/387] lib/ffi/copy_fill.lua --- jit char[1]\n[293/387] lib/ffi/err.lua --- error in FFI metamethod: don't print metamethod frame.\n[294/387] lib/ffi/err.lua --- tailcall in regular metamethod: keep metamethod frame.\n[295/387] lib/ffi/err.lua --- error in FFI metamethod: set correct PC.\n[296/387] lib/ffi/istype.lua --- 1\n[297/387] lib/ffi/istype.lua --- 2\n[298/387] lib/ffi/istype.lua --- 3\n[299/387] lib/ffi/istype.lua --- 4\n[300/387] lib/ffi/istype.lua --- 5\n[301/387] lib/ffi/jit_array.lua --- smoke\n[302/387] lib/ffi/jit_array.lua --- int array pointer arithmetic\n[303/387] lib/ffi/jit_array.lua --- double array pointer arithmetic\n[304/387] lib/ffi/jit_array.lua --- double array pointer comparisons\n[305/387] lib/ffi/jit_array.lua --- constant offset in double array index\n[306/387] lib/ffi/jit_array.lua --- fixed index of minus one\n[307/387] lib/ffi/jit_array.lua --- uint8_t array element comparisons\n[308/387] lib/ffi/jit_array.lua --- int32_t array bit/bswap tricks\n[309/387] lib/ffi/jit_array.lua --- int32_t shift/rotate/and\n[310/387] lib/ffi/jit_complex.lua --- field access\n[311/387] lib/ffi/jit_complex.lua --- one element circular chain, named indexing\n[312/387] lib/ffi/jit_complex.lua --- one element circular chain, array indexing\n[313/387] lib/ffi/jit_complex.lua --- one-arg initialiser\n[314/387] lib/ffi/jit_complex.lua --- two-arg initialiser\n[315/387] lib/ffi/jit_complex.lua --- float<>double conversions\n[316/387] lib/ffi/jit_complex.lua --- Complex struct field\n[317/387] lib/ffi/jit_complex.lua --- Index overflow for complex is ignored\n[318/387] lib/ffi/jit_misc.lua --- errno\n[319/387] lib/ffi/jit_misc.lua --- string\n[320/387] lib/ffi/jit_misc.lua --- fill\n[321/387] lib/ffi/jit_misc.lua --- copy array elements\n[322/387] lib/ffi/jit_misc.lua --- copy from string\n[323/387] lib/ffi/jit_misc.lua --- copy structures\n[324/387] lib/ffi/jit_misc.lua --- init struct from first field, complex\n[325/387] lib/ffi/jit_misc.lua --- int array as parameterised type\n[326/387] lib/ffi/jit_misc.lua --- double array as parameterised type\n[327/387] lib/ffi/jit_misc.lua --- abi\n[328/387] lib/ffi/jit_misc.lua --- typeof constructed typeof\n[329/387] lib/ffi/jit_struct.lua --- iteration variable as field name\n[330/387] lib/ffi/jit_struct.lua --- constant field names\n[331/387] lib/ffi/jit_struct.lua --- constants from structure\n[332/387] lib/ffi/jit_struct.lua --- adding to array elements\n[333/387] lib/ffi/jit_struct.lua --- double indexing\n[334/387] lib/ffi/jit_struct.lua --- structurally identical\n[335/387] lib/ffi/jit_struct.lua --- structurally different\n[336/387] lib/ffi/jit_struct.lua --- union\n[337/387] lib/ffi/jit_struct.lua --- circular chain\n[338/387] lib/ffi/jit_struct.lua --- int struct initialiser\n[339/387] lib/ffi/jit_struct.lua --- double struct initialiser\n[340/387] lib/ffi/jit_struct.lua --- pointer / int struct initialiser\n[341/387] lib/ffi/jit_struct.lua --- unstable pointer/int type struct initialiser\n[342/387] lib/ffi/jit_struct.lua --- upvalued int box\n[343/387] lib/ffi/meta_tostring.lua --- tostring/typeof semi-roundtrip\n[344/387] lib/ffi/meta_tostring.lua --- assorted union fields\n[345/387] lib/ffi/redir.lua --- function\n[346/387] lib/ffi/redir.lua --- variable\n[347/387] lib/ffi/type_punning.lua --- float\n[348/387] lib/ffi/type_punning.lua --- double\n[349/387] lib/ffi/type_punning.lua --- i8\n[350/387] lib/ffi/type_punning.lua --- p32/p64\n[351/387] lib/ffi/type_punning.lua --- u16\n[352/387] lib/ffi/type_punning.lua --- u16\n[353/387] lib/ffi/type_punning.lua --- i16\n[354/387] lib/ffi/type_punning.lua --- i16\n[355/387] lib/ffi/type_punning.lua --- double\n[356/387] lib/ffi/type_punning.lua --- double\n[357/387] lib/ffi/type_punning.lua --- u32\n[358/387] lib/ffi/type_punning.lua --- u64\n[359/387] lib/contents.lua --- base\n[360/387] lib/contents.lua --- pre-5.2 base\n[361/387] lib/contents.lua --- pre-5.2 base rawlen\n[362/387] lib/contents.lua --- math\n[363/387] lib/contents.lua --- pre-5.2 math\n[364/387] lib/contents.lua --- string\n[365/387] lib/contents.lua --- pre-5.2 string\n[366/387] lib/contents.lua --- pre-5.2 table\n[367/387] lib/contents.lua --- pre-5.2 table.pack\n[368/387] lib/contents.lua --- io\n[369/387] lib/contents.lua --- io file\n[370/387] lib/contents.lua --- os\n[371/387] lib/contents.lua --- debug\n[372/387] lib/contents.lua --- package\n[373/387] lib/contents.lua --- pre-5.2 package\n[374/387] lib/contents.lua --- package.loaders\n[375/387] lib/contents.lua --- package.loaded\n[376/387] lib/contents.lua --- bit\n[377/387] lib/contents.lua --- ffi\n[378/387] lib/contents.lua --- ffi 2.1\n[379/387] computations.lua --- ack\n[380/387] computations.lua --- ack notail\n[381/387] computations.lua --- fac\n[382/387] computations.lua --- ffib\n[383/387] computations.lua --- fib\n[384/387] computations.lua --- nsieve\n[385/387] computations.lua --- recsum\n[386/387] computations.lua --- recsump\n[387/387] computations.lua --- tak\n387 passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "stock-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-jon",
+      "test.lua"
+    ],
+    "cwd": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/stock/test",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/stock/test/src/?.lua;/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/stock/test/tests/lib/?.lua;;"
+    },
+    "seconds": 1.7193229200001952,
+    "limit_seconds": 60,
+    "status": "complete",
+    "exit": 0,
+    "expected_negative": false,
+    "expected_result": true,
+    "stdout": "[  1/509] lang/andor.lua --- smoke\n[  2/509] lang/andor.lua --- allcases\n[  3/509] lang/andor.lua --- tracefib\n[  4/509] lang/assignment.lua --- local\n[  5/509] lang/assignment.lua --- global\n[  6/509] lang/assignment.lua --- local lhs in key on lhs\n[  7/509] lang/assignment.lua --- global lhs in key on lhs\n[  8/509] lang/compare.lua --- 1,2\n[  9/509] lang/compare.lua --- 2,1\n[ 10/509] lang/compare.lua --- 1,1\n[ 11/509] lang/compare.lua --- 2\n[ 12/509] lang/compare.lua --- 1\n[ 13/509] lang/compare.lua --- 0\n[ 14/509] lang/compare.lua --- pcall\n[ 15/509] lang/compare.lua --- bit\n[ 16/509] lang/compare.lua --- string 1 255\n[ 17/509] lang/compare.lua --- String comparisons:\n[ 18/509] lang/compare.lua --- obj_eq/ne\n[ 19/509] lang/compare_nan.lua --- nan nan\n[ 20/509] lang/compare_nan.lua --- nan one\n[ 21/509] lang/compare_nan.lua --- one nan\n[ 22/509] lang/compare_nan.lua --- nan 1\n[ 23/509] lang/compare_nan.lua --- 1 nan\n[ 24/509] lang/compare_nan.lua --- not nan nan\n[ 25/509] lang/compare_nan.lua --- not nan one\n[ 26/509] lang/compare_nan.lua --- not one nan\n[ 27/509] lang/compare_nan.lua --- not nan 1\n[ 28/509] lang/compare_nan.lua --- not 1 nan\n[ 29/509] lang/constant/number.lua --- exp\n[ 30/509] lang/constant/number.lua --- hex exp\n[ 31/509] lang/constant/table.lua --- tnew\n[ 32/509] lang/constant/table.lua --- tdup\n[ 33/509] lang/for.lua --- direction\n[ 34/509] lang/for.lua --- coerce to integer at 13\n[ 35/509] lang/for.lua --- coerce to integer at 10\n[ 36/509] lang/for.lua --- cannot coerce to integer at 10\n[ 37/509] lang/length.lua --- length increasing and decreasing in loop\n[ 38/509] lang/length.lua --- length increasing in loop with existing element\n[ 39/509] lang/length.lua --- length decreasing in loop with erased element\n[ 40/509] lang/modulo.lua --- integer equivalence\n[ 41/509] lang/modulo.lua --- fractional equivalence\n[ 42/509] lang/modulo.lua --- jit constant RHS\n[ 43/509] lang/modulo.lua --- jit constant LHS, with exit\n[ 44/509] lang/modulo.lua --- divide by zero\n[ 45/509] lang/concat.lua --- Constant folding\n[ 46/509] lang/concat.lua --- Fuse conversions to strings\n[ 47/509] lang/concat.lua --- Fuse string construction\n[ 48/509] lang/concat.lua --- CSE, sink\n[ 49/509] lang/concat.lua --- CSE, two buffers in parallel, no sink\n[ 50/509] lang/concat.lua --- Append, CSE\n[ 51/509] lang/concat.lua --- Append, FOLD\n[ 52/509] lang/concat.lua --- Append to buffer, sink\n[ 53/509] lang/concat.lua --- Append to two buffers in parallel, no append, no sink\n[ 54/509] lang/concat.lua --- Sink into side-exit\n[ 55/509] lang/concat.lua --- Very long strings\n[ 56/509] lang/self.lua --- trivial setget\n[ 57/509] lang/table.lua --- tables as keys in tables\n[ 58/509] lang/table.lua --- some tables as keys in tables\n[ 59/509] lang/upvalue/closure.lua --- for\n[ 60/509] lang/upvalue/closure.lua --- while\n[ 61/509] lang/upvalue/closure.lua --- repeat\n[ 62/509] lang/upvalue/closure.lua --- func\n[ 63/509] lang/upvalue/closure.lua --- recursive type change\n[ 64/509] lang/upvalue/closure.lua --- Don't mark upvalue as immutable if written to after prototype definition\n[ 65/509] lang/coroutine.lua --- traceback\n[ 66/509] lang/tail_recursion.lua --- self\n[ 67/509] lang/tail_recursion.lua --- mutual\n[ 68/509] lang/vararg_jit.lua --- 1\n[ 69/509] lang/vararg_jit.lua --- 2\n[ 70/509] lang/vararg_jit.lua --- 3\n[ 71/509] lang/vararg_jit.lua --- 4\n[ 72/509] lang/vararg_jit.lua --- 5\n[ 73/509] lang/vararg_jit.lua --- 6\n[ 74/509] lang/vararg_jit.lua --- 7\n[ 75/509] lang/gc.lua --- rechain\n[ 76/509] lang/gc.lua --- TSETM gc\n[ 77/509] lang/goto.lua --- Basic goto and label semantics.\n[ 78/509] lang/goto.lua --- Goto is not a keyword.\n[ 79/509] lang/goto.lua --- Trailing label is considered to be out of scope.\n[ 80/509] lang/goto.lua --- Simple loop with cross-jumping.\n[ 81/509] lang/goto.lua --- Backwards goto must close upval.\n[ 82/509] lang/goto.lua --- Break must close upval, even if closure is parsed after break.\n[ 83/509] lang/goto.lua --- Label prevents joining to KNIL.\n[ 84/509] lang/goto.lua --- Break resolved from the right scope.\n[ 85/509] lang/goto.lua --- Do not join twice with UCLO.\n[ 86/509] lang/meta/arith.lua --- op\n[ 87/509] lang/meta/arith.lua --- lhs\n[ 88/509] lang/meta/arith.lua --- rhs\n[ 89/509] lang/meta/arith.lua --- meta only lhs\n[ 90/509] lang/meta/arith.lua --- meta only rhs\n[ 91/509] lang/meta/arith.lua --- defaults string, int\n[ 92/509] lang/meta/arith.lua --- defaults int, string\n[ 93/509] lang/meta/arith.lua --- defaults string, string\n[ 94/509] lang/meta/arith.lua --- defaults string, kint\n[ 95/509] lang/meta/arith.lua --- defaults kint, string\n[ 96/509] lang/meta/arith_jit.lua --- assert rhs\n[ 97/509] lang/meta/arith_jit.lua --- assert lhs\n[ 98/509] lang/meta/arith_jit.lua --- assert both sides\n[ 99/509] lang/meta/arith_jit.lua --- adjust no result to one result\n[100/509] lang/meta/call.lua --- table\n[101/509] lang/meta/call.lua --- userdata\n[102/509] lang/meta/call.lua --- number\n[103/509] lang/meta/call.lua --- table with changing metamethod\n[104/509] lang/meta/call.lua --- jit table\n[105/509] lang/meta/call.lua --- jit table rawget as metamethod\n[106/509] lang/meta/call.lua --- jit number\n[107/509] lang/meta/call.lua --- jit newindex pcall\n[108/509] lang/meta/call.lua --- jit index pcall\n[109/509] lang/meta/cat.lua --- default\n[110/509] lang/meta/cat.lua --- lhs\n[111/509] lang/meta/cat.lua --- rhs\n[112/509] lang/meta/cat.lua --- mixed types\n[113/509] lang/meta/cat.lua --- jit mixed types\n[114/509] lang/meta/comp.lua --- __lt and __le xop\n[115/509] lang/meta/comp.lua --- __lt and __le values\n[116/509] lang/meta/comp_jit.lua --- coverage\n[117/509] lang/meta/comp_jit.lua --- Mixed metamethods for ordered comparisons.\n[118/509] lang/meta/eq.lua --- __eq xop\n[119/509] lang/meta/eq.lua --- __eq values\n[120/509] lang/meta/eq_jit.lua --- coverage\n[121/509] lang/meta/eq_jit.lua --- non-constant objects\n[122/509] lang/meta/framegap.lua --- untitled\n[123/509] lang/meta/index.lua --- table 1\n[124/509] lang/meta/index.lua --- table 2\n[125/509] lang/meta/index.lua --- userdata\n[126/509] lang/meta/index.lua --- string\n[127/509] lang/meta/len.lua --- table\n[128/509] lang/meta/len.lua --- userdata\n[129/509] lang/meta/len.lua --- number\n[130/509] lang/meta/newindex.lua --- table 1\n[131/509] lang/meta/newindex.lua --- jit gaining href\n[132/509] lang/meta/newindex.lua --- jit gaining aref\n[133/509] lang/meta/newindex.lua --- resize\n[134/509] lang/meta/newindex.lua --- str\n[135/509] lang/meta/nomm.lua --- untitled\n[136/509] lang/meta/debuginfo.lua --- table metamethods\n[137/509] lang/meta/debuginfo.lua --- userdata metamethods\n[138/509] lib/base/assert.lua --- pass through one\n[139/509] lib/base/assert.lua --- pass through many\n[140/509] lib/base/assert.lua --- raise on nil\n[141/509] lib/base/assert.lua --- raise on false\n[142/509] lib/base/error.lua --- no message\n[143/509] lib/base/error.lua --- level 0\n[144/509] lib/base/error.lua --- default level\n[145/509] lib/base/error.lua --- default level in xpcall\n[146/509] lib/base/error.lua --- level 2 in xpcall\n[147/509] lib/base/getfenv.lua --- untitled\n[148/509] lib/base/getsetmetatable.lua --- get __metatable\n[149/509] lib/base/getsetmetatable.lua --- jit smoke\n[150/509] lib/base/getsetmetatable.lua --- jit assorted\n[151/509] lib/base/getsetmetatable.lua --- jit get primitive metatable\n[152/509] lib/base/ipairs.lua --- small integer values\n[153/509] lib/base/ipairs.lua --- jit key=value\n[154/509] lib/base/ipairs.lua --- untitled\n[155/509] lib/base/next.lua --- _G 1\n[156/509] lib/base/next.lua --- as iterator\n[157/509] lib/base/pairs.lua --- nometatable\n[158/509] lib/base/pairs.lua --- empty metatable\n[159/509] lib/base/pairs.lua --- _G\n[160/509] lib/base/pairs.lua --- count\n[161/509] lib/base/pcall_jit.lua --- square sum\n[162/509] lib/base/pcall_jit.lua --- sqrt square sum\n[163/509] lib/base/pcall_jit.lua --- sum with error\n[164/509] lib/base/pcall_jit.lua --- sum or square\n[165/509] lib/base/pcall_jit.lua --- sum or square with error\n[166/509] lib/base/select.lua --- select #\n[167/509] lib/base/select.lua --- select modf\n[168/509] lib/base/select.lua --- select 1 \n[169/509] lib/base/select.lua --- select 2\n[170/509] lib/base/select.lua --- select vararg #\n[171/509] lib/base/select.lua --- select vararg i\n[172/509] lib/base/select.lua --- select vararg 4\n[173/509] lib/base/select.lua --- varg-select specialisation requires guard against select\n[174/509] lib/base/tonumber_tostring.lua --- tonumber int\n[175/509] lib/base/tonumber_tostring.lua --- tonumber float\n[176/509] lib/base/tonumber_tostring.lua --- tostring int / tonumber\n[177/509] lib/base/tonumber_tostring.lua --- tostring float / tonumber\n[178/509] lib/base/tonumber_tostring.lua --- tonumber table\n[179/509] lib/base/tonumber_tostring.lua --- tostring int / tostring\n[180/509] lib/base/tonumber_tostring.lua --- tostring table __tostring\n[181/509] lib/base/tonumber_tostring.lua --- tostring table __tostring __call\n[182/509] lib/base/tonumber_tostring.lua --- print calls overridden tostring\n[183/509] lib/base/tonumber_tostring.lua --- tonumber base 2\n[184/509] lib/base/tonumber_tostring.lua --- __tostring must be callable\n[185/509] lib/bit.lua --- Minimal sanity checks.\n[186/509] lib/bit.lua --- Basic argument processing.\n[187/509] lib/bit.lua --- unop test vectors\n[188/509] lib/bit.lua --- binop test vectors\n[189/509] lib/bit.lua --- shift test vectors\n[190/509] lib/bit.lua --- tohex test vectors\n[191/509] lib/bit.lua --- Don't propagate TOBIT narrowing across two conversions.\n[192/509] lib/math/abs.lua --- smoke\n[193/509] lib/math/abs.lua --- argcheck\n[194/509] lib/math/constants.lua --- pi\n[195/509] lib/math/constants.lua --- huge\n[196/509] lib/math/random.lua --- generally uniform in range [0, 1)\n[197/509] lib/math/random.lua --- all in range [1, 10]\n[198/509] lib/math/random.lua --- all in range [-3, 11]\n[199/509] lib/string/metatable.lua --- __index metamethod is string library\n[200/509] lib/string/byte.lua --- simple\n[201/509] lib/string/byte.lua --- Fixed slice [i,i+k] or overflow\n[202/509] lib/string/byte.lua --- Positive slice [i,len] or overflow\n[203/509] lib/string/byte.lua --- Negative slice [-i,len] or underflow\n[204/509] lib/string/byte.lua --- Positive slice [1,i] or overflow\n[205/509] lib/string/byte.lua --- Negative slice [1,-i] or underflow\n[206/509] lib/string/byte.lua --- Check for slot stack overflow\n[207/509] lib/string/char.lua --- jit one char\n[208/509] lib/string/char.lua --- jit until out of bounds\n[209/509] lib/string/char.lua --- jit five chars\n[210/509] lib/string/dump.lua --- Must unpatch modified bytecode with ILOOP/JLOOP etc.\n[211/509] lib/string/dump.lua --- roundtrip constants\n[212/509] lib/string/format/num.lua --- small denormals at low precision\n[213/509] lib/string/format/num.lua --- smoke\n[214/509] lib/string/format/num.lua --- easily enumerable cases of %a, %A\n[215/509] lib/string/format/num.lua --- easily enumerable cases of %f\n[216/509] lib/string/format/num.lua --- easily enumerable cases of %e\n[217/509] lib/string/format/num.lua --- assorted\n[218/509] lib/string/format/num.lua --- assorted %a\n[219/509] lib/string/format/num.lua --- Cases where inprecision can easily affect rounding\n[220/509] lib/string/format/num.lua --- ExploringBinary.com/print-precision-of-dyadic-fractions-varies-by-language/\n[221/509] lib/string/format/num.lua --- ExploringBinary.com/incorrect-floating-point-to-decimal-conversions/\n[222/509] lib/string/format/num.lua --- big f\n[223/509] lib/string/format/num.lua --- RandomASCII.wordpress.com/2013/02/07/\n[224/509] lib/string/len.lua --- smoke\n[225/509] lib/string/len.lua --- argcheck\n[226/509] lib/string/lower_upper.lua --- smoke\n[227/509] lib/string/lower_upper.lua --- repeated\n[228/509] lib/string/lower_upper.lua --- repeated with growing string\n[229/509] lib/string/lower_upper.lua --- misc upper\n[230/509] lib/string/lower_upper.lua --- misc lower\n[231/509] lib/string/multiple_functions.lua --- string_op\n[232/509] lib/string/rep.lua --- smoke\n[233/509] lib/string/rep.lua --- versus concat\n[234/509] lib/string/rep.lua --- misc\n[235/509] lib/string/rep.lua --- separator\n[236/509] lib/string/rep.lua --- iterate to table\n[237/509] lib/string/rep.lua --- iterate to table with sep\n[238/509] lib/string/rep.lua --- iterate and concat\n[239/509] lib/string/reverse.lua --- misc\n[240/509] lib/string/sub.lua --- smoke\n[241/509] lib/string/sub.lua --- argcheck\n[242/509] lib/string/sub.lua --- all bar substrings\n[243/509] lib/string/sub.lua --- Positive slice [i,len] or overflow\n[244/509] lib/string/sub.lua --- Negative slice [-i,len] or underflow\n[245/509] lib/string/sub.lua --- Positive slice [1,i] or overflow\n[246/509] lib/string/sub.lua --- Negative slice [1,-i] or underflow\n[247/509] lib/string/sub.lua --- jit sub 1 eq\n[248/509] lib/string/sub.lua --- jit sub 1 ne (contents)\n[249/509] lib/string/sub.lua --- jit sub 1 ne (rhs too long)\n[250/509] lib/string/sub.lua --- jit sub 1,2 ne\n[251/509] lib/string/sub.lua --- jit sub 1,k eq\n[252/509] lib/string/sub.lua --- jit sub 1,k ne (contents)\n[253/509] lib/string/sub.lua --- jit sub 1,k ne (rhs too long)\n[254/509] lib/string/sub.lua --- jit sub 1,2 eq\n[255/509] lib/string/sub.lua --- jit sub 1,3 eq\n[256/509] lib/string/sub.lua --- jit sub 1,4 eq\n[257/509] lib/string/sub.lua --- jit sub i,i\n[258/509] lib/table/concat.lua --- table.concat\n[259/509] lib/table/concat.lua --- table.concat must inhibit CSE and DSE\n[260/509] lib/table/concat.lua --- table.concat must inhibit CSE and DSE 2\n[261/509] lib/table/concat.lua --- table.concat must inhibit CSE and DSE 3\n[262/509] lib/table/insert.lua --- table.insert(t,i)\n[263/509] lib/table/insert.lua --- table.insert(t,i,i)\n[264/509] lib/table/new.lua --- table.new\n[265/509] lib/table/remove.lua --- table.remove(t) removes correct entries\n[266/509] lib/table/remove.lua --- table.remove(t) returns the removed entry\n[267/509] lib/table/remove.lua --- table.remove(t, 1) removes and returns the first entry\n[268/509] lib/table/remove.lua --- TSETR hash part\n[269/509] lib/table/remove.lua --- TSETR write barrier\n[270/509] lib/table/sort.lua --- numbers\n[271/509] lib/table/sort.lua --- strings\n[272/509] lib/table/sort.lua --- tables\n[273/509] lib/coroutine/yield.lua --- Stack overflow on return (create)\n[274/509] lib/coroutine/yield.lua --- Stack overflow on return (wrap)\n[275/509] lib/coroutine/yield.lua --- cogen\n[276/509] lib/coroutine/yield.lua --- cofunc\n[277/509] lib/coroutine/yield.lua --- assorted\n[278/509] lib/ffi/bit64.lua --- smoke tobit\n[279/509] lib/ffi/bit64.lua --- smoke band\n[280/509] lib/ffi/bit64.lua --- smoke shl\n[281/509] lib/ffi/bit64.lua --- smoke tohex\n[282/509] lib/ffi/bit64.lua --- tobit/band assorted C types\n[283/509] lib/ffi/bit64.lua --- tobit/band negative unsigned enum\n[284/509] lib/ffi/bit64.lua --- jit band/bor/bxor\n[285/509] lib/ffi/bit64.lua --- jit shift/xor\n[286/509] lib/ffi/bit64.lua --- jit rotate/xor\n[287/509] lib/ffi/bit64.lua --- jit all ops\n[288/509] lib/ffi/cdata_var.lua --- byte array allocations\n[289/509] lib/ffi/cdata_var.lua --- int array allocations\n[290/509] lib/ffi/copy_fill.lua --- misc\n[291/509] lib/ffi/copy_fill.lua --- jit char[10]\n[292/509] lib/ffi/copy_fill.lua --- jit char[1]\n[293/509] lib/ffi/err.lua --- error in FFI metamethod: don't print metamethod frame.\n[294/509] lib/ffi/err.lua --- tailcall in regular metamethod: keep metamethod frame.\n[295/509] lib/ffi/err.lua --- error in FFI metamethod: set correct PC.\n[296/509] lib/ffi/istype.lua --- 1\n[297/509] lib/ffi/istype.lua --- 2\n[298/509] lib/ffi/istype.lua --- 3\n[299/509] lib/ffi/istype.lua --- 4\n[300/509] lib/ffi/istype.lua --- 5\n[301/509] lib/ffi/jit_array.lua --- smoke\n[302/509] lib/ffi/jit_array.lua --- int array pointer arithmetic\n[303/509] lib/ffi/jit_array.lua --- double array pointer arithmetic\n[304/509] lib/ffi/jit_array.lua --- double array pointer comparisons\n[305/509] lib/ffi/jit_array.lua --- constant offset in double array index\n[306/509] lib/ffi/jit_array.lua --- fixed index of minus one\n[307/509] lib/ffi/jit_array.lua --- uint8_t array element comparisons\n[308/509] lib/ffi/jit_array.lua --- int32_t array bit/bswap tricks\n[309/509] lib/ffi/jit_array.lua --- int32_t shift/rotate/and\n[310/509] lib/ffi/jit_complex.lua --- field access\n[311/509] lib/ffi/jit_complex.lua --- one element circular chain, named indexing\n[312/509] lib/ffi/jit_complex.lua --- one element circular chain, array indexing\n[313/509] lib/ffi/jit_complex.lua --- one-arg initialiser\n[314/509] lib/ffi/jit_complex.lua --- two-arg initialiser\n[315/509] lib/ffi/jit_complex.lua --- float<>double conversions\n[316/509] lib/ffi/jit_complex.lua --- Complex struct field\n[317/509] lib/ffi/jit_complex.lua --- Index overflow for complex is ignored\n[318/509] lib/ffi/jit_misc.lua --- errno\n[319/509] lib/ffi/jit_misc.lua --- string\n[320/509] lib/ffi/jit_misc.lua --- fill\n[321/509] lib/ffi/jit_misc.lua --- copy array elements\n[322/509] lib/ffi/jit_misc.lua --- copy from string\n[323/509] lib/ffi/jit_misc.lua --- copy structures\n[324/509] lib/ffi/jit_misc.lua --- init struct from first field, complex\n[325/509] lib/ffi/jit_misc.lua --- int array as parameterised type\n[326/509] lib/ffi/jit_misc.lua --- double array as parameterised type\n[327/509] lib/ffi/jit_misc.lua --- abi\n[328/509] lib/ffi/jit_misc.lua --- typeof constructed typeof\n[329/509] lib/ffi/jit_struct.lua --- iteration variable as field name\n[330/509] lib/ffi/jit_struct.lua --- constant field names\n[331/509] lib/ffi/jit_struct.lua --- constants from structure\n[332/509] lib/ffi/jit_struct.lua --- adding to array elements\n[333/509] lib/ffi/jit_struct.lua --- double indexing\n[334/509] lib/ffi/jit_struct.lua --- structurally identical\n[335/509] lib/ffi/jit_struct.lua --- structurally different\n[336/509] lib/ffi/jit_struct.lua --- union\n[337/509] lib/ffi/jit_struct.lua --- circular chain\n[338/509] lib/ffi/jit_struct.lua --- int struct initialiser\n[339/509] lib/ffi/jit_struct.lua --- double struct initialiser\n[340/509] lib/ffi/jit_struct.lua --- pointer / int struct initialiser\n[341/509] lib/ffi/jit_struct.lua --- unstable pointer/int type struct initialiser\n[342/509] lib/ffi/jit_struct.lua --- upvalued int box\n[343/509] lib/ffi/meta_tostring.lua --- tostring/typeof semi-roundtrip\n[344/509] lib/ffi/meta_tostring.lua --- assorted union fields\n[345/509] lib/ffi/redir.lua --- function\n[346/509] lib/ffi/redir.lua --- variable\n[347/509] lib/ffi/type_punning.lua --- float\n[348/509] lib/ffi/type_punning.lua --- double\n[349/509] lib/ffi/type_punning.lua --- i8\n[350/509] lib/ffi/type_punning.lua --- p32/p64\n[351/509] lib/ffi/type_punning.lua --- u16\n[352/509] lib/ffi/type_punning.lua --- u16\n[353/509] lib/ffi/type_punning.lua --- i16\n[354/509] lib/ffi/type_punning.lua --- i16\n[355/509] lib/ffi/type_punning.lua --- double\n[356/509] lib/ffi/type_punning.lua --- double\n[357/509] lib/ffi/type_punning.lua --- u32\n[358/509] lib/ffi/type_punning.lua --- u64\n[359/509] lib/contents.lua --- base\n[360/509] lib/contents.lua --- pre-5.2 base\n[361/509] lib/contents.lua --- pre-5.2 base rawlen\n[362/509] lib/contents.lua --- math\n[363/509] lib/contents.lua --- pre-5.2 math\n[364/509] lib/contents.lua --- string\n[365/509] lib/contents.lua --- pre-5.2 string\n[366/509] lib/contents.lua --- pre-5.2 table\n[367/509] lib/contents.lua --- pre-5.2 table.pack\n[368/509] lib/contents.lua --- io\n[369/509] lib/contents.lua --- io file\n[370/509] lib/contents.lua --- os\n[371/509] lib/contents.lua --- debug\n[372/509] lib/contents.lua --- package\n[373/509] lib/contents.lua --- pre-5.2 package\n[374/509] lib/contents.lua --- package.loaders\n[375/509] lib/contents.lua --- package.loaded\n[376/509] lib/contents.lua --- bit\n[377/509] lib/contents.lua --- ffi\n[378/509] lib/contents.lua --- ffi 2.1\n[379/509] computations.lua --- ack\n[380/509] computations.lua --- ack notail\n[381/509] computations.lua --- fac\n[382/509] computations.lua --- ffib\n[383/509] computations.lua --- fib\n[384/509] computations.lua --- nsieve\n[385/509] computations.lua --- recsum\n[386/509] computations.lua --- recsump\n[387/509] computations.lua --- tak\n[388/509] trace/exit_frame.lua --- global assignments\n[389/509] trace/exit_frame.lua --- mutual recursion\n[390/509] trace/exit_frame.lua --- multi-path mutual recursion\n[391/509] trace/exit_frame.lua --- late mutual recursion\n[392/509] trace/exit_growstack.lua --- Exit needs to grow stack before slot fill.\n[393/509] trace/exit_growstack.lua --- Exit needs to grow stack after slot fill.\n[394/509] trace/exit_jfuncf.lua --- everything\n[395/509] trace/gc64_slot_revival.lua --- BC_KNIL\n[396/509] trace/gc64_slot_revival.lua --- BC_VARG\n[397/509] trace/phi/copyspill.lua --- mat4mul\n[398/509] trace/phi/ref.lua --- rref points into invariant part 1\n[399/509] trace/phi/ref.lua --- rref points into invariant part 2\n[400/509] trace/phi/ref.lua --- rref points into invariant part 3\n[401/509] trace/phi/ref.lua --- rref points into invariant part 4\n[402/509] trace/phi/ref.lua --- rref points into invariant part 5\n[403/509] trace/phi/ref.lua --- rref points into invariant part 6\n[404/509] trace/phi/ref.lua --- variant slot, but no corresponding SLOAD i-1\n[405/509] trace/phi/ref.lua --- variant slot, but no corresponding SLOAD i+1\n[406/509] trace/phi/ref.lua --- variant slot, but no corresponding SLOAD side exit\n[407/509] trace/phi/ref.lua --- dup lref from variant slot (suppressed)\n[408/509] trace/phi/ref.lua --- const rref\n[409/509] trace/phi/ref.lua --- dup rref (ok)\n[410/509] trace/phi/ref.lua --- variant slot, no corresponding SLOAD\n[411/509] trace/phi/ref.lua --- don't eliminate PHI if referenced from snapshot\n[412/509] trace/phi/ref.lua --- don't eliminate PHI if referenced from snapshot\n[413/509] trace/phi/ref.lua --- don't eliminate PHI if referenced from another non-redundant PHI\n[414/509] trace/phi/rotate.lua --- rot8\n[415/509] trace/phi/rotate.lua --- rot9\n[416/509] trace/phi/rotate.lua --- rot18\n[417/509] trace/phi/rotate.lua --- rotx\n[418/509] trace/snap.lua --- gcexit\n[419/509] trace/snap.lua --- top\n[420/509] trace/snap.lua --- top2\n[421/509] trace/stitch.lua --- octal\n[422/509] trace/stitch.lua --- coroutines\n[423/509] opt/dse/array.lua --- 1\n[424/509] opt/dse/array.lua --- 2\n[425/509] opt/dse/array.lua --- 3\n[426/509] opt/dse/array.lua --- 4\n[427/509] opt/dse/array.lua --- 5\n[428/509] opt/dse/array.lua --- 6\n[429/509] opt/dse/array.lua --- 7\n[430/509] opt/dse/array.lua --- 8\n[431/509] opt/dse/array.lua --- 9\n[432/509] opt/dse/array.lua --- 10\n[433/509] opt/dse/array.lua --- 11\n[434/509] opt/dse/array.lua --- 12\n[435/509] opt/dse/array.lua --- CALLL must inhibit DSE.\n[436/509] opt/dse/field.lua --- 1. Store with same ref and same value. All stores in loop eliminated.\n[437/509] opt/dse/field.lua --- 2. Store with different ref and same value. All stores in loop eliminated.\n[438/509] opt/dse/field.lua --- 3. Store with different ref and different value. Cannot eliminate any stores.\n[439/509] opt/dse/field.lua --- 4. Store with same ref and different value. 2nd store remains in loop.\n[440/509] opt/dse/field.lua --- 5. Store with same ref, different value and aliased loads.\n[441/509] opt/fold/kfold.lua --- operators\n[442/509] opt/fold/kfold.lua --- abs\n[443/509] opt/fold/kfold.lua --- atan2 ldexp\n[444/509] opt/fold/kfold.lua --- minmax\n[445/509] opt/fold/kfold.lua --- floorceil\n[446/509] opt/fold/kfold.lua --- sqrt exp log trig\n[447/509] opt/fold/kfold.lua --- exp\n[448/509] opt/fwd/hrefk_rollback.lua --- https://github.com/LuaJIT/LuaJIT/issues/124\n[449/509] opt/fwd/tnew_tdup.lua --- 1.\n[450/509] opt/fwd/tnew_tdup.lua --- 2.\n[451/509] opt/fwd/tnew_tdup.lua --- 3.\n[452/509] opt/fwd/tnew_tdup.lua --- 4. HREFK not eliminated. Ditto for the EQ(FLOAD(t, #tab.hmask), k).\n[453/509] opt/fwd/tnew_tdup.lua --- 5. HREFK not eliminated. Ditto for the EQ(FLOAD(t, #tab.hmask), k).\n[454/509] opt/fwd/tnew_tdup.lua --- 6.\n[455/509] opt/fwd/tnew_tdup.lua --- 7.\n[456/509] opt/fwd/upval.lua --- 1. Open upvalue above base slot, aliasing an SSA value.\n[457/509] opt/fwd/upval.lua --- 2. Open upvalue below base slot. UREFO CSE for a.x\n[458/509] opt/fwd/upval.lua --- 3. Closed upvalue. UREFC CSE for a.x\n[459/509] opt/fwd/upval.lua --- 4. Open upvalue below base slot. Forwarded. 1x USTORE (+ 1x DSE USTORE).\n[460/509] opt/fwd/upval.lua --- 5. Closed upvalue. Forwarded. 1x USTORE (+ 1x DSE USTORE).\n[461/509] opt/fuse.lua --- Don't fuse i+101 on x64.\n[462/509] opt/loop/unroll.lua --- type instability on loop unroll\n[463/509] opt/loop/unroll.lua --- untitled\n[464/509] opt/loop/unroll.lua --- FAILFOLD on loop unroll\n[465/509] opt/loop/unroll.lua --- Unroll if inner loop aborts.\n[466/509] opt/sink/alloc.lua --- DCE or sink trivial TNEW or TDUP.\n[467/509] opt/sink/alloc.lua --- Sink TNEW/TDUP\n[468/509] opt/sink/alloc.lua --- Sink outermost table of nested TNEW.\n[469/509] opt/sink/alloc.lua --- Sink one TNEW\n[470/509] opt/sink/alloc.lua --- Sink TDUP or TDUP\n[471/509] opt/sink/alloc.lua --- Sink of simplified complex add, unused in next iteration, drop PHI.\n[472/509] opt/sink/alloc.lua --- Sink of complex add, unused in next iteration, drop PHI.\n[473/509] opt/sink/alloc.lua --- Sink of TDUP with stored values that are both PHI and non-PHI.\n[474/509] opt/sink/alloc.lua --- Sink of CONV.\n[475/509] opt/sink/alloc.lua --- Sink of stores with numbers.\n[476/509] opt/sink/alloc.lua --- Sink of stores with constants.\n[477/509] opt/sink/alloc.lua --- Sink with two references to the same table.\n[478/509] opt/sink/alloc.lua --- point\n[479/509] opt/sink/alloc.lua --- untitled\n[480/509] opt/sink/nosink.lua --- Cannot sink TNEW, aliased load.\n[481/509] opt/sink/nosink.lua --- Cannot sink TNEW, escaping to upvalue.\n[482/509] opt/sink/nosink.lua --- Cannot sink TNEW, escaping through a store.\n[483/509] opt/sink/nosink.lua --- Cannot sink TNEW, iteratively escaping through a store.\n[484/509] opt/sink/nosink.lua --- Cannot sink TNEW, escaping to next iteration (unused in 1st variant).\n[485/509] opt/sink/nosink.lua --- Cannot sink TNEW, escaping to next iteration (snapshot ref).\n[486/509] opt/sink/nosink.lua --- Cannot sink TNEW, escaping to next iteration (IR/snapshot ref).\n[487/509] opt/sink/nosink.lua --- Cannot sink inner TNEW, escaping to next iteration (IR ref).\n[488/509] opt/sink/nosink.lua --- Cannot sink TNEW, cross-PHI ref (and snapshot ref).\n[489/509] opt/sink/nosink.lua --- Cannot sink TNEW, cross-PHI ref (and snapshot ref).\n[490/509] opt/sink/nosink.lua --- Cannot sink TNEW, escaping to exit.\n[491/509] opt/sink/nosink.lua --- Cannot sink TNEW, escaping to exit.\n[492/509] opt/sink/nosink.lua --- Cannot sink, since nested inner table is non-PHI.\n[493/509] opt/sink/ffi.lua --- incrementing\n[494/509] opt/sink/ffi.lua --- hoistable increment\n[495/509] opt/sink/ffi.lua --- escaping hoistable increment\n[496/509] opt/sink/ffi.lua --- escaping addition\n[497/509] opt/sink/ffi.lua --- conditional addition / incrementing\n[498/509] opt/sink/ffi.lua --- incrementing pointer\n[499/509] opt/sink/ffi.lua --- mutating complex\n[500/509] opt/sink/ffi.lua --- mutating struct\n[501/509] opt/sink/ffi.lua --- mutating struct 2\n[502/509] opt/sink/ffi.lua --- escaping loop counter to float\n[503/509] opt/sink/ffi.lua --- 64 bit crash bug\n[504/509] opt/sink/ffi_nosink.lua --- escaping global\n[505/509] opt/sink/ffi_nosink.lua --- preincrement escaping global\n[506/509] opt/sink/ffi_nosink.lua --- escaping global and local\n[507/509] opt/sink/ffi_nosink.lua --- swapping\n[508/509] opt/sink/ffi_nosink.lua --- pointer to self\n[509/509] opt/sink/ffi_nosink.lua --- strchr\n509 passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "resize-general",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "cwd": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/lib/?.lua;;",
+      "LJ_TAB_RESIZE_CASES": "array,hash,stringkey,boolean,delete,weak,metatable"
+    },
+    "seconds": 1.8184725639985118,
+    "limit_seconds": 60,
+    "status": "complete",
+    "exit": 1,
+    "expected_negative": false,
+    "expected_result": false,
+    "stdout": "",
+    "stderr": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit: ...t-20260905-34e9qs5t/normal/tests/t-tab-resize-stress.lua:674: no native exit observed from JIT resize store workers\nstack traceback:\n\t[C]: in function 'assert'\n\t...t-20260905-34e9qs5t/normal/tests/t-tab-resize-stress.lua:674: in function 'fn'\n\t...t-20260905-34e9qs5t/normal/tests/t-tab-resize-stress.lua:51: in function 'run_case'\n\t...t-20260905-34e9qs5t/normal/tests/t-tab-resize-stress.lua:1719: in main chunk\n\t[C]: at 0x5602f8f01100\n"
+  },
+  {
+    "label": "resize-jit",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "cwd": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/lib/?.lua;;",
+      "LJ_TAB_RESIZE_CASES": "jitstore,jitread,jititer"
+    },
+    "seconds": 4.925293742999202,
+    "limit_seconds": 60,
+    "status": "complete",
+    "exit": 0,
+    "expected_negative": false,
+    "expected_result": true,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "label": "resize-weakfin",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "cwd": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/lib/?.lua;;",
+      "LJ_TAB_RESIZE_CASES": "weakfinjit"
+    },
+    "seconds": 4.876115873001254,
+    "limit_seconds": 60,
+    "status": "complete",
+    "exit": 0,
+    "expected_negative": false,
+    "expected_result": true,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "label": "rooted-readers",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/t-tab-rooted-readers.lua"
+    ],
+    "cwd": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/lib/?.lua;;"
+    },
+    "seconds": 0.6156177259999822,
+    "limit_seconds": 60,
+    "status": "complete",
+    "exit": 0,
+    "expected_negative": false,
+    "expected_result": true,
+    "stdout": "t-tab-rooted-readers OK: unpack/concat retain protected table results\n",
+    "stderr": ""
+  }
+]

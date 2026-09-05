@@ -1,0 +1,20 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/canonical/tools/test.lua",
+    "m5_meta_rooted_chain",
+    "m5_x64_rooted_reads"
+  ],
+  "cwd": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/canonical",
+  "environment": {
+    "LJ_TEST_ROOT": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/canonical",
+    "JOBS": "4"
+  },
+  "seconds": 26.84123944000021,
+  "exit": 0,
+  "status": "complete",
+  "limit_seconds": 180
+}

@@ -1,0 +1,1514 @@
+[
+  {
+    "case": "tab_store_existing",
+    "pair": 1,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.46435208399998373,
+    "limit_seconds": 30,
+    "ns_per_op": 741.46
+  },
+  {
+    "case": "tab_store_existing",
+    "pair": 1,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.21406941100030963,
+    "limit_seconds": 30,
+    "ns_per_op": 273.44
+  },
+  {
+    "case": "tab_store_existing",
+    "pair": 2,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.21402817199850688,
+    "limit_seconds": 30,
+    "ns_per_op": 273.96
+  },
+  {
+    "case": "tab_store_existing",
+    "pair": 2,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.4643653329985682,
+    "limit_seconds": 30,
+    "ns_per_op": 733.54
+  },
+  {
+    "case": "tab_store_existing",
+    "pair": 3,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.4643834099988453,
+    "limit_seconds": 30,
+    "ns_per_op": 728.61
+  },
+  {
+    "case": "tab_store_existing",
+    "pair": 3,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.21413283000038064,
+    "limit_seconds": 30,
+    "ns_per_op": 273.81
+  },
+  {
+    "case": "tab_store_existing",
+    "pair": 4,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.21405624200087914,
+    "limit_seconds": 30,
+    "ns_per_op": 274.3
+  },
+  {
+    "case": "tab_store_existing",
+    "pair": 4,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.46438838799986115,
+    "limit_seconds": 30,
+    "ns_per_op": 734.42
+  },
+  {
+    "case": "tab_store_existing",
+    "pair": 5,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.4645296500002587,
+    "limit_seconds": 30,
+    "ns_per_op": 740.29
+  },
+  {
+    "case": "tab_store_existing",
+    "pair": 5,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.21398739100004605,
+    "limit_seconds": 30,
+    "ns_per_op": 274.51
+  },
+  {
+    "case": "tab_store_existing",
+    "pair": 6,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.21397280800010776,
+    "limit_seconds": 30,
+    "ns_per_op": 273.89
+  },
+  {
+    "case": "tab_store_existing",
+    "pair": 6,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.464414684998701,
+    "limit_seconds": 30,
+    "ns_per_op": 738.3
+  },
+  {
+    "case": "tab_store_existing",
+    "pair": 7,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.4641727959988202,
+    "limit_seconds": 30,
+    "ns_per_op": 727.59
+  },
+  {
+    "case": "tab_store_existing",
+    "pair": 7,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_store_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.21395413000027474,
+    "limit_seconds": 30,
+    "ns_per_op": 275.12
+  },
+  {
+    "case": "tab_hash_read",
+    "pair": 1,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_hash_read"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.3641828119998536,
+    "limit_seconds": 30,
+    "ns_per_op": 572.31
+  },
+  {
+    "case": "tab_hash_read",
+    "pair": 1,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_hash_read"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.3140687009999965,
+    "limit_seconds": 30,
+    "ns_per_op": 404.27
+  },
+  {
+    "case": "tab_hash_read",
+    "pair": 2,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_hash_read"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.3142189789996337,
+    "limit_seconds": 30,
+    "ns_per_op": 402.77
+  },
+  {
+    "case": "tab_hash_read",
+    "pair": 2,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_hash_read"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.36411859600048047,
+    "limit_seconds": 30,
+    "ns_per_op": 570.6
+  },
+  {
+    "case": "tab_hash_read",
+    "pair": 3,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_hash_read"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.36414365699965856,
+    "limit_seconds": 30,
+    "ns_per_op": 570.36
+  },
+  {
+    "case": "tab_hash_read",
+    "pair": 3,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_hash_read"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.3139923299986549,
+    "limit_seconds": 30,
+    "ns_per_op": 403.75
+  },
+  {
+    "case": "tab_hash_read",
+    "pair": 4,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_hash_read"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.31401713299965195,
+    "limit_seconds": 30,
+    "ns_per_op": 404.02
+  },
+  {
+    "case": "tab_hash_read",
+    "pair": 4,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_hash_read"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.3641016670007957,
+    "limit_seconds": 30,
+    "ns_per_op": 573.14
+  },
+  {
+    "case": "tab_hash_read",
+    "pair": 5,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_hash_read"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.36412109000048076,
+    "limit_seconds": 30,
+    "ns_per_op": 577.53
+  },
+  {
+    "case": "tab_hash_read",
+    "pair": 5,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_hash_read"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.3140442839994648,
+    "limit_seconds": 30,
+    "ns_per_op": 404.59
+  },
+  {
+    "case": "tab_hash_read",
+    "pair": 6,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_hash_read"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.3140997159989638,
+    "limit_seconds": 30,
+    "ns_per_op": 406.76
+  },
+  {
+    "case": "tab_hash_read",
+    "pair": 6,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_hash_read"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.3641607169993222,
+    "limit_seconds": 30,
+    "ns_per_op": 570.92
+  },
+  {
+    "case": "tab_hash_read",
+    "pair": 7,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_hash_read"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.3640702320008131,
+    "limit_seconds": 30,
+    "ns_per_op": 576.88
+  },
+  {
+    "case": "tab_hash_read",
+    "pair": 7,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_hash_read"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.3140290899991669,
+    "limit_seconds": 30,
+    "ns_per_op": 407.88
+  },
+  {
+    "case": "tab_read_existing",
+    "pair": 1,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_read_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 1.0648446270006389,
+    "limit_seconds": 30,
+    "ns_per_op": 1276.84
+  },
+  {
+    "case": "tab_read_existing",
+    "pair": 1,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_read_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.5643682370009628,
+    "limit_seconds": 30,
+    "ns_per_op": 626.96
+  },
+  {
+    "case": "tab_read_existing",
+    "pair": 2,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_read_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.564419562000694,
+    "limit_seconds": 30,
+    "ns_per_op": 623.27
+  },
+  {
+    "case": "tab_read_existing",
+    "pair": 2,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_read_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 1.064987571000529,
+    "limit_seconds": 30,
+    "ns_per_op": 1275.91
+  },
+  {
+    "case": "tab_read_existing",
+    "pair": 3,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_read_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 1.065011382999728,
+    "limit_seconds": 30,
+    "ns_per_op": 1272.33
+  },
+  {
+    "case": "tab_read_existing",
+    "pair": 3,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_read_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.5643557300008979,
+    "limit_seconds": 30,
+    "ns_per_op": 631.6
+  },
+  {
+    "case": "tab_read_existing",
+    "pair": 4,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_read_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.5643274350004504,
+    "limit_seconds": 30,
+    "ns_per_op": 627.87
+  },
+  {
+    "case": "tab_read_existing",
+    "pair": 4,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_read_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 1.06487014600134,
+    "limit_seconds": 30,
+    "ns_per_op": 1269.47
+  },
+  {
+    "case": "tab_read_existing",
+    "pair": 5,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_read_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 1.0649338949988305,
+    "limit_seconds": 30,
+    "ns_per_op": 1276.52
+  },
+  {
+    "case": "tab_read_existing",
+    "pair": 5,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_read_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.5645826029995078,
+    "limit_seconds": 30,
+    "ns_per_op": 627.31
+  },
+  {
+    "case": "tab_read_existing",
+    "pair": 6,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_read_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.5642970129993046,
+    "limit_seconds": 30,
+    "ns_per_op": 625.7
+  },
+  {
+    "case": "tab_read_existing",
+    "pair": 6,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_read_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 1.0647726229999535,
+    "limit_seconds": 30,
+    "ns_per_op": 1281.56
+  },
+  {
+    "case": "tab_read_existing",
+    "pair": 7,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_read_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 1.0648441960001946,
+    "limit_seconds": 30,
+    "ns_per_op": 1266.81
+  },
+  {
+    "case": "tab_read_existing",
+    "pair": 7,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_read_existing"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.564337580000938,
+    "limit_seconds": 30,
+    "ns_per_op": 633.67
+  },
+  {
+    "case": "tab_array",
+    "pair": 1,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_array"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.21399620900047012,
+    "limit_seconds": 30,
+    "ns_per_op": 168.28
+  },
+  {
+    "case": "tab_array",
+    "pair": 1,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_array"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.21385358599945903,
+    "limit_seconds": 30,
+    "ns_per_op": 167.77
+  },
+  {
+    "case": "tab_array",
+    "pair": 2,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_array"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.21391204400060815,
+    "limit_seconds": 30,
+    "ns_per_op": 168.54
+  },
+  {
+    "case": "tab_array",
+    "pair": 2,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_array"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.21392756099885446,
+    "limit_seconds": 30,
+    "ns_per_op": 168.87
+  },
+  {
+    "case": "tab_array",
+    "pair": 3,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_array"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.21390277099999366,
+    "limit_seconds": 30,
+    "ns_per_op": 168.63
+  },
+  {
+    "case": "tab_array",
+    "pair": 3,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_array"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.213902348999909,
+    "limit_seconds": 30,
+    "ns_per_op": 168.59
+  },
+  {
+    "case": "tab_array",
+    "pair": 4,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_array"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.21399142100017343,
+    "limit_seconds": 30,
+    "ns_per_op": 174.51
+  },
+  {
+    "case": "tab_array",
+    "pair": 4,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_array"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.21390324599997257,
+    "limit_seconds": 30,
+    "ns_per_op": 168.37
+  },
+  {
+    "case": "tab_array",
+    "pair": 5,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_array"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.21423129300092114,
+    "limit_seconds": 30,
+    "ns_per_op": 168.41
+  },
+  {
+    "case": "tab_array",
+    "pair": 5,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_array"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.21410747399932006,
+    "limit_seconds": 30,
+    "ns_per_op": 168.33
+  },
+  {
+    "case": "tab_array",
+    "pair": 6,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_array"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.21401707900076872,
+    "limit_seconds": 30,
+    "ns_per_op": 168.51
+  },
+  {
+    "case": "tab_array",
+    "pair": 6,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_array"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.21452421600042726,
+    "limit_seconds": 30,
+    "ns_per_op": 167.92
+  },
+  {
+    "case": "tab_array",
+    "pair": 7,
+    "name": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_array"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.2143479110000044,
+    "limit_seconds": 30,
+    "ns_per_op": 167.92
+  },
+  {
+    "case": "tab_array",
+    "pair": 7,
+    "name": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua",
+      "tab_array"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.005",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "status": "complete",
+    "exit": 0,
+    "seconds": 0.2142722419994243,
+    "limit_seconds": 30,
+    "ns_per_op": 167.75
+  }
+]

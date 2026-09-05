@@ -1,0 +1,13 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "10,11",
+    "timeout",
+    "--kill-after=2s",
+    "15s",
+    "/tmp/lj-rooted-hit-queue-growth-20260905-nhG4iM9e/probe"
+  ],
+  "exit": 0,
+  "seconds": 0.0047394780012837145
+}

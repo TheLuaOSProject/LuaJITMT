@@ -1,0 +1,79 @@
+{
+  "runtime": "immutable rooted-positive-hit assert archive",
+  "shared_files_edited": [],
+  "functional_cpus": [
+    10,
+    11
+  ],
+  "compile_cpus": "0-15",
+  "measurement_interference": "root benchmark on CPU 30; this probe is not a timing comparison",
+  "sources": {
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert/src/libluajit.a": {
+      "sha256": "9695d469b23d70e5ff4740a635a66c7997445d1703afff0e58e78b42e6a36589",
+      "git_blob": "bd33c7833012098ddcad2f682c2157d237d83611"
+    },
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert/src/lj_tab.c": {
+      "sha256": "28b2eac3dc6c0734d131cf33d3f34826ae758c9b3deb437c6bd154e0cd2fd48f",
+      "git_blob": "4c60ff26e7c00404654158f9ae780ec2390e7969"
+    },
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert/src/lj_tab.h": {
+      "sha256": "12169670f7b092cd517fcbae538830a8ac1ec5986f7781787c03986500cae562",
+      "git_blob": "6592cfb7ef8884d50c52b864707e235e428dd8eb"
+    },
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert/src/lj_meta.c": {
+      "sha256": "dfbcd351d8aabc36580bf933f42583108f66fd723cfcb1f0afb6b32bd1b94909",
+      "git_blob": "ad02c75c233c9869bddc0dd87763ec70b2d86aca"
+    },
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert/src/lj_gc2.c": {
+      "sha256": "4d66c49ef385ff23cf6017559addc43f57cb7212e6fab8205abbed2ef9cba2d7",
+      "git_blob": "8cfdceba49e1d01e86a5e5ec8dae885b484ba9de"
+    },
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert/src/lj_gc2.h": {
+      "sha256": "feb4003d78f8f1a965d2a4d3e94a964b545b37791c34517ace440996aae12e41",
+      "git_blob": "cc3129bf9344559dc88fbf4120ad3195d8adc070"
+    },
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert/src/lj_gc.c": {
+      "sha256": "7ceb24d2c755325c7c3d4113330bbb4fce6d3c893dd22fc1ef8bf924590ab4cb",
+      "git_blob": "5aebc1a0fc484e5683ec4e78cf6b88b03b724967"
+    },
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert/src/lj_state.c": {
+      "sha256": "80d2fa440b4b81e0d460d485dcbe2fc478e2f158c2f79504e44b1a89ffc2bf64",
+      "git_blob": "975279be85d715dcd5dce3c0390c3a2ec35988b5"
+    },
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert/src/lj_arena.c": {
+      "sha256": "98fc9a9af8f8949fe8259d278bb6308790755a06f8f6bcebdcc4a949ec8efbc5",
+      "git_blob": "4a55c2e5367cef0e4c5b774e36d2854bbb63672d"
+    },
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert/src/lj_arena.h": {
+      "sha256": "6ab384112c74e400a9092ec38f491107b2c9b5510c18f84e4c7aa02e1c2231f2",
+      "git_blob": "0971b02565feb93af0bfe6be8905f4e052b1a1f5"
+    },
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert/src/lj_tg.h": {
+      "sha256": "a5cb46bde2868512743795750b5a1da71cd1a581bc037da127e60b36cb994015",
+      "git_blob": "ff6a8ba530600a89b908d6f6a0e04c1fbab63c05"
+    }
+  },
+  "artifacts": {
+    "probe.c": "6ae67376c2030c7e6ff848126f4901f59864f29be2223c6c895155bff301c0b8",
+    "build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build.json": "8d5887a50e7ebe5e987340bc8ee4b0491a32337f76613685a03540864561e94f",
+    "build-initial.json": "0230d2c41f10edb3736bbae2fd17c403b5002a880c3046f59eba78cf2ff8e415",
+    "build-initial.log": "6d710935335903871e34a4d6fa74df97942932f8e777ede776c3fd2a7903bf24",
+    "run-1.log": "6a23d83d917886b28506b25ed9b0ef5dae8a10df81b4787b2d66f4c47214ddaa",
+    "run-1.json": "4e435df72f8b52a41c9d365c89c1b62c5516cbecc974ed8ffa9c6c9d0a7ed5f4",
+    "probe-setup-v1.c": "5afb7492172bcedb82be5bea825497c7e2cafaf23ecbe7b6f9854a9dd203ebde",
+    "run-2.log": "851d7f8e54578cf08ee56f28d9740a78f1dbb68a14e7893e7862a4abe90d8b36",
+    "run-2.json": "ffb9578998b6822290664d1926fed3ccf487e3d357c892d01d50e6100964fb9e",
+    "probe-setup-v2.c": "e26b8baf808cc55e3917441bb80a62f9d32f2d00e2264d8788fece7590195389",
+    "run-3.log": "88539e4d207d32c4aac89e59648aab4623b33c8682a24443f7eac3ca2aa96f8a",
+    "run-3.json": "3ec13f4a7c04a7fd3596f21bbf04ef9676588c6da81cba0ece424660747ff2fc",
+    "probe-v3-sbb-only.c": "d78a66b27b91eddb5da520530fd000ec37cf407559ab990be9a946e416b7b787",
+    "probe-v3-sbb-only": "d938f20d30979f71856886c885a8a92dbabffd760375bf1c979b195ef579db7b",
+    "build-v3.json": "4cc67d2e192aef56ad0ba4d171b2f5a0f7c4c1fffa4f738e7e5208e16214b56e",
+    "probe": "db76b770663c6e0a19f41c415d5697b951adbba514d8b2ea57f7b17ed4ac9efa",
+    "run-final.log": "6c24ad5f10190cc5e4c39b9ceb0673dc93667aaebc37d93356cb411a78355c79",
+    "run-final.json": "e8f8b208e420bc4ab4dde52436f8bcd9a36ee5d9165099b42068546ad7526a77",
+    "README.md": "ddd469a549130694d56dd2e93e2281b21c0ad7dc94858bdb33ea0b6d870cba99",
+    "wrapper-relocations.txt": "35176435f227b807e8953807da60108dd2ddb1c2231d678847c786456ba5c64f"
+  }
+}

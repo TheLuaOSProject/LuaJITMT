@@ -1,0 +1,7 @@
+/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit: ...t-20260905-34e9qs5t/normal/tests/t-tab-resize-stress.lua:674: no native exit observed from JIT resize store workers
+stack traceback:
+	[C]: in function 'assert'
+	...t-20260905-34e9qs5t/normal/tests/t-tab-resize-stress.lua:674: in function 'fn'
+	...t-20260905-34e9qs5t/normal/tests/t-tab-resize-stress.lua:51: in function 'run_case'
+	...t-20260905-34e9qs5t/normal/tests/t-tab-resize-stress.lua:1719: in main chunk
+	[C]: at 0x5602f8f01100

@@ -1,0 +1,29 @@
+{
+  "command": [
+    "clang",
+    "-O1",
+    "-g",
+    "-fno-omit-frame-pointer",
+    "-fsanitize=address",
+    "-std=gnu11",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-mcx16",
+    "-DLJ_GC2_TEST_HELPERS",
+    "-DLJ_TAB_TEST_HELPERS",
+    "-DLJ_ARENA_TEST_HELPERS",
+    "-DLJ_TRACE_TEST_HELPERS",
+    "-DLUA_USE_ASSERT",
+    "-I/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/asan/src",
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/asan/tests/t-tab-rooted-len-try.c",
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/asan/src/libluajit.a",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-o",
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/asan-t-tab-rooted-len-try"
+  ],
+  "exit": 0,
+  "output": ""
+}

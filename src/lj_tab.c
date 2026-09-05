@@ -4862,7 +4862,7 @@ static LJ_AINLINE void tab_rooted_get_publish_nil(TValue *outroot)
 static int tab_gettv_rooted_try_impl(lua_State *L, cTValue *tabroot,
 				      cTValue *keyroot,
 				      const TValue *fixedkey,
-				      TValue *outroot)
+				      TValue *outroot, int hit_only)
 {
   TabKeyedSlotOwnerSnapshot owner;
   LJGC2Lease table_lease = { 0 };
@@ -4906,7 +4906,7 @@ static int tab_gettv_rooted_try_impl(lua_State *L, cTValue *tabroot,
   ** pointer from validating as an address-reused successor before its exact
   ** lease has been acquired. */
   if (!lj_gc2_smr_read_try(owner.g)) {
-    if (tab_keyed_slot_owner_current(L, &owner))
+    if (!hit_only && tab_keyed_slot_owner_current(L, &owner))
       tab_rooted_get_publish_nil(curout);
     return LJ_TAB_ROOTED_GET_RETRY;
   }
@@ -4977,7 +4977,7 @@ confirm:
   curout = outstack ? restorestack(L, outofs) : outroot;
   if (status == LJ_TAB_ROOTED_GET_FOUND) {
     copyTVrel(L, curout, &result);
-  } else {
+  } else if (!hit_only) {
     tab_rooted_get_publish_nil(curout);
   }
 
@@ -5007,7 +5007,17 @@ cleanup:
 int lj_tab_gettv_rooted_try(lua_State *L, cTValue *tabroot,
 			     cTValue *keyroot, TValue *outroot)
 {
-  return tab_gettv_rooted_try_impl(L, tabroot, keyroot, NULL, outroot);
+  return tab_gettv_rooted_try_impl(L, tabroot, keyroot, NULL, outroot, 0);
+}
+
+int lj_tab_gettv_rooted_hit_try(lua_State *L, cTValue *tabroot,
+				 cTValue *keyroot, TValue *outroot)
+{
+  /* Meta callers have not allocated their chain roots yet. A miss/refusal
+  ** must preserve both original inputs, including an aliased output, so the
+  ** general chain can capture them after this complete retaining interval. */
+  return tab_gettv_rooted_try_impl(L, tabroot, keyroot, NULL, outroot, 1) ==
+	 LJ_TAB_ROOTED_GET_FOUND;
 }
 
 int lj_tab_getinttv_rooted_try(lua_State *L, cTValue *tabroot, int32_t key,
@@ -5015,7 +5025,7 @@ int lj_tab_getinttv_rooted_try(lua_State *L, cTValue *tabroot, int32_t key,
 {
   TValue keytv;
   setintV(&keytv, key);
-  return tab_gettv_rooted_try_impl(L, tabroot, NULL, &keytv, outroot);
+  return tab_gettv_rooted_try_impl(L, tabroot, NULL, &keytv, outroot, 0);
 }
 
 static int tab_resolve_current_keyed_try_raw(global_State *g, GCtab *t,

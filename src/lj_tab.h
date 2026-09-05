@@ -400,7 +400,11 @@ LJ_FUNCA cTValue *lj_tab_get(lua_State *L, GCtab *t, cTValue *key);
 ** exact current value into |outroot|; an authority-confirmed ABSENT or RETRY
 ** release-publishes nil.  Invalid operands or a lost exact owner return RETRY
 ** without touching output, since no safe publication authority exists.
-** The helper never waits, allocates or throws.  RETRY covers transient GC2
+** SMR and read admission are attempted without waiting; the helper invokes
+** no Lua and allocates no chain anchors.
+** A successful GC-result publication can grow existing GC queue storage after
+** vector SMR closes, while the exact object leases still retain every body.
+** RETRY covers transient GC2
 ** admission, changing/retiring table generations, internal table sentinels
 ** and a lost exact state owner.  ABSENT includes a non-table parent, nil/NaN
 ** key misses, a structurally present nil slot and an ordinary missing key.
@@ -419,6 +423,14 @@ LJ_FUNC int lj_tab_gettv_rooted_try(lua_State *L, cTValue *tabroot,
 				     cTValue *keyroot, TValue *outroot);
 LJ_FUNC int lj_tab_getinttv_rooted_try(lua_State *L, cTValue *tabroot,
 					int32_t key, TValue *outroot);
+/* Positive-hit form for a caller which still needs its original operands on
+** a miss or admission refusal. Return one only after publishing an exactly
+** retained result; return zero with all cells unchanged otherwise. Source
+** cells need the same retained-container/owner/prototype provenance described
+** below. Unlike the scalar form, this retains the existing one-shot SMR
+** interval and supports GC results and Huge vectors. It never waits for SMR. */
+LJ_FUNC int lj_tab_gettv_rooted_hit_try(lua_State *L, cTValue *tabroot,
+				     cTValue *keyroot, TValue *outroot);
 /* Positive number/boolean hit only, with small table/string/vector leases
 ** independent of global SMR. Sources must be authoritative cells in a caller-
 ** retained container or stable owner/prototype roots (including VM constant

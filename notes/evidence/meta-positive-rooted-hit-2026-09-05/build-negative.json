@@ -1,0 +1,18 @@
+{
+  "kind": "negative",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/negative/src",
+    "-j8",
+    "BUILDMODE=static",
+    "XCFLAGS=-DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLUA_USE_ASSERT"
+  ],
+  "exit": 0,
+  "seconds": 5.579151071000524,
+  "build_ASAN_OPTIONS": null,
+  "binary_sha256": "1c5ba219920f08ae63c69fad30b649fb3a982eab356bff8362dd20213e25fb49"
+}

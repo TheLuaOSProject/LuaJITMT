@@ -1,0 +1,146 @@
+[
+  {
+    "label": "corrected-stock-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/stock/test",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/lib/?.lua;;"
+    },
+    "seconds": 1.3676649399985763,
+    "limit_seconds": 60,
+    "status": "complete",
+    "exit": 0,
+    "expected_negative": false,
+    "expected_result": true,
+    "stdout": "387 passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "corrected-stock-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-jon",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/stock/test",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/lib/?.lua;;"
+    },
+    "seconds": 1.8192888770008722,
+    "limit_seconds": 60,
+    "status": "complete",
+    "exit": 0,
+    "expected_negative": false,
+    "expected_result": true,
+    "stdout": "509 passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "corrected-resize-general",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "cwd": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/lib/?.lua;;",
+      "LJ_M5_TAB_RESIZE_STRESS_CASES": "weak,gcmark,gckey,weakkey,weakmeta,finalizer,metatable,len,traversal,nextchurn,nextinvalid,tableclear,tablelib,tablelibshift,metadispatch"
+    },
+    "seconds": 4.226276418999987,
+    "limit_seconds": 60,
+    "status": "complete",
+    "exit": 0,
+    "expected_negative": false,
+    "expected_result": true,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "label": "corrected-resize-jit",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "cwd": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/lib/?.lua;;",
+      "LJ_M5_TAB_RESIZE_STRESS_CASES": "jitstore,jitread,jititer"
+    },
+    "seconds": 1.3152816369984066,
+    "limit_seconds": 60,
+    "status": "complete",
+    "exit": 0,
+    "expected_negative": false,
+    "expected_result": true,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "label": "corrected-resize-weakfin",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "cwd": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/lib/?.lua;;",
+      "LJ_M5_TAB_RESIZE_STRESS_CASES": "weakfinjit"
+    },
+    "seconds": 1.2176824109992594,
+    "limit_seconds": 60,
+    "status": "complete",
+    "exit": 0,
+    "expected_negative": false,
+    "expected_result": true,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  },
+  {
+    "label": "corrected-resize-remote",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/t-tab-resize-stress.lua"
+    ],
+    "cwd": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/tests/lib/?.lua;;",
+      "LJ_M5_TAB_RESIZE_STRESS_CASES": "remotejitgc"
+    },
+    "seconds": 0.06420671599880734,
+    "limit_seconds": 60,
+    "status": "complete",
+    "exit": 0,
+    "expected_negative": false,
+    "expected_result": true,
+    "stdout": "t-tab-resize-stress OK: 3 writers, 768 resize rounds\n",
+    "stderr": ""
+  }
+]

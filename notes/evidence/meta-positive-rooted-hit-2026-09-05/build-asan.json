@@ -1,0 +1,24 @@
+{
+  "kind": "asan",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/asan/src",
+    "-j8",
+    "BUILDMODE=static",
+    "XCFLAGS=-DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLUA_USE_ASSERT",
+    "CC=clang",
+    "CCOPT=-O1 -g -fno-omit-frame-pointer -fsanitize=address",
+    "CCOPT_x86=",
+    "CCOPT_x64=",
+    "TARGET_LDFLAGS=-fsanitize=address",
+    "HOST_LDFLAGS=-fsanitize=address"
+  ],
+  "exit": 0,
+  "seconds": 8.084205659000872,
+  "build_ASAN_OPTIONS": "detect_leaks=0",
+  "binary_sha256": "dcf6d99b2361ad344eda7e71ea7eb8f9af84816869f9f37d43c788c9f63fd5aa"
+}

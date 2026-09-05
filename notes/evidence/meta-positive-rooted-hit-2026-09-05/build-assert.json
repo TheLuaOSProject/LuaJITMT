@@ -1,0 +1,18 @@
+{
+  "kind": "assert",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/assert/src",
+    "-j8",
+    "BUILDMODE=static",
+    "XCFLAGS=-DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLUA_USE_ASSERT"
+  ],
+  "exit": 0,
+  "seconds": 5.5773712690006505,
+  "build_ASAN_OPTIONS": null,
+  "binary_sha256": "f8b95a9a9e91aac544aeecf1895a21222c460fe9dc5e028b79b8013f94a5efd6"
+}
