@@ -1,0 +1,142 @@
+[
+  {
+    "control": "no-invalidation",
+    "fixture": "t-gc2-sweep-public-table-rescan",
+    "mode": "public",
+    "rc": -6,
+    "elapsed": 0.19295726300060778,
+    "source_sha256": "7384aaf1553c498291b436b72025e3cdad0111900df061dfd7cfd5724ff36796",
+    "fixture_sha256": "81d79757038e0dabba677b85ebf3c5c635b92c9ff6cb06891e3078c0669855fe",
+    "output": "public SWEEP table rescan dropped: publication=0 requests=1 cyclic=0 child_marked=0 ssb_drained=1 scan_current=1 needscan=0 rescan_state=0 pending=0\nt-gc2-sweep-public-table-rescan-scheduled: /workspaces/lj-lockless/tests/t-gc2-sweep-public-table-rescan.c:196: test_public_rescan: Assertion `child_marked == 1' failed.\n"
+  },
+  {
+    "control": "no-coalescing",
+    "fixture": "t-gc2-sweep-table-coalescing",
+    "mode": "duplicates",
+    "rc": -6,
+    "elapsed": 0.10799268699975073,
+    "source_sha256": "724374f19f87adadf2ebbf2eabbf3106c2c2286fea481c79dc6d1a3d4a7a3a80",
+    "fixture_sha256": "a664e380f4688afc0dfb836baa2cb1f859b8f8f3815b694a1797cc199bf562fb",
+    "output": "duplicate scans: huge=0 api=0 cyclic=0 scans=32\nt-gc2-sweep-table-coalescing-scheduled: /workspaces/lj-lockless/tests/t-gc2-sweep-table-coalescing.c:297: test_duplicates: Assertion `scans == 1' failed.\n"
+  },
+  {
+    "control": "markretry-uninvalidated",
+    "fixture": "t-gc2-sweep-table-coalescing",
+    "mode": "retry",
+    "rc": -6,
+    "elapsed": 0.13858319300015864,
+    "source_sha256": "58f91af795acd23207be2df0ae1b9606fa29f0bc4be54f3ae96cc85e55a487a2",
+    "fixture_sha256": "a664e380f4688afc0dfb836baa2cb1f859b8f8f3815b694a1797cc199bf562fb",
+    "output": "t-gc2-sweep-table-coalescing-scheduled: /workspaces/lj-lockless/tests/t-gc2-sweep-table-coalescing.c:244: assert_graph: Assertion `lj_gc2_ismarked(f->g, obj2gco(f->child)) == 1' failed.\n"
+  },
+  {
+    "control": "wrongtype-uninvalidated",
+    "fixture": "t-gc2-sweep-table-coalescing",
+    "mode": "wrongtype",
+    "rc": -6,
+    "elapsed": 0.098906397999599,
+    "source_sha256": "5d3f7292a8d5513ff27c7b90b8ed84979124fed56daf5c3a929c8b631e43380b",
+    "fixture_sha256": "a664e380f4688afc0dfb836baa2cb1f859b8f8f3815b694a1797cc199bf562fb",
+    "output": "t-gc2-sweep-table-coalescing-scheduled: /workspaces/lj-lockless/tests/t-gc2-sweep-table-coalescing.c:244: assert_graph: Assertion `lj_gc2_ismarked(f->g, obj2gco(f->child)) == 1' failed.\n"
+  },
+  {
+    "control": "overflow-suppressible",
+    "fixture": "t-gc2-sweep-table-coalescing",
+    "mode": "overflow",
+    "rc": -6,
+    "elapsed": 0.09443081000063103,
+    "source_sha256": "87f9a16beda55bf678fce3d539f479e6ad3cd1b67dc1b29e1c5bbe47d741d144",
+    "fixture_sha256": "a664e380f4688afc0dfb836baa2cb1f859b8f8f3815b694a1797cc199bf562fb",
+    "output": "t-gc2-sweep-table-coalescing-scheduled: /workspaces/lj-lockless/tests/t-gc2-sweep-table-coalescing.c:244: assert_graph: Assertion `lj_gc2_ismarked(f->g, obj2gco(f->child)) == 1' failed.\n"
+  },
+  {
+    "control": "overflow-suppressible",
+    "fixture": "t-gc2-sweep-table-coalescing",
+    "mode": "registry",
+    "rc": -6,
+    "elapsed": 0.09015622700007953,
+    "source_sha256": "87f9a16beda55bf678fce3d539f479e6ad3cd1b67dc1b29e1c5bbe47d741d144",
+    "fixture_sha256": "a664e380f4688afc0dfb836baa2cb1f859b8f8f3815b694a1797cc199bf562fb",
+    "output": "t-gc2-sweep-table-coalescing-scheduled: /workspaces/lj-lockless/tests/t-gc2-sweep-table-coalescing.c:512: test_registry_denial: Assertion `lj_tg_ssb_next_acq(f.tg) == next' failed.\n"
+  },
+  {
+    "control": "saturated-proof",
+    "fixture": "t-gc2-sweep-table-coalescing",
+    "mode": "saturation",
+    "rc": -6,
+    "elapsed": 0.10409218199947645,
+    "source_sha256": "561308f9fdcf815b5845c073ad4b2899cb8881adeaa5fcb5172a49ec67e56bef",
+    "fixture_sha256": "a664e380f4688afc0dfb836baa2cb1f859b8f8f3815b694a1797cc199bf562fb",
+    "output": "t-gc2-sweep-table-coalescing-scheduled: /workspaces/lj-lockless/tests/t-gc2-sweep-table-coalescing.c:244: assert_graph: Assertion `lj_gc2_ismarked(f->g, obj2gco(f->child)) == 1' failed.\n"
+  },
+  {
+    "control": "self-redirty",
+    "fixture": "t-gc2-recovery",
+    "mode": "",
+    "rc": -6,
+    "elapsed": 0.11680649800018728,
+    "source_sha256": "5ff3caa144a9d72df81f3896b590f7c3da74845bbf71fd409d4f1903c559e820",
+    "fixture_sha256": "7a11a96b3da06431d5e480d759c8fabe81a6db7bd160e30d6afb7b8c41e909fe",
+    "output": "t-gc2-recovery-scheduled: /workspaces/lj-lockless/tests/t-gc2-recovery.c:1841: test_current_cyclic_table_private_edge_is_consumed: Assertion `lj_gc2_test_recovery_state(f.g, obj2gco(t)) == LJ_ARENA_RECOVERY_IDLE' failed.\n"
+  },
+  {
+    "control": "released-scope",
+    "fixture": "t-gc2-sweep-table-coalescing",
+    "mode": "duplicates",
+    "rc": -6,
+    "elapsed": 0.0974068420000549,
+    "source_sha256": "89dbc8bf19cf6004212ecf4688d11458723469cb89dbcc09e5646d6fe8fba82d",
+    "fixture_sha256": "a664e380f4688afc0dfb836baa2cb1f859b8f8f3815b694a1797cc199bf562fb",
+    "output": "t-gc2-sweep-table-coalescing-scheduled: /workspaces/lj-lockless/tests/t-gc2-sweep-table-coalescing.c:85: hook: Assertion `(lj_arena_remote_active_acq(lj_arena_of(t)) & LJ_ARENA_REMOTE_COUNT_MASK) != 0' failed.\n"
+  },
+  {
+    "control": "phase-conditional",
+    "fixture": "t-gc2-sweep-table-coalescing",
+    "mode": "phase_expected",
+    "rc": -6,
+    "elapsed": 0.09200513499945373,
+    "source_sha256": "2d73aab5c3f7a842f554beef18a1e70a8822a146772c80ff9dbb797c39a397fb",
+    "fixture_sha256": "a664e380f4688afc0dfb836baa2cb1f859b8f8f3815b694a1797cc199bf562fb",
+    "output": "t-gc2-sweep-table-coalescing-scheduled: /workspaces/lj-lockless/tests/t-gc2-sweep-table-coalescing.c:244: assert_graph: Assertion `lj_gc2_ismarked(f->g, obj2gco(f->child)) == 1' failed.\n"
+  },
+  {
+    "control": "phase-conditional",
+    "fixture": "t-gc2-sweep-table-coalescing",
+    "mode": "phase_base",
+    "rc": -6,
+    "elapsed": 0.08331159299996216,
+    "source_sha256": "2d73aab5c3f7a842f554beef18a1e70a8822a146772c80ff9dbb797c39a397fb",
+    "fixture_sha256": "a664e380f4688afc0dfb836baa2cb1f859b8f8f3815b694a1797cc199bf562fb",
+    "output": "t-gc2-sweep-table-coalescing-scheduled: /workspaces/lj-lockless/tests/t-gc2-sweep-table-coalescing.c:244: assert_graph: Assertion `lj_gc2_ismarked(f->g, obj2gco(f->child)) == 1' failed.\n"
+  },
+  {
+    "control": "remember-conditional",
+    "fixture": "t-gc2-sweep-table-coalescing",
+    "mode": "phase_remember",
+    "rc": -6,
+    "elapsed": 0.0833646109995243,
+    "source_sha256": "0408849313c1e6b92f961d48c8ec1569d00f159106334de5c9194257ed1284cd",
+    "fixture_sha256": "a664e380f4688afc0dfb836baa2cb1f859b8f8f3815b694a1797cc199bf562fb",
+    "output": "t-gc2-sweep-table-coalescing-scheduled: /workspaces/lj-lockless/tests/t-gc2-sweep-table-coalescing.c:244: assert_graph: Assertion `lj_gc2_ismarked(f->g, obj2gco(f->child)) == 1' failed.\n"
+  },
+  {
+    "control": "old-mark-helper",
+    "fixture": "t-gc2-sweep-table-coalescing",
+    "mode": "mark_barrier_denial",
+    "rc": -6,
+    "elapsed": 0.08921569199992518,
+    "source_sha256": "76dbe82d9f7f0e05c88dcb2400f144d1502cd3feb619534398c422bdc9c78cda",
+    "fixture_sha256": "a664e380f4688afc0dfb836baa2cb1f859b8f8f3815b694a1797cc199bf562fb",
+    "output": "t-gc2-sweep-table-coalescing-scheduled: /workspaces/lj-lockless/tests/t-gc2-sweep-table-coalescing.c:244: assert_graph: Assertion `lj_gc2_ismarked(f->g, obj2gco(f->child)) == 1' failed.\n"
+  },
+  {
+    "control": "mark-saturation-bypass",
+    "fixture": "t-gc2-sweep-table-coalescing",
+    "mode": "mark_barrier_saturation",
+    "rc": -6,
+    "elapsed": 0.08861959400019259,
+    "source_sha256": "00d9468e9254fd4c5c8cfdd70c04f5998ec2010ae8a0bb4b02c0317a7f306106",
+    "fixture_sha256": "a664e380f4688afc0dfb836baa2cb1f859b8f8f3815b694a1797cc199bf562fb",
+    "output": "t-gc2-sweep-table-coalescing-scheduled: /workspaces/lj-lockless/tests/t-gc2-sweep-table-coalescing.c:244: assert_graph: Assertion `lj_gc2_ismarked(f->g, obj2gco(f->child)) == 1' failed.\n"
+  }
+]

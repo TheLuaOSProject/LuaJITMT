@@ -82,6 +82,7 @@ are verified reasons the full goal is still open:
 | Native acknowledgement | Native return can wait for a leader to clear a consumed poll/ack | Immutable scan evidence and independently completable acknowledgement; preserve stack exclusion |
 | Worker scheduling | MARK-close ownership loss can be reported as progress and cause repeated drain-loop execution | Return/defer without false progress or peer sleep; preserve durable retry |
 | GC work per mutation | Public SWEEP barriers can repeatedly queue an entire growing table; traversal charges a whole vector as one work unit | Prove redundant barrier elision, bound traversal by slots/bytes, and measure full-suite phase/history amplification |
+| Table scan authority exhaustion | A long-lived table's 32-bit dirty counter saturates into a permanent universe-wide reclamation veto | Renew exact authority without ABA or losing pending scans; prove continued collection across forced exhaustion |
 | Strings | Physical body reclamation requires explicit collection by the sole main TG with no GC workers | Concurrent canonicalization, unlink, and eventual body reclamation |
 | String interning | Header resize claim waits for pinned readers and blocks entrants | Immutable successor topology and helpable publication |
 | Marking/JIT overlap | One worker token serializes tracing; each mark quantum excludes every active `jit_base` | Parallel mark ownership plus certified concurrent native/JIT roots |
@@ -181,11 +182,19 @@ controls and post-fix completion tests:
   `notes/jit-root-abort-deferred-retirement-2026-09-05.md`. A resumed table read
   still waits on that same paused reclaimer; its stopped stack is preserved as
   a separate core-operation progress defect.
+- Semantic table requests now invalidate their scan proof under retained
+  admission before publication, allowing covered duplicates to share one
+  completed SWEEP scan. The public MARK helper also retains exact admission
+  through publication and preserves denied/saturated requests. Small/huge,
+  raw-store, phase-crossing, cyclic, protected-memory, recovery, and fourteen
+  negative controls pass. Independent review and the integrated assertion/
+  ASan runs are recorded in
+  `notes/gc-sweep-table-coalescing-2026-09-05.md`.
 
 The combined normal Linux runtime passes the default stock suite (387 tests
 with JIT off, 509 with JIT on). That is semantic regression coverage, not
 proof of the concurrent progress, reclamation, or performance requirements.
-The unchanged combined allocator state-churn fixture completes in 63.341
+The leaf/statistics allocator state-churn fixture completes in 63.341
 seconds with a longer bound after an earlier 60-second timeout. Diagnostic
 rounds advance and collect to IDLE; repeated automatic SWEEP traversal remains
 a performance problem in this schedule, not demonstrated nonconvergence. See
@@ -193,10 +202,28 @@ a performance problem in this schedule, not demonstrated nonconvergence. See
 fixture now explicitly selects the two lifetime words required
 by its original exact batch assertions; ten combined and ten pre-leaf control
 runs pass with that geometry.
+The final coalescing plus deferred JIT retirement normal build completes the
+same unchanged state-churn fixture in 5.625 seconds and again passes both stock
+suites. These are integrated functional completion observations; use the
+separately frozen benchmarks for performance comparisons.
 
 These repairs do not constitute production resize or asynchronous GC
 completion. Continue keeping each protocol change and its exact validation in
 a separate reviewable commit.
+
+The 32-bit dirty-counter saturation policy also requires a stability follow-up.
+`gc2_table_dirty_bump()` consumes this authority on committed table writes and
+semantic table publication; a surviving table does not renew it at each GC
+cycle. Saturation safely prevents ABA by setting permanent `NO_RECLAIM`, but
+ordinary sustained mutation can exhaust this namespace. For scale, one million
+increments per second consumes 32 bits in about 72 minutes; this is arithmetic,
+not a measured runtime rate. The historical claim that renewal is unnecessary
+on realistic timescales in
+`notes/gc2-table-authority-saturation-2026-07-19.md` is not an acceptance rule.
+Retain the safe veto until replacement authority is proven. The replacement
+must account for suspended publishers/scanners, exact rescan tokens, cycle
+identity, and cell reuse, and demonstrate eventual collection after forced
+exhaustion without dropping completed writes.
 
 ### B. Remove measured algorithmic performance cliffs
 

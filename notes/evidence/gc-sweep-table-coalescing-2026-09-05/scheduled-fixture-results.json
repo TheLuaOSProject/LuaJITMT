@@ -1,0 +1,1605 @@
+{
+  "fixture_sha256": "a664e380f4688afc0dfb836baa2cb1f859b8f8f3815b694a1797cc199bf562fb",
+  "results": [
+    {
+      "tree": "integrated",
+      "mode": "all",
+      "repeat": 0,
+      "rc": 0,
+      "elapsed": 0.04347899200001848,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "all",
+      "repeat": 1,
+      "rc": 0,
+      "elapsed": 0.04385986600027536,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "all",
+      "repeat": 2,
+      "rc": 0,
+      "elapsed": 0.04394651599977806,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "all",
+      "repeat": 3,
+      "rc": 0,
+      "elapsed": 0.04329499300001771,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "all",
+      "repeat": 4,
+      "rc": 0,
+      "elapsed": 0.04335132699998212,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "all",
+      "repeat": 5,
+      "rc": 0,
+      "elapsed": 0.04332665900074062,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "all",
+      "repeat": 6,
+      "rc": 0,
+      "elapsed": 0.04275189500003762,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "all",
+      "repeat": 7,
+      "rc": 0,
+      "elapsed": 0.043350167000426154,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "all",
+      "repeat": 8,
+      "rc": 0,
+      "elapsed": 0.04323282899986225,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "all",
+      "repeat": 9,
+      "rc": 0,
+      "elapsed": 0.04309885000020586,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "all",
+      "repeat": 10,
+      "rc": 0,
+      "elapsed": 0.0425687229999312,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "all",
+      "repeat": 11,
+      "rc": 0,
+      "elapsed": 0.04309132300022611,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "all",
+      "repeat": 12,
+      "rc": 0,
+      "elapsed": 0.043034770999838656,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "all",
+      "repeat": 13,
+      "rc": 0,
+      "elapsed": 0.0430112559997724,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "all",
+      "repeat": 14,
+      "rc": 0,
+      "elapsed": 0.043270242999824404,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "all",
+      "repeat": 15,
+      "rc": 0,
+      "elapsed": 0.042713009000181046,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "all",
+      "repeat": 16,
+      "rc": 0,
+      "elapsed": 0.04278406299999915,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "all",
+      "repeat": 17,
+      "rc": 0,
+      "elapsed": 0.04322466000030545,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "all",
+      "repeat": 18,
+      "rc": 0,
+      "elapsed": 0.04275007299929712,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "all",
+      "repeat": 19,
+      "rc": 0,
+      "elapsed": 0.04291568499957066,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 0,
+      "rc": 0,
+      "elapsed": 0.0025871660000120755,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 1,
+      "rc": 0,
+      "elapsed": 0.0023789410006429534,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 2,
+      "rc": 0,
+      "elapsed": 0.0021781010000267997,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 3,
+      "rc": 0,
+      "elapsed": 0.002076434000628069,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 4,
+      "rc": 0,
+      "elapsed": 0.0022269869996307534,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 5,
+      "rc": 0,
+      "elapsed": 0.002221323000412667,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 6,
+      "rc": 0,
+      "elapsed": 0.002119521000167879,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 7,
+      "rc": 0,
+      "elapsed": 0.0022351490006258246,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 8,
+      "rc": 0,
+      "elapsed": 0.0022209220005606767,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 9,
+      "rc": 0,
+      "elapsed": 0.0022417179998228676,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 10,
+      "rc": 0,
+      "elapsed": 0.0023508579997724155,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 11,
+      "rc": 0,
+      "elapsed": 0.0022841729996798676,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 12,
+      "rc": 0,
+      "elapsed": 0.002135822999662196,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 13,
+      "rc": 0,
+      "elapsed": 0.0024049129997365526,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 14,
+      "rc": 0,
+      "elapsed": 0.0021875100001125247,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 15,
+      "rc": 0,
+      "elapsed": 0.002271705000566726,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 16,
+      "rc": 0,
+      "elapsed": 0.0019865489994117524,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 17,
+      "rc": 0,
+      "elapsed": 0.0021822689996042755,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 18,
+      "rc": 0,
+      "elapsed": 0.002046141000391799,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 19,
+      "rc": 0,
+      "elapsed": 0.002078141000311007,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 20,
+      "rc": 0,
+      "elapsed": 0.002070327999717847,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 21,
+      "rc": 0,
+      "elapsed": 0.002436302999740292,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 22,
+      "rc": 0,
+      "elapsed": 0.002080064000438142,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 23,
+      "rc": 0,
+      "elapsed": 0.0020429289997991873,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 24,
+      "rc": 0,
+      "elapsed": 0.0021414339998955256,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 25,
+      "rc": 0,
+      "elapsed": 0.002361281999583298,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 26,
+      "rc": 0,
+      "elapsed": 0.0020155279999016784,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 27,
+      "rc": 0,
+      "elapsed": 0.0021897589995205635,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 28,
+      "rc": 0,
+      "elapsed": 0.002061991999653401,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 29,
+      "rc": 0,
+      "elapsed": 0.0020947929997419124,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 30,
+      "rc": 0,
+      "elapsed": 0.002046809000603389,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 31,
+      "rc": 0,
+      "elapsed": 0.00219986299998709,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 32,
+      "rc": 0,
+      "elapsed": 0.0021879989999433747,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 33,
+      "rc": 0,
+      "elapsed": 0.0020653370002037263,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 34,
+      "rc": 0,
+      "elapsed": 0.0021278730000631185,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 35,
+      "rc": 0,
+      "elapsed": 0.00208503700014262,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 36,
+      "rc": 0,
+      "elapsed": 0.0021200999999564374,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 37,
+      "rc": 0,
+      "elapsed": 0.0019528829998307629,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 38,
+      "rc": 0,
+      "elapsed": 0.0032383359994128114,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 39,
+      "rc": 0,
+      "elapsed": 0.002159739999115118,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 40,
+      "rc": 0,
+      "elapsed": 0.0020393029999468126,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 41,
+      "rc": 0,
+      "elapsed": 0.00196347400014929,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 42,
+      "rc": 0,
+      "elapsed": 0.0021501040000657667,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 43,
+      "rc": 0,
+      "elapsed": 0.002180967999265704,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 44,
+      "rc": 0,
+      "elapsed": 0.0021017429999119486,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 45,
+      "rc": 0,
+      "elapsed": 0.001961831999324204,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 46,
+      "rc": 0,
+      "elapsed": 0.002122318000147061,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 47,
+      "rc": 0,
+      "elapsed": 0.002070609999464068,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 48,
+      "rc": 0,
+      "elapsed": 0.002068537000013748,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 49,
+      "rc": 0,
+      "elapsed": 0.002087218000269786,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 50,
+      "rc": 0,
+      "elapsed": 0.002173273999687808,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 51,
+      "rc": 0,
+      "elapsed": 0.002149990999896545,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 52,
+      "rc": 0,
+      "elapsed": 0.0020750940002471907,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 53,
+      "rc": 0,
+      "elapsed": 0.002172833999793511,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 54,
+      "rc": 0,
+      "elapsed": 0.0021734170004492626,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 55,
+      "rc": 0,
+      "elapsed": 0.002174483000089822,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 56,
+      "rc": 0,
+      "elapsed": 0.0025849609992292244,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 57,
+      "rc": 0,
+      "elapsed": 0.0021367600002122344,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 58,
+      "rc": 0,
+      "elapsed": 0.0021100240001032944,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 59,
+      "rc": 0,
+      "elapsed": 0.002028486999734014,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 60,
+      "rc": 0,
+      "elapsed": 0.0020903220001855516,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 61,
+      "rc": 0,
+      "elapsed": 0.0021078370000395807,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 62,
+      "rc": 0,
+      "elapsed": 0.0021020980002504075,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 63,
+      "rc": 0,
+      "elapsed": 0.002064735999738332,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 64,
+      "rc": 0,
+      "elapsed": 0.002123401000062586,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 65,
+      "rc": 0,
+      "elapsed": 0.002149500000086846,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 66,
+      "rc": 0,
+      "elapsed": 0.002035958999840659,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 67,
+      "rc": 0,
+      "elapsed": 0.0022235989999899175,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 68,
+      "rc": 0,
+      "elapsed": 0.0018959489998451318,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 69,
+      "rc": 0,
+      "elapsed": 0.001908541999910085,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 70,
+      "rc": 0,
+      "elapsed": 0.002123304999258835,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 71,
+      "rc": 0,
+      "elapsed": 0.00214050100021268,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 72,
+      "rc": 0,
+      "elapsed": 0.0020253120001143543,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 73,
+      "rc": 0,
+      "elapsed": 0.0021417250000013155,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 74,
+      "rc": 0,
+      "elapsed": 0.0020341579993328196,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 75,
+      "rc": 0,
+      "elapsed": 0.0021491010002137045,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 76,
+      "rc": 0,
+      "elapsed": 0.0020821019998038537,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 77,
+      "rc": 0,
+      "elapsed": 0.0021407350004665204,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 78,
+      "rc": 0,
+      "elapsed": 0.0021661880000465317,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 79,
+      "rc": 0,
+      "elapsed": 0.0021110489997226978,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 80,
+      "rc": 0,
+      "elapsed": 0.0021855390004930086,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 81,
+      "rc": 0,
+      "elapsed": 0.002165941999919596,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 82,
+      "rc": 0,
+      "elapsed": 0.0019633940000858274,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 83,
+      "rc": 0,
+      "elapsed": 0.001963577999958943,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 84,
+      "rc": 0,
+      "elapsed": 0.002071432999400713,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 85,
+      "rc": 0,
+      "elapsed": 0.0022442839999712305,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 86,
+      "rc": 0,
+      "elapsed": 0.002184884000598686,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 87,
+      "rc": 0,
+      "elapsed": 0.0021919909995631315,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 88,
+      "rc": 0,
+      "elapsed": 0.002162015999601863,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 89,
+      "rc": 0,
+      "elapsed": 0.0023420540001097834,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 90,
+      "rc": 0,
+      "elapsed": 0.0021391039999798522,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 91,
+      "rc": 0,
+      "elapsed": 0.0022009300000718213,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 92,
+      "rc": 0,
+      "elapsed": 0.0021261879992380273,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 93,
+      "rc": 0,
+      "elapsed": 0.002319855000678217,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 94,
+      "rc": 0,
+      "elapsed": 0.002253030000247236,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 95,
+      "rc": 0,
+      "elapsed": 0.002257153000755352,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 96,
+      "rc": 0,
+      "elapsed": 0.002177775999371079,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 97,
+      "rc": 0,
+      "elapsed": 0.0020887790005872375,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 98,
+      "rc": 0,
+      "elapsed": 0.0021827930004292284,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "integrated",
+      "mode": "mark_barrier_saturation",
+      "repeat": 99,
+      "rc": 0,
+      "elapsed": 0.002097417999721074,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "all",
+      "repeat": 0,
+      "rc": 0,
+      "elapsed": 0.04468935400018381,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "all",
+      "repeat": 1,
+      "rc": 0,
+      "elapsed": 0.04325181300009717,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "all",
+      "repeat": 2,
+      "rc": 0,
+      "elapsed": 0.04290901900003519,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "all",
+      "repeat": 3,
+      "rc": 0,
+      "elapsed": 0.04352353900048911,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "all",
+      "repeat": 4,
+      "rc": 0,
+      "elapsed": 0.04313952299980883,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "all",
+      "repeat": 5,
+      "rc": 0,
+      "elapsed": 0.042900043000372534,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "all",
+      "repeat": 6,
+      "rc": 0,
+      "elapsed": 0.04244945300069958,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "all",
+      "repeat": 7,
+      "rc": 0,
+      "elapsed": 0.042899691000457096,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "all",
+      "repeat": 8,
+      "rc": 0,
+      "elapsed": 0.04277890600042156,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "all",
+      "repeat": 9,
+      "rc": 0,
+      "elapsed": 0.04343433499980165,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "all",
+      "repeat": 10,
+      "rc": 0,
+      "elapsed": 0.04324348899990582,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "all",
+      "repeat": 11,
+      "rc": 0,
+      "elapsed": 0.04312679200029379,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "all",
+      "repeat": 12,
+      "rc": 0,
+      "elapsed": 0.04279681499974686,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "all",
+      "repeat": 13,
+      "rc": 0,
+      "elapsed": 0.04284622900013346,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "all",
+      "repeat": 14,
+      "rc": 0,
+      "elapsed": 0.043326944999535044,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "all",
+      "repeat": 15,
+      "rc": 0,
+      "elapsed": 0.0430155290005132,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "all",
+      "repeat": 16,
+      "rc": 0,
+      "elapsed": 0.042813192000721756,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "all",
+      "repeat": 17,
+      "rc": 0,
+      "elapsed": 0.04299530899970705,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "all",
+      "repeat": 18,
+      "rc": 0,
+      "elapsed": 0.043321109999851615,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "all",
+      "repeat": 19,
+      "rc": 0,
+      "elapsed": 0.04320933700000751,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "mark_barrier_saturation",
+      "repeat": 0,
+      "rc": 0,
+      "elapsed": 0.0025928130007741856,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "mark_barrier_saturation",
+      "repeat": 1,
+      "rc": 0,
+      "elapsed": 0.002390730999650259,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "mark_barrier_saturation",
+      "repeat": 2,
+      "rc": 0,
+      "elapsed": 0.0023368379997918964,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "mark_barrier_saturation",
+      "repeat": 3,
+      "rc": 0,
+      "elapsed": 0.002235330000075919,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "mark_barrier_saturation",
+      "repeat": 4,
+      "rc": 0,
+      "elapsed": 0.0022395169999072095,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "mark_barrier_saturation",
+      "repeat": 5,
+      "rc": 0,
+      "elapsed": 0.00224903600064863,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "mark_barrier_saturation",
+      "repeat": 6,
+      "rc": 0,
+      "elapsed": 0.002385881000009249,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "mark_barrier_saturation",
+      "repeat": 7,
+      "rc": 0,
+      "elapsed": 0.0022152990004542517,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "mark_barrier_saturation",
+      "repeat": 8,
+      "rc": 0,
+      "elapsed": 0.0024119519994201255,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "mark_barrier_saturation",
+      "repeat": 9,
+      "rc": 0,
+      "elapsed": 0.0022772600004827837,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "mark_barrier_saturation",
+      "repeat": 10,
+      "rc": 0,
+      "elapsed": 0.0024025270004131016,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "mark_barrier_saturation",
+      "repeat": 11,
+      "rc": 0,
+      "elapsed": 0.0021755329998995876,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "mark_barrier_saturation",
+      "repeat": 12,
+      "rc": 0,
+      "elapsed": 0.0021787980003864504,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "mark_barrier_saturation",
+      "repeat": 13,
+      "rc": 0,
+      "elapsed": 0.0020757559996127384,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "mark_barrier_saturation",
+      "repeat": 14,
+      "rc": 0,
+      "elapsed": 0.0026700700000219513,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "mark_barrier_saturation",
+      "repeat": 15,
+      "rc": 0,
+      "elapsed": 0.002351041000110854,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "mark_barrier_saturation",
+      "repeat": 16,
+      "rc": 0,
+      "elapsed": 0.002173624999159074,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "mark_barrier_saturation",
+      "repeat": 17,
+      "rc": 0,
+      "elapsed": 0.0021866100005354383,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "mark_barrier_saturation",
+      "repeat": 18,
+      "rc": 0,
+      "elapsed": 0.002333589000045322,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "protocol",
+      "mode": "mark_barrier_saturation",
+      "repeat": 19,
+      "rc": 0,
+      "elapsed": 0.0020941379998475895,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "all",
+      "repeat": 0,
+      "rc": 0,
+      "elapsed": 0.11197245399944222,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "all",
+      "repeat": 1,
+      "rc": 0,
+      "elapsed": 0.11315004100015358,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "all",
+      "repeat": 2,
+      "rc": 0,
+      "elapsed": 0.1116668929998923,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "all",
+      "repeat": 3,
+      "rc": 0,
+      "elapsed": 0.11214400900007604,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "all",
+      "repeat": 4,
+      "rc": 0,
+      "elapsed": 0.1119949309995718,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "all",
+      "repeat": 5,
+      "rc": 0,
+      "elapsed": 0.11119955300000584,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "all",
+      "repeat": 6,
+      "rc": 0,
+      "elapsed": 0.11275899700012815,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "all",
+      "repeat": 7,
+      "rc": 0,
+      "elapsed": 0.11125989500033029,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "all",
+      "repeat": 8,
+      "rc": 0,
+      "elapsed": 0.1124417689998154,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "all",
+      "repeat": 9,
+      "rc": 0,
+      "elapsed": 0.11183537499982776,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "all",
+      "repeat": 10,
+      "rc": 0,
+      "elapsed": 0.11194422199969267,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "all",
+      "repeat": 11,
+      "rc": 0,
+      "elapsed": 0.11216275799961295,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "all",
+      "repeat": 12,
+      "rc": 0,
+      "elapsed": 0.11161575699952664,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "all",
+      "repeat": 13,
+      "rc": 0,
+      "elapsed": 0.11104238999996596,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "all",
+      "repeat": 14,
+      "rc": 0,
+      "elapsed": 0.11184518499976548,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "all",
+      "repeat": 15,
+      "rc": 0,
+      "elapsed": 0.11196107100022346,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "all",
+      "repeat": 16,
+      "rc": 0,
+      "elapsed": 0.111261234000267,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "all",
+      "repeat": 17,
+      "rc": 0,
+      "elapsed": 0.11154226100006781,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "all",
+      "repeat": 18,
+      "rc": 0,
+      "elapsed": 0.11121274299966899,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "all",
+      "repeat": 19,
+      "rc": 0,
+      "elapsed": 0.11169711300044582,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "mark_barrier_saturation",
+      "repeat": 0,
+      "rc": 0,
+      "elapsed": 0.008574921999752405,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "mark_barrier_saturation",
+      "repeat": 1,
+      "rc": 0,
+      "elapsed": 0.008532953000212729,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "mark_barrier_saturation",
+      "repeat": 2,
+      "rc": 0,
+      "elapsed": 0.008092308999948727,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "mark_barrier_saturation",
+      "repeat": 3,
+      "rc": 0,
+      "elapsed": 0.008265845000096306,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "mark_barrier_saturation",
+      "repeat": 4,
+      "rc": 0,
+      "elapsed": 0.00823681099973328,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "mark_barrier_saturation",
+      "repeat": 5,
+      "rc": 0,
+      "elapsed": 0.008242902000347385,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "mark_barrier_saturation",
+      "repeat": 6,
+      "rc": 0,
+      "elapsed": 0.007827785999324988,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "mark_barrier_saturation",
+      "repeat": 7,
+      "rc": 0,
+      "elapsed": 0.007873853000091913,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "mark_barrier_saturation",
+      "repeat": 8,
+      "rc": 0,
+      "elapsed": 0.007771018999847001,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "mark_barrier_saturation",
+      "repeat": 9,
+      "rc": 0,
+      "elapsed": 0.0077403750001394656,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "mark_barrier_saturation",
+      "repeat": 10,
+      "rc": 0,
+      "elapsed": 0.00787660500009224,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "mark_barrier_saturation",
+      "repeat": 11,
+      "rc": 0,
+      "elapsed": 0.008166960999915318,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "mark_barrier_saturation",
+      "repeat": 12,
+      "rc": 0,
+      "elapsed": 0.008154822000506101,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "mark_barrier_saturation",
+      "repeat": 13,
+      "rc": 0,
+      "elapsed": 0.008119821000036609,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "mark_barrier_saturation",
+      "repeat": 14,
+      "rc": 0,
+      "elapsed": 0.007910760000413575,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "mark_barrier_saturation",
+      "repeat": 15,
+      "rc": 0,
+      "elapsed": 0.008088773000054061,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "mark_barrier_saturation",
+      "repeat": 16,
+      "rc": 0,
+      "elapsed": 0.00799483999981021,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "mark_barrier_saturation",
+      "repeat": 17,
+      "rc": 0,
+      "elapsed": 0.007970847999786201,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "mark_barrier_saturation",
+      "repeat": 18,
+      "rc": 0,
+      "elapsed": 0.0080538060001345,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "tree": "asan",
+      "mode": "mark_barrier_saturation",
+      "repeat": 19,
+      "rc": 0,
+      "elapsed": 0.008265598000434693,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    }
+  ]
+}

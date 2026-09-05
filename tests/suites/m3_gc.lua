@@ -38,6 +38,7 @@ local m3_scaffold_deps = {
   "m3_gc2_public_store_weak_window",
   "m3_gc2_sweep_public_table_rescan",
   "m3_gc2_sweep_leaf_publication",
+  "m3_gc2_sweep_table_coalescing",
   "m3_gc2_weak_resize_retry",
   "m3_gc2_activation_runtime",
   "m3_gc2_no_legacy_runtime",
@@ -193,6 +194,27 @@ return function(add)
         })
       end)
       print("M3 SWEEP leaf publication regression passed")
+    end
+  })
+
+  register({
+    name = "m3_gc2_sweep_table_coalescing",
+    description = "admitted SWEEP requests coalesce behind complete table scans",
+    run = function(t)
+      if jit.os ~= "Linux" then
+        print("M3 SWEEP coalescing protected-memory fixture requires Linux")
+        return
+      end
+      local flags = gc2_test_cflags .. " -DLUA_USE_ASSERT"
+      build.with_default_build_restore(t, function()
+        build.clean_build(t, { quiet = true, xcflags = flags })
+        compile_and_run_c(t, t:tmp("lj-t-gc2-sweep-table-coalescing"),
+                          "t-gc2-sweep-table-coalescing.c", {
+          cflags = flags,
+          timeout = "40s"
+        })
+      end)
+      print("M3 SWEEP table coalescing regression passed")
     end
   })
 
@@ -557,6 +579,7 @@ return function(add)
       utils.run_case(cases, t, "m3_gc2_markword_token_model")
       utils.run_case(cases, t, "m3_gc2_sweep_public_table_rescan")
       utils.run_case(cases, t, "m3_gc2_sweep_leaf_publication")
+      utils.run_case(cases, t, "m3_gc2_sweep_table_coalescing")
       utils.run_case(cases, t, "m3_gc2_recovery")
       utils.run_case(cases, t, "m3_gc2_sweep_edge_lease")
       utils.run_case(cases, t, "m3_gc2_worker_scheduler")

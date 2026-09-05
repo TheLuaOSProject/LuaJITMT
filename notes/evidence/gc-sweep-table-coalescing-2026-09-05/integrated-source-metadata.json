@@ -1,0 +1,12 @@
+{
+  "base": "0ba76b4ff61282356b08cd15800c387c690b8187",
+  "archive_sha256": "94b6c1f2bd2d9b290eb1a8a2a543c141b2de1d882929eb6d689f642bb050656e",
+  "overlays": {
+    "src/lj_gc2.c": "61009e510a1de2b591fffe32162a1772a4a24d4a4bb7b84368bbdc0eb8341c25",
+    "src/lj_gc2.h": "12a024f5b2de1c760bc56702dc17d112357a7fc56d229f013a299d9b13552f99",
+    "tests/t-gc2-table-store-guard.c": "a9e9ced74a491d43b1036fd1acd5d7b420257fd89a8fea38b558566a87b25b4d",
+    "tests/t-gc2-sweep-table-coalescing.c": "4a67ae9e094b4b28088cf00df2ddc5a39ad65c5e04e5d73d3453c8ee378dfe4b",
+    "tests/suites/m3_gc.lua": "5806034033db7592a203c72fd407ec22d016f08a175ed19186696119da867a3e"
+  },
+  "excluded": "Uncommitted arena empty-reclaimed changes. Final coalescing including MARK helper repair plus committed JIT root-abort retirement."
+}

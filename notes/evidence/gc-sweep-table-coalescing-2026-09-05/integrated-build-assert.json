@@ -1,0 +1,17 @@
+{
+  "kind": "assert",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/assert/src",
+    "-j8",
+    "BUILDMODE=static",
+    "XCFLAGS=-DLJ_GC2_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLUA_USE_ASSERT"
+  ],
+  "exit": 0,
+  "seconds": 9.781271554999876,
+  "executable_sha256": "421e0af7148772798ae8442ad152e6864d32514e94c03db2cc4fe625b127cb4b"
+}

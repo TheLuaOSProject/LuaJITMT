@@ -1,0 +1,66 @@
+{
+  "compile": [
+    "gcc",
+    "-std=gnu11",
+    "-O2",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-mcx16",
+    "-DLJ_GC2_TEST_HELPERS",
+    "-DLJ_ARENA_TEST_HELPERS",
+    "-DLJ_TRACE_TEST_HELPERS",
+    "-DLJ_TAB_TEST_HELPERS",
+    "-DLUA_USE_ASSERT",
+    "-I/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/assert/src",
+    "/tmp/lj-sweep-coalescing-20260904-lmawpxay/mark-scheduling-diagnostic.c",
+    "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/assert/src/libluajit.a",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-o",
+    "/tmp/lj-sweep-coalescing-20260904-lmawpxay/mark-scheduling-diagnostic"
+  ],
+  "runs": [
+    {
+      "repeat": 0,
+      "rc": 0,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "repeat": 1,
+      "rc": 0,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "repeat": 2,
+      "rc": 0,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "repeat": 3,
+      "rc": 0,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "repeat": 4,
+      "rc": 0,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "repeat": 5,
+      "rc": 0,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "repeat": 6,
+      "rc": 0,
+      "output": "t-gc2-sweep-table-coalescing OK: admitted requests coalesce behind complete scans; unresolved and saturated requests remain durable\n"
+    },
+    {
+      "repeat": 7,
+      "rc": -6,
+      "output": "ZERO phase=1 gate=1 resume=1 cycle=1 auto_yield=64 deadline=6302606793555 now=6302606773682 remaining=19873 afterphase=1 aftergate=1 scans=0\nmark-scheduling-diagnostic: /tmp/lj-sweep-coalescing-20260904-lmawpxay/mark-scheduling-diagnostic.c:346: scan_to_proof: Assertion `result != 0' failed.\n"
+    }
+  ]
+}

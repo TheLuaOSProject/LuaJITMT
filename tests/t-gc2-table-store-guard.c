@@ -771,13 +771,13 @@ static void test_sweep_finish_dirty_ordering(void)
   pthread_t thread;
   uint32_t dirty_before;
   uint64_t stamp_before;
+  uint64_t stamp_admitted;
   uint64_t stamp_committed;
 
   assert(stamp != NULL);
   dirty_before = (uint32_t)la_load64_acq(&stamp->state);
-  assert(dirty_before != UINT32_MAX);
+  assert(dirty_before < UINT32_MAX - 6u);
   stamp_before = (UINT64_C(71) << 32) | dirty_before;
-  stamp_committed = (uint64_t)(dirty_before + 1u);
   la_store64_rel(&stamp->state, stamp_before);
   before = resource_snapshot(&f);
 
@@ -791,9 +791,14 @@ static void test_sweep_finish_dirty_ordering(void)
   assert(lj_gc2_table_store_revalidate(f.L, &failed) ==
          LJ_GC2_TABLE_STORE_GUARD_OK);
   assert(failed.store_authorized);
+  /* Begin semantically publishes the parent twice: its object lease, then
+  ** the by-value root preceding ACTIVE. Each invalidates before its SSB LP.
+  ** Failed finish itself must still leave the admitted stamp unchanged. */
+  stamp_admitted = (uint64_t)(dirty_before + 2u);
+  assert(la_load64_acq(&stamp->state) == stamp_admitted);
   assert(lj_gc2_table_store_finish(f.L, &failed, 0) ==
          LJ_GC2_TABLE_STORE_GUARD_OK);
-  assert(la_load64_acq(&stamp->state) == stamp_before);
+  assert(la_load64_acq(&stamp->state) == stamp_admitted);
   assert_descriptor_idle(&f);
 
   assert(lj_gc2_table_store_begin(f.L, &committed, f.parent,
@@ -806,6 +811,12 @@ static void test_sweep_finish_dirty_ordering(void)
   assert(lj_gc2_table_store_revalidate(f.L, &committed) ==
          LJ_GC2_TABLE_STORE_GUARD_OK);
   assert(committed.store_authorized);
+  stamp_admitted = (uint64_t)(dirty_before + 4u);
+  assert(la_load64_acq(&stamp->state) == stamp_admitted);
+  /* Finish dirties after the committed store, then the independent public
+  ** SWEEP barrier invalidates before publishing its rescue request. Both
+  ** precede INSTALLING; neither may retain the old covered cycle. */
+  stamp_committed = stamp_admitted + 2u;
 
   memset(&ctx, 0, sizeof(ctx));
   ctx.fixture = &f;

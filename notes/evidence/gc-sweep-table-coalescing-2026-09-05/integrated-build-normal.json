@@ -1,0 +1,16 @@
+{
+  "kind": "normal",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/normal/src",
+    "-j8",
+    "BUILDMODE=static"
+  ],
+  "exit": 0,
+  "seconds": 9.393393696000203,
+  "executable_sha256": "981164c388957d9dbfc8d63665a0403a2fb76942a8e387dea9711558850e9a2a"
+}

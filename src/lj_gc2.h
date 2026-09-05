@@ -479,6 +479,14 @@ LJ_FUNC void lj_gc2_test_sweep_reclaim_scope_leave(global_State *g);
 #define LJ_GC2_THREAD_NEEDSCAN_TEST_INSTALLING	3u
 #define LJ_GC2_TABLE_RESCAN_TEST_INSTALLING	1u
 #define LJ_GC2_TABLE_RESCAN_TEST_HINT_CLEARED	2u
+#define LJ_GC2_TABLE_COALESCE_TEST_PRE_DIRTY	1u
+#define LJ_GC2_TABLE_COALESCE_TEST_POST_DIRTY	2u
+#define LJ_GC2_TABLE_COALESCE_TEST_SCAN_START	3u
+#define LJ_GC2_TABLE_COALESCE_TEST_PRE_PROOF	4u
+#define LJ_GC2_TABLE_COALESCE_TEST_MARK_ENTER	5u
+typedef void (*LJGC2TableCoalesceTestHook)(global_State *g, GCtab *t,
+					   uint32_t stage);
+LJ_FUNC void lj_gc2_test_table_coalesce_hook(LJGC2TableCoalesceTestHook hook);
 #define LJ_GC2_TABLE_TOKEN_TEST_PRE_TRANSFER	1u
 #define LJ_GC2_TABLE_TOKEN_TEST_PRE_PROOF	2u
 #define LJ_GC2_TABLE_TOKEN_TEST_POST_PROOF	3u

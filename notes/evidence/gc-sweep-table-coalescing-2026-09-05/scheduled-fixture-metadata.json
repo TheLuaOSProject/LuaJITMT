@@ -1,0 +1,214 @@
+{
+  "fixture": "/workspaces/lj-lockless/tests/t-gc2-sweep-table-coalescing.c",
+  "fixture_sha256": "a664e380f4688afc0dfb836baa2cb1f859b8f8f3815b694a1797cc199bf562fb",
+  "results": "/tmp/lj-sweep-coalescing-20260904-lmawpxay/scheduled-fixture-results.json",
+  "driver": "/tmp/lj-sweep-coalescing-20260904-lmawpxay/run-scheduled-fixtures.py",
+  "driver_sha256": "2827004f06615a0465cf52343efbd9f4f8abf07a559c1d61047043aa3f31c376",
+  "runs": [
+    {
+      "name": "integrated",
+      "tree": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/assert",
+      "archive": "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/assert/src/libluajit.a",
+      "archive_sha256": "d390236098789ccbe80b674de4c96c6bf6f80c946660b24732622a8a5ce6c839",
+      "executable": "/tmp/lj-sweep-coalescing-20260904-lmawpxay/scheduled-integrated-fixture",
+      "executable_sha256": "0850e5aa58286fb48dbba9e2c836bf202b8bc5b89463babfec599ee52680e4f7",
+      "compile_command": [
+        "gcc",
+        "-std=gnu11",
+        "-O2",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-mcx16",
+        "-DLJ_GC2_TEST_HELPERS",
+        "-DLUA_USE_ASSERT",
+        "-DLJ_ARENA_TEST_HELPERS",
+        "-DLJ_TRACE_TEST_HELPERS",
+        "-DLJ_TAB_TEST_HELPERS",
+        "-I/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/assert/src",
+        "/workspaces/lj-lockless/tests/t-gc2-sweep-table-coalescing.c",
+        "/tmp/lj-gc-coalescing-final-20260905-0eig4rlf/assert/src/libluajit.a",
+        "-lm",
+        "-ldl",
+        "-pthread",
+        "-o",
+        "/tmp/lj-sweep-coalescing-20260904-lmawpxay/scheduled-integrated-fixture"
+      ],
+      "compile_exit": 0,
+      "compiler": "gcc (Debian 14.2.0-19) 14.2.0",
+      "source_sha256": {
+        "src/lj_gc2.c": "61009e510a1de2b591fffe32162a1772a4a24d4a4bb7b84368bbdc0eb8341c25",
+        "src/lj_gc2.h": "12a024f5b2de1c760bc56702dc17d112357a7fc56d229f013a299d9b13552f99",
+        "src/lj_arena.c": "fa91f740bc8271cf61b8ce214e4c957dc4327bb6f49c87538869376ff50acbbd",
+        "src/lj_arena.h": "04e84f9cccbed43277879e6bd5124e0b03796f0acd88c9c2b85f36044b8d9ec0"
+      },
+      "runtime_environment": {
+        "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+      },
+      "modes": [
+        {
+          "command": [
+            "taskset",
+            "-c",
+            "0-15",
+            "/tmp/lj-sweep-coalescing-20260904-lmawpxay/scheduled-integrated-fixture",
+            "all"
+          ],
+          "outer_timeout_seconds": 40,
+          "fixture_alarm_seconds": 30,
+          "count": 20,
+          "all_exit_zero": true
+        },
+        {
+          "command": [
+            "taskset",
+            "-c",
+            "0-15",
+            "/tmp/lj-sweep-coalescing-20260904-lmawpxay/scheduled-integrated-fixture",
+            "mark_barrier_saturation"
+          ],
+          "outer_timeout_seconds": 40,
+          "fixture_alarm_seconds": 30,
+          "count": 100,
+          "all_exit_zero": true
+        }
+      ]
+    },
+    {
+      "name": "protocol",
+      "tree": "/tmp/lj-sweep-coalescing-20260904-lmawpxay/fixed",
+      "archive": "/tmp/lj-sweep-coalescing-20260904-lmawpxay/fixed/src/libluajit.a",
+      "archive_sha256": "0b3747c094b37617b488b0171dcc4e26668643605b5d2f031c567396578efd92",
+      "executable": "/tmp/lj-sweep-coalescing-20260904-lmawpxay/scheduled-protocol-fixture",
+      "executable_sha256": "ecc7be8492c0c316f86a85efd0030898027e87cd3e3520bedecefbc9e98681a3",
+      "compile_command": [
+        "gcc",
+        "-std=gnu11",
+        "-O2",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-mcx16",
+        "-DLJ_GC2_TEST_HELPERS",
+        "-DLUA_USE_ASSERT",
+        "-I/tmp/lj-sweep-coalescing-20260904-lmawpxay/fixed/src",
+        "/workspaces/lj-lockless/tests/t-gc2-sweep-table-coalescing.c",
+        "/tmp/lj-sweep-coalescing-20260904-lmawpxay/fixed/src/libluajit.a",
+        "-lm",
+        "-ldl",
+        "-pthread",
+        "-o",
+        "/tmp/lj-sweep-coalescing-20260904-lmawpxay/scheduled-protocol-fixture"
+      ],
+      "compile_exit": 0,
+      "compiler": "gcc (Debian 14.2.0-19) 14.2.0",
+      "source_sha256": {
+        "src/lj_gc2.c": "61009e510a1de2b591fffe32162a1772a4a24d4a4bb7b84368bbdc0eb8341c25",
+        "src/lj_gc2.h": "12a024f5b2de1c760bc56702dc17d112357a7fc56d229f013a299d9b13552f99",
+        "src/lj_arena.c": "fa91f740bc8271cf61b8ce214e4c957dc4327bb6f49c87538869376ff50acbbd",
+        "src/lj_arena.h": "04e84f9cccbed43277879e6bd5124e0b03796f0acd88c9c2b85f36044b8d9ec0"
+      },
+      "runtime_environment": {
+        "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+      },
+      "modes": [
+        {
+          "command": [
+            "taskset",
+            "-c",
+            "0-15",
+            "/tmp/lj-sweep-coalescing-20260904-lmawpxay/scheduled-protocol-fixture",
+            "all"
+          ],
+          "outer_timeout_seconds": 40,
+          "fixture_alarm_seconds": 30,
+          "count": 20,
+          "all_exit_zero": true
+        },
+        {
+          "command": [
+            "taskset",
+            "-c",
+            "0-15",
+            "/tmp/lj-sweep-coalescing-20260904-lmawpxay/scheduled-protocol-fixture",
+            "mark_barrier_saturation"
+          ],
+          "outer_timeout_seconds": 40,
+          "fixture_alarm_seconds": 30,
+          "count": 20,
+          "all_exit_zero": true
+        }
+      ]
+    },
+    {
+      "name": "asan",
+      "tree": "/tmp/lj-sweep-coalescing-20260904-lmawpxay/asan",
+      "archive": "/tmp/lj-sweep-coalescing-20260904-lmawpxay/asan/src/libluajit.a",
+      "archive_sha256": "40207169bb3738bcb259ec367c4c57671a34e383f63785a52e90ef14bf94f3a9",
+      "executable": "/tmp/lj-sweep-coalescing-20260904-lmawpxay/scheduled-asan-fixture",
+      "executable_sha256": "6fef266c620f37f3a904e82ac3d6babb30b8322323b668361e43816d5a1657a3",
+      "compile_command": [
+        "clang",
+        "-std=gnu11",
+        "-O1",
+        "-g",
+        "-fno-omit-frame-pointer",
+        "-fsanitize=address",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-mcx16",
+        "-DLJ_GC2_TEST_HELPERS",
+        "-DLUA_USE_ASSERT",
+        "-DLJ_TAB_TEST_HELPERS",
+        "-I/tmp/lj-sweep-coalescing-20260904-lmawpxay/asan/src",
+        "/workspaces/lj-lockless/tests/t-gc2-sweep-table-coalescing.c",
+        "/tmp/lj-sweep-coalescing-20260904-lmawpxay/asan/src/libluajit.a",
+        "-lm",
+        "-ldl",
+        "-pthread",
+        "-o",
+        "/tmp/lj-sweep-coalescing-20260904-lmawpxay/scheduled-asan-fixture"
+      ],
+      "compile_exit": 0,
+      "compiler": "Debian clang version 19.1.7 (3+b1)",
+      "source_sha256": {
+        "src/lj_gc2.c": "61009e510a1de2b591fffe32162a1772a4a24d4a4bb7b84368bbdc0eb8341c25",
+        "src/lj_gc2.h": "12a024f5b2de1c760bc56702dc17d112357a7fc56d229f013a299d9b13552f99",
+        "src/lj_arena.c": "fa91f740bc8271cf61b8ce214e4c957dc4327bb6f49c87538869376ff50acbbd",
+        "src/lj_arena.h": "04e84f9cccbed43277879e6bd5124e0b03796f0acd88c9c2b85f36044b8d9ec0"
+      },
+      "runtime_environment": {
+        "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+      },
+      "modes": [
+        {
+          "command": [
+            "taskset",
+            "-c",
+            "0-15",
+            "/tmp/lj-sweep-coalescing-20260904-lmawpxay/scheduled-asan-fixture",
+            "all"
+          ],
+          "outer_timeout_seconds": 40,
+          "fixture_alarm_seconds": 30,
+          "count": 20,
+          "all_exit_zero": true
+        },
+        {
+          "command": [
+            "taskset",
+            "-c",
+            "0-15",
+            "/tmp/lj-sweep-coalescing-20260904-lmawpxay/scheduled-asan-fixture",
+            "mark_barrier_saturation"
+          ],
+          "outer_timeout_seconds": 40,
+          "fixture_alarm_seconds": 30,
+          "count": 20,
+          "all_exit_zero": true
+        }
+      ]
+    }
+  ]
+}
