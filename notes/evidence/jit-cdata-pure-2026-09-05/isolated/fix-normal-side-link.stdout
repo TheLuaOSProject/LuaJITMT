@@ -1,0 +1,11 @@
+trace	1	link	1	loop	parent	0	exits	2
+trace	2	link	1	root	parent	1	exits	0
+trace	3	link	1	root	parent	1	exits	5
+trace	4	link	0	interpreter	parent	3	exits	0
+trace	1	link	1	loop	parent	0	exits	3
+trace	2	link	1	root	parent	1	exits	0
+trace	3	link	1	root	parent	1	exits	6
+trace	4	link	0	interpreter	parent	3	exits	0
+trace	5	link	1	root	parent	1	exits	0
+trace	6	link	1	root	parent	3	exits	4
+side-link-pass	oldside	3	before-exits	5	calls	640

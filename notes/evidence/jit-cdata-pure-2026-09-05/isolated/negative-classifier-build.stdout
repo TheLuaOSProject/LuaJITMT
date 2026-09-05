@@ -1,0 +1,6 @@
+make: Entering directory '/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/negative-classifier/src'
+CC        lj_opt_loop.o
+AR        libluajit.a
+LINK      luajit
+OK        Successfully built LuaJIT
+make: Leaving directory '/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/negative-classifier/src'

@@ -95,7 +95,7 @@ are verified reasons the full goal is still open:
 | Trace stitching | Production stitch probe rejects every edge and the stitch entry returns immediately | Prove C/VM return and snapshot lifetime before enabling real executed stitched traces |
 | VM events | START/STOP/ABORT/RECORD callbacks still retain recorder ownership | Exact event/continuation sessions with callbacks outside shared ownership |
 | Generic FFI traces | CALLXS is live; first generated callbacks could overwrite loop slots through stale owner stack bounds | XSAVE owner geometry is repaired; continue aggregate ABI, caller topology and no-replay lifecycle work |
-| Cdata method recording | Pre-MT traces could skip replacement methods; shared-MT constructor/field recording still refuses before trace-owned exceptions | Pre-MT method guards are repaired; exact rooted recorder/native lookup and root-publication exclusion are prerequisites for MT enablement |
+| Cdata method recording | Pre-MT guards are repaired and restricted pure loops reuse entry checks; shared-MT constructor/field recording still refuses before trace-owned exceptions | Exact rooted recorder/native lookup and root-publication exclusion remain prerequisites for MT enablement |
 | Win64 table traces | The recorder rejects ordinary HSTORE/ASTORE, including pre-MT stores | Complete Win64 helper ABI and require executed table-store traces under Wine and native CI |
 | Diagnostics | Remote allocator-list walks are replaced by scalar publication in `abf234ca`; other snapshot lifetime contracts still apply | Preserve owner/lifetime contracts and audit remaining diagnostic access |
 | Allocator API | The default internal-allocator gate ignores custom `lua_Alloc` callbacks and makes `lua_setallocf` a no-op | Restore exact allocation ownership and callback behavior as a separate tested milestone |
@@ -257,6 +257,13 @@ controls and post-fix completion tests:
   and GC assertions remain unchanged; current-source canonical and isolated
   ASan/LSan checks pass, with disabled-producer and missing-admission negatives.
   No runtime source changes. See `notes/jit-xsave-staging-fixture-2026-09-05.md`.
+- Pure pre-MT cdata loops reuse guarded entry method loads only after whole-body
+  effect classification in protected unrolling. Entry guards, phase/TG polls,
+  call/allocation exclusions and error cleanup remain. Combined normal/assert/
+  ASan validation passes 90 processes plus both new shared canonical entries.
+  Seven paired current-source field benchmarks recover 0.0684 s to 0.0206 s
+  (69.9% less); this is a focused field-loop result. General MT method recording
+  remains refused. See `notes/jit-cdata-pure-2026-09-05.md`.
 - `1bce0fa5`: promote exhausted inline table dirty authority into pre-reserved
   persistent wide proof, retaining common stamp/token geometry. Small mappings
   use a dense sidecar plane and Huge mappings use checked tail reservation.

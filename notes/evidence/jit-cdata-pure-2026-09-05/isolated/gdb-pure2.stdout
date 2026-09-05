@@ -1,0 +1,23 @@
+Breakpoint 1 at 0xde329: file lj_opt_loop.c, line 327.
+Breakpoint 2 at 0xde860: file lj_opt_loop.c, line 330.
+Breakpoint 3 at 0xde8b7: file lj_opt_loop.c, line 343.
+No compiled code for line 346 in file "lj_opt_loop.c".
+Breakpoint 4 (lj_opt_loop.c:346) pending.
+No compiled code for line 350 in file "lj_opt_loop.c".
+Breakpoint 5 (lj_opt_loop.c:350) pending.
+No compiled code for line 353 in file "lj_opt_loop.c".
+Breakpoint 6 (lj_opt_loop.c:353) pending.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+$1 = 1
+$2 = 1
+$3 = 0
+
+Breakpoint 2, loop_cdata_fload_pure (J=0x7ffff7c91700, end=32794) at lj_opt_loop.c:330
+330	  for (ref = REF_FIRST; ref < end; ref++) {
+#0  loop_cdata_fload_pure (J=0x7ffff7c91700, end=32794) at lj_opt_loop.c:330
+#1  loop_unroll (lps=<optimized out>) at lj_opt_loop.c:402
+#2  cploop_opt (L=<optimized out>, dummy=<optimized out>, ud=<optimized out>) at lj_opt_loop.c:534
+$4 = 32769
+gdb-pure2.txt:19: Error in sourced command file:
+value has been optimized out

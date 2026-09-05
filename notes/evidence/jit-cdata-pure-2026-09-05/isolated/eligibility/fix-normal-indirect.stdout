@@ -1,0 +1,15 @@
+negative	indirect	root	1	nins	52	exits	1	postroot	1	answer	3320
+XPOLL 	1
+PHI   	2
+XSTORE	4
+LOOP  	1
+NOP   	2
+SLOAD 	5
+LE    	3
+FLOAD 	6
+HLOAD 	4
+EQ    	6
+ADD   	9
+CONV  	2
+XLOAD 	3
+HREFK 	4

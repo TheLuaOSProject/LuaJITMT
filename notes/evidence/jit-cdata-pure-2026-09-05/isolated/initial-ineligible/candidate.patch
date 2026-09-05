@@ -1,0 +1,153 @@
+--- a/src/lj_jit.h
++++ b/src/lj_jit.h
+@@ -903,6 +903,7 @@
+   IRType1 guardemit;	/* Accumulated IRT_GUARD for emitted instructions. */
+   uint8_t bcskip;	/* Number of bytecode instructions to skip. */
+   uint8_t root_startins_pending;  /* Record captured root ITERN once. */
++  uint8_t loop_cdata_fload;  /* Token-private pure pre-MT unroll scope. */
+ 
+   FoldState fold;	/* Fold state. */
+ 
+--- a/src/lj_opt_loop.c
++++ b/src/lj_opt_loop.c
+@@ -16,6 +16,7 @@
+ #include "lj_jit.h"
+ #include "lj_iropt.h"
+ #include "lj_profile.h"
++#include "lj_record.h"
+ #include "lj_trace.h"
+ #include "lj_snap.h"
+ #include "lj_vm.h"
+@@ -303,6 +304,57 @@
+ } LoopState;
+ 
+ #if LJ_TARGET_X64 && LJ_GC64
++/* Only a direct scalar payload store is admitted. Pointer-based/indirect FFI
++** stores and every Lua-object store remain outside this first optimization. */
++static int loop_cdata_scalar_store(jit_State *J, IRIns *ir)
++{
++  IRIns *addr = IR(ir->op1), *base, *ofs;
++  if (!(irt_isnum(ir->t) || irt_isint(ir->t)) || addr->o != IR_ADD)
++    return 0;
++  base = IR(addr->op1);
++  ofs = IR(addr->op2);
++  return irt_iscdata(base->t) &&
++    (base->o == IR_SLOAD || base->o == IR_KGC) &&
++    ofs->o == IR_KINT && ofs->i >= (int32_t)sizeof(GCcdata);
++}
++
++/* Classify the complete original body, including operations after a candidate
++** lookup. The copied prefix alone cannot exclude a previous iteration's late
++** mutation. No opaque/helper operation or allocation is presumed pure. */
++static int loop_cdata_fload_pure(jit_State *J, IRRef end)
++{
++  IRRef ref;
++  if (J->parent != 0 || J->cur.link != J->cur.traceno ||
++      lj_record_mt_runtime_shared(J2G(J), J->L))
++    return 0;
++  for (ref = REF_FIRST; ref < end; ref++) {
++    IRIns *ir = IR(ref);
++    switch (ir->o) {
++    case IR_NOP: case IR_SLOAD: case IR_FLOAD:
++    case IR_HREFK: case IR_HLOAD: case IR_XLOAD:
++    case IR_ADD: case IR_ADDOV: case IR_EQ: case IR_NE:
++      break;
++    case IR_LT: case IR_GE: case IR_LE: case IR_GT:
++    case IR_ULT: case IR_UGE: case IR_ULE: case IR_UGT:
++      if (!(irt_isnum(ir->t) || irt_isint(ir->t)))
++        return 0;
++      break;
++    case IR_CONV:
++      if (ir->op2 != IRCONV_NUM_INT &&
++          ir->op2 != (IRCONV_INT_NUM|IRCONV_CHECK))
++        return 0;
++      break;
++    case IR_XSTORE:
++      if (!loop_cdata_scalar_store(J, ir))
++        return 0;
++      break;
++    default:
++      return 0;
++    }
++  }
++  return 1;
++}
++
+ static LJ_AINLINE int loop_needs_xpoll(jit_State *J)
+ {
+   global_State *g = J2G(J);
+@@ -345,7 +397,11 @@
+   /* LOOP separates the pre-roll from the loop body. */
+   emitir_raw(IRTG(IR_LOOP, IRT_NIL), 0, 0);
+ #if LJ_TARGET_X64 && LJ_GC64
+-  emitir_raw(IRTG(IR_XPOLL, IRT_NIL), loop_needs_xpoll(J), 0);
++  {
++    int needs_poll = loop_needs_xpoll(J);
++    J->loop_cdata_fload = !needs_poll && loop_cdata_fload_pure(J, invar);
++    emitir_raw(IRTG(IR_XPOLL, IRT_NIL), needs_poll, 0);
++  }
+ #endif
+ 
+   /* Grow snapshot buffer and map for copy-substituted snapshots.
+@@ -490,7 +546,11 @@
+   lps.J = J;
+   lps.subst = NULL;
+   lps.sizesubst = 0;
++  J->loop_cdata_fload = 0;
+   errcode = lj_vm_cpcall(J->L, NULL, &lps, cploop_opt);
++  /* The protected callback owns the flag on every success/error path. Never
++  ** carry eligibility into loop retry, another trace, or later optimizer work. */
++  J->loop_cdata_fload = 0;
+   lj_mem_freevec(J2G(J), lps.subst, lps.sizesubst, IRRef1);
+   if (LJ_UNLIKELY(errcode)) {
+     lua_State *L = J->L;
+--- a/src/lj_opt_mem.c
++++ b/src/lj_opt_mem.c
+@@ -19,6 +19,7 @@
+ #include "lj_iropt.h"
+ #include "lj_ircall.h"
+ #include "lj_dispatch.h"
++#include "lj_record.h"
+ 
+ /* Some local macros to save typing. Undef'd at the end. */
+ #define IR(ref)		(&J->cur.ir[(ref)])
+@@ -54,6 +55,31 @@
+       J->chain[IR_XPOLL] > lim)
+     lim = J->chain[IR_XPOLL];
+   return lim;
++}
++
++/* Reuse only the cdata base-root/node chain while the protected root-loop
++** unroller has classified the whole body as pure. Entry guards, XBAR, ordinary
++** table alias checks, and the unconditional GC phase poll remain unchanged. */
++static int fload_cdata_unroll_invariant(jit_State *J, IRRef obj, IRRef fid)
++{
++#if LJ_TARGET_X64 && LJ_GC64
++  const IRRef basefid = (IRRef)(GG_OFS(g.gcroot[GCROOT_BASEMT+~LJ_TCDATA]) >> 2);
++  IRRef poll = J->chain[IR_XPOLL];
++  if (!J->loop_cdata_fload || !J->chain[IR_LOOP] ||
++      poll <= J->chain[IR_LOOP] || IR(poll)->op1 != 0 ||
++      J->parent != 0 || lj_record_mt_runtime_shared(J2G(J), J->L))
++    return 0;
++  if (obj == REF_NIL && fid == basefid && irt_istab(fins->t))
++    return 1;
++  if (fid == IRFL_TAB_NODE && !irref_isk(obj)) {
++    IRIns *base = IR(obj);
++    return base->o == IR_FLOAD && irt_istab(base->t) &&
++      base->op1 == REF_NIL && base->op2 == basefid;
++  }
++#else
++  UNUSED(J); UNUSED(obj); UNUSED(fid);
++#endif
++  return 0;
+ }
+ 
+ static LJ_AINLINE IRRef fload_alias_limit(jit_State *J, IRRef lim, IRRef fid)
+@@ -66,6 +92,7 @@
+   ** MT traces keep XPOLL as an alias boundary.
+   */
+   if ((fid != IRFL_TAB_META || mt_active_or_entering_acq(J2G(J))) &&
++      !fload_cdata_unroll_invariant(J, fins->op1, fid) &&
+       J->chain[IR_XPOLL] > lim)
+     lim = J->chain[IR_XPOLL];
+   return lim;

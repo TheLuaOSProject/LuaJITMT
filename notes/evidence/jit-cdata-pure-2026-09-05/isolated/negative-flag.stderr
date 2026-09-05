@@ -1,0 +1,1 @@
+negative-flag-fixture: /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/flag-error.c:27: main: Assertion `J->loop_cdata_fload==0' failed.

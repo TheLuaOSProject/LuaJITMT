@@ -1,0 +1,12 @@
+set pagination off
+set breakpoint pending on
+break fload_cdata_unroll_invariant if J->loop_cdata_fload != 0
+run /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/positive.lua
+print J->loop_cdata_fload
+print J->chain[17]
+print J->chain[18]
+print J->parent
+print obj
+print fid
+bt 3
+quit

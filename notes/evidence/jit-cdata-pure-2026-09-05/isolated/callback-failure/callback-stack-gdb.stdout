@@ -1,0 +1,52 @@
+Breakpoint 1 at 0x7f40: file /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/callback-negative.c, line 17.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+
+Breakpoint 1, invoke (callback=0x7ffff7fbb008, value=1) at /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/callback-negative.c:17
+17	 int native=lj_ffi_native_frame_snapshot(testtg,&s)==LJ_FFI_NATIVE_FRAME_SNAPSHOT_STABLE && s.depth &&
+$1 = {
+  nextgc = {
+    gcptr64 = 140737346884896
+  },
+  marked = 97 'a',
+  gct = 6 '\006',
+  dummy_ffid = 1 '\001',
+  status = 0 '\000',
+  glref = {
+    ptr64 = 140737350533424
+  },
+  gclist = {
+    gcptr64 = 0
+  },
+  base = 0x7ffff793c618,
+  top = 0x7ffff793c638,
+  maxstack = {
+    ptr64 = 140737347045456
+  },
+  stack = {
+    ptr64 = 140737347044688
+  },
+  openupval = {
+    gcptr64 = 0
+  },
+  env = {
+    gcptr64 = 140737348183680
+  },
+  mt_thread = {
+    gcptr64 = 0
+  },
+  thread_next = 0x0,
+  gcprep_next = 0x0,
+  cframe = 0x7fffffffdf30,
+  stacksize = 105,
+  tg_hint = 0x7ffff7c92d20,
+  thr_owner = 4294967297,
+  grayagain_cycle = 0,
+  scan_epoch = 1,
+  scan_dirty_epoch = 1059,
+  scan_handoff_epoch = 0,
+  scan_needscan_counted = 0,
+  gcprep_state = 0
+}
+callback-stack-gdb.txt:6: Error in sourced command file:
+There is no member named ffi_native_frames.

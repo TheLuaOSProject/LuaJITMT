@@ -1,0 +1,41 @@
+[
+  {
+    "variant": "tree",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-C",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/src",
+      "-j4",
+      "BUILDMODE=static",
+      "CCDEBUG=-g",
+      "TARGET_STRIP=:"
+    ],
+    "exit": 0,
+    "seconds": 9.63448233300005,
+    "runtime_sha256": "550cb4160bb5273f2cc3a00b32afe6ff6f701c07b114f24d5073750f0a51f960",
+    "archive_sha256": "1b374ce40368ccb37a36ceedfc35043fa8c646c609dde54994f719bbf3790634"
+  },
+  {
+    "variant": "strict",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-C",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src",
+      "-j4",
+      "BUILDMODE=static",
+      "CCDEBUG=-g",
+      "TARGET_STRIP=:",
+      "XCFLAGS=-DLUA_USE_ASSERT"
+    ],
+    "exit": 0,
+    "seconds": 10.141007415000786,
+    "runtime_sha256": "8b05e7c359238c23dcb6e95d58107174ef0cf3be3d5ede4bbb72449bcbe8a27f",
+    "archive_sha256": "d90174a88f7abe8ad5e99f6d4598dd6908acd7e6255528278bd7453057588f2f"
+  }
+]

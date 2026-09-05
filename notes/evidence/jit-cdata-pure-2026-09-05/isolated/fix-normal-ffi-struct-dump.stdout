@@ -1,0 +1,109 @@
+benchmark               total_s      ns/op
+---- TRACE 1 start bench.lua:145
+---- TRACE 1 IR
+0001 >  [35mint[m SLOAD  #7    CRI
+0002 >  [35mint[m LE     0001  [35m+2147483646[m
+0003    [35mint[m SLOAD  #6    CI
+0004 >  [33mcdt[m SLOAD  #4    T
+0005 >  [34mnum[m SLOAD  #5    T
+0006    [31mtab[m FLOAD  nil   #276
+0007    p64 FLOAD  0006  tab.node
+0008 >  p64 HREFK  0007  [32m"__index"[m @2
+0009 >  [1mfun[m HLOAD  0008
+0010 >  [1mfun[m EQ     0009  [1mffi.meta.__index[m
+0011    [35mu16[m FLOAD  0004  cdata.ctypeid
+0012 >  [35mint[m EQ     0011  [35m+102[m
+0013    p64 ADD    0004  [35m+16 [m
+0014    [34mnum[m XLOAD  0013  
+0015  + [34mnum[m ADD    0014  [34m+1  [m
+0016 >  p64 HREFK  0007  [32m"__newindex"[m @3
+0017 >  [1mfun[m HLOAD  0016
+0018 >  [1mfun[m EQ     0017  [1mffi.meta.__newindex[m
+0019    [34mnum[m XSTORE 0013  0015
+0020    p64 ADD    0004  [35m+24 [m
+0021    [34mnum[m XLOAD  0020  
+0022  + [34mnum[m ADD    0021  0005
+0023  + [35mint[m ADD    0003  [35m+1  [m
+0024 >  [35mint[m LE     0023  0001
+0025 ------ LOOP ------------
+0026 >  nil XPOLL  #0  
+0027  + [34mnum[m ADD    0015  [34m+1  [m
+0028    [34mnum[m XSTORE 0013  0027
+0029  + [34mnum[m ADD    0022  0021
+0030  + [35mint[m ADD    0023  [35m+1  [m
+0031 >  [35mint[m LE     0030  0001
+0032    [35mint[m PHI    0023  0030
+0033    [34mnum[m PHI    0022  0029
+0034    [34mnum[m PHI    0015  0027
+---- TRACE 1 mcode 356
+563eed6cfe9a  mov dword [r14+0x84c], 0x1
+563eed6cfea5  mov r9, 0x00007fe929e97fa0
+563eed6cfeaf  mov rbx, 0x00007fe929e97fd0
+563eed6cfeb9  movsd xmm1, [rip-0xfd81]
+563eed6cfec1  movsd xmm7, [rdx+0x28]
+563eed6cfec6  cvttsd2si eax, xmm7
+563eed6cfeca  xorps xmm6, xmm6
+563eed6cfecd  cvtsi2sd xmm6, eax
+563eed6cfed1  ucomisd xmm7, xmm6
+563eed6cfed5  jnz 0x563eed6c0118
+563eed6cfedb  jpe 0x563eed6c0118
+563eed6cfee1  cmp eax, 0x7ffffffe
+563eed6cfee7  jg 0x563eed6c0118
+563eed6cfeed  cvttsd2si ebp, [rdx+0x20]
+563eed6cfef2  rorx rcx, [rdx+0x10], 0x2f
+563eed6cfef9  cmp cx, -0x0b
+563eed6cfefd  jnz 0x563eed6c0118
+563eed6cff03  shr rcx, 0x11
+563eed6cff07  cmp dword [rdx+0x1c], 0xfff90000
+563eed6cff0e  jnb 0x563eed6c0118
+563eed6cff14  movsd xmm6, [rdx+0x18]
+563eed6cff19  mov r10, 0x00007fe92a1d04d0
+563eed6cff23  mov r10, [r10]
+563eed6cff26  mov rsi, [r10+0x28]
+563eed6cff2a  cmp dword [rsi-0x10], +0x02
+563eed6cff2e  jb 0x563eed6c0120
+563eed6cff34  mov rdi, 0xfffdffe929f92780
+563eed6cff3e  cmp rdi, [rsi+0x38]
+563eed6cff42  jnz 0x563eed6c0120
+563eed6cff48  rorx r8, [rsi+0x30], 0x2f
+563eed6cff4f  cmp r8w, -0x09
+563eed6cff54  jnz 0x563eed6c0120
+563eed6cff5a  shr r8, 0x11
+563eed6cff5e  cmp r8, r9
+563eed6cff61  jnz 0x563eed6c0120
+563eed6cff67  cmp word [rcx+0xa], +0x66
+563eed6cff6c  jnz 0x563eed6c0120
+563eed6cff72  movsd xmm7, [rcx+0x10]
+563eed6cff77  addsd xmm7, xmm1
+563eed6cff7b  cmp dword [rsi-0x10], +0x03
+563eed6cff7f  jb 0x563eed6c0120
+563eed6cff85  mov rdi, 0xfffdffe929f927b0
+563eed6cff8f  cmp rdi, [rsi+0x50]
+563eed6cff93  jnz 0x563eed6c0120
+563eed6cff99  rorx rdx, [rsi+0x48], 0x2f
+563eed6cffa0  cmp dx, -0x09
+563eed6cffa4  jnz 0x563eed6c0120
+563eed6cffaa  shr rdx, 0x11
+563eed6cffae  cmp rdx, rbx
+563eed6cffb1  jnz 0x563eed6c0120
+563eed6cffb7  movsd [rcx+0x10], xmm7
+563eed6cffbc  movsd xmm0, [rcx+0x18]
+563eed6cffc1  addsd xmm6, xmm0
+563eed6cffc5  add ebp, +0x01
+563eed6cffc8  cmp ebp, eax
+563eed6cffca  jg 0x563eed6c0128
+->LOOP:
+563eed6cffd0  mov rdi, 0x00007fe92a1d0584
+563eed6cffda  mov edi, [rdi]
+563eed6cffdc  cmp edi, +0x00
+563eed6cffdf  jz 0x563eed6c0130
+563eed6cffe5  addsd xmm7, xmm1
+563eed6cffe9  movsd [rcx+0x10], xmm7
+563eed6cffee  addsd xmm6, xmm0
+563eed6cfff2  add ebp, +0x01
+563eed6cfff5  cmp ebp, eax
+563eed6cfff7  jle 0x563eed6cffd0	->LOOP
+563eed6cfff9  jmp 0x563eed6c0138
+---- TRACE 1 stop -> loop
+
+ffi_struct               0.0000      80.00

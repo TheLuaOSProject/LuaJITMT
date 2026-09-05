@@ -1,0 +1,1 @@
+global-worker early-exit=269997 limit=2000000 exit-callback-mutation=1 continuation-calls=3460006 second-calls=160 final-IDLE

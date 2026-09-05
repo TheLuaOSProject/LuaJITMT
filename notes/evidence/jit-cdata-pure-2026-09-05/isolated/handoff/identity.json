@@ -1,0 +1,86 @@
+{
+  "validated_patch_sha256": "508e80124110ef8bfbf9ecbedfa646afdce846d1f78df79f82b0ee233889000f",
+  "comment_only_patch_sha256": "aed2f782b4b50704172aa374010caa47de20510b5f9279a05cc47c320ef27119",
+  "composed_patch_sha256": "6eff86feefc6299c35fa74d3b03562fdf4476ffbbae2e9c7a6be5f9d7a537853",
+  "validated_source_sha256": {
+    "src/lj_jit.h": "7608c51820c5f365d5cd7ce74fc79a0a3b87b6f9c437b97d01e83b78e7a6c1fa",
+    "src/lj_opt_loop.c": "68cfffc755981068c5ab818d0ce41c6d438647fe300dc60070c993fe5f3a461f",
+    "src/lj_opt_mem.c": "34162cb91d55b0e94b8a559c182eb93f37485f60551e0d2c8e7adb61a5ac2159"
+  },
+  "handoff_source_sha256": {
+    "src/lj_jit.h": "7608c51820c5f365d5cd7ce74fc79a0a3b87b6f9c437b97d01e83b78e7a6c1fa",
+    "src/lj_opt_loop.c": "d84ee15a992f10af796af03037cfeabbfa84f6c9ce69346d67c36215ecfd49de",
+    "src/lj_opt_mem.c": "34162cb91d55b0e94b8a559c182eb93f37485f60551e0d2c8e7adb61a5ac2159"
+  },
+  "preprocessor_results": [
+    {
+      "mode": "normal",
+      "variant": "measured",
+      "command": [
+        "cc",
+        "-E",
+        "-P",
+        "-I/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src",
+        "src/lj_opt_loop.c"
+      ],
+      "cwd": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/preprocessor-comment",
+      "exit": 0,
+      "sha256": "0e296777393221e56fdab463fbea2a80a385d99e917bf6b37eca50e4a28350df",
+      "bytes": 695645
+    },
+    {
+      "mode": "normal",
+      "variant": "handoff",
+      "command": [
+        "cc",
+        "-E",
+        "-P",
+        "-I/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src",
+        "src/lj_opt_loop.c"
+      ],
+      "cwd": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/preprocessor-comment",
+      "exit": 0,
+      "sha256": "0e296777393221e56fdab463fbea2a80a385d99e917bf6b37eca50e4a28350df",
+      "bytes": 695645
+    },
+    {
+      "mode": "assert",
+      "variant": "measured",
+      "command": [
+        "cc",
+        "-E",
+        "-P",
+        "-I/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src",
+        "-DLUA_USE_ASSERT",
+        "-DLJ_GC2_TEST_HELPERS",
+        "-DLJ_TRACE_TEST_HELPERS",
+        "-DLJ_TAB_TEST_HELPERS",
+        "src/lj_opt_loop.c"
+      ],
+      "cwd": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/preprocessor-comment",
+      "exit": 0,
+      "sha256": "f43c7b6717a5a517668753d48be9cee45e3be9c3d057bea1c623568fcb6c9a3e",
+      "bytes": 731218
+    },
+    {
+      "mode": "assert",
+      "variant": "handoff",
+      "command": [
+        "cc",
+        "-E",
+        "-P",
+        "-I/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src",
+        "-DLUA_USE_ASSERT",
+        "-DLJ_GC2_TEST_HELPERS",
+        "-DLJ_TRACE_TEST_HELPERS",
+        "-DLJ_TAB_TEST_HELPERS",
+        "src/lj_opt_loop.c"
+      ],
+      "cwd": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/preprocessor-comment",
+      "exit": 0,
+      "sha256": "f43c7b6717a5a517668753d48be9cee45e3be9c3d057bea1c623568fcb6c9a3e",
+      "bytes": 731218
+    }
+  ],
+  "boundary": "The executable and timing evidence remains the validated508e patch. Handoff differs only by equal-line-count comment; normal/assert preprocessor streams identical. No poll assembly fix or callback fix included."
+}

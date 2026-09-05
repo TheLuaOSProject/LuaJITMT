@@ -1,0 +1,12 @@
+set pagination off
+set print pretty on
+break invoke if enabled != 0
+run
+print *testtg->cur_L
+print testtg->ffi_native_frames
+print testtg->ffi_native_depth
+print testtg->ffi_xsave_root
+print testtg->ffi_xsave_baseslot
+print testtg->ffi_xsave_nslots
+bt 8
+quit

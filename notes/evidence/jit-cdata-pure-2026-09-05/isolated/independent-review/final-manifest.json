@@ -1,0 +1,27 @@
+{
+  "base": "b4e26564542cb8bfa997a11c6a90e5e0017a2f79",
+  "scope": "Read-only static source review; patch reconstruction in /tmp only; no runtime or build execution",
+  "production_manifest_sha256": "5339320a21f358258315c5afe4e321c7bfe8c4437233be1f41f5720a0a43e3db",
+  "candidates": {
+    "initial": {
+      "patch_sha256": "8dbd5f3038efbfb4969e460ed29aabd41c011e480d1ac839396d76e978bd4182",
+      "source_sha256": {
+        "src/lj_jit.h": "7608c51820c5f365d5cd7ce74fc79a0a3b87b6f9c437b97d01e83b78e7a6c1fa",
+        "src/lj_opt_loop.c": "24bcdd25a87ee343d955d6f0c85434eea233ffbc9ecb6458fbfdcc9b3d2c2bf8",
+        "src/lj_opt_mem.c": "34162cb91d55b0e94b8a559c182eb93f37485f60551e0d2c8e7adb61a5ac2159"
+      },
+      "source_reconstruction_matches_owner_manifest": true
+    },
+    "revised": {
+      "patch_sha256": "508e80124110ef8bfbf9ecbedfa646afdce846d1f78df79f82b0ee233889000f",
+      "source_sha256": {
+        "src/lj_jit.h": "7608c51820c5f365d5cd7ce74fc79a0a3b87b6f9c437b97d01e83b78e7a6c1fa",
+        "src/lj_opt_loop.c": "68cfffc755981068c5ab818d0ce41c6d438647fe300dc60070c993fe5f3a461f",
+        "src/lj_opt_mem.c": "34162cb91d55b0e94b8a559c182eb93f37485f60551e0d2c8e7adb61a5ac2159"
+      },
+      "source_reconstruction_matches_owner_manifest": true
+    }
+  },
+  "final_review_sha256": "595fb8731a01d74b3f4d17f90cff59078cb086a9fc6d7a1bef5e55bf279afc28",
+  "artifact_boundary_note": "Earlier manifest/candidate copies captured the intermediate owner-edit draft; preserved, not proof evidence. Qualified candidate reconstructions match exact owner manifests."
+}

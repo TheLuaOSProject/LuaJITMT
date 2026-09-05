@@ -1,0 +1,11 @@
+{
+  "variant": "base-normal",
+  "result": "TIMEOUT20s",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal-global-worker"
+  ],
+  "qualification": "No stdout/stderr captured. Oversized20m continuation carried obsolete2m arithmetic assertion; no semantic/convergence claim."
+}

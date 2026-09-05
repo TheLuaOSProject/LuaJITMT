@@ -1,0 +1,39 @@
+{
+  "fresh_alternating_pairs": 7,
+  "iterations": 30000000,
+  "cpu": 31,
+  "statistic": "median of seven fresh-process best-of-five printed CPU times",
+  "times_seconds": {
+    "base": [
+      0.0684,
+      0.0684,
+      0.0684,
+      0.0684,
+      0.0684,
+      0.0684,
+      0.0684
+    ],
+    "candidate": [
+      0.0206,
+      0.0206,
+      0.0206,
+      0.0206,
+      0.0206,
+      0.0206,
+      0.0206
+    ]
+  },
+  "median_seconds": {
+    "base": 0.0684,
+    "candidate": 0.0206
+  },
+  "change_percent": -69.88304093567251,
+  "source_differences": [
+    "src/lj_jit.h",
+    "src/lj_opt_loop.c",
+    "src/lj_opt_mem.c"
+  ],
+  "compared_runtime_inputs": 224,
+  "workload_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+  "scope": "Normal default mixed runtimes; current poll/callback fixes in both. Only pure-cdata optimizer differs. Shared host; four-decimal workload output. No broader speed or stock-parity claim."
+}

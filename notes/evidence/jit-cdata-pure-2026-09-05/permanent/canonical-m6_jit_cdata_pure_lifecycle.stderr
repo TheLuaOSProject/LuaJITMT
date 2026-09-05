@@ -1,0 +1,7 @@
+== m6_jit_cdata_pure_lifecycle ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -I'/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/src' '/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/tests/t-jit-cdata-pure-phase.c' '/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tmp/lj_t-jit-cdata-pure-phase'
++ LUA_PATH='/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/tests/lib/?.lua;/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/src/?.lua;/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/src/jit/?.lua;;' timeout '20s' '/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tmp/lj_t-jit-cdata-pure-phase' 'gate'
++ LUA_PATH='/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/tests/lib/?.lua;/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/src/?.lua;/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/src/jit/?.lua;;' timeout '20s' '/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tmp/lj_t-jit-cdata-pure-phase' 'worker'
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -I'/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/src' '/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/tests/t-jit-cdata-pure-error.c' '/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/src/libluajit.a' -lm -ldl -pthread -Wl,--wrap=lj_mem_realloc -o '/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tmp/lj_t-jit-cdata-pure-error'
++ timeout '20s' '/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tmp/lj_t-jit-cdata-pure-error'
+ok m6_jit_cdata_pure_lifecycle

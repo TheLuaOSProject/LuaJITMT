@@ -1,0 +1,2 @@
+shape	1	nins	45	loop	26	post	1	1	2
+pure-method	resize	exits	159	calls	160	expected	160

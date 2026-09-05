@@ -1,0 +1,14 @@
+{
+  "command": [
+    "git",
+    "apply",
+    "--check",
+    "--whitespace=error-all",
+    "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tests-only.patch"
+  ],
+  "cwd": "/workspaces/lj-lockless",
+  "head": "f43a9f24e2d5403924ae4f48b51808925326451d",
+  "exit": 0,
+  "stdout": "",
+  "stderr": ""
+}

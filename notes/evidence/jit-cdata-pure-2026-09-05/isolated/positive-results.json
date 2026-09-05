@@ -1,0 +1,41 @@
+[
+  {
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/positive.lua"
+    ],
+    "exit": 0,
+    "layout": "jit=3216 flags=208 rootflag=224 fold=232 gg=42256 cdatafid=276\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/positive.lua"
+    ],
+    "exit": 0,
+    "layout": "jit=3216 flags=208 rootflag=224 fold=232 gg=42256 cdatafid=276\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-assert",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/positive.lua"
+    ],
+    "exit": 0,
+    "layout": "jit=3216 flags=208 rootflag=224 fold=232 gg=42256 cdatafid=276\n",
+    "stderr": ""
+  }
+]

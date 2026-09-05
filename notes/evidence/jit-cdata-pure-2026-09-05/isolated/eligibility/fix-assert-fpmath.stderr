@@ -1,0 +1,6 @@
+/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/luajit: /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:66: assertion failed!
+stack traceback:
+	[C]: in function 'assert'
+	/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:66: in function 'main'
+	/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:69: in main chunk
+	[C]: at 0x555710583fc0

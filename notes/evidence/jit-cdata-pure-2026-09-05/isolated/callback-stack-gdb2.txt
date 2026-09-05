@@ -1,0 +1,25 @@
+set pagination off
+set print pretty on
+break invoke if enabled != 0
+run
+set $L=testtg->cur_L
+set $stack=(TValue*)$L->stack.ptr64
+set $jb=testtg->jit_base
+print $L->base-$stack
+print $L->top-$stack
+print $jb-$stack
+print testtg->ffi_native_frame[0]
+print testtg->ffi_xsave_root-$stack
+print testtg->ffi_xsave_baseslot
+print testtg->ffi_xsave_nslots
+set $step=$jb+7
+print $step-$stack
+print *$step
+watch -l $step->u64
+continue
+bt 6
+print *$step
+continue
+bt 6
+print *$step
+quit

@@ -1,0 +1,11 @@
+{
+  "variant": "base-normal",
+  "result": "TIMEOUT20s",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal-global-worker"
+  ],
+  "qualification": "2m cdata continuation under GC worker policy; 2s stack sample in rooted GGET admission, worker parked. No nonconvergence claim."
+}

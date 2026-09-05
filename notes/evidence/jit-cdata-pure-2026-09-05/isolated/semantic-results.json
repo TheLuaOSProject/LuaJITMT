@@ -1,0 +1,387 @@
+[
+  {
+    "variant": "base-normal",
+    "mode": "index",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/t-premt-cdata-pure.lua",
+      "index",
+      "baseline"
+    ],
+    "env": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t45\tloop\t26\tpost\t1\t1\t2\npure-method\tindex\texits\t159\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  },
+  {
+    "variant": "base-normal",
+    "mode": "newindex",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/t-premt-cdata-pure.lua",
+      "newindex",
+      "baseline"
+    ],
+    "env": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t45\tloop\t26\tpost\t1\t1\t2\npure-method\tnewindex\texits\t80\tcalls\t80\texpected\t80\n",
+    "stderr": ""
+  },
+  {
+    "variant": "base-normal",
+    "mode": "missing",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/t-premt-cdata-pure.lua",
+      "missing",
+      "baseline"
+    ],
+    "env": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t45\tloop\t26\tpost\t1\t1\t2\npure-method\tmissing\texits\t1\tcalls\t0\texpected\t0\n",
+    "stderr": ""
+  },
+  {
+    "variant": "base-normal",
+    "mode": "nonfunction",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/t-premt-cdata-pure.lua",
+      "nonfunction",
+      "baseline"
+    ],
+    "env": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t45\tloop\t26\tpost\t1\t1\t2\npure-method\tnonfunction\texits\t1\tcalls\t0\texpected\t0\n",
+    "stderr": ""
+  },
+  {
+    "variant": "base-normal",
+    "mode": "resize",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/t-premt-cdata-pure.lua",
+      "resize",
+      "baseline"
+    ],
+    "env": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t45\tloop\t26\tpost\t1\t1\t2\npure-method\tresize\texits\t159\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  },
+  {
+    "variant": "base-normal",
+    "mode": "methodlife",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/t-premt-cdata-pure.lua",
+      "methodlife",
+      "baseline"
+    ],
+    "env": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t43\tloop\t24\tpost\t1\t1\t2\npure-method\tmethodlife\texits\t159\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  },
+  {
+    "variant": "base-normal",
+    "mode": "replace",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/t-premt-cdata-pure.lua",
+      "replace",
+      "baseline"
+    ],
+    "env": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t45\tloop\t26\tpost\t1\t1\t2\npure-method\treplace\texits\t1\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-normal",
+    "mode": "index",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/t-premt-cdata-pure.lua",
+      "index"
+    ],
+    "env": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tindex\texits\t159\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-normal",
+    "mode": "newindex",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/t-premt-cdata-pure.lua",
+      "newindex"
+    ],
+    "env": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tnewindex\texits\t80\tcalls\t80\texpected\t80\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-normal",
+    "mode": "missing",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/t-premt-cdata-pure.lua",
+      "missing"
+    ],
+    "env": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tmissing\texits\t1\tcalls\t0\texpected\t0\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-normal",
+    "mode": "nonfunction",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/t-premt-cdata-pure.lua",
+      "nonfunction"
+    ],
+    "env": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tnonfunction\texits\t1\tcalls\t0\texpected\t0\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-normal",
+    "mode": "resize",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/t-premt-cdata-pure.lua",
+      "resize"
+    ],
+    "env": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tresize\texits\t159\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-normal",
+    "mode": "methodlife",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/t-premt-cdata-pure.lua",
+      "methodlife"
+    ],
+    "env": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t35\tloop\t24\tpost\t0\t0\t0\npure-method\tmethodlife\texits\t159\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-normal",
+    "mode": "replace",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/t-premt-cdata-pure.lua",
+      "replace"
+    ],
+    "env": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\treplace\texits\t1\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-assert",
+    "mode": "index",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/t-premt-cdata-pure.lua",
+      "index"
+    ],
+    "env": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tindex\texits\t159\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-assert",
+    "mode": "newindex",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/t-premt-cdata-pure.lua",
+      "newindex"
+    ],
+    "env": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tnewindex\texits\t80\tcalls\t80\texpected\t80\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-assert",
+    "mode": "missing",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/t-premt-cdata-pure.lua",
+      "missing"
+    ],
+    "env": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tmissing\texits\t1\tcalls\t0\texpected\t0\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-assert",
+    "mode": "nonfunction",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/t-premt-cdata-pure.lua",
+      "nonfunction"
+    ],
+    "env": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tnonfunction\texits\t1\tcalls\t0\texpected\t0\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-assert",
+    "mode": "resize",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/t-premt-cdata-pure.lua",
+      "resize"
+    ],
+    "env": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tresize\texits\t159\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-assert",
+    "mode": "methodlife",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/t-premt-cdata-pure.lua",
+      "methodlife"
+    ],
+    "env": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t35\tloop\t24\tpost\t0\t0\t0\npure-method\tmethodlife\texits\t159\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-assert",
+    "mode": "replace",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/t-premt-cdata-pure.lua",
+      "replace"
+    ],
+    "env": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\treplace\texits\t1\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  }
+]

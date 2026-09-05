@@ -1,0 +1,370 @@
+{
+  "workload_source": "/tmp/lj-ffi-owned-trace-20260905-pmxukjxp/base-normal/aux/bench/bench.lua",
+  "workload_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+  "dumps": [
+    {
+      "kind": "dump",
+      "variant": "base-normal",
+      "command": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+        "-jon",
+        "-jdump=im",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/workloads/bench.lua",
+        "ffi_struct"
+      ],
+      "environment_overrides": {
+        "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/?.lua;;",
+        "BENCH_SCALE": "0.00001"
+      },
+      "exit": 0,
+      "runtime_sha256": "6462939c511211260c700dbe6efb8c224801d4b38c66c78e277e785a0bd04134"
+    },
+    {
+      "kind": "dump",
+      "variant": "fix-normal",
+      "command": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+        "-jon",
+        "-jdump=im",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/workloads/bench.lua",
+        "ffi_struct"
+      ],
+      "environment_overrides": {
+        "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/?.lua;;",
+        "BENCH_SCALE": "0.00001"
+      },
+      "exit": 0,
+      "runtime_sha256": "69e91d9c399526567eef614cbdfbc702600720549dc4e24912b17b31c92ca6e5"
+    }
+  ],
+  "samples": [
+    {
+      "pair": 1,
+      "variant": "base-normal",
+      "command": [
+        "taskset",
+        "-c",
+        "31",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+        "-jon",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/workloads/bench.lua",
+        "ffi_struct"
+      ],
+      "cwd": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal",
+      "environment_overrides": {
+        "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/?.lua;;",
+        "BENCH_SCALE": "1"
+      },
+      "exit": 0,
+      "wall_seconds": 0.35392121500262874,
+      "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0684       2.28\n",
+      "stderr": "",
+      "runtime_sha256": "6462939c511211260c700dbe6efb8c224801d4b38c66c78e277e785a0bd04134"
+    },
+    {
+      "pair": 1,
+      "variant": "fix-normal",
+      "command": [
+        "taskset",
+        "-c",
+        "31",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+        "-jon",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/workloads/bench.lua",
+        "ffi_struct"
+      ],
+      "cwd": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal",
+      "environment_overrides": {
+        "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/?.lua;;",
+        "BENCH_SCALE": "1"
+      },
+      "exit": 0,
+      "wall_seconds": 0.11451460100215627,
+      "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+      "stderr": "",
+      "runtime_sha256": "69e91d9c399526567eef614cbdfbc702600720549dc4e24912b17b31c92ca6e5"
+    },
+    {
+      "pair": 2,
+      "variant": "fix-normal",
+      "command": [
+        "taskset",
+        "-c",
+        "31",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+        "-jon",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/workloads/bench.lua",
+        "ffi_struct"
+      ],
+      "cwd": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal",
+      "environment_overrides": {
+        "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/?.lua;;",
+        "BENCH_SCALE": "1"
+      },
+      "exit": 0,
+      "wall_seconds": 0.1149765580012172,
+      "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+      "stderr": "",
+      "runtime_sha256": "69e91d9c399526567eef614cbdfbc702600720549dc4e24912b17b31c92ca6e5"
+    },
+    {
+      "pair": 2,
+      "variant": "base-normal",
+      "command": [
+        "taskset",
+        "-c",
+        "31",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+        "-jon",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/workloads/bench.lua",
+        "ffi_struct"
+      ],
+      "cwd": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal",
+      "environment_overrides": {
+        "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/?.lua;;",
+        "BENCH_SCALE": "1"
+      },
+      "exit": 0,
+      "wall_seconds": 0.3535097300009511,
+      "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0672       2.24\n",
+      "stderr": "",
+      "runtime_sha256": "6462939c511211260c700dbe6efb8c224801d4b38c66c78e277e785a0bd04134"
+    },
+    {
+      "pair": 3,
+      "variant": "base-normal",
+      "command": [
+        "taskset",
+        "-c",
+        "31",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+        "-jon",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/workloads/bench.lua",
+        "ffi_struct"
+      ],
+      "cwd": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal",
+      "environment_overrides": {
+        "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/?.lua;;",
+        "BENCH_SCALE": "1"
+      },
+      "exit": 0,
+      "wall_seconds": 0.35425260799820535,
+      "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0684       2.28\n",
+      "stderr": "",
+      "runtime_sha256": "6462939c511211260c700dbe6efb8c224801d4b38c66c78e277e785a0bd04134"
+    },
+    {
+      "pair": 3,
+      "variant": "fix-normal",
+      "command": [
+        "taskset",
+        "-c",
+        "31",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+        "-jon",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/workloads/bench.lua",
+        "ffi_struct"
+      ],
+      "cwd": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal",
+      "environment_overrides": {
+        "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/?.lua;;",
+        "BENCH_SCALE": "1"
+      },
+      "exit": 0,
+      "wall_seconds": 0.11444445999950403,
+      "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+      "stderr": "",
+      "runtime_sha256": "69e91d9c399526567eef614cbdfbc702600720549dc4e24912b17b31c92ca6e5"
+    },
+    {
+      "pair": 4,
+      "variant": "fix-normal",
+      "command": [
+        "taskset",
+        "-c",
+        "31",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+        "-jon",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/workloads/bench.lua",
+        "ffi_struct"
+      ],
+      "cwd": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal",
+      "environment_overrides": {
+        "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/?.lua;;",
+        "BENCH_SCALE": "1"
+      },
+      "exit": 0,
+      "wall_seconds": 0.11453807399811922,
+      "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+      "stderr": "",
+      "runtime_sha256": "69e91d9c399526567eef614cbdfbc702600720549dc4e24912b17b31c92ca6e5"
+    },
+    {
+      "pair": 4,
+      "variant": "base-normal",
+      "command": [
+        "taskset",
+        "-c",
+        "31",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+        "-jon",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/workloads/bench.lua",
+        "ffi_struct"
+      ],
+      "cwd": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal",
+      "environment_overrides": {
+        "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/?.lua;;",
+        "BENCH_SCALE": "1"
+      },
+      "exit": 0,
+      "wall_seconds": 0.3544627120027144,
+      "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0684       2.28\n",
+      "stderr": "",
+      "runtime_sha256": "6462939c511211260c700dbe6efb8c224801d4b38c66c78e277e785a0bd04134"
+    },
+    {
+      "pair": 5,
+      "variant": "base-normal",
+      "command": [
+        "taskset",
+        "-c",
+        "31",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+        "-jon",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/workloads/bench.lua",
+        "ffi_struct"
+      ],
+      "cwd": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal",
+      "environment_overrides": {
+        "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/?.lua;;",
+        "BENCH_SCALE": "1"
+      },
+      "exit": 0,
+      "wall_seconds": 0.3544122419989435,
+      "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0684       2.28\n",
+      "stderr": "",
+      "runtime_sha256": "6462939c511211260c700dbe6efb8c224801d4b38c66c78e277e785a0bd04134"
+    },
+    {
+      "pair": 5,
+      "variant": "fix-normal",
+      "command": [
+        "taskset",
+        "-c",
+        "31",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+        "-jon",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/workloads/bench.lua",
+        "ffi_struct"
+      ],
+      "cwd": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal",
+      "environment_overrides": {
+        "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/?.lua;;",
+        "BENCH_SCALE": "1"
+      },
+      "exit": 0,
+      "wall_seconds": 0.11459921999994549,
+      "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+      "stderr": "",
+      "runtime_sha256": "69e91d9c399526567eef614cbdfbc702600720549dc4e24912b17b31c92ca6e5"
+    },
+    {
+      "pair": 6,
+      "variant": "fix-normal",
+      "command": [
+        "taskset",
+        "-c",
+        "31",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+        "-jon",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/workloads/bench.lua",
+        "ffi_struct"
+      ],
+      "cwd": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal",
+      "environment_overrides": {
+        "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/?.lua;;",
+        "BENCH_SCALE": "1"
+      },
+      "exit": 0,
+      "wall_seconds": 0.1142494479972811,
+      "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+      "stderr": "",
+      "runtime_sha256": "69e91d9c399526567eef614cbdfbc702600720549dc4e24912b17b31c92ca6e5"
+    },
+    {
+      "pair": 6,
+      "variant": "base-normal",
+      "command": [
+        "taskset",
+        "-c",
+        "31",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+        "-jon",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/workloads/bench.lua",
+        "ffi_struct"
+      ],
+      "cwd": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal",
+      "environment_overrides": {
+        "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/?.lua;;",
+        "BENCH_SCALE": "1"
+      },
+      "exit": 0,
+      "wall_seconds": 0.3541886870007147,
+      "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0684       2.28\n",
+      "stderr": "",
+      "runtime_sha256": "6462939c511211260c700dbe6efb8c224801d4b38c66c78e277e785a0bd04134"
+    },
+    {
+      "pair": 7,
+      "variant": "base-normal",
+      "command": [
+        "taskset",
+        "-c",
+        "31",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+        "-jon",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/workloads/bench.lua",
+        "ffi_struct"
+      ],
+      "cwd": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal",
+      "environment_overrides": {
+        "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/?.lua;;",
+        "BENCH_SCALE": "1"
+      },
+      "exit": 0,
+      "wall_seconds": 0.3541759629988519,
+      "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0684       2.28\n",
+      "stderr": "",
+      "runtime_sha256": "6462939c511211260c700dbe6efb8c224801d4b38c66c78e277e785a0bd04134"
+    },
+    {
+      "pair": 7,
+      "variant": "fix-normal",
+      "command": [
+        "taskset",
+        "-c",
+        "31",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+        "-jon",
+        "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/workloads/bench.lua",
+        "ffi_struct"
+      ],
+      "cwd": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal",
+      "environment_overrides": {
+        "LUA_PATH": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/?.lua;;",
+        "BENCH_SCALE": "1"
+      },
+      "exit": 0,
+      "wall_seconds": 0.11439737600085209,
+      "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+      "stderr": "",
+      "runtime_sha256": "69e91d9c399526567eef614cbdfbc702600720549dc4e24912b17b31c92ca6e5"
+    }
+  ]
+}

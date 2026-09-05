@@ -1,0 +1,25 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal-global-worker"
+  ],
+  "pid": 199985,
+  "sample_after_seconds": 2,
+  "gdb_command": [
+    "gdb",
+    "-q",
+    "-batch",
+    "-p",
+    "199985",
+    "-ex",
+    "set pagination off",
+    "-ex",
+    "thread apply all bt 20",
+    "-ex",
+    "detach"
+  ],
+  "termination": "killed exact diagnostic process after sample",
+  "exit": -9
+}

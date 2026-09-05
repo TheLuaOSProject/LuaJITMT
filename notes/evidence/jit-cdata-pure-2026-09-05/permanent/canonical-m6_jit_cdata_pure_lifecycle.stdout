@@ -1,0 +1,7 @@
+make: Entering directory '/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/src'
+make: Nothing to be done for 'default'.
+make: Leaving directory '/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/src'
+pure-phase gate early-exit=56406 limit=2000000 exit-callback-mutation=1 continuation-calls=3887188 second-calls=160 final-IDLE
+pure-phase worker early-exit=54575 limit=2000000 exit-callback-mutation=1 continuation-calls=3890850 second-calls=160 final-IDLE
+flag-error injected=1 status=4 flag=0
+M6 pure cdata lifecycle behavior passed

@@ -1,0 +1,8 @@
+{
+  "patch_sha256": "508e80124110ef8bfbf9ecbedfa646afdce846d1f78df79f82b0ee233889000f",
+  "reconstructed": {
+    "src/lj_jit.h": true,
+    "src/lj_opt_loop.c": true,
+    "src/lj_opt_mem.c": true
+  }
+}

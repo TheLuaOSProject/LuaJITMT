@@ -1,0 +1,8 @@
+{
+  "luajit": "3440ee845ac7cdcf948feb061b09a912ef49caa94827aa7f914c292351840330",
+  "libluajit.a": "350f9d39a2b8342a10b773bd0e15920adabc34ca94d8d7287bbcfc6caceb9660",
+  "normal-t-jit-cdata-pure-phase": "7be916aac42fab776a74b4bb16095f184a8194616c939199f51406ca706e1984",
+  "normal-t-jit-cdata-pure-error": "5f4fdb46a3874696a92491e65fb5fe09d937edfc30456323565d609cdefeb14f",
+  "normal-t-jit-first-attach": "aa5a98e982b950bd188b1a0797808992d672cb9b5c8688a3c9043fbe71b7d794",
+  "normal-t-ffi-callxs-callback-stack": "4ac55d0dadcf0d96c762654b1c2afc8000309c80b3294b72dec12d1e4b305b10"
+}

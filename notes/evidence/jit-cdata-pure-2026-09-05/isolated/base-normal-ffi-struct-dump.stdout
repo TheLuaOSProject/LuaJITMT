@@ -1,0 +1,142 @@
+benchmark               total_s      ns/op
+---- TRACE 1 start bench.lua:145
+---- TRACE 1 IR
+0001 >  [35mint[m SLOAD  #7    CRI
+0002 >  [35mint[m LE     0001  [35m+2147483646[m
+0003    [35mint[m SLOAD  #6    CI
+0004 >  [33mcdt[m SLOAD  #4    T
+0005 >  [34mnum[m SLOAD  #5    T
+0006    [31mtab[m FLOAD  nil   #276
+0007    p64 FLOAD  0006  tab.node
+0008 >  p64 HREFK  0007  [32m"__index"[m @2
+0009 >  [1mfun[m HLOAD  0008
+0010 >  [1mfun[m EQ     0009  [1mffi.meta.__index[m
+0011    [35mu16[m FLOAD  0004  cdata.ctypeid
+0012 >  [35mint[m EQ     0011  [35m+102[m
+0013    p64 ADD    0004  [35m+16 [m
+0014    [34mnum[m XLOAD  0013  
+0015  + [34mnum[m ADD    0014  [34m+1  [m
+0016 >  p64 HREFK  0007  [32m"__newindex"[m @3
+0017 >  [1mfun[m HLOAD  0016
+0018 >  [1mfun[m EQ     0017  [1mffi.meta.__newindex[m
+0019    [34mnum[m XSTORE 0013  0015
+0020    p64 ADD    0004  [35m+24 [m
+0021    [34mnum[m XLOAD  0020  
+0022  + [34mnum[m ADD    0021  0005
+0023  + [35mint[m ADD    0003  [35m+1  [m
+0024 >  [35mint[m LE     0023  0001
+0025 ------ LOOP ------------
+0026 >  nil XPOLL  #0  
+0027    [31mtab[m FLOAD  nil   #276
+0028    p64 FLOAD  0027  tab.node
+0029 >  p64 HREFK  0028  [32m"__index"[m @2
+0030 >  [1mfun[m HLOAD  0029
+0031 >  [1mfun[m EQ     0030  [1mffi.meta.__index[m
+0032  + [34mnum[m ADD    0015  [34m+1  [m
+0033 >  p64 HREFK  0028  [32m"__newindex"[m @3
+0034 >  [1mfun[m HLOAD  0033
+0035 >  [1mfun[m EQ     0034  [1mffi.meta.__newindex[m
+0036    [34mnum[m XSTORE 0013  0032
+0037  + [34mnum[m ADD    0022  0021
+0038  + [35mint[m ADD    0023  [35m+1  [m
+0039 >  [35mint[m LE     0038  0001
+0040    [35mint[m PHI    0023  0038
+0041    [34mnum[m PHI    0022  0037
+0042    [34mnum[m PHI    0015  0032
+---- TRACE 1 mcode 501
+55ae2029fe0b  mov dword [r14+0x84c], 0x1
+55ae2029fe16  mov rsi, 0x00007f72d1427fa0
+55ae2029fe20  movsd xmm1, [rip-0xfcd8]
+55ae2029fe28  movsd xmm7, [rdx+0x28]
+55ae2029fe2d  cvttsd2si eax, xmm7
+55ae2029fe31  xorps xmm6, xmm6
+55ae2029fe34  cvtsi2sd xmm6, eax
+55ae2029fe38  ucomisd xmm7, xmm6
+55ae2029fe3c  jnz 0x55ae20290120
+55ae2029fe42  jpe 0x55ae20290120
+55ae2029fe48  cmp eax, 0x7ffffffe
+55ae2029fe4e  jg 0x55ae20290120
+55ae2029fe54  cvttsd2si ebp, [rdx+0x20]
+55ae2029fe59  rorx rcx, [rdx+0x10], 0x2f
+55ae2029fe60  cmp cx, -0x0b
+55ae2029fe64  jnz 0x55ae20290120
+55ae2029fe6a  shr rcx, 0x11
+55ae2029fe6e  cmp dword [rdx+0x1c], 0xfff90000
+55ae2029fe75  jnb 0x55ae20290120
+55ae2029fe7b  movsd xmm6, [rdx+0x18]
+55ae2029fe80  mov rdx, 0x00007f72d1427fd0
+55ae2029fe8a  mov r11, 0x00007f72d17604d0
+55ae2029fe94  mov r11, [r11]
+55ae2029fe97  mov r9, [r11+0x28]
+55ae2029fe9b  cmp dword [r9-0x10], +0x02
+55ae2029fea0  jb 0x55ae20290128
+55ae2029fea6  mov rdi, 0xfffdff72d1522780
+55ae2029feb0  cmp rdi, [r9+0x38]
+55ae2029feb4  jnz 0x55ae20290128
+55ae2029feba  rorx r10, [r9+0x30], 0x2f
+55ae2029fec1  cmp r10w, -0x09
+55ae2029fec6  jnz 0x55ae20290128
+55ae2029fecc  shr r10, 0x11
+55ae2029fed0  cmp r10, rsi
+55ae2029fed3  jnz 0x55ae20290128
+55ae2029fed9  cmp word [rcx+0xa], +0x66
+55ae2029fede  jnz 0x55ae20290128
+55ae2029fee4  movsd xmm7, [rcx+0x10]
+55ae2029fee9  addsd xmm7, xmm1
+55ae2029feed  cmp dword [r9-0x10], +0x03
+55ae2029fef2  jb 0x55ae20290128
+55ae2029fef8  mov rdi, 0xfffdff72d15227b0
+55ae2029ff02  cmp rdi, [r9+0x50]
+55ae2029ff06  jnz 0x55ae20290128
+55ae2029ff0c  rorx r8, [r9+0x48], 0x2f
+55ae2029ff13  cmp r8w, -0x09
+55ae2029ff18  jnz 0x55ae20290128
+55ae2029ff1e  shr r8, 0x11
+55ae2029ff22  cmp r8, rdx
+55ae2029ff25  jnz 0x55ae20290128
+55ae2029ff2b  movsd [rcx+0x10], xmm7
+55ae2029ff30  movsd xmm0, [rcx+0x18]
+55ae2029ff35  addsd xmm6, xmm0
+55ae2029ff39  add ebp, +0x01
+55ae2029ff3c  cmp ebp, eax
+55ae2029ff3e  jg 0x55ae20290130
+->LOOP:
+55ae2029ff44  mov rdi, 0x00007f72d1760584
+55ae2029ff4e  mov edi, [rdi]
+55ae2029ff50  cmp edi, +0x00
+55ae2029ff53  jz 0x55ae20290138
+55ae2029ff59  mov rbx, 0x00007f72d17604d0
+55ae2029ff63  mov rbx, [rbx]
+55ae2029ff66  mov rbx, [rbx+0x28]
+55ae2029ff6a  cmp dword [rbx-0x10], +0x02
+55ae2029ff6e  jb 0x55ae20290140
+55ae2029ff74  mov rdi, 0xfffdff72d1522780
+55ae2029ff7e  cmp rdi, [rbx+0x38]
+55ae2029ff82  jnz 0x55ae20290140
+55ae2029ff88  rorx r15, [rbx+0x30], 0x2f
+55ae2029ff8f  cmp r15w, -0x09
+55ae2029ff94  jnz 0x55ae20290140
+55ae2029ff9a  shr r15, 0x11
+55ae2029ff9e  cmp r15, rsi
+55ae2029ffa1  jnz 0x55ae20290140
+55ae2029ffa7  addsd xmm7, xmm1
+55ae2029ffab  cmp dword [rbx-0x10], +0x03
+55ae2029ffaf  jb 0x55ae20290140
+55ae2029ffb5  mov rdi, 0xfffdff72d15227b0
+55ae2029ffbf  cmp rdi, [rbx+0x50]
+55ae2029ffc3  jnz 0x55ae20290140
+55ae2029ffc9  rorx rbx, [rbx+0x48], 0x2f
+55ae2029ffd0  cmp bx, -0x09
+55ae2029ffd4  jnz 0x55ae20290140
+55ae2029ffda  shr rbx, 0x11
+55ae2029ffde  cmp rbx, rdx
+55ae2029ffe1  jnz 0x55ae20290140
+55ae2029ffe7  movsd [rcx+0x10], xmm7
+55ae2029ffec  addsd xmm6, xmm0
+55ae2029fff0  add ebp, +0x01
+55ae2029fff3  cmp ebp, eax
+55ae2029fff5  jle 0x55ae2029ff44	->LOOP
+55ae2029fffb  jmp 0x55ae20290148
+---- TRACE 1 stop -> loop
+
+ffi_struct               0.0000      73.33

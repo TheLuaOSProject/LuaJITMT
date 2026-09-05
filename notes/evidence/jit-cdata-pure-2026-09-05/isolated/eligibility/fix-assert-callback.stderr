@@ -1,0 +1,6 @@
+/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/luajit: /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:45: negative eligibility still needs an actual native root
+stack traceback:
+	[C]: in function 'assert'
+	/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:45: in function 'main'
+	/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:69: in main chunk
+	[C]: at 0x564f83043fc0

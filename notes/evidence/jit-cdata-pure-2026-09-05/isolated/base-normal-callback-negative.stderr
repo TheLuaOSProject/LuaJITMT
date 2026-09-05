@@ -1,0 +1,2 @@
+lua error: [string "local ffi,util,vmdef,bit=require('ffi'),requi..."]:12: callback result
+base-normal-callback-negative: /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/tests/lib/lua_fixture_helpers.h:19: ljt_lua_fail: Assertion `0' failed.

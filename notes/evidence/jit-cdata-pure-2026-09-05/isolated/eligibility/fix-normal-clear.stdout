@@ -1,0 +1,18 @@
+negative	clear	root	1	nins	52	exits	1	postroot	1	answer	3320
+ULOAD 	2
+XPOLL 	1
+CALLS 	2
+RENAME	1
+XSTORE	2
+HREFK 	4
+XLOAD 	1
+CONV  	2
+SLOAD 	6
+LOOP  	1
+FLOAD 	5
+HLOAD 	4
+EQ    	7
+ADD   	8
+LE    	3
+UREFC 	1
+PHI   	2

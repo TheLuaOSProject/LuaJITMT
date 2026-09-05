@@ -1,0 +1,362 @@
+[
+  {
+    "variant": "base-normal",
+    "mode": "allocate",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "allocate"
+    ],
+    "exit": 0,
+    "stdout": "negative\tallocate\troot\t1\tnins\t68\texits\t1\tpostroot\t1\tanswer\t6560\nPHI   \t2\nNOP   \t1\nXPOLL \t1\nXSTORE\t8\nLOOP  \t1\nXLOAD \t1\nSLOAD \t5\nLE    \t3\nFLOAD \t7\nHLOAD \t6\nEQ    \t9\nADD   \t14\nCONV  \t2\nCNEW  \t2\nHREFK \t6\n",
+    "stderr": ""
+  },
+  {
+    "variant": "base-normal",
+    "mode": "luastore",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "luastore"
+    ],
+    "exit": 0,
+    "stdout": "negative\tluastore\troot\t1\tnins\t55\texits\t1\tpostroot\t1\tanswer\t3320\nXPOLL \t1\nPHI   \t2\nRENAME\t2\nLOOP  \t1\nXSTORE\t2\nTBAR  \t2\nHSTORE\t2\nSLOAD \t5\nLE    \t3\nFLOAD \t8\nHLOAD \t4\nEQ    \t6\nADD   \t8\nCONV  \t2\nXLOAD \t1\nHREFK \t6\n",
+    "stderr": ""
+  },
+  {
+    "variant": "base-normal",
+    "mode": "newref",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "newref"
+    ],
+    "exit": 0,
+    "stdout": "negative\tnewref\troot\t1\tnins\t64\texits\t1\tpostroot\t1\tanswer\t3320\nULE   \t2\nHREF  \t2\nXPOLL \t1\nPHI   \t2\nXSTORE\t2\nRENAME\t1\nHREFK \t4\nXLOAD \t1\nCONV  \t4\nADD   \t10\nSLOAD \t5\nLOOP  \t1\nFLOAD \t8\nHLOAD \t4\nEQ    \t8\nLE    \t3\nADDOV \t2\nNEWREF\t2\nHSTORE\t2\n",
+    "stderr": ""
+  },
+  {
+    "variant": "base-normal",
+    "mode": "clear",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "clear"
+    ],
+    "exit": 0,
+    "stdout": "negative\tclear\troot\t1\tnins\t52\texits\t1\tpostroot\t1\tanswer\t3320\nULOAD \t2\nXPOLL \t1\nCALLS \t2\nRENAME\t1\nXSTORE\t2\nHREFK \t4\nXLOAD \t1\nCONV  \t2\nSLOAD \t6\nLOOP  \t1\nFLOAD \t5\nHLOAD \t4\nEQ    \t7\nADD   \t8\nLE    \t3\nUREFC \t1\nPHI   \t2\n",
+    "stderr": ""
+  },
+  {
+    "variant": "base-normal",
+    "mode": "foreign",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "foreign"
+    ],
+    "exit": 0,
+    "stdout": "negative\tforeign\troot\t1\tnins\t87\texits\t1\tpostroot\t1\tanswer\t6560\nULOAD \t2\nNOP   \t2\nNE    \t4\nSUBOV \t2\nXSTORE\t2\nXSAVE \t2\nCARG  \t2\nXPOLL \t1\nPHI   \t2\nLOOP  \t1\nCALLXS\t2\nCALLS \t4\nHREFK \t8\nXLOAD \t2\nSLOAD \t5\nLE    \t3\nFLOAD \t7\nHLOAD \t8\nEQ    \t11\nADD   \t10\nCONV  \t4\nUREFC \t1\nNEG   \t2\n",
+    "stderr": ""
+  },
+  {
+    "variant": "base-normal",
+    "mode": "callback",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "callback"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit: /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:45: negative eligibility still needs an actual native root\nstack traceback:\n\t[C]: in function 'assert'\n\t/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:45: in function 'main'\n\t/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:69: in main chunk\n\t[C]: at 0x5604f924a100\n"
+  },
+  {
+    "variant": "base-normal",
+    "mode": "indirect",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "indirect"
+    ],
+    "exit": 0,
+    "stdout": "negative\tindirect\troot\t1\tnins\t52\texits\t1\tpostroot\t1\tanswer\t3320\nXPOLL \t1\nPHI   \t2\nXSTORE\t4\nLOOP  \t1\nNOP   \t2\nSLOAD \t5\nLE    \t3\nFLOAD \t6\nHLOAD \t4\nEQ    \t6\nADD   \t9\nCONV  \t2\nXLOAD \t3\nHREFK \t4\n",
+    "stderr": ""
+  },
+  {
+    "variant": "base-normal",
+    "mode": "fpmath",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "fpmath"
+    ],
+    "exit": 1,
+    "stdout": "negative\tfpmath\troot\t1\tnins\t63\texits\t1\tpostroot\t1\tanswer\t3320.5193307811\nXPOLL \t1\nPHI   \t2\nNOP   \t1\nXSTORE\t2\nLOOP  \t1\nCALLN \t2\nSLOAD \t5\nLE    \t3\nFLOAD \t10\nHLOAD \t8\nEQ    \t7\nADD   \t10\nCONV  \t2\nXLOAD \t1\nHREFK \t8\n",
+    "stderr": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit: /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:66: assertion failed!\nstack traceback:\n\t[C]: in function 'assert'\n\t/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:66: in function 'main'\n\t/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:69: in main chunk\n\t[C]: at 0x559e89704100\n"
+  },
+  {
+    "variant": "fix-normal",
+    "mode": "allocate",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "allocate"
+    ],
+    "exit": 0,
+    "stdout": "negative\tallocate\troot\t1\tnins\t68\texits\t1\tpostroot\t1\tanswer\t6560\nPHI   \t2\nNOP   \t1\nXPOLL \t1\nXSTORE\t8\nLOOP  \t1\nXLOAD \t1\nSLOAD \t5\nLE    \t3\nFLOAD \t7\nHLOAD \t6\nEQ    \t9\nADD   \t14\nCONV  \t2\nCNEW  \t2\nHREFK \t6\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-normal",
+    "mode": "luastore",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "luastore"
+    ],
+    "exit": 0,
+    "stdout": "negative\tluastore\troot\t1\tnins\t55\texits\t1\tpostroot\t1\tanswer\t3320\nXPOLL \t1\nPHI   \t2\nRENAME\t2\nLOOP  \t1\nXSTORE\t2\nTBAR  \t2\nHSTORE\t2\nSLOAD \t5\nLE    \t3\nFLOAD \t8\nHLOAD \t4\nEQ    \t6\nADD   \t8\nCONV  \t2\nXLOAD \t1\nHREFK \t6\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-normal",
+    "mode": "newref",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "newref"
+    ],
+    "exit": 0,
+    "stdout": "negative\tnewref\troot\t1\tnins\t64\texits\t1\tpostroot\t1\tanswer\t3320\nULE   \t2\nHREF  \t2\nXPOLL \t1\nPHI   \t2\nXSTORE\t2\nRENAME\t1\nHREFK \t4\nXLOAD \t1\nCONV  \t4\nADD   \t10\nSLOAD \t5\nLOOP  \t1\nFLOAD \t8\nHLOAD \t4\nEQ    \t8\nLE    \t3\nADDOV \t2\nNEWREF\t2\nHSTORE\t2\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-normal",
+    "mode": "clear",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "clear"
+    ],
+    "exit": 0,
+    "stdout": "negative\tclear\troot\t1\tnins\t52\texits\t1\tpostroot\t1\tanswer\t3320\nULOAD \t2\nXPOLL \t1\nCALLS \t2\nRENAME\t1\nXSTORE\t2\nHREFK \t4\nXLOAD \t1\nCONV  \t2\nSLOAD \t6\nLOOP  \t1\nFLOAD \t5\nHLOAD \t4\nEQ    \t7\nADD   \t8\nLE    \t3\nUREFC \t1\nPHI   \t2\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-normal",
+    "mode": "foreign",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "foreign"
+    ],
+    "exit": 0,
+    "stdout": "negative\tforeign\troot\t1\tnins\t87\texits\t1\tpostroot\t1\tanswer\t6560\nULOAD \t2\nNOP   \t2\nNE    \t4\nSUBOV \t2\nXSTORE\t2\nXSAVE \t2\nCARG  \t2\nXPOLL \t1\nPHI   \t2\nLOOP  \t1\nCALLXS\t2\nCALLS \t4\nHREFK \t8\nXLOAD \t2\nSLOAD \t5\nLE    \t3\nFLOAD \t7\nHLOAD \t8\nEQ    \t11\nADD   \t10\nCONV  \t4\nUREFC \t1\nNEG   \t2\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-normal",
+    "mode": "callback",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "callback"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit: /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:45: negative eligibility still needs an actual native root\nstack traceback:\n\t[C]: in function 'assert'\n\t/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:45: in function 'main'\n\t/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:69: in main chunk\n\t[C]: at 0x5633f6da8100\n"
+  },
+  {
+    "variant": "fix-normal",
+    "mode": "indirect",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "indirect"
+    ],
+    "exit": 0,
+    "stdout": "negative\tindirect\troot\t1\tnins\t52\texits\t1\tpostroot\t1\tanswer\t3320\nXPOLL \t1\nPHI   \t2\nXSTORE\t4\nLOOP  \t1\nNOP   \t2\nSLOAD \t5\nLE    \t3\nFLOAD \t6\nHLOAD \t4\nEQ    \t6\nADD   \t9\nCONV  \t2\nXLOAD \t3\nHREFK \t4\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-normal",
+    "mode": "fpmath",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "fpmath"
+    ],
+    "exit": 1,
+    "stdout": "negative\tfpmath\troot\t1\tnins\t63\texits\t1\tpostroot\t1\tanswer\t3320.5193307811\nXPOLL \t1\nPHI   \t2\nNOP   \t1\nXSTORE\t2\nLOOP  \t1\nCALLN \t2\nSLOAD \t5\nLE    \t3\nFLOAD \t10\nHLOAD \t8\nEQ    \t7\nADD   \t10\nCONV  \t2\nXLOAD \t1\nHREFK \t8\n",
+    "stderr": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit: /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:66: assertion failed!\nstack traceback:\n\t[C]: in function 'assert'\n\t/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:66: in function 'main'\n\t/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:69: in main chunk\n\t[C]: at 0x564b02786100\n"
+  },
+  {
+    "variant": "fix-assert",
+    "mode": "allocate",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "allocate"
+    ],
+    "exit": 0,
+    "stdout": "negative\tallocate\troot\t1\tnins\t68\texits\t1\tpostroot\t1\tanswer\t6560\nPHI   \t2\nNOP   \t1\nXPOLL \t1\nXSTORE\t8\nLOOP  \t1\nXLOAD \t1\nSLOAD \t5\nLE    \t3\nFLOAD \t7\nHLOAD \t6\nEQ    \t9\nADD   \t14\nCONV  \t2\nCNEW  \t2\nHREFK \t6\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-assert",
+    "mode": "luastore",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "luastore"
+    ],
+    "exit": 0,
+    "stdout": "negative\tluastore\troot\t1\tnins\t55\texits\t1\tpostroot\t1\tanswer\t3320\nXPOLL \t1\nPHI   \t2\nRENAME\t2\nLOOP  \t1\nXSTORE\t2\nTBAR  \t2\nHSTORE\t2\nSLOAD \t5\nLE    \t3\nFLOAD \t8\nHLOAD \t4\nEQ    \t6\nADD   \t8\nCONV  \t2\nXLOAD \t1\nHREFK \t6\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-assert",
+    "mode": "newref",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "newref"
+    ],
+    "exit": 0,
+    "stdout": "negative\tnewref\troot\t1\tnins\t64\texits\t1\tpostroot\t1\tanswer\t3320\nULE   \t2\nHREF  \t2\nXPOLL \t1\nPHI   \t2\nXSTORE\t2\nRENAME\t1\nHREFK \t4\nXLOAD \t1\nCONV  \t4\nADD   \t10\nSLOAD \t5\nLOOP  \t1\nFLOAD \t8\nHLOAD \t4\nEQ    \t8\nLE    \t3\nADDOV \t2\nNEWREF\t2\nHSTORE\t2\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-assert",
+    "mode": "clear",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "clear"
+    ],
+    "exit": 0,
+    "stdout": "negative\tclear\troot\t1\tnins\t52\texits\t1\tpostroot\t1\tanswer\t3320\nULOAD \t2\nXPOLL \t1\nCALLS \t2\nRENAME\t1\nXSTORE\t2\nHREFK \t4\nXLOAD \t1\nCONV  \t2\nSLOAD \t6\nLOOP  \t1\nFLOAD \t5\nHLOAD \t4\nEQ    \t7\nADD   \t8\nLE    \t3\nUREFC \t1\nPHI   \t2\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-assert",
+    "mode": "foreign",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "foreign"
+    ],
+    "exit": 0,
+    "stdout": "negative\tforeign\troot\t1\tnins\t87\texits\t1\tpostroot\t1\tanswer\t6560\nULOAD \t2\nNOP   \t2\nNE    \t4\nSUBOV \t2\nXSTORE\t2\nXSAVE \t2\nCARG  \t2\nXPOLL \t1\nPHI   \t2\nLOOP  \t1\nCALLXS\t2\nCALLS \t4\nHREFK \t8\nXLOAD \t2\nSLOAD \t5\nLE    \t3\nFLOAD \t7\nHLOAD \t8\nEQ    \t11\nADD   \t10\nCONV  \t4\nUREFC \t1\nNEG   \t2\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-assert",
+    "mode": "callback",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "callback"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/luajit: /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:45: negative eligibility still needs an actual native root\nstack traceback:\n\t[C]: in function 'assert'\n\t/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:45: in function 'main'\n\t/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:69: in main chunk\n\t[C]: at 0x564f83043fc0\n"
+  },
+  {
+    "variant": "fix-assert",
+    "mode": "indirect",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "indirect"
+    ],
+    "exit": 0,
+    "stdout": "negative\tindirect\troot\t1\tnins\t52\texits\t1\tpostroot\t1\tanswer\t3320\nXPOLL \t1\nPHI   \t2\nXSTORE\t4\nLOOP  \t1\nNOP   \t2\nSLOAD \t5\nLE    \t3\nFLOAD \t6\nHLOAD \t4\nEQ    \t6\nADD   \t9\nCONV  \t2\nXLOAD \t3\nHREFK \t4\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-assert",
+    "mode": "fpmath",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "fpmath"
+    ],
+    "exit": 1,
+    "stdout": "negative\tfpmath\troot\t1\tnins\t63\texits\t1\tpostroot\t1\tanswer\t3320.5193307811\nXPOLL \t1\nPHI   \t2\nNOP   \t1\nXSTORE\t2\nLOOP  \t1\nCALLN \t2\nSLOAD \t5\nLE    \t3\nFLOAD \t10\nHLOAD \t8\nEQ    \t7\nADD   \t10\nCONV  \t2\nXLOAD \t1\nHREFK \t8\n",
+    "stderr": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/luajit: /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:66: assertion failed!\nstack traceback:\n\t[C]: in function 'assert'\n\t/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:66: in function 'main'\n\t/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:69: in main chunk\n\t[C]: at 0x555710583fc0\n"
+  }
+]

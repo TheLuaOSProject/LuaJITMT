@@ -1,0 +1,27 @@
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+
+Program received signal SIGTRAP, Trace/breakpoint trap.
+0x00005555555ce77f in lj_assert_bad_for_arg_type ()
+#0  0x00005555555ce77f in lj_assert_bad_for_arg_type ()
+#1  0x000055555555cb87 in lj_vm_pcall_unwind (L=L@entry=0x7ffff7c90080, base=0x7ffff7a726a0, nres1=nres1@entry=0, ef=ef@entry=0) at lj_state.c:130
+#2  0x000055555558a710 in lua_pcall (L=L@entry=0x7ffff7c90080, nargs=nargs@entry=0, nresults=nresults@entry=-1, errfunc=errfunc@entry=0) at lj_api.c:2797
+#3  0x000055555555bd1f in ljt_lua_dostring (src=0x5555556b7d48 "local ffi,util,vmdef,bit=require('ffi'),require('jit.util'),require('jit.vmdef'),require('bit')\nlocal p=ffi.new('struct {double x;double y;}',0,1)\nlocal fn=ffi.cast('int(*)(int(*)(int),int)',invoke_pt"..., L=0x7ffff7c90080) at /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/tests/lib/lua_fixture_helpers.h:39
+#4  main () at /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/callback-negative.c:37
+rip            0x5555555ce77f      0x5555555ce77f <lj_assert_bad_for_arg_type+1>
+rax            0x1                 1
+   0x5555555ce76b <lj_vm_next+270>:	or     %al,%bl
+   0x5555555ce76d <lj_vm_next+272>:	lea    (%rsi,%rcx,1),%edx
+   0x5555555ce770 <lj_vm_next+275>:	lea    0x8(%rsp),%rax
+   0x5555555ce775 <lj_vm_next+280>:	movq   $0xffffffffffffffff,0x8(%rax)
+   0x5555555ce77d <lj_vm_next+288>:	ret
+   0x5555555ce77e <lj_assert_bad_for_arg_type>:	int3
+=> 0x5555555ce77f <lj_assert_bad_for_arg_type+1>:	int3
+   0x5555555ce780 <lj_vm_ffi_callback>:	push   %rbx
+   0x5555555ce781 <lj_vm_ffi_callback+1>:	push   %r15
+   0x5555555ce783 <lj_vm_ffi_callback+3>:	push   %r14
+A debugging session is active.
+
+	Inferior 1 [process 191712] will be killed.
+
+Quit anyway? (y or n) [answered Y; input not from terminal]

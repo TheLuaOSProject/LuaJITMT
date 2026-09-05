@@ -1,0 +1,6 @@
+set pagination off
+run
+bt 20
+info registers rip rax
+x/10i $rip-20
+quit

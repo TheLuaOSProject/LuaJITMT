@@ -1,0 +1,99 @@
+[
+  {
+    "variant": "base-normal",
+    "compile": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src",
+      "-I/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/tests",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/global-worker.c",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal-global-worker"
+    ],
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal-global-worker"
+    ],
+    "exit": -6,
+    "stdout": "worker continuation\t2.0000003e+14\t0\t0\n",
+    "stderr": "phase continuation: [string \"local result=run(p,20000000);print('worker co...\"]:1: assertion failed!\nbase-normal-global-worker: /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/tests/lib/lua_fixture_helpers.h:19: ljt_lua_fail: Assertion `0' failed.\n"
+  },
+  {
+    "variant": "fix-normal",
+    "compile": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src",
+      "-I/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/tests",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/global-worker.c",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal-global-worker"
+    ],
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal-global-worker"
+    ],
+    "exit": -6,
+    "stdout": "worker continuation\t2.0000003e+14\t0\t0\n",
+    "stderr": "phase continuation: [string \"local result=run(p,20000000);print('worker co...\"]:1: assertion failed!\nfix-normal-global-worker: /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/tests/lib/lua_fixture_helpers.h:19: ljt_lua_fail: Assertion `0' failed.\n"
+  },
+  {
+    "variant": "fix-assert",
+    "compile": [
+      "cc",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src",
+      "-I/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/tests",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/global-worker.c",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert-global-worker"
+    ],
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert-global-worker"
+    ],
+    "exit": -6,
+    "stdout": "worker continuation\t2.0000003e+14\t0\t0\n",
+    "stderr": "phase continuation: [string \"local result=run(p,20000000);print('worker co...\"]:1: assertion failed!\nfix-assert-global-worker: /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/tests/lib/lua_fixture_helpers.h:19: ljt_lua_fail: Assertion `0' failed.\n"
+  }
+]

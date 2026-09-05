@@ -1,0 +1,715 @@
+[
+  {
+    "name": "build",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-C",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src",
+      "-j4"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": false,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 17.25787180200132,
+    "exit": 0,
+    "stdout": "make: Entering directory '/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src'\nHOSTCC    host/minilua.o\nHOSTCC    host/buildvm_asm.o\nHOSTCC    host/buildvm_peobj.o\nHOSTCC    host/buildvm_lib.o\nHOSTCC    host/buildvm_fold.o\nHOSTLINK  host/minilua\nVERSION   luajit.h\nDYNASM    host/buildvm_arch.h\nCC        luajit.o\nHOSTCC    host/buildvm.o\nHOSTLINK  host/buildvm\nBUILDVM   lj_vm.S\nBUILDVM   lj_bcdef.h\nBUILDVM   lj_ffdef.h\nBUILDVM   lj_libdef.h\nBUILDVM   lj_recdef.h\nBUILDVM   lj_folddef.h\nBUILDVM   jit/vmdef.lua\nASM       lj_vm.o\nCC        lj_assert.o\nCC        lj_gc.o\nCC        lj_gc2.o\nCC        lj_safepoint.o\nCC        lj_err.o\nCC        lj_char.o\nCC        lj_bc.o\nCC        lj_obj.o\nCC        lj_buf.o\nCC        lj_str.o\nCC        lj_tab.o\nCC        lj_func.o\nCC        lj_udata.o\nCC        lj_meta.o\nCC        lj_debug.o\nCC        lj_prng.o\nCC        lj_state.o\nCC        lj_dispatch.o\nCC        lj_tg.o\nCC        lj_thr.o\nCC        lj_chan.o\nCC        lj_arena.o\nCC        lj_vmevent.o\nCC        lj_vmmath.o\nCC        lj_strscan.o\nCC        lj_strfmt.o\nCC        lj_strfmt_num.o\nCC        lj_serialize.o\nCC        lj_api.o\nCC        lj_profile.o\nCC        lj_lex.o\nCC        lj_parse.o\nCC        lj_bcread.o\nCC        lj_bcwrite.o\nCC        lj_load.o\nCC        lj_ir.o\nCC        lj_opt_mem.o\nCC        lj_opt_fold.o\nCC        lj_opt_narrow.o\nCC        lj_opt_dce.o\nCC        lj_opt_loop.o\nCC        lj_opt_split.o\nCC        lj_opt_sink.o\nCC        lj_mcode.o\nCC        lj_snap.o\nCC        lj_record.o\nCC        lj_crecord.o\nCC        lj_ffrecord.o\nCC        lj_asm.o\nCC        lj_trace.o\nCC        lj_gdbjit.o\nCC        lj_ctype.o\nCC        lj_cdata.o\nCC        lj_cconv.o\nCC        lj_ccall.o\nCC        lj_ccallback.o\nCC        lj_carith.o\nCC        lj_clib.o\nCC        lj_cparse.o\nCC        lj_lib.o\nCC        lj_alloc.o\nCC        lib_aux.o\nCC        lib_base.o\nCC        lib_math.o\nCC        lib_bit.o\nCC        lib_string.o\nCC        lib_table.o\nCC        lib_io.o\nCC        lib_os.o\nCC        lib_package.o\nCC        lib_debug.o\nCC        lib_jit.o\nCC        lib_ffi.o\nCC        lib_buffer.o\nCC        lib_threading.o\nCC        lib_init.o\nDYNASM    lj_vm_dyn.o\nDYNCC     lj_assert_dyn.o\nDYNCC     lj_gc_dyn.o\nDYNCC     lj_gc2_dyn.o\nDYNCC     lj_safepoint_dyn.o\nDYNCC     lj_err_dyn.o\nDYNCC     lj_char_dyn.o\nDYNCC     lj_bc_dyn.o\nDYNCC     lj_obj_dyn.o\nDYNCC     lj_buf_dyn.o\nDYNCC     lj_str_dyn.o\nDYNCC     lj_tab_dyn.o\nDYNCC     lj_func_dyn.o\nDYNCC     lj_udata_dyn.o\nDYNCC     lj_meta_dyn.o\nDYNCC     lj_debug_dyn.o\nDYNCC     lj_prng_dyn.o\nDYNCC     lj_state_dyn.o\nDYNCC     lj_dispatch_dyn.o\nDYNCC     lj_tg_dyn.o\nDYNCC     lj_thr_dyn.o\nDYNCC     lj_chan_dyn.o\nDYNCC     lj_arena_dyn.o\nDYNCC     lj_vmevent_dyn.o\nDYNCC     lj_vmmath_dyn.o\nDYNCC     lj_strscan_dyn.o\nDYNCC     lj_strfmt_dyn.o\nDYNCC     lj_strfmt_num_dyn.o\nDYNCC     lj_serialize_dyn.o\nDYNCC     lj_api_dyn.o\nDYNCC     lj_profile_dyn.o\nDYNCC     lj_lex_dyn.o\nDYNCC     lj_parse_dyn.o\nDYNCC     lj_bcread_dyn.o\nDYNCC     lj_bcwrite_dyn.o\nDYNCC     lj_load_dyn.o\nDYNCC     lj_ir_dyn.o\nDYNCC     lj_opt_mem_dyn.o\nDYNCC     lj_opt_fold_dyn.o\nDYNCC     lj_opt_narrow_dyn.o\nDYNCC     lj_opt_dce_dyn.o\nDYNCC     lj_opt_loop_dyn.o\nDYNCC     lj_opt_split_dyn.o\nDYNCC     lj_opt_sink_dyn.o\nDYNCC     lj_mcode_dyn.o\nDYNCC     lj_snap_dyn.o\nDYNCC     lj_record_dyn.o\nDYNCC     lj_crecord_dyn.o\nDYNCC     lj_ffrecord_dyn.o\nDYNCC     lj_asm_dyn.o\nDYNCC     lj_trace_dyn.o\nDYNCC     lj_gdbjit_dyn.o\nDYNCC     lj_ctype_dyn.o\nDYNCC     lj_cdata_dyn.o\nDYNCC     lj_cconv_dyn.o\nDYNCC     lj_ccall_dyn.o\nDYNCC     lj_ccallback_dyn.o\nDYNCC     lj_carith_dyn.o\nDYNCC     lj_clib_dyn.o\nDYNCC     lj_cparse_dyn.o\nDYNCC     lj_lib_dyn.o\nDYNCC     lj_alloc_dyn.o\nDYNCC     lib_aux_dyn.o\nDYNCC     lib_base_dyn.o\nDYNCC     lib_math_dyn.o\nDYNCC     lib_bit_dyn.o\nDYNCC     lib_string_dyn.o\nDYNCC     lib_table_dyn.o\nDYNCC     lib_io_dyn.o\nDYNCC     lib_os_dyn.o\nDYNCC     lib_package_dyn.o\nDYNCC     lib_debug_dyn.o\nDYNCC     lib_jit_dyn.o\nDYNCC     lib_ffi_dyn.o\nDYNCC     lib_buffer_dyn.o\nDYNCC     lib_threading_dyn.o\nDYNCC     lib_init_dyn.o\nAR        libluajit.a\nDYNLINK   libluajit.so\nLINK      luajit\nOK        Successfully built LuaJIT\nmake: Leaving directory '/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src'\n",
+    "stderr": "**** WARNING Cannot determine rolling release version from git log.\n**** WARNING The 'git' command must be available during the build.\n"
+  },
+  {
+    "name": "stock-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/luajit",
+      "-joff",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/stock/test",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 1.3877062820029096,
+    "exit": 0,
+    "stdout": "387 passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-jit-cdata-basemt-guards.lua-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/t-jit-cdata-basemt-guards.lua"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.009773378998943372,
+    "exit": 0,
+    "stdout": "cdata-base-guard\tcall\twarm-exits\t0\tafter-exits\t0\tcalls\t80\texpected\t80\ncdata-base-guard\tindex\twarm-exits\t0\tafter-exits\t0\tcalls\t160\texpected\t160\ncdata-base-guard\tnewindex\twarm-exits\t0\tafter-exits\t0\tcalls\t160\texpected\t160\ncdata-base-guard\tmissing\twarm-exits\t0\tafter-exits\t0\tcalls\t0\texpected\t0\ncdata-base-guard\tnonfunction\twarm-exits\t0\tafter-exits\t0\tcalls\t0\texpected\t0\ncdata-base-guard\tresize\twarm-exits\t0\tafter-exits\t0\tcalls\t80\texpected\t80\ncdata-base-guard\tmethodlife\twarm-exits\t0\tafter-exits\t0\tcalls\t80\texpected\t80\ncdata-base-guard\treplace\twarm-exits\t0\tafter-exits\t0\tcalls\t80\texpected\t80\ncdata base-table native guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-meta-cdata-capture.lua-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/t-meta-cdata-capture.lua"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.14690724100000807,
+    "exit": 0,
+    "stdout": "cdata method collection, callbacks, replacement and errors passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "stock-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/luajit",
+      "-jon",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/stock/test",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 1.8621749339981761,
+    "exit": 0,
+    "stdout": "509 passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-jit-cdata-basemt-guards.lua-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/t-jit-cdata-basemt-guards.lua"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.00949808400037,
+    "exit": 0,
+    "stdout": "cdata-base-guard\tcall\twarm-exits\t1\tafter-exits\t80\tcalls\t80\texpected\t80\ncdata-base-guard\tindex\twarm-exits\t1\tafter-exits\t159\tcalls\t160\texpected\t160\ncdata-base-guard\tnewindex\twarm-exits\t1\tafter-exits\t80\tcalls\t160\texpected\t160\ncdata-base-guard\tmissing\twarm-exits\t1\tafter-exits\t1\tcalls\t0\texpected\t0\ncdata-base-guard\tnonfunction\twarm-exits\t1\tafter-exits\t1\tcalls\t0\texpected\t0\ncdata-base-guard\tresize\twarm-exits\t1\tafter-exits\t80\tcalls\t80\texpected\t80\ncdata-base-guard\tmethodlife\twarm-exits\t1\tafter-exits\t80\tcalls\t80\texpected\t80\ncdata-base-guard\treplace\twarm-exits\t1\tafter-exits\t1\tcalls\t80\texpected\t80\ncdata base-table native guards passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-meta-cdata-capture.lua-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/t-meta-cdata-capture.lua"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.1467611219995888,
+    "exit": 0,
+    "stdout": "cdata method collection, callbacks, replacement and errors passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "mutation-index",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/t-jit-cdata-pure.lua",
+      "index"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.005221056999289431,
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tindex\texits\t159\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  },
+  {
+    "name": "mutation-newindex",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/t-jit-cdata-pure.lua",
+      "newindex"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.00474923300134833,
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tnewindex\texits\t80\tcalls\t80\texpected\t80\n",
+    "stderr": ""
+  },
+  {
+    "name": "mutation-missing",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/t-jit-cdata-pure.lua",
+      "missing"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.004634624998288928,
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tmissing\texits\t1\tcalls\t0\texpected\t0\n",
+    "stderr": ""
+  },
+  {
+    "name": "mutation-nonfunction",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/t-jit-cdata-pure.lua",
+      "nonfunction"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.00447329000235186,
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tnonfunction\texits\t1\tcalls\t0\texpected\t0\n",
+    "stderr": ""
+  },
+  {
+    "name": "mutation-resize",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/t-jit-cdata-pure.lua",
+      "resize"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.005663479998474941,
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tresize\texits\t159\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  },
+  {
+    "name": "mutation-methodlife",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/t-jit-cdata-pure.lua",
+      "methodlife"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.0051405660015007015,
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t35\tloop\t24\tpost\t0\t0\t0\npure-method\tmethodlife\texits\t159\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  },
+  {
+    "name": "mutation-replace",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/t-jit-cdata-pure.lua",
+      "replace"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.0044709389985655434,
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\treplace\texits\t1\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  },
+  {
+    "name": "side",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/t-jit-cdata-pure-side.lua"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.004769335999299074,
+    "exit": 0,
+    "stdout": "trace\t1\tlink\t1\tloop\tparent\t0\texits\t2\ntrace\t2\tlink\t1\troot\tparent\t1\texits\t0\ntrace\t3\tlink\t1\troot\tparent\t1\texits\t5\ntrace\t4\tlink\t0\tinterpreter\tparent\t3\texits\t0\ntrace\t1\tlink\t1\tloop\tparent\t0\texits\t3\ntrace\t2\tlink\t1\troot\tparent\t1\texits\t0\ntrace\t3\tlink\t1\troot\tparent\t1\texits\t6\ntrace\t4\tlink\t0\tinterpreter\tparent\t3\texits\t0\ntrace\t5\tlink\t1\troot\tparent\t1\texits\t0\ntrace\t6\tlink\t1\troot\tparent\t3\texits\t4\nside-link-pass\toldside\t3\tbefore-exits\t5\tcalls\t640\n",
+    "stderr": ""
+  },
+  {
+    "name": "exclude-allocate",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/t-jit-cdata-pure-exclusions.lua",
+      "allocate"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.00433118700311752,
+    "exit": 0,
+    "stdout": "negative\tallocate\troot\t1\tnins\t68\texits\t1\tpostroot\t1\tanswer\t6560\nHREFK \t6\nHLOAD \t6\nEQ    \t9\nADD   \t14\nXSTORE\t8\nXLOAD \t1\nLOOP  \t1\nXPOLL \t1\nFLOAD \t7\nNOP   \t1\nPHI   \t2\nCONV  \t2\nLE    \t3\nCNEW  \t2\nSLOAD \t5\n",
+    "stderr": ""
+  },
+  {
+    "name": "exclude-luastore",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/t-jit-cdata-pure-exclusions.lua",
+      "luastore"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.004350618997705169,
+    "exit": 0,
+    "stdout": "negative\tluastore\troot\t1\tnins\t55\texits\t1\tpostroot\t1\tanswer\t3320\nHREFK \t6\nHLOAD \t4\nEQ    \t6\nADD   \t8\nCONV  \t2\nXLOAD \t1\nTBAR  \t2\nXPOLL \t1\nRENAME\t2\nFLOAD \t8\nPHI   \t2\nLOOP  \t1\nHSTORE\t2\nXSTORE\t2\nSLOAD \t5\nLE    \t3\n",
+    "stderr": ""
+  },
+  {
+    "name": "exclude-newref",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/t-jit-cdata-pure-exclusions.lua",
+      "newref"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.004372397001134232,
+    "exit": 0,
+    "stdout": "negative\tnewref\troot\t1\tnins\t64\texits\t1\tpostroot\t1\tanswer\t3320\nHREFK \t4\nHLOAD \t4\nEQ    \t8\nADD   \t10\nCONV  \t4\nXLOAD \t1\nADDOV \t2\nULE   \t2\nHREF  \t2\nPHI   \t2\nRENAME\t1\nLOOP  \t1\nXPOLL \t1\nFLOAD \t8\nLE    \t3\nSLOAD \t5\nXSTORE\t2\nNEWREF\t2\nHSTORE\t2\n",
+    "stderr": ""
+  },
+  {
+    "name": "exclude-clear",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/t-jit-cdata-pure-exclusions.lua",
+      "clear"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.004323626999394037,
+    "exit": 0,
+    "stdout": "negative\tclear\troot\t1\tnins\t52\texits\t1\tpostroot\t1\tanswer\t3320\nHREFK \t4\nHLOAD \t4\nEQ    \t7\nADD   \t8\nCONV  \t2\nXLOAD \t1\nUREFC \t1\nULOAD \t2\nPHI   \t2\nRENAME\t1\nLOOP  \t1\nXPOLL \t1\nFLOAD \t5\nLE    \t3\nSLOAD \t6\nXSTORE\t2\nCALLS \t2\n",
+    "stderr": ""
+  },
+  {
+    "name": "exclude-foreign",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/t-jit-cdata-pure-exclusions.lua",
+      "foreign"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.00427924600080587,
+    "exit": 0,
+    "stdout": "negative\tforeign\troot\t1\tnins\t87\texits\t1\tpostroot\t1\tanswer\t6560\nHREFK \t8\nHLOAD \t8\nEQ    \t11\nADD   \t10\nCONV  \t4\nXLOAD \t2\nUREFC \t1\nULOAD \t2\nNOP   \t2\nNE    \t4\nSUBOV \t2\nNEG   \t2\nXSAVE \t2\nCARG  \t2\nPHI   \t2\nLOOP  \t1\nXPOLL \t1\nFLOAD \t7\nCALLXS\t2\nCALLS \t4\nLE    \t3\nSLOAD \t5\nXSTORE\t2\n",
+    "stderr": ""
+  },
+  {
+    "name": "exclude-indirect",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/t-jit-cdata-pure-exclusions.lua",
+      "indirect"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.004366083998320391,
+    "exit": 0,
+    "stdout": "negative\tindirect\troot\t1\tnins\t52\texits\t1\tpostroot\t1\tanswer\t3320\nHREFK \t4\nHLOAD \t4\nEQ    \t6\nADD   \t9\nCONV  \t2\nXLOAD \t3\nNOP   \t2\nXPOLL \t1\nFLOAD \t6\nPHI   \t2\nLOOP  \t1\nXSTORE\t4\nSLOAD \t5\nLE    \t3\n",
+    "stderr": ""
+  },
+  {
+    "name": "exclude-fpmath",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/t-jit-cdata-pure-exclusions.lua",
+      "fpmath"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.0044428349974623416,
+    "exit": 0,
+    "stdout": "negative\tfpmath\troot\t1\tnins\t63\texits\t1\tpostroot\t1\tanswer\t3320.5193307811\nHREFK \t8\nHLOAD \t8\nEQ    \t7\nADD   \t10\nCONV  \t2\nXLOAD \t1\nLOOP  \t1\nXPOLL \t1\nFLOAD \t10\nNOP   \t1\nPHI   \t2\nCALLN \t2\nXSTORE\t2\nSLOAD \t5\nLE    \t3\n",
+    "stderr": ""
+  },
+  {
+    "name": "profile",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/t-jit-cdata-pure-profile.lua"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.006852207003248623,
+    "exit": 0,
+    "stdout": "profile-negative\tmode1\ttrue\tconservative\ttrue\tsamples\t1\tmethodcalls\t934\texits\t8\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-t-jit-cdata-pure-phase.c",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src",
+      "-I/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/t-jit-cdata-pure-phase.c",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal-t-jit-cdata-pure-phase"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": false,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.09969033900051727,
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "t-jit-cdata-pure-phase.c gate",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal-t-jit-cdata-pure-phase",
+      "gate"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.014728419002494775,
+    "exit": 0,
+    "stdout": "pure-phase gate early-exit=143 limit=2000000 exit-callback-mutation=1 continuation-calls=3999714 second-calls=160 final-IDLE\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-jit-cdata-pure-phase.c worker",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal-t-jit-cdata-pure-phase",
+      "worker"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.01460817499901168,
+    "exit": 0,
+    "stdout": "pure-phase worker early-exit=79430 limit=2000000 exit-callback-mutation=1 continuation-calls=3841140 second-calls=160 final-IDLE\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-t-jit-cdata-pure-error.c",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src",
+      "-I/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/t-jit-cdata-pure-error.c",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=lj_mem_realloc",
+      "-o",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal-t-jit-cdata-pure-error"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": false,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.09219971499987878,
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "t-jit-cdata-pure-error.c ",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal-t-jit-cdata-pure-error"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.0036657370001194067,
+    "exit": 0,
+    "stdout": "flag-error injected=1 status=4 flag=0\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-t-jit-first-attach.c",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src",
+      "-I/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/t-jit-first-attach.c",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal-t-jit-first-attach"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": false,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.12705504200130235,
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "t-jit-first-attach.c ",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal-t-jit-first-attach"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.004194258999632439,
+    "exit": 0,
+    "stdout": "warm native exits\t1\nwarm root 1: 1 XPOLL instructions, all mode 0; LOOP=1\nfirst attach: exit trace=1 snap=4 iteration=61131 limit=1000000000 result=61131 attach-ms=0.060 early=1\nfirst-attach mode-0 native backedge progress PASS\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-jit-first-attach.c noloop",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal-t-jit-first-attach",
+      "noloop"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.003961351998441387,
+    "exit": 0,
+    "stdout": "warm native exits\t1\nwarm root 1: 1 XPOLL instructions, all mode 0; LOOP=0\nfirst attach: exit trace=1 snap=4 iteration=55690 limit=1000000000 result=55690 attach-ms=0.048 early=1\nfirst-attach mode-0 native backedge progress PASS\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-t-ffi-callxs-callback-stack.c",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src",
+      "-I/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/t-ffi-callxs-callback-stack.c",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal-t-ffi-callxs-callback-stack"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": false,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.11235466699872632,
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "t-ffi-callxs-callback-stack.c ",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal-t-ffi-callxs-callback-stack"
+    ],
+    "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal",
+    "test": true,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/tests/lib/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?.lua;/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal/src/?/init.lua;;"
+    },
+    "seconds": 0.00949307900009444,
+    "exit": 0,
+    "stdout": "callback stack mode=0 generated=80 callbacks=80 relocated=0 throws=0\ncallback stack mode=1 generated=80 callbacks=80 relocated=1 throws=0\ncallback stack mode=2 generated=1 callbacks=1 relocated=0 throws=1\n",
+    "stderr": ""
+  }
+]

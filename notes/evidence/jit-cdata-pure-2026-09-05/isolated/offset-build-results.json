@@ -1,0 +1,39 @@
+[
+  {
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-C",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src",
+      "-j4",
+      "BUILDMODE=static",
+      "CCDEBUG=-g",
+      "TARGET_STRIP=:"
+    ],
+    "exit": 2,
+    "seconds": 0.06922146199940471,
+    "stderr": "lj_opt_loop.c: In function \u2018loop_cdata_scalar_store\u2019:\nlj_opt_loop.c:324:21: error: \u2018TValue\u2019 has no member named \u2018i64\u2019; did you mean \u2018u64\u2019?\n  324 |     ir_kint64(ofs)->i64 >= (int64_t)sizeof(GCcdata) &&\n      |                     ^~~\n      |                     u64\nlj_opt_loop.c:325:21: error: \u2018TValue\u2019 has no member named \u2018i64\u2019; did you mean \u2018u64\u2019?\n  325 |     ir_kint64(ofs)->i64 <= INT32_MAX;\n      |                     ^~~\n      |                     u64\nlj_opt_loop.c:326:1: warning: control reaches end of non-void function [-Wreturn-type]\n  326 | }\n      | ^\nmake: *** [Makefile:712: lj_opt_loop.o] Error 1\n"
+  },
+  {
+    "variant": "fix-assert",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-C",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src",
+      "-j4",
+      "BUILDMODE=static",
+      "CCDEBUG=-g",
+      "TARGET_STRIP=:",
+      "XCFLAGS=-DLUA_USE_ASSERT -DLJ_GC2_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLJ_TAB_TEST_HELPERS"
+    ],
+    "exit": 2,
+    "seconds": 0.07208819699735614,
+    "stderr": "lj_opt_loop.c: In function \u2018loop_cdata_scalar_store\u2019:\nlj_opt_loop.c:324:21: error: \u2018TValue\u2019 has no member named \u2018i64\u2019; did you mean \u2018u64\u2019?\n  324 |     ir_kint64(ofs)->i64 >= (int64_t)sizeof(GCcdata) &&\n      |                     ^~~\n      |                     u64\nlj_opt_loop.c:325:21: error: \u2018TValue\u2019 has no member named \u2018i64\u2019; did you mean \u2018u64\u2019?\n  325 |     ir_kint64(ofs)->i64 <= INT32_MAX;\n      |                     ^~~\n      |                     u64\nlj_opt_loop.c:326:1: warning: control reaches end of non-void function [-Wreturn-type]\n  326 | }\n      | ^\nmake: *** [Makefile:712: lj_opt_loop.o] Error 1\n"
+  }
+]

@@ -1,0 +1,60 @@
+[
+  {
+    "variant": "base-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-C",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src",
+      "-j4",
+      "BUILDMODE=static",
+      "CCDEBUG=-g",
+      "TARGET_STRIP=:"
+    ],
+    "cwd": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal",
+    "exit": 0,
+    "seconds": 12.838984933001484,
+    "runtime_sha256": "6462939c511211260c700dbe6efb8c224801d4b38c66c78e277e785a0bd04134"
+  },
+  {
+    "variant": "fix-normal",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-C",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src",
+      "-j4",
+      "BUILDMODE=static",
+      "CCDEBUG=-g",
+      "TARGET_STRIP=:"
+    ],
+    "cwd": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal",
+    "exit": 0,
+    "seconds": 13.016628449000564,
+    "runtime_sha256": "9238bd2ddf982448cd2c86f4d229edce110d1068a5d0db84c4c7a3ac4ba83755"
+  },
+  {
+    "variant": "fix-assert",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-C",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src",
+      "-j4",
+      "BUILDMODE=static",
+      "CCDEBUG=-g",
+      "TARGET_STRIP=:",
+      "XCFLAGS=-DLUA_USE_ASSERT -DLJ_GC2_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLJ_TAB_TEST_HELPERS"
+    ],
+    "cwd": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert",
+    "exit": 0,
+    "seconds": 13.782243085999653,
+    "runtime_sha256": "1ce1ec346d086a3e9494c2e0085f12b78e169c780ac8d8b5af351df136e19baa"
+  }
+]

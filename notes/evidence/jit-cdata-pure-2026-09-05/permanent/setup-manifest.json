@@ -1,0 +1,18 @@
+{
+  "base_commit": "8d342cd6456d2f93ba07a779cdde30d4806eb90f",
+  "implementation_patch_sha256": "6eff86feefc6299c35fa74d3b03562fdf4476ffbbae2e9c7a6be5f9d7a537853",
+  "raw": {
+    "eligibility.lua": "79ce753ed1c3f2feb27a7e43d33f3fbee11d69cb48ad24e2a278de7f16e3f729",
+    "flag-error.c": "88431f3503cf6269ebd807678b6e62ab5292da3aa33354f690b3458726104636",
+    "global-worker.c": "c475366936e4db5ea0e414c81b0de27cb56553a879a3f8b5f104a8e62d2b4ac0",
+    "phase-gate.c": "6ca2342b22f5ad28db2c07febdce224448848346594503301b76a485f41c90a7",
+    "profile-negative.lua": "86a3724a98995265d7c2d3c236c4c223e4d899c3636828f88ea2cbb30b319f98",
+    "run-premt-eligibility.py": "ccf291a746c8ff96a75c9a02e1ad5b2bd86d8f6751f11b39653f0674294de7f1",
+    "run-premt-flag.py": "6ee43c37b1078b9ec78d52cc9a81018a8bc59cf42bb1f790e5fe65bb113f6cfa",
+    "run-premt-phase.py": "df35a79b430a2d2e8e9b161438e969d37afe992ce8fd3acaed76bb1585df01f2",
+    "run-premt-semantic.py": "9fdd81b9796e6111974dc03d1abaf08e225822fc2d4519e75b92f7d55d210672",
+    "run-premt-worker.py": "21fd323525f51e4b894bd7945a80ee074327168bfa978d3339bd6bc9f6a56d87",
+    "side-link.lua": "0d6c516a85b0758be8dc6bf81580d40622c70dcbc5f98516eb67b121c7491daa",
+    "t-premt-cdata-pure.lua": "8625acf51f9e0e93ed40c352f32bb963d6467e2a7d07425f7b90bd34cdb9db2e"
+  }
+}

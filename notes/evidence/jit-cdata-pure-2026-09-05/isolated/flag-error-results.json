@@ -1,0 +1,70 @@
+[
+  {
+    "variant": "fix-normal",
+    "compile": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src",
+      "-I/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/tests",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/flag-error.c",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/libluajit.a",
+      "-Wl,--wrap=lj_mem_realloc",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal-flag-error"
+    ],
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal-flag-error"
+    ],
+    "exit": 0,
+    "stdout": "flag-error injected=1 status=4 flag=0\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-assert",
+    "compile": [
+      "cc",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-I/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src",
+      "-I/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/tests",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/flag-error.c",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/libluajit.a",
+      "-Wl,--wrap=lj_mem_realloc",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert-flag-error"
+    ],
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert-flag-error"
+    ],
+    "exit": 0,
+    "stdout": "flag-error injected=1 status=4 flag=0\n",
+    "stderr": ""
+  }
+]

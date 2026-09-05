@@ -1,0 +1,44 @@
+[
+  {
+    "case": "m6_jit_cdata_pure",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/strict/src/luajit",
+      "/workspaces/lj-lockless/tools/test.lua",
+      "m6_jit_cdata_pure"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LJ_TEST_ROOT": "/workspaces/lj-lockless",
+      "JOBS": "4",
+      "MAKE_JOBS": "4",
+      "TMPDIR": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/shared-canonical-tmp",
+      "LUA_PATH": "/workspaces/lj-lockless/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 44.587509644999955
+  },
+  {
+    "case": "m6_jit_cdata_pure_lifecycle",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/strict/src/luajit",
+      "/workspaces/lj-lockless/tools/test.lua",
+      "m6_jit_cdata_pure_lifecycle"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LJ_TEST_ROOT": "/workspaces/lj-lockless",
+      "JOBS": "4",
+      "MAKE_JOBS": "4",
+      "TMPDIR": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/shared-canonical-tmp",
+      "LUA_PATH": "/workspaces/lj-lockless/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.2642511829981231
+  }
+]

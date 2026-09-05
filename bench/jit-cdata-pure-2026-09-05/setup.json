@@ -1,0 +1,11 @@
+{
+  "baseline": "f43a9f24e2d5403924ae4f48b51808925326451d",
+  "implementation_sha256": "6eff86feefc6299c35fa74d3b03562fdf4476ffbbae2e9c7a6be5f9d7a537853",
+  "created_trees": [
+    "normal",
+    "strict",
+    "asan"
+  ],
+  "tests-only.patch": "09bbd814ff7e5f620fa16a2460632d727781d787f6bde62abaf69dd9973b4124",
+  "xsave-fixture.patch": "64dce0f83d37e590439a45abc0ef4e73a5668721d045d62db3f460c798bc14cd"
+}

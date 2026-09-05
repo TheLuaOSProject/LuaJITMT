@@ -1,0 +1,18 @@
+Breakpoint 1 at 0xde8f6: file lj_opt_loop.c, line 316.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+
+Breakpoint 1, loop_cdata_scalar_store (J=<optimized out>, ir=0x7ffff793ba20) at lj_opt_loop.c:316
+316	  return irt_iscdata(base->t) &&
+$1 = {{op1 = 2, op2 = 4, ot = 18826, prev = 32771}, {op12 = 262146, t = {irt = 138 '\212'}, o = 73 'I', r = 3 '\003', s = 128 '\200'}, i = 262146, gcr = {gcptr64 = 9224297318839484418}, ptr = {ptr64 = 9224297318839484418}, tv = {u64 = 9224297318839484418, n = -4.5715004136032981e-309, gcr = {gcptr64 = 9224297318839484418}, it64 = -9222446754870067198, {i = 262146, it = 2147699082}, ftsz = -9222446754870067198, u32 = {lo = 262146, hi = 2147699082}}}
+$2 = {{op1 = 0, op2 = 0, ot = 7957, prev = 0}, {op12 = 0, t = {irt = 21 '\025'}, o = 31 '\037', r = 0 '\000', s = 0 '\000'}, i = 0, gcr = {gcptr64 = 34175054774272}, ptr = {ptr64 = 34175054774272}, tv = {u64 = 34175054774272, n = 1.6884720508710672e-310, gcr = {gcptr64 = 34175054774272}, it64 = 34175054774272, {i = 0, it = 7957}, ftsz = 34175054774272, u32 = {lo = 0, hi = 7957}}}
+$3 = 16
+$4 = 73 'I'
+$5 = 31 '\037'
+$6 = 0
+$7 = IR_KINT
+A debugging session is active.
+
+	Inferior 1 [process 187398] will be killed.
+
+Quit anyway? (y or n) [answered Y; input not from terminal]

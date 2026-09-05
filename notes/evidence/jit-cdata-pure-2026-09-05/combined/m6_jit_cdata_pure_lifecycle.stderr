@@ -1,0 +1,7 @@
+== m6_jit_cdata_pure_lifecycle ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -I'/workspaces/lj-lockless/src' '/workspaces/lj-lockless/tests/t-jit-cdata-pure-phase.c' '/workspaces/lj-lockless/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/shared-canonical-tmp/lj_t-jit-cdata-pure-phase'
++ LUA_PATH='/workspaces/lj-lockless/tests/lib/?.lua;/workspaces/lj-lockless/src/?.lua;/workspaces/lj-lockless/src/jit/?.lua;;' timeout '20s' '/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/shared-canonical-tmp/lj_t-jit-cdata-pure-phase' 'gate'
++ LUA_PATH='/workspaces/lj-lockless/tests/lib/?.lua;/workspaces/lj-lockless/src/?.lua;/workspaces/lj-lockless/src/jit/?.lua;;' timeout '20s' '/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/shared-canonical-tmp/lj_t-jit-cdata-pure-phase' 'worker'
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -I'/workspaces/lj-lockless/src' '/workspaces/lj-lockless/tests/t-jit-cdata-pure-error.c' '/workspaces/lj-lockless/src/libluajit.a' -lm -ldl -pthread -Wl,--wrap=lj_mem_realloc -o '/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/shared-canonical-tmp/lj_t-jit-cdata-pure-error'
++ timeout '20s' '/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/shared-canonical-tmp/lj_t-jit-cdata-pure-error'
+ok m6_jit_cdata_pure_lifecycle

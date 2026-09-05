@@ -1,0 +1,11 @@
+{
+  "luajit": "1aec3bf4dc5d07a6ea2a889dc669cb14aeb3e86809b357ba3729d5edf88e88e9",
+  "libluajit.a": "39cccd2bae737635b0983cf3d54373332234098831d859f08085e155212b5e73",
+  "strict-t-jit-cdata-pure-phase": "f011470c3535f5bddf9f3daa02fc643b40803ac821c76552ccf3ccef6a98b08a",
+  "strict-t-jit-cdata-pure-error": "bbdc2cef9dd6205221ffd261870df7ee6d3ff4b623cbc320eddf30b8622f6936",
+  "strict-t-jit-first-attach": "a51fc5867b31f29632014c8c044869bdb622e4e478d27a6e0d60c3527f132acc",
+  "strict-t-ffi-callxs-callback-stack": "f04b512156fcd381d72cf7cd5c05faa33cd8066c0678e7936d5bc0bba69744bb",
+  "strict-t-jit-xsave": "d2c9a0f1971fab3ce4cacfe2469c679167c1c7ef3fcdcaacb2f26c10ca7e2a49",
+  "strict-t-ffi-callxs-callback": "b430d271f4226ab79c0d30e2f96d1d327e3fb6da7b0eebb2e4af19a78f0e138c",
+  "strict-t-ffi-callxs-postcall": "0de31c238bbf04ce776a7acf64be2e83b5fb0417d6acc20c24215e3281b69b21"
+}

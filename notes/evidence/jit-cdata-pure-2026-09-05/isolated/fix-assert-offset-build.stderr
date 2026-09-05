@@ -1,0 +1,13 @@
+lj_opt_loop.c: In function ‘loop_cdata_scalar_store’:
+lj_opt_loop.c:324:21: error: ‘TValue’ has no member named ‘i64’; did you mean ‘u64’?
+  324 |     ir_kint64(ofs)->i64 >= (int64_t)sizeof(GCcdata) &&
+      |                     ^~~
+      |                     u64
+lj_opt_loop.c:325:21: error: ‘TValue’ has no member named ‘i64’; did you mean ‘u64’?
+  325 |     ir_kint64(ofs)->i64 <= INT32_MAX;
+      |                     ^~~
+      |                     u64
+lj_opt_loop.c:326:1: warning: control reaches end of non-void function [-Wreturn-type]
+  326 | }
+      | ^
+make: *** [Makefile:712: lj_opt_loop.o] Error 1

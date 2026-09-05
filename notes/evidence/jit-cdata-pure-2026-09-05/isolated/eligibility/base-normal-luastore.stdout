@@ -1,0 +1,17 @@
+negative	luastore	root	1	nins	55	exits	1	postroot	1	answer	3320
+XPOLL 	1
+PHI   	2
+RENAME	2
+LOOP  	1
+XSTORE	2
+TBAR  	2
+HSTORE	2
+SLOAD 	5
+LE    	3
+FLOAD 	8
+HLOAD 	4
+EQ    	6
+ADD   	8
+CONV  	2
+XLOAD 	1
+HREFK 	6

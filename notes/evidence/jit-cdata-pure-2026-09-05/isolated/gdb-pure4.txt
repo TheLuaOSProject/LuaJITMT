@@ -1,0 +1,14 @@
+set pagination off
+break loop_cdata_fload_pure
+run /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/positive.lua
+python
+j=gdb.parse_and_eval('J')
+ir=j['cur']['ir']
+for r in range(32769,int(gdb.parse_and_eval('end'))):
+ x=ir[r]
+ print(r,x)
+end
+finish
+print J->loop_cdata_fload
+print $rax
+quit

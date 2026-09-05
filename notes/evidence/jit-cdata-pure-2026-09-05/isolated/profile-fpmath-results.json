@@ -1,0 +1,89 @@
+[
+  {
+    "variant": "base-normal",
+    "mode": "profile",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/profile-negative.lua"
+    ],
+    "exit": 0,
+    "stdout": "profile-negative\tmode1\ttrue\tconservative\ttrue\tsamples\t1\tmethodcalls\t4818\texits\t8\n",
+    "stderr": ""
+  },
+  {
+    "variant": "base-normal",
+    "mode": "fpmath",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/base-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "fpmath"
+    ],
+    "exit": 0,
+    "stdout": "negative\tfpmath\troot\t1\tnins\t63\texits\t1\tpostroot\t1\tanswer\t3320.5193307811\nXPOLL \t1\nPHI   \t2\nNOP   \t1\nXSTORE\t2\nCALLN \t2\nLOOP  \t1\nXLOAD \t1\nSLOAD \t5\nLE    \t3\nHREFK \t8\nHLOAD \t8\nEQ    \t7\nADD   \t10\nCONV  \t2\nFLOAD \t10\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-normal",
+    "mode": "profile",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/profile-negative.lua"
+    ],
+    "exit": 0,
+    "stdout": "profile-negative\tmode1\ttrue\tconservative\ttrue\tsamples\t1\tmethodcalls\t13070\texits\t8\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-normal",
+    "mode": "fpmath",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "fpmath"
+    ],
+    "exit": 0,
+    "stdout": "negative\tfpmath\troot\t1\tnins\t63\texits\t1\tpostroot\t1\tanswer\t3320.5193307811\nXPOLL \t1\nPHI   \t2\nNOP   \t1\nXSTORE\t2\nCALLN \t2\nLOOP  \t1\nXLOAD \t1\nSLOAD \t5\nLE    \t3\nHREFK \t8\nHLOAD \t8\nEQ    \t7\nADD   \t10\nCONV  \t2\nFLOAD \t10\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-assert",
+    "mode": "profile",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/profile-negative.lua"
+    ],
+    "exit": 0,
+    "stdout": "profile-negative\tmode1\ttrue\tconservative\ttrue\tsamples\t1\tmethodcalls\t13794\texits\t8\n",
+    "stderr": ""
+  },
+  {
+    "variant": "fix-assert",
+    "mode": "fpmath",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-assert/src/luajit",
+      "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+      "fpmath"
+    ],
+    "exit": 0,
+    "stdout": "negative\tfpmath\troot\t1\tnins\t63\texits\t1\tpostroot\t1\tanswer\t3320.5193307811\nXPOLL \t1\nPHI   \t2\nNOP   \t1\nXSTORE\t2\nCALLN \t2\nLOOP  \t1\nXLOAD \t1\nSLOAD \t5\nLE    \t3\nHREFK \t8\nHLOAD \t8\nEQ    \t7\nADD   \t10\nCONV  \t2\nFLOAD \t10\n",
+    "stderr": ""
+  }
+]

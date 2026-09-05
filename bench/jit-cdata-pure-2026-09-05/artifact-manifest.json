@@ -1,0 +1,41 @@
+{
+  "scope": "only ffi_struct, exact normal mixed poll/callback sources differ in three optimizer inputs",
+  "artifacts": [
+    {
+      "source": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/benchmark.py",
+      "relative_path": "benchmark.py",
+      "sha256": "171742d6b1beb3d44b9bb279091cef98bc926a3fdd170689178cd67c1aa330e3",
+      "bytes": 2900
+    },
+    {
+      "source": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/field-cost-results.json",
+      "relative_path": "field-cost-results.json",
+      "sha256": "0a17f98f2f53ab89b20ec698ab48cdf05ad25fefb22f3864cb3525bd3469c7ae",
+      "bytes": 10705
+    },
+    {
+      "source": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/field-cost-summary.json",
+      "relative_path": "field-cost-summary.json",
+      "sha256": "014172af3734a1f640a785afa641cb70952f6d83b8b8715612ca24fba2cac9cf",
+      "bytes": 952
+    },
+    {
+      "source": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/bench.lua",
+      "relative_path": "bench.lua",
+      "sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+      "bytes": 5301
+    },
+    {
+      "source": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/normal-binaries.json",
+      "relative_path": "normal-binaries.json",
+      "sha256": "1e79281e0ad28bc74d80a35013840633447870a46713a0555c3589cd96624eb9",
+      "bytes": 581
+    },
+    {
+      "source": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/setup.json",
+      "relative_path": "setup.json",
+      "sha256": "b61ed44731fd7675c0de109f2477644db13e27bf657eeed2fbb65ac885f60eaa",
+      "bytes": 404
+    }
+  ]
+}

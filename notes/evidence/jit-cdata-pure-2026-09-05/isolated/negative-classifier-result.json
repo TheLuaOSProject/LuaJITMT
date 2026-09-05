@@ -1,0 +1,26 @@
+{
+  "build": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/negative-classifier/src",
+    "-j4",
+    "BUILDMODE=static",
+    "CCDEBUG=-g",
+    "TARGET_STRIP=:"
+  ],
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/negative-classifier/src/luajit",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua",
+    "allocate"
+  ],
+  "source_sha256": "297bd45fe4d0b26a00d4d25f65a91179b0dd28068e859ae6b6a74c992058d631",
+  "exit": 1,
+  "stdout": "negative\tallocate\troot\t1\tnins\t57\texits\t1\tpostroot\t0\tanswer\t6560\nXPOLL \t1\nNOP   \t2\nPHI   \t2\nXSTORE\t7\nLOOP  \t1\nXLOAD \t1\nCONV  \t2\nSLOAD \t5\nLE    \t3\nHREFK \t3\nHLOAD \t3\nEQ    \t6\nADD   \t14\nCNEW  \t2\nFLOAD \t5\n",
+  "stderr": "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/negative-classifier/src/luajit: /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:59: ineligible body must retain repeated cdata-base method proof\nstack traceback:\n\t[C]: in function 'assert'\n\t/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:59: in function 'main'\n\t/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/eligibility.lua:69: in main chunk\n\t[C]: at 0x55bc0d5e9100\n"
+}

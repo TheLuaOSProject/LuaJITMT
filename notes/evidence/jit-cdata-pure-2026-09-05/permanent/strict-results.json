@@ -1,0 +1,434 @@
+[
+  {
+    "case": "mutation-index",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/tests/t-jit-cdata-pure.lua",
+      "index"
+    ],
+    "cwd": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.004789790000359062,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tindex\texits\t159\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  },
+  {
+    "case": "mutation-newindex",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/tests/t-jit-cdata-pure.lua",
+      "newindex"
+    ],
+    "cwd": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.004890421998425154,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tnewindex\texits\t80\tcalls\t80\texpected\t80\n",
+    "stderr": ""
+  },
+  {
+    "case": "mutation-missing",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/tests/t-jit-cdata-pure.lua",
+      "missing"
+    ],
+    "cwd": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.00469413400060148,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tmissing\texits\t1\tcalls\t0\texpected\t0\n",
+    "stderr": ""
+  },
+  {
+    "case": "mutation-nonfunction",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/tests/t-jit-cdata-pure.lua",
+      "nonfunction"
+    ],
+    "cwd": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.004409477001900086,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tnonfunction\texits\t1\tcalls\t0\texpected\t0\n",
+    "stderr": ""
+  },
+  {
+    "case": "mutation-resize",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/tests/t-jit-cdata-pure.lua",
+      "resize"
+    ],
+    "cwd": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.00587164700118592,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tresize\texits\t159\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  },
+  {
+    "case": "mutation-methodlife",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/tests/t-jit-cdata-pure.lua",
+      "methodlife"
+    ],
+    "cwd": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.005516885998076759,
+    "stdout": "shape\t1\tnins\t35\tloop\t24\tpost\t0\t0\t0\npure-method\tmethodlife\texits\t159\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  },
+  {
+    "case": "mutation-replace",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/tests/t-jit-cdata-pure.lua",
+      "replace"
+    ],
+    "cwd": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.004654157000913983,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\treplace\texits\t1\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  },
+  {
+    "case": "side",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/tests/t-jit-cdata-pure-side.lua"
+    ],
+    "cwd": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.004493761000048835,
+    "stdout": "trace\t1\tlink\t1\tloop\tparent\t0\texits\t2\ntrace\t2\tlink\t1\troot\tparent\t1\texits\t0\ntrace\t3\tlink\t1\troot\tparent\t1\texits\t5\ntrace\t4\tlink\t0\tinterpreter\tparent\t3\texits\t0\ntrace\t1\tlink\t1\tloop\tparent\t0\texits\t3\ntrace\t2\tlink\t1\troot\tparent\t1\texits\t0\ntrace\t3\tlink\t1\troot\tparent\t1\texits\t6\ntrace\t4\tlink\t0\tinterpreter\tparent\t3\texits\t0\ntrace\t5\tlink\t1\troot\tparent\t1\texits\t0\ntrace\t6\tlink\t1\troot\tparent\t3\texits\t4\nside-link-pass\toldside\t3\tbefore-exits\t5\tcalls\t640\n",
+    "stderr": ""
+  },
+  {
+    "case": "exclude-allocate",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/tests/t-jit-cdata-pure-exclusions.lua",
+      "allocate"
+    ],
+    "cwd": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.004553439997835085,
+    "stdout": "negative\tallocate\troot\t1\tnins\t68\texits\t1\tpostroot\t1\tanswer\t6560\nADD   \t14\nCONV  \t2\nXLOAD \t1\nPHI   \t2\nXSTORE\t8\nLOOP  \t1\nXPOLL \t1\nNOP   \t1\nFLOAD \t7\nEQ    \t9\nSLOAD \t5\nLE    \t3\nHREFK \t6\nCNEW  \t2\nHLOAD \t6\n",
+    "stderr": ""
+  },
+  {
+    "case": "exclude-luastore",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/tests/t-jit-cdata-pure-exclusions.lua",
+      "luastore"
+    ],
+    "cwd": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.004415045998030109,
+    "stdout": "negative\tluastore\troot\t1\tnins\t55\texits\t1\tpostroot\t1\tanswer\t3320\nADD   \t8\nCONV  \t2\nXLOAD \t1\nTBAR  \t2\nXSTORE\t2\nRENAME\t2\nLOOP  \t1\nXPOLL \t1\nPHI   \t2\nFLOAD \t8\nHSTORE\t2\nSLOAD \t5\nLE    \t3\nHREFK \t6\nHLOAD \t4\nEQ    \t6\n",
+    "stderr": ""
+  },
+  {
+    "case": "exclude-newref",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/tests/t-jit-cdata-pure-exclusions.lua",
+      "newref"
+    ],
+    "cwd": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.004873862002568785,
+    "stdout": "negative\tnewref\troot\t1\tnins\t64\texits\t1\tpostroot\t1\tanswer\t3320\nADD   \t10\nCONV  \t4\nXLOAD \t1\nADDOV \t2\nXSTORE\t2\nHREF  \t2\nPHI   \t2\nRENAME\t1\nXPOLL \t1\nLOOP  \t1\nEQ    \t8\nHLOAD \t4\nFLOAD \t8\nHREFK \t4\nSLOAD \t5\nLE    \t3\nULE   \t2\nNEWREF\t2\nHSTORE\t2\n",
+    "stderr": ""
+  },
+  {
+    "case": "exclude-clear",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/tests/t-jit-cdata-pure-exclusions.lua",
+      "clear"
+    ],
+    "cwd": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.004537844000878977,
+    "stdout": "negative\tclear\troot\t1\tnins\t52\texits\t1\tpostroot\t1\tanswer\t3320\nADD   \t8\nCONV  \t2\nXLOAD \t1\nUREFC \t1\nXSTORE\t2\nPHI   \t2\nRENAME\t1\nLOOP  \t1\nXPOLL \t1\nEQ    \t7\nFLOAD \t5\nHLOAD \t4\nSLOAD \t6\nLE    \t3\nHREFK \t4\nULOAD \t2\nCALLS \t2\n",
+    "stderr": ""
+  },
+  {
+    "case": "exclude-foreign",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/tests/t-jit-cdata-pure-exclusions.lua",
+      "foreign"
+    ],
+    "cwd": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.005892502998904092,
+    "stdout": "negative\tforeign\troot\t1\tnins\t87\texits\t1\tpostroot\t1\tanswer\t6560\nADD   \t10\nCONV  \t4\nXLOAD \t2\nUREFC \t1\nXSTORE\t2\nNOP   \t2\nNE    \t4\nSUBOV \t2\nNEG   \t2\nXSAVE \t2\nCARG  \t2\nPHI   \t2\nXPOLL \t1\nLOOP  \t1\nCALLXS\t2\nCALLS \t4\nFLOAD \t7\nEQ    \t11\nSLOAD \t5\nLE    \t3\nHREFK \t8\nHLOAD \t8\nULOAD \t2\n",
+    "stderr": ""
+  },
+  {
+    "case": "exclude-indirect",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/tests/t-jit-cdata-pure-exclusions.lua",
+      "indirect"
+    ],
+    "cwd": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.0046268119986052625,
+    "stdout": "negative\tindirect\troot\t1\tnins\t52\texits\t1\tpostroot\t1\tanswer\t3320\nADD   \t9\nCONV  \t2\nXLOAD \t3\nNOP   \t2\nXSTORE\t4\nLOOP  \t1\nXPOLL \t1\nFLOAD \t6\nPHI   \t2\nSLOAD \t5\nLE    \t3\nHREFK \t4\nHLOAD \t4\nEQ    \t6\n",
+    "stderr": ""
+  },
+  {
+    "case": "exclude-fpmath",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/tests/t-jit-cdata-pure-exclusions.lua",
+      "fpmath"
+    ],
+    "cwd": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.005439597000076901,
+    "stdout": "negative\tfpmath\troot\t1\tnins\t63\texits\t1\tpostroot\t1\tanswer\t3320.5193307811\nADD   \t10\nCONV  \t2\nXLOAD \t1\nPHI   \t2\nXSTORE\t2\nCALLN \t2\nLOOP  \t1\nXPOLL \t1\nFLOAD \t10\nNOP   \t1\nSLOAD \t5\nLE    \t3\nHREFK \t8\nHLOAD \t8\nEQ    \t7\n",
+    "stderr": ""
+  },
+  {
+    "case": "profile",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/tests/t-jit-cdata-pure-profile.lua"
+    ],
+    "cwd": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.007093636002537096,
+    "stdout": "profile-negative\tmode1\ttrue\tconservative\ttrue\tsamples\t1\tmethodcalls\t970\texits\t8\n",
+    "stderr": ""
+  },
+  {
+    "case": "phase-gate",
+    "compile": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/tests/t-jit-cdata-pure-phase.c",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict-phase"
+    ],
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict-phase",
+      "gate"
+    ],
+    "cwd": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.014738287001819117,
+    "stdout": "pure-phase gate early-exit=131988 limit=2000000 exit-callback-mutation=1 continuation-calls=3736024 second-calls=160 final-IDLE\n",
+    "stderr": "",
+    "executable_sha256": "45ffb6d0cde1dc40559f5614b5e396ca4cf597589f4bb327532826e61941f43c"
+  },
+  {
+    "case": "phase-worker",
+    "compile": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/tests/t-jit-cdata-pure-phase.c",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict-phase"
+    ],
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict-phase",
+      "worker"
+    ],
+    "cwd": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.014145343000564026,
+    "stdout": "pure-phase worker early-exit=237488 limit=2000000 exit-callback-mutation=1 continuation-calls=3525024 second-calls=160 final-IDLE\n",
+    "stderr": "",
+    "executable_sha256": "45ffb6d0cde1dc40559f5614b5e396ca4cf597589f4bb327532826e61941f43c"
+  },
+  {
+    "case": "error-",
+    "compile": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/tree/tests/t-jit-cdata-pure-error.c",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=lj_mem_realloc",
+      "-o",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict-error"
+    ],
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict-error"
+    ],
+    "cwd": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.003816641001321841,
+    "stdout": "flag-error injected=1 status=4 flag=0\n",
+    "stderr": "",
+    "executable_sha256": "6b97ca05078ccf0dcd4b84b8afce9eb0dda99b3a0858dcec0bfd126e50139f7b"
+  }
+]

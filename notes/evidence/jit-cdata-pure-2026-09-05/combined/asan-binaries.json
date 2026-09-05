@@ -1,0 +1,11 @@
+{
+  "luajit": "21de9e18037373c7fce8f3781cc6b8ef0cf8a78f656b3e7f93380005acc3ceb5",
+  "libluajit.a": "960e4aae3383185bececc3db1b0802f949d7b6384ad20a290f714235f56b1b22",
+  "asan-t-jit-cdata-pure-phase": "4ccebe0de5e884192a90b71dc8038e885998b1e0133605efa42bb5a09c02a1a5",
+  "asan-t-jit-cdata-pure-error": "7f70e9d57551cc12c4523f2aaa7af8b3efca24b003eefabf38066c73cab632b5",
+  "asan-t-jit-first-attach": "7119516532a2c608e62e700d6d88ab402dec950a4258e7273133b204f6da5f45",
+  "asan-t-ffi-callxs-callback-stack": "bba18b34a13ebc8580aa95ad7c7bbc525d36ba52a113765e6029a7387553443c",
+  "asan-t-jit-xsave": "3929bc03ad4452978251f6b21b009802916c6c183140bac8d29d8625f0063ded",
+  "asan-t-ffi-callxs-callback": "972417a8906ef792718184b051374309b3c462b78fcd9beab3cfd647f3ecc3ee",
+  "asan-t-ffi-callxs-postcall": "51ba6b3c698b0aaae46c19649592cf0ce31e3696c9cad0e66bc9085f74ab8433"
+}

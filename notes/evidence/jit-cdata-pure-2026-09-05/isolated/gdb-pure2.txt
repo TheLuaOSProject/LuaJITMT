@@ -1,0 +1,20 @@
+set pagination off
+set breakpoint pending on
+break loop_cdata_fload_pure
+commands
+silent
+print J->cur.link
+print J->cur.traceno
+print J->parent
+continue
+end
+break lj_opt_loop.c:329
+break lj_opt_loop.c:341
+break lj_opt_loop.c:346
+break lj_opt_loop.c:350
+break lj_opt_loop.c:353
+run /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/positive.lua
+bt 3
+print ref
+print *ir
+quit

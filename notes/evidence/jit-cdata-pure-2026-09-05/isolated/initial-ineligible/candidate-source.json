@@ -1,0 +1,8 @@
+{
+  "base": "b4e26564542cb8bfa997a11c6a90e5e0017a2f79",
+  "files": {
+    "src/lj_jit.h": "7608c51820c5f365d5cd7ce74fc79a0a3b87b6f9c437b97d01e83b78e7a6c1fa",
+    "src/lj_opt_loop.c": "24bcdd25a87ee343d955d6f0c85434eea233ffbc9ecb6458fbfdcc9b3d2c2bf8",
+    "src/lj_opt_mem.c": "34162cb91d55b0e94b8a559c182eb93f37485f60551e0d2c8e7adb61a5ac2159"
+  }
+}

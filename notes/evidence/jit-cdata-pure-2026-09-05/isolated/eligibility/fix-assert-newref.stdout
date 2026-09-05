@@ -1,0 +1,20 @@
+negative	newref	root	1	nins	64	exits	1	postroot	1	answer	3320
+ULE   	2
+HREF  	2
+XPOLL 	1
+PHI   	2
+XSTORE	2
+RENAME	1
+HREFK 	4
+XLOAD 	1
+CONV  	4
+ADD   	10
+SLOAD 	5
+LOOP  	1
+FLOAD 	8
+HLOAD 	4
+EQ    	8
+LE    	3
+ADDOV 	2
+NEWREF	2
+HSTORE	2

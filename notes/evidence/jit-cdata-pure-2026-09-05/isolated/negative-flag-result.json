@@ -1,0 +1,43 @@
+{
+  "build": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/negative-flag/src",
+    "-j4",
+    "BUILDMODE=static",
+    "CCDEBUG=-g",
+    "TARGET_STRIP=:"
+  ],
+  "compile": [
+    "cc",
+    "-std=gnu11",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-mcx16",
+    "-I/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/negative-flag/src",
+    "-I/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/negative-flag/tests",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/flag-error.c",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/negative-flag/src/libluajit.a",
+    "-Wl,--wrap=lj_mem_realloc",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-o",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/negative-flag-fixture"
+  ],
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-premt-cdata-hoist-20260905-oa96m15y/negative-flag-fixture"
+  ],
+  "exit": -6,
+  "stdout": "",
+  "stderr": "negative-flag-fixture: /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/flag-error.c:27: main: Assertion `J->loop_cdata_fload==0' failed.\n"
+}

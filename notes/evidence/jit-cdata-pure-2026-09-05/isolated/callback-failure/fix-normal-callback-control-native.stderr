@@ -1,0 +1,4 @@
+generated invoke value=1 depth=1 flags=3
+suspended callback count=1
+lua error: [string "local ffi,util,vmdef,bit=require('ffi'),requi..."]:14: callback result
+fix-normal-callback-control: /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/fix-normal/tests/lib/lua_fixture_helpers.h:19: ljt_lua_fail: Assertion `0' failed.

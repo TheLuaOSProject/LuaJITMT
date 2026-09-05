@@ -1,0 +1,16 @@
+negative	allocate	root	1	nins	57	exits	1	postroot	0	answer	6560
+XPOLL 	1
+NOP   	2
+PHI   	2
+XSTORE	7
+LOOP  	1
+XLOAD 	1
+CONV  	2
+SLOAD 	5
+LE    	3
+HREFK 	3
+HLOAD 	3
+EQ    	6
+ADD   	14
+CNEW  	2
+FLOAD 	5

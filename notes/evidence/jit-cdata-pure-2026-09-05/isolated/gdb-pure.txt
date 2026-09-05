@@ -1,0 +1,13 @@
+set pagination off
+set print pretty on
+set breakpoint pending on
+break loop_cdata_fload_pure
+run /tmp/lj-premt-cdata-hoist-20260905-oa96m15y/positive.lua
+print J->parent
+print J->cur.link
+print J->cur.traceno
+print end
+print IRCONV_NUM_INT
+finish
+print $rax
+quit

@@ -1,0 +1,16 @@
+negative	fpmath	root	1	nins	63	exits	1	postroot	1	answer	3320.5193307811
+XPOLL 	1
+PHI   	2
+NOP   	1
+XSTORE	2
+LOOP  	1
+CALLN 	2
+SLOAD 	5
+LE    	3
+FLOAD 	10
+HLOAD 	8
+EQ    	7
+ADD   	10
+CONV  	2
+XLOAD 	1
+HREFK 	8

@@ -1,0 +1,24 @@
+negative	foreign	root	1	nins	87	exits	1	postroot	1	answer	6560
+ULOAD 	2
+NOP   	2
+NE    	4
+SUBOV 	2
+XSTORE	2
+XSAVE 	2
+CARG  	2
+XPOLL 	1
+PHI   	2
+LOOP  	1
+CALLXS	2
+CALLS 	4
+HREFK 	8
+XLOAD 	2
+SLOAD 	5
+LE    	3
+FLOAD 	7
+HLOAD 	8
+EQ    	11
+ADD   	10
+CONV  	4
+UREFC 	1
+NEG   	2

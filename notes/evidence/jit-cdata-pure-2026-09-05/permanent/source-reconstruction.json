@@ -1,0 +1,14 @@
+{
+  "command": [
+    "git",
+    "apply",
+    "--verbose",
+    "--whitespace=error-all",
+    "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/implementation.patch"
+  ],
+  "cwd": "/tmp/lj-premt-cdata-permanent-20260905-q1xk87z4/source-reconstruction-3we0r27j",
+  "exit": 0,
+  "stdout": "",
+  "stderr": "Checking patch src/lj_jit.h...\nChecking patch src/lj_opt_loop.c...\nChecking patch src/lj_opt_mem.c...\nApplied patch src/lj_jit.h cleanly.\nApplied patch src/lj_opt_loop.c cleanly.\nApplied patch src/lj_opt_mem.c cleanly.\n",
+  "all_three_modified_sources_match": true
+}

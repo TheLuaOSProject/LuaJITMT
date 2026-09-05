@@ -1,0 +1,19 @@
+--- a/src/lj_opt_loop.c
++++ b/src/lj_opt_loop.c
+@@ -365,11 +365,11 @@
+ static LJ_AINLINE int loop_needs_xpoll(jit_State *J)
+ {
+   global_State *g = J2G(J);
+-  /* A loop poll is needed only after another TG can participate in a
+-  ** safepoint handshake or while SIGPROF owner requests are enabled. First
+-  ** Lua-thread/GC-worker activation and profile start flush existing traces
+-  ** around their policy publication, so a trace with the old policy cannot
+-  ** survive into a runtime that needs remote/asynchronous polls.
++  /* The literal selects the combined poll/profile-request test. Owner-L policy
++  ** activation flushes traces around publication; global workers_set(g, n)
++  ** may publish a pool without that flush. Native entry and collector payload/
++  ** reclaim safety use the independent phase-gate/jit_base protocol instead.
++  ** Do not infer worker activation responsiveness from this literal.
+   */
+   return gc2_n_threads_acq(g) > 1 || gc2_n_workers_acq(g) != 0 ||
+ 	 mt_active_or_entering_acq(g)
