@@ -15,33 +15,6 @@ static int32_t lj_callxs_flush_entered;
 static int32_t lj_callxs_flush_entries;
 static int32_t lj_callxs_flush_effects;
 static int32_t lj_callxs_flush_aggregate_calls;
-static int32_t lj_callxs_flush_generated;
-static uintptr_t lj_callxs_trace_begin[256], lj_callxs_trace_end[256];
-static uint32_t lj_callxs_trace_count;
-
-/* Worker publishes scalar code ranges after warming. The channel protocol
-** keeps this list stable until its blocked call has returned. Never read the
-** code bytes through these addresses, including after trace retirement. */
-void lj_callxs_flush_clear_traces(void)
-{
-  __atomic_store_n(&lj_callxs_trace_count, 0, __ATOMIC_RELEASE);
-}
-
-int32_t lj_callxs_flush_add_trace(uintptr_t start, uint32_t size)
-{
-  uint32_t n = __atomic_load_n(&lj_callxs_trace_count, __ATOMIC_ACQUIRE);
-  if (n == 256 || size == 0 || start + size <= start)
-    return 0;
-  lj_callxs_trace_begin[n] = start;
-  lj_callxs_trace_end[n] = start + size;
-  __atomic_store_n(&lj_callxs_trace_count, n + 1, __ATOMIC_RELEASE);
-  return 1;
-}
-
-int32_t lj_callxs_flush_generated_count(void)
-{
-  return __atomic_load_n(&lj_callxs_flush_generated, __ATOMIC_ACQUIRE);
-}
 
 /* Larger than two SysV eightbytes and not scalar-sized on Win64, so this
 ** result is returned through the ABI's hidden destination pointer on every
@@ -83,7 +56,6 @@ void lj_callxs_flush_configure(int32_t gate_value, int32_t block)
   lj_callxs_flush_store(&lj_callxs_flush_entries, 0);
   lj_callxs_flush_store(&lj_callxs_flush_effects, 0);
   lj_callxs_flush_store(&lj_callxs_flush_aggregate_calls, 0);
-  lj_callxs_flush_store(&lj_callxs_flush_generated, 0);
   lj_callxs_flush_store(&lj_callxs_flush_gate_value, gate_value);
   lj_callxs_flush_store(&lj_callxs_flush_release, block ? 0 : 1);
 }
@@ -113,16 +85,9 @@ int32_t lj_callxs_flush_aggregate_call_count(void)
   return lj_callxs_flush_load(&lj_callxs_flush_aggregate_calls);
 }
 
-static void lj_callxs_flush_wait(int32_t value, uintptr_t caller)
+static void lj_callxs_flush_wait(int32_t value)
 {
   if (value == lj_callxs_flush_load(&lj_callxs_flush_gate_value)) {
-    uint32_t i, n = __atomic_load_n(&lj_callxs_trace_count, __ATOMIC_ACQUIRE);
-    for (i = 0; i < n; i++) {
-      if (caller >= lj_callxs_trace_begin[i] && caller < lj_callxs_trace_end[i]) {
-        (void)__atomic_add_fetch(&lj_callxs_flush_generated, 1, __ATOMIC_ACQ_REL);
-        break;
-      }
-    }
     (void)__atomic_add_fetch(&lj_callxs_flush_entries, 1,
                              __ATOMIC_ACQ_REL);
     lj_callxs_flush_store(&lj_callxs_flush_entered, 1);
@@ -135,19 +100,19 @@ static void lj_callxs_flush_wait(int32_t value, uintptr_t caller)
 
 int32_t lj_callxs_flush_maybe_block(int32_t value)
 {
-  lj_callxs_flush_wait(value, (uintptr_t)__builtin_return_address(0));
+  lj_callxs_flush_wait(value);
   return value + 9;
 }
 
 int32_t *lj_callxs_flush_ptr_maybe_block(int32_t *ptr, int32_t value)
 {
-  lj_callxs_flush_wait(value, (uintptr_t)__builtin_return_address(0));
+  lj_callxs_flush_wait(value);
   return ptr;
 }
 
 _Bool lj_callxs_flush_bool_maybe_block(int32_t value, int32_t truth)
 {
-  lj_callxs_flush_wait(value, (uintptr_t)__builtin_return_address(0));
+  lj_callxs_flush_wait(value);
   return truth != 0;
 }
 
@@ -157,7 +122,7 @@ lj_callxs_flush_aggregate_maybe_block(double bias, int32_t value)
   struct lj_callxs_flush_aggregate result;
   (void)__atomic_add_fetch(&lj_callxs_flush_aggregate_calls, 1,
                            __ATOMIC_ACQ_REL);
-  lj_callxs_flush_wait(value, (uintptr_t)__builtin_return_address(0));
+  lj_callxs_flush_wait(value);
   result.magic_hi = UINT32_C(0xfedc0000) + (uint32_t)value;
   result.magic_lo = UINT32_C(0x76540000) + (uint32_t)value;
   result.weight = bias + (double)value * 0.25;

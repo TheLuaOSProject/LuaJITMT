@@ -1,0 +1,4 @@
+{
+  "tests/t-ffi-callxs-remote-flush.lua": "ad71b68c0a52c6651e24354a655b6fd8171ee1910dd457f2c213d1a33042d716",
+  "tests/t-ffi-callxs-remote-flush-lib.c": "fc9eee70014373e5869998896fe930a7ad5cd30542fed32be42d103603f849f8"
+}

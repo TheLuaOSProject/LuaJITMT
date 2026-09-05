@@ -1,0 +1,243 @@
+{
+  "scope": "Captured builtin CALLXS dispatch and actual caller-PC witness; no production runtime change",
+  "artifacts": [
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/canonical.json",
+      "relative_path": "canonical.json",
+      "sha256": "8a5fe587cda81dc4ac001ac29561e7da69dd32060f32ed850c95a805338a522d",
+      "bytes": 1072,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/canonical.py",
+      "relative_path": "canonical.py",
+      "sha256": "b7235db407a366aa40b5ee29328aace021e50f7c2484175f33da14e54b81b78b",
+      "bytes": 1456,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/canonical.stderr",
+      "relative_path": "canonical.stderr",
+      "sha256": "23a7db73f49f05fe9e214c01741ef8f4eeb9eaea34ada68ce27996f286798b37",
+      "bytes": 1794,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/canonical.stdout",
+      "relative_path": "canonical.stdout",
+      "sha256": "f307635b4ec177afb45d9670e75e289de52c4f0b727ae6943940fa0467cb095a",
+      "bytes": 9590,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/captured-dispatch-v1-lj-cdata-pure-combined-20260905-nue2ccoj-result.json",
+      "relative_path": "captured-dispatch-v1-lj-cdata-pure-combined-20260905-nue2ccoj-result.json",
+      "sha256": "670c5cbdcb44370266d4f08199d4d73b4302d6a62bad540aa286daf5c3d75611",
+      "bytes": 886,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/captured-dispatch-v1.lua",
+      "relative_path": "captured-dispatch-v1.lua",
+      "sha256": "aa7e3da2dc6cf098cefc1d7641a9730345fc308bd1c78306a8a2bd6adc8c6272",
+      "bytes": 15103,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/compile-native-witness.json",
+      "relative_path": "compile-native-witness.json",
+      "sha256": "b4090d08c9af9dd39f8ed2469e95e60e2adff5c41101e27340e3c6b88645a7ac",
+      "bytes": 330,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/diagnostic-join-lj-cdata-pure-combined-20260905-nue2ccoj-result.json",
+      "relative_path": "diagnostic-join-lj-cdata-pure-combined-20260905-nue2ccoj-result.json",
+      "sha256": "fc5beca3c02babc2eedb960e808735362504cb2a4df55cb8b826d4e56c5eb711",
+      "bytes": 1053,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/diagnostic-join-v2-lj-cdata-pure-combined-20260905-nue2ccoj-result.json",
+      "relative_path": "diagnostic-join-v2-lj-cdata-pure-combined-20260905-nue2ccoj-result.json",
+      "sha256": "9023dc3dadfd5fa2e74467ec81d83f0abfc3f8db66ab4d9a0f82042b3dd8fcb4",
+      "bytes": 1190,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/diagnostic-join-v2.lua",
+      "relative_path": "diagnostic-join-v2.lua",
+      "sha256": "c0a7abdb48afd42d3e97a3ac680e61dc25e51e36f349329e347e28449ca9be0b",
+      "bytes": 14856,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/diagnostic-join.lua",
+      "relative_path": "diagnostic-join.lua",
+      "sha256": "a4bf51e03fedf5397be7dfa9e4c380c0e6dcf83966cd4c0b8b31ae1fecbdb34d",
+      "bytes": 14770,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/diagnostic-verbose-lj-cdata-pure-combined-20260905-nue2ccoj-result.json",
+      "relative_path": "diagnostic-verbose-lj-cdata-pure-combined-20260905-nue2ccoj-result.json",
+      "sha256": "d5765222857c051110e845dbb2963b1a4638b115049e3862e27c868d878189b4",
+      "bytes": 1881,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/diagnostic-verbose.lua",
+      "relative_path": "diagnostic-verbose.lua",
+      "sha256": "65a1d6319468e8202e99fb43b1aea072ac1896bf4501479a1201b33f4ec453c6",
+      "bytes": 14883,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/final-source.json",
+      "relative_path": "final-source.json",
+      "sha256": "f115695869c6071e71a7313b0d59227b989840eb80a55885fc69d747af47e94f",
+      "bytes": 223,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/final.lua",
+      "relative_path": "final.lua",
+      "sha256": "ad71b68c0a52c6651e24354a655b6fd8171ee1910dd457f2c213d1a33042d716",
+      "bytes": 16550,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/fixture-lib.c",
+      "relative_path": "fixture-lib.c",
+      "sha256": "eb1d4e13e8539facb91f32c328aa36b50a5476235685afa94bb71ad1c4078b03",
+      "bytes": 3631,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/fixture.patch",
+      "relative_path": "fixture.patch",
+      "sha256": "5006223c77f25b0396a6c2bc8e45dfedd3d8c4664d0f0f6f208f8a28bab2ae9b",
+      "bytes": 11335,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/fixture.so",
+      "relative_path": "fixture.so",
+      "sha256": "376b8ed1ad643d24403edf833cab19ce51f984c42c3563634a0131949b6f2509",
+      "bytes": 16264,
+      "storage": "hash_only_binary"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/native-witness-lib.c",
+      "relative_path": "native-witness-lib.c",
+      "sha256": "fc9eee70014373e5869998896fe930a7ad5cd30542fed32be42d103603f849f8",
+      "bytes": 5154,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/native-witness-lj-callxs-callback-geometry-20260905-vgzqdmkx-base-assert-result.json",
+      "relative_path": "native-witness-lj-callxs-callback-geometry-20260905-vgzqdmkx-base-assert-result.json",
+      "sha256": "c5ad03d18416414270e2e98270a2b2e7568c025d7404d91b4c17f937a4353658",
+      "bytes": 1005,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/native-witness-lj-cdata-pure-combined-20260905-nue2ccoj-asan-result.json",
+      "relative_path": "native-witness-lj-cdata-pure-combined-20260905-nue2ccoj-asan-result.json",
+      "sha256": "6767eb07eb2491f35f422d9a822cac0f89656a49cc9dad25f281232f4c290317",
+      "bytes": 1023,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/native-witness-lj-cdata-pure-combined-20260905-nue2ccoj-normal-result.json",
+      "relative_path": "native-witness-lj-cdata-pure-combined-20260905-nue2ccoj-normal-result.json",
+      "sha256": "8ba9e16c29b6a457c0e2387b91ae22f27dcb78ac097c5e9794d55c107320886e",
+      "bytes": 975,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/native-witness-lj-cdata-pure-combined-20260905-nue2ccoj-result.json",
+      "relative_path": "native-witness-lj-cdata-pure-combined-20260905-nue2ccoj-result.json",
+      "sha256": "d8347601caf0a21f969ee3f9f7f35f1de71e02c0e62b31bb2ff971c3bf37e123",
+      "bytes": 887,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/native-witness.lua",
+      "relative_path": "native-witness.lua",
+      "sha256": "3d39c7fb0352b16c06592ea10f99d02c770f3882c553766a34ef0d76ab335c0c",
+      "bytes": 16551,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/native-witness.so",
+      "relative_path": "native-witness.so",
+      "sha256": "acd72917815d64e2960a413a853a32874a538d07dcd99506e20214664d7527fd",
+      "bytes": 16616,
+      "storage": "hash_only_binary"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/negative-interpreted-pointer-lj-cdata-pure-combined-20260905-nue2ccoj-strict-result.json",
+      "relative_path": "negative-interpreted-pointer-lj-cdata-pure-combined-20260905-nue2ccoj-strict-result.json",
+      "sha256": "8eb848e70de34c47239602c3dd55db98671d2a1951d962c8ee86e7bfe8941259",
+      "bytes": 1308,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/negative-interpreted-pointer.lua",
+      "relative_path": "negative-interpreted-pointer.lua",
+      "sha256": "95cea28c90e358888d9e5f9b7330bad5b94f9a873478e497d5c018f6a95237b4",
+      "bytes": 16580,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/original-lj-cdata-pure-combined-20260905-nue2ccoj-result.json",
+      "relative_path": "original-lj-cdata-pure-combined-20260905-nue2ccoj-result.json",
+      "sha256": "59cb95081d81b3c6f27743be1c548e2d3dd44ff678bdafa0cf5b5bfd47c19ed3",
+      "bytes": 1046,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/original.lua",
+      "relative_path": "original.lua",
+      "sha256": "02716ed24292ef82c94a316ca8d337670956835847c4889d36e15f14c142cd3d",
+      "bytes": 14634,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/run-native-witness.py",
+      "relative_path": "run-native-witness.py",
+      "sha256": "9a5212d64829c8c8ed9333c86dc382b8ccf24427a9f19fe754b0521ae60a40d1",
+      "bytes": 1381,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/run.py",
+      "relative_path": "run.py",
+      "sha256": "998e58624a7d731b34d86a9798dca4f7213fbadcf2568314dadd4bcd4ea2c611",
+      "bytes": 1374,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/runtime-source-identity.json",
+      "relative_path": "runtime-source-identity.json",
+      "sha256": "48708ea034c9da6867abaab5cf5b2a54621defa1d100be2f7d7b71d9f4f76c9f",
+      "bytes": 29147,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/setup.json",
+      "relative_path": "setup.json",
+      "sha256": "20096470efd2d9899d4a2ea7f4fc0c4e68e92305a68a79b7580989b75dd35ebb",
+      "bytes": 703,
+      "storage": "archived_text"
+    },
+    {
+      "source": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/validate-native-witness.py",
+      "relative_path": "validate-native-witness.py",
+      "sha256": "a735cb172bee98408ee4acc7a38d1ffa326de09397479c86a061a74250dd0570",
+      "bytes": 1582,
+      "storage": "archived_text"
+    }
+  ]
+}

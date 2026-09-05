@@ -123,7 +123,7 @@ int32_t lj_callxs_flush_generated_count(void);
   local function run_aggregate(base, n)
     local result
     for i = 1, n do
-      result = invoke(aggregate_fn,
+      result = invoke(aggregate_fn, 
         0.5, base + i)
     end
     return result
@@ -173,6 +173,7 @@ int32_t lj_callxs_flush_generated_count(void);
 
   local command, ok = start_ch:recv(10)
   assert(ok == true and command == "block_pointer")
+  jit.off(run_pointer, true)
   local pointer_result = run_pointer(ptr, 100, 8)
   assert(pointer_result == ptr and ffi.istype("int32_t *", pointer_result))
   assert(ready_ch:send({

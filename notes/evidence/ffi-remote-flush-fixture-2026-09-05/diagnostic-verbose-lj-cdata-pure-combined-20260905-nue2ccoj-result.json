@@ -1,0 +1,21 @@
+{
+  "exit": 1,
+  "stdout": "",
+  "stderr": "[TRACE flush]\n[TRACE --- diagnostic-verbose.lua:73 -- NYI: bytecode ISLT   at diagnostic-verbose.lua:74]\n[TRACE --- diagnostic-verbose.lua:117 -- NYI: bytecode ISLT   at diagnostic-verbose.lua:119]\n[TRACE --- diagnostic-verbose.lua:73 -- NYI: bytecode ISLT   at diagnostic-verbose.lua:74]\n[TRACE --- diagnostic-verbose.lua:73 -- NYI: bytecode ISLT   at diagnostic-verbose.lua:74]\n[TRACE --- diagnostic-verbose.lua:71 -- NYI: bytecode ISLT  ]\n[TRACE --- diagnostic-verbose.lua:73 -- leaving loop in root trace at diagnostic-verbose.lua:76]\n[TRACE --- diagnostic-verbose.lua:71 -- NYI: bytecode ?]\n[TRACE --- diagnostic-verbose.lua:73 -- NYI: bytecode ? at diagnostic-verbose.lua:74]\n/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/strict/src/luajit: ...-readiness-20260905-root-i9ll10l3/diagnostic-verbose.lua:221: ready first=nil second=timeout; joined=false result=...-readiness-20260905-root-i9ll10l3/diagnostic-verbose.lua:123: scalar blocker did not record XSAVE\nstack traceback:\n\t[C]: in function 'error'\n\t...-readiness-20260905-root-i9ll10l3/diagnostic-verbose.lua:221: in main chunk\n\t[C]: at 0x556ddbba5fc0\n",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/strict/src/luajit",
+    "-jon",
+    "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/diagnostic-verbose.lua"
+  ],
+  "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/strict",
+  "environment": {
+    "LJ_M7_FFI_CALLXS_FLUSH_SO": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/fixture.so",
+    "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/strict/src/?.lua;;"
+  },
+  "seconds": 10.006057718997909,
+  "runtime_sha256": "1aec3bf4dc5d07a6ea2a889dc669cb14aeb3e86809b357ba3729d5edf88e88e9",
+  "source_sha256": "65a1d6319468e8202e99fb43b1aea072ac1896bf4501479a1201b33f4ec453c6"
+}

@@ -1,0 +1,29 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/strict/src/luajit",
+    "/workspaces/lj-lockless/tools/test.lua",
+    "m7_ffi_callxs_authentic"
+  ],
+  "cwd": "/workspaces/lj-lockless",
+  "environment": {
+    "LJ_TEST_ROOT": "/workspaces/lj-lockless",
+    "JOBS": "4",
+    "MAKE_JOBS": "4",
+    "TMPDIR": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/canonical-tmp",
+    "LUA_PATH": "/workspaces/lj-lockless/src/?.lua;;"
+  },
+  "exit": 0,
+  "seconds": 27.652556036999158,
+  "final_source": {
+    "tests/t-ffi-callxs-remote-flush.lua": "ad71b68c0a52c6651e24354a655b6fd8171ee1910dd457f2c213d1a33042d716",
+    "tests/t-ffi-callxs-remote-flush-lib.c": "fc9eee70014373e5869998896fe930a7ad5cd30542fed32be42d103603f849f8"
+  },
+  "restored_binaries": {
+    "luajit": "8b3e002419c9de15b04f1fe1c8fe7c088132b0618f7d83e34b3e1c0fc294ac84",
+    "libluajit.a": "23274e5d1f03c3286e9cc4120bbba7d097dade1b2974b27844850be25c9b7cf8",
+    "libluajit.so": "f44d3ab8b017804678dd377ff72da0c03f10ca693ce7cf5e1c69ff8c8d7119ad"
+  }
+}

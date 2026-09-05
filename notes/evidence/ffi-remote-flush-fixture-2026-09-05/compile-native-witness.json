@@ -1,0 +1,17 @@
+{
+  "command": [
+    "cc",
+    "-O2",
+    "-shared",
+    "-fPIC",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/native-witness-lib.c",
+    "-o",
+    "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/native-witness.so"
+  ],
+  "exit": 0,
+  "stdout": "",
+  "stderr": ""
+}

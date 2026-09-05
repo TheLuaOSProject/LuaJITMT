@@ -1,0 +1,21 @@
+{
+  "exit": 1,
+  "stdout": "",
+  "stderr": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/strict/src/luajit: ...-readiness-20260905-root-i9ll10l3/diagnostic-join-v2.lua:220: ready first=nil second=timeout; joined=false result=...-readiness-20260905-root-i9ll10l3/diagnostic-join-v2.lua:122: scalar blocker did not record XSAVE\nstack traceback:\n\t[C]: in function 'error'\n\t...-readiness-20260905-root-i9ll10l3/diagnostic-join-v2.lua:220: in main chunk\n\t[C]: at 0x564dbd62afc0\n",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/strict/src/luajit",
+    "-jon",
+    "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/diagnostic-join-v2.lua"
+  ],
+  "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/strict",
+  "environment": {
+    "LJ_M7_FFI_CALLXS_FLUSH_SO": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/fixture.so",
+    "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/strict/src/?.lua;;"
+  },
+  "seconds": 10.006055718000425,
+  "runtime_sha256": "1aec3bf4dc5d07a6ea2a889dc669cb14aeb3e86809b357ba3729d5edf88e88e9",
+  "source_sha256": "c0a7abdb48afd42d3e97a3ac680e61dc25e51e36f349329e347e28449ca9be0b"
+}

@@ -1,0 +1,21 @@
+{
+  "head": "35cfaaa28e54dab337c6d320891ef36cb4bab6e5",
+  "compile": [
+    "cc",
+    "-O2",
+    "-shared",
+    "-fPIC",
+    "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/fixture-lib.c",
+    "-o",
+    "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/fixture.so"
+  ],
+  "exit": 0,
+  "stdout": "",
+  "stderr": "",
+  "source": {
+    "original.lua": "02716ed24292ef82c94a316ca8d337670956835847c4889d36e15f14c142cd3d",
+    "diagnostic-join.lua": "a4bf51e03fedf5397be7dfa9e4c380c0e6dcf83966cd4c0b8b31ae1fecbdb34d",
+    "fixture-lib.c": "eb1d4e13e8539facb91f32c328aa36b50a5476235685afa94bb71ad1c4078b03",
+    "fixture.so": "376b8ed1ad643d24403edf833cab19ce51f984c42c3563634a0131949b6f2509"
+  }
+}

@@ -123,7 +123,7 @@ int32_t lj_callxs_flush_generated_count(void);
   local function run_aggregate(base, n)
     local result
     for i = 1, n do
-      result = invoke(aggregate_fn,
+      result = invoke(aggregate_fn, 
         0.5, base + i)
     end
     return result

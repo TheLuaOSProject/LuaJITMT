@@ -13,9 +13,6 @@ int32_t lj_callxs_flush_entered_count(void);
 int32_t lj_callxs_flush_entry_count(void);
 int32_t lj_callxs_flush_effect_count(void);
 int32_t lj_callxs_flush_aggregate_call_count(void);
-void lj_callxs_flush_clear_traces(void);
-int32_t lj_callxs_flush_add_trace(uintptr_t, uint32_t);
-int32_t lj_callxs_flush_generated_count(void);
 int32_t lj_callxs_flush_maybe_block(int32_t);
 int32_t *lj_callxs_flush_ptr_maybe_block(int32_t *, int32_t);
 _Bool lj_callxs_flush_bool_maybe_block(int32_t, int32_t);
@@ -35,9 +32,6 @@ local worker = threading.spawn(function(ready_ch, start_ch, so_path)
   ffi.cdef [[
   void lj_callxs_flush_configure(int32_t, int32_t);
   int32_t lj_callxs_flush_aggregate_call_count(void);
-void lj_callxs_flush_clear_traces(void);
-int32_t lj_callxs_flush_add_trace(uintptr_t, uint32_t);
-int32_t lj_callxs_flush_generated_count(void);
   int32_t lj_callxs_flush_maybe_block(int32_t);
   int32_t *lj_callxs_flush_ptr_maybe_block(int32_t *, int32_t);
   _Bool lj_callxs_flush_bool_maybe_block(int32_t, int32_t);
@@ -52,15 +46,6 @@ int32_t lj_callxs_flush_generated_count(void);
     lj_callxs_flush_aggregate_maybe_block(double, int32_t);
   ]]
   local worker_lib = ffi.load(so_path)
-  -- Capture dispatch on the worker before recording. Shared-MT metatable and
-  -- CLibrary lookup recording remains conservatively refused; this fixture
-  -- exercises the generic foreign-call lifecycle through the real builtin.
-  local scalar_fn = worker_lib.lj_callxs_flush_maybe_block
-  local pointer_fn = worker_lib.lj_callxs_flush_ptr_maybe_block
-  local bool_fn = worker_lib.lj_callxs_flush_bool_maybe_block
-  local aggregate_fn = worker_lib.lj_callxs_flush_aggregate_maybe_block
-  local invoke = debug.getmetatable(scalar_fn).__call
-  assert(type(invoke) == "function")
   assert(ffi.sizeof("struct lj_callxs_flush_aggregate") == 24)
 
   local function trace_op_count(wanted)
@@ -82,24 +67,10 @@ int32_t lj_callxs_flush_generated_count(void);
   end
   jit.off(trace_op_count, true)
 
-  local function publish_trace_ranges()
-    worker_lib.lj_callxs_flush_clear_traces()
-    local count = 0
-    for tr = 1, 256 do
-      local code, addr = util.tracemc(tr)
-      if code then
-        assert(worker_lib.lj_callxs_flush_add_trace(addr, #code) == 1)
-        count = count + 1
-      end
-    end
-    assert(count > 0, "blocked call must have a published native caller")
-  end
-  jit.off(publish_trace_ranges, true)
-
   local function run_scalar(base, n)
     local sum = 0
     for i = 1, n do
-      sum = sum + invoke(scalar_fn, base + i)
+      sum = sum + worker_lib.lj_callxs_flush_maybe_block(base + i)
     end
     return sum
   end
@@ -107,7 +78,7 @@ int32_t lj_callxs_flush_generated_count(void);
   local function run_pointer(ptr, base, n)
     local result
     for i = 1, n do
-      result = invoke(pointer_fn, ptr, base + i)
+      result = worker_lib.lj_callxs_flush_ptr_maybe_block(ptr, base + i)
     end
     return result
   end
@@ -115,7 +86,7 @@ int32_t lj_callxs_flush_generated_count(void);
   local function run_bool(base, n, truth)
     local result
     for i = 1, n do
-      result = invoke(bool_fn, base + i, truth)
+      result = worker_lib.lj_callxs_flush_bool_maybe_block(base + i, truth)
     end
     return result
   end
@@ -123,7 +94,7 @@ int32_t lj_callxs_flush_generated_count(void);
   local function run_aggregate(base, n)
     local result
     for i = 1, n do
-      result = invoke(aggregate_fn,
+      result = worker_lib.lj_callxs_flush_aggregate_maybe_block(
         0.5, base + i)
     end
     return result
@@ -162,7 +133,6 @@ int32_t lj_callxs_flush_generated_count(void);
   local boxed_callxs = trace_op_count("CALLXS")
   assert(boxed_xsave > 0, "boxed blocker did not record XSAVE")
   assert(boxed_callxs > 0, "boxed blocker did not record CALLXS")
-  publish_trace_ranges()
   assert(ready_ch:send({
     phase = "pointer_ready",
     scalar_xsave = scalar_xsave,
@@ -193,7 +163,6 @@ int32_t lj_callxs_flush_generated_count(void);
   local bool_callxs = trace_op_count("CALLXS")
   assert(bool_xsave > 0, "boolean blocker did not record XSAVE")
   assert(bool_callxs > 0, "boolean blocker did not record CALLXS")
-  publish_trace_ranges()
   assert(ready_ch:send({
     phase = "bool_ready",
     bool_xsave = bool_xsave,
@@ -224,7 +193,6 @@ int32_t lj_callxs_flush_generated_count(void);
   local aggregate_callxs = trace_op_count("CALLXS")
   assert(aggregate_xsave > 0, "sret blocker did not record XSAVE")
   assert(aggregate_callxs > 0, "sret blocker did not record CALLXS")
-  publish_trace_ranges()
   assert(ready_ch:send({
     phase = "aggregate_ready",
     aggregate_xsave = aggregate_xsave,
@@ -249,23 +217,11 @@ int32_t lj_callxs_flush_generated_count(void);
 end, ready, start, so)
 
 local recorded, ready_ok = ready:recv(10)
-if ready_ok ~= true or type(recorded) ~= "table" then
-  local joined, why = worker:join(0)
-  error("worker did not become ready: " .. tostring(ready_ok) ..
-        "; join=" .. tostring(joined) .. "; " .. tostring(why))
-end
+if not ready_ok then local done, why = worker:join(0); error("no worker-ready; joined="..tostring(done).." result="..tostring(why)) end
 assert(ready_ok == true and type(recorded) == "table")
 assert(recorded.phase == "pointer_ready")
 assert(recorded.scalar_xsave > 0 and recorded.scalar_callxs > 0)
 assert(recorded.boxed_xsave > 0 and recorded.boxed_callxs > 0)
-
-local function assert_generated_entry()
-  local count = lib.lj_callxs_flush_generated_count()
-  -- Release before reporting failure, so close can join an interpreted caller.
-  if count ~= 1 then lib.lj_callxs_flush_unblock() end
-  assert(count == 1, "blocked foreign call did not originate in published mcode")
-end
-jit.off(assert_generated_entry, true)
 
 -- The first loop iteration reaches the patched loop backedge. The gate is on
 -- the eighth iteration, which therefore executes from the already-recorded
@@ -280,7 +236,6 @@ while lib.lj_callxs_flush_entered_count() == 0 and
 end
 assert(lib.lj_callxs_flush_entered_count() == 1,
        "generated CALLXS did not enter the blocker")
-assert_generated_entry()
 assert(lib.lj_callxs_flush_entry_count() == 1,
        "blocking call was entered more than once")
 assert(lib.lj_callxs_flush_effect_count() == 0,
@@ -332,7 +287,6 @@ while lib.lj_callxs_flush_entered_count() == 0 and
 end
 assert(lib.lj_callxs_flush_entered_count() == 1,
        "generated boolean CALLXS did not enter the blocker")
-assert_generated_entry()
 assert(lib.lj_callxs_flush_entry_count() == 1)
 assert(lib.lj_callxs_flush_effect_count() == 0)
 
@@ -381,7 +335,6 @@ while lib.lj_callxs_flush_entered_count() == 0 and
 end
 assert(lib.lj_callxs_flush_entered_count() == 1,
        "generated sret CALLXS did not enter the blocker")
-assert_generated_entry()
 assert(lib.lj_callxs_flush_entry_count() == 1,
        "blocking sret call was entered more than once")
 assert(lib.lj_callxs_flush_effect_count() == 0,

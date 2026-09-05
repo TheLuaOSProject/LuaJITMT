@@ -1,0 +1,23 @@
+{
+  "exit": 0,
+  "stdout": "t-ffi-callxs-remote-flush OK: boxed GC/flush 0.000/0.000s, bool GC/flush 0.000/0.000s, sret GC/flush 0.000/0.000s before release\n",
+  "stderr": "",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/asan/src/luajit",
+    "-jon",
+    "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/native-witness.lua"
+  ],
+  "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/asan",
+  "environment": {
+    "LJ_M7_FFI_CALLXS_FLUSH_SO": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/native-witness.so",
+    "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  "seconds": 0.03948706899973331,
+  "runtime_sha256": "21de9e18037373c7fce8f3781cc6b8ef0cf8a78f656b3e7f93380005acc3ceb5",
+  "library_sha256": "acd72917815d64e2960a413a853a32874a538d07dcd99506e20214664d7527fd",
+  "source_sha256": "3d39c7fb0352b16c06592ea10f99d02c770f3882c553766a34ef0d76ab335c0c"
+}

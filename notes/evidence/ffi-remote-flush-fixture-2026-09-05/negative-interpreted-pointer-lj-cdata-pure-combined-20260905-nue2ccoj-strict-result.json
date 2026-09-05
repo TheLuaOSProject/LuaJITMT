@@ -1,0 +1,22 @@
+{
+  "exit": 1,
+  "stdout": "",
+  "stderr": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/strict/src/luajit: ...-20260905-root-i9ll10l3/negative-interpreted-pointer.lua:267: blocked foreign call did not originate in published mcode\nstack traceback:\n\t[C]: in function 'assert'\n\t...-20260905-root-i9ll10l3/negative-interpreted-pointer.lua:267: in function 'assert_generated_entry'\n\t...-20260905-root-i9ll10l3/negative-interpreted-pointer.lua:284: in main chunk\n\t[C]: at 0x556138008fc0\n",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/strict/src/luajit",
+    "-jon",
+    "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/negative-interpreted-pointer.lua"
+  ],
+  "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/strict",
+  "environment": {
+    "LJ_M7_FFI_CALLXS_FLUSH_SO": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/native-witness.so",
+    "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/strict/src/?.lua;;"
+  },
+  "seconds": 0.008972335999715142,
+  "runtime_sha256": "1aec3bf4dc5d07a6ea2a889dc669cb14aeb3e86809b357ba3729d5edf88e88e9",
+  "library_sha256": "acd72917815d64e2960a413a853a32874a538d07dcd99506e20214664d7527fd",
+  "source_sha256": "95cea28c90e358888d9e5f9b7330bad5b94f9a873478e497d5c018f6a95237b4"
+}

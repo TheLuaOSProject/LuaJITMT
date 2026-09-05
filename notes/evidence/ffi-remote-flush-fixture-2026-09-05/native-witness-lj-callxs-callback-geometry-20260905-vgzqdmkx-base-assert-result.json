@@ -1,0 +1,22 @@
+{
+  "exit": 0,
+  "stdout": "t-ffi-callxs-remote-flush OK: boxed GC/flush 0.000/0.000s, bool GC/flush 0.000/0.000s, sret GC/flush 0.000/0.000s before release\n",
+  "stderr": "",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert/src/luajit",
+    "-jon",
+    "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/native-witness.lua"
+  ],
+  "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert",
+  "environment": {
+    "LJ_M7_FFI_CALLXS_FLUSH_SO": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/native-witness.so",
+    "LUA_PATH": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert/src/?.lua;;"
+  },
+  "seconds": 0.015713248001702596,
+  "runtime_sha256": "b58b39089cd270dd7915bc9e3dbec14716f386c55db8516764939444d6c21e8d",
+  "library_sha256": "acd72917815d64e2960a413a853a32874a538d07dcd99506e20214664d7527fd",
+  "source_sha256": "3d39c7fb0352b16c06592ea10f99d02c770f3882c553766a34ef0d76ab335c0c"
+}

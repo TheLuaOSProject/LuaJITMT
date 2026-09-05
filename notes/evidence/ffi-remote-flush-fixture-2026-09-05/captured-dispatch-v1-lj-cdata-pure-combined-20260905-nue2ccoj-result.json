@@ -1,0 +1,21 @@
+{
+  "exit": 0,
+  "stdout": "t-ffi-callxs-remote-flush OK: boxed GC/flush 0.000/0.000s, bool GC/flush 0.000/0.000s, sret GC/flush 0.000/0.000s before release\n",
+  "stderr": "",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/strict/src/luajit",
+    "-jon",
+    "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/captured-dispatch-v1.lua"
+  ],
+  "cwd": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/strict",
+  "environment": {
+    "LJ_M7_FFI_CALLXS_FLUSH_SO": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/fixture.so",
+    "LUA_PATH": "/tmp/lj-cdata-pure-combined-20260905-nue2ccoj/strict/src/?.lua;;"
+  },
+  "seconds": 0.015421760999743128,
+  "runtime_sha256": "1aec3bf4dc5d07a6ea2a889dc669cb14aeb3e86809b357ba3729d5edf88e88e9",
+  "source_sha256": "aa7e3da2dc6cf098cefc1d7641a9730345fc308bd1c78306a8a2bd6adc8c6272"
+}

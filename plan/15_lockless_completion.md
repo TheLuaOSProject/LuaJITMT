@@ -249,8 +249,8 @@ controls and post-fix completion tests:
   loop overwrite. Scalar callbacks, actual stack relocation/full GC, error
   unwind and cleanup pass in normal/assertion/ASan builds, including the
   current mode-0 poll repair. Existing XSAVE-staging and remote-flush aggregate
-  failures reproduce on baseline. The XSAVE fixture correction below closes
-  its gate; remote-flush readiness remains a separate follow-up. See
+  failures reproduce on baseline. The XSAVE and remote-flush fixture corrections
+  below close their gates while retaining the separate MT lookup limitation. See
   `notes/ffi-callback-stack-geometry-2026-09-05.md`.
 - The XSAVE staging fixture now completes SWEEP and resets fresh poison before
   warming its actual generated producer. Original shape, native owner/frame
@@ -264,6 +264,13 @@ controls and post-fix completion tests:
   Seven paired current-source field benchmarks recover 0.0684 s to 0.0206 s
   (69.9% less); this is a focused field-loop result. General MT method recording
   remains refused. See `notes/jit-cdata-pure-2026-09-05.md`.
+- The authentic CALLXS aggregate now passes its remote GC/flush, post-call and
+  nested-callback checks. The remote fixture captures actual builtin dispatch
+  before recording and requires each blocked pointer/bool/sret call's return PC
+  to be in published mcode. An interpreted-call negative fails that oracle.
+  Normal/assert/ASan and the shared canonical aggregate pass. General shared-MT
+  metatable/library lookup recording remains refused; no runtime source changes.
+  See `notes/ffi-remote-flush-fixture-2026-09-05.md`.
 - `1bce0fa5`: promote exhausted inline table dirty authority into pre-reserved
   persistent wide proof, retaining common stamp/token geometry. Small mappings
   use a dense sidecar plane and Huge mappings use checked tail reservation.
