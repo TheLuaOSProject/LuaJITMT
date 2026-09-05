@@ -1,0 +1,62 @@
+{
+  "base": "d680421c4cb50b85437d88255bc89358c5e3a6b1",
+  "control": "same normal sources, with only the meta scalar fast-path call removed",
+  "build": "normal static, default O2, debug symbols, no helper/assert flags",
+  "cpu": 30,
+  "system_isolation": false,
+  "gc_suppression": false,
+  "n": 100000,
+  "pairs_per_mode": 7,
+  "script_sha256": "538ce56d14da6128176c1d79405a2445507ed59103d0b26347c8054c7ae06ddd",
+  "binaries": {
+    "before": {
+      "path": "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal-before/src/luajit",
+      "sha256": "b91a597eb07e22250a54d3035299f2fea119654e26179fbe0304a238c6d8ae95"
+    },
+    "after": {
+      "path": "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/src/luajit",
+      "sha256": "71e4061bbf9ff703df8aa57742e5823e225e12402cc888202d0478bee1abe7d3"
+    }
+  },
+  "summary": {
+    "field": {
+      "before_median": 0.035858,
+      "after_median": 0.01974,
+      "before_range": [
+        0.03577,
+        0.035948
+      ],
+      "after_range": [
+        0.019719,
+        0.020074
+      ],
+      "ratio_of_medians": 0.5505047688103073
+    },
+    "array": {
+      "before_median": 0.023756,
+      "after_median": 0.015396,
+      "before_range": [
+        0.023673,
+        0.023772
+      ],
+      "after_range": [
+        0.015355,
+        0.015472
+      ],
+      "ratio_of_medians": 0.648088903855868
+    },
+    "boolean": {
+      "before_median": 0.035861,
+      "after_median": 0.020073,
+      "before_range": [
+        0.035829,
+        0.035897
+      ],
+      "after_range": [
+        0.019703,
+        0.020213
+      ],
+      "ratio_of_medians": 0.5597445693092775
+    }
+  }
+}

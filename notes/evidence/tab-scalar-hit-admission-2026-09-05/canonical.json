@@ -1,0 +1,26 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/tree/src/luajit",
+    "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/canonical/tools/test.lua",
+    "m5_tab_scalar_hit",
+    "m5_tab_rooted_get_try",
+    "m5_tab_rooted_len_try",
+    "m5_tab_rooted_reader",
+    "m5_tab_rooted_readers",
+    "m5_meta_rooted_chain",
+    "m5_x64_rooted_reads",
+    "m5_tab_clear_entering",
+    "m5_tab_forward_filter",
+    "m5_tab_chain_order"
+  ],
+  "cwd": "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/canonical",
+  "exit": 0,
+  "seconds": 144.39648526900055,
+  "env": {
+    "LJ_TEST_ROOT": "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/canonical",
+    "JOBS": "4"
+  }
+}

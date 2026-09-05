@@ -1,0 +1,13 @@
+--- /workspaces/lj-lockless/src/lj_meta.c	2026-09-05 00:53:03.827987338 +0000
++++ /tmp/lj-tab-scalar-hit-20260905-mosheh9q/negative/src/lj_meta.c	2026-09-05 01:06:39.632471360 +0000
+@@ -704,10 +704,6 @@
+   int capture;
+   int loop;
+ 
+-  /* A positive scalar hit needs neither chain allocation nor a GC result
+-  ** transfer. Keep every unsupported case on the existing general path. */
+-  if (!funcenv && lj_tab_getscalar_rooted_try(L, o, k, out))
+-    return out;
+   meta_chain_roots_init(L, &roots);
+   capture = meta_chain_capture_inputs(L, &roots, &oref, &kref);
+   if (LJ_UNLIKELY(capture != META_CAPTURE_VALID)) {

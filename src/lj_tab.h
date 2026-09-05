@@ -419,6 +419,16 @@ LJ_FUNC int lj_tab_gettv_rooted_try(lua_State *L, cTValue *tabroot,
 				     cTValue *keyroot, TValue *outroot);
 LJ_FUNC int lj_tab_getinttv_rooted_try(lua_State *L, cTValue *tabroot,
 					int32_t key, TValue *outroot);
+/* Positive number/boolean hit only, with small table/string/vector leases
+** independent of global SMR. Sources must be authoritative cells in a caller-
+** retained container or stable owner/prototype roots (including VM constant
+** scratch backed by the active prototype). Actor/L ownership alone does not
+** establish source provenance. Output must be an enumerated owner root.
+** No allocation, callback or semantic publication on failure;
+** return zero with every cell unchanged for misses or unsupported cases.
+** The ordinary rooted API retains its broader semantics and progress debt. */
+LJ_FUNC int lj_tab_getscalar_rooted_try(lua_State *L, cTValue *tabroot,
+				      cTValue *keyroot, TValue *outroot);
 /* Copy one semantic value starting from an authoritative table TValue root.
 ** The helper retains the exact parent, key and result incarnations across its
 ** current-generation SMR read, and release-publishes into an already
@@ -488,6 +498,17 @@ typedef void (*LJTabRootedReaderRetryHook)(lua_State *L, GCtab *t,
 /* Test-only one-shot hook immediately before rooted length validates its
 ** captured table generation. Hooks must not wait, allocate or throw. */
 typedef void (*LJTabLenRootedTryHook)(GCtab *t);
+typedef void (*LJTabScalarRootedTryHook)(lua_State *L, GCtab *t,
+				       uint32_t stage);
+enum {
+  LJ_TAB_SCALAR_TEST_SOURCE = 1,
+  LJ_TAB_SCALAR_TEST_VECTORS = 2,
+  LJ_TAB_SCALAR_TEST_RETAINED = 3,
+  LJ_TAB_SCALAR_TEST_RESULT = 4,
+  LJ_TAB_SCALAR_TEST_VALUE = 5
+};
+LJ_FUNC void lj_tab_test_set_scalar_rooted_try_hook(
+  LJTabScalarRootedTryHook hook);
 typedef void (*LJTabResizeDescInstallHook)(lua_State *L, GCtab *t,
 					   TabResizeDesc *desc,
 					   uint32_t stage);

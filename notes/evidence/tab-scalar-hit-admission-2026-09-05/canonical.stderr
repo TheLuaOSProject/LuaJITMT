@@ -1,0 +1,29 @@
+== m5_tab_scalar_hit ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLUA_USE_ASSERT -I'/tmp/lj-tab-scalar-hit-20260905-mosheh9q/canonical/src' '/tmp/lj-tab-scalar-hit-20260905-mosheh9q/canonical/tests/t-tab-scalar-hit.c' '/tmp/lj-tab-scalar-hit-20260905-mosheh9q/canonical/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj_t-tab-scalar-hit'
++ timeout '45s' '/tmp/lj_t-tab-scalar-hit'
+ok m5_tab_scalar_hit
+== m5_tab_rooted_get_try ==
+ok m5_tab_rooted_get_try
+== m5_tab_rooted_len_try ==
+fatal: not a git repository (or any of the parent directories): .git
+fatal: not a git repository (or any of the parent directories): .git
+ok m5_tab_rooted_len_try
+== m5_tab_rooted_reader ==
+fatal: not a git repository (or any of the parent directories): .git
+fatal: not a git repository (or any of the parent directories): .git
+ok m5_tab_rooted_reader
+== m5_tab_rooted_readers ==
++ LJ_M5_TAB_ROOTED_READER_ROUNDS='2400' LUA_PATH='/tmp/lj-tab-scalar-hit-20260905-mosheh9q/canonical/tests/lib/?.lua;/tmp/lj-tab-scalar-hit-20260905-mosheh9q/canonical/src/?.lua;/tmp/lj-tab-scalar-hit-20260905-mosheh9q/canonical/src/jit/?.lua;;' timeout '40s' '/tmp/lj-tab-scalar-hit-20260905-mosheh9q/canonical/src/luajit' '/tmp/lj-tab-scalar-hit-20260905-mosheh9q/canonical/tests/t-tab-rooted-readers.lua'
+ok m5_tab_rooted_readers
+== m5_meta_rooted_chain ==
+ok m5_meta_rooted_chain
+== m5_x64_rooted_reads ==
+ok m5_x64_rooted_reads
+== m5_tab_clear_entering ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLJ_TAB_TEST_HELPERS -I'/tmp/lj-tab-scalar-hit-20260905-mosheh9q/canonical/src' '/tmp/lj-tab-scalar-hit-20260905-mosheh9q/canonical/tests/t-tab-clear-entering.c' '/tmp/lj-tab-scalar-hit-20260905-mosheh9q/canonical/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj_t-tab-clear-entering'
++ timeout '20s' '/tmp/lj_t-tab-clear-entering'
+ok m5_tab_clear_entering
+== m5_tab_forward_filter ==
+ok m5_tab_forward_filter
+== m5_tab_chain_order ==
+ok m5_tab_chain_order

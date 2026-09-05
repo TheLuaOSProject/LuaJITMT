@@ -1,0 +1,192 @@
+[
+  {
+    "name": "asan-build",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-j4",
+      "BUILDMODE=static",
+      "CCDEBUG=-g",
+      "TARGET_STRIP=:",
+      "XCFLAGS=-DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLUA_USE_ASSERT",
+      "CC=clang",
+      "CCOPT=-O1 -fno-omit-frame-pointer -fsanitize=address",
+      "CCOPT_x86=",
+      "CCOPT_x64=",
+      "TARGET_LDFLAGS=-fsanitize=address",
+      "HOST_LDFLAGS=-fsanitize=address"
+    ],
+    "cwd": "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan",
+    "exit": 0,
+    "seconds": 11.953854401999706,
+    "env": {
+      "ASAN_OPTIONS": "detect_leaks=0"
+    }
+  },
+  {
+    "name": "asan-t-tab-scalar-hit-compile",
+    "command": [
+      "clang",
+      "-g",
+      "-O1",
+      "-fno-omit-frame-pointer",
+      "-fsanitize=address",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan/src",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan/tests/t-tab-scalar-hit.c",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan-t-tab-scalar-hit"
+    ],
+    "cwd": "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan",
+    "exit": 0,
+    "seconds": 0.31516353199913283,
+    "env": null
+  },
+  {
+    "name": "asan-t-tab-scalar-hit",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan-t-tab-scalar-hit"
+    ],
+    "cwd": "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan",
+    "exit": 0,
+    "seconds": 0.06417752199922688,
+    "env": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    }
+  },
+  {
+    "name": "asan-t-tab-rooted-get-try-compile",
+    "command": [
+      "clang",
+      "-g",
+      "-O1",
+      "-fno-omit-frame-pointer",
+      "-fsanitize=address",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan/src",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan/tests/t-tab-rooted-get-try.c",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan-t-tab-rooted-get-try"
+    ],
+    "cwd": "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan",
+    "exit": 0,
+    "seconds": 0.26500380499965104,
+    "env": null
+  },
+  {
+    "name": "asan-t-tab-rooted-get-try",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan-t-tab-rooted-get-try"
+    ],
+    "cwd": "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan",
+    "exit": 0,
+    "seconds": 0.016154577000634163,
+    "env": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    }
+  },
+  {
+    "name": "asan-t-tab-rooted-len-try-compile",
+    "command": [
+      "clang",
+      "-g",
+      "-O1",
+      "-fno-omit-frame-pointer",
+      "-fsanitize=address",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan/src",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan/tests/t-tab-rooted-len-try.c",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan-t-tab-rooted-len-try"
+    ],
+    "cwd": "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan",
+    "exit": 0,
+    "seconds": 0.2647952340012125,
+    "env": null
+  },
+  {
+    "name": "asan-t-tab-rooted-len-try",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan-t-tab-rooted-len-try"
+    ],
+    "cwd": "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan",
+    "exit": 0,
+    "seconds": 0.0160982649995276,
+    "env": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    }
+  },
+  {
+    "name": "asan-t-tab-rooted-reader-compile",
+    "command": [
+      "clang",
+      "-g",
+      "-O1",
+      "-fno-omit-frame-pointer",
+      "-fsanitize=address",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan/src",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan/tests/t-tab-rooted-reader.c",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan-t-tab-rooted-reader"
+    ],
+    "cwd": "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan",
+    "exit": 0,
+    "seconds": 0.2647994409999228,
+    "env": null
+  },
+  {
+    "name": "asan-t-tab-rooted-reader",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan-t-tab-rooted-reader"
+    ],
+    "cwd": "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan",
+    "exit": 0,
+    "seconds": 0.0321086900003138,
+    "env": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    }
+  }
+]

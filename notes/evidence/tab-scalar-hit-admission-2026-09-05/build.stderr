@@ -1,0 +1,15 @@
+lj_gc2.c: In function ‘lj_gc2_small_lease_try’:
+lj_gc2.c:16682:25: error: implicit declaration of function ‘gc2_small_lifetime_readable’; did you mean ‘gc2_small_lifetime_nearest’? [-Wimplicit-function-declaration]
+16682 |       (expected_gct && !gc2_small_lifetime_readable(a, cell)) ||
+      |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |                         gc2_small_lifetime_nearest
+lj_gc2.c: At top level:
+lj_gc2.c:16753:23: error: static declaration of ‘gc2_small_lifetime_readable’ follows non-static declaration
+16753 | static LJ_AINLINE int gc2_small_lifetime_readable(GCArena *a,
+      |                       ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+lj_gc2.c:16682:25: note: previous implicit declaration of ‘gc2_small_lifetime_readable’ with type ‘int()’
+16682 |       (expected_gct && !gc2_small_lifetime_readable(a, cell)) ||
+      |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+make[1]: *** [Makefile:712: lj_gc2.o] Error 1
+make[1]: *** Waiting for unfinished jobs....
+make: *** [Makefile:141: default] Error 2

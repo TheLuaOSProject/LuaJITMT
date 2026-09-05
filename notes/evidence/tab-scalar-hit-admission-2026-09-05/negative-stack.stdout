@@ -1,0 +1,28 @@
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+[New Thread 0x7ffff7a4f6c0 (LWP 93428)]
+real IDLE reclaimer paused; entering ordinary scalar field loop
+
+Thread 1 "negative-t-tab-" received signal SIGALRM, Alarm clock.
+lj_thr_retry_yield (L=0x7ffff7c90080) at lj_thr.c:2201
+2201	  for (i = 0; i < 64; i++)
+
+Thread 2 (Thread 0x7ffff7a4f6c0 (LWP 93428) "negative-t-tab-"):
+#0  la_load32_acq (p=0x5555557064a8 <gc2_idle_reclaim_test_release>) at /tmp/lj-tab-scalar-hit-20260905-mosheh9q/negative/src/lj_atomic.h:33
+#1  gc2_idle_reclaim_test_pause_after_jit_quiescence () at lj_gc2.c:760
+#2  gc2_idle_reclaim_enter (g=g@entry=0x7ffff7c90130) at lj_gc2.c:7074
+#3  0x000055555558687d in lj_gc2_reclaim_retired (g=0x7ffff7c90130, epoch=1) at lj_gc2.c:7147
+#4  0x000055555555c434 in reclaim_main (arg=0x7fffffffdf40) at /tmp/lj-tab-scalar-hit-20260905-mosheh9q/negative/tests/t-tab-scalar-hit.c:314
+#5  0x00007ffff7d35b7b in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#6  0x00007ffff7db37f8 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+
+Thread 1 (Thread 0x7ffff7ca21c0 (LWP 93425) "negative-t-tab-"):
+#0  lj_thr_retry_yield (L=0x7ffff7c90080) at lj_thr.c:2201
+#1  0x00005555555ad98f in lj_tab_wait_l (L=L@entry=0x7ffff7c90080) at lj_tab.c:237
+#2  0x00005555555c56c8 in meta_chain_capture_inputs (L=L@entry=0x7ffff7c90080, roots=roots@entry=0x7fffffffdd30, oref=oref@entry=0x7fffffffdd50, kref=kref@entry=0x7fffffffdd70) at lj_meta.c:517
+#3  0x00005555555c624c in meta_tget_rooted_mode (L=0x7ffff7c90080, o=<optimized out>, k=<optimized out>, out=<optimized out>, funcenv=<optimized out>) at lj_meta.c:708
+#4  0x00005555556495f1 in lj_vmeta_tgetv ()
+#5  0x00005555555ccdc7 in lj_vm_pcall_unwind (L=L@entry=0x7ffff7c90080, base=0x7ffff7a726a0, nres1=nres1@entry=2, ef=ef@entry=0) at lj_state.c:130
+#6  0x0000555555600eb0 in lua_pcall (L=L@entry=0x7ffff7c90080, nargs=nargs@entry=1, nresults=nresults@entry=1, errfunc=errfunc@entry=0) at lj_api.c:2797
+#7  0x000055555555c1f3 in paused_reclaimer () at /tmp/lj-tab-scalar-hit-20260905-mosheh9q/negative/tests/t-tab-scalar-hit.c:343
+#8  0x000055555555cffc in main (argc=<optimized out>, argv=<optimized out>) at /tmp/lj-tab-scalar-hit-20260905-mosheh9q/negative/tests/t-tab-scalar-hit.c:392

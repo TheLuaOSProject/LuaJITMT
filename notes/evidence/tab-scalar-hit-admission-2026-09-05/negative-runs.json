@@ -1,0 +1,58 @@
+[
+  {
+    "name": "negative-build",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-j4",
+      "BUILDMODE=static",
+      "CCDEBUG=-g",
+      "TARGET_STRIP=:",
+      "XCFLAGS=-DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLUA_USE_ASSERT"
+    ],
+    "cwd": "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/negative",
+    "exit": 0,
+    "seconds": 10.59155770399957,
+    "env": null
+  },
+  {
+    "name": "negative-t-tab-scalar-hit-compile",
+    "command": [
+      "cc",
+      "-g",
+      "-O1",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLUA_USE_ASSERT",
+      "-I/tmp/lj-tab-scalar-hit-20260905-mosheh9q/negative/src",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/negative/tests/t-tab-scalar-hit.c",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/negative/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/negative-t-tab-scalar-hit"
+    ],
+    "cwd": "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/negative",
+    "exit": 0,
+    "seconds": 0.21529707499939832,
+    "env": null
+  },
+  {
+    "name": "negative-t-tab-scalar-hit",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/negative-t-tab-scalar-hit",
+      "paused-only"
+    ],
+    "cwd": "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/negative",
+    "exit": -14,
+    "seconds": 5.029334164000829,
+    "env": null
+  }
+]

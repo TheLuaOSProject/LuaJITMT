@@ -1,0 +1,1 @@
+t-tab-rooted-reader OK: rooted table snapshots preserve parent/key/result lifetimes

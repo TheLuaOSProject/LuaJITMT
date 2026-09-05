@@ -1,0 +1,8 @@
+simple/nonmarking/aliases/misses passed
+source replacement/real resize/retirement passed
+protected candidates/collision keys/vector bounds passed
+Huge/custom allocator fallback passed
+real IDLE reclaimer paused; entering ordinary scalar field loop
+ordinary scalar field loop completed before reclaimer release
+paused unrelated plain-arena writer remains a bounded refusal
+scalar table-hit tests passed

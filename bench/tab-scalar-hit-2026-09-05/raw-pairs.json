@@ -1,0 +1,842 @@
+[
+  {
+    "mode": "field",
+    "pair": 0,
+    "variant": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal-before/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "field"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.040670408998266794,
+    "stdout": "field 1700000 0.035854000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.035854
+  },
+  {
+    "mode": "field",
+    "pair": 0,
+    "variant": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "field"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.024700563999431324,
+    "stdout": "field 1700000 0.019920000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.01992
+  },
+  {
+    "mode": "field",
+    "pair": 1,
+    "variant": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "field"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.024367451000216533,
+    "stdout": "field 1700000 0.019735000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.019735
+  },
+  {
+    "mode": "field",
+    "pair": 1,
+    "variant": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal-before/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "field"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.040542058000937686,
+    "stdout": "field 1700000 0.035837000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.035837
+  },
+  {
+    "mode": "field",
+    "pair": 2,
+    "variant": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal-before/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "field"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.040213051999671734,
+    "stdout": "field 1700000 0.035770000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.03577
+  },
+  {
+    "mode": "field",
+    "pair": 2,
+    "variant": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "field"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.024201549000281375,
+    "stdout": "field 1700000 0.019719000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.019719
+  },
+  {
+    "mode": "field",
+    "pair": 3,
+    "variant": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "field"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.024235906999820145,
+    "stdout": "field 1700000 0.019765000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.019765
+  },
+  {
+    "mode": "field",
+    "pair": 3,
+    "variant": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal-before/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "field"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.04072976300085429,
+    "stdout": "field 1700000 0.035858000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.035858
+  },
+  {
+    "mode": "field",
+    "pair": 4,
+    "variant": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal-before/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "field"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.040706023000893765,
+    "stdout": "field 1700000 0.035901000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.035901
+  },
+  {
+    "mode": "field",
+    "pair": 4,
+    "variant": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "field"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.024492984999596956,
+    "stdout": "field 1700000 0.019740000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.01974
+  },
+  {
+    "mode": "field",
+    "pair": 5,
+    "variant": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "field"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.024452281000776566,
+    "stdout": "field 1700000 0.019728000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.019728
+  },
+  {
+    "mode": "field",
+    "pair": 5,
+    "variant": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal-before/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "field"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.04068056399955822,
+    "stdout": "field 1700000 0.035948000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.035948
+  },
+  {
+    "mode": "field",
+    "pair": 6,
+    "variant": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal-before/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "field"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.04063241000039852,
+    "stdout": "field 1700000 0.035904000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.035904
+  },
+  {
+    "mode": "field",
+    "pair": 6,
+    "variant": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "field"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.024793819999104016,
+    "stdout": "field 1700000 0.020074000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.020074
+  },
+  {
+    "mode": "array",
+    "pair": 0,
+    "variant": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal-before/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "array"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.02836219299933873,
+    "stdout": "array 1700000 0.023710000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.02371
+  },
+  {
+    "mode": "array",
+    "pair": 0,
+    "variant": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "array"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.02018681700064917,
+    "stdout": "array 1700000 0.015434000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.015434
+  },
+  {
+    "mode": "array",
+    "pair": 1,
+    "variant": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "array"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.019899195998732466,
+    "stdout": "array 1700000 0.015389000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.015389
+  },
+  {
+    "mode": "array",
+    "pair": 1,
+    "variant": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal-before/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "array"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.02806702599991695,
+    "stdout": "array 1700000 0.023673000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.023673
+  },
+  {
+    "mode": "array",
+    "pair": 2,
+    "variant": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal-before/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "array"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.02835512100136839,
+    "stdout": "array 1700000 0.023772000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.023772
+  },
+  {
+    "mode": "array",
+    "pair": 2,
+    "variant": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "array"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.020048069000040414,
+    "stdout": "array 1700000 0.015472000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.015472
+  },
+  {
+    "mode": "array",
+    "pair": 3,
+    "variant": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "array"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.019904220000171335,
+    "stdout": "array 1700000 0.015355000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.015355
+  },
+  {
+    "mode": "array",
+    "pair": 3,
+    "variant": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal-before/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "array"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.028370354999424308,
+    "stdout": "array 1700000 0.023730000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.02373
+  },
+  {
+    "mode": "array",
+    "pair": 4,
+    "variant": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal-before/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "array"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.028332228001090698,
+    "stdout": "array 1700000 0.023772000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.023772
+  },
+  {
+    "mode": "array",
+    "pair": 4,
+    "variant": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "array"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.019987043999208254,
+    "stdout": "array 1700000 0.015396000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.015396
+  },
+  {
+    "mode": "array",
+    "pair": 5,
+    "variant": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "array"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.020040722998601268,
+    "stdout": "array 1700000 0.015412000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.015412
+  },
+  {
+    "mode": "array",
+    "pair": 5,
+    "variant": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal-before/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "array"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.02829751199897146,
+    "stdout": "array 1700000 0.023756000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.023756
+  },
+  {
+    "mode": "array",
+    "pair": 6,
+    "variant": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal-before/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "array"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.02831118200083438,
+    "stdout": "array 1700000 0.023765000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.023765
+  },
+  {
+    "mode": "array",
+    "pair": 6,
+    "variant": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "array"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.01999296400026651,
+    "stdout": "array 1700000 0.015394000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.015394
+  },
+  {
+    "mode": "boolean",
+    "pair": 0,
+    "variant": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal-before/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "boolean"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.04056296599992493,
+    "stdout": "boolean 100000 0.035861000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.035861
+  },
+  {
+    "mode": "boolean",
+    "pair": 0,
+    "variant": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "boolean"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.024566395000874763,
+    "stdout": "boolean 100000 0.019964000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.019964
+  },
+  {
+    "mode": "boolean",
+    "pair": 1,
+    "variant": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "boolean"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.024717211001188844,
+    "stdout": "boolean 100000 0.020146000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.020146
+  },
+  {
+    "mode": "boolean",
+    "pair": 1,
+    "variant": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal-before/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "boolean"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.04053089399894816,
+    "stdout": "boolean 100000 0.035859000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.035859
+  },
+  {
+    "mode": "boolean",
+    "pair": 2,
+    "variant": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal-before/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "boolean"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.0405510239997966,
+    "stdout": "boolean 100000 0.035836000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.035836
+  },
+  {
+    "mode": "boolean",
+    "pair": 2,
+    "variant": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "boolean"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.024836131999109057,
+    "stdout": "boolean 100000 0.020132000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.020132
+  },
+  {
+    "mode": "boolean",
+    "pair": 3,
+    "variant": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "boolean"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.02467983099995763,
+    "stdout": "boolean 100000 0.020073000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.020073
+  },
+  {
+    "mode": "boolean",
+    "pair": 3,
+    "variant": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal-before/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "boolean"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.040407043999948655,
+    "stdout": "boolean 100000 0.035897000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.035897
+  },
+  {
+    "mode": "boolean",
+    "pair": 4,
+    "variant": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal-before/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "boolean"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.04053202900104225,
+    "stdout": "boolean 100000 0.035881000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.035881
+  },
+  {
+    "mode": "boolean",
+    "pair": 4,
+    "variant": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "boolean"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.024446228999295272,
+    "stdout": "boolean 100000 0.019777000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.019777
+  },
+  {
+    "mode": "boolean",
+    "pair": 5,
+    "variant": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "boolean"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.025060557998585864,
+    "stdout": "boolean 100000 0.020213000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.020213
+  },
+  {
+    "mode": "boolean",
+    "pair": 5,
+    "variant": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal-before/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "boolean"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.040603874000225915,
+    "stdout": "boolean 100000 0.035862000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.035862
+  },
+  {
+    "mode": "boolean",
+    "pair": 6,
+    "variant": "before",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal-before/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "boolean"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.040434497999740415,
+    "stdout": "boolean 100000 0.035829000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.035829
+  },
+  {
+    "mode": "boolean",
+    "pair": 6,
+    "variant": "after",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/src/luajit",
+      "-joff",
+      "/workspaces/lj-lockless/bench/tab-scalar-hit-2026-09-05/scalar-hit.lua",
+      "100000",
+      "boolean"
+    ],
+    "exit": 0,
+    "wall_seconds": 0.02441018599893141,
+    "stdout": "boolean 100000 0.019703000\n",
+    "stderr": "",
+    "loop_cpu_seconds": 0.019703
+  }
+]

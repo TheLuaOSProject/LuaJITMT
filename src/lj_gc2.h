@@ -681,6 +681,17 @@ LJ_FUNC int lj_gc2_obj_lease_acquire(global_State *g, GCobj *o,
 /* Acquire one exact registered raw allocation with the same tri-state result. */
 LJ_FUNC int lj_gc2_mem_lease_acquire(global_State *g, void *p,
 				      LJGC2Lease *lease);
+/* Nonmarking small-allocation admission through the persistent mapping
+** registry only. expected_gct accepts TAB/STR, or zero for a plain allocation.
+** No global SMR, Huge/custom allocator fallback, allocation or waiting.
+** On success release the lease after the final byte read. spanp is a
+** conservative cell-span bound, capped at the small allocation limit; an
+** unused bump tail can make it larger than the original requested size.
+** The caller must confirm its authoritative source before reading a variable
+** layout header, whose immutable size remains the allocation contract. */
+LJ_FUNC int lj_gc2_small_lease_try(global_State *g, const void *p,
+				 size_t minimum, uint32_t expected_gct,
+				 LJGC2Lease *lease, size_t *spanp);
 /* Release is idempotent and zeros the public token before dropping admission. */
 LJ_FUNC void lj_gc2_lease_release(LJGC2Lease *lease);
 /* Resolve an interior bytecode pointer through allocator identity and retain

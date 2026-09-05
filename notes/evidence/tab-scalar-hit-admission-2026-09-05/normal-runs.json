@@ -1,0 +1,49 @@
+[
+  {
+    "name": "normal-build",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-j4",
+      "BUILDMODE=static",
+      "CCDEBUG=-g",
+      "TARGET_STRIP=:"
+    ],
+    "cwd": "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal",
+    "exit": 0,
+    "seconds": 12.134052303999852,
+    "env": null
+  },
+  {
+    "name": "stock-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/src/luajit",
+      "-joff",
+      "test.lua"
+    ],
+    "cwd": "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/tests/stock/test",
+    "exit": 0,
+    "seconds": 2.5199785299992072,
+    "env": null
+  },
+  {
+    "name": "stock-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/src/luajit",
+      "-jon",
+      "test.lua"
+    ],
+    "cwd": "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal/tests/stock/test",
+    "exit": 0,
+    "seconds": 2.5681106579995685,
+    "env": null
+  }
+]

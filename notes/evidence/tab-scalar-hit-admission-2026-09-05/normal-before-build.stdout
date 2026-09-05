@@ -1,0 +1,9 @@
+==== Building LuaJIT 2.1 ====
+make -C src
+make[1]: Entering directory '/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal-before/src'
+CC        lj_meta.o
+AR        libluajit.a
+LINK      luajit
+OK        Successfully built LuaJIT
+make[1]: Leaving directory '/tmp/lj-tab-scalar-hit-20260905-mosheh9q/normal-before/src'
+==== Successfully built LuaJIT 2.1 ====

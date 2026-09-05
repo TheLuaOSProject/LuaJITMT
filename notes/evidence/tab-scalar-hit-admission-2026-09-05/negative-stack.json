@@ -1,0 +1,19 @@
+{
+  "command": [
+    "gdb",
+    "-q",
+    "-batch",
+    "-ex",
+    "set pagination off",
+    "-ex",
+    "handle SIGALRM stop print nopass",
+    "-ex",
+    "run paused-only",
+    "-ex",
+    "thread apply all bt",
+    "--args",
+    "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/negative-t-tab-scalar-hit"
+  ],
+  "exit": 0,
+  "seconds": 5.125116077999337
+}

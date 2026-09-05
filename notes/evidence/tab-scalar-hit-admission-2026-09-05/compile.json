@@ -1,0 +1,20 @@
+{
+  "command": [
+    "cc",
+    "-g",
+    "-O1",
+    "-DLJ_GC2_TEST_HELPERS",
+    "-DLJ_TAB_TEST_HELPERS",
+    "-DLJ_ARENA_TEST_HELPERS",
+    "-DLUA_USE_ASSERT",
+    "-I/tmp/lj-tab-scalar-hit-20260905-mosheh9q/tree/src",
+    "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/tree/tests/t-tab-scalar-hit.c",
+    "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/tree/src/libluajit.a",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-o",
+    "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/t-tab-scalar-hit"
+  ],
+  "exit": 1
+}

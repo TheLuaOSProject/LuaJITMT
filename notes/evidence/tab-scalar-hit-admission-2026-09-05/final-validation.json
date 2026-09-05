@@ -1,0 +1,32 @@
+{
+  "final_fixture_sha256": "3f22601cdf84eaafec855d25b82ab7fac71d7111afcf97d63b1ac04400c6df20",
+  "final_fixture_git_blob": "ac74d35586699d5e20ad438eaae36dfac4cbb404",
+  "production_git_blobs": {
+    "src/lj_meta.c": "f99d24ee9a01eb90addfeef37cbfa31030c1c7da",
+    "src/lj_tab.c": "2936c295abc8ef1581eac4992d8eec0aa23d9553",
+    "src/lj_tab.h": "902e6f19215cb4b64c7fc6f7734368acc369c9f6",
+    "src/lj_gc2.c": "8cfdceba49e1d01e86a5e5ec8dae885b484ba9de",
+    "src/lj_gc2.h": "cc3129bf9344559dc88fbf4120ad3195d8adc070"
+  },
+  "results": [
+    {
+      "variant": "tree",
+      "status": "passed",
+      "stdout": "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/tree-fixture-final.stdout",
+      "stdout_contents": "simple/nonmarking/aliases/misses passed\nsource replacement/real resize/retirement passed\nprotected candidates/collision keys/vector bounds passed\nHuge fallback/custom allocator preflight passed\nreal IDLE reclaimer paused; entering ordinary scalar field loop\nordinary scalar field loop completed before reclaimer release\npaused unrelated plain-arena writer remains a bounded refusal\nscalar table-hit tests passed\n",
+      "stderr": "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/tree-fixture-final.stderr",
+      "stderr_contents": "",
+      "runtime_ASAN_OPTIONS": null
+    },
+    {
+      "variant": "asan",
+      "status": "passed",
+      "stdout": "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan-fixture-final.stdout",
+      "stdout_contents": "simple/nonmarking/aliases/misses passed\nsource replacement/real resize/retirement passed\nprotected candidates/collision keys/vector bounds passed\nHuge fallback/custom allocator preflight passed\nreal IDLE reclaimer paused; entering ordinary scalar field loop\nordinary scalar field loop completed before reclaimer release\npaused unrelated plain-arena writer remains a bounded refusal\nscalar table-hit tests passed\n",
+      "stderr": "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/asan-fixture-final.stderr",
+      "stderr_contents": "",
+      "runtime_ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    }
+  ],
+  "note": "Final helper/assert and ASan runs after additional key and retired-queue assertions; final-fixtures.json preserves the preceding run and its timing. Final test compilation additionally used -Wall -Wextra -Werror. No production sources changed."
+}

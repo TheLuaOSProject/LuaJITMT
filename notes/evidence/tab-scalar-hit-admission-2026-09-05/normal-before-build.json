@@ -1,0 +1,14 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-j4",
+    "BUILDMODE=static",
+    "CCDEBUG=-g",
+    "TARGET_STRIP=:"
+  ],
+  "exit": 0,
+  "seconds": 0.41502189700076997
+}

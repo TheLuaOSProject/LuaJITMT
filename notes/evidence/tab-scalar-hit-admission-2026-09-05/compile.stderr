@@ -1,0 +1,4 @@
+/tmp/lj-tab-scalar-hit-20260905-mosheh9q/tree/tests/t-tab-scalar-hit.c: In function ‘simple_cases’:
+/tmp/lj-tab-scalar-hit-20260905-mosheh9q/tree/tests/t-tab-scalar-hit.c:102:3: error: implicit declaration of function ‘setfalseV’ [-Wimplicit-function-declaration]
+  102 |   setfalseV(slot);
+      |   ^~~~~~~~~

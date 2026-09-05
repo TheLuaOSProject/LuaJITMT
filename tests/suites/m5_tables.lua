@@ -4,6 +4,24 @@ local resize_desc_flags =
   "-DLJ_TAB_TEST_HELPERS " .. build.gc2_test_helper_flag
 
 return function(add)
+  add({
+    name = "m5_tab_scalar_hit",
+    description = "Linux scalar table hits with a paused IDLE reclaimer",
+    run = function(t)
+      if jit.os ~= "Linux" then
+        print("M5 scalar-hit reclaimer fixture requires Linux")
+        return
+      end
+      local flags = build.gc2_test_helper_flag ..
+        " -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLUA_USE_ASSERT"
+      build.with_default_build_restore(t, function()
+        build.clean_build(t, { quiet = true, xcflags = flags })
+        build.build_and_run_c(t, t:tmp("lj_t-tab-scalar-hit"),
+          "t-tab-scalar-hit.c", { build = false, cflags = flags, timeout = "45s" })
+      end)
+      print("M5 scalar table-hit tests passed")
+    end
+  })
   runtime.add_luajit_c_fixture_cases(add, {
     {
       name = "m5_tab_emptyhash",

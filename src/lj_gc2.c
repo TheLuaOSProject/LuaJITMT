@@ -1399,6 +1399,7 @@ static int gc2_small_containing_admit(global_State *g, GCArena *a,
 				      GC2MarkScope *scope);
 static int gc2_small_containing_start(GCArena *a, uint32_t cell,
 				      uint32_t *startp);
+static LJ_AINLINE int gc2_small_lifetime_readable(GCArena *a, uint32_t cell);
 static int gc2_small_candidate_admit(global_State *g, GCobj *o, GCArena *a,
 				     uint32_t expected_gct,
 				     void **basep, uint32_t *startp,
@@ -16618,6 +16619,91 @@ void lj_gc2_lease_release(LJGC2Lease *lease)
   /* Clear first so repeated release and any diagnostic re-entry are no-ops. */
   memset(lease, 0, sizeof(*lease));
   gc2_mark_scope_leave(&scope);
+}
+
+/* Bound a retained exact start without touching its payload. Allocation/free
+** boundaries are block|mark; the unconsumed bump tail need not have an end
+** sentinel, so this is an upper bound, not an exact requested byte count. */
+static size_t gc2_small_lease_span(GCArena *a, uint32_t start)
+{
+  uint32_t cell = start + 1u;
+  uint32_t end = start + (LJ_HUGE_THRESHOLD >> LJ_CELL_SHIFT);
+  if (end > LJ_ARENA_CELLS)
+    end = LJ_ARENA_CELLS;
+  while (cell < end) {
+    uint32_t wi = cell >> 6, lo = cell & 63u;
+    uint64_t bits = (la_load64_acq(&a->block[wi]) |
+		     la_load64_acq(&a->mark[wi])) & (~(uint64_t)0 << lo);
+    if (bits) {
+      uint32_t boundary = (wi << 6) + lj_ffs64(bits);
+      if (boundary < end)
+	end = boundary;
+      break;
+    }
+    cell = (wi + 1u) << 6;
+  }
+  return (size_t)(end - start) << LJ_CELL_SHIFT;
+}
+
+int lj_gc2_small_lease_try(global_State *g, const void *p,
+			 size_t minimum, uint32_t expected_gct,
+			 LJGC2Lease *lease, size_t *spanp)
+{
+  HugeTab *registry;
+  LJHugeInfo hi;
+  GC2MarkScope scope;
+  GCArena *a;
+  uint32_t cell, flags;
+  size_t span;
+  if (!lease)
+    return 0;
+  gc2_public_lease_init(lease);
+  if (spanp) *spanp = 0;
+  if (!g || !p || !minimum || minimum > LJ_HUGE_THRESHOLD ||
+      !checkptrGC(p) || ((uintptr_t)p & (LJ_CELL_SIZE - 1u)) ||
+      la_load32_acq(&g->allocf_arena) == 0 ||
+      (expected_gct && expected_gct != (uint32_t)~LJ_TTAB &&
+		       expected_gct != (uint32_t)~LJ_TSTR) ||
+      !(registry = (HugeTab *)gc2_small_arena_tab_acq(g)))
+    return 0;
+  a = lj_arena_of(p);
+  cell = lj_arena_cellof(p);
+  if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS)
+    return 0;
+  gc2_mark_scope_init(&scope);
+  scope.admission = lj_arena_hugetab_rescue_enter(registry, a, &hi);
+  if (scope.admission == LJ_ARENA_RESCUE_RETRY)
+    return 0;
+  scope.a = a;
+  la_fence_seq();  /* Pair with lifetime CAS -> SC fence -> reader check. */
+  if (hi.size != LJ_ARENA_SIZE)
+    goto denied;
+  flags = lj_arena_flags_acq(a);
+  if (!!(flags & LJ_AF_TRAVERSABLE) != !!expected_gct ||
+      (expected_gct && !gc2_small_lifetime_readable(a, cell)) ||
+      !lj_arena_bm_get(a->block, cell) || lj_arena_late_get(a, cell) ||
+      lj_arena_sweep_state_acq(a, cell) == LJ_ARENA_SWEEP_FREEING ||
+      (expected_gct && (!lj_arena_ready_get(a, cell) ||
+		       lj_arena_cdata_get(a, cell))))
+    goto denied;
+  span = gc2_small_lease_span(a, cell);
+  if (minimum > span ||
+      (expected_gct &&
+       (minimum < offsetof(GChead, gct) + sizeof(((GChead *)0)->gct) ||
+	(uint32_t)la_load8_acq(&((const GCobj *)p)->gch.gct) != expected_gct)))
+    goto denied;
+  /* A lifetime/free intent can have won after the first check, but cannot
+  ** overwrite an admitted body. Reject that terminal/transient identity. */
+  if (!lj_arena_bm_get(a->block, cell) || lj_arena_late_get(a, cell) ||
+      lj_arena_sweep_state_acq(a, cell) == LJ_ARENA_SWEEP_FREEING ||
+      (expected_gct && !gc2_small_lifetime_readable(a, cell)))
+    goto denied;
+  gc2_public_lease_take(lease, &scope);
+  if (spanp) *spanp = span;
+  return 1;
+denied:
+  gc2_mark_scope_leave(&scope);
+  return 0;
 }
 
 /* Conservative TValue roots may be popped stack cells, stale weak slots, or

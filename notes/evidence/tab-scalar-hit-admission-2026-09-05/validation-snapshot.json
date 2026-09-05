@@ -1,0 +1,27 @@
+{
+  "base": "d680421c4cb50b85437d88255bc89358c5e3a6b1",
+  "tree": "/tmp/lj-tab-scalar-hit-20260905-mosheh9q/tree",
+  "arena": "HEAD; pending empty-reclaimed change excluded",
+  "sha256": {
+    "src/lj_meta.c": "12e9a1a5083319c0e94e3b96267ea7bbf92fd76a73fe0ee7c9e3de30b0c0c5f8",
+    "src/lj_tab.c": "94a90cb9bd31d3fdfbbd3dca099d49c72ae201c66b4af2a2c920195f0aba5b75",
+    "src/lj_tab.h": "9bd2396645a8644c8c64a4473829a721338936c29c4c68974fa726f5d5d90b18",
+    "src/lj_gc2.c": "4d66c49ef385ff23cf6017559addc43f57cb7212e6fab8205abbed2ef9cba2d7",
+    "src/lj_gc2.h": "feb4003d78f8f1a965d2a4d3e94a964b545b37791c34517ace440996aae12e41",
+    "tests/t-tab-scalar-hit.c": "f82d76a7aec4a4f8f830f06b1105716acf7fed7f6aade29f653e0ae5ed100dea",
+    "tests/suites/m5_tables.lua": "98158cc705d7903137f8849dbe511f249101af93d2e30e24e7c07df5c38d01c8"
+  },
+  "git_blobs": {
+    "src/lj_meta.c": "f99d24ee9a01eb90addfeef37cbfa31030c1c7da",
+    "src/lj_tab.c": "2936c295abc8ef1581eac4992d8eec0aa23d9553",
+    "src/lj_tab.h": "902e6f19215cb4b64c7fc6f7734368acc369c9f6",
+    "src/lj_gc2.c": "8cfdceba49e1d01e86a5e5ec8dae885b484ba9de",
+    "src/lj_gc2.h": "cc3129bf9344559dc88fbf4120ad3195d8adc070",
+    "tests/t-tab-scalar-hit.c": "b514861a2e7caff08426208cd016223600e5a03b",
+    "tests/suites/m5_tables.lua": "5ed3d4595081e3f1616524c287057f4aad94ef40"
+  },
+  "arena_git_blobs": {
+    "src/lj_arena.c": "9686ba18d5f3723a447a0ca4a7b3b9dc810729dd",
+    "src/lj_arena.h": "3cd3302ae3fa4c14708d092ecbd5caee9f77127d"
+  }
+}

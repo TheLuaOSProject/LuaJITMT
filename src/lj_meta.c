@@ -704,6 +704,10 @@ static cTValue *meta_tget_rooted_mode(lua_State *L, cTValue *o, cTValue *k,
   int capture;
   int loop;
 
+  /* A positive scalar hit needs neither chain allocation nor a GC result
+  ** transfer. Keep every unsupported case on the existing general path. */
+  if (!funcenv && lj_tab_getscalar_rooted_try(L, o, k, out))
+    return out;
   meta_chain_roots_init(L, &roots);
   capture = meta_chain_capture_inputs(L, &roots, &oref, &kref);
   if (LJ_UNLIKELY(capture != META_CAPTURE_VALID)) {
