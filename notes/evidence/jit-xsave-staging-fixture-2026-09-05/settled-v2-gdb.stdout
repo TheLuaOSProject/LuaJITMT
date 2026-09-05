@@ -1,0 +1,40 @@
+Breakpoint 1 at 0xc0c0: file /tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/settled-v2-t-jit-xsave.c, line 328.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+
+Breakpoint 1, begin_xsave_staging (L=0x7ffff7c90080) at /tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/settled-v2-t-jit-xsave.c:328
+328	  TGState *tg = L2TG(L);
+$1 = 0
+0x0000555555652f13 in lj_BC_FUNCC ()
+Value returned is $2 = 0
+$3 = (TValue *) 0x1
+$4 = 4294967295
+$5 = 4294967295
+Hardware watchpoint 2: -location $stage_tg->ffi_xsave_root
+
+Hardware watchpoint 2: -location $stage_tg->ffi_xsave_root
+
+Old value = (TValue *) 0x1
+New value = (TValue *) 0x7ffff7a7ba60
+0x000055552f1d3ced in ?? ()
+native staging first changed root at pc 0x55552f1d3ced
+$6 = 156
+$7 = (TValue *) 0x7ffff7a7ba60
+=> 0x55552f1d3ced:	movl   $0x9,0x840(%r14)
+   0x55552f1d3cf8:	movl   $0xc,0x844(%r14)
+   0x55552f1d3d03:	push   %rax
+   0x55552f1d3d04:	movabs $0x7ffff7c90150,%rax
+0x000055552f1d3cf8 in ?? ()
+0x000055552f1d3d03 in ?? ()
+$8 = (TValue *) 0x7ffff7a7ba60
+$9 = 9
+$10 = 12
+$11 = 156
+$12 = 0
+$13 = 156
+$14 = 713
+$15 = 32
+$16 = 4
+executing producer final IR: {'IR_LOOP': 1, 'IR_XSAVE': 2, 'IR_TNEW': 0, 'IR_TDUP': 0, 'IR_CNEW': 0, 'IR_CNEWI': 0}
+t-jit-xsave OK: copied snapshots materialize and stage exact roots
+[Inferior 1 (process 231353) exited normally]

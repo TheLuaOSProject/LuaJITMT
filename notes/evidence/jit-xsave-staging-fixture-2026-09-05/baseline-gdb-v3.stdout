@@ -1,0 +1,182 @@
+Breakpoint 1 at 0xba370: file lj_load.c, line 323.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+
+Breakpoint 1, luaL_loadstring (L=L@entry=0x7ffff7c90080, s=s@entry=0x5555556b7528 "_G.__xsa"...) at lj_load.c:323
+323	  return luaL_loadbuffer(L, s, strlen(s), s);
+$1 = (TValue *) 0x1
+Hardware watchpoint 2: -location $stage_tg->ffi_xsave_root
+Breakpoint 3 at 0x7ffff7cdb690
+
+Breakpoint 3, 0x00007ffff7cdb690 in __assert_fail () from /lib/x86_64-linux-gnu/libc.so.6
+trace exits total: 228 last: [((136, 1), 1), ((137, 1), 1), ((138, 1), 1), ((139, 1), 1), ((140, 1), 1), ((141, 1), 1), ((142, 1), 1), ((143, 1), 1), ((144, 1), 1), ((145, 1), 1), ((146, 1), 1), ((147, 1), 1), ((148, 1), 1), ((149, 1), 1), ((150, 1), 1), ((151, 1), 1), ((152, 1), 1), ((153, 1), 1), ((154, 1), 1), ((155, 1), 66)]
+$2 = (TValue *) 0x1
+$3 = 4294967295
+$4 = 4294967295
+$5 = 0
+$6 = 0
+$7 = (TValue *) 0x0
+$8 = 3
+$9 = 1
+$10 = 0
+$11 = 0
+$12 = 1001
+$13 = {gcptr64 = 140737348215872}
+$14 = {nextgc = {gcptr64 = 140737345576736}, marked = 1 '\001', gct = 9 '\t', nsnap = 10, nins = 32813, unused_gc64 = 0, gclist = {gcptr64 = 0}, ir = 0x7ffff7796108, nk = 32741, nsnapmap = 49, snap = 0x7ffff77d6270, snapmap = 0x7ffff77d62e8, startpt = {gcptr64 = 140737348210480}, startpc = {ptr64 = 140737348210616}, startins = 88, szmcode = 648, mcode = 0x555568ae3e69 "\362\017\020|$\030", <incomplete sequence \307>..., exittab = 0x7ffff7a43410, exitstub = 0x555568ae3460 "\377%\252\377\377\377\314", <incomplete sequence \314>..., mcloop = 0, nchild = 0, spadjust = 32, traceno = 155, link = 1, root = 23, nextroot = 0, nextside = 154, sinktags = 0 '\000', topslot = 5 '\005', linktype = 1 '\001', unused1 = 1 '\001', native_pins = 0, retire_epoch = 0, retired_next = 0x1}
+   0x555568ae3e69:	movsd  0x18(%rsp),%xmm7
+   0x555568ae3e6f:	movl   $0x9b,0x84c(%r14)
+   0x555568ae3e7a:	movsd  %xmm7,0x18(%rsp)
+   0x555568ae3e80:	mov    0x830(%r14),%rdx
+   0x555568ae3e87:	movabs $0x7ffff7a56b30,%r15
+   0x555568ae3e91:	mov    0x820(%r14),%rdi
+   0x555568ae3e98:	cmpl   $0xfff90000,0x4(%rdx)
+   0x555568ae3e9f:	jae    0x555568ae3460
+   0x555568ae3ea5:	movsd  (%rdx),%xmm5
+   0x555568ae3ea9:	movsd  %xmm5,0x10(%rsp)
+   0x555568ae3eaf:	movaps %xmm7,%xmm2
+   0x555568ae3eb2:	addsd  -0xa02(%rip),%xmm2        # 0x555568ae34b8
+   0x555568ae3eba:	movsd  %xmm2,0x8(%rsp)
+   0x555568ae3ec0:	mov    0x28(%rbp),%rbx
+   0x555568ae3ec4:	cmpl   $0x0,-0x10(%rbx)
+   0x555568ae3ec8:	jb     0x555568ae3468
+   0x555568ae3ece:	movabs $0xfffdfffff7a58ed0,%rsi
+   0x555568ae3ed8:	cmp    0x8(%rbx),%rsi
+   0x555568ae3edc:	jne    0x555568ae3468
+   0x555568ae3ee2:	cmpq   $0x0,0x20(%rbp)
+   0x555568ae3ee7:	jne    0x555568ae3468
+   0x555568ae3eed:	lea    0x4c50(%r14),%rdx
+   0x555568ae3ef4:	movl   $0xf7a58ed0,(%rdx)
+   0x555568ae3efa:	movl   $0xfffdffff,0x4(%rdx)
+   0x555568ae3f01:	mov    %rbp,%rsi
+   0x555568ae3f04:	call   0x5555555ba1c0 <lj_tab_newkey>
+   0x555568ae3f09:	mov    0x830(%r14),%rdx
+   0x555568ae3f10:	movsd  -0xa58(%rip),%xmm6        # 0x555568ae34c0
+   0x555568ae3f18:	movsd  0x10(%rsp),%xmm5
+   0x555568ae3f1e:	movsd  -0xa6e(%rip),%xmm4        # 0x555568ae34b8
+   0x555568ae3f26:	movsd  -0xa7e(%rip),%xmm3        # 0x555568ae34b0
+   0x555568ae3f2e:	movsd  0x8(%rsp),%xmm2
+   0x555568ae3f34:	movsd  %xmm2,(%rax)
+   0x555568ae3f38:	rorx   $0x2f,-0x10(%rdx),%rbx
+   0x555568ae3f3f:	shr    $0x11,%rbx
+   0x555568ae3f43:	mov    0x10(%rbx),%rbx
+   0x555568ae3f47:	mov    0x28(%rbx),%rbx
+   0x555568ae3f4b:	cmpl   $0x2a,-0x10(%rbx)
+   0x555568ae3f4f:	jb     0x555568ae3470
+   0x555568ae3f55:	movabs $0xfffdfffff7a56a60,%rdi
+   0x555568ae3f5f:	cmp    0x3f8(%rbx),%rdi
+   0x555568ae3f66:	jne    0x555568ae3470
+   0x555568ae3f6c:	rorx   $0x2f,0x3f0(%rbx),%rbx
+   0x555568ae3f76:	cmp    $0xfff4,%bx
+   0x555568ae3f7a:	jne    0x555568ae3470
+   0x555568ae3f80:	shr    $0x11,%rbx
+   0x555568ae3f84:	mov    0x28(%rbx),%rbx
+   0x555568ae3f88:	cmpl   $0xb,-0x10(%rbx)
+   0x555568ae3f8c:	jb     0x555568ae3470
+   0x555568ae3f92:	movabs $0xfffdfffff7a56b60,%rdi
+   0x555568ae3f9c:	cmp    0x110(%rbx),%rdi
+   0x555568ae3fa3:	jne    0x555568ae3470
+   0x555568ae3fa9:	rorx   $0x2f,0x108(%rbx),%rbx
+   0x555568ae3fb3:	cmp    $0xfff7,%bx
+   0x555568ae3fb7:	jne    0x555568ae3470
+   0x555568ae3fbd:	shr    $0x11,%rbx
+   0x555568ae3fc1:	push   %rax
+   0x555568ae3fc2:	movabs $0x7ffff7c90160,%rax
+   0x555568ae3fcc:	movsd  (%rax),%xmm1
+   0x555568ae3fd0:	pop    %rax
+   0x555568ae3fd1:	movaps %xmm5,%xmm7
+   0x555568ae3fd4:	xorps  %xmm1,%xmm7
+   0x555568ae3fd7:	cmp    %r15,%rbx
+   0x555568ae3fda:	jne    0x555568ae3478
+   0x555568ae3fe0:	movsd  %xmm7,0x20(%rdx)
+   0x555568ae3fe5:	movsd  %xmm6,0x18(%rdx)
+   0x555568ae3fea:	movl   $0xf7a56b30,0x10(%rdx)
+   0x555568ae3ff1:	movl   $0xfffbffff,0x14(%rdx)
+   0x555568ae3ff8:	mov    %rbp,0x8(%rdx)
+   0x555568ae3ffc:	orl    $0xfffa0000,0xc(%rdx)
+   0x555568ae4003:	mov    %rdx,0x838(%r14)
+   0x555568ae400a:	movl   $0x4,0x840(%r14)
+   0x555568ae4015:	movl   $0x7,0x844(%r14)
+   0x555568ae4020:	push   %rax
+   0x555568ae4021:	movabs $0x7ffff7c90150,%rax
+   0x555568ae402b:	movsd  (%rax),%xmm6
+   0x555568ae402f:	pop    %rax
+   0x555568ae4030:	movaps %xmm5,%xmm7
+   0x555568ae4033:	andps  %xmm6,%xmm7
+   0x555568ae4036:	mov    0x10(%rbp),%rbx
+   0x555568ae403a:	cmpl   $0x1,0x30(%rbp)
+   0x555568ae403e:	jbe    0x555568ae3488
+   0x555568ae4044:	cmpl   $0xfff90000,0xc(%rbx)
+   0x555568ae404b:	jae    0x555568ae3488
+   0x555568ae4051:	movsd  0x8(%rbx),%xmm6
+   0x555568ae4056:	addsd  %xmm7,%xmm6
+   0x555568ae405a:	addsd  %xmm2,%xmm6
+   0x555568ae405e:	mulsd  %xmm3,%xmm5
+   0x555568ae4062:	addsd  %xmm4,%xmm5
+   0x555568ae4066:	subsd  %xmm5,%xmm6
+   0x555568ae406a:	movabs $0x7ffff7a59238,%rdi
+   0x555568ae4074:	cmp    -0x8(%rdx),%rdi
+   0x555568ae4078:	jne    0x555568ae3490
+   0x555568ae407e:	add    $0xffffffffffffffb8,%rdx
+   0x555568ae4082:	mov    %rdx,0x830(%r14)
+   0x555568ae4089:	cmpl   $0xfff90000,0x34(%rdx)
+   0x555568ae4090:	jae    0x555568ae3498
+   0x555568ae4096:	movsd  0x30(%rdx),%xmm7
+   0x555568ae409b:	addsd  %xmm6,%xmm7
+   0x555568ae409f:	cmpl   $0xfff90000,0xc(%rdx)
+   0x555568ae40a6:	jae    0x555568ae3498
+   0x555568ae40ac:	movsd  0x18(%rdx),%xmm5
+   0x555568ae40b1:	movsd  0x10(%rdx),%xmm6
+   0x555568ae40b6:	addsd  %xmm4,%xmm6
+   0x555568ae40ba:	ucomisd %xmm6,%xmm5
+   0x555568ae40be:	jb     0x555568ae34a0
+   0x555568ae40c4:	movabs $0x7ffff7c90584,%rdi
+   0x555568ae40ce:	mov    (%rdi),%edi
+   0x555568ae40d0:	cmp    $0x0,%edi
+   0x555568ae40d3:	je     0x555568ae34a8
+   0x555568ae40d9:	movsd  %xmm6,0x28(%rdx)
+   0x555568ae40de:	movsd  %xmm6,0x10(%rdx)
+   0x555568ae40e3:	movsd  %xmm7,0x8(%rdx)
+   0x555568ae40e8:	add    $0x20,%rsp
+   0x555568ae40ec:	jmp    0x555568aff9f1
+   0x555568ae40f1:	nop
+   0x555568ae40f2:	nop
+   0x555568ae40f3:	nop
+   0x555568ae40f4:	movsd  0x18(%rsp),%xmm7
+   0x555568ae40fa:	movl   $0x9a,0x84c(%r14)
+   0x555568aff9f1:	add    $0xffffffffffffffb0,%rsp
+   0x555568aff9f5:	movl   $0x1,0x84c(%r14)
+   0x555568affa00:	movabs $0x7ffff7a56b30,%r12
+   0x555568affa0a:	movabs $0x7ffff7c90178,%rdi
+   0x555568affa14:	mov    (%rdi),%rdi
+   0x555568affa17:	push   %rax
+   0x555568affa18:	movabs $0x7ffff7c90180,%rax
+   0x555568affa22:	cmp    (%rax),%rdi
+   0x555568affa25:	pop    %rax
+   0x555568affa26:	jae    0x555568affa46
+   0x555568affa28:	movabs $0x7ffff7c90978,%rdi
+   0x555568affa32:	mov    (%rdi),%rdi
+   0x555568affa35:	push   %rax
+   0x555568affa36:	movabs $0x7ffff7c90998,%rax
+   0x555568affa40:	cmp    (%rax),%rdi
+   0x555568affa43:	pop    %rax
+   0x555568affa44:	jbe    0x555568affa5f
+   0x555568affa46:	mov    $0x1,%esi
+   0x555568affa4b:	mov    0x818(%r14),%rdi
+   0x555568affa52:	call   0x555555568090 <lj_gc_step_jit>
+   0x555568affa57:	test   %eax,%eax
+   0x555568affa59:	jne    0x555568af0180
+   0x555568affa5f:	mov    0x820(%r14),%rdi
+   0x555568affa66:	mov    0x830(%r14),%rdx
+   0x555568affa6d:	movsd  0x18(%rdx),%xmm7
+   0x555568affa72:	cvttsd2si %xmm7,%ebx
+   0x555568affa76:	xorps  %xmm6,%xmm6
+   0x555568affa79:	cvtsi2sd %ebx,%xmm6
+   0x555568affa7d:	ucomisd %xmm6,%xmm7
+   0x555568affa81:	jne    0x555568af0180
+   0x555568affa87:	jp     0x555568af0180
+   0x555568affa8d:	cmp    $0x7ffffffe,%ebx
+   0x555568affa93:	jg     0x555568af0180
+   0x555568affa99:	cvttsd2si 0x10(%rdx),%ebp
+   0x555568affa9e:	cmpl   $0xfff90000,0xc(%rdx)
+#0  0x00007ffff7cdb690 in __assert_fail () from /lib/x86_64-linux-gnu/libc.so.6
+#1  0x000055555555ce29 in main () at /tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert/tests/t-jit-xsave.c:976

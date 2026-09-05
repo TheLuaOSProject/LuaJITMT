@@ -320,19 +320,6 @@ static void native_finish_hook(TGState *tg)
   }
 }
 
-/* Start the runtime producer with fresh poison after collector admission has
-** reopened. Earlier allocation-shape traces are allowed to exit before XSAVE;
-** they cannot accidentally satisfy this allocation-free producer witness. */
-static int begin_xsave_staging(lua_State *L)
-{
-  TGState *tg = L2TG(L);
-  assert(gc2_phase_acq(G(L)) == LJ_GC2_IDLE);
-  assert(lj_tg_load_jit_base(tg) == NULL);
-  assert(lj_tg_in_native_acq(tg) == 0);
-  xsave_stage(tg, (TValue *)(uintptr_t)1, UINT32_MAX, UINT32_MAX);
-  return 0;
-}
-
 static void test_xsave_native_owner_lifecycle(lua_State *L, global_State *g,
 				       TGState *tg, GCtrace *T)
 {
@@ -927,8 +914,6 @@ int main(void)
   assert(tg->ffi_xsave_root == NULL);
   assert(tg->ffi_xsave_baseslot == 0);
   assert(tg->ffi_xsave_nslots == 0);
-  lua_pushcfunction(L, begin_xsave_staging);
-  lua_setglobal(L, "__xsave_begin_staging");
   tg->ffi_xsave_root = (TValue *)(uintptr_t)1;
   tg->ffi_xsave_baseslot = UINT32_MAX;
   tg->ffi_xsave_nslots = UINT32_MAX;
@@ -972,11 +957,6 @@ int main(void)
     "  for i = 1, n do s = s + math.abs(-i) end\n"
     "  return s\n"
     "end\n"
-    /* READY SWEEP permits old traces but deliberately refuses new recording.
-    ** Finish that cycle before warming this fresh producer, then poison again
-    ** so only its generated math.abs marker can satisfy the staging oracle. */
-    "collectgarbage('collect')\n"
-    "__xsave_begin_staging()\n"
     "for i = 1, 40 do assert(stage(80) == 3240) end\n"
     /* The synthetic frame is published after this chunk has returned, unlike
     ** a real native frame whose materialized Lua frames retain every inlined
@@ -997,8 +977,8 @@ int main(void)
   assert(tg->ffi_xsave_root >= stack && tg->ffi_xsave_root < maxstack);
   assert(tg->ffi_xsave_baseslot != UINT32_MAX);
   assert(tg->ffi_xsave_nslots != UINT32_MAX);
-  /* The last marker executes inside math.abs called by stage(), so its
-  ** logical root is the trace root and its frame starts at a non-zero slot. */
+  /* The last marker executes inside inner(), so its complete logical root is
+  ** the trace root while the current frame begins at a non-zero slot. */
   assert(tg->ffi_xsave_baseslot != 0);
   assert(tg->ffi_xsave_nslots > tg->ffi_xsave_baseslot + LJ_FR2);
   assert(tg->ffi_xsave_root + tg->ffi_xsave_nslots <= maxstack);

@@ -975,7 +975,6 @@ int main(void)
     /* READY SWEEP permits old traces but deliberately refuses new recording.
     ** Finish that cycle before warming this fresh producer, then poison again
     ** so only its generated math.abs marker can satisfy the staging oracle. */
-    "collectgarbage('collect')\n"
     "__xsave_begin_staging()\n"
     "for i = 1, 40 do assert(stage(80) == 3240) end\n"
     /* The synthetic frame is published after this chunk has returned, unlike

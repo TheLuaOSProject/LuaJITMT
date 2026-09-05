@@ -1,0 +1,15 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "gdb",
+    "-q",
+    "-batch",
+    "-x",
+    "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/settled-v2-gdb.txt",
+    "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/settled-v2-b4"
+  ],
+  "exit": 0,
+  "seconds": 0.21433657500165282
+}

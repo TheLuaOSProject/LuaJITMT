@@ -1,0 +1,4 @@
+== m6_jit_xsave ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLUA_USE_ASSERT -DLJ_XSAVE_TEST_HELPERS -DLJ_GC2_TEST_HELPERS -I'/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/canonical/src' '/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/canonical/tests/t-jit-xsave.c' '/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/canonical/src/libluajit.a' -lm -ldl -pthread -o '/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/canonical-tmp/lj_t-jit-xsave'
++ timeout '20s' '/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/canonical-tmp/lj_t-jit-xsave'
+ok m6_jit_xsave

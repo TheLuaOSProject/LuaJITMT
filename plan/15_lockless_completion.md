@@ -249,8 +249,14 @@ controls and post-fix completion tests:
   loop overwrite. Scalar callbacks, actual stack relocation/full GC, error
   unwind and cleanup pass in normal/assertion/ASan builds, including the
   current mode-0 poll repair. Existing XSAVE-staging and remote-flush aggregate
-  failures reproduce on baseline and remain separate follow-ups. See
+  failures reproduce on baseline. The XSAVE fixture correction below closes
+  its gate; remote-flush readiness remains a separate follow-up. See
   `notes/ffi-callback-stack-geometry-2026-09-05.md`.
+- The XSAVE staging fixture now completes SWEEP and resets fresh poison before
+  warming its actual generated producer. Original shape, native owner/frame
+  and GC assertions remain unchanged; current-source canonical and isolated
+  ASan/LSan checks pass, with disabled-producer and missing-admission negatives.
+  No runtime source changes. See `notes/jit-xsave-staging-fixture-2026-09-05.md`.
 - `1bce0fa5`: promote exhausted inline table dirty authority into pre-reserved
   persistent wide proof, retaining common stamp/token geometry. Small mappings
   use a dense sidecar plane and Huge mappings use checked tail reservation.

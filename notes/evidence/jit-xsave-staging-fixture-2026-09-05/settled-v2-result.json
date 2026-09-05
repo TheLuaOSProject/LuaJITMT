@@ -1,0 +1,38 @@
+{
+  "compile": [
+    "cc",
+    "-std=gnu11",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-mcx16",
+    "-DLUA_USE_ASSERT",
+    "-DLJ_XSAVE_TEST_HELPERS",
+    "-DLJ_GC2_TEST_HELPERS",
+    "-I/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert/src",
+    "-I/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert/tests",
+    "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/settled-v2-t-jit-xsave.c",
+    "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert/src/libluajit.a",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-o",
+    "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/settled-v2-b4"
+  ],
+  "compile_exit": 0,
+  "compile_stdout": "",
+  "compile_stderr": "",
+  "fixture_sha256": "ad895d2f2757644ffe097121af528ddeb1fbac9c66c950642c39722175fb282d",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/settled-v2-b4"
+  ],
+  "exit": 0,
+  "stdout": "t-jit-xsave OK: copied snapshots materialize and stage exact roots\n",
+  "stderr": "",
+  "seconds": 0.4324277159976191
+}

@@ -1,0 +1,22 @@
+[
+  {
+    "function": "assert_xsave_retf_shape",
+    "unchanged": true,
+    "sha256": "5871b73f6abd2d43fd0aed7656fc7a89611241ccb0357f7dd94b2eaeba174cb2"
+  },
+  {
+    "function": "assert_xsave_trace_shape",
+    "unchanged": true,
+    "sha256": "4ed3c450cee9f3cfc00bd5de180bd9782f49c0df69be3b2d8ff79ef688914f4b"
+  },
+  {
+    "function": "test_xsave_native_owner_lifecycle",
+    "unchanged": true,
+    "sha256": "4f204731d32ab12f6896369ab120251df0d90604e89962edbdc7d494ad3abeaa"
+  },
+  {
+    "function": "test_certified_native_frame_scanner",
+    "unchanged": true,
+    "sha256": "232d4034ad4518cb64016b5b2f3393a9d8acdc20e34981c2e40c55ece0102f34"
+  }
+]

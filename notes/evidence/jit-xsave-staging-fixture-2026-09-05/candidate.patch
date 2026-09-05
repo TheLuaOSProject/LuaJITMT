@@ -1,0 +1,17 @@
+--- a/src/lj_ccall.c
++++ b/src/lj_ccall.c
+@@ -2300,6 +2300,14 @@
+     lj_trace_native_unpin(g, T);
+     goto out;
+   }
++  /* XSAVE has materialized the pre-call frame, but generated code can leave
++  ** L->base/top describing an older interpreter frame. Publish the validated
++  ** owner stack geometry before native entry: a callback's first owner poll
++  ** and continuation setup must see the saved live extent. Doing this while
++  ** native is still zero also keeps these stores ahead of any remote native
++  ** snapshot. No allocation or stack relocation occurs after validation. */
++  L->base = restorestack(L, geo.base_offset);
++  L->top = restorestack(L, geo.top_offset);
+   /* The exact even frame precedes every remotely acknowledged native state.
+   ** Successful entry consumes staging here after publication; every ordinary
+   ** earlier rejection consumes it at the common return. */

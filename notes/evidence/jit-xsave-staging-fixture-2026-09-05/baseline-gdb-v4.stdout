@@ -1,0 +1,24 @@
+Breakpoint 1 at 0xba370: file lj_load.c, line 323.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+
+Breakpoint 1, luaL_loadstring (L=L@entry=0x7ffff7c90080, s=s@entry=0x5555556b7528 "_G.__xsa"...) at lj_load.c:323
+323	  return luaL_loadbuffer(L, s, strlen(s), s);
+$1 = (TValue *) 0x1
+Hardware watchpoint 2: -location $stage_tg->ffi_xsave_root
+Breakpoint 3 at 0x7ffff7cdb690
+
+Breakpoint 3, 0x00007ffff7cdb690 in __assert_fail () from /lib/x86_64-linux-gnu/libc.so.6
+trace exits total: 228
+record errors: [(('LJ_TRERR_LINNER', 11), 2), (('LJ_TRERR_MCODELM', 11), 1)]
+$2 = (TValue *) 0x1
+$3 = 4294967295
+$4 = 4294967295
+$5 = 0
+$6 = 0
+$7 = (TValue *) 0x0
+$8 = 3
+$9 = 1
+$10 = 0
+$11 = 0
+$12 = 1001

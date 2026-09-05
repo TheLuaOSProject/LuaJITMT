@@ -1,0 +1,140 @@
+[
+  {
+    "case": "build",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-C",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert/src",
+      "-j4",
+      "BUILDMODE=static",
+      "CCDEBUG=-g",
+      "TARGET_STRIP=:",
+      "XCFLAGS=-DLUA_USE_ASSERT -DLJ_XSAVE_TEST_HELPERS -DLJ_GC2_TEST_HELPERS"
+    ],
+    "exit": 0,
+    "seconds": 10.090791935999732
+  },
+  {
+    "case": "xsave",
+    "variant": "base-assert",
+    "compile": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert/src",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert/tests/t-jit-xsave.c",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert-jit-xsave"
+    ],
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert-jit-xsave"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert/src/?.lua;;"
+    },
+    "exit": -6,
+    "seconds": 0.09956477800005814,
+    "stdout": "",
+    "stderr": "base-assert-jit-xsave: /tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert/tests/t-jit-xsave.c:976: main: Assertion `tg->ffi_xsave_root != (TValue *)(uintptr_t)1' failed.\n",
+    "exe_sha256": "d6c8cc65076464fb10f87bea9dfa23e03fd961fb332b5217c5c8ceb0ee646a1a"
+  },
+  {
+    "case": "xsave",
+    "variant": "fix-assert",
+    "compile": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/src",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/tests/t-jit-xsave.c",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert-jit-xsave"
+    ],
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert-jit-xsave"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/src/?.lua;;"
+    },
+    "exit": -6,
+    "seconds": 0.09755795499950182,
+    "stdout": "",
+    "stderr": "fix-assert-jit-xsave: /tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/tests/t-jit-xsave.c:976: main: Assertion `tg->ffi_xsave_root != (TValue *)(uintptr_t)1' failed.\n",
+    "exe_sha256": "071869e8142a4a570151605e53d717e2e6bd3c99d867280c0ad6508b008ce47b"
+  },
+  {
+    "case": "remote-flush",
+    "variant": "base-assert",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert/src/luajit",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert/tests/t-ffi-callxs-remote-flush.lua"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert/src/?.lua;;",
+      "LJ_M7_FFI_CALLXS_FLUSH_SO": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/control-callxs-remote-flush.so"
+    },
+    "exit": 1,
+    "seconds": 10.006083996999223,
+    "stdout": "",
+    "stderr": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert/src/luajit: ...vgzqdmkx/base-assert/tests/t-ffi-callxs-remote-flush.lua:220: assertion failed!\nstack traceback:\n\t[C]: in function 'assert'\n\t...vgzqdmkx/base-assert/tests/t-ffi-callxs-remote-flush.lua:220: in main chunk\n\t[C]: at 0x5605d0506fc0\n"
+  },
+  {
+    "case": "remote-flush",
+    "variant": "fix-assert",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/src/luajit",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/tests/t-ffi-callxs-remote-flush.lua"
+    ],
+    "cwd": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/src/?.lua;;",
+      "LJ_M7_FFI_CALLXS_FLUSH_SO": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/control-callxs-remote-flush.so"
+    },
+    "exit": 1,
+    "seconds": 10.006399088997568,
+    "stdout": "",
+    "stderr": "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/fix-assert/src/luajit: ...-vgzqdmkx/fix-assert/tests/t-ffi-callxs-remote-flush.lua:220: assertion failed!\nstack traceback:\n\t[C]: in function 'assert'\n\t...-vgzqdmkx/fix-assert/tests/t-ffi-callxs-remote-flush.lua:220: in main chunk\n\t[C]: at 0x55d2a12edfc0\n"
+  }
+]

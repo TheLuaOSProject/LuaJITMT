@@ -977,6 +977,7 @@ int main(void)
     ** so only its generated math.abs marker can satisfy the staging oracle. */
     "collectgarbage('collect')\n"
     "__xsave_begin_staging()\n"
+    "jit.off(stage, true)\n"
     "for i = 1, 40 do assert(stage(80) == 3240) end\n"
     /* The synthetic frame is published after this chunk has returned, unlike
     ** a real native frame whose materialized Lua frames retain every inlined

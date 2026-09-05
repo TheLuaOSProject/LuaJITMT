@@ -1,0 +1,48 @@
+set pagination off
+set confirm off
+set print elements 8
+set environment LUA_PATH /tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert/src/?.lua;;
+break begin_xsave_staging
+run
+set $stage_L=L
+set $stage_tg=L->tg_hint
+set $stage_g=$stage_tg->gl
+set $stage_J=$stage_g->jitp
+p $stage_g->gc2.phase
+finish
+p $stage_tg->ffi_xsave_root
+p $stage_tg->ffi_xsave_baseslot
+p $stage_tg->ffi_xsave_nslots
+watch -l $stage_tg->ffi_xsave_root
+continue
+printf "native staging first changed root at pc %p\n", $pc
+p $stage_tg->vmstate
+p $stage_tg->jit_base
+x/4i $pc
+nexti
+nexti
+p $stage_tg->ffi_xsave_root
+p $stage_tg->ffi_xsave_baseslot
+p $stage_tg->ffi_xsave_nslots
+set $T=(GCtrace *)$stage_J->tracev->slot[$stage_tg->vmstate].gcptr64
+p $T->traceno
+p $T->root
+p $T->link
+p $T->szmcode
+p ((GCproto *)$T->startpt.gcptr64)->firstline
+p ((GCproto *)$T->startpt.gcptr64)->numline
+python
+T=gdb.parse_and_eval('$T').dereference()
+ops={name:int(gdb.parse_and_eval(name)) for name in ['IR_LOOP','IR_XSAVE','IR_TNEW','IR_TDUP','IR_CNEW','IR_CNEWI']}
+counts={k:0 for k in ops}
+for ref in range(32768,int(T['nins'])):
+ op=int(T['ir'][ref]['o'])
+ for name,num in ops.items():counts[name]+=op==num
+print('executing producer final IR:',counts)
+assert counts['IR_LOOP']==1 and counts['IR_XSAVE']>=2
+assert not any(counts[x] for x in ['IR_TNEW','IR_TDUP','IR_CNEW','IR_CNEWI'])
+assert int(gdb.parse_and_eval('$stage_tg->ffi_xsave_baseslot'))>0
+end
+disable 1 2
+continue
+quit

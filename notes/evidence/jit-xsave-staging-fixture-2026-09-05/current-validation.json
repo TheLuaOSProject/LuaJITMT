@@ -1,0 +1,111 @@
+[
+  {
+    "base": "8d342cd6456d2f93ba07a779cdde30d4806eb90f",
+    "archive_command": [
+      "git",
+      "archive",
+      "8d342cd6456d2f93ba07a779cdde30d4806eb90f",
+      "Makefile",
+      ".relver",
+      "src",
+      "dynasm",
+      "tests",
+      "tools",
+      "COPYRIGHT"
+    ],
+    "callback_patch_sha256": "3520adc5a48bdf92263460d5f928b6ac37e836a44ba382c24d9111ada826e8f3",
+    "fixture_sha256": "ad895d2f2757644ffe097121af528ddeb1fbac9c66c950642c39722175fb282d"
+  },
+  {
+    "name": "current-build",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-C",
+      "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/current-assert/src",
+      "-j4",
+      "BUILDMODE=static",
+      "CCDEBUG=-g",
+      "TARGET_STRIP=:",
+      "XCFLAGS=-DLUA_USE_ASSERT -DLJ_XSAVE_TEST_HELPERS -DLJ_GC2_TEST_HELPERS"
+    ],
+    "cwd": "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/current-assert",
+    "env_override": {},
+    "exit": 0,
+    "seconds": 10.08868448299836,
+    "stdout": "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/current-build.stdout",
+    "stderr": "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/current-build.stderr"
+  },
+  {
+    "name": "current-compile",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/current-assert/src",
+      "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/current-assert/tests/t-jit-xsave.c",
+      "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/current-assert/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/current-final-xsave"
+    ],
+    "cwd": "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/current-assert",
+    "env_override": {},
+    "exit": 0,
+    "seconds": 0.36479040699850884,
+    "stdout": "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/current-compile.stdout",
+    "stderr": "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/current-compile.stderr"
+  },
+  {
+    "name": "current-final",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/current-final-xsave"
+    ],
+    "cwd": "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/current-assert",
+    "env_override": {
+      "LUA_PATH": "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/current-assert/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 0.1642069879999326,
+    "stdout": "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/current-final.stdout",
+    "stderr": "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/current-final.stderr"
+  },
+  {
+    "name": "canonical-final",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-normal/src/luajit",
+      "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/canonical/tools/test.lua",
+      "m6_jit_xsave"
+    ],
+    "cwd": "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/canonical",
+    "env_override": {
+      "LJ_TEST_ROOT": "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/canonical",
+      "JOBS": "4",
+      "MAKE_JOBS": "4",
+      "TMPDIR": "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/canonical-tmp",
+      "LUA_PATH": "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/canonical/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 27.784785711999575,
+    "stdout": "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/canonical-final.stdout",
+    "stderr": "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/canonical-final.stderr"
+  }
+]

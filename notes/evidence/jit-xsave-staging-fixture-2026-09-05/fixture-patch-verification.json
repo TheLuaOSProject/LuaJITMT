@@ -1,0 +1,15 @@
+{
+  "command": [
+    "patch",
+    "--batch",
+    "--fuzz=0",
+    "-p1",
+    "-i",
+    "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/fixture-only.patch"
+  ],
+  "cwd": "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/reconstruct",
+  "exit": 0,
+  "stdout": "patching file tests/t-jit-xsave.c\n",
+  "stderr": "",
+  "matches_final": true
+}

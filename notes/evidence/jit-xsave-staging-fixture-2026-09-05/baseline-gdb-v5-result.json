@@ -1,0 +1,15 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "gdb",
+    "-q",
+    "-batch",
+    "-x",
+    "/tmp/lj-xsave-staging-triage-20260905-gw6ejc3p/baseline-gdb-v5.txt",
+    "/tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert-jit-xsave"
+  ],
+  "exit": 0,
+  "seconds": 0.26491620500019053
+}

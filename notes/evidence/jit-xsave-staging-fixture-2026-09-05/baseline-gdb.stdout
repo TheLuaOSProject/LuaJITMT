@@ -1,0 +1,6 @@
+Breakpoint 1 at 0x9940: file /tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert/tests/lib/lua_fixture_helpers.h, line 31.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+
+Breakpoint 1, main () at /tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert/tests/lib/lua_fixture_helpers.h:31
+31	  lua_State *L = luaL_newstate();

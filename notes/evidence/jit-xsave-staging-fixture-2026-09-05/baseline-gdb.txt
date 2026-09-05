@@ -1,0 +1,47 @@
+set pagination off
+set confirm off
+set print elements 8
+set environment LUA_PATH /tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert/src/?.lua;;
+python
+import gdb,collections
+exits=collections.Counter()
+class ExitCount(gdb.Breakpoint):
+ def stop(self):
+  try:
+   pair=(int(gdb.parse_and_eval('parent')),int(gdb.parse_and_eval('exitno')))
+   exits[pair]+=1
+  except Exception as e: print('exit counter:',e)
+  return False
+ExitCount('lj_trace_exit',internal=True)
+end
+break /tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert/tests/t-jit-xsave.c:920
+run
+set $stage_tg = tg
+watch -l $stage_tg->ffi_xsave_root
+commands
+silent
+printf "root staging write %p\n", $stage_tg->ffi_xsave_root
+bt 4
+continue
+end
+break /tmp/lj-callxs-callback-geometry-20260905-vgzqdmkx/base-assert/tests/t-jit-xsave.c:976
+continue
+python
+print('trace exits:',sorted(exits.items()))
+end
+p tg->ffi_xsave_root
+p tg->ffi_xsave_baseslot
+p tg->ffi_xsave_nslots
+p tg->poll
+p tg->reqmask
+p tg->jit_base
+p g->gc2.phase
+p g->gc2.jit_phase_gate
+p g->mt_active
+p g->mt_entering
+p J->tracev->sizetrace
+p J->tracev->slot[1]
+p scan_trace->mcode
+p scan_trace->szmcode
+x/30i scan_trace->mcode
+quit
