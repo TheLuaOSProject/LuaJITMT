@@ -1,0 +1,19 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "16-23",
+    "make",
+    "-C",
+    "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src",
+    "-j4"
+  ],
+  "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+  "environment": {
+    "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/tests/lib/?.lua;;"
+  },
+  "seconds": 9.102337762000388,
+  "exit": 2,
+  "stdout": "make: Entering directory '/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src'\nHOSTCC    host/minilua.o\nHOSTCC    host/buildvm_asm.o\nHOSTCC    host/buildvm_peobj.o\nHOSTCC    host/buildvm_lib.o\nHOSTCC    host/buildvm_fold.o\nHOSTLINK  host/minilua\nVERSION   luajit.h\nDYNASM    host/buildvm_arch.h\nCC        luajit.o\nHOSTCC    host/buildvm.o\nHOSTLINK  host/buildvm\nBUILDVM   lj_vm.S\nBUILDVM   lj_bcdef.h\nBUILDVM   lj_ffdef.h\nBUILDVM   lj_libdef.h\nBUILDVM   lj_recdef.h\nBUILDVM   lj_folddef.h\nBUILDVM   jit/vmdef.lua\nASM       lj_vm.o\nCC        lj_assert.o\nCC        lj_gc.o\nCC        lj_gc2.o\nCC        lj_safepoint.o\nCC        lj_err.o\nCC        lj_char.o\nCC        lj_bc.o\nCC        lj_obj.o\nCC        lj_buf.o\nCC        lj_str.o\nCC        lj_tab.o\nCC        lj_func.o\nCC        lj_udata.o\nCC        lj_meta.o\nCC        lj_debug.o\nCC        lj_prng.o\nCC        lj_state.o\nCC        lj_dispatch.o\nCC        lj_tg.o\nCC        lj_thr.o\nCC        lj_chan.o\nCC        lj_arena.o\nCC        lj_vmevent.o\nCC        lj_vmmath.o\nCC        lj_strscan.o\nCC        lj_strfmt.o\nCC        lj_strfmt_num.o\nCC        lj_serialize.o\nCC        lj_api.o\nCC        lj_profile.o\nCC        lj_lex.o\nCC        lj_parse.o\nCC        lj_bcread.o\nCC        lj_bcwrite.o\nCC        lj_load.o\nCC        lj_ir.o\nCC        lj_opt_mem.o\nCC        lj_opt_fold.o\nmake: Leaving directory '/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src'\n",
+  "stderr": "lj_opt_mem.c: In function \u2018fload_pure_unroll_invariant\u2019:\nlj_opt_mem.c:77:9: error: implicit declaration of function \u2018irt_isudata\u2019; did you mean \u2018irt_iscdata\u2019? [-Wimplicit-function-declaration]\n   77 |     if (irt_isudata(ud->t) && (ud->o == IR_SLOAD || ud->o == IR_KGC))\n      |         ^~~~~~~~~~~\n      |         irt_iscdata\nmake: *** [Makefile:712: lj_opt_mem.o] Error 1\nmake: *** Waiting for unfinished jobs....\n"
+}

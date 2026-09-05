@@ -1,0 +1,119 @@
+---- TRACE flush
+
+---- TRACE 1 start direct-cost.lua:12
+---- TRACE 1 IR
+0001 >  [35mint[m SLOAD  #6    CRI
+0002 >  [35mint[m LE     0001  [35m+2147483646[m
+0003    [35mint[m SLOAD  #5    CI
+0004 >  [36mudt[m SLOAD  #2    T
+0005 >  [34mnum[m SLOAD  #4    T
+0006    [31mtab[m FLOAD  0004  udata.meta
+0007    [35mu8 [m FLOAD  0004  udata.udtype
+0008 >  [35mint[m EQ     0007  [35m+1  [m
+0009 >  [31mtab[m NE     0006  [31mNULL[m
+0010    p64 FLOAD  0006  tab.node
+0011 >  p64 HREFK  0010  [32m"__index"[m @12
+0012 >  [31mtab[m HLOAD  0011
+0013    p64 FLOAD  0012  tab.node
+0014 >  p64 HREFK  0013  [32m"write"[m @3
+0015 >  [1mfun[m HLOAD  0014
+0016  + [34mnum[m ADD    0005  [34m+1  [m
+0017  + [35mint[m ADD    0003  [35m+1  [m
+0018 >  [35mint[m LE     0017  0001
+0019 ------ LOOP ------------
+0020 >  nil XPOLL  #0  
+0021    [35mu8 [m FLOAD  0004  udata.udtype
+0022 >  [35mint[m EQ     0021  [35m+1  [m
+0023    p64 FLOAD  0012  tab.node
+0024 >  p64 HREFK  0023  [32m"write"[m @3
+0025 >  [1mfun[m HLOAD  0024
+0026  + [34mnum[m ADD    0016  [34m+1  [m
+0027  + [35mint[m ADD    0017  [35m+1  [m
+0028 >  [35mint[m LE     0027  0001
+0029    [35mint[m PHI    0017  0027
+0030    [34mnum[m PHI    0016  0026
+---- TRACE 1 mcode 369
+55850125fe8f  mov dword [r14+0x84c], 0x1
+55850125fe9a  movsd xmm0, [rip-0xfd52]
+55850125fea2  movsd xmm7, [rdx+0x20]
+55850125fea7  cvttsd2si eax, xmm7
+55850125feab  xorps xmm6, xmm6
+55850125feae  cvtsi2sd xmm6, eax
+55850125feb2  ucomisd xmm7, xmm6
+55850125feb6  jnz 0x558501250120
+55850125febc  jpe 0x558501250120
+55850125fec2  cmp eax, 0x7ffffffe
+55850125fec8  jg 0x558501250120
+55850125fece  cvttsd2si ebp, [rdx+0x18]
+55850125fed3  rorx rcx, [rdx], 0x2f
+55850125fed9  cmp cx, -0x0d
+55850125fedd  jnz 0x558501250120
+55850125fee3  shr rcx, 0x11
+55850125fee7  cmp dword [rdx+0x14], 0xfff90000
+55850125feee  jnb 0x558501250120
+55850125fef4  movsd xmm7, [rdx+0x10]
+55850125fef9  mov r9, [rcx+0x20]
+55850125fefd  cmp byte [rcx+0xa], 0x1
+55850125ff01  jnz 0x558501250128
+55850125ff07  test r9, r9
+55850125ff0a  jz 0x558501250128
+55850125ff10  mov r8, [r9+0x28]
+55850125ff14  cmp dword [r8-0x10], +0x0c
+55850125ff19  jb 0x558501250128
+55850125ff1f  mov rdi, 0xfffdff044ddd2780
+55850125ff29  cmp rdi, [r8+0x128]
+55850125ff30  jnz 0x558501250128
+55850125ff36  rorx rdx, [r8+0x120], 0x2f
+55850125ff40  cmp dx, -0x0c
+55850125ff44  jnz 0x558501250128
+55850125ff4a  shr rdx, 0x11
+55850125ff4e  mov rsi, [rdx+0x28]
+55850125ff52  cmp dword [rsi-0x10], +0x03
+55850125ff56  jb 0x558501250128
+55850125ff5c  mov rdi, 0xfffdff044ddd5800
+55850125ff66  cmp rdi, [rsi+0x50]
+55850125ff6a  jnz 0x558501250128
+55850125ff70  mov rdi, [rsi+0x48]
+55850125ff74  sar rdi, 0x2f
+55850125ff78  cmp edi, -0x09
+55850125ff7b  jnz 0x558501250128
+55850125ff81  addsd xmm7, xmm0
+55850125ff85  add ebp, +0x01
+55850125ff88  cmp ebp, eax
+55850125ff8a  jg 0x558501250130
+->LOOP:
+55850125ff90  mov rdi, 0x00007f044e010584
+55850125ff9a  mov edi, [rdi]
+55850125ff9c  cmp edi, +0x00
+55850125ff9f  jz 0x558501250138
+55850125ffa5  cmp dword [r14+0x808], +0x00
+55850125ffad  jnz 0x558501250138
+55850125ffb3  cmp byte [rcx+0xa], 0x1
+55850125ffb7  jnz 0x558501250140
+55850125ffbd  mov rbx, [rdx+0x28]
+55850125ffc1  cmp dword [rbx-0x10], +0x03
+55850125ffc5  jb 0x558501250140
+55850125ffcb  mov rdi, 0xfffdff044ddd5800
+55850125ffd5  cmp rdi, [rbx+0x50]
+55850125ffd9  jnz 0x558501250140
+55850125ffdf  mov rdi, [rbx+0x48]
+55850125ffe3  sar rdi, 0x2f
+55850125ffe7  cmp edi, -0x09
+55850125ffea  jnz 0x558501250140
+55850125fff0  addsd xmm7, xmm0
+55850125fff4  add ebp, +0x01
+55850125fff7  cmp ebp, eax
+55850125fff9  jle 0x55850125ff90	->LOOP
+55850125fffb  jmp 0x558501250148
+---- TRACE 1 stop -> loop
+
+shape	file	root	1	nins	31	mcode	369	meta	1	node	2	postmeta	0	postnode	1	exits	1
+---- TRACE 2 start direct-cost.lua:12
+---- TRACE 2 abort direct-cost.lua:12 -- NYI: bytecode ISLT  
+
+sample	1	0.000080000
+sample	2	0.000003000
+sample	3	0.000003000
+sample	4	0.000003000
+sample	5	0.000002000
+result	file	80	0.000002000

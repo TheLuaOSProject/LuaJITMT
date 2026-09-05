@@ -1,0 +1,39 @@
+{
+  "artifacts": [
+    {
+      "source": "/tmp/lj-special-udata-pure-20260905-u7z61i10/benchmark.py",
+      "relative_path": "benchmark.py",
+      "sha256": "fedd876ecf83688bd51ca2c2af1553131aa028f29bed3a0945ae6399107765b3",
+      "bytes": 1412,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-pure-20260905-u7z61i10/cost.lua",
+      "relative_path": "cost.lua",
+      "sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+      "bytes": 2167,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-pure-20260905-u7z61i10/direct-cost.lua",
+      "relative_path": "direct-cost.lua",
+      "sha256": "f3f4a1b1b955a145741aadc9bdca053169737ede33961661674abbb4b2dbe52d",
+      "bytes": 2432,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-pure-20260905-u7z61i10/cost-results.json",
+      "relative_path": "cost-results.json",
+      "sha256": "0a99beaffa83823e351883ecd8dac8c9fa7290cdc2dd0917c062bb2958b7a64d",
+      "bytes": 113150,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-special-udata-pure-20260905-u7z61i10/cost-summary.json",
+      "relative_path": "cost-summary.json",
+      "sha256": "b4b425461bf735d625df526fbf690a9e977e557306c21435705f0eaa6573fc62",
+      "bytes": 4373,
+      "storage": "text"
+    }
+  ]
+}

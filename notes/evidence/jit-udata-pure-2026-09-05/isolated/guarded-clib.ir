@@ -1,0 +1,151 @@
+---- TRACE flush
+
+---- TRACE 1 start cost.lua:17
+---- TRACE 1 IR
+0001 >  [35mint[m SLOAD  #5    CRI
+0002 >  [35mint[m LE     0001  [35m+2147483646[m
+0003    [35mint[m SLOAD  #4    CI
+0004 >  [34mnum[m SLOAD  #3    T
+0005    [1mfun[m SLOAD  #0    R
+0006 >  p64 UREFC  0005  #0  
+0007 >  [36mudt[m ULOAD  0006
+0008 >  p64 UREFC  0005  #1  
+0009 >  [32mstr[m ULOAD  0008
+0010    [31mtab[m FLOAD  0007  udata.meta
+0011 >  p64 EQ     0007  [0x7f18d06660d0]
+0012 >  [31mtab[m NE     0010  [31mNULL[m
+0013    p64 FLOAD  0010  tab.node
+0014 >  p64 HREFK  0013  [32m"__index"[m @2
+0015 >  [1mfun[m HLOAD  0014
+0016 >  [1mfun[m EQ     0015  [1mffi.clib.__index[m
+0017 >  [32mstr[m EQ     0009  [32m"abs"[m
+0018  + [34mnum[m ADD    0004  [34m+1  [m
+0019  + [35mint[m ADD    0003  [35m+1  [m
+0020 >  [35mint[m LE     0019  0001
+0021 ------ LOOP ------------
+0022 >  nil XPOLL  #0  
+0023 >  [36mudt[m ULOAD  0006
+0024 >  [32mstr[m ULOAD  0008
+0025    [31mtab[m FLOAD  0023  udata.meta
+0026 >  p64 EQ     0023  [0x7f18d06660d0]
+0027 >  [31mtab[m NE     0025  [31mNULL[m
+0028    p64 FLOAD  0025  tab.node
+0029 >  p64 HREFK  0028  [32m"__index"[m @2
+0030 >  [1mfun[m HLOAD  0029
+0031 >  [1mfun[m EQ     0030  [1mffi.clib.__index[m
+0032 >  [32mstr[m EQ     0024  [32m"abs"[m
+0033  + [34mnum[m ADD    0018  [34m+1  [m
+0034  + [35mint[m ADD    0019  [35m+1  [m
+0035 >  [35mint[m LE     0034  0001
+0036    [35mint[m PHI    0019  0034
+0037    [34mnum[m PHI    0018  0033
+---- TRACE 1 mcode 512
+55ba3378fe00  mov dword [r14+0x84c], 0x1
+55ba3378fe0b  mov rsi, 0x00007f18d06660d0
+55ba3378fe15  mov rcx, 0x00007f18d0766b80
+55ba3378fe1f  movsd xmm0, [rip-0xfcd7]
+55ba3378fe27  movsd xmm7, [rdx+0x18]
+55ba3378fe2c  cvttsd2si eax, xmm7
+55ba3378fe30  xorps xmm6, xmm6
+55ba3378fe33  cvtsi2sd xmm6, eax
+55ba3378fe37  ucomisd xmm7, xmm6
+55ba3378fe3b  jnz 0x55ba33780120
+55ba3378fe41  jpe 0x55ba33780120
+55ba3378fe47  cmp eax, 0x7ffffffe
+55ba3378fe4d  jg 0x55ba33780120
+55ba3378fe53  cvttsd2si ebp, [rdx+0x10]
+55ba3378fe58  cmp dword [rdx+0xc], 0xfff90000
+55ba3378fe5f  jnb 0x55ba33780120
+55ba3378fe65  movsd xmm7, [rdx+0x8]
+55ba3378fe6a  rorx rbx, [rdx-0x10], 0x2f
+55ba3378fe71  shr rbx, 0x11
+55ba3378fe75  mov rdx, 0x00007f18d0665ee0
+55ba3378fe7f  mov rdi, [rbx+0x28]
+55ba3378fe83  cmp byte [rdi+0xa], 0x0
+55ba3378fe87  jz 0x55ba33780128
+55ba3378fe8d  lea r9, [rdi+0x10]
+55ba3378fe91  rorx rdi, [r9], 0x2f
+55ba3378fe97  cmp di, -0x0d
+55ba3378fe9b  jnz 0x55ba33780128
+55ba3378fea1  shr rdi, 0x11
+55ba3378fea5  mov rbx, [rbx+0x30]
+55ba3378fea9  cmp byte [rbx+0xa], 0x0
+55ba3378fead  jz 0x55ba33780128
+55ba3378feb3  lea r8, [rbx+0x10]
+55ba3378feb7  rorx r10, [r8], 0x2f
+55ba3378febd  cmp r10w, -0x05
+55ba3378fec2  jnz 0x55ba33780128
+55ba3378fec8  shr r10, 0x11
+55ba3378fecc  mov rbx, [rdi+0x20]
+55ba3378fed0  cmp rdi, rsi
+55ba3378fed3  jnz 0x55ba33780128
+55ba3378fed9  test rbx, rbx
+55ba3378fedc  jz 0x55ba33780128
+55ba3378fee2  mov r12, [rbx+0x28]
+55ba3378fee6  cmp dword [r12-0x10], +0x02
+55ba3378feec  jb 0x55ba33780128
+55ba3378fef2  mov rdi, 0xfffdff18d0762780
+55ba3378fefc  cmp rdi, [r12+0x38]
+55ba3378ff01  jnz 0x55ba33780128
+55ba3378ff07  rorx r11, [r12+0x30], 0x2f
+55ba3378ff0f  cmp r11w, -0x09
+55ba3378ff14  jnz 0x55ba33780128
+55ba3378ff1a  shr r11, 0x11
+55ba3378ff1e  cmp r11, rdx
+55ba3378ff21  jnz 0x55ba33780128
+55ba3378ff27  cmp r10, rcx
+55ba3378ff2a  jnz 0x55ba33780128
+55ba3378ff30  addsd xmm7, xmm0
+55ba3378ff34  add ebp, +0x01
+55ba3378ff37  cmp ebp, eax
+55ba3378ff39  jg 0x55ba33780130
+->LOOP:
+55ba3378ff3f  mov rdi, 0x00007f18d09a0584
+55ba3378ff49  mov edi, [rdi]
+55ba3378ff4b  cmp edi, +0x00
+55ba3378ff4e  jz 0x55ba33780138
+55ba3378ff54  cmp dword [r14+0x808], +0x00
+55ba3378ff5c  jnz 0x55ba33780138
+55ba3378ff62  rorx r13, [r9], 0x2f
+55ba3378ff68  cmp r13w, -0x0d
+55ba3378ff6d  jnz 0x55ba33780140
+55ba3378ff73  shr r13, 0x11
+55ba3378ff77  rorx rbx, [r8], 0x2f
+55ba3378ff7d  cmp bx, -0x05
+55ba3378ff81  jnz 0x55ba33780140
+55ba3378ff87  shr rbx, 0x11
+55ba3378ff8b  mov r15, [r13+0x20]
+55ba3378ff8f  cmp r13, rsi
+55ba3378ff92  jnz 0x55ba33780140
+55ba3378ff98  test r15, r15
+55ba3378ff9b  jz 0x55ba33780140
+55ba3378ffa1  mov r15, [r15+0x28]
+55ba3378ffa5  cmp dword [r15-0x10], +0x02
+55ba3378ffaa  jb 0x55ba33780140
+55ba3378ffb0  mov rdi, 0xfffdff18d0762780
+55ba3378ffba  cmp rdi, [r15+0x38]
+55ba3378ffbe  jnz 0x55ba33780140
+55ba3378ffc4  rorx r15, [r15+0x30], 0x2f
+55ba3378ffcb  cmp r15w, -0x09
+55ba3378ffd0  jnz 0x55ba33780140
+55ba3378ffd6  shr r15, 0x11
+55ba3378ffda  cmp r15, rdx
+55ba3378ffdd  jnz 0x55ba33780140
+55ba3378ffe3  cmp rbx, rcx
+55ba3378ffe6  jnz 0x55ba33780140
+55ba3378ffec  addsd xmm7, xmm0
+55ba3378fff0  add ebp, +0x01
+55ba3378fff3  cmp ebp, eax
+55ba3378fff5  jle 0x55ba3378ff3f	->LOOP
+55ba3378fffb  jmp 0x55ba33780148
+---- TRACE 1 stop -> loop
+
+sample	1	0.000004000	80
+sample	2	0.000003000	80
+---- TRACE 2 start cost.lua:15
+---- TRACE 2 abort cost.lua:15 -- NYI: bytecode ISLT  
+
+sample	3	0.000051000	80
+sample	4	0.000002000	80
+sample	5	0.000002000	80
+result	clib	80	0.000002000	38	512	1	0

@@ -1,0 +1,610 @@
+[
+  {
+    "variant": "guarded",
+    "label": "hoist-witness-disabled",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-special-udata-pure.lua",
+      "clib",
+      "function"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/?.lua;;"
+    },
+    "seconds": 0.008332929999596672,
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/luajit: ...al-udata-pure-20260905-u7z61i10/t-special-udata-pure.lua:193: ...al-udata-pure-20260905-u7z61i10/t-special-udata-pure.lua:57: pure metatable reuse shape\nstack traceback:\n\t[C]: in function 'assert'\n\t...al-udata-pure-20260905-u7z61i10/t-special-udata-pure.lua:193: in main chunk\n\t[C]: at 0x56204feeb100\n",
+    "expected_exit": 1,
+    "expected_error": "pure metatable reuse shape"
+  },
+  {
+    "variant": "candidate",
+    "label": "native-witness-disabled",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-special-udata-pure-no-native.lua",
+      "clib",
+      "function"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;;"
+    },
+    "seconds": 0.00848578200020711,
+    "exit": 1,
+    "stdout": "direct-shape\tclib\tfunction\t1\t25\t1\t1\t0\t0\nspecial-userdata-guard\tclib\tfunction\twarm-exits\t1\told-exits\t0\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\n",
+    "stderr": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit: ...ure-20260905-u7z61i10/t-special-udata-pure-no-native.lua:194: ...ure-20260905-u7z61i10/t-special-udata-pure-no-native.lua:179: post-mutation execution must enter the original native loop\nstack traceback:\n\t[C]: in function 'assert'\n\t...ure-20260905-u7z61i10/t-special-udata-pure-no-native.lua:194: in main chunk\n\t[C]: at 0x55d19861e100\n",
+    "expected_exit": 1,
+    "expected_error": "post-mutation execution must enter the original native loop"
+  },
+  {
+    "variant": "candidate",
+    "label": "udata-effect/luastore",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-udata-pure-exclusions.lua",
+      "luastore"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;;"
+    },
+    "seconds": 0.006876703999296296,
+    "exit": 0,
+    "stdout": "udata-effect\tluastore\troot\t1\tnins\t49\tpostmeta\t1\tvalue\t80\texits\t1\n",
+    "stderr": "",
+    "expected_exit": 0,
+    "expected_error": null
+  },
+  {
+    "variant": "candidate",
+    "label": "udata-effect/newref",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-udata-pure-exclusions.lua",
+      "newref"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;;"
+    },
+    "seconds": 0.006834381001681322,
+    "exit": 0,
+    "stdout": "udata-effect\tnewref\troot\t1\tnins\t59\tpostmeta\t1\tvalue\t80\texits\t1\n",
+    "stderr": "",
+    "expected_exit": 0,
+    "expected_error": null
+  },
+  {
+    "variant": "candidate",
+    "label": "udata-effect/allocate",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-udata-pure-exclusions.lua",
+      "allocate"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;;"
+    },
+    "seconds": 0.006874345999676734,
+    "exit": 0,
+    "stdout": "udata-effect\tallocate\troot\t1\tnins\t67\tpostmeta\t1\tvalue\t3320\texits\t1\n",
+    "stderr": "",
+    "expected_exit": 0,
+    "expected_error": null
+  },
+  {
+    "variant": "candidate",
+    "label": "udata-effect/indirect",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-udata-pure-exclusions.lua",
+      "indirect"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;;"
+    },
+    "seconds": 0.0074159680007142015,
+    "exit": 0,
+    "stdout": "udata-effect\tindirect\troot\t1\tnins\t62\tpostmeta\t1\tvalue\t80\texits\t1\n",
+    "stderr": "",
+    "expected_exit": 0,
+    "expected_error": null
+  },
+  {
+    "variant": "candidate",
+    "label": "udata-effect/directstore",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-udata-pure-exclusions.lua",
+      "directstore"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;;"
+    },
+    "seconds": 0.00675759499790729,
+    "exit": 0,
+    "stdout": "udata-effect\tdirectstore\troot\t1\tnins\t44\tpostmeta\t0\tvalue\t80\texits\t1\n",
+    "stderr": "",
+    "expected_exit": 0,
+    "expected_error": null
+  },
+  {
+    "variant": "candidate",
+    "label": "udata-effect/clear",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-udata-pure-exclusions.lua",
+      "clear"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;;"
+    },
+    "seconds": 0.006664651999017224,
+    "exit": 0,
+    "stdout": "udata-effect\tclear\troot\t1\tnins\t41\tpostmeta\t1\tvalue\t80\texits\t1\n",
+    "stderr": "",
+    "expected_exit": 0,
+    "expected_error": null
+  },
+  {
+    "variant": "candidate",
+    "label": "udata-effect/foreign",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-udata-pure-exclusions.lua",
+      "foreign"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;;"
+    },
+    "seconds": 0.00673644400012563,
+    "exit": 0,
+    "stdout": "udata-effect\tforeign\troot\t1\tnins\t74\tpostmeta\t1\tvalue\t3320\texits\t1\n",
+    "stderr": "",
+    "expected_exit": 0,
+    "expected_error": null
+  },
+  {
+    "variant": "candidate",
+    "label": "udata-effect/fpmath",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-udata-pure-exclusions.lua",
+      "fpmath"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;;"
+    },
+    "seconds": 0.006787804999476066,
+    "exit": 0,
+    "stdout": "udata-effect\tfpmath\troot\t1\tnins\t58\tpostmeta\t1\tvalue\t80.519330781135\texits\t1\n",
+    "stderr": "",
+    "expected_exit": 0,
+    "expected_error": null
+  },
+  {
+    "variant": "strict",
+    "label": "udata-effect/luastore",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-udata-pure-exclusions.lua",
+      "luastore"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/strict/src/?.lua;;"
+    },
+    "seconds": 0.006898428000567947,
+    "exit": 0,
+    "stdout": "udata-effect\tluastore\troot\t1\tnins\t49\tpostmeta\t1\tvalue\t80\texits\t1\n",
+    "stderr": "",
+    "expected_exit": 0,
+    "expected_error": null
+  },
+  {
+    "variant": "strict",
+    "label": "udata-effect/newref",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-udata-pure-exclusions.lua",
+      "newref"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/strict/src/?.lua;;"
+    },
+    "seconds": 0.006863825001346413,
+    "exit": 0,
+    "stdout": "udata-effect\tnewref\troot\t1\tnins\t59\tpostmeta\t1\tvalue\t80\texits\t1\n",
+    "stderr": "",
+    "expected_exit": 0,
+    "expected_error": null
+  },
+  {
+    "variant": "strict",
+    "label": "udata-effect/allocate",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-udata-pure-exclusions.lua",
+      "allocate"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/strict/src/?.lua;;"
+    },
+    "seconds": 0.00687955399916973,
+    "exit": 0,
+    "stdout": "udata-effect\tallocate\troot\t1\tnins\t67\tpostmeta\t1\tvalue\t3320\texits\t1\n",
+    "stderr": "",
+    "expected_exit": 0,
+    "expected_error": null
+  },
+  {
+    "variant": "strict",
+    "label": "udata-effect/indirect",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-udata-pure-exclusions.lua",
+      "indirect"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/strict/src/?.lua;;"
+    },
+    "seconds": 0.006839116002083756,
+    "exit": 0,
+    "stdout": "udata-effect\tindirect\troot\t1\tnins\t62\tpostmeta\t1\tvalue\t80\texits\t1\n",
+    "stderr": "",
+    "expected_exit": 0,
+    "expected_error": null
+  },
+  {
+    "variant": "strict",
+    "label": "udata-effect/directstore",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-udata-pure-exclusions.lua",
+      "directstore"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/strict/src/?.lua;;"
+    },
+    "seconds": 0.006746311999449972,
+    "exit": 0,
+    "stdout": "udata-effect\tdirectstore\troot\t1\tnins\t44\tpostmeta\t0\tvalue\t80\texits\t1\n",
+    "stderr": "",
+    "expected_exit": 0,
+    "expected_error": null
+  },
+  {
+    "variant": "strict",
+    "label": "udata-effect/clear",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-udata-pure-exclusions.lua",
+      "clear"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/strict/src/?.lua;;"
+    },
+    "seconds": 0.006727372998284409,
+    "exit": 0,
+    "stdout": "udata-effect\tclear\troot\t1\tnins\t41\tpostmeta\t1\tvalue\t80\texits\t1\n",
+    "stderr": "",
+    "expected_exit": 0,
+    "expected_error": null
+  },
+  {
+    "variant": "strict",
+    "label": "udata-effect/foreign",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-udata-pure-exclusions.lua",
+      "foreign"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/strict/src/?.lua;;"
+    },
+    "seconds": 0.00690757600023062,
+    "exit": 0,
+    "stdout": "udata-effect\tforeign\troot\t1\tnins\t74\tpostmeta\t1\tvalue\t3320\texits\t1\n",
+    "stderr": "",
+    "expected_exit": 0,
+    "expected_error": null
+  },
+  {
+    "variant": "strict",
+    "label": "udata-effect/fpmath",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-udata-pure-exclusions.lua",
+      "fpmath"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/strict/src/?.lua;;"
+    },
+    "seconds": 0.00689674499881221,
+    "exit": 0,
+    "stdout": "udata-effect\tfpmath\troot\t1\tnins\t58\tpostmeta\t1\tvalue\t80.519330781135\texits\t1\n",
+    "stderr": "",
+    "expected_exit": 0,
+    "expected_error": null
+  },
+  {
+    "variant": "asan",
+    "label": "udata-effect/luastore",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-udata-pure-exclusions.lua",
+      "luastore"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.02380551999885938,
+    "exit": 0,
+    "stdout": "udata-effect\tluastore\troot\t1\tnins\t49\tpostmeta\t1\tvalue\t80\texits\t1\n",
+    "stderr": "",
+    "expected_exit": 0,
+    "expected_error": null
+  },
+  {
+    "variant": "asan",
+    "label": "udata-effect/newref",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-udata-pure-exclusions.lua",
+      "newref"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.0238946860008582,
+    "exit": 0,
+    "stdout": "udata-effect\tnewref\troot\t1\tnins\t59\tpostmeta\t1\tvalue\t80\texits\t1\n",
+    "stderr": "",
+    "expected_exit": 0,
+    "expected_error": null
+  },
+  {
+    "variant": "asan",
+    "label": "udata-effect/allocate",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-udata-pure-exclusions.lua",
+      "allocate"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.023772984997776803,
+    "exit": 0,
+    "stdout": "udata-effect\tallocate\troot\t1\tnins\t67\tpostmeta\t1\tvalue\t3320\texits\t1\n",
+    "stderr": "",
+    "expected_exit": 0,
+    "expected_error": null
+  },
+  {
+    "variant": "asan",
+    "label": "udata-effect/indirect",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-udata-pure-exclusions.lua",
+      "indirect"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.02392222599883098,
+    "exit": 0,
+    "stdout": "udata-effect\tindirect\troot\t1\tnins\t62\tpostmeta\t1\tvalue\t80\texits\t1\n",
+    "stderr": "",
+    "expected_exit": 0,
+    "expected_error": null
+  },
+  {
+    "variant": "asan",
+    "label": "udata-effect/directstore",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-udata-pure-exclusions.lua",
+      "directstore"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.023727532003249507,
+    "exit": 0,
+    "stdout": "udata-effect\tdirectstore\troot\t1\tnins\t44\tpostmeta\t0\tvalue\t80\texits\t1\n",
+    "stderr": "",
+    "expected_exit": 0,
+    "expected_error": null
+  },
+  {
+    "variant": "asan",
+    "label": "udata-effect/clear",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-udata-pure-exclusions.lua",
+      "clear"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.023794572000042535,
+    "exit": 0,
+    "stdout": "udata-effect\tclear\troot\t1\tnins\t41\tpostmeta\t1\tvalue\t80\texits\t1\n",
+    "stderr": "",
+    "expected_exit": 0,
+    "expected_error": null
+  },
+  {
+    "variant": "asan",
+    "label": "udata-effect/foreign",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-udata-pure-exclusions.lua",
+      "foreign"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.023837329001253238,
+    "exit": 0,
+    "stdout": "udata-effect\tforeign\troot\t1\tnins\t74\tpostmeta\t1\tvalue\t3320\texits\t1\n",
+    "stderr": "",
+    "expected_exit": 0,
+    "expected_error": null
+  },
+  {
+    "variant": "asan",
+    "label": "udata-effect/fpmath",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/t-udata-pure-exclusions.lua",
+      "fpmath"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.022988111999438843,
+    "exit": 0,
+    "stdout": "udata-effect\tfpmath\troot\t1\tnins\t58\tpostmeta\t1\tvalue\t80.519330781135\texits\t1\n",
+    "stderr": "",
+    "expected_exit": 0,
+    "expected_error": null
+  }
+]

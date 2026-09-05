@@ -1,0 +1,33 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/strict/src/luajit",
+    "/workspaces/lj-lockless/tools/test.lua",
+    "m6_jit_udata_pure"
+  ],
+  "cwd": "/workspaces/lj-lockless",
+  "environment": {
+    "LJ_TEST_ROOT": "/workspaces/lj-lockless",
+    "JOBS": "4",
+    "MAKE_JOBS": "4",
+    "TMPDIR": "/tmp/lj-udata-pure-root-20260905-pmj9t1ei/canonical-tmp",
+    "LUA_PATH": "/workspaces/lj-lockless/src/?.lua;;"
+  },
+  "runner_sha256": "c46bd587935c8f1ec0aca5ff33cb7335fdcc0d67cb14a67aa91407692b3245c9",
+  "sources": {
+    "src/lj_opt_mem.c": "00787841d7305b758edacb399e16fe5494b9d923525baa5f6b9523af7acbfc2c",
+    "src/lj_crecord.c": "d9117ff3214f258cc84648725effcd498f3d1e93a774a94efd65e81ed11f2bff",
+    "tests/suites/m6_jit.lua": "8a06a961f8d8e1f6b25a6f691d90f3be909333c67f6769e6c800ee29133c572d",
+    "tests/t-jit-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11",
+    "tests/t-jit-udata-pure-exclusions.lua": "03044aaa9f6ccf0ea1512012e8c112d991be54c4f73f096e86e44ba881cd0319"
+  },
+  "exit": 0,
+  "seconds": 44.889107977000094,
+  "default_binaries": {
+    "luajit": "c8e6108c02ce0ab375bed82448ae31eb3b6602ddf8b3e031e2416a0471616189",
+    "libluajit.a": "fd5bea9007c4ceed07c6a4a970b9adf946170ff53ebe36f5bb631b5b1292e63b",
+    "libluajit.so": "e275019182eb5aa7bf3babbcf542217d1a2a2623bf45f0ffb099409c3c001eea"
+  }
+}

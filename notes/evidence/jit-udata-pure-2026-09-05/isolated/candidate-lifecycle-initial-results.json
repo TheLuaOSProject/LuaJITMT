@@ -1,0 +1,149 @@
+[
+  {
+    "label": "compile-phase",
+    "command": [
+      "cc",
+      "-g",
+      "-O2",
+      "-I/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src",
+      "-I/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/tests",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/tests/t-jit-cdata-pure-phase.c",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate-phase"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.08830157599732047,
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "label": "phase/gate",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate-phase",
+      "gate"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.02242020300036529,
+    "exit": 0,
+    "stdout": "pure-phase gate early-exit=147 limit=2000000 exit-callback-mutation=1 continuation-calls=3999706 second-calls=160 final-IDLE\n",
+    "stderr": ""
+  },
+  {
+    "label": "phase/worker",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate-phase",
+      "worker"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.021809254001709633,
+    "exit": 0,
+    "stdout": "pure-phase worker early-exit=83178 limit=2000000 exit-callback-mutation=1 continuation-calls=3833644 second-calls=160 final-IDLE\n",
+    "stderr": ""
+  },
+  {
+    "label": "compile-error",
+    "command": [
+      "cc",
+      "-g",
+      "-O2",
+      "-I/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src",
+      "-I/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/tests",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/tests/t-jit-cdata-pure-error.c",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate-error",
+      "-Wl,--wrap=lj_mem_realloc"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.08631031100230757,
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "label": "error/None",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate-error"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.005325658999936422,
+    "exit": 0,
+    "stdout": "flag-error injected=1 status=4 flag=0\n",
+    "stderr": ""
+  },
+  {
+    "label": "compile-first-attach",
+    "command": [
+      "cc",
+      "-g",
+      "-O2",
+      "-I/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src",
+      "-I/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/tests",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/tests/t-jit-first-attach.c",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate-first-attach"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.10137802399913198,
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "label": "first-attach/loop",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate-first-attach",
+      "loop"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.0370347709977068,
+    "exit": -6,
+    "stdout": "",
+    "stderr": "candidate-first-attach: /tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/tests/t-jit-first-attach.c:95: main: Assertion `argc == 1 || no_loop' failed.\n"
+  }
+]

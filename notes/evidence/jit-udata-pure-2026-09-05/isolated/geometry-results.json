@@ -1,0 +1,418 @@
+[
+  {
+    "trial": 0,
+    "variant": "guarded",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/cost-geometry.lua",
+      "file",
+      "20000000",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/hash-geometry.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/?.lua;;"
+    },
+    "seconds": 0.7024491890006175,
+    "exit": 0,
+    "stdout": "geometry\t1\t3\t3\t15\t1.3993347594829e+14\t1.3993347582125e+14\nsample\t1\t0.050159000\t20000000\nsample\t2\t0.069784000\t20000000\nsample\t3\t0.191360000\t20000000\nsample\t4\t0.191356000\t20000000\nsample\t5\t0.191355000\t20000000\nresult\tfile\t20000000\t0.050159000\t40\t608\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "fc716d0325ffa05b16822747e11416d6df8583b06fd639353f3871ba2588ecbf",
+    "module_sha256": "3cd7c32ac2b0f6e35073a487dd9343e6160142033cba055ff173bdeae04abd3c",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "trial": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/cost-geometry.lua",
+      "file",
+      "20000000",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/hash-geometry.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;;"
+    },
+    "seconds": 0.9660558340001444,
+    "exit": 0,
+    "stdout": "geometry\t1\t3\t3\t15\t1.3996151821286e+14\t1.3996151808582e+14\nsample\t1\t0.191383000\t20000000\nsample\t2\t0.191357000\t20000000\nsample\t3\t0.191366000\t20000000\nsample\t4\t0.191368000\t20000000\nsample\t5\t0.191367000\t20000000\nresult\tfile\t20000000\t0.191357000\t40\t608\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "fc716d0325ffa05b16822747e11416d6df8583b06fd639353f3871ba2588ecbf",
+    "module_sha256": "3cd7c32ac2b0f6e35073a487dd9343e6160142033cba055ff173bdeae04abd3c",
+    "exe_sha256": "f59c1797bfda0060b341208ec44d86d39b0640c504e425d47f274ae9b237e7da"
+  },
+  {
+    "trial": 2,
+    "variant": "guarded",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/cost-geometry.lua",
+      "file",
+      "20000000",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/hash-geometry.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/?.lua;;"
+    },
+    "seconds": 0.5415738349984167,
+    "exit": 0,
+    "stdout": "geometry\t1\t3\t3\t15\t1.3982861533363e+14\t1.3982861520659e+14\nsample\t1\t0.050173000\t20000000\nsample\t2\t0.050138000\t20000000\nsample\t3\t0.050138000\t20000000\nsample\t4\t0.191364000\t20000000\nsample\t5\t0.191362000\t20000000\nresult\tfile\t20000000\t0.050138000\t40\t608\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "fc716d0325ffa05b16822747e11416d6df8583b06fd639353f3871ba2588ecbf",
+    "module_sha256": "3cd7c32ac2b0f6e35073a487dd9343e6160142033cba055ff173bdeae04abd3c",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "trial": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/cost-geometry.lua",
+      "file",
+      "20000000",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/hash-geometry.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;;"
+    },
+    "seconds": 0.682766180998442,
+    "exit": 0,
+    "stdout": "geometry\t1\t3\t3\t15\t1.4047678072602e+14\t1.4047678059898e+14\nsample\t1\t0.050168000\t20000000\nsample\t2\t0.050139000\t20000000\nsample\t3\t0.191358000\t20000000\nsample\t4\t0.191357000\t20000000\nsample\t5\t0.191355000\t20000000\nresult\tfile\t20000000\t0.050139000\t40\t608\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "fc716d0325ffa05b16822747e11416d6df8583b06fd639353f3871ba2588ecbf",
+    "module_sha256": "3cd7c32ac2b0f6e35073a487dd9343e6160142033cba055ff173bdeae04abd3c",
+    "exe_sha256": "f59c1797bfda0060b341208ec44d86d39b0640c504e425d47f274ae9b237e7da"
+  },
+  {
+    "trial": 4,
+    "variant": "guarded",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/cost-geometry.lua",
+      "file",
+      "20000000",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/hash-geometry.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/?.lua;;"
+    },
+    "seconds": 0.8241200359989307,
+    "exit": 0,
+    "stdout": "geometry\t1\t3\t3\t15\t1.4044344774016e+14\t1.4044344761312e+14\nsample\t1\t0.050168000\t20000000\nsample\t2\t0.191367000\t20000000\nsample\t3\t0.191369000\t20000000\nsample\t4\t0.191362000\t20000000\nsample\t5\t0.191360000\t20000000\nresult\tfile\t20000000\t0.050168000\t40\t608\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "fc716d0325ffa05b16822747e11416d6df8583b06fd639353f3871ba2588ecbf",
+    "module_sha256": "3cd7c32ac2b0f6e35073a487dd9343e6160142033cba055ff173bdeae04abd3c",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "trial": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/cost-geometry.lua",
+      "file",
+      "20000000",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/hash-geometry.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;;"
+    },
+    "seconds": 0.6827696709988231,
+    "exit": 0,
+    "stdout": "geometry\t1\t3\t3\t15\t1.4028059490893e+14\t1.4028059478189e+14\nsample\t1\t0.050170000\t20000000\nsample\t2\t0.050138000\t20000000\nsample\t3\t0.191367000\t20000000\nsample\t4\t0.191363000\t20000000\nsample\t5\t0.191362000\t20000000\nresult\tfile\t20000000\t0.050138000\t40\t608\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "fc716d0325ffa05b16822747e11416d6df8583b06fd639353f3871ba2588ecbf",
+    "module_sha256": "3cd7c32ac2b0f6e35073a487dd9343e6160142033cba055ff173bdeae04abd3c",
+    "exe_sha256": "f59c1797bfda0060b341208ec44d86d39b0640c504e425d47f274ae9b237e7da"
+  },
+  {
+    "trial": 6,
+    "variant": "guarded",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/cost-geometry.lua",
+      "file",
+      "20000000",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/hash-geometry.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/?.lua;;"
+    },
+    "seconds": 0.8243079950007086,
+    "exit": 0,
+    "stdout": "geometry\t1\t3\t3\t15\t1.4048373291597e+14\t1.4048373278893e+14\nsample\t1\t0.050175000\t20000000\nsample\t2\t0.191367000\t20000000\nsample\t3\t0.191365000\t20000000\nsample\t4\t0.191360000\t20000000\nsample\t5\t0.191364000\t20000000\nresult\tfile\t20000000\t0.050175000\t40\t608\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "fc716d0325ffa05b16822747e11416d6df8583b06fd639353f3871ba2588ecbf",
+    "module_sha256": "3cd7c32ac2b0f6e35073a487dd9343e6160142033cba055ff173bdeae04abd3c",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "trial": 7,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/cost-geometry.lua",
+      "file",
+      "20000000",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/hash-geometry.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;;"
+    },
+    "seconds": 0.8240961310002604,
+    "exit": 0,
+    "stdout": "geometry\t1\t3\t3\t15\t1.3989304167808e+14\t1.3989304155104e+14\nsample\t1\t0.050168000\t20000000\nsample\t2\t0.191361000\t20000000\nsample\t3\t0.191362000\t20000000\nsample\t4\t0.191357000\t20000000\nsample\t5\t0.191362000\t20000000\nresult\tfile\t20000000\t0.050168000\t40\t608\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "fc716d0325ffa05b16822747e11416d6df8583b06fd639353f3871ba2588ecbf",
+    "module_sha256": "3cd7c32ac2b0f6e35073a487dd9343e6160142033cba055ff173bdeae04abd3c",
+    "exe_sha256": "f59c1797bfda0060b341208ec44d86d39b0640c504e425d47f274ae9b237e7da"
+  },
+  {
+    "trial": 8,
+    "variant": "guarded",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/cost-geometry.lua",
+      "file",
+      "20000000",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/hash-geometry.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/?.lua;;"
+    },
+    "seconds": 0.5410408499992627,
+    "exit": 0,
+    "stdout": "geometry\t1\t3\t3\t15\t1.3980605200973e+14\t1.3980605188269e+14\nsample\t1\t0.050170000\t20000000\nsample\t2\t0.050137000\t20000000\nsample\t3\t0.050137000\t20000000\nsample\t4\t0.191359000\t20000000\nsample\t5\t0.191359000\t20000000\nresult\tfile\t20000000\t0.050137000\t40\t608\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "fc716d0325ffa05b16822747e11416d6df8583b06fd639353f3871ba2588ecbf",
+    "module_sha256": "3cd7c32ac2b0f6e35073a487dd9343e6160142033cba055ff173bdeae04abd3c",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "trial": 9,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/cost-geometry.lua",
+      "file",
+      "20000000",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/hash-geometry.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;;"
+    },
+    "seconds": 0.8240851359987573,
+    "exit": 0,
+    "stdout": "geometry\t1\t3\t3\t15\t1.4067405430963e+14\t1.4067405418259e+14\nsample\t1\t0.050167000\t20000000\nsample\t2\t0.191362000\t20000000\nsample\t3\t0.191361000\t20000000\nsample\t4\t0.191358000\t20000000\nsample\t5\t0.191358000\t20000000\nresult\tfile\t20000000\t0.050167000\t40\t608\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "fc716d0325ffa05b16822747e11416d6df8583b06fd639353f3871ba2588ecbf",
+    "module_sha256": "3cd7c32ac2b0f6e35073a487dd9343e6160142033cba055ff173bdeae04abd3c",
+    "exe_sha256": "f59c1797bfda0060b341208ec44d86d39b0640c504e425d47f274ae9b237e7da"
+  },
+  {
+    "trial": 10,
+    "variant": "guarded",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/cost-geometry.lua",
+      "file",
+      "20000000",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/hash-geometry.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/?.lua;;"
+    },
+    "seconds": 0.9657831710028404,
+    "exit": 0,
+    "stdout": "geometry\t1\t3\t3\t15\t1.3978136348442e+14\t1.3978136335738e+14\nsample\t1\t0.191387000\t20000000\nsample\t2\t0.191357000\t20000000\nsample\t3\t0.191361000\t20000000\nsample\t4\t0.191362000\t20000000\nsample\t5\t0.191362000\t20000000\nresult\tfile\t20000000\t0.191357000\t40\t608\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "fc716d0325ffa05b16822747e11416d6df8583b06fd639353f3871ba2588ecbf",
+    "module_sha256": "3cd7c32ac2b0f6e35073a487dd9343e6160142033cba055ff173bdeae04abd3c",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "trial": 11,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/cost-geometry.lua",
+      "file",
+      "20000000",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/hash-geometry.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;;"
+    },
+    "seconds": 0.6829204049972759,
+    "exit": 0,
+    "stdout": "geometry\t1\t3\t3\t15\t1.4002142460493e+14\t1.4002142447789e+14\nsample\t1\t0.050200000\t20000000\nsample\t2\t0.050148000\t20000000\nsample\t3\t0.191368000\t20000000\nsample\t4\t0.191369000\t20000000\nsample\t5\t0.191365000\t20000000\nresult\tfile\t20000000\t0.050148000\t40\t608\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "fc716d0325ffa05b16822747e11416d6df8583b06fd639353f3871ba2588ecbf",
+    "module_sha256": "3cd7c32ac2b0f6e35073a487dd9343e6160142033cba055ff173bdeae04abd3c",
+    "exe_sha256": "f59c1797bfda0060b341208ec44d86d39b0640c504e425d47f274ae9b237e7da"
+  },
+  {
+    "trial": 12,
+    "variant": "guarded",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/cost-geometry.lua",
+      "file",
+      "20000000",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/hash-geometry.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/?.lua;;"
+    },
+    "seconds": 0.6830700610007625,
+    "exit": 0,
+    "stdout": "geometry\t1\t3\t3\t15\t1.4059714243968e+14\t1.4059714231264e+14\nsample\t1\t0.050167000\t20000000\nsample\t2\t0.050142000\t20000000\nsample\t3\t0.191376000\t20000000\nsample\t4\t0.191362000\t20000000\nsample\t5\t0.191357000\t20000000\nresult\tfile\t20000000\t0.050142000\t40\t608\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "fc716d0325ffa05b16822747e11416d6df8583b06fd639353f3871ba2588ecbf",
+    "module_sha256": "3cd7c32ac2b0f6e35073a487dd9343e6160142033cba055ff173bdeae04abd3c",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "trial": 13,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/cost-geometry.lua",
+      "file",
+      "20000000",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/hash-geometry.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;;"
+    },
+    "seconds": 0.6828275310035679,
+    "exit": 0,
+    "stdout": "geometry\t1\t3\t3\t15\t1.3965898496589e+14\t1.3965898483885e+14\nsample\t1\t0.050171000\t20000000\nsample\t2\t0.050140000\t20000000\nsample\t3\t0.191365000\t20000000\nsample\t4\t0.191360000\t20000000\nsample\t5\t0.191360000\t20000000\nresult\tfile\t20000000\t0.050140000\t40\t608\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "fc716d0325ffa05b16822747e11416d6df8583b06fd639353f3871ba2588ecbf",
+    "module_sha256": "3cd7c32ac2b0f6e35073a487dd9343e6160142033cba055ff173bdeae04abd3c",
+    "exe_sha256": "f59c1797bfda0060b341208ec44d86d39b0640c504e425d47f274ae9b237e7da"
+  },
+  {
+    "trial": 14,
+    "variant": "guarded",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/cost-geometry.lua",
+      "file",
+      "20000000",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/hash-geometry.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/?.lua;;"
+    },
+    "seconds": 0.824037809001311,
+    "exit": 0,
+    "stdout": "geometry\t1\t3\t3\t15\t1.3985930866048e+14\t1.3985930853344e+14\nsample\t1\t0.050171000\t20000000\nsample\t2\t0.191363000\t20000000\nsample\t3\t0.191360000\t20000000\nsample\t4\t0.191357000\t20000000\nsample\t5\t0.191358000\t20000000\nresult\tfile\t20000000\t0.050171000\t40\t608\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "fc716d0325ffa05b16822747e11416d6df8583b06fd639353f3871ba2588ecbf",
+    "module_sha256": "3cd7c32ac2b0f6e35073a487dd9343e6160142033cba055ff173bdeae04abd3c",
+    "exe_sha256": "11c6c00f107416b1fdb1fa1f5309b79b9b5148efb2c1bf8cb942e12bb4515073"
+  },
+  {
+    "trial": 15,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/cost-geometry.lua",
+      "file",
+      "20000000",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/hash-geometry.so"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;;"
+    },
+    "seconds": 0.8241420249978546,
+    "exit": 0,
+    "stdout": "geometry\t1\t3\t3\t15\t1.4064496661478e+14\t1.4064496648774e+14\nsample\t1\t0.050168000\t20000000\nsample\t2\t0.191363000\t20000000\nsample\t3\t0.191359000\t20000000\nsample\t4\t0.191362000\t20000000\nsample\t5\t0.191368000\t20000000\nresult\tfile\t20000000\t0.050168000\t40\t608\t1\t0\n",
+    "stderr": "",
+    "fixture_sha256": "fc716d0325ffa05b16822747e11416d6df8583b06fd639353f3871ba2588ecbf",
+    "module_sha256": "3cd7c32ac2b0f6e35073a487dd9343e6160142033cba055ff173bdeae04abd3c",
+    "exe_sha256": "f59c1797bfda0060b341208ec44d86d39b0640c504e425d47f274ae9b237e7da"
+  }
+]

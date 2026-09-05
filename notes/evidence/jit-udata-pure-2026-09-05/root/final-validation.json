@@ -1,0 +1,99 @@
+{
+  "setup": {
+    "base": "597b8705208957ade8465416da30976ab9b52195",
+    "original_owner": "/tmp/lj-special-udata-pure-20260905-u7z61i10",
+    "combined_owner": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b",
+    "patch_sha256": "c53b908a2f6bd57294452ad9de58db34e25db1ac4414a90c1d78bda2d0df614c"
+  },
+  "source_count": 224,
+  "all_shared_runtime_inputs_match_combined": true,
+  "combined": {
+    "source_bytes_rechecked": true,
+    "prior_handoff_all_artifacts_unchanged": true,
+    "input_files": 224,
+    "source_sha256": {
+      "src/lj_crecord.c": "d9117ff3214f258cc84648725effcd498f3d1e93a774a94efd65e81ed11f2bff",
+      "src/lj_opt_mem.c": "00787841d7305b758edacb399e16fe5494b9d923525baa5f6b9523af7acbfc2c"
+    },
+    "variants": {
+      "candidate": {
+        "commands": 92,
+        "runtime_processes": 87,
+        "stock": {
+          "stock/-joff": "387 passed",
+          "stock/-jon": "509 passed"
+        }
+      },
+      "strict": {
+        "commands": 92,
+        "runtime_processes": 87,
+        "stock": {
+          "stock/-joff": "387 passed",
+          "stock/-jon": "509 passed"
+        }
+      },
+      "asan": {
+        "commands": 94,
+        "runtime_processes": 87,
+        "stock": {
+          "stock/-joff": "387 passed",
+          "stock/-jon": "509 passed"
+        }
+      }
+    },
+    "binaries": {
+      "candidate": {
+        "luajit": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+        "libluajit.a": "91e74c9cd2b5ee8f808825e8923fe7baecd827713c3ba8624f04267090925922"
+      },
+      "strict": {
+        "luajit": "c46bd587935c8f1ec0aca5ff33cb7335fdcc0d67cb14a67aa91407692b3245c9",
+        "libluajit.a": "28738b04be13b4305bb41472ca63c6146e3a828e34f1c01ca31cfce0a47aa327"
+      },
+      "asan": {
+        "luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+        "libluajit.a": "f76d408ca0242ae2fb00a9bfbc43eb29f23a308a1429bf2650ad85cd342ad0d9"
+      }
+    },
+    "runtime_processes": 261,
+    "validation_commands": 278,
+    "build_commands": 3,
+    "ir_probe_processes": 4,
+    "failures": [],
+    "timing_repeated": false
+  },
+  "canonical_runtime_processes": 80,
+  "canonical": {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/strict/src/luajit",
+      "/workspaces/lj-lockless/tools/test.lua",
+      "m6_jit_udata_pure"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LJ_TEST_ROOT": "/workspaces/lj-lockless",
+      "JOBS": "4",
+      "MAKE_JOBS": "4",
+      "TMPDIR": "/tmp/lj-udata-pure-root-20260905-pmj9t1ei/canonical-tmp",
+      "LUA_PATH": "/workspaces/lj-lockless/src/?.lua;;"
+    },
+    "runner_sha256": "c46bd587935c8f1ec0aca5ff33cb7335fdcc0d67cb14a67aa91407692b3245c9",
+    "sources": {
+      "src/lj_opt_mem.c": "00787841d7305b758edacb399e16fe5494b9d923525baa5f6b9523af7acbfc2c",
+      "src/lj_crecord.c": "d9117ff3214f258cc84648725effcd498f3d1e93a774a94efd65e81ed11f2bff",
+      "tests/suites/m6_jit.lua": "8a06a961f8d8e1f6b25a6f691d90f3be909333c67f6769e6c800ee29133c572d",
+      "tests/t-jit-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11",
+      "tests/t-jit-udata-pure-exclusions.lua": "03044aaa9f6ccf0ea1512012e8c112d991be54c4f73f096e86e44ba881cd0319"
+    },
+    "exit": 0,
+    "seconds": 44.889107977000094,
+    "default_binaries": {
+      "luajit": "c8e6108c02ce0ab375bed82448ae31eb3b6602ddf8b3e031e2416a0471616189",
+      "libluajit.a": "fd5bea9007c4ceed07c6a4a970b9adf946170ff53ebe36f5bb631b5b1292e63b",
+      "libluajit.so": "e275019182eb5aa7bf3babbcf542217d1a2a2623bf45f0ffb099409c3c001eea"
+    }
+  }
+}

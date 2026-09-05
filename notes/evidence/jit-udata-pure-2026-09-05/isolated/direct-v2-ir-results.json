@@ -1,0 +1,82 @@
+[
+  {
+    "command": [
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/luajit",
+      "-jdump=im",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/direct-cost.lua",
+      "clib",
+      "80"
+    ],
+    "exit": 0
+  },
+  {
+    "command": [
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/luajit",
+      "-jdump=im",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/direct-cost.lua",
+      "file",
+      "80"
+    ],
+    "exit": 0
+  },
+  {
+    "command": [
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/luajit",
+      "-jdump=im",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/direct-cost.lua",
+      "buffer",
+      "80"
+    ],
+    "exit": 0
+  },
+  {
+    "command": [
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/luajit",
+      "-jdump=im",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/direct-cost.lua",
+      "plain",
+      "80"
+    ],
+    "exit": 0
+  },
+  {
+    "command": [
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
+      "-jdump=im",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/direct-cost.lua",
+      "clib",
+      "80"
+    ],
+    "exit": 0
+  },
+  {
+    "command": [
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
+      "-jdump=im",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/direct-cost.lua",
+      "file",
+      "80"
+    ],
+    "exit": 0
+  },
+  {
+    "command": [
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
+      "-jdump=im",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/direct-cost.lua",
+      "buffer",
+      "80"
+    ],
+    "exit": 0
+  },
+  {
+    "command": [
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
+      "-jdump=im",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/direct-cost.lua",
+      "plain",
+      "80"
+    ],
+    "exit": 0
+  }
+]

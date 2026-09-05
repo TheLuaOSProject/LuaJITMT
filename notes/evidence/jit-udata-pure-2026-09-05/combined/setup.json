@@ -1,0 +1,15 @@
+{
+  "base": "9f68fa8d58e0f115764e5bba73406659ed82c274",
+  "prior_handoff": "/tmp/lj-special-udata-pure-20260905-u7z61i10",
+  "prior_manifest_sha256": "01fbabe6f4f261e542538c1508dd82234a5be5259c1f3bb5a4d2a79e94f25d6c",
+  "archive_sha256": "5e6e519e404928a8212064218f0990654b7dc89a000d8e6f0e7f037961178381",
+  "frozen_files": {
+    "candidate-v2.patch": "c53b908a2f6bd57294452ad9de58db34e25db1ac4414a90c1d78bda2d0df614c",
+    "receiver-source.c": "d9117ff3214f258cc84648725effcd498f3d1e93a774a94efd65e81ed11f2bff",
+    "t-ffi-clib-receiver.lua": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+    "t-ffi-clib-receiver-lib.c": "8ce51fb90a6c101f208886b5b0dd27a4f9bb19c33bcbde696afb3b101e1d38aa",
+    "t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11",
+    "t-udata-pure-exclusions.lua": "03044aaa9f6ccf0ea1512012e8c112d991be54c4f73f096e86e44ba881cd0319",
+    "direct-cost.lua": "f3f4a1b1b955a145741aadc9bdca053169737ede33961661674abbb4b2dbe52d"
+  }
+}

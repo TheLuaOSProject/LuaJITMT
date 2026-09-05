@@ -32,6 +32,7 @@ local m6_cases = {
   "m6_jit_xbar_xpoll",
   "m6_jit_cdata_basemt_guards",
   "m6_jit_special_udata_guards",
+  "m6_jit_udata_pure",
   "m6_jit_cdata_pure",
   "m6_jit_cdata_pure_lifecycle",
   "m6_jit_xsave",
@@ -1174,6 +1175,40 @@ assert(threading.gcworkers(0) == 1)
         libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=lj_mem_realloc" }
       })
       print("M6 pure cdata lifecycle behavior passed")
+    end
+  })
+
+  add({
+    name = "m6_jit_udata_pure",
+    description = "direct userdata pure-loop guards, mutations and effect exclusions",
+    run = function(t)
+      if jit.os ~= "Linux" or jit.arch ~= "x64" then
+        print("M6 pure userdata IR fixtures require Linux/x64")
+        return
+      end
+      build_default(t)
+      for _, kind in ipairs({ "clib", "file", "buffer", "plain" }) do
+        for _, mode in ipairs({
+          "function", "table", "missing", "nonfunction", "replace",
+          "replace_missing", "resize", "methodlife", "table_entry"
+        }) do
+          runtime.luajit_script(t, "t-jit-udata-pure.lua", { kind, mode }, {
+            joff = true, timeout = "20s"
+          })
+          runtime.luajit_script(t, "t-jit-udata-pure.lua", { kind, mode }, {
+            jon = true, timeout = "20s"
+          })
+        end
+      end
+      for _, mode in ipairs({
+        "allocate", "luastore", "newref", "clear", "foreign", "indirect",
+        "fpmath", "directstore"
+      }) do
+        runtime.luajit_script(t, "t-jit-udata-pure-exclusions.lua", { mode }, {
+          jon = true, timeout = "20s"
+        })
+      end
+      print("M6 pure userdata guard and exclusion behavior passed")
     end
   })
 

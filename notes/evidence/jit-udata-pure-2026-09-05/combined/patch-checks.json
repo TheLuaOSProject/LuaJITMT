@@ -1,0 +1,15 @@
+[
+  {
+    "command": [
+      "git",
+      "apply",
+      "--reverse",
+      "--check",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate-v2.patch"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  }
+]

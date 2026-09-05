@@ -1,0 +1,389 @@
+{
+  "root": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b",
+  "artifacts": [
+    {
+      "relative_path": "asan-binaries.json",
+      "sha256": "b5cdce8ba3c9e8a9afcdd56582636f6997353ef9d7e56fe64c090e3694ee6749",
+      "bytes": 168,
+      "storage": "text"
+    },
+    {
+      "relative_path": "asan-build.json",
+      "sha256": "8dd11b9439661e7361aedf19a4318023f16162239f272d8277e5f7b7a7459ebd",
+      "bytes": 3363,
+      "storage": "text"
+    },
+    {
+      "relative_path": "asan-error",
+      "sha256": "47576d6a46e01361e35362f05687e2525a0aa1b60091575036cf81394fd72663",
+      "bytes": 19933672,
+      "storage": "hash-only"
+    },
+    {
+      "relative_path": "asan-first-attach",
+      "sha256": "0f5839ec3adf77ed0dc84c02f1785819cdeda0ecf68aa4a9a5f84c4aab428016",
+      "bytes": 19951616,
+      "storage": "hash-only"
+    },
+    {
+      "relative_path": "asan-fixture-binaries.json",
+      "sha256": "8d865680e550e73c7c8496176a705735eb4715dc2650f7f7b01f773d306af542",
+      "bytes": 448,
+      "storage": "text"
+    },
+    {
+      "relative_path": "asan-phase",
+      "sha256": "1f16271273fd413f78671e37a193bb07bafe92ca8a7597493b167c5859dfc58d",
+      "bytes": 19949400,
+      "storage": "hash-only"
+    },
+    {
+      "relative_path": "asan-receiver-11.so",
+      "sha256": "d3ab0e9ebf73088dcd82104a6f89806bcef9d2974db9d55e7c7eea5fa3fe206f",
+      "bytes": 15288,
+      "storage": "hash-only"
+    },
+    {
+      "relative_path": "asan-receiver-29.so",
+      "sha256": "cfff842054f1c64a6d40ad5e55da936b071e986d06923a674fb973c479320746",
+      "bytes": 15288,
+      "storage": "hash-only"
+    },
+    {
+      "relative_path": "asan-results.json",
+      "sha256": "0d5ed16ce87f8f460559fa5ece8053872b5a72e4ed46bea801a4a26bc853912c",
+      "bytes": 159629,
+      "storage": "text"
+    },
+    {
+      "relative_path": "base.tar",
+      "sha256": "5e6e519e404928a8212064218f0990654b7dc89a000d8e6f0e7f037961178381",
+      "bytes": 40847360,
+      "storage": "hash-only"
+    },
+    {
+      "relative_path": "buffer.ir",
+      "sha256": "50df5668ec5265a0abdf793d3a17bdd08d1d1a47150ae3b927a3ba18ed211efd",
+      "bytes": 4045,
+      "storage": "text"
+    },
+    {
+      "relative_path": "buffer.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "relative_path": "build.py",
+      "sha256": "47ebc773a37e9cd3cdc8b9bad0cbf151e8ce3b1096e3e6ba0d3138bd6e67b782",
+      "bytes": 1501,
+      "storage": "text"
+    },
+    {
+      "relative_path": "candidate-binaries.json",
+      "sha256": "c8cbf1e9dd4725ffb649407076f377bac37712deacd4baa3ae1a86aeb252f046",
+      "bytes": 168,
+      "storage": "text"
+    },
+    {
+      "relative_path": "candidate-build.json",
+      "sha256": "96fb1630c9d7319803ba505967edd83c82bc7193301be71fbb7d8917cebd6a0f",
+      "bytes": 5014,
+      "storage": "text"
+    },
+    {
+      "relative_path": "candidate-error",
+      "sha256": "d6dba6a6af7d647ad020aa994698a49098ba5d0f7ff1dc9d6a592230f26b15d8",
+      "bytes": 1714952,
+      "storage": "hash-only"
+    },
+    {
+      "relative_path": "candidate-first-attach",
+      "sha256": "89f046a6df9e20ef87eaeb52ce2a835eecc38a730013760256be8b0dd1d18e4a",
+      "bytes": 1728568,
+      "storage": "hash-only"
+    },
+    {
+      "relative_path": "candidate-fixture-binaries.json",
+      "sha256": "77fe2ef89bca861a18f009ddb1dc931e8d5a42ecb357f1e0635e7000c4c123f8",
+      "bytes": 473,
+      "storage": "text"
+    },
+    {
+      "relative_path": "candidate-phase",
+      "sha256": "069cc9610e8541a44b4b92aea22ab6ea07b1cb23d1382977cc0ba767137228e1",
+      "bytes": 1718704,
+      "storage": "hash-only"
+    },
+    {
+      "relative_path": "candidate-receiver-11.so",
+      "sha256": "65df1cb9356ec22e5dcfdcdf752c2a0dd7f549e084804f976aa27243ea50bf14",
+      "bytes": 15088,
+      "storage": "hash-only"
+    },
+    {
+      "relative_path": "candidate-receiver-29.so",
+      "sha256": "ede901313b761384ae5964c8a8749b5deb1160c22660ddce1f64a5920f288fe0",
+      "bytes": 15088,
+      "storage": "hash-only"
+    },
+    {
+      "relative_path": "candidate-results.json",
+      "sha256": "1ea74a354a0380bd68967f1ff8dd460526766e7c983231d6de9e563c5ec3c446",
+      "bytes": 123165,
+      "storage": "text"
+    },
+    {
+      "relative_path": "candidate-v2.patch",
+      "sha256": "c53b908a2f6bd57294452ad9de58db34e25db1ac4414a90c1d78bda2d0df614c",
+      "bytes": 2075,
+      "storage": "text"
+    },
+    {
+      "relative_path": "clib.ir",
+      "sha256": "6f2b633f4ff4d697d2baca60f984e5fc62188e602b591167c3d567ff5ea36186",
+      "bytes": 3281,
+      "storage": "text"
+    },
+    {
+      "relative_path": "clib.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "relative_path": "direct-cost.lua",
+      "sha256": "f3f4a1b1b955a145741aadc9bdca053169737ede33961661674abbb4b2dbe52d",
+      "bytes": 2432,
+      "storage": "text"
+    },
+    {
+      "relative_path": "file.ir",
+      "sha256": "ee9c4538597a413d625f7ac0849718ee8924ed21eb96d92bef80dd18b44b15e1",
+      "bytes": 4042,
+      "storage": "text"
+    },
+    {
+      "relative_path": "file.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "relative_path": "final-validation.json",
+      "sha256": "017a3d5aa7cc9d6d11f4894a69eca85a0a8c8c22e8ea82d7d2e7ee401c054d9b",
+      "bytes": 1617,
+      "storage": "text"
+    },
+    {
+      "relative_path": "finalize.py",
+      "sha256": "2c9dd5c409c6938be6761d829e3132bf6d09066752661c2313a7ea9d5fc48c11",
+      "bytes": 3519,
+      "storage": "text"
+    },
+    {
+      "relative_path": "ir-check-results.json",
+      "sha256": "0b2b518703125d8f164c546a72a762e4bbd609f4537c47f8d57edd391b5f622e",
+      "bytes": 13563,
+      "storage": "text"
+    },
+    {
+      "relative_path": "ir-check.py",
+      "sha256": "efb22f6931f38cf55dd59688fe5191775a2dcf4537b80b02355cb8ada13e7702",
+      "bytes": 1978,
+      "storage": "text"
+    },
+    {
+      "relative_path": "patch-checks.json",
+      "sha256": "53428fdbcd07d676adf844cc7d9cd5fe20dd4240a152594f16aaa9937ce72f8f",
+      "bytes": 311,
+      "storage": "text"
+    },
+    {
+      "relative_path": "plain.ir",
+      "sha256": "5a56e298aee4b3b176c82f687c6c9d2e6506b09fcd5d6ce7ac94c66c6206e4d3",
+      "bytes": 3605,
+      "storage": "text"
+    },
+    {
+      "relative_path": "plain.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "relative_path": "receiver-source.c",
+      "sha256": "d9117ff3214f258cc84648725effcd498f3d1e93a774a94efd65e81ed11f2bff",
+      "bytes": 111294,
+      "storage": "text"
+    },
+    {
+      "relative_path": "review.md",
+      "sha256": "f4b796b32c08f71d9116d185175518eba9cc69e1b02bff43598e6472dd646b17",
+      "bytes": 6092,
+      "storage": "text"
+    },
+    {
+      "relative_path": "runtime-input-identity.json",
+      "sha256": "3c40fe1272833ebb3a79abf8eb4827fb8af98877a5a9bb35f615272b3529768c",
+      "bytes": 83725,
+      "storage": "text"
+    },
+    {
+      "relative_path": "setup.json",
+      "sha256": "de56cbe9d77862ead85a4af28397be14922623080b78b1246bcc756526145151",
+      "bytes": 1012,
+      "storage": "text"
+    },
+    {
+      "relative_path": "strict-binaries.json",
+      "sha256": "655aacd045b90b15a504026aea29c180f13bb862a1ef59dacaa6f46addf342da",
+      "bytes": 168,
+      "storage": "text"
+    },
+    {
+      "relative_path": "strict-build.json",
+      "sha256": "06584cf8acc34c43316ca7fcde975a094f13984ec120e3b5a549e58f3e81dda1",
+      "bytes": 3182,
+      "storage": "text"
+    },
+    {
+      "relative_path": "strict-error",
+      "sha256": "13ca365bb570a0030dd36ec9cd873b2dde7bcec77c0b7879a0bf981984d1f108",
+      "bytes": 14048912,
+      "storage": "hash-only"
+    },
+    {
+      "relative_path": "strict-first-attach",
+      "sha256": "aef3e5e4679e046a6ac15d9f7ca6a79ded7aae97af522b0978ca29c9a87da60b",
+      "bytes": 14057496,
+      "storage": "hash-only"
+    },
+    {
+      "relative_path": "strict-fixture-binaries.json",
+      "sha256": "f1b58b12390b14738cb07f79151c1bb714d5ad481734a0fe16fa6d95bbd4f6f2",
+      "bytes": 458,
+      "storage": "text"
+    },
+    {
+      "relative_path": "strict-phase",
+      "sha256": "0c27cf85fe5e61b9a2d702fc550148264b0775c1455193e06cd4e74fc107de40",
+      "bytes": 14051128,
+      "storage": "hash-only"
+    },
+    {
+      "relative_path": "strict-receiver-11.so",
+      "sha256": "65df1cb9356ec22e5dcfdcdf752c2a0dd7f549e084804f976aa27243ea50bf14",
+      "bytes": 15088,
+      "storage": "hash-only"
+    },
+    {
+      "relative_path": "strict-receiver-29.so",
+      "sha256": "ede901313b761384ae5964c8a8749b5deb1160c22660ddce1f64a5920f288fe0",
+      "bytes": 15088,
+      "storage": "hash-only"
+    },
+    {
+      "relative_path": "strict-results.json",
+      "sha256": "ea02daaa0a9e976c3241f6deb6904ed15be1611d437c06f44d8e9e7834e0460d",
+      "bytes": 122044,
+      "storage": "text"
+    },
+    {
+      "relative_path": "t-ffi-clib-receiver-lib.c",
+      "sha256": "8ce51fb90a6c101f208886b5b0dd27a4f9bb19c33bcbde696afb3b101e1d38aa",
+      "bytes": 155,
+      "storage": "text"
+    },
+    {
+      "relative_path": "t-ffi-clib-receiver.lua",
+      "sha256": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+      "bytes": 4597,
+      "storage": "text"
+    },
+    {
+      "relative_path": "t-special-udata-pure.lua",
+      "sha256": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11",
+      "bytes": 7376,
+      "storage": "text"
+    },
+    {
+      "relative_path": "t-udata-pure-exclusions.lua",
+      "sha256": "03044aaa9f6ccf0ea1512012e8c112d991be54c4f73f096e86e44ba881cd0319",
+      "bytes": 3748,
+      "storage": "text"
+    },
+    {
+      "relative_path": "test-input-identity.json",
+      "sha256": "6c4670e71c99cec9063f55ece51d9277059f148a1b0bdbaab86496bf323d47c8",
+      "bytes": 26419,
+      "storage": "text"
+    },
+    {
+      "relative_path": "validate.py",
+      "sha256": "1cd378b85b78495695fa7065fda34d353a4713803cca301aed3e96dbe233504e",
+      "bytes": 5027,
+      "storage": "text"
+    },
+    {
+      "relative_path": "combined-source/lj_crecord.c",
+      "sha256": "d9117ff3214f258cc84648725effcd498f3d1e93a774a94efd65e81ed11f2bff",
+      "bytes": 111294,
+      "storage": "text"
+    },
+    {
+      "relative_path": "combined-source/lj_jit.h",
+      "sha256": "7608c51820c5f365d5cd7ce74fc79a0a3b87b6f9c437b97d01e83b78e7a6c1fa",
+      "bytes": 36301,
+      "storage": "text"
+    },
+    {
+      "relative_path": "combined-source/lj_opt_loop.c",
+      "sha256": "d84ee15a992f10af796af03037cfeabbfa84f6c9ce69346d67c36215ecfd49de",
+      "bytes": 20726,
+      "storage": "text"
+    },
+    {
+      "relative_path": "combined-source/lj_opt_mem.c",
+      "sha256": "00787841d7305b758edacb399e16fe5494b9d923525baa5f6b9523af7acbfc2c",
+      "bytes": 38809,
+      "storage": "text"
+    },
+    {
+      "relative_path": "candidate/src/luajit",
+      "sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+      "bytes": 1514736,
+      "storage": "hash-only"
+    },
+    {
+      "relative_path": "candidate/src/libluajit.a",
+      "sha256": "91e74c9cd2b5ee8f808825e8923fe7baecd827713c3ba8624f04267090925922",
+      "bytes": 2352996,
+      "storage": "hash-only"
+    },
+    {
+      "relative_path": "strict/src/luajit",
+      "sha256": "c46bd587935c8f1ec0aca5ff33cb7335fdcc0d67cb14a67aa91407692b3245c9",
+      "bytes": 14094416,
+      "storage": "hash-only"
+    },
+    {
+      "relative_path": "strict/src/libluajit.a",
+      "sha256": "28738b04be13b4305bb41472ca63c6146e3a828e34f1c01ca31cfce0a47aa327",
+      "bytes": 31007806,
+      "storage": "hash-only"
+    },
+    {
+      "relative_path": "asan/src/luajit",
+      "sha256": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "bytes": 19985928,
+      "storage": "hash-only"
+    },
+    {
+      "relative_path": "asan/src/libluajit.a",
+      "sha256": "f76d408ca0242ae2fb00a9bfbc43eb29f23a308a1429bf2650ad85cd342ad0d9",
+      "bytes": 27403672,
+      "storage": "hash-only"
+    }
+  ]
+}

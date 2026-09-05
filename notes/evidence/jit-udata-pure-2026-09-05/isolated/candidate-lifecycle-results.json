@@ -1,0 +1,81 @@
+[
+  {
+    "label": "compile-first-attach",
+    "command": [
+      "cc",
+      "-g",
+      "-O2",
+      "-I/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src",
+      "-I/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/tests",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/tests/t-jit-first-attach.c",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate-first-attach"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.10956607600019197,
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "label": "first-attach/None",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate-first-attach"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.006134182000096189,
+    "exit": 0,
+    "stdout": "warm native exits\t1\nwarm root 1: 1 XPOLL instructions, all mode 0; LOOP=1\nfirst attach: exit trace=1 snap=4 iteration=27513 limit=1000000000 result=27513 attach-ms=0.070 early=1\nfirst-attach mode-0 native backedge progress PASS\n",
+    "stderr": ""
+  },
+  {
+    "label": "first-attach/noloop",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate-first-attach",
+      "noloop"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.005897808001464,
+    "exit": 0,
+    "stdout": "warm native exits\t1\nwarm root 1: 1 XPOLL instructions, all mode 0; LOOP=0\nfirst attach: exit trace=1 snap=4 iteration=33862 limit=1000000000 result=33862 attach-ms=0.061 early=1\nfirst-attach mode-0 native backedge progress PASS\n",
+    "stderr": ""
+  },
+  {
+    "label": "profile",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/tests/t-jit-cdata-pure-profile.lua"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/src/?.lua;/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate/tests/lib/?.lua;;"
+    },
+    "seconds": 0.009429948997421889,
+    "exit": 0,
+    "stdout": "profile-negative\tmode1\ttrue\tconservative\ttrue\tsamples\t1\tmethodcalls\t12324\texits\t8\n",
+    "stderr": ""
+  }
+]

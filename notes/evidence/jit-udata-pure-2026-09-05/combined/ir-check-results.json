@@ -1,0 +1,750 @@
+[
+  {
+    "kind": "clib",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jdump=im",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/direct-cost.lua",
+      "clib",
+      "80"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate",
+    "exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f3f4a1b1b955a145741aadc9bdca053169737ede33961661674abbb4b2dbe52d",
+    "binary_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "prior_ir_sha256": "c5472e619d53066c2ee6d313f6ea33cc1e0130e404f3e63b4ab132b09fb5982b",
+    "previous_shape": [
+      "shape\tclib\troot\t1\tnins\t23\tmcode\t278\tmeta\t1\tnode\t1\tpostmeta\t0\tpostnode\t0\texits\t1"
+    ],
+    "current_shape": [
+      "shape\tclib\troot\t1\tnins\t24\tmcode\t298\tmeta\t1\tnode\t1\tpostmeta\t0\tpostnode\t0\texits\t1"
+    ],
+    "same_hot_loop_assembly": true,
+    "same_loop_page_offset": true,
+    "previous_loop_page_offset": 4032,
+    "current_loop_page_offset": 4032,
+    "previous_loop_assembly": [
+      [
+        0,
+        "mov rdi, 0xADDR"
+      ],
+      [
+        10,
+        "mov edi, [rdi]"
+      ],
+      [
+        12,
+        "cmp edi, +0x00"
+      ],
+      [
+        15,
+        "jz 0xADDR"
+      ],
+      [
+        21,
+        "cmp dword [r14+0x808], +0x00"
+      ],
+      [
+        29,
+        "jnz 0xADDR"
+      ],
+      [
+        35,
+        "addsd xmm7, xmm0"
+      ],
+      [
+        39,
+        "add ebp, +0x01"
+      ],
+      [
+        42,
+        "cmp ebp, eax"
+      ],
+      [
+        44,
+        "jle 0xADDR\t->LOOP"
+      ],
+      [
+        46,
+        "jmp 0xADDR"
+      ]
+    ],
+    "current_loop_assembly": [
+      [
+        0,
+        "mov rdi, 0xADDR"
+      ],
+      [
+        10,
+        "mov edi, [rdi]"
+      ],
+      [
+        12,
+        "cmp edi, +0x00"
+      ],
+      [
+        15,
+        "jz 0xADDR"
+      ],
+      [
+        21,
+        "cmp dword [r14+0x808], +0x00"
+      ],
+      [
+        29,
+        "jnz 0xADDR"
+      ],
+      [
+        35,
+        "addsd xmm7, xmm0"
+      ],
+      [
+        39,
+        "add ebp, +0x01"
+      ],
+      [
+        42,
+        "cmp ebp, eax"
+      ],
+      [
+        44,
+        "jle 0xADDR\t->LOOP"
+      ],
+      [
+        46,
+        "jmp 0xADDR"
+      ]
+    ]
+  },
+  {
+    "kind": "file",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jdump=im",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/direct-cost.lua",
+      "file",
+      "80"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate",
+    "exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f3f4a1b1b955a145741aadc9bdca053169737ede33961661674abbb4b2dbe52d",
+    "binary_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "prior_ir_sha256": "64c0a441c39c27faad5dd9c33446af75a3e95054c21b638888ce91d5d4973775",
+    "previous_shape": [
+      "shape\tfile\troot\t1\tnins\t31\tmcode\t369\tmeta\t1\tnode\t2\tpostmeta\t0\tpostnode\t1\texits\t1"
+    ],
+    "current_shape": [
+      "shape\tfile\troot\t1\tnins\t31\tmcode\t369\tmeta\t1\tnode\t2\tpostmeta\t0\tpostnode\t1\texits\t1"
+    ],
+    "same_hot_loop_assembly": true,
+    "same_loop_page_offset": true,
+    "previous_loop_page_offset": 3984,
+    "current_loop_page_offset": 3984,
+    "previous_loop_assembly": [
+      [
+        0,
+        "mov rdi, 0xADDR"
+      ],
+      [
+        10,
+        "mov edi, [rdi]"
+      ],
+      [
+        12,
+        "cmp edi, +0x00"
+      ],
+      [
+        15,
+        "jz 0xADDR"
+      ],
+      [
+        21,
+        "cmp dword [r14+0x808], +0x00"
+      ],
+      [
+        29,
+        "jnz 0xADDR"
+      ],
+      [
+        35,
+        "cmp byte [rcx+0xa], 0x1"
+      ],
+      [
+        39,
+        "jnz 0xADDR"
+      ],
+      [
+        45,
+        "mov rbx, [rdx+0x28]"
+      ],
+      [
+        49,
+        "cmp dword [rbx-0x10], +0x03"
+      ],
+      [
+        53,
+        "jb 0xADDR"
+      ],
+      [
+        59,
+        "mov rdi, 0xADDR"
+      ],
+      [
+        69,
+        "cmp rdi, [rbx+0x50]"
+      ],
+      [
+        73,
+        "jnz 0xADDR"
+      ],
+      [
+        79,
+        "mov rdi, [rbx+0x48]"
+      ],
+      [
+        83,
+        "sar rdi, 0x2f"
+      ],
+      [
+        87,
+        "cmp edi, -0x09"
+      ],
+      [
+        90,
+        "jnz 0xADDR"
+      ],
+      [
+        96,
+        "addsd xmm7, xmm0"
+      ],
+      [
+        100,
+        "add ebp, +0x01"
+      ],
+      [
+        103,
+        "cmp ebp, eax"
+      ],
+      [
+        105,
+        "jle 0xADDR\t->LOOP"
+      ],
+      [
+        107,
+        "jmp 0xADDR"
+      ]
+    ],
+    "current_loop_assembly": [
+      [
+        0,
+        "mov rdi, 0xADDR"
+      ],
+      [
+        10,
+        "mov edi, [rdi]"
+      ],
+      [
+        12,
+        "cmp edi, +0x00"
+      ],
+      [
+        15,
+        "jz 0xADDR"
+      ],
+      [
+        21,
+        "cmp dword [r14+0x808], +0x00"
+      ],
+      [
+        29,
+        "jnz 0xADDR"
+      ],
+      [
+        35,
+        "cmp byte [rcx+0xa], 0x1"
+      ],
+      [
+        39,
+        "jnz 0xADDR"
+      ],
+      [
+        45,
+        "mov rbx, [rdx+0x28]"
+      ],
+      [
+        49,
+        "cmp dword [rbx-0x10], +0x03"
+      ],
+      [
+        53,
+        "jb 0xADDR"
+      ],
+      [
+        59,
+        "mov rdi, 0xADDR"
+      ],
+      [
+        69,
+        "cmp rdi, [rbx+0x50]"
+      ],
+      [
+        73,
+        "jnz 0xADDR"
+      ],
+      [
+        79,
+        "mov rdi, [rbx+0x48]"
+      ],
+      [
+        83,
+        "sar rdi, 0x2f"
+      ],
+      [
+        87,
+        "cmp edi, -0x09"
+      ],
+      [
+        90,
+        "jnz 0xADDR"
+      ],
+      [
+        96,
+        "addsd xmm7, xmm0"
+      ],
+      [
+        100,
+        "add ebp, +0x01"
+      ],
+      [
+        103,
+        "cmp ebp, eax"
+      ],
+      [
+        105,
+        "jle 0xADDR\t->LOOP"
+      ],
+      [
+        107,
+        "jmp 0xADDR"
+      ]
+    ]
+  },
+  {
+    "kind": "buffer",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jdump=im",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/direct-cost.lua",
+      "buffer",
+      "80"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate",
+    "exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f3f4a1b1b955a145741aadc9bdca053169737ede33961661674abbb4b2dbe52d",
+    "binary_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "prior_ir_sha256": "d05ed93f6e3afea2c6e7b181d8b2d85906153e5fce08acad7a6c7644b32e8f34",
+    "previous_shape": [
+      "shape\tbuffer\troot\t1\tnins\t31\tmcode\t375\tmeta\t1\tnode\t2\tpostmeta\t0\tpostnode\t1\texits\t1"
+    ],
+    "current_shape": [
+      "shape\tbuffer\troot\t1\tnins\t31\tmcode\t375\tmeta\t1\tnode\t2\tpostmeta\t0\tpostnode\t1\texits\t1"
+    ],
+    "same_hot_loop_assembly": true,
+    "same_loop_page_offset": true,
+    "previous_loop_page_offset": 3968,
+    "current_loop_page_offset": 3968,
+    "previous_loop_assembly": [
+      [
+        0,
+        "mov rdi, 0xADDR"
+      ],
+      [
+        10,
+        "mov edi, [rdi]"
+      ],
+      [
+        12,
+        "cmp edi, +0x00"
+      ],
+      [
+        15,
+        "jz 0xADDR"
+      ],
+      [
+        21,
+        "cmp dword [r14+0x808], +0x00"
+      ],
+      [
+        29,
+        "jnz 0xADDR"
+      ],
+      [
+        35,
+        "cmp byte [rcx+0xa], 0x3"
+      ],
+      [
+        39,
+        "jnz 0xADDR"
+      ],
+      [
+        45,
+        "mov rbx, [rdx+0x28]"
+      ],
+      [
+        49,
+        "cmp dword [rbx-0x10], +0x19"
+      ],
+      [
+        53,
+        "jb 0xADDR"
+      ],
+      [
+        59,
+        "mov rdi, 0xADDR"
+      ],
+      [
+        69,
+        "cmp rdi, [rbx+0x260]"
+      ],
+      [
+        76,
+        "jnz 0xADDR"
+      ],
+      [
+        82,
+        "mov rdi, [rbx+0x258]"
+      ],
+      [
+        89,
+        "sar rdi, 0x2f"
+      ],
+      [
+        93,
+        "cmp edi, -0x09"
+      ],
+      [
+        96,
+        "jnz 0xADDR"
+      ],
+      [
+        102,
+        "addsd xmm7, xmm0"
+      ],
+      [
+        106,
+        "add ebp, +0x01"
+      ],
+      [
+        109,
+        "cmp ebp, eax"
+      ],
+      [
+        111,
+        "jle 0xADDR\t->LOOP"
+      ],
+      [
+        113,
+        "jmp 0xADDR"
+      ]
+    ],
+    "current_loop_assembly": [
+      [
+        0,
+        "mov rdi, 0xADDR"
+      ],
+      [
+        10,
+        "mov edi, [rdi]"
+      ],
+      [
+        12,
+        "cmp edi, +0x00"
+      ],
+      [
+        15,
+        "jz 0xADDR"
+      ],
+      [
+        21,
+        "cmp dword [r14+0x808], +0x00"
+      ],
+      [
+        29,
+        "jnz 0xADDR"
+      ],
+      [
+        35,
+        "cmp byte [rcx+0xa], 0x3"
+      ],
+      [
+        39,
+        "jnz 0xADDR"
+      ],
+      [
+        45,
+        "mov rbx, [rdx+0x28]"
+      ],
+      [
+        49,
+        "cmp dword [rbx-0x10], +0x19"
+      ],
+      [
+        53,
+        "jb 0xADDR"
+      ],
+      [
+        59,
+        "mov rdi, 0xADDR"
+      ],
+      [
+        69,
+        "cmp rdi, [rbx+0x260]"
+      ],
+      [
+        76,
+        "jnz 0xADDR"
+      ],
+      [
+        82,
+        "mov rdi, [rbx+0x258]"
+      ],
+      [
+        89,
+        "sar rdi, 0x2f"
+      ],
+      [
+        93,
+        "cmp edi, -0x09"
+      ],
+      [
+        96,
+        "jnz 0xADDR"
+      ],
+      [
+        102,
+        "addsd xmm7, xmm0"
+      ],
+      [
+        106,
+        "add ebp, +0x01"
+      ],
+      [
+        109,
+        "cmp ebp, eax"
+      ],
+      [
+        111,
+        "jle 0xADDR\t->LOOP"
+      ],
+      [
+        113,
+        "jmp 0xADDR"
+      ]
+    ]
+  },
+  {
+    "kind": "plain",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jdump=im",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/direct-cost.lua",
+      "plain",
+      "80"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate",
+    "exit": 0,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;"
+    },
+    "fixture_sha256": "f3f4a1b1b955a145741aadc9bdca053169737ede33961661674abbb4b2dbe52d",
+    "binary_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "prior_ir_sha256": "19bf3707980ab4f25e1dd2e4a4508b14f592702ab50c39072782d40095ae3616",
+    "previous_shape": [
+      "shape\tplain\troot\t1\tnins\t27\tmcode\t334\tmeta\t1\tnode\t2\tpostmeta\t0\tpostnode\t1\texits\t1"
+    ],
+    "current_shape": [
+      "shape\tplain\troot\t1\tnins\t27\tmcode\t334\tmeta\t1\tnode\t2\tpostmeta\t0\tpostnode\t1\texits\t1"
+    ],
+    "same_hot_loop_assembly": true,
+    "same_loop_page_offset": true,
+    "previous_loop_page_offset": 3984,
+    "current_loop_page_offset": 3984,
+    "previous_loop_assembly": [
+      [
+        0,
+        "mov rdi, 0xADDR"
+      ],
+      [
+        10,
+        "mov edi, [rdi]"
+      ],
+      [
+        12,
+        "cmp edi, +0x00"
+      ],
+      [
+        15,
+        "jz 0xADDR"
+      ],
+      [
+        21,
+        "cmp dword [r14+0x808], +0x00"
+      ],
+      [
+        29,
+        "jnz 0xADDR"
+      ],
+      [
+        35,
+        "mov rbx, [rdx+0x28]"
+      ],
+      [
+        39,
+        "cmp dword [rbx-0x10], +0x00"
+      ],
+      [
+        43,
+        "jb 0xADDR"
+      ],
+      [
+        49,
+        "mov rdi, 0xADDR"
+      ],
+      [
+        59,
+        "cmp rdi, [rbx+0x8]"
+      ],
+      [
+        63,
+        "jnz 0xADDR"
+      ],
+      [
+        69,
+        "cmp dword [rbx+0x4], 0xADDR"
+      ],
+      [
+        76,
+        "jnz 0xADDR"
+      ],
+      [
+        82,
+        "addsd xmm7, xmm0"
+      ],
+      [
+        86,
+        "add ebp, +0x01"
+      ],
+      [
+        89,
+        "cmp ebp, eax"
+      ],
+      [
+        91,
+        "jle 0xADDR\t->LOOP"
+      ],
+      [
+        93,
+        "jmp 0xADDR"
+      ]
+    ],
+    "current_loop_assembly": [
+      [
+        0,
+        "mov rdi, 0xADDR"
+      ],
+      [
+        10,
+        "mov edi, [rdi]"
+      ],
+      [
+        12,
+        "cmp edi, +0x00"
+      ],
+      [
+        15,
+        "jz 0xADDR"
+      ],
+      [
+        21,
+        "cmp dword [r14+0x808], +0x00"
+      ],
+      [
+        29,
+        "jnz 0xADDR"
+      ],
+      [
+        35,
+        "mov rbx, [rdx+0x28]"
+      ],
+      [
+        39,
+        "cmp dword [rbx-0x10], +0x00"
+      ],
+      [
+        43,
+        "jb 0xADDR"
+      ],
+      [
+        49,
+        "mov rdi, 0xADDR"
+      ],
+      [
+        59,
+        "cmp rdi, [rbx+0x8]"
+      ],
+      [
+        63,
+        "jnz 0xADDR"
+      ],
+      [
+        69,
+        "cmp dword [rbx+0x4], 0xADDR"
+      ],
+      [
+        76,
+        "jnz 0xADDR"
+      ],
+      [
+        82,
+        "addsd xmm7, xmm0"
+      ],
+      [
+        86,
+        "add ebp, +0x01"
+      ],
+      [
+        89,
+        "cmp ebp, eax"
+      ],
+      [
+        91,
+        "jle 0xADDR\t->LOOP"
+      ],
+      [
+        93,
+        "jmp 0xADDR"
+      ]
+    ]
+  }
+]

@@ -1,0 +1,2593 @@
+[
+  {
+    "label": "host-instrumentation",
+    "command": [
+      "nm",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/host/minilua",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/host/buildvm"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": false,
+    "inputs": {},
+    "seconds": 0.015761208000185434,
+    "exit": 0,
+    "stdout": "\n/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/host/minilua:\n0000000000008960 t Arith\n000000000000af50 t GCTM\n0000000000026174 B _CRT_glob\n0000000000025db0 d _DYNAMIC\n0000000000025fe8 d _GLOBAL_OFFSET_TABLE_\n0000000000020000 R _IO_stdin_used\n                 w _ITM_deregisterTMCloneTable\n                 w _ITM_registerTMCloneTable\n0000000000024d74 r __FRAME_END__\n00000000000218bc r __GNU_EH_FRAME_HDR\n0000000000026170 D __TMC_END__\n0000000000024d78 r __abi_tag\n0000000000026170 B __bss_start\n                 U __ctype_b_loc@GLIBC_2.3\n                 U __ctype_tolower_loc@GLIBC_2.3\n                 U __ctype_toupper_loc@GLIBC_2.3\n                 w __cxa_finalize@GLIBC_2.2.5\n0000000000026160 D __data_start\n00000000000033a0 t __do_global_dtors_aux\n0000000000025768 d __do_global_dtors_aux_fini_array_entry\n0000000000026168 D __dso_handle\n                 U __errno_location@GLIBC_2.2.5\n0000000000025760 d __frame_dummy_init_array_entry\n                 w __gmon_start__\n                 U __isoc99_fscanf@GLIBC_2.7\n                 U __libc_start_main@GLIBC_2.34\n0000000000026170 D _edata\n0000000000026178 B _end\n000000000001f668 T _fini\n0000000000003000 T _init\n                 U _setjmp@GLIBC_2.2.5\n0000000000003300 T _start\n0000000000018100 t addfield\n0000000000014610 t addk\n0000000000016d20 t adjust_assign\n000000000001eae0 t arshift\n0000000000017040 t assignment\n0000000000019960 t aux_close\n00000000000184c0 t auxsort\n000000000001e4b0 t band\n000000000001f230 t barg\n0000000000025a90 d base_funcs\n                 U bcmp@GLIBC_2.2.5\n0000000000025770 d bitlib\n000000000001e3e0 t bnot\n0000000000014f40 t body\n000000000001e5c0 t bor\n0000000000012930 t breakstat\n000000000001ef60 t bswap\n000000000001e6d0 t bxor\n0000000000006000 t callTMres\n0000000000005ea0 t call_binTM\n000000000001f640 t callallgcTM\n00000000000127f0 t check_match\n000000000000ee00 t chunk\n                 U clearerr@GLIBC_2.2.5\n0000000000010c20 t close_func\n0000000000004710 t close_state\n0000000000013b60 t codearith\n0000000000026170 b completed.0\n0000000000016530 t condjump\n0000000000014880 t constructor\n00000000000194b0 t createstdfile\n0000000000026160 W data_start\n0000000000003330 t deregister_tm_clones\n00000000000144a0 t discharge2reg\n0000000000020a18 r dummynode_\n000000000001f480 t errfile\n00000000000167e0 t error_expected\n                 U exit@GLIBC_2.2.5\n0000000000016860 t exp1\n0000000000013e20 t exp2reg\n000000000001f630 t f_call\n00000000000197c0 t f_flush\n0000000000019860 t f_lines\n00000000000044f0 t f_luaopen\n000000000000e830 t f_parser\n00000000000198e0 t f_read\n0000000000019910 t f_write\n                 U fclose@GLIBC_2.2.5\n                 U feof@GLIBC_2.2.5\n                 U ferror@GLIBC_2.2.5\n                 U fflush@GLIBC_2.2.5\n                 U fgets@GLIBC_2.2.5\n0000000000015c50 t field\n0000000000025c50 d flib\n                 U floor@GLIBC_2.2.5\n                 U fopen@GLIBC_2.2.5\n00000000000168f0 t forbody\n                 U fprintf@GLIBC_2.2.5\n00000000000033e0 t frame_dummy\n                 U fread@GLIBC_2.2.5\n                 U free@GLIBC_2.2.5\n                 U freopen@GLIBC_2.2.5\n0000000000015d60 t funcargs\n                 U fwrite@GLIBC_2.2.5\n000000000001b170 t g_iofile\n0000000000019e40 t g_read\n000000000001a3c0 t g_write\n000000000001f5c0 t getF\n000000000000e6e0 t getS\n0000000000009e20 t get_compTM\n                 U getc@GLIBC_2.2.5\n000000000001bfb0 t gmatch\n000000000001de70 t gmatch_aux\n0000000000008320 t growCI\n0000000000011bc0 t inclinenumber\n00000000000196c0 t io_close\n00000000000193f0 t io_fclose\n000000000001a750 t io_flush\n0000000000019940 t io_gc\n000000000001a8c0 t io_input\n000000000001a8e0 t io_lines\n0000000000019480 t io_noclose\n000000000001ac20 t io_open\n000000000001adb0 t io_output\n0000000000019650 t io_pclose\n000000000001add0 t io_read\n0000000000019bd0 t io_readline\n000000000001aec0 t io_type\n000000000001b080 t io_write\n0000000000025bb0 d iolib\n000000000000bdc0 t ipairsaux\n0000000000016450 t jumponcond\n0000000000004430 t l_alloc\n00000000000166c0 t leaveblock\n0000000000010fa0 t llex\n                 U longjmp@GLIBC_2.2.5\n000000000001e7e0 t lshift\n000000000000c730 t luaB_assert\n000000000000c7e0 t luaB_error\n000000000000bd20 t luaB_ipairs\n000000000000c920 t luaB_loadfile\n000000000000c9e0 t luaB_loadstring\n000000000000c460 t luaB_newproxy\n000000000000c000 t luaB_next\n000000000000bf60 t luaB_pairs\n000000000000cb80 t luaB_pcall\n000000000000cc90 t luaB_rawget\n000000000000cd30 t luaB_setfenv\n000000000000d100 t luaB_setmetatable\n000000000000d2a0 t luaB_tonumber\n000000000000d4d0 t luaB_type\n000000000000d540 t luaB_unpack\n000000000000b0a0 t luaC_separateudata\n00000000000060b0 t luaD_call\n000000000000e700 t luaD_pcall\n0000000000007f00 t luaD_precall\n0000000000004480 t luaD_rawrunprotected\n0000000000004fb0 t luaD_reallocCI\n0000000000005d10 t luaD_reallocstack\n0000000000004d80 t luaF_close\n00000000000055f0 t luaG_errormsg\n00000000000050c0 t luaG_runerror\n0000000000009150 t luaH_get\n0000000000008a90 t luaH_getn\n0000000000004840 t luaH_new\n0000000000014180 t luaK_code\n0000000000013d40 t luaK_dischargevars\n0000000000014790 t luaK_exp2RK\n0000000000013ab0 t luaK_exp2anyreg\n0000000000012ad0 t luaK_goiftrue\n0000000000016610 t luaK_patchlist\n0000000000016f50 t luaK_storevar\n0000000000018210 t luaL_addvalue\n000000000000da50 t luaL_argerror\n000000000000e4b0 t luaL_checkinteger\n000000000001dc30 t luaL_checknumber\n0000000000018430 t luaL_checkstack\n0000000000019a20 t luaL_checkudata\n000000000000d8e0 t luaL_error\n000000000001e090 t luaL_findtable\n0000000000003d70 t luaL_loadfile\n000000000000e3c0 t luaL_optinteger\n0000000000018360 t luaL_prepbuffer\n0000000000003850 t luaL_register\n000000000000e290 t luaL_typerror\n000000000000df50 t luaL_where\n0000000000014240 t luaM_growaux_\n00000000000057d0 t luaO_chunkid\n0000000000020a40 r luaO_log2.log_2\n0000000000020a08 r luaO_nilobject_\n00000000000058c0 t luaO_pushfstring\n0000000000005210 t luaO_pushvfstring\n0000000000004a90 t luaS_newlstr\n0000000000004930 t luaS_resize\n00000000000258a0 d luaT_init.luaT_eventname\n0000000000025840 d luaT_typenames\n0000000000005950 t luaV_concat\n00000000000083c0 t luaV_gettable\n0000000000008d70 t luaV_lessthan\n0000000000008600 t luaV_settable\n0000000000009060 t luaV_tonumber\n0000000000012070 t luaX_lexerror\n0000000000012670 t luaX_newstring\n0000000000025930 d luaX_tokens\n0000000000010f50 t luaZ_fill\n000000000000e000 t lua_concat\n0000000000003a80 t lua_createtable\n000000000000db00 t lua_getinfo\n0000000000017600 t lua_newuserdata\n0000000000017490 t lua_objlen\n000000000000b1d0 t lua_pushcclosure\n000000000000e130 t lua_pushfstring\n000000000000bc20 t lua_pushlstring\n0000000000003b70 t lua_rawseti\n000000000000c2c0 t lua_setmetatable\n0000000000004110 t lua_tolstring\n0000000000025a30 d lualibs\n000000000000b3d0 t luaopen_base\n000000000000b670 t luaopen_io\n000000000000bb10 t luaopen_os\n000000000000bb30 t luaopen_string\n000000000000b650 t luaopen_table\n00000000000033f0 T main\n00000000000092e0 t mainposition\n                 U malloc@GLIBC_2.2.5\n000000000001d120 t match\n000000000001da50 t match_class\n                 U memchr@GLIBC_2.2.5\n                 U memcpy@GLIBC_2.14\n                 U memset@GLIBC_2.2.5\n0000000000015760 t new_localvar\n00000000000093a0 t newkey\n000000000000ec40 t open_func\n000000000001b3b0 t os_exit\n000000000001b3d0 t os_remove\n0000000000004450 t panic\n00000000000158d0 t parlist\n0000000000014350 t patchlistaux\n                 U pow@GLIBC_2.29\n00000000000150c0 t primaryexp\n0000000000020b40 r priority\n000000000000a5c0 t propagatemark\n000000000001dba0 t push_onecapture\n0000000000015b00 t pushclosure\n000000000001a2e0 t read_chars\n0000000000019d00 t read_line\n0000000000011dd0 t read_long_string\n0000000000012330 t read_numeral\n                 U realloc@GLIBC_2.2.5\n0000000000004ee0 t reallymarkobject\n00000000000154e0 t recfield\n0000000000003360 t register_tm_clones\n                 U remove@GLIBC_2.2.5\n0000000000004cb0 t resetstack\n0000000000009820 t resize\n000000000001ec60 t rol\n000000000001ede0 t ror\n000000000001e960 t rshift\n0000000000012220 t save\n0000000000009b50 t setarrayvector\n0000000000009c60 t setnodevector\n000000000001d970 t singlematch\n0000000000009fb0 t singlestep\n0000000000016140 t singlevar\n00000000000161f0 t singlevaraux\n0000000000011cc0 t skip_sep\n0000000000017fc0 t sort\n0000000000018fc0 t sort_comp\n                 U sprintf@GLIBC_2.2.5\n                 U stderr@GLIBC_2.2.5\n                 U stdin@GLIBC_2.2.5\n                 U stdout@GLIBC_2.2.5\n000000000001b490 t str_byte\n000000000001b6e0 t str_char\n000000000001b7e0 t str_find\n000000000001ccf0 t str_find_aux\n000000000001b7f0 t str_format\n000000000001c060 t str_gsub\n000000000001c780 t str_lower\n000000000001c880 t str_match\n000000000001c890 t str_rep\n000000000001ca20 t str_sub\n000000000001cbf0 t str_upper\n                 U strcat@GLIBC_2.2.5\n                 U strchr@GLIBC_2.2.5\n                 U strcmp@GLIBC_2.2.5\n                 U strcoll@GLIBC_2.2.5\n                 U strcspn@GLIBC_2.2.5\n                 U strerror@GLIBC_2.2.5\n                 U strlen@GLIBC_2.2.5\n0000000000025cf0 d strlib\n                 U strncat@GLIBC_2.2.5\n                 U strncpy@GLIBC_2.2.5\n                 U strpbrk@GLIBC_2.2.5\n                 U strtod@GLIBC_2.2.5\n                 U strtoul@GLIBC_2.2.5\n0000000000012c90 t subexpr\n000000000000abb0 t sweeplist\n0000000000025cc0 d syslib\n0000000000025b60 d tab_funcs\n00000000000177c0 t tconcat\n0000000000017ac0 t tinsert\n000000000001e310 t tobit\n000000000001f030 t tohex\n0000000000017cf0 t tremove\n                 U ungetc@GLIBC_2.2.5\n\n/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/host/buildvm:\n000000000001adc0 d _DYNAMIC\n000000000001afe8 d _GLOBAL_OFFSET_TABLE_\n000000000000e000 R _IO_stdin_used\n                 w _ITM_deregisterTMCloneTable\n                 w _ITM_registerTMCloneTable\n0000000000018a0c r __FRAME_END__\n00000000000177e0 r __GNU_EH_FRAME_HDR\n000000000001b0f0 D __TMC_END__\n0000000000018a10 r __abi_tag\n000000000001b0f0 B __bss_start\n                 w __cxa_finalize@GLIBC_2.2.5\n000000000001b0e0 D __data_start\n00000000000062a0 t __do_global_dtors_aux\n00000000000194a8 d __do_global_dtors_aux_fini_array_entry\n000000000001b0e8 D __dso_handle\n                 U __errno_location@GLIBC_2.2.5\n00000000000194a0 d __frame_dummy_init_array_entry\n                 w __gmon_start__\n                 U __libc_start_main@GLIBC_2.34\n000000000001b0f0 D _edata\n0000000000021340 B _end\n000000000000db4c T _fini\n0000000000006000 T _init\n0000000000006200 T _start\n00000000000194b0 D bc_names\n000000000000e2f0 r build_actionlist\n0000000000008560 t build_backend\n000000000001b0f0 b completed.0\n0000000000007560 T dasm_checkstep\n0000000000006e80 T dasm_encode\n0000000000006380 T dasm_free\n0000000000007510 T dasm_getpclabel\n0000000000006460 T dasm_growpc\n00000000000062f0 T dasm_init\n0000000000006b50 T dasm_link\n0000000000006560 T dasm_put\n00000000000064e0 T dasm_setup\n00000000000063f0 T dasm_setupglobal\n000000000001b0e0 W data_start\n0000000000006230 t deregister_tm_clones\n000000000000b770 T emit_asm\n000000000000bd10 t emit_asm_label\n000000000000cff0 T emit_fold\n000000000000be10 T emit_lib\n000000000000bde0 T emit_peobj\n                 U exit@GLIBC_2.2.5\n000000000001a1a0 d extnames\n                 U fclose@GLIBC_2.2.5\n                 U ferror@GLIBC_2.2.5\n000000000001b268 b ffasmfunc\n000000000001b260 b ffid\n                 U fflush@GLIBC_2.2.5\n                 U fgets@GLIBC_2.2.5\n000000000001d340 b foldkeys\n                 U fopen@GLIBC_2.2.5\n                 U fprintf@GLIBC_2.2.5\n                 U fputc@GLIBC_2.2.5\n00000000000062e0 t frame_dummy\n                 U free@GLIBC_2.2.5\n000000000001d334 b funcidx\n000000000001d2e0 b funcname\n                 U fwrite@GLIBC_2.2.5\n000000000001a4d0 d globnames\n00000000000197e0 D ir_names\n0000000000019d00 D ircall_names\n0000000000019c30 D irfield_names\n0000000000019bf0 D irfpm_names\n0000000000019b20 D irt_names\n0000000000017558 r jccnames.rel\n00000000000175e0 r libbc_code\n000000000001ad30 d libbc_map\n000000000000c350 t libdef_endmodule\n000000000000c580 t libdef_func\n000000000001abd0 d libdef_handlers\n000000000000c860 t libdef_lua\n000000000000c470 t libdef_module\n000000000000cee0 t libdef_name\n000000000000cbc0 t libdef_push\n000000000000ca10 t libdef_rec\n000000000000ced0 t libdef_regfunc\n000000000000cdf0 t libdef_set\n000000000001d330 b lineno\n0000000000007650 T main\n                 U malloc@GLIBC_2.2.5\n                 U memcpy@GLIBC_2.14\n                 U memmove@GLIBC_2.2.5\n                 U memset@GLIBC_2.2.5\n000000000001a470 d modenames\n000000000001d290 b modname\n000000000001d288 b modnamelen\n000000000001b26c b modstate\n000000000000d810 t nexttoken\n000000000001d338 b nkeys\n000000000001b280 b obuf\n000000000001d280 b optr\n00000000000075f0 T owrite\n                 U putc@GLIBC_2.2.5\n                 U realloc@GLIBC_2.2.5\n000000000001b264 b recffid\n000000000001b270 b regfunc\n0000000000006260 t register_tm_clones\n000000000001b100 b relocmap\n                 U sprintf@GLIBC_2.2.5\n                 U stderr@GLIBC_2.2.5\n                 U stdin@GLIBC_2.2.5\n                 U stdout@GLIBC_2.2.5\n                 U strchr@GLIBC_2.2.5\n                 U strcmp@GLIBC_2.2.5\n                 U strcpy@GLIBC_2.2.5\n                 U strcspn@GLIBC_2.2.5\n                 U strerror@GLIBC_2.2.5\n                 U strlen@GLIBC_2.2.5\n                 U strncmp@GLIBC_2.2.5\n                 U strstr@GLIBC_2.2.5\n                 U strtod@GLIBC_2.2.5\n                 U strtol@GLIBC_2.2.5\n000000000000b690 t sym_insert\n000000000001aaa0 d trace_errors\n0000000000008490 t usage\n",
+    "stderr": ""
+  },
+  {
+    "label": "runtime-instrumentation",
+    "command": [
+      "nm",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/lj_opt_mem.o",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/lj_crecord.o"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": false,
+    "inputs": {},
+    "seconds": 0.012673205997998593,
+    "exit": 0,
+    "stdout": "\n/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/lj_opt_mem.o:\n0000000000000000 r .L___asan_gen_\n0000000000000000 r .str\n0000000000000000 r .str.1\n0000000000000000 n .str.1.15a4b303641b65f5d6186b0c8fd795a0\n0000000000000000 r .str.10\n0000000000000000 n .str.10.15a4b303641b65f5d6186b0c8fd795a0\n0000000000000000 n .str.15a4b303641b65f5d6186b0c8fd795a0\n0000000000000000 r .str.2\n0000000000000000 n .str.2.15a4b303641b65f5d6186b0c8fd795a0\n0000000000000000 r .str.3\n0000000000000000 n .str.3.15a4b303641b65f5d6186b0c8fd795a0\n0000000000000000 r .str.5\n0000000000000000 n .str.5.15a4b303641b65f5d6186b0c8fd795a0\n0000000000000000 r .str.6\n0000000000000000 n .str.6.15a4b303641b65f5d6186b0c8fd795a0\n0000000000000000 r .str.7\n0000000000000000 n .str.7.15a4b303641b65f5d6186b0c8fd795a0\n0000000000000008 C ___asan_globals_registered\n                 U __asan_handle_no_return\n                 U __asan_init\n                 U __asan_option_detect_stack_use_after_return\n                 U __asan_register_elf_globals\n                 U __asan_report_load1\n                 U __asan_report_load2\n                 U __asan_report_load4\n                 U __asan_report_load8\n                 U __asan_report_store1\n                 U __asan_report_store2\n                 U __asan_stack_malloc_0\n                 U __asan_unregister_elf_globals\n                 U __asan_version_mismatch_check_v8\n0000000000000000 r __func__.aa_ahref\n0000000000000000 n __func__.aa_ahref.15a4b303641b65f5d6186b0c8fd795a0\n0000000000000000 r __func__.aa_table\n0000000000000000 n __func__.aa_table.15a4b303641b65f5d6186b0c8fd795a0\n0000000000000000 r __func__.aa_xref\n0000000000000000 n __func__.aa_xref.15a4b303641b65f5d6186b0c8fd795a0\n0000000000000000 r __func__.ahstore_tabref\n0000000000000000 n __func__.ahstore_tabref.15a4b303641b65f5d6186b0c8fd795a0\n0000000000000000 r __func__.fwd_ahload\n0000000000000000 n __func__.fwd_ahload.15a4b303641b65f5d6186b0c8fd795a0\n                 w __start_asan_globals\n                 w __stop_asan_globals\n0000000000002500 t aa_ahref\n0000000000009260 t aa_findcnew\n00000000000002d0 t aa_table\n0000000000007980 t aa_xref\n0000000000000000 t asan.module_ctor\n0000000000000000 t asan.module_dtor\n0000000000008b50 t fload_pure_unroll_invariant\n0000000000000a30 t fwd_ahload\n                 U lj_assert_fail\n                 U lj_ir_emit\n                 U lj_ir_kgc\n                 U lj_ir_kint64\n                 U lj_ir_knull\n                 U lj_ir_knum_u64\n                 U lj_ir_kvalue\n                 U lj_ir_type_size\n                 U lj_opt_cse\n                 U lj_opt_cselim\n0000000000002ba0 T lj_opt_dse_ahstore\n0000000000005d50 T lj_opt_dse_fstore\n0000000000004380 T lj_opt_dse_ustore\n00000000000080b0 T lj_opt_dse_xstore\n0000000000003200 T lj_opt_fwd_alen\n0000000000000540 T lj_opt_fwd_aload\n0000000000004f50 T lj_opt_fwd_fload\n0000000000001c80 T lj_opt_fwd_hload\n0000000000002270 T lj_opt_fwd_href_nokey\n0000000000001ce0 T lj_opt_fwd_hrefk\n00000000000065f0 T lj_opt_fwd_sbuf\n0000000000005470 T lj_opt_fwd_tab_fload\n0000000000000000 T lj_opt_fwd_tptr\n0000000000003b50 T lj_opt_fwd_uload\n0000000000008720 T lj_opt_fwd_wasnonnil\n0000000000006830 T lj_opt_fwd_xload\n                 U lj_tab_get\n                 U lj_thr_get_tg_fallback\n0000000000000000 r switch.table.lj_opt_fwd_xload\n0000000000000000 n switch.table.lj_opt_fwd_xload.15a4b303641b65f5d6186b0c8fd795a0\n\n/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/lj_crecord.o:\n0000000000000000 r .L___asan_gen_\n0000000000000192 r .L___asan_gen_.67\n00000000000001b4 r .L___asan_gen_.68\n00000000000001c8 r .L___asan_gen_.69\n0000000000000226 r .L___asan_gen_.70\n00000000000003e5 r .L___asan_gen_.71\n0000000000000583 r .L___asan_gen_.72\n000000000000075d r .L___asan_gen_.73\n0000000000000827 r .L___asan_gen_.74\n000000000000084f r .L___asan_gen_.75\n0000000000000895 r .L___asan_gen_.76\n00000000000008db r .L___asan_gen_.77\n000000000000098a r .L___asan_gen_.78\n00000000000009fa r .L___asan_gen_.79\n0000000000000a0d r .L___asan_gen_.80\n0000000000000b0e r .L___asan_gen_.81\n0000000000000b22 r .L___asan_gen_.82\n0000000000000baf r .L___asan_gen_.83\n0000000000000bc3 r .L___asan_gen_.84\n0000000000000beb r .L___asan_gen_.85\n0000000000000bff r .L___asan_gen_.86\n0000000000000c11 r .L___asan_gen_.87\n0000000000000c4f r .L___asan_gen_.88\n0000000000000c66 r .L___asan_gen_.89\n0000000000000cf1 r .L___asan_gen_.90\n0000000000000d35 r .L___asan_gen_.91\n0000000000000d83 r .L___asan_gen_.92\n0000000000000da5 r .L___asan_gen_.93\n0000000000000e06 r .L___asan_gen_.94\n0000000000000000 r .str\n0000000000000000 n .str.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.1\n0000000000000000 n .str.1.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.10\n0000000000000000 n .str.10.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.12\n0000000000000000 n .str.12.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.13\n0000000000000000 n .str.13.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.14\n0000000000000000 n .str.14.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.15\n0000000000000000 n .str.15.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.16\n0000000000000000 n .str.16.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.17\n0000000000000000 n .str.17.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.18\n0000000000000000 n .str.18.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.19\n0000000000000000 n .str.19.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.2\n0000000000000000 n .str.2.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.20\n0000000000000000 n .str.20.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.21\n0000000000000000 n .str.21.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.22\n0000000000000000 n .str.22.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.24\n0000000000000000 n .str.24.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.25\n0000000000000000 n .str.25.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.26\n0000000000000000 n .str.26.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.28\n0000000000000000 n .str.28.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.29\n0000000000000000 n .str.29.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.3\n0000000000000000 n .str.3.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.30\n0000000000000000 n .str.30.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.31\n0000000000000000 n .str.31.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.32\n0000000000000000 n .str.32.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.33\n0000000000000000 n .str.33.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.34\n0000000000000000 n .str.34.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.35\n0000000000000000 n .str.35.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.36\n0000000000000000 n .str.36.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.37\n0000000000000000 n .str.37.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.38\n0000000000000000 n .str.38.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.39\n0000000000000000 n .str.39.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.4\n0000000000000000 n .str.4.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.40\n0000000000000000 n .str.40.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.41\n0000000000000000 n .str.41.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.42\n0000000000000000 n .str.42.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.43\n0000000000000000 n .str.43.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.44\n0000000000000000 n .str.44.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.45\n0000000000000000 n .str.45.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.46\n0000000000000000 n .str.46.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.47\n0000000000000000 n .str.47.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.48\n0000000000000000 n .str.48.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.49\n0000000000000000 n .str.49.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.5\n0000000000000000 n .str.5.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.50\n0000000000000000 n .str.50.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.51\n0000000000000000 n .str.51.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.52\n0000000000000000 n .str.52.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.53\n0000000000000000 n .str.53.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.54\n0000000000000000 n .str.54.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.55\n0000000000000000 n .str.55.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.56\n0000000000000000 n .str.56.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.57\n0000000000000000 n .str.57.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.58\n0000000000000000 n .str.58.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.59\n0000000000000000 n .str.59.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.6\n0000000000000000 n .str.6.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.60\n0000000000000000 n .str.60.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.61\n0000000000000000 n .str.61.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.62\n0000000000000000 n .str.62.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.63\n0000000000000000 n .str.63.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.64\n0000000000000000 n .str.64.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.65\n0000000000000000 n .str.65.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.7\n0000000000000000 n .str.7.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.8\n0000000000000000 n .str.8.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r .str.9\n0000000000000000 n .str.9.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000008 C ___asan_globals_registered\n                 U __asan_handle_no_return\n                 U __asan_init\n                 U __asan_memcpy\n                 U __asan_memset\n                 U __asan_option_detect_stack_use_after_return\n                 U __asan_register_elf_globals\n                 U __asan_report_load1\n                 U __asan_report_load2\n                 U __asan_report_load4\n                 U __asan_report_load8\n                 U __asan_report_store1\n                 U __asan_report_store2\n                 U __asan_report_store4\n                 U __asan_report_store8\n                 U __asan_set_shadow_00\n                 U __asan_set_shadow_f5\n                 U __asan_stack_malloc_0\n                 U __asan_stack_malloc_1\n                 U __asan_stack_malloc_2\n                 U __asan_stack_malloc_3\n                 U __asan_stack_malloc_4\n                 U __asan_unregister_elf_globals\n                 U __asan_version_mismatch_check_v8\n0000000000000000 r __func__.argv2cdata\n0000000000000000 n __func__.argv2cdata.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r __func__.argv2ctype_direct\n0000000000000000 n __func__.argv2ctype_direct.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r __func__.cconv_idx\n0000000000000000 n __func__.cconv_idx.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r __func__.checklivetv\n0000000000000000 n __func__.checklivetv.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r __func__.crec_bit64_arg\n0000000000000000 n __func__.crec_bit64_arg.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r __func__.crec_call\n0000000000000000 n __func__.crec_call.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r __func__.crec_call_args_collect\n0000000000000000 n __func__.crec_call_args_collect.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r __func__.crec_call_trace\n0000000000000000 n __func__.crec_call_trace.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r __func__.crec_constructor\n0000000000000000 n __func__.crec_constructor.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r __func__.crec_copy\n0000000000000000 n __func__.crec_copy.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r __func__.crec_ct_tv\n0000000000000000 n __func__.crec_ct_tv.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r __func__.crec_finalizer\n0000000000000000 n __func__.crec_finalizer.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r __func__.crec_index_bf\n0000000000000000 n __func__.crec_index_bf.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r __func__.ctype_name_acq\n0000000000000000 n __func__.ctype_name_acq.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r __func__.lj_crecord_tonumber\n0000000000000000 n __func__.lj_crecord_tonumber.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r __func__.recff_cdata_arith\n0000000000000000 n __func__.recff_cdata_arith.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r __func__.recff_cdata_index\n0000000000000000 n __func__.recff_cdata_index.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r __func__.recff_clib_index\n0000000000000000 n __func__.recff_clib_index.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r __func__.recff_ffi_abi\n0000000000000000 n __func__.recff_ffi_abi.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r __func__.recff_ffi_fill\n0000000000000000 n __func__.recff_ffi_fill.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r __func__.recff_ffi_xof\n0000000000000000 n __func__.recff_ffi_xof.03293d02d2b9d9de5152d4d76383d2c1\n                 w __start_asan_globals\n                 w __stop_asan_globals\n0000000000003430 t argv2cdata\n0000000000013320 t argv2ctype_direct\n0000000000000000 t asan.module_ctor\n0000000000000000 t asan.module_dtor\n0000000000009fd0 t crec_alloc\n0000000000014a40 t crec_bit64_argid\n0000000000015010 t crec_bit64_type\n00000000000175c0 t crec_call_sysv_classify_ct\n0000000000017030 t crec_call_sysv_classify_struct\n0000000000017da0 t crec_cconv_multi_init\n00000000000100f0 t crec_copy\n0000000000003cf0 t crec_ct2irt_snapshot\n0000000000004b20 t crec_ct_tv\n0000000000009ec0 t crec_ctype_metatv\n000000000000f260 t crec_ctype_rawchild\n0000000000003680 t crec_ctype_rawid\n0000000000016fb0 t crec_ctype_rawrefid\n0000000000003f60 t crec_ctype_snapshot\n0000000000017a90 t crec_ctype_vlsize\n0000000000018050 t crec_direct_ctype_base_string\n0000000000019040 t crec_direct_ctype_base_unqualified\n0000000000011890 t crec_fill\n000000000001b4a0 t crec_ident_string\n000000000001b540 t crec_lookup_named_ctype\n0000000000018980 t crec_qual_token\n0000000000003fb0 t crec_tv_ct\n                 U lj_assert_fail\n                 U lj_carith_check64\n                 U lj_ccall_ctid_vararg\n                 U lj_clib_cache_snapshot\n                 U lj_cparse\n0000000000016c30 T lj_crecord_loadiu64\n00000000000166d0 T lj_crecord_tonumber\n0000000000016d40 T lj_crecord_topcvoid\n0000000000016ee0 T lj_crecord_topuint8\n                 U lj_ctype_enumconst_snapshot\n                 U lj_ctype_getfieldq_snapshot\n                 U lj_ctype_getname_snapshot\n                 U lj_ctype_info_predefined\n                 U lj_ctype_info_snapshot\n                 U lj_ctype_intern_l\n                 U lj_ctype_metaroot_init_nothrow\n                 U lj_ctype_metaroot_release\n                 U lj_ctype_metaroot_tv\n                 U lj_ctype_metatv_rooted_try\n                 U lj_ctype_parse_unlock\n                 U lj_ctype_predefined_nometa\n                 U lj_ctype_predefined_string\n                 U lj_ctype_ptrstruct_snapshot\n                 U lj_ctype_rawref_predefined\n                 U lj_ctype_rawref_snapshot\n                 U lj_ctype_size_predefined\n                 U lj_ctype_size_snapshot\n                 U lj_ctype_snapshot\n                 U lj_ffrecord_xsave\n                 U lj_ir_call\n                 U lj_ir_kgc\n                 U lj_ir_kint\n                 U lj_ir_kint64\n                 U lj_ir_knull\n                 U lj_ir_knum_u64\n                 U lj_ir_kptr_\n                 U lj_ir_ktrace\n                 U lj_ir_type_size\n                 U lj_obj_equal\n                 U lj_opt_fold\n                 U lj_opt_narrow_cindex\n                 U lj_opt_narrow_tobit\n                 U lj_opt_narrow_toint\n                 U lj_snap_add\n                 U lj_str_new\n                 U lj_strscan_num\n                 U lj_tab_gettv_forjit\n                 U lj_tg_root_anchor_pop\n                 U lj_tg_root_anchor_push\n                 U lj_thr_get_tg_fallback\n                 U lj_trace_err\n                 U lj_trace_err_info\n00000000000152f0 T recff_bit64_nary\n0000000000015c20 T recff_bit64_shift\n0000000000014870 T recff_bit64_tobit\n00000000000160b0 T recff_bit64_tohex\n0000000000014d00 T recff_bit64_unary\n000000000000b7c0 T recff_cdata_arith\n0000000000007550 T recff_cdata_call\n0000000000000000 T recff_cdata_index\n000000000000e2b0 T recff_clib_index\n0000000000012b40 T recff_ffi_abi\n000000000000fa60 T recff_ffi_copy\n000000000000f4a0 T recff_ffi_errno\n0000000000011220 T recff_ffi_fill\n0000000000014850 T recff_ffi_gc\n00000000000124b0 T recff_ffi_istype\n000000000000f410 T recff_ffi_new\n000000000000f560 T recff_ffi_string\n00000000000121b0 T recff_ffi_typeof\n0000000000012da0 T recff_ffi_xof\n0000000000000000 r switch.table.recff_cdata_call\n0000000000000000 n switch.table.recff_cdata_call.03293d02d2b9d9de5152d4d76383d2c1\n0000000000000000 r switch.table.recff_cdata_call.66\n0000000000000000 n switch.table.recff_cdata_call.66.03293d02d2b9d9de5152d4d76383d2c1\n",
+    "stderr": ""
+  },
+  {
+    "label": "stock/-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-joff",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/stock/test",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/stock/test/test.lua": "364b05bb7ad95cef27a8f38c636e10df05e233c8559961398197fcd2993c4b50"
+    },
+    "seconds": 4.536437405997276,
+    "exit": 0,
+    "stdout": "387 passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "stock/-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/stock/test",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/stock/test/test.lua": "364b05bb7ad95cef27a8f38c636e10df05e233c8559961398197fcd2993c4b50"
+    },
+    "seconds": 6.114963037001871,
+    "exit": 0,
+    "stdout": "509 passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "compile-library/11",
+    "command": [
+      "clang",
+      "-shared",
+      "-fPIC",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DNAMESPACE_VALUE=11",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver-lib.c",
+      "-o",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": false,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver-lib.c": "8ce51fb90a6c101f208886b5b0dd27a4f9bb19c33bcbde696afb3b101e1d38aa"
+    },
+    "seconds": 0.044125520002125995,
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "label": "compile-library/29",
+    "command": [
+      "clang",
+      "-shared",
+      "-fPIC",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DNAMESPACE_VALUE=29",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver-lib.c",
+      "-o",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": false,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver-lib.c": "8ce51fb90a6c101f208886b5b0dd27a4f9bb19c33bcbde696afb3b101e1d38aa"
+    },
+    "seconds": 0.043465696999192005,
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "label": "captured/index-other/-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua",
+      "index-other",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so": "d3ab0e9ebf73088dcd82104a6f89806bcef9d2974db9d55e7c7eea5fa3fe206f",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so": "cfff842054f1c64a6d40ad5e55da936b071e986d06923a674fb973c479320746"
+    },
+    "seconds": 0.03384314700087998,
+    "exit": 0,
+    "stdout": "index-other\twarmexits\t0\tside\tnil\tok\ttrue\tresult\t6420\teffects\t80\ta\t-101\tb\t29\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": ""
+  },
+  {
+    "label": "captured/index-other/-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua",
+      "index-other",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so": "d3ab0e9ebf73088dcd82104a6f89806bcef9d2974db9d55e7c7eea5fa3fe206f",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so": "cfff842054f1c64a6d40ad5e55da936b071e986d06923a674fb973c479320746"
+    },
+    "seconds": 0.034137585000280524,
+    "exit": 0,
+    "stdout": "index-other\twarmexits\t2\tside\t3\tok\ttrue\tresult\t6420\teffects\t80\ta\t-101\tb\t29\tnativeexits\t1\tsideexits\t1\n",
+    "stderr": ""
+  },
+  {
+    "label": "captured/index-type/-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua",
+      "index-type",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so": "d3ab0e9ebf73088dcd82104a6f89806bcef9d2974db9d55e7c7eea5fa3fe206f",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so": "cfff842054f1c64a6d40ad5e55da936b071e986d06923a674fb973c479320746"
+    },
+    "seconds": 0.03395576899856678,
+    "exit": 0,
+    "stdout": "index-type\twarmexits\t0\tside\tnil\tok\tfalse\tresult\t...eiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua:29: bad argument #1 to 'index' (userdata expected, got userdata)\teffects\t1\ta\t-101\tb\t29\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": ""
+  },
+  {
+    "label": "captured/index-type/-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua",
+      "index-type",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so": "d3ab0e9ebf73088dcd82104a6f89806bcef9d2974db9d55e7c7eea5fa3fe206f",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so": "cfff842054f1c64a6d40ad5e55da936b071e986d06923a674fb973c479320746"
+    },
+    "seconds": 0.032599268000922166,
+    "exit": 0,
+    "stdout": "index-type\twarmexits\t2\tside\t3\tok\tfalse\tresult\t...eiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua:29: bad argument #1 to 'index' (userdata expected, got userdata)\teffects\t1\ta\t-101\tb\t29\tnativeexits\t1\tsideexits\t0\n",
+    "stderr": ""
+  },
+  {
+    "label": "captured/newindex-other/-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua",
+      "newindex-other",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so": "d3ab0e9ebf73088dcd82104a6f89806bcef9d2974db9d55e7c7eea5fa3fe206f",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so": "cfff842054f1c64a6d40ad5e55da936b071e986d06923a674fb973c479320746"
+    },
+    "seconds": 0.03162232899921946,
+    "exit": 0,
+    "stdout": "newindex-other\twarmexits\t0\tside\tnil\tok\ttrue\tresult\t3240\teffects\t80\ta\t-101\tb\t180\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": ""
+  },
+  {
+    "label": "captured/newindex-other/-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua",
+      "newindex-other",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so": "d3ab0e9ebf73088dcd82104a6f89806bcef9d2974db9d55e7c7eea5fa3fe206f",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so": "cfff842054f1c64a6d40ad5e55da936b071e986d06923a674fb973c479320746"
+    },
+    "seconds": 0.03364053800032707,
+    "exit": 0,
+    "stdout": "newindex-other\twarmexits\t2\tside\t3\tok\ttrue\tresult\t3240\teffects\t80\ta\t-101\tb\t180\tnativeexits\t1\tsideexits\t1\n",
+    "stderr": ""
+  },
+  {
+    "label": "captured/newindex-type/-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua",
+      "newindex-type",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so": "d3ab0e9ebf73088dcd82104a6f89806bcef9d2974db9d55e7c7eea5fa3fe206f",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so": "cfff842054f1c64a6d40ad5e55da936b071e986d06923a674fb973c479320746"
+    },
+    "seconds": 0.03343384899926605,
+    "exit": 0,
+    "stdout": "newindex-type\twarmexits\t0\tside\tnil\tok\tfalse\tresult\t...eiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua:16: bad argument #1 to 'newindex' (userdata expected, got userdata)\teffects\t1\ta\t-101\tb\t29\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": ""
+  },
+  {
+    "label": "captured/newindex-type/-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua",
+      "newindex-type",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so": "d3ab0e9ebf73088dcd82104a6f89806bcef9d2974db9d55e7c7eea5fa3fe206f",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so": "cfff842054f1c64a6d40ad5e55da936b071e986d06923a674fb973c479320746"
+    },
+    "seconds": 0.03370703200198477,
+    "exit": 0,
+    "stdout": "newindex-type\twarmexits\t2\tside\t3\tok\tfalse\tresult\t...eiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua:16: bad argument #1 to 'newindex' (userdata expected, got userdata)\teffects\t1\ta\t-101\tb\t29\tnativeexits\t1\tsideexits\t0\n",
+    "stderr": ""
+  },
+  {
+    "label": "captured/index-life/-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua",
+      "index-life",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so": "d3ab0e9ebf73088dcd82104a6f89806bcef9d2974db9d55e7c7eea5fa3fe206f",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so": "cfff842054f1c64a6d40ad5e55da936b071e986d06923a674fb973c479320746"
+    },
+    "seconds": 0.03522568799962755,
+    "exit": 0,
+    "stdout": "index-life\twarmexits\t0\tside\tnil\tretained\tfalse\n",
+    "stderr": ""
+  },
+  {
+    "label": "captured/index-life/-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua",
+      "index-life",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so": "d3ab0e9ebf73088dcd82104a6f89806bcef9d2974db9d55e7c7eea5fa3fe206f",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so": "cfff842054f1c64a6d40ad5e55da936b071e986d06923a674fb973c479320746"
+    },
+    "seconds": 0.03533726300156559,
+    "exit": 0,
+    "stdout": "index-life\twarmexits\t2\tside\t3\tretained\ttrue\n",
+    "stderr": ""
+  },
+  {
+    "label": "captured/newindex-life/-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua",
+      "newindex-life",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so": "d3ab0e9ebf73088dcd82104a6f89806bcef9d2974db9d55e7c7eea5fa3fe206f",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so": "cfff842054f1c64a6d40ad5e55da936b071e986d06923a674fb973c479320746"
+    },
+    "seconds": 0.03503636499954155,
+    "exit": 0,
+    "stdout": "newindex-life\twarmexits\t0\tside\tnil\tretained\tfalse\n",
+    "stderr": ""
+  },
+  {
+    "label": "captured/newindex-life/-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua",
+      "newindex-life",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so": "d3ab0e9ebf73088dcd82104a6f89806bcef9d2974db9d55e7c7eea5fa3fe206f",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so": "cfff842054f1c64a6d40ad5e55da936b071e986d06923a674fb973c479320746"
+    },
+    "seconds": 0.033760400001483504,
+    "exit": 0,
+    "stdout": "newindex-life\twarmexits\t2\tside\t3\tretained\ttrue\n",
+    "stderr": ""
+  },
+  {
+    "label": "captured/index-side-other/-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua",
+      "index-side-other",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so": "d3ab0e9ebf73088dcd82104a6f89806bcef9d2974db9d55e7c7eea5fa3fe206f",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so": "cfff842054f1c64a6d40ad5e55da936b071e986d06923a674fb973c479320746"
+    },
+    "seconds": 0.03231051100010518,
+    "exit": 0,
+    "stdout": "index-side-other\twarmexits\t0\tside\tnil\tok\ttrue\tresult\t1350\teffects\t80\ta\t-101\tb\t29\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": ""
+  },
+  {
+    "label": "captured/index-side-other/-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua",
+      "index-side-other",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so": "d3ab0e9ebf73088dcd82104a6f89806bcef9d2974db9d55e7c7eea5fa3fe206f",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so": "cfff842054f1c64a6d40ad5e55da936b071e986d06923a674fb973c479320746"
+    },
+    "seconds": 0.0323498979996657,
+    "exit": 0,
+    "stdout": "index-side-other\twarmexits\t2\tside\t3\tok\ttrue\tresult\t1350\teffects\t80\ta\t-101\tb\t29\tnativeexits\t0\tsideexits\t2\n",
+    "stderr": ""
+  },
+  {
+    "label": "captured/index-side-type/-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua",
+      "index-side-type",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so": "d3ab0e9ebf73088dcd82104a6f89806bcef9d2974db9d55e7c7eea5fa3fe206f",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so": "cfff842054f1c64a6d40ad5e55da936b071e986d06923a674fb973c479320746"
+    },
+    "seconds": 0.03346295899973484,
+    "exit": 0,
+    "stdout": "index-side-type\twarmexits\t0\tside\tnil\tok\tfalse\tresult\t...eiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua:30: bad argument #1 to 'index' (userdata expected, got userdata)\teffects\t40\ta\t-101\tb\t29\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": ""
+  },
+  {
+    "label": "captured/index-side-type/-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua",
+      "index-side-type",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so": "d3ab0e9ebf73088dcd82104a6f89806bcef9d2974db9d55e7c7eea5fa3fe206f",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so": "cfff842054f1c64a6d40ad5e55da936b071e986d06923a674fb973c479320746"
+    },
+    "seconds": 0.033990115000051446,
+    "exit": 0,
+    "stdout": "index-side-type\twarmexits\t2\tside\t3\tok\tfalse\tresult\t...eiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua:30: bad argument #1 to 'index' (userdata expected, got userdata)\teffects\t40\ta\t-101\tb\t29\tnativeexits\t0\tsideexits\t1\n",
+    "stderr": ""
+  },
+  {
+    "label": "captured/newindex-side-other/-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua",
+      "newindex-side-other",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so": "d3ab0e9ebf73088dcd82104a6f89806bcef9d2974db9d55e7c7eea5fa3fe206f",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so": "cfff842054f1c64a6d40ad5e55da936b071e986d06923a674fb973c479320746"
+    },
+    "seconds": 0.034009532999334624,
+    "exit": 0,
+    "stdout": "newindex-side-other\twarmexits\t0\tside\tnil\tok\ttrue\tresult\t3240\teffects\t80\ta\t39\tb\t180\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": ""
+  },
+  {
+    "label": "captured/newindex-side-other/-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua",
+      "newindex-side-other",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so": "d3ab0e9ebf73088dcd82104a6f89806bcef9d2974db9d55e7c7eea5fa3fe206f",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so": "cfff842054f1c64a6d40ad5e55da936b071e986d06923a674fb973c479320746"
+    },
+    "seconds": 0.033153802000015276,
+    "exit": 0,
+    "stdout": "newindex-side-other\twarmexits\t2\tside\t3\tok\ttrue\tresult\t3240\teffects\t80\ta\t39\tb\t180\tnativeexits\t0\tsideexits\t2\n",
+    "stderr": ""
+  },
+  {
+    "label": "captured/newindex-side-type/-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua",
+      "newindex-side-type",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so": "d3ab0e9ebf73088dcd82104a6f89806bcef9d2974db9d55e7c7eea5fa3fe206f",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so": "cfff842054f1c64a6d40ad5e55da936b071e986d06923a674fb973c479320746"
+    },
+    "seconds": 0.03398210200248286,
+    "exit": 0,
+    "stdout": "newindex-side-type\twarmexits\t0\tside\tnil\tok\tfalse\tresult\t...eiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua:17: bad argument #1 to 'newindex' (userdata expected, got userdata)\teffects\t40\ta\t39\tb\t29\tnativeexits\t0\tsideexits\t0\n",
+    "stderr": ""
+  },
+  {
+    "label": "captured/newindex-side-type/-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua",
+      "newindex-side-type",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua": "aa0d4db920b877a17fdb2c83063ac495569ea6790fe09aafa2363ddd954e87ab",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-11.so": "d3ab0e9ebf73088dcd82104a6f89806bcef9d2974db9d55e7c7eea5fa3fe206f",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-receiver-29.so": "cfff842054f1c64a6d40ad5e55da936b071e986d06923a674fb973c479320746"
+    },
+    "seconds": 0.033803584999986924,
+    "exit": 0,
+    "stdout": "newindex-side-type\twarmexits\t2\tside\t3\tok\tfalse\tresult\t...eiver-combined-20260905-sn9vd57b/t-ffi-clib-receiver.lua:17: bad argument #1 to 'newindex' (userdata expected, got userdata)\teffects\t40\ta\t39\tb\t29\tnativeexits\t0\tsideexits\t1\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/clib/function",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "clib",
+      "function"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.03560768700117478,
+    "exit": 0,
+    "stdout": "direct-shape\tclib\tfunction\t1\t26\t1\t1\t0\t0\nspecial-userdata-guard\tclib\tfunction\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/clib/table",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "clib",
+      "table"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.03591261900146492,
+    "exit": 0,
+    "stdout": "direct-shape\tclib\ttable\t1\t26\t1\t1\t0\t0\nspecial-userdata-guard\tclib\ttable\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/clib/missing",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "clib",
+      "missing"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.03584011999919312,
+    "exit": 0,
+    "stdout": "direct-shape\tclib\tmissing\t1\t26\t1\t1\t0\t0\nspecial-userdata-guard\tclib\tmissing\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...iver-combined-20260905-sn9vd57b/t-special-udata-pure.lua:31: attempt to index local 'p' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/clib/nonfunction",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "clib",
+      "nonfunction"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.03574029299852555,
+    "exit": 0,
+    "stdout": "direct-shape\tclib\tnonfunction\t1\t26\t1\t1\t0\t0\nspecial-userdata-guard\tclib\tnonfunction\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...iver-combined-20260905-sn9vd57b/t-special-udata-pure.lua:31: attempt to index local 'p' (a number value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/clib/resize",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "clib",
+      "resize"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.04058489100134466,
+    "exit": 0,
+    "stdout": "direct-shape\tclib\tresize\t1\t26\t1\t1\t0\t0\nspecial-userdata-guard\tclib\tresize\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/clib/replace",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "clib",
+      "replace"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.03752207199795521,
+    "exit": 0,
+    "stdout": "direct-shape\tclib\treplace\t1\t26\t1\t1\t0\t0\nspecial-userdata-guard\tclib\treplace\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/clib/replace_missing",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "clib",
+      "replace_missing"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.03600693699991098,
+    "exit": 0,
+    "stdout": "direct-shape\tclib\treplace_missing\t1\t26\t1\t1\t0\t0\nspecial-userdata-guard\tclib\treplace_missing\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...iver-combined-20260905-sn9vd57b/t-special-udata-pure.lua:31: attempt to index local 'p' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/clib/table_entry",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "clib",
+      "table_entry"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.036741534000611864,
+    "exit": 0,
+    "stdout": "direct-shape\tclib\ttable_entry\t1\t30\t1\t2\t0\t1\nspecial-userdata-guard\tclib\ttable_entry\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/clib/methodlife",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "clib",
+      "methodlife"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.03936050600168528,
+    "exit": 0,
+    "stdout": "direct-shape\tclib\tmethodlife\t1\t25\t1\t1\t0\t0\nspecial-userdata-guard\tclib\tmethodlife\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/file/function",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "file",
+      "function"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.03626327699748799,
+    "exit": 0,
+    "stdout": "direct-shape\tfile\tfunction\t1\t33\t1\t2\t0\t1\nspecial-userdata-guard\tfile\tfunction\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/file/table",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "file",
+      "table"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.036466625999310054,
+    "exit": 0,
+    "stdout": "direct-shape\tfile\ttable\t1\t33\t1\t2\t0\t1\nspecial-userdata-guard\tfile\ttable\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/file/missing",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "file",
+      "missing"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.036157761998765636,
+    "exit": 0,
+    "stdout": "direct-shape\tfile\tmissing\t1\t33\t1\t2\t0\t1\nspecial-userdata-guard\tfile\tmissing\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...iver-combined-20260905-sn9vd57b/t-special-udata-pure.lua:32: attempt to index local 'p' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/file/nonfunction",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "file",
+      "nonfunction"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.03541107500132057,
+    "exit": 0,
+    "stdout": "direct-shape\tfile\tnonfunction\t1\t33\t1\t2\t0\t1\nspecial-userdata-guard\tfile\tnonfunction\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...iver-combined-20260905-sn9vd57b/t-special-udata-pure.lua:32: attempt to index local 'p' (a number value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/file/resize",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "file",
+      "resize"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.04272740899978089,
+    "exit": 0,
+    "stdout": "direct-shape\tfile\tresize\t1\t33\t1\t2\t0\t1\nspecial-userdata-guard\tfile\tresize\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/file/replace",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "file",
+      "replace"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.03666873599649989,
+    "exit": 0,
+    "stdout": "direct-shape\tfile\treplace\t1\t33\t1\t2\t0\t1\nspecial-userdata-guard\tfile\treplace\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/file/replace_missing",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "file",
+      "replace_missing"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.035043301999394316,
+    "exit": 0,
+    "stdout": "direct-shape\tfile\treplace_missing\t1\t33\t1\t2\t0\t1\nspecial-userdata-guard\tfile\treplace_missing\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...iver-combined-20260905-sn9vd57b/t-special-udata-pure.lua:32: attempt to index local 'p' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/file/table_entry",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "file",
+      "table_entry"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.03696881400173879,
+    "exit": 0,
+    "stdout": "direct-shape\tfile\ttable_entry\t1\t33\t1\t2\t0\t1\nspecial-userdata-guard\tfile\ttable_entry\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/file/methodlife",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "file",
+      "methodlife"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.03869835599834914,
+    "exit": 0,
+    "stdout": "direct-shape\tfile\tmethodlife\t1\t28\t1\t1\t0\t0\nspecial-userdata-guard\tfile\tmethodlife\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/buffer/function",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "buffer",
+      "function"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.03608660600002622,
+    "exit": 0,
+    "stdout": "direct-shape\tbuffer\tfunction\t1\t33\t1\t2\t0\t1\nspecial-userdata-guard\tbuffer\tfunction\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/buffer/table",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "buffer",
+      "table"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.03585118400224019,
+    "exit": 0,
+    "stdout": "direct-shape\tbuffer\ttable\t1\t33\t1\t2\t0\t1\nspecial-userdata-guard\tbuffer\ttable\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/buffer/missing",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "buffer",
+      "missing"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.035666522999235895,
+    "exit": 0,
+    "stdout": "direct-shape\tbuffer\tmissing\t1\t33\t1\t2\t0\t1\nspecial-userdata-guard\tbuffer\tmissing\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...iver-combined-20260905-sn9vd57b/t-special-udata-pure.lua:33: attempt to index local 'p' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/buffer/nonfunction",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "buffer",
+      "nonfunction"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.0369518750012503,
+    "exit": 0,
+    "stdout": "direct-shape\tbuffer\tnonfunction\t1\t33\t1\t2\t0\t1\nspecial-userdata-guard\tbuffer\tnonfunction\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...iver-combined-20260905-sn9vd57b/t-special-udata-pure.lua:33: attempt to index local 'p' (a number value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/buffer/resize",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "buffer",
+      "resize"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.041504991000692826,
+    "exit": 0,
+    "stdout": "direct-shape\tbuffer\tresize\t1\t33\t1\t2\t0\t1\nspecial-userdata-guard\tbuffer\tresize\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/buffer/replace",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "buffer",
+      "replace"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.03613249599948176,
+    "exit": 0,
+    "stdout": "direct-shape\tbuffer\treplace\t1\t33\t1\t2\t0\t1\nspecial-userdata-guard\tbuffer\treplace\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/buffer/replace_missing",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "buffer",
+      "replace_missing"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.03573936899920227,
+    "exit": 0,
+    "stdout": "direct-shape\tbuffer\treplace_missing\t1\t33\t1\t2\t0\t1\nspecial-userdata-guard\tbuffer\treplace_missing\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...iver-combined-20260905-sn9vd57b/t-special-udata-pure.lua:33: attempt to index local 'p' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/buffer/table_entry",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "buffer",
+      "table_entry"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.036216468000930035,
+    "exit": 0,
+    "stdout": "direct-shape\tbuffer\ttable_entry\t1\t33\t1\t2\t0\t1\nspecial-userdata-guard\tbuffer\ttable_entry\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/buffer/methodlife",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "buffer",
+      "methodlife"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.039149152999016223,
+    "exit": 0,
+    "stdout": "direct-shape\tbuffer\tmethodlife\t1\t28\t1\t1\t0\t0\nspecial-userdata-guard\tbuffer\tmethodlife\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/plain/function",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "plain",
+      "function"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.035966007999377325,
+    "exit": 0,
+    "stdout": "direct-shape\tplain\tfunction\t1\t29\t1\t2\t0\t1\nspecial-userdata-guard\tplain\tfunction\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/plain/table",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "plain",
+      "table"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.036132956000074046,
+    "exit": 0,
+    "stdout": "direct-shape\tplain\ttable\t1\t29\t1\t2\t0\t1\nspecial-userdata-guard\tplain\ttable\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/plain/missing",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "plain",
+      "missing"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.03634720500122057,
+    "exit": 0,
+    "stdout": "direct-shape\tplain\tmissing\t1\t29\t1\t2\t0\t1\nspecial-userdata-guard\tplain\tmissing\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...iver-combined-20260905-sn9vd57b/t-special-udata-pure.lua:34: attempt to index local 'p' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/plain/nonfunction",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "plain",
+      "nonfunction"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.03583853099917178,
+    "exit": 0,
+    "stdout": "direct-shape\tplain\tnonfunction\t1\t29\t1\t2\t0\t1\nspecial-userdata-guard\tplain\tnonfunction\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...iver-combined-20260905-sn9vd57b/t-special-udata-pure.lua:34: attempt to index local 'p' (a number value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/plain/resize",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "plain",
+      "resize"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.039552429003379075,
+    "exit": 0,
+    "stdout": "direct-shape\tplain\tresize\t1\t29\t1\t2\t0\t1\nspecial-userdata-guard\tplain\tresize\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/plain/replace",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "plain",
+      "replace"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.03576568200151087,
+    "exit": 0,
+    "stdout": "direct-shape\tplain\treplace\t1\t29\t1\t2\t0\t1\nspecial-userdata-guard\tplain\treplace\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/plain/replace_missing",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "plain",
+      "replace_missing"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.03609105600116891,
+    "exit": 0,
+    "stdout": "direct-shape\tplain\treplace_missing\t1\t29\t1\t2\t0\t1\nspecial-userdata-guard\tplain\treplace_missing\twarm-exits\t1\told-exits\t1\tok\tfalse\tresult\t...iver-combined-20260905-sn9vd57b/t-special-udata-pure.lua:34: attempt to index local 'p' (a userdata value)\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/plain/table_entry",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "plain",
+      "table_entry"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.03761514800135046,
+    "exit": 0,
+    "stdout": "direct-shape\tplain\ttable_entry\t1\t29\t1\t2\t0\t1\nspecial-userdata-guard\tplain\ttable_entry\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t0\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "direct/plain/methodlife",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua",
+      "plain",
+      "methodlife"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-special-udata-pure.lua": "e8b00a97764801d3c1dc27286ff05360adbbc9ebeecf9165cf82c9afdf4b0b11"
+    },
+    "seconds": 0.03815885999938473,
+    "exit": 0,
+    "stdout": "direct-shape\tplain\tmethodlife\t1\t24\t1\t1\t0\t0\nspecial-userdata-guard\tplain\tmethodlife\twarm-exits\t1\told-exits\t80\tok\ttrue\tresult\t0\tcalls\t80\twrites\t0\nspecial userdata native method guards passed\n",
+    "stderr": ""
+  },
+  {
+    "label": "udata-effect/luastore",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-udata-pure-exclusions.lua",
+      "luastore"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-udata-pure-exclusions.lua": "03044aaa9f6ccf0ea1512012e8c112d991be54c4f73f096e86e44ba881cd0319"
+    },
+    "seconds": 0.03589206600008765,
+    "exit": 0,
+    "stdout": "udata-effect\tluastore\troot\t1\tnins\t49\tpostmeta\t1\tvalue\t80\texits\t1\n",
+    "stderr": ""
+  },
+  {
+    "label": "udata-effect/newref",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-udata-pure-exclusions.lua",
+      "newref"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-udata-pure-exclusions.lua": "03044aaa9f6ccf0ea1512012e8c112d991be54c4f73f096e86e44ba881cd0319"
+    },
+    "seconds": 0.03604010900016874,
+    "exit": 0,
+    "stdout": "udata-effect\tnewref\troot\t1\tnins\t59\tpostmeta\t1\tvalue\t80\texits\t1\n",
+    "stderr": ""
+  },
+  {
+    "label": "udata-effect/allocate",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-udata-pure-exclusions.lua",
+      "allocate"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-udata-pure-exclusions.lua": "03044aaa9f6ccf0ea1512012e8c112d991be54c4f73f096e86e44ba881cd0319"
+    },
+    "seconds": 0.035394893999182386,
+    "exit": 0,
+    "stdout": "udata-effect\tallocate\troot\t1\tnins\t67\tpostmeta\t1\tvalue\t3320\texits\t1\n",
+    "stderr": ""
+  },
+  {
+    "label": "udata-effect/indirect",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-udata-pure-exclusions.lua",
+      "indirect"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-udata-pure-exclusions.lua": "03044aaa9f6ccf0ea1512012e8c112d991be54c4f73f096e86e44ba881cd0319"
+    },
+    "seconds": 0.03537979900283972,
+    "exit": 0,
+    "stdout": "udata-effect\tindirect\troot\t1\tnins\t62\tpostmeta\t1\tvalue\t80\texits\t1\n",
+    "stderr": ""
+  },
+  {
+    "label": "udata-effect/directstore",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-udata-pure-exclusions.lua",
+      "directstore"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-udata-pure-exclusions.lua": "03044aaa9f6ccf0ea1512012e8c112d991be54c4f73f096e86e44ba881cd0319"
+    },
+    "seconds": 0.035486848999426,
+    "exit": 0,
+    "stdout": "udata-effect\tdirectstore\troot\t1\tnins\t44\tpostmeta\t0\tvalue\t80\texits\t1\n",
+    "stderr": ""
+  },
+  {
+    "label": "udata-effect/clear",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-udata-pure-exclusions.lua",
+      "clear"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-udata-pure-exclusions.lua": "03044aaa9f6ccf0ea1512012e8c112d991be54c4f73f096e86e44ba881cd0319"
+    },
+    "seconds": 0.03572580399850267,
+    "exit": 0,
+    "stdout": "udata-effect\tclear\troot\t1\tnins\t41\tpostmeta\t1\tvalue\t80\texits\t1\n",
+    "stderr": ""
+  },
+  {
+    "label": "udata-effect/foreign",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-udata-pure-exclusions.lua",
+      "foreign"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-udata-pure-exclusions.lua": "03044aaa9f6ccf0ea1512012e8c112d991be54c4f73f096e86e44ba881cd0319"
+    },
+    "seconds": 0.0346316939976532,
+    "exit": 0,
+    "stdout": "udata-effect\tforeign\troot\t1\tnins\t74\tpostmeta\t1\tvalue\t3320\texits\t1\n",
+    "stderr": ""
+  },
+  {
+    "label": "udata-effect/fpmath",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-udata-pure-exclusions.lua",
+      "fpmath"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/t-udata-pure-exclusions.lua": "03044aaa9f6ccf0ea1512012e8c112d991be54c4f73f096e86e44ba881cd0319"
+    },
+    "seconds": 0.0354830230025982,
+    "exit": 0,
+    "stdout": "udata-effect\tfpmath\troot\t1\tnins\t58\tpostmeta\t1\tvalue\t80.519330781135\texits\t1\n",
+    "stderr": ""
+  },
+  {
+    "label": "cdata/index",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure.lua",
+      "index"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure.lua": "8625acf51f9e0e93ed40c352f32bb963d6467e2a7d07425f7b90bd34cdb9db2e"
+    },
+    "seconds": 0.0356712359971425,
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tindex\texits\t159\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  },
+  {
+    "label": "cdata/newindex",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure.lua",
+      "newindex"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure.lua": "8625acf51f9e0e93ed40c352f32bb963d6467e2a7d07425f7b90bd34cdb9db2e"
+    },
+    "seconds": 0.03550737499972456,
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tnewindex\texits\t80\tcalls\t80\texpected\t80\n",
+    "stderr": ""
+  },
+  {
+    "label": "cdata/missing",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure.lua",
+      "missing"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure.lua": "8625acf51f9e0e93ed40c352f32bb963d6467e2a7d07425f7b90bd34cdb9db2e"
+    },
+    "seconds": 0.03452017000017804,
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tmissing\texits\t1\tcalls\t0\texpected\t0\n",
+    "stderr": ""
+  },
+  {
+    "label": "cdata/nonfunction",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure.lua",
+      "nonfunction"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure.lua": "8625acf51f9e0e93ed40c352f32bb963d6467e2a7d07425f7b90bd34cdb9db2e"
+    },
+    "seconds": 0.03522605000034673,
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tnonfunction\texits\t1\tcalls\t0\texpected\t0\n",
+    "stderr": ""
+  },
+  {
+    "label": "cdata/resize",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure.lua",
+      "resize"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure.lua": "8625acf51f9e0e93ed40c352f32bb963d6467e2a7d07425f7b90bd34cdb9db2e"
+    },
+    "seconds": 0.040141940997273196,
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\tresize\texits\t159\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  },
+  {
+    "label": "cdata/methodlife",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure.lua",
+      "methodlife"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure.lua": "8625acf51f9e0e93ed40c352f32bb963d6467e2a7d07425f7b90bd34cdb9db2e"
+    },
+    "seconds": 0.036996335998992436,
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t35\tloop\t24\tpost\t0\t0\t0\npure-method\tmethodlife\texits\t159\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  },
+  {
+    "label": "cdata/replace",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure.lua",
+      "replace"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure.lua": "8625acf51f9e0e93ed40c352f32bb963d6467e2a7d07425f7b90bd34cdb9db2e"
+    },
+    "seconds": 0.03501958600099897,
+    "exit": 0,
+    "stdout": "shape\t1\tnins\t37\tloop\t26\tpost\t0\t0\t0\npure-method\treplace\texits\t1\tcalls\t160\texpected\t160\n",
+    "stderr": ""
+  },
+  {
+    "label": "cdata-effect/allocate",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure-exclusions.lua",
+      "allocate"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure-exclusions.lua": "d6815200179eb2bc95488073584ac0b3814acadf54cf1967040d556bc433a927"
+    },
+    "seconds": 0.035158700000465615,
+    "exit": 0,
+    "stdout": "negative\tallocate\troot\t1\tnins\t68\texits\t1\tpostroot\t1\tanswer\t6560\nADD   \t14\nCONV  \t2\nXLOAD \t1\nPHI   \t2\nXSTORE\t8\nLOOP  \t1\nXPOLL \t1\nNOP   \t1\nFLOAD \t7\nEQ    \t9\nSLOAD \t5\nLE    \t3\nHREFK \t6\nCNEW  \t2\nHLOAD \t6\n",
+    "stderr": ""
+  },
+  {
+    "label": "cdata-effect/luastore",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure-exclusions.lua",
+      "luastore"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure-exclusions.lua": "d6815200179eb2bc95488073584ac0b3814acadf54cf1967040d556bc433a927"
+    },
+    "seconds": 0.03481665899744257,
+    "exit": 0,
+    "stdout": "negative\tluastore\troot\t1\tnins\t55\texits\t1\tpostroot\t1\tanswer\t3320\nADD   \t8\nCONV  \t2\nXLOAD \t1\nTBAR  \t2\nXSTORE\t2\nRENAME\t2\nLOOP  \t1\nXPOLL \t1\nPHI   \t2\nFLOAD \t8\nHSTORE\t2\nSLOAD \t5\nLE    \t3\nHREFK \t6\nHLOAD \t4\nEQ    \t6\n",
+    "stderr": ""
+  },
+  {
+    "label": "cdata-effect/newref",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure-exclusions.lua",
+      "newref"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure-exclusions.lua": "d6815200179eb2bc95488073584ac0b3814acadf54cf1967040d556bc433a927"
+    },
+    "seconds": 0.03456238499711617,
+    "exit": 0,
+    "stdout": "negative\tnewref\troot\t1\tnins\t64\texits\t1\tpostroot\t1\tanswer\t3320\nADD   \t10\nCONV  \t4\nXLOAD \t1\nADDOV \t2\nXSTORE\t2\nHREF  \t2\nPHI   \t2\nRENAME\t1\nXPOLL \t1\nLOOP  \t1\nEQ    \t8\nHLOAD \t4\nFLOAD \t8\nHREFK \t4\nSLOAD \t5\nLE    \t3\nULE   \t2\nNEWREF\t2\nHSTORE\t2\n",
+    "stderr": ""
+  },
+  {
+    "label": "cdata-effect/clear",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure-exclusions.lua",
+      "clear"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure-exclusions.lua": "d6815200179eb2bc95488073584ac0b3814acadf54cf1967040d556bc433a927"
+    },
+    "seconds": 0.034732943000562955,
+    "exit": 0,
+    "stdout": "negative\tclear\troot\t1\tnins\t52\texits\t1\tpostroot\t1\tanswer\t3320\nADD   \t8\nCONV  \t2\nXLOAD \t1\nUREFC \t1\nXSTORE\t2\nPHI   \t2\nRENAME\t1\nLOOP  \t1\nXPOLL \t1\nEQ    \t7\nFLOAD \t5\nHLOAD \t4\nSLOAD \t6\nLE    \t3\nHREFK \t4\nULOAD \t2\nCALLS \t2\n",
+    "stderr": ""
+  },
+  {
+    "label": "cdata-effect/foreign",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure-exclusions.lua",
+      "foreign"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure-exclusions.lua": "d6815200179eb2bc95488073584ac0b3814acadf54cf1967040d556bc433a927"
+    },
+    "seconds": 0.035156253001332516,
+    "exit": 0,
+    "stdout": "negative\tforeign\troot\t1\tnins\t100\texits\t1\tpostroot\t1\tanswer\t6560\nADD   \t10\nCONV  \t4\nXLOAD \t2\nUREFC \t1\nXSTORE\t2\nNE    \t6\nSUBOV \t2\nNEG   \t2\nXSAVE \t2\nCARG  \t2\nPHI   \t2\nNOP   \t1\nXPOLL \t1\nLOOP  \t1\nCALLXS\t2\nCALLS \t4\nFLOAD \t11\nEQ    \t15\nSLOAD \t5\nLE    \t3\nHREFK \t10\nHLOAD \t10\nULOAD \t2\n",
+    "stderr": ""
+  },
+  {
+    "label": "cdata-effect/indirect",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure-exclusions.lua",
+      "indirect"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure-exclusions.lua": "d6815200179eb2bc95488073584ac0b3814acadf54cf1967040d556bc433a927"
+    },
+    "seconds": 0.03508128799876431,
+    "exit": 0,
+    "stdout": "negative\tindirect\troot\t1\tnins\t52\texits\t1\tpostroot\t1\tanswer\t3320\nADD   \t9\nCONV  \t2\nXLOAD \t3\nNOP   \t2\nXSTORE\t4\nLOOP  \t1\nXPOLL \t1\nFLOAD \t6\nPHI   \t2\nSLOAD \t5\nLE    \t3\nHREFK \t4\nHLOAD \t4\nEQ    \t6\n",
+    "stderr": ""
+  },
+  {
+    "label": "cdata-effect/fpmath",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure-exclusions.lua",
+      "fpmath"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure-exclusions.lua": "d6815200179eb2bc95488073584ac0b3814acadf54cf1967040d556bc433a927"
+    },
+    "seconds": 0.035554326001147274,
+    "exit": 0,
+    "stdout": "negative\tfpmath\troot\t1\tnins\t63\texits\t1\tpostroot\t1\tanswer\t3320.5193307811\nADD   \t10\nCONV  \t2\nXLOAD \t1\nPHI   \t2\nXSTORE\t2\nCALLN \t2\nLOOP  \t1\nXPOLL \t1\nFLOAD \t10\nNOP   \t1\nSLOAD \t5\nLE    \t3\nHREFK \t8\nHLOAD \t8\nEQ    \t7\n",
+    "stderr": ""
+  },
+  {
+    "label": "cdata/side",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure-side.lua"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure-side.lua": "0d6c516a85b0758be8dc6bf81580d40622c70dcbc5f98516eb67b121c7491daa"
+    },
+    "seconds": 0.035685260001628194,
+    "exit": 0,
+    "stdout": "trace\t1\tlink\t1\tloop\tparent\t0\texits\t2\ntrace\t2\tlink\t1\troot\tparent\t1\texits\t0\ntrace\t3\tlink\t1\troot\tparent\t1\texits\t5\ntrace\t4\tlink\t0\tinterpreter\tparent\t3\texits\t0\ntrace\t1\tlink\t1\tloop\tparent\t0\texits\t3\ntrace\t2\tlink\t1\troot\tparent\t1\texits\t0\ntrace\t3\tlink\t1\troot\tparent\t1\texits\t6\ntrace\t4\tlink\t0\tinterpreter\tparent\t3\texits\t0\ntrace\t5\tlink\t1\troot\tparent\t1\texits\t0\ntrace\t6\tlink\t1\troot\tparent\t3\texits\t4\nside-link-pass\toldside\t3\tbefore-exits\t5\tcalls\t640\n",
+    "stderr": ""
+  },
+  {
+    "label": "cdata/profile",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure-profile.lua"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure-profile.lua": "86a3724a98995265d7c2d3c236c4c223e4d899c3636828f88ea2cbb30b319f98"
+    },
+    "seconds": 0.03704094200293184,
+    "exit": 0,
+    "stdout": "profile-negative\tmode1\ttrue\tconservative\ttrue\tsamples\t1\tmethodcalls\t20000\texits\t8\n",
+    "stderr": ""
+  },
+  {
+    "label": "compile-phase",
+    "command": [
+      "clang",
+      "-std=gnu11",
+      "-O1",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-I/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src",
+      "-I/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure-phase.c",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-phase"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": false,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure-phase.c": "4dfc0812d71b5e098491d923d94b93f26f4789b8a691b1263635c34ab7528629",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/libluajit.a": "f76d408ca0242ae2fb00a9bfbc43eb29f23a308a1429bf2650ad85cd342ad0d9"
+    },
+    "seconds": 0.21783651399891824,
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "label": "phase/gate",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-phase",
+      "gate"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-phase": "1f16271273fd413f78671e37a193bb07bafe92ca8a7597493b167c5859dfc58d"
+    },
+    "seconds": 0.052218380998965586,
+    "exit": 0,
+    "stdout": "pure-phase gate early-exit=55007 limit=2000000 exit-callback-mutation=1 continuation-calls=3889986 second-calls=160 final-IDLE\n",
+    "stderr": ""
+  },
+  {
+    "label": "phase/worker",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-phase",
+      "worker"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-phase": "1f16271273fd413f78671e37a193bb07bafe92ca8a7597493b167c5859dfc58d"
+    },
+    "seconds": 0.051660521003213944,
+    "exit": 0,
+    "stdout": "pure-phase worker early-exit=187120 limit=2000000 exit-callback-mutation=1 continuation-calls=3625760 second-calls=160 final-IDLE\n",
+    "stderr": ""
+  },
+  {
+    "label": "compile-error",
+    "command": [
+      "clang",
+      "-std=gnu11",
+      "-O1",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-I/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src",
+      "-I/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure-error.c",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-error",
+      "-Wl,--wrap=lj_mem_realloc"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": false,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-cdata-pure-error.c": "173f886b01556c9fb95466b8c2b8ef7b59e93e140ea5cf1622c2670e8bb8ed98",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/libluajit.a": "f76d408ca0242ae2fb00a9bfbc43eb29f23a308a1429bf2650ad85cd342ad0d9"
+    },
+    "seconds": 0.21160975200109533,
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "label": "error/None",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-error"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-error": "47576d6a46e01361e35362f05687e2525a0aa1b60091575036cf81394fd72663"
+    },
+    "seconds": 0.03000253100253758,
+    "exit": 0,
+    "stdout": "flag-error injected=1 status=4 flag=0\n",
+    "stderr": ""
+  },
+  {
+    "label": "compile-first-attach",
+    "command": [
+      "clang",
+      "-std=gnu11",
+      "-O1",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-I/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src",
+      "-I/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-first-attach.c",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-first-attach"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": false,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/t-jit-first-attach.c": "c306c030c1ec022bc04bec5df6e5a885342cab8af160b4f3c302209e851e05de",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/libluajit.a": "f76d408ca0242ae2fb00a9bfbc43eb29f23a308a1429bf2650ad85cd342ad0d9"
+    },
+    "seconds": 0.22312190500088036,
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "label": "first-attach/None",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-first-attach"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-first-attach": "0f5839ec3adf77ed0dc84c02f1785819cdeda0ecf68aa4a9a5f84c4aab428016"
+    },
+    "seconds": 0.031076556002517464,
+    "exit": 0,
+    "stdout": "warm native exits\t1\nwarm root 1: 1 XPOLL instructions, all mode 0; LOOP=1\nfirst attach: exit trace=1 snap=4 iteration=76701 limit=1000000000 result=76701 attach-ms=0.183 early=1\nfirst-attach mode-0 native backedge progress PASS\n",
+    "stderr": ""
+  },
+  {
+    "label": "first-attach/noloop",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-first-attach",
+      "noloop"
+    ],
+    "cwd": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/src/?.lua;/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan/tests/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "test": true,
+    "inputs": {
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/asan-first-attach": "0f5839ec3adf77ed0dc84c02f1785819cdeda0ecf68aa4a9a5f84c4aab428016"
+    },
+    "seconds": 0.030870397000398953,
+    "exit": 0,
+    "stdout": "warm native exits\t1\nwarm root 1: 1 XPOLL instructions, all mode 0; LOOP=0\nfirst attach: exit trace=1 snap=4 iteration=29697 limit=1000000000 result=29697 attach-ms=0.197 early=1\nfirst-attach mode-0 native backedge progress PASS\n",
+    "stderr": ""
+  }
+]

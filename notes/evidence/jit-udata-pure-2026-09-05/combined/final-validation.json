@@ -1,0 +1,55 @@
+{
+  "source_bytes_rechecked": true,
+  "prior_handoff_all_artifacts_unchanged": true,
+  "input_files": 224,
+  "source_sha256": {
+    "src/lj_crecord.c": "d9117ff3214f258cc84648725effcd498f3d1e93a774a94efd65e81ed11f2bff",
+    "src/lj_opt_mem.c": "00787841d7305b758edacb399e16fe5494b9d923525baa5f6b9523af7acbfc2c"
+  },
+  "variants": {
+    "candidate": {
+      "commands": 92,
+      "runtime_processes": 87,
+      "stock": {
+        "stock/-joff": "387 passed",
+        "stock/-jon": "509 passed"
+      }
+    },
+    "strict": {
+      "commands": 92,
+      "runtime_processes": 87,
+      "stock": {
+        "stock/-joff": "387 passed",
+        "stock/-jon": "509 passed"
+      }
+    },
+    "asan": {
+      "commands": 94,
+      "runtime_processes": 87,
+      "stock": {
+        "stock/-joff": "387 passed",
+        "stock/-jon": "509 passed"
+      }
+    }
+  },
+  "binaries": {
+    "candidate": {
+      "luajit": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+      "libluajit.a": "91e74c9cd2b5ee8f808825e8923fe7baecd827713c3ba8624f04267090925922"
+    },
+    "strict": {
+      "luajit": "c46bd587935c8f1ec0aca5ff33cb7335fdcc0d67cb14a67aa91407692b3245c9",
+      "libluajit.a": "28738b04be13b4305bb41472ca63c6146e3a828e34f1c01ca31cfce0a47aa327"
+    },
+    "asan": {
+      "luajit": "881281ff891041ae778dbd8c2a476bd609ddd0446a28aa4ca89dfbf131e0ef6d",
+      "libluajit.a": "f76d408ca0242ae2fb00a9bfbc43eb29f23a308a1429bf2650ad85cd342ad0d9"
+    }
+  },
+  "runtime_processes": 261,
+  "validation_commands": 278,
+  "build_commands": 3,
+  "ir_probe_processes": 4,
+  "failures": [],
+  "timing_repeated": false
+}

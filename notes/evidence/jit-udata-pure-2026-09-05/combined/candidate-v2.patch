@@ -1,0 +1,52 @@
+--- a/src/lj_opt_mem.c
++++ b/src/lj_opt_mem.c
+@@ -57,10 +57,11 @@
+   return lim;
+ }
+ 
+-/* Reuse only the cdata base-root/node chain while the protected root-loop
+-** unroller has classified the whole body as pure. Entry guards, XBAR, ordinary
+-** table alias checks, and the unconditional GC phase poll remain unchanged. */
+-static int fload_cdata_unroll_invariant(jit_State *J, IRRef obj, IRRef fid)
++/* Reuse only a cdata base-root or direct userdata metatable and its node
++** chain while the protected root-loop unroller has classified the whole body
++** as pure. Entry guards, XBAR, ordinary table alias checks, and the
++** unconditional GC phase poll remain unchanged. */
++static int fload_pure_unroll_invariant(jit_State *J, IRRef obj, IRRef fid)
+ {
+ #if LJ_TARGET_X64 && LJ_GC64
+   const IRRef basefid = (IRRef)(GG_OFS(g.gcroot[GCROOT_BASEMT+~LJ_TCDATA]) >> 2);
+@@ -71,10 +72,22 @@
+     return 0;
+   if (obj == REF_NIL && fid == basefid && irt_istab(fins->t))
+     return 1;
++  if (fid == IRFL_UDATA_META && irt_istab(fins->t)) {
++    IRIns *ud = IR(obj);
++    if ((irt_type(ud->t) == IRT_UDATA) && (ud->o == IR_SLOAD || ud->o == IR_KGC))
++      return 1;
++  }
+   if (fid == IRFL_TAB_NODE && !irref_isk(obj)) {
+     IRIns *base = IR(obj);
+-    return base->o == IR_FLOAD && irt_istab(base->t) &&
+-      base->op1 == REF_NIL && base->op2 == basefid;
++    if (base->o == IR_FLOAD && irt_istab(base->t)) {
++      if (base->op1 == REF_NIL && base->op2 == basefid)
++        return 1;
++      if (base->op2 == IRFL_UDATA_META) {
++        IRIns *ud = IR(base->op1);
++        return (irt_type(ud->t) == IRT_UDATA) &&
++          (ud->o == IR_SLOAD || ud->o == IR_KGC);
++      }
++    }
+   }
+ #else
+   UNUSED(J); UNUSED(obj); UNUSED(fid);
+@@ -92,7 +105,7 @@
+   ** MT traces keep XPOLL as an alias boundary.
+   */
+   if ((fid != IRFL_TAB_META || mt_active_or_entering_acq(J2G(J))) &&
+-      !fload_cdata_unroll_invariant(J, fins->op1, fid) &&
++      !fload_pure_unroll_invariant(J, fins->op1, fid) &&
+       J->chain[IR_XPOLL] > lim)
+     lim = J->chain[IR_XPOLL];
+   return lim;

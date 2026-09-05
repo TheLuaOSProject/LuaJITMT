@@ -1,0 +1,15 @@
+{
+  "command": [
+    "cc",
+    "-shared",
+    "-fPIC",
+    "-O2",
+    "-I/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src",
+    "/tmp/lj-special-udata-pure-20260905-u7z61i10/hash-geometry.c",
+    "-o",
+    "/tmp/lj-special-udata-pure-20260905-u7z61i10/hash-geometry.so"
+  ],
+  "exit": 0,
+  "stdout": "",
+  "stderr": ""
+}

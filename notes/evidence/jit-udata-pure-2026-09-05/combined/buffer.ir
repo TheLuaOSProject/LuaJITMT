@@ -1,0 +1,119 @@
+---- TRACE flush
+
+---- TRACE 1 start direct-cost.lua:13
+---- TRACE 1 IR
+0001 >  [35mint[m SLOAD  #6    CRI
+0002 >  [35mint[m LE     0001  [35m+2147483646[m
+0003    [35mint[m SLOAD  #5    CI
+0004 >  [36mudt[m SLOAD  #2    T
+0005 >  [34mnum[m SLOAD  #4    T
+0006    [31mtab[m FLOAD  0004  udata.meta
+0007    [35mu8 [m FLOAD  0004  udata.udtype
+0008 >  [35mint[m EQ     0007  [35m+3  [m
+0009 >  [31mtab[m NE     0006  [31mNULL[m
+0010    p64 FLOAD  0006  tab.node
+0011 >  p64 HREFK  0010  [32m"__index"[m @2
+0012 >  [31mtab[m HLOAD  0011
+0013    p64 FLOAD  0012  tab.node
+0014 >  p64 HREFK  0013  [32m"put"[m @25
+0015 >  [1mfun[m HLOAD  0014
+0016  + [34mnum[m ADD    0005  [34m+1  [m
+0017  + [35mint[m ADD    0003  [35m+1  [m
+0018 >  [35mint[m LE     0017  0001
+0019 ------ LOOP ------------
+0020 >  nil XPOLL  #0  
+0021    [35mu8 [m FLOAD  0004  udata.udtype
+0022 >  [35mint[m EQ     0021  [35m+3  [m
+0023    p64 FLOAD  0012  tab.node
+0024 >  p64 HREFK  0023  [32m"put"[m @25
+0025 >  [1mfun[m HLOAD  0024
+0026  + [34mnum[m ADD    0016  [34m+1  [m
+0027  + [35mint[m ADD    0017  [35m+1  [m
+0028 >  [35mint[m LE     0027  0001
+0029    [35mint[m PHI    0017  0027
+0030    [34mnum[m PHI    0016  0026
+---- TRACE 1 mcode 375
+557e16edfe7f  mov dword [r14+0x84c], 0x1
+557e16edfe8a  movsd xmm0, [rip-0xfd42]
+557e16edfe92  movsd xmm7, [rdx+0x20]
+557e16edfe97  cvttsd2si eax, xmm7
+557e16edfe9b  xorps xmm6, xmm6
+557e16edfe9e  cvtsi2sd xmm6, eax
+557e16edfea2  ucomisd xmm7, xmm6
+557e16edfea6  jnz 0x557e16ed0120
+557e16edfeac  jpe 0x557e16ed0120
+557e16edfeb2  cmp eax, 0x7ffffffe
+557e16edfeb8  jg 0x557e16ed0120
+557e16edfebe  cvttsd2si ebp, [rdx+0x18]
+557e16edfec3  rorx rcx, [rdx], 0x2f
+557e16edfec9  cmp cx, -0x0d
+557e16edfecd  jnz 0x557e16ed0120
+557e16edfed3  shr rcx, 0x11
+557e16edfed7  cmp dword [rdx+0x14], 0xfff90000
+557e16edfede  jnb 0x557e16ed0120
+557e16edfee4  movsd xmm7, [rdx+0x10]
+557e16edfee9  mov r9, [rcx+0x20]
+557e16edfeed  cmp byte [rcx+0xa], 0x3
+557e16edfef1  jnz 0x557e16ed0128
+557e16edfef7  test r9, r9
+557e16edfefa  jz 0x557e16ed0128
+557e16edff00  mov r8, [r9+0x28]
+557e16edff04  cmp dword [r8-0x10], +0x02
+557e16edff09  jb 0x557e16ed0128
+557e16edff0f  mov rdi, 0xfffdfff2d3012780
+557e16edff19  cmp rdi, [r8+0x38]
+557e16edff1d  jnz 0x557e16ed0128
+557e16edff23  rorx rdx, [r8+0x30], 0x2f
+557e16edff2a  cmp dx, -0x0c
+557e16edff2e  jnz 0x557e16ed0128
+557e16edff34  shr rdx, 0x11
+557e16edff38  mov rsi, [rdx+0x28]
+557e16edff3c  cmp dword [rsi-0x10], +0x19
+557e16edff40  jb 0x557e16ed0128
+557e16edff46  mov rdi, 0xfffdfff2d2f13900
+557e16edff50  cmp rdi, [rsi+0x260]
+557e16edff57  jnz 0x557e16ed0128
+557e16edff5d  mov rdi, [rsi+0x258]
+557e16edff64  sar rdi, 0x2f
+557e16edff68  cmp edi, -0x09
+557e16edff6b  jnz 0x557e16ed0128
+557e16edff71  addsd xmm7, xmm0
+557e16edff75  add ebp, +0x01
+557e16edff78  cmp ebp, eax
+557e16edff7a  jg 0x557e16ed0130
+->LOOP:
+557e16edff80  mov rdi, 0x00007ff2d3250584
+557e16edff8a  mov edi, [rdi]
+557e16edff8c  cmp edi, +0x00
+557e16edff8f  jz 0x557e16ed0138
+557e16edff95  cmp dword [r14+0x808], +0x00
+557e16edff9d  jnz 0x557e16ed0138
+557e16edffa3  cmp byte [rcx+0xa], 0x3
+557e16edffa7  jnz 0x557e16ed0140
+557e16edffad  mov rbx, [rdx+0x28]
+557e16edffb1  cmp dword [rbx-0x10], +0x19
+557e16edffb5  jb 0x557e16ed0140
+557e16edffbb  mov rdi, 0xfffdfff2d2f13900
+557e16edffc5  cmp rdi, [rbx+0x260]
+557e16edffcc  jnz 0x557e16ed0140
+557e16edffd2  mov rdi, [rbx+0x258]
+557e16edffd9  sar rdi, 0x2f
+557e16edffdd  cmp edi, -0x09
+557e16edffe0  jnz 0x557e16ed0140
+557e16edffe6  addsd xmm7, xmm0
+557e16edffea  add ebp, +0x01
+557e16edffed  cmp ebp, eax
+557e16edffef  jle 0x557e16edff80	->LOOP
+557e16edfff1  jmp 0x557e16ed0148
+---- TRACE 1 stop -> loop
+
+shape	buffer	root	1	nins	31	mcode	375	meta	1	node	2	postmeta	0	postnode	1	exits	1
+---- TRACE 2 start direct-cost.lua:13
+---- TRACE 2 abort direct-cost.lua:13 -- NYI: bytecode ISLT  
+
+sample	1	0.000122000
+sample	2	0.000005000
+sample	3	0.000005000
+sample	4	0.000004000
+sample	5	0.000004000
+result	buffer	80	0.000004000

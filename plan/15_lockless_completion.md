@@ -96,7 +96,7 @@ are verified reasons the full goal is still open:
 | VM events | START/STOP/ABORT/RECORD callbacks still retain recorder ownership | Exact event/continuation sessions with callbacks outside shared ownership |
 | Generic FFI traces | CALLXS is live; first generated callbacks could overwrite loop slots through stale owner stack bounds | XSAVE owner geometry is repaired; continue aggregate ABI, caller topology and no-replay lifecycle work |
 | Cdata method recording | Pre-MT guards are repaired and restricted pure loops reuse entry checks; shared-MT constructor/field recording still refuses before trace-owned exceptions | Exact rooted recorder/native lookup and root-publication exclusion remain prerequisites for MT enablement |
-| Special userdata dispatch | Namespace/file/buffer methods were treated as immutable despite Lua mutation; common native guards now cover them | Keep exact method/root guards; measure and prove any pure-loop coalescing |
+| Special userdata dispatch | Mutable methods use common native guards; direct pure pre-MT loops now reuse exact entry metatable/node loads | Keep entry guards and complete-body exclusions; broader captured/upvalue and MT lookup proofs remain |
 | C-library lookup | Direct captured lookup now retains and guards its exact receiver; native cached lookups still ignore environment writes and semantic close | Authoritative runtime cache/lifecycle guards, including direct calls and installed side traces |
 | Win64 table traces | The recorder rejects ordinary HSTORE/ASTORE, including pre-MT stores | Complete Win64 helper ABI and require executed table-store traces under Wine and native CI |
 | Diagnostics | Remote allocator-list walks are replaced by scalar publication in `abf234ca`; other snapshot lifetime contracts still apply | Preserve owner/lifetime contracts and audit remaining diagnostic access |
@@ -296,6 +296,14 @@ controls and post-fix completion tests:
   exact pre-fix controls fail all ten native cases each. Cache mutation and
   semantic close remain separate defects. See
   `notes/ffi-clib-receiver-2026-09-05.md`.
+- Direct userdata pure loops now reuse only the exact entry metatable and its
+  immediate node load under the existing whole-body proof. All entry/subtype,
+  phase/TG, alias and effect exclusions remain; shared MT is not enabled.
+  Combined receiver/optimizer validation passes 261 processes and the new
+  canonical entry passes 80. The original isolated direct lookup measurements
+  improve about 40% for namespaces and 54% for file/buffer; captured receiver
+  loops remain excluded and variable file costs remain unexplained. See
+  `notes/jit-udata-pure-2026-09-05.md`.
 - `1bce0fa5`: promote exhausted inline table dirty authority into pre-reserved
   persistent wide proof, retaining common stamp/token geometry. Small mappings
   use a dense sidecar plane and Huge mappings use checked tail reservation.

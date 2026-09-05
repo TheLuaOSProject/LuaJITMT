@@ -1,0 +1,35 @@
+[
+  {
+    "command": [
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/luajit",
+      "-jdump=im",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/cost.lua",
+      "clib",
+      "80"
+    ],
+    "exit": 0,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af"
+  },
+  {
+    "command": [
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/luajit",
+      "-jdump=im",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/cost.lua",
+      "file",
+      "80"
+    ],
+    "exit": 0,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af"
+  },
+  {
+    "command": [
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded/src/luajit",
+      "-jdump=im",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/cost.lua",
+      "call",
+      "80"
+    ],
+    "exit": 0,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af"
+  }
+]

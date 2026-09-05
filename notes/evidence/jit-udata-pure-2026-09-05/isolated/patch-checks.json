@@ -1,0 +1,27 @@
+[
+  {
+    "command": [
+      "git",
+      "apply",
+      "--check",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate-v2.patch"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/guarded",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "git",
+      "apply",
+      "--reverse",
+      "--check",
+      "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate-v2.patch"
+    ],
+    "cwd": "/tmp/lj-special-udata-pure-20260905-u7z61i10/candidate",
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  }
+]

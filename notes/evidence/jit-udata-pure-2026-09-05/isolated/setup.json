@@ -1,0 +1,10 @@
+{
+  "source_package": "/tmp/lj-special-udata-method-review-20260905-djl20ksd",
+  "base": "e34282576c7df0180e8113a4cfba07fd637a36b3",
+  "files": {
+    "guarded-recorder.patch": "c67caffd432a8e460a8e5feac5d265e664910a5cd5f2bc9cd0ee991b346ea084",
+    "candidate-v1.patch": "87d52532910c09e44bb1dcc7feefab7681646373fc5fe9a5400fc5bdc07de6d8",
+    "t-jit-special-udata-guards.lua": "48c15b70cae00869609dc998f8fdb5904b55241599fa63872c51107ef7f5cebf",
+    "cost.lua": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af"
+  }
+}
