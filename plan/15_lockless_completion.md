@@ -1,7 +1,7 @@
 # Lockless completion plan
 
 Reviewed: 2026-09-04, starting at `a649f737`.
-Updated: 2026-09-05 after integrated rooted-read review and complete Linux measurements.
+Updated: 2026-09-05 after cdata correctness, interpreter admission and GC overflow integration.
 
 This is the operative continuation of the original plan. It preserves the
 requested end state: one shared Lua heap, safe ordinary racy Lua programs,
@@ -16,7 +16,7 @@ Linux until the next release is ready. Windows and macOS investigation/fixes
 resume before that release. Their known gaps stay recorded below without
 blocking independent Linux progress or narrowing final scope.
 
-User priority (2026-09-04, latest steering): stability comes first. Prioritize
+User priority (reaffirmed 2026-09-05): stability comes first. Prioritize
 reproducible races, lost GC edges, lifetime/reclamation errors, semantic
 regressions, and stalled progress. Performance remains required, with changes
 backed by those safety checks and measured cost. The work areas below describe
@@ -83,7 +83,7 @@ are verified reasons the full goal is still open:
 | Native acknowledgement | Native return can wait for a leader to clear a consumed poll/ack | Immutable scan evidence and independently completable acknowledgement; preserve stack exclusion |
 | Worker scheduling | MARK-close ownership loss can be reported as progress and cause repeated drain-loop execution | Return/defer without false progress or peer sleep; preserve durable retry |
 | GC work per mutation | Public SWEEP barriers can repeatedly queue an entire growing table; traversal charges a whole vector as one work unit | Prove redundant barrier elision, bound traversal by slots/bytes, and measure full-suite phase/history amplification |
-| Table scan authority exhaustion | A long-lived table's 32-bit dirty counter saturates into a permanent universe-wide reclamation veto | Renew exact authority without ABA or losing pending scans; prove continued collection across forced exhaustion |
+| Table scan authority exhaustion | A long-lived table's 32-bit dirty counter saturated into a permanent universe-wide reclamation veto | Persistent wide promotion now preserves collection through that rollover; retain full-namespace containment and current cycle-namespace limits |
 | Strings | Physical body reclamation requires explicit collection by the sole main TG with no GC workers | Concurrent canonicalization, unlink, and eventual body reclamation |
 | String interning | Header resize claim waits for pinned readers and blocks entrants | Immutable successor topology and helpable publication |
 | Marking/JIT overlap | One worker token serializes tracing; each mark quantum excludes every active `jit_base` | Parallel mark ownership plus certified concurrent native/JIT roots |
@@ -94,6 +94,7 @@ are verified reasons the full goal is still open:
 | Trace stitching | Production stitch probe rejects every edge and the stitch entry returns immediately | Prove C/VM return and snapshot lifetime before enabling real executed stitched traces |
 | VM events | START/STOP/ABORT/RECORD callbacks still retain recorder ownership | Exact event/continuation sessions with callbacks outside shared ownership |
 | Generic FFI traces | CALLXS is live, with incomplete aggregate ABI and caller topology | Extend generic ABI lowering and no-replay frame lifecycle |
+| Cdata method recording | Pre-MT traces could skip replacement methods; shared-MT constructor/field recording still refuses before trace-owned exceptions | Pre-MT method guards are repaired; exact rooted recorder/native lookup and root-publication exclusion are prerequisites for MT enablement |
 | Win64 table traces | The recorder rejects ordinary HSTORE/ASTORE, including pre-MT stores | Complete Win64 helper ABI and require executed table-store traces under Wine and native CI |
 | Diagnostics | Remote allocator-list walks are replaced by scalar publication in `abf234ca`; other snapshot lifetime contracts still apply | Preserve owner/lifetime contracts and audit remaining diagnostic access |
 | Allocator API | The default internal-allocator gate ignores custom `lua_Alloc` callbacks and makes `lua_setallocf` a no-op | Restore exact allocation ownership and callback behavior as a separate tested milestone |
@@ -231,6 +232,23 @@ controls and post-fix completion tests:
   setup fails the new unfinished-constructor assertion. Normal runtime
   preprocessing is unchanged. See
   `notes/fnew-fixture-valid-allocator-2026-09-05.md`.
+- `4e7a270e`: capture a callable first cdata method during the existing exact
+  receiver/key admission, publish its private root, then close extra scopes
+  before generic key publication. Thirteen strict/ASan/LSan schedules and
+  ordinary Lua/FFI collection, callback, replacement and alias cases pass.
+  Arbitrary allocator callbacks retain the existing path. See
+  `notes/meta-cdata-capture-2026-09-05.md`.
+- `30cf1d99`: guard mutable cdata base-table methods in admitted pre-MT native
+  traces. Eight mutation/lifetime controls require real native exits and exact
+  calls/errors; stock and activation cases pass. Retain the measured tiny-loop
+  cost rather than the stale-method assumption. Shared-MT recording remains
+  refused. See `notes/jit-cdata-basemt-guards-2026-09-05.md`.
+- `1bce0fa5`: promote exhausted inline table dirty authority into pre-reserved
+  persistent wide proof, retaining common stamp/token geometry. Small mappings
+  use a dense sidecar plane and Huge mappings use checked tail reservation.
+  Old scans, paused publishers, reuse, terminal token-only completion, failure
+  and repeated collection are covered in the final normal/assertion/ASan
+  combination. See `notes/gc-table-wide-authority-2026-09-05.md`.
 
 The combined normal Linux runtime passes the default stock suite (387 tests
 with JIT off, 509 with JIT on). That is semantic regression coverage, not
@@ -254,53 +272,51 @@ and buffers. Unchanged state churn completes in 5.379 seconds. Exact production
 and fixture identities, build flags, bounds, and results are in
 `notes/linux-integrated-stability-2026-09-05.md`. These functional timings are
 not paired performance measurements.
+The later final combination through `1bce0fa5` passes 113 test processes in
+normal, assertion/helper and target-only ASan/LSan variants, including stock
+387/509 in each variant, full current GC/TNEW/FNEW C fixtures, 13 cdata capture
+schedules, native mutation guards and concurrent table/weak/finalizer cases.
+The shared default mixed build also passes both new Lua fixtures in both JIT
+modes. Exact combined identities and the known excluded shared-cdata native
+refusal are recorded in `notes/gc-table-wide-authority-2026-09-05.md`.
 
 These repairs do not constitute production resize or asynchronous GC
 completion. Continue keeping each protocol change and its exact validation in
 a separate reviewable commit.
 
-The 32-bit dirty-counter saturation policy also requires a stability follow-up.
-`gc2_table_dirty_bump()` consumes this authority on committed table writes and
-semantic table publication; a surviving table does not renew it at each GC
-cycle. Saturation safely prevents ABA by setting permanent `NO_RECLAIM`, but
-ordinary sustained mutation can exhaust this namespace. For scale, one million
-increments per second consumes 32 bits in about 72 minutes; this is arithmetic,
-not a measured runtime rate. The historical claim that renewal is unnecessary
-on realistic timescales in
-`notes/gc2-table-authority-saturation-2026-07-19.md` is not an acceptance rule.
-Retain the safe veto until replacement authority is proven. The replacement
-must account for suspended publishers/scanners, exact rescan tokens, cycle
-identity, and cell reuse, and demonstrate eventual collection after forced
-exhaustion without dropping completed writes.
-The first isolated wide-stamp experiment is invalid as design-selection
-evidence: C stamps grew from 16 to 32 bytes, but four VM/emitted FNEW index
-operations retained the old stride and could overwrite a different entry's
-exact token. All original records and generated-object evidence are preserved
-in `notes/gc-table-authority-wide-prototype-2026-09-05.md`; its passing suites
-and timings do not establish a correct integrated wide design. Revalidate
-every allocation/reset path in a fresh corrected prototype. Compare a design
-with separately reserved wider proof storage and unchanged common CAS64
-cost only after proving scanner rollover, reuse, publication, and allocation
-failure behavior. Do not drop invalidations or remove the existing safe veto
-to avoid a slow path.
-The independent reservation audit now supplies the smaller complete comparison
-protocol: retain the 16-byte inline/token geometry, reserve wide storage before
-object publication, keep its identity monotone across cell reuse, and invalidate
-it before publishing the inline sentinel. Pure lazy post-store allocation still
-has no complete OOM progress answer. Small FREE and huge DEFER_FREE token-only
-completion must remain blind to the wider proof. See
-`notes/gc-table-overflow-reservation-audit-2026-09-05.md`. Both alternative
-prototypes remain isolated pending full source, failure, lifetime and cost review.
-The corrected AoS prototype now validates all four VM/emitted indexes, both
-proof halves, high-cell reuse, pending-token guards and old-era rejection,
-with explicit negative controls. No corrected AoS timing is claimed. See
-`notes/gc-table-authority-wide-corrected-prototype-2026-09-05.md`.
-The alternative Huge tail reservation has a separate size/bounds/realloc/OOM
-audit in `notes/gc-huge-tail-overflow-audit-2026-09-05.md`. It can remove the
-additional Huge proof allocation but may grow a boundary mapping or fault an
-extra resident page. Published traversable realloc must retain its existing
-refusal gate. Audit feasibility alone does not select or validate a production
-layout.
+The practical 32-bit table dirty-authority exhaustion issue now has a validated
+replacement. `gc2_table_dirty_bump()` promotes to pre-reserved persistent wide
+authority, clearing old coverage before publishing the inline mode. Scanners
+retain their captured domain, era and serial; cell reuse resets only inline
+coverage and preserves exact token refusal. Ordinary rollover permits later
+collection, while full 96-bit era/serial exhaustion and the independent
+GC-cycle exhaustion policy retain safe containment. The previous statement
+that sustained mutation could not realistically exhaust 32 bits is superseded.
+
+Small mappings append a dense wide sidecar plane, keeping the ordinary 16-byte
+entry, token offsets, header and emitted VM/JIT reset indexes unchanged. Huge
+proofs use checked physical tail reservation rather than a separate allocation.
+Logical payload bounds and published traversable realloc refusal are preserved;
+FREE/DEFER_FREE token-only completion remains blind to body proof storage.
+Permanent tests cover paused publishers/scanners, same-low-bits era changes,
+high-cell reuse, allocation failure, actual protected proof pages, full payload
+boundaries and repeated real collection. Combined Linux validation and the
+separate storage/performance qualifications are recorded in
+`notes/gc-table-wide-authority-2026-09-05.md`.
+
+Design evidence remains accountable: the original 32-byte AoS experiment had
+four stale emitted indexes and is invalid selection evidence
+(`notes/gc-table-authority-wide-prototype-2026-09-05.md`). The corrected AoS
+prototype has correctness controls but no corrected timing claim
+(`notes/gc-table-authority-wide-corrected-prototype-2026-09-05.md`). The selected
+dense layout retains common CAS64 cost at the expense of doubled reserved
+sidecar bytes; the tail avoids Huge metadata heap allocation but can add
+virtual space or a resident page. Measurements and adverse cases remain in
+`notes/gc-table-dense-overflow-prototype-2026-09-05.md` and
+`notes/gc-huge-tail-overflow-prototype-2026-09-05.md`. This does not close broader
+nonblocking GC or eventual-reclamation requirements. Next protocol work must
+preserve scanner stack authority while replacing native consumed-ack and
+automatic phase handshakes with durable asynchronous completion.
 
 ### B. Remove measured algorithmic performance cliffs
 
@@ -392,6 +408,16 @@ cost by about 4.4% across seven matched process pairs, with the four table
 cases approximately unchanged. Most generic FFI admission cost remains;
 no broad FFI or full-harness speedup is inferred from that narrow measurement.
 See `notes/meta-receiver-tag-2026-09-05.md`.
+`4e7a270e` removes repeated first-hop cdata admission with exact method rooting.
+Seven matched pairs reduce the filtered interpreter FFI cost from 1497.51 to
+1241.17 ns/iteration (paired geometric ratio 0.82865); table controls stay
+within about 0.7%. See `notes/meta-cdata-capture-2026-09-05.md`.
+The separate native stale-method repair `30cf1d99` increases tiny `ffi_struct`
+cost from roughly 0.69 to 2.28 ns/iteration (+232% paired median); constructor
+cost rises 66% when sunk and 1.2% when materialized. Repeated checks after XPOLL
+are visible in the recorded IR. Keep the correctness guards; any reduction
+needs explicit pre-MT alias, callback, collection, activation and side-exit
+proof. The old full-harness ratios do not measure these newer combined changes.
 
 Continue removing demonstrably redundant publications while preserving receiver
 roots and exact post-CAS key/value handoff. Then replace unbounded whole-object
@@ -464,6 +490,18 @@ events and then resumable START/RECORD events outside recorder ownership using
 exact session state. Extend SysV and Win64 aggregate ABI lowering, rollback,
 varargs, sret, root calls, protected/continuation frames, and tailcalls while
 proving foreign side effects execute exactly once.
+
+The shared-cdata hammer's native assertion currently fails because the general
+metamethod recorder fence runs before the trace-owned cdata exceptions. A
+trace-owned result does not own the shared base metatable or the constructor's
+ctype receiver. Do not exempt cdata from that fence merely to satisfy tracing.
+Provide authoritative source-root capture, exact receiver/table/method retention
+and private root publication before recorder work can throw or allocate. Native
+dispatch also needs nonwaiting guards and safe replay at each affected semantic
+lookup. Base-root mutation exclusion must span publication; a flush returning
+before the root store is insufficient for a newly admitted peer recorder.
+The demonstrated pre-MT stale-method defect is repaired separately and does
+not establish this shared-MT protocol.
 
 Production stitching is currently disabled in both `lj_trace_stitch_probe()`
 and `lj_trace_stitch()`. A side-publication fix or a fixture which directly
