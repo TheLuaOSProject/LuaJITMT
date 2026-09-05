@@ -1,0 +1,23 @@
+{
+  "protocol": "Original 360-second pilot is retained verbatim under performance/. Extended interpreter is a separate fresh fork process with a 900-second bound; this complete comparison uses its15rows against the original pilot stock interpreter sample. These are not alternating repeated process pairs, and changing the bound is not performance evidence. JIT comparison uses the complete original pilot pair.",
+  "stock_reference": "b925b3e3fc6771171602323b45fbe9fb8fc90369",
+  "fork_binary_sha256": "cfd0a47e14be6de5f1a3fde057abb88752ee7aeb516990b2884ae77acf01db17",
+  "harness_sha256": "ebd0b8d53b6e7a340c90c45ad33d9bdd47acbd5418890d593d6aae127ef926a9",
+  "interpreter": {
+    "complete": true,
+    "rows": 15,
+    "stock_input": "performance/stock-joff.stdout",
+    "fork_input": "extended-interpreter/fork-joff.stdout",
+    "stock_seconds": 31.967388483999457,
+    "fork_seconds": 727.4270960239992,
+    "stock_limit_seconds": 360,
+    "fork_limit_seconds": 900,
+    "geometric_mean_fork_over_stock": 9.69463900470469
+  },
+  "jit": {
+    "complete": true,
+    "geometric_mean_fork_over_stock": 1.3378837087473854,
+    "reported_fork_rows": 15
+  },
+  "shared_host_limitations": "CPU30 pinned, GC enabled, scale1, five internal minimum rounds, default normal static builds. Concurrent functional0-15 and cost31 activity may share caches/memory; no host or frequency isolation."
+}

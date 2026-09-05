@@ -1,0 +1,24 @@
+{
+  "base": "5411209f5a5ba701f72bdfe2894beae3e09839e2",
+  "archive_sha256": "389b624f10d551a4b16e54e3ebd47093c0a9a8217b3d49fece1692d5fb2064b8",
+  "overlays": {
+    "src/lj_tab.c": {
+      "sha256": "28b2eac3dc6c0734d131cf33d3f34826ae758c9b3deb437c6bd154e0cd2fd48f",
+      "git_blob": "4c60ff26e7c00404654158f9ae780ec2390e7969"
+    },
+    "src/lj_tab.h": {
+      "sha256": "12169670f7b092cd517fcbae538830a8ac1ec5986f7781787c03986500cae562",
+      "git_blob": "6592cfb7ef8884d50c52b864707e235e428dd8eb"
+    },
+    "src/lj_meta.c": {
+      "sha256": "dfbcd351d8aabc36580bf933f42583108f66fd723cfcb1f0afb6b32bd1b94909",
+      "git_blob": "ad02c75c233c9869bddc0dd87763ec70b2d86aca"
+    },
+    "tests/t-tab-rooted-get-try.c": {
+      "sha256": "f6b2b337b6c97156b7049d7d7c4527615af2d3664e6566c7454220f91141f5ad",
+      "git_blob": "d7783b6f5c45873719df22e438cb09104dfdf2dc"
+    }
+  },
+  "scope": "Preserve tri-state API; add positive-only direct meta read through identical lifetime protocol, leaving all failure operands unchanged.",
+  "measured_source_note": "Final shared header additionally corrects allocation documentation only; exact frozen header identity is in overlays. Production code, declarations and fixture behavior are unchanged."
+}

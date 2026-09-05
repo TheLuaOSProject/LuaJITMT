@@ -1,0 +1,19 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "30",
+    "stdbuf",
+    "-oL",
+    "-eL",
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+    "-joff",
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua"
+  ],
+  "seconds": 727.4270960239992,
+  "status": "complete",
+  "exit": 0,
+  "limit_seconds": 900,
+  "binary_sha256": "cfd0a47e14be6de5f1a3fde057abb88752ee7aeb516990b2884ae77acf01db17",
+  "post_binary_sha256": "cfd0a47e14be6de5f1a3fde057abb88752ee7aeb516990b2884ae77acf01db17"
+}

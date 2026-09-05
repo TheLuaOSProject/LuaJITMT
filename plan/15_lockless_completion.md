@@ -1,7 +1,7 @@
 # Lockless completion plan
 
 Reviewed: 2026-09-04, starting at `a649f737`.
-Updated: 2026-09-05 after integrated arena, scalar-read, and JIT coverage review.
+Updated: 2026-09-05 after integrated rooted-read review and complete Linux measurements.
 
 This is the operative continuation of the original plan. It preserves the
 requested end state: one shared Lua heap, safe ordinary racy Lua programs,
@@ -213,6 +213,12 @@ controls and post-fix completion tests:
   an initial old-oracle failure remains unreproduced and is not claimed as a
   diagnosed JIT defect. See
   `notes/jit-resize-native-exit-coverage-2026-09-05.md`.
+- `28de50a6`: return broader positive rooted table hits before allocating
+  general metamethod-chain anchors. GC results and Huge vectors retain the
+  exact reader/result transfer protocol; absence/refusal leaves aliased inputs
+  and outputs untouched. Strict, ASan, stock, canonical meta, concurrent resize,
+  and real queue-growth publication checks pass. Queue allocation and general
+  SMR admission remain. See `notes/meta-positive-rooted-hit-2026-09-05.md`.
 
 The combined normal Linux runtime passes the default stock suite (387 tests
 with JIT off, 509 with JIT on). That is semantic regression coverage, not
@@ -338,16 +344,27 @@ preserve the existing hard thresholds and active progress cadence. See
 35–45% in seven alternating fresh-process pairs per case, with exact old-path
 controls, GC enabled, and validated results. This establishes the new helper's
 cost for small field/array hits, not general table performance or stock parity.
-The combined full JIT pilot now reports a 1.320666406 fork/stock geometric mean
+The first combined full JIT pilot reports a 1.320666406 fork/stock geometric mean
 over all 15 rows, with closures at 1,598.75 ns/op (21.83 times stock). The
 interpreter again times out at 180 seconds after six rows; its aggregate is
 undefined. A separate seven-pair matched diagnosis finds 11–25% overhead from
 failed scalar attempts in three large-table workloads, while the small array
 case improves by about 33%. Preserve those regressions alongside the wins.
-Reusing the existing bounded reader for broader positive hits before chain
-allocation is the next candidate, with unchanged failure inputs and exact GC
-result publication as requirements. See
+See
 `notes/linux-integrated-performance-2026-09-05.md`.
+`28de50a6` then reuses the existing bounded reader for broader positive hits
+before chain allocation, preserving unchanged failure inputs and exact GC
+result publication. Seven matched pairs per case reduce existing-key store,
+hash-read, and existing-key read costs by about 63%, 29%, and 51%, with the
+small array case approximately unchanged. The full JIT pilot has a
+1.337883709 fork/stock geometric mean. Its 360-second interpreter timeout is
+preserved separately from a fresh full interpreter run which completes all
+15 rows in 727.427 seconds under a 900-second bound; compared with the earlier
+stock sample, the complete interpreter ratio is 9.694639005. This is a shared
+host exploratory observation, not repeated paired acceptance evidence.
+Generic interpreter FFI, coroutine, and string-buffer costs remain large. See
+`notes/meta-positive-rooted-hit-2026-09-05.md` and
+`notes/linux-rooted-hit-full-performance-2026-09-05.md`.
 
 Continue removing demonstrably redundant publications while preserving receiver
 roots and exact post-CAS key/value handoff. Then replace unbounded whole-object

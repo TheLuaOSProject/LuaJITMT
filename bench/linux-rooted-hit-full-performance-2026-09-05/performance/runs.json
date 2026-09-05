@@ -1,0 +1,342 @@
+[
+  {
+    "name": "stock",
+    "mode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/luajit",
+      "-jon",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua"
+    ],
+    "environment": {
+      "BENCH_SCALE": "1",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 8.034207992999654,
+    "limit_seconds": 360,
+    "rows": {
+      "arith_loop": {
+        "total_s": 0.0342,
+        "ns_per_op": 0.68
+      },
+      "fib30": {
+        "total_s": 0.0062,
+        "ns_per_op": 6242000.0
+      },
+      "tab_hash_write": {
+        "total_s": 0.0503,
+        "ns_per_op": 25.15
+      },
+      "tab_store_existing": {
+        "total_s": 0.0374,
+        "ns_per_op": 1.87
+      },
+      "tab_insert_newkey": {
+        "total_s": 0.0237,
+        "ns_per_op": 118.4
+      },
+      "tab_hash_read": {
+        "total_s": 0.4547,
+        "ns_per_op": 22.74
+      },
+      "tab_read_existing": {
+        "total_s": 0.0609,
+        "ns_per_op": 2.03
+      },
+      "tab_array": {
+        "total_s": 0.082,
+        "ns_per_op": 2.73
+      },
+      "alloc_tables": {
+        "total_s": 0.0034,
+        "ns_per_op": 0.68
+      },
+      "string_intern": {
+        "total_s": 0.1487,
+        "ns_per_op": 74.34
+      },
+      "closures_upval": {
+        "total_s": 0.3699,
+        "ns_per_op": 73.98
+      },
+      "upval_hot": {
+        "total_s": 0.0342,
+        "ns_per_op": 0.68
+      },
+      "ffi_struct": {
+        "total_s": 0.0205,
+        "ns_per_op": 0.68
+      },
+      "coroutine_switch": {
+        "total_s": 0.0719,
+        "ns_per_op": 23.97
+      },
+      "sbuf_format": {
+        "total_s": 0.1455,
+        "ns_per_op": 72.77
+      }
+    },
+    "missing_rows": []
+  },
+  {
+    "name": "fork",
+    "mode": "-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-jon",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua"
+    ],
+    "environment": {
+      "BENCH_SCALE": "1",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 53.62064058100077,
+    "limit_seconds": 360,
+    "rows": {
+      "arith_loop": {
+        "total_s": 0.0342,
+        "ns_per_op": 0.68
+      },
+      "fib30": {
+        "total_s": 0.0084,
+        "ns_per_op": 8449000.0
+      },
+      "tab_hash_write": {
+        "total_s": 0.064,
+        "ns_per_op": 32.02
+      },
+      "tab_store_existing": {
+        "total_s": 0.0379,
+        "ns_per_op": 1.9
+      },
+      "tab_insert_newkey": {
+        "total_s": 0.3583,
+        "ns_per_op": 1791.66
+      },
+      "tab_hash_read": {
+        "total_s": 0.4681,
+        "ns_per_op": 23.4
+      },
+      "tab_read_existing": {
+        "total_s": 0.0681,
+        "ns_per_op": 2.27
+      },
+      "tab_array": {
+        "total_s": 0.0822,
+        "ns_per_op": 2.74
+      },
+      "alloc_tables": {
+        "total_s": 0.0034,
+        "ns_per_op": 0.69
+      },
+      "string_intern": {
+        "total_s": 0.0167,
+        "ns_per_op": 8.33
+      },
+      "closures_upval": {
+        "total_s": 7.9939,
+        "ns_per_op": 1598.78
+      },
+      "upval_hot": {
+        "total_s": 0.0342,
+        "ns_per_op": 0.68
+      },
+      "ffi_struct": {
+        "total_s": 0.0205,
+        "ns_per_op": 0.68
+      },
+      "coroutine_switch": {
+        "total_s": 0.7072,
+        "ns_per_op": 235.74
+      },
+      "sbuf_format": {
+        "total_s": 0.0155,
+        "ns_per_op": 7.75
+      }
+    },
+    "missing_rows": []
+  },
+  {
+    "name": "stock",
+    "mode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua"
+    ],
+    "environment": {
+      "BENCH_SCALE": "1",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?.lua;;"
+    },
+    "exit": 0,
+    "status": "complete",
+    "seconds": 31.967388483999457,
+    "limit_seconds": 360,
+    "rows": {
+      "arith_loop": {
+        "total_s": 0.1711,
+        "ns_per_op": 3.42
+      },
+      "fib30": {
+        "total_s": 0.0286,
+        "ns_per_op": 28636000.0
+      },
+      "tab_hash_write": {
+        "total_s": 0.0951,
+        "ns_per_op": 47.57
+      },
+      "tab_store_existing": {
+        "total_s": 0.2547,
+        "ns_per_op": 12.73
+      },
+      "tab_insert_newkey": {
+        "total_s": 0.0264,
+        "ns_per_op": 131.94
+      },
+      "tab_hash_read": {
+        "total_s": 1.0033,
+        "ns_per_op": 50.17
+      },
+      "tab_read_existing": {
+        "total_s": 0.431,
+        "ns_per_op": 14.37
+      },
+      "tab_array": {
+        "total_s": 0.374,
+        "ns_per_op": 12.47
+      },
+      "alloc_tables": {
+        "total_s": 0.2783,
+        "ns_per_op": 55.67
+      },
+      "string_intern": {
+        "total_s": 0.1949,
+        "ns_per_op": 97.47
+      },
+      "closures_upval": {
+        "total_s": 0.3795,
+        "ns_per_op": 75.9
+      },
+      "upval_hot": {
+        "total_s": 0.4463,
+        "ns_per_op": 8.93
+      },
+      "ffi_struct": {
+        "total_s": 2.3129,
+        "ns_per_op": 77.1
+      },
+      "coroutine_switch": {
+        "total_s": 0.0655,
+        "ns_per_op": 21.85
+      },
+      "sbuf_format": {
+        "total_s": 0.2113,
+        "ns_per_op": 105.65
+      }
+    },
+    "missing_rows": []
+  },
+  {
+    "name": "fork",
+    "mode": "-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "stdbuf",
+      "-oL",
+      "-eL",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/luajit",
+      "-joff",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/plan/aux/bench/bench.lua"
+    ],
+    "environment": {
+      "BENCH_SCALE": "1",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src/?.lua;;"
+    },
+    "exit": -9,
+    "status": "timeout",
+    "seconds": 360.003303118001,
+    "limit_seconds": 360,
+    "rows": {
+      "arith_loop": {
+        "total_s": 0.285,
+        "ns_per_op": 5.7
+      },
+      "fib30": {
+        "total_s": 0.0349,
+        "ns_per_op": 34850000.0
+      },
+      "tab_hash_write": {
+        "total_s": 0.1379,
+        "ns_per_op": 68.95
+      },
+      "tab_store_existing": {
+        "total_s": 5.7147,
+        "ns_per_op": 285.74
+      },
+      "tab_insert_newkey": {
+        "total_s": 0.7554,
+        "ns_per_op": 3777.05
+      },
+      "tab_hash_read": {
+        "total_s": 7.5156,
+        "ns_per_op": 375.78
+      },
+      "tab_read_existing": {
+        "total_s": 18.1297,
+        "ns_per_op": 604.32
+      },
+      "tab_array": {
+        "total_s": 5.2343,
+        "ns_per_op": 174.48
+      },
+      "alloc_tables": {
+        "total_s": 10.47,
+        "ns_per_op": 2093.99
+      },
+      "string_intern": {
+        "total_s": 0.1741,
+        "ns_per_op": 87.07
+      },
+      "closures_upval": {
+        "total_s": 7.6611,
+        "ns_per_op": 1532.22
+      },
+      "upval_hot": {
+        "total_s": 0.6036,
+        "ns_per_op": 12.07
+      }
+    },
+    "missing_rows": [
+      "ffi_struct",
+      "coroutine_switch",
+      "sbuf_format"
+    ]
+  }
+]

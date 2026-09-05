@@ -1,0 +1,17 @@
+{
+  "kind": "normal",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src",
+    "-j8",
+    "BUILDMODE=static"
+  ],
+  "exit": 0,
+  "seconds": 5.124346395999964,
+  "build_ASAN_OPTIONS": null,
+  "binary_sha256": "cfd0a47e14be6de5f1a3fde057abb88752ee7aeb516990b2884ae77acf01db17"
+}

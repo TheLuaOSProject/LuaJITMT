@@ -1,0 +1,50 @@
+{
+  "runtime_metadata": {
+    "base": "5411209f5a5ba701f72bdfe2894beae3e09839e2",
+    "archive_sha256": "389b624f10d551a4b16e54e3ebd47093c0a9a8217b3d49fece1692d5fb2064b8",
+    "overlays": {
+      "src/lj_tab.c": {
+        "sha256": "28b2eac3dc6c0734d131cf33d3f34826ae758c9b3deb437c6bd154e0cd2fd48f",
+        "git_blob": "4c60ff26e7c00404654158f9ae780ec2390e7969"
+      },
+      "src/lj_tab.h": {
+        "sha256": "12169670f7b092cd517fcbae538830a8ac1ec5986f7781787c03986500cae562",
+        "git_blob": "6592cfb7ef8884d50c52b864707e235e428dd8eb"
+      },
+      "src/lj_meta.c": {
+        "sha256": "dfbcd351d8aabc36580bf933f42583108f66fd723cfcb1f0afb6b32bd1b94909",
+        "git_blob": "ad02c75c233c9869bddc0dd87763ec70b2d86aca"
+      },
+      "tests/t-tab-rooted-get-try.c": {
+        "sha256": "f6b2b337b6c97156b7049d7d7c4527615af2d3664e6566c7454220f91141f5ad",
+        "git_blob": "d7783b6f5c45873719df22e438cb09104dfdf2dc"
+      }
+    },
+    "scope": "Preserve tri-state API; add positive-only direct meta read through identical lifetime protocol, leaving all failure operands unchanged.",
+    "measured_source_note": "Final shared header additionally corrects allocation documentation only; exact frozen header identity is in overlays. Production code, declarations and fixture behavior are unchanged."
+  },
+  "build": {
+    "kind": "normal",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-C",
+      "/tmp/lj-rooted-positive-hit-20260905-34e9qs5t/normal/src",
+      "-j8",
+      "BUILDMODE=static"
+    ],
+    "exit": 0,
+    "seconds": 5.124346395999964,
+    "build_ASAN_OPTIONS": null,
+    "binary_sha256": "cfd0a47e14be6de5f1a3fde057abb88752ee7aeb516990b2884ae77acf01db17"
+  },
+  "harness_sha256": "ebd0b8d53b6e7a340c90c45ad33d9bdd47acbd5418890d593d6aae127ef926a9",
+  "stock_ref": "b925b3e3fc6771171602323b45fbe9fb8fc90369",
+  "binary_sha256": {
+    "stock": "d399449cc8cee4b0c600104a4a66fd44eeeac276c0f8571ce8204744041b5e34",
+    "fork": "cfd0a47e14be6de5f1a3fde057abb88752ee7aeb516990b2884ae77acf01db17"
+  },
+  "protocol": "Fresh stock JIT, fork JIT, stock interpreter, fork interpreter; BENCH_SCALE=1, GC mode unset, unmodified full harness, 360s per process. Each row is minimum of five in-process rounds, not independent process repetitions. CPU 30; other functional work on CPUs 0-15; no full host/frequency isolation."
+}

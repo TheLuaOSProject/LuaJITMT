@@ -103,8 +103,11 @@ source identities, raw pairs and normal build metadata are in
 `bench/meta-positive-rooted-hit-2026-09-05/`.
 
 The separate full JIT pilot completes 15 rows with a 1.337883709 fork/stock
-geometric mean. Its interpreter run reaches 12 rows before the longer
-360-second limit, so it still has no interpreter aggregate. Its untouched
-artifacts remain under `/tmp/lj-rooted-hit-full-benchmark-20260905-96tl6pn9`;
-the extended full-interpreter observation is recorded separately when terminal.
-Neither the longer bound nor more completed rows alone establishes a speedup.
+geometric mean. Its interpreter run reaches 12 rows before the 360-second
+limit; that original incomplete result is preserved. A separate full
+interpreter process with a 900-second bound completes all 15 rows in 727.427
+seconds. Compared with the earlier stock interpreter sample, its geometric
+ratio is 9.694639005. Exact bounds, raw outputs, comparison limits and remaining
+costs are recorded in `notes/linux-rooted-hit-full-performance-2026-09-05.md`
+and its durable benchmark artifacts. Neither extending the bound nor completing
+more rows alone establishes a speedup.
