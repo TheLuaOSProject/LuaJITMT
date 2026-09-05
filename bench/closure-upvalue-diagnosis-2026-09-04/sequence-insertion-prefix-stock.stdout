@@ -1,0 +1,3 @@
+benchmark               total_s      ns/op
+tab_insert_newkey        0.0229     114.42
+closures_upval           0.0372      74.30

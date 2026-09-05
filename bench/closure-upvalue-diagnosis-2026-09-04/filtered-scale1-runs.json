@@ -1,0 +1,64 @@
+[
+  {
+    "kind": "leaf",
+    "scale": 1,
+    "iters": 5000000,
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/luajit",
+      "-jon",
+      "-e",
+      "io.stdout:setvbuf(\"line\")",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "1",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.lua;/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:47:12.510663+00:00",
+    "status": "complete",
+    "timeout_s": 90,
+    "exit_code": 0,
+    "wall_s": 49.543347476000235,
+    "user_s": 49.287761,
+    "system_s": 0.150688,
+    "stdout": "filtered-scale1-leaf.stdout",
+    "stderr": "filtered-scale1-leaf.stderr"
+  },
+  {
+    "kind": "stock",
+    "scale": 1,
+    "iters": 5000000,
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/luajit",
+      "-jon",
+      "-e",
+      "io.stdout:setvbuf(\"line\")",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "1",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?.lua;/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:48:02.054182+00:00",
+    "status": "complete",
+    "timeout_s": 90,
+    "exit_code": 0,
+    "wall_s": 1.769099820000065,
+    "user_s": 1.7627119999999934,
+    "system_s": 0.0029909999999999937,
+    "stdout": "filtered-scale1-stock.stdout",
+    "stderr": "filtered-scale1-stock.stderr"
+  }
+]

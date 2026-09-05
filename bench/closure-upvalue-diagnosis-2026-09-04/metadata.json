@@ -1,0 +1,88 @@
+{
+  "created_utc": "2026-09-04T23:45:02.709161+00:00",
+  "cpu": 30,
+  "scope": "diagnosis only; GC enabled for primary samples; existing frozen binary and harness, no runtime mutations",
+  "binaries": {
+    "leaf": {
+      "path": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/luajit",
+      "sha256": "c6e24874cefde9b2033b0e138cc3564d2e27dfc72ce04597b45ab70ad98fc8cf",
+      "readelf_notes": "\nDisplaying notes found in: .note.gnu.property\n  Owner                Data size \tDescription\n  GNU                  0x00000010\tNT_GNU_PROPERTY_TYPE_0\n      Properties: x86 ISA needed: x86-64-baseline\n\nDisplaying notes found in: .note.gnu.build-id\n  Owner                Data size \tDescription\n  GNU                  0x00000014\tNT_GNU_BUILD_ID (unique build ID bitstring)\n    Build ID: 54d546c4e17b8526f2abfef11c4af6c6d2f38e67\n\nDisplaying notes found in: .note.ABI-tag\n  Owner                Data size \tDescription\n  GNU                  0x00000010\tNT_GNU_ABI_TAG (ABI version tag)\n    OS: Linux, ABI: 3.2.0\n"
+    },
+    "stock": {
+      "path": "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/luajit",
+      "sha256": "d399449cc8cee4b0c600104a4a66fd44eeeac276c0f8571ce8204744041b5e34",
+      "readelf_notes": "\nDisplaying notes found in: .note.gnu.property\n  Owner                Data size \tDescription\n  GNU                  0x00000010\tNT_GNU_PROPERTY_TYPE_0\n      Properties: x86 ISA needed: x86-64-baseline\n\nDisplaying notes found in: .note.gnu.build-id\n  Owner                Data size \tDescription\n  GNU                  0x00000014\tNT_GNU_BUILD_ID (unique build ID bitstring)\n    Build ID: 7ee48eb30ddc2bb66518fe3133b14860908c163c\n\nDisplaying notes found in: .note.ABI-tag\n  Owner                Data size \tDescription\n  GNU                  0x00000010\tNT_GNU_ABI_TAG (ABI version tag)\n    OS: Linux, ABI: 3.2.0\n"
+    }
+  },
+  "harness": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/aux/bench/bench.lua",
+  "isolation": "CPU affinity only, shared machine; other agents have functional work, use CPUs0-15 where practical",
+  "harness_sha256": "ebd0b8d53b6e7a340c90c45ad33d9bdd47acbd5418890d593d6aae127ef926a9",
+  "cpu_metadata": {
+    "/sys/devices/system/cpu/cpu30/topology/thread_siblings_list": "30",
+    "/sys/devices/system/cpu/cpu30/cpufreq/scaling_governor": "performance",
+    "/sys/fs/cgroup/cpu.max": "max 100000"
+  },
+  "completed_utc": "2026-09-05",
+  "post_run_sha256": {
+    "leaf": "c6e24874cefde9b2033b0e138cc3564d2e27dfc72ce04597b45ab70ad98fc8cf",
+    "stock": "d399449cc8cee4b0c600104a4a66fd44eeeac276c0f8571ce8204744041b5e34"
+  },
+  "post_run_harness_sha256": "ebd0b8d53b6e7a340c90c45ad33d9bdd47acbd5418890d593d6aae127ef926a9",
+  "runtime_archive_sha256": "474aa2c4546f7ea7c193ae528f06038acd5b58f5d245faaeed3e189731f8601a",
+  "frozen_source_sha256": {
+    "lj_arena.c": "b1ae85e2a68592df91838bbf6ba3a934983a3c035d62656e621ca8f360145a33",
+    "lj_arena.h": "9ee1e016047b62981514ef5b74fc8053575a0386fe18b48fc73ead704b8d61d5",
+    "lj_gc2.c": "eeca1e87c175f48d05c91d17a7650ed0725da453ed3ed59ac6fccada30ecdccd",
+    "lj_gc2.h": "ad67e4d926d04788910d84d72e82b11ee5ae117cb292e1d823a5ecf8325b3789",
+    "lj_func.c": "ffa40416d4b84951418377217798f82b8c3400334fa4a975f965e919820bdb26",
+    "lj_func.h": "5a43589d241272c6cc277b426cf8e7200679e6c7a7bb96301f1153d5c26b91c9",
+    "lj_asm_x86.h": "e5c4bd5411014c84bfc1704f60b24e8efe41bde66ea240908a2af4caaf527742",
+    "lj_obj.h": "4dddf105f8b3006efb495259340ea4acaae9579e283b769ff9e683810beb435b"
+  },
+  "diagnostic_frontend": {
+    "source": "gcdiag.c",
+    "source_sha256": "b5556f0a338f1855a0d14ba3c5457895a13c56d9e25b894cd2077d4640660f66",
+    "runtime_archive": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/libluajit.a",
+    "binary": "/tmp/lj-closure-upvalue-diagnosis-20260904-7a0j7cbc/gcdiag",
+    "binary_sha256": "e803a3fe1dc1c4245bba1219b14994dec1c2426600c68dd984d6323ea2028f2f",
+    "scope": "separate read-only main-owner diagnostics; no GC workers or secondary TG; not primary timing binary",
+    "historical_variant": "The first counter pair was collected before adding count_empty_reclaimed and small_registry_capacity output. The reachability probe used the checked-in extended source; earlier frontend executable was overwritten. The runtime archive was unchanged.",
+    "reproduction_compile_command": [
+      "taskset",
+      "-c",
+      "0",
+      "gcc",
+      "-O2",
+      "-g",
+      "-I/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src",
+      "/workspaces/lj-lockless/bench/closure-upvalue-diagnosis-2026-09-04/gcdiag.c",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-closure-upvalue-diagnosis-20260904-7a0j7cbc/gcdiag-reproduce"
+    ],
+    "reproduction_compile_exit_code": 0,
+    "reproduced_binary_sha256": "206d99bb31dd4fe222742978f3ea424ff174e482913efc008fe0c2d58bd24685",
+    "reproduced_binary_matches_original": false
+  },
+  "symbols": {
+    "method": "relink frozen luajit.o and libluajit.a without strip, then local perf report --symfs; measured binary untouched",
+    "relink_command": [
+      "gcc",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-closure-upvalue-leaf-unstripped",
+      "luajit.o",
+      "libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread"
+    ],
+    "working_directory": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src",
+    "build_id_matches_measured_leaf": true,
+    "symfs": "/tmp/lj-closure-upvalue-diagnosis-20260904-7a0j7cbc/symbols"
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "30",
+    "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/luajit",
+    "-jon",
+    "-e",
+    "io.stdout:setvbuf(\"line\")",
+    "/workspaces/lj-lockless/bench/closure-upvalue-diagnosis-2026-09-04/sequence-profile.lua",
+    "tab_insert_newkey,closures_upval"
+  ],
+  "environment": {
+    "BENCH_SCALE": "1",
+    "CLOSURE_SCALE": "0.1",
+    "DIAG_STOP_AFTER": "closures_upval",
+    "BENCH_GC_MODE": null,
+    "LUA_PATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.lua;/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?/init.lua;;",
+    "LUA_CPATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.so;;"
+  },
+  "pid": 42792,
+  "profile_marker_seen": true,
+  "perf_command": [
+    "perf",
+    "record",
+    "-q",
+    "-o",
+    "/tmp/lj-closure-upvalue-diagnosis-20260904-7a0j7cbc/prefix.data",
+    "-F",
+    "199",
+    "-e",
+    "cycles:u",
+    "--call-graph",
+    "dwarf",
+    "-p",
+    "42792",
+    "--",
+    "sleep",
+    "5"
+  ],
+  "perf_exit": 0,
+  "profile_wall_s": 5.048595034000755,
+  "exit_code": 0
+}

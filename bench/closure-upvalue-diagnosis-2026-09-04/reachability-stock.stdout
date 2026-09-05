@@ -1,0 +1,8 @@
+benchmark               total_s      ns/op
+tab_insert_newkey        0.0241     120.58
+watch_before_closures run=1 live=0
+watch_before_closures run=2 live=0
+watch_before_closures run=3 live=0
+watch_before_closures run=4 live=0
+watch_before_closures run=5 live=0
+closures_upval           0.0072      71.66

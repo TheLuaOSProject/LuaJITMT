@@ -1,0 +1,194 @@
+[
+  {
+    "sample": 0,
+    "kind": "stock",
+    "scale": 0.1,
+    "iters": 500000,
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/luajit",
+      "-jon",
+      "-e",
+      "io.stdout:setvbuf(\"line\")",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.1",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?.lua;/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:45:52.908334+00:00",
+    "status": "complete",
+    "timeout_s": 45,
+    "exit_code": 0,
+    "wall_s": 0.1812261979998766,
+    "user_s": 0.178641,
+    "system_s": 0.001992,
+    "stdout": "filtered-01-stock.stdout",
+    "stderr": "filtered-01-stock.stderr"
+  },
+  {
+    "sample": 0,
+    "kind": "leaf",
+    "scale": 0.1,
+    "iters": 500000,
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/luajit",
+      "-jon",
+      "-e",
+      "io.stdout:setvbuf(\"line\")",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.1",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.lua;/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:45:53.089887+00:00",
+    "status": "complete",
+    "timeout_s": 45,
+    "exit_code": 0,
+    "wall_s": 4.982491219999702,
+    "user_s": 4.939187,
+    "system_s": 0.031925999999999996,
+    "stdout": "filtered-01-leaf.stdout",
+    "stderr": "filtered-01-leaf.stderr"
+  },
+  {
+    "sample": 1,
+    "kind": "leaf",
+    "scale": 0.1,
+    "iters": 500000,
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/luajit",
+      "-jon",
+      "-e",
+      "io.stdout:setvbuf(\"line\")",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.1",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.lua;/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:45:58.072766+00:00",
+    "status": "complete",
+    "timeout_s": 45,
+    "exit_code": 0,
+    "wall_s": 4.981236414999785,
+    "user_s": 4.951837,
+    "system_s": 0.017963,
+    "stdout": "filtered-02-leaf.stdout",
+    "stderr": "filtered-02-leaf.stderr"
+  },
+  {
+    "sample": 1,
+    "kind": "stock",
+    "scale": 0.1,
+    "iters": 500000,
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/luajit",
+      "-jon",
+      "-e",
+      "io.stdout:setvbuf(\"line\")",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.1",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?.lua;/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:46:03.054394+00:00",
+    "status": "complete",
+    "timeout_s": 45,
+    "exit_code": 0,
+    "wall_s": 0.1831712250000237,
+    "user_s": 0.18046000000000006,
+    "system_s": 0.0019920000000000007,
+    "stdout": "filtered-02-stock.stdout",
+    "stderr": "filtered-02-stock.stderr"
+  },
+  {
+    "sample": 2,
+    "kind": "stock",
+    "scale": 0.1,
+    "iters": 500000,
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/luajit",
+      "-jon",
+      "-e",
+      "io.stdout:setvbuf(\"line\")",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.1",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?.lua;/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:46:03.237928+00:00",
+    "status": "complete",
+    "timeout_s": 45,
+    "exit_code": 0,
+    "wall_s": 0.18391062899991084,
+    "user_s": 0.18025499999999894,
+    "system_s": 0.0030019999999999977,
+    "stdout": "filtered-03-stock.stdout",
+    "stderr": "filtered-03-stock.stderr"
+  },
+  {
+    "sample": 2,
+    "kind": "leaf",
+    "scale": 0.1,
+    "iters": 500000,
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/luajit",
+      "-jon",
+      "-e",
+      "io.stdout:setvbuf(\"line\")",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/plan/aux/bench/bench.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "0.1",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.lua;/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.so;;"
+    },
+    "started_utc": "2026-09-04T23:46:03.422222+00:00",
+    "status": "complete",
+    "timeout_s": 45,
+    "exit_code": 0,
+    "wall_s": 4.976225076999981,
+    "user_s": 4.943864,
+    "system_s": 0.020954,
+    "stdout": "filtered-03-leaf.stdout",
+    "stderr": "filtered-03-leaf.stderr"
+  }
+]

@@ -1,0 +1,28 @@
+--- frozen/plan/aux/bench/bench.lua
++++ diagnosis/sequence.lua
+@@ -11,7 +11,8 @@
+ local scale = tonumber(getenv("BENCH_SCALE")) or 1
+ if scale <= 0 then scale = 1 end
+ local function bench(name, iters, fn)
+-  iters = floor(iters * scale + 0.5)
++  local bscale = name == "closures_upval" and tonumber(getenv("CLOSURE_SCALE")) or scale
++  iters = floor(iters * bscale + 0.5)
+   if iters < 1 then iters = 1 end
+   benches[#benches+1] = { name = name, iters = iters, fn = fn }
+ end
+@@ -173,7 +174,7 @@
+ collectgarbage("collect")
+ print(string.format("%-18s %12s %10s", "benchmark", "total_s", "ns/op"))
+ for _, b in ipairs(benches) do
+-  if not filter or b.name:find(filter, 1, true) then
++  if not filter or filter:find(b.name, 1, true) then
+     local best = math.huge
+     for run = 1, 5 do
+       collectgarbage("collect")
+@@ -183,5 +184,6 @@
+       if dt < best then best = dt end
+     end
+     print(string.format("%-18s %12.4f %10.2f", b.name, best, best / b.iters * 1e9))
++    if getenv("DIAG_STOP_AFTER") == b.name then break end
+   end
+ end

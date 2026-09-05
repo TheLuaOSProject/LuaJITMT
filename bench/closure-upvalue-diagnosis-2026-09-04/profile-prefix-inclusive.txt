@@ -1,0 +1,159 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 999  of event 'cpu_atom/cycles/u'
+# Event count (approx.): 21344297891
+#
+# Children      Self  Command  Shared Object     Symbol
+# ........  ........  .......  ................  ................................................
+#
+    99.90%     0.00%  luajit   libc.so.6         [.] 0x00007fce5251bca7
+    99.90%     0.00%  luajit   luajit            [.] docall
+    99.90%     0.00%  luajit   luajit            [.] lj_BC_FUNCC
+    99.90%     0.00%  luajit   luajit            [.] lj_vm_cpcall
+    99.90%     0.00%  luajit   luajit            [.] lj_vm_pcall_unwind
+    99.90%     0.00%  luajit   luajit            [.] lua_cpcall
+    99.90%     0.00%  luajit   luajit            [.] lua_pcall
+    99.90%     0.00%  luajit   luajit            [.] main
+    99.90%     0.00%  luajit   luajit            [.] pmain
+    97.73%     0.00%  luajit   luajit            [.] lj_BC_FNEW
+    97.73%     0.00%  luajit   luajit            [.] lj_func_newL_gc
+    94.51%     0.00%  luajit   luajit            [.] gc2_step_auto
+    94.51%     0.00%  luajit   luajit            [.] lj_gc2_step_explicit
+    64.86%     0.00%  luajit   luajit            [.] gc2_worker_drain_inner
+    40.65%     0.00%  luajit   luajit            [.] lj_gc2_sweep_owner_progress
+    37.23%     0.00%  luajit   luajit            [.] gc2_traverse_obj
+    31.67%     0.10%  luajit   luajit            [.] gc2_traverse_tab_rec.constprop.0
+    29.52%    28.41%  luajit   luajit            [.] lj_arena_alloc_quarantine_finish
+    24.82%     4.51%  luajit   luajit            [.] gc2_small_candidate_admit
+    23.93%     0.00%  luajit   luajit            [.] gc2_mark_drain_owned_bounded
+    23.73%     0.00%  luajit   luajit            [.] gc2_drain_grey
+    23.12%     1.00%  luajit   luajit            [.] gc2_markobj_preserve_status_impl.constprop.0
+    20.44%     0.00%  luajit   luajit            [.] lj_gc2_sweep_prepare_bridge_boundary.part.0
+    19.41%     1.20%  luajit   luajit            [.] gc2_retain_candidate_status
+    18.71%     0.38%  luajit   luajit            [.] gc2_small_registered_rescue_enter
+    18.32%     1.40%  luajit   luajit            [.] lj_arena_hugetab_rescue_enter
+    17.45%     0.19%  luajit   luajit            [.] gc2_trace_sweep_tv_edge.isra.0
+    16.45%     0.50%  luajit   luajit            [.] gc2_markobj_worker_status
+    16.35%     0.00%  luajit   luajit            [.] gc2_mark_payload_obj_worker
+    16.04%     0.00%  luajit   luajit            [.] gc2_fixpoint_round
+    16.04%     0.00%  luajit   luajit            [.] gc2_mark_close_help
+    12.75%     0.10%  luajit   luajit            [.] safepoint_ack_tg
+    12.65%     0.00%  luajit   luajit            [.] lj_safepoint_handshake
+    12.65%     0.00%  luajit   luajit            [.] safepoint_ack_native
+    12.65%     0.00%  luajit   luajit            [.] safepoint_apply_tg_mode
+    12.53%     0.40%  luajit   luajit            [.] gc2_tv_admit_scoped_impl
+    12.43%     0.50%  luajit   luajit            [.] gc2_observed_obj_status_scoped_impl
+    12.35%    12.35%  luajit   luajit            [.] lj_arena_alloc_prepare_sweep_kind.part.0
+     9.62%     2.92%  luajit   luajit            [.] gc2_sweep_arena_unmarked_impl.isra.0
+     9.62%     0.00%  luajit   luajit            [.] lj_gc_sweep_gc2_arena_unmarked_exclusive
+     8.07%     0.00%  luajit   luajit            [.] gc2_mark_complete_result
+     7.42%     7.42%  luajit   luajit            [.] hugetab_reader_entry
+     6.49%     5.08%  luajit   luajit            [.] gc2_sweep_pregrace_batch
+     5.45%     0.60%  luajit   luajit            [.] gc2_trace_sweep_edge
+     5.10%     4.40%  luajit   luajit            [.] hugetab_counted_lease_release.part.0
+     4.91%     4.91%  luajit   luajit            [.] hugetab_search
+     4.33%     4.33%  luajit   luajit            [.] gc2_mark_small_cell_admitted
+     4.12%     4.12%  luajit   luajit            [.] arena_publish_leave
+     3.21%     0.30%  luajit   luajit            [.] gc2_small_arena_known
+     3.01%     0.50%  luajit   luajit            [.] lj_arena_hugetab_lookup
+     2.72%     0.20%  luajit   luajit            [.] gc2_preserve_lfunc_direct_bodies
+     2.63%     0.31%  luajit   luajit            [.] gc2_drain_published_ssb_to_grey
+     2.60%     2.60%  luajit   luajit            [.] lj_arena_rescue_enter
+     2.32%     0.10%  luajit   luajit            [.] gc2_ssb_mark_one
+     1.91%     0.20%  luajit   luajit            [.] func_newL_gc1tv_bump
+     1.71%     0.10%  luajit   luajit            [.] lj_gc_pubroot
+     1.61%     0.00%  luajit   luajit            [.] lj_gc2_barrier_tv_g
+     1.11%     0.00%  luajit   luajit            [.] gc2_mark_thread_root_obj_worker_status
+     1.11%     1.11%  luajit   luajit            [.] arena_count_live_cells
+     1.01%     0.00%  luajit   luajit            [.] lj_vm_gc2_pubroot
+     0.91%     0.60%  luajit   luajit            [.] lj_gc_reclaim_gc2_arena
+     0.80%     0.00%  luajit   luajit            [.] gc2_mark_begin
+     0.80%     0.00%  luajit   luajit            [.] arena_reserve_bump_impl
+     0.80%     0.00%  luajit   luajit            [.] lj_gc2_sweep_to_idle
+     0.76%     0.00%  luajit   luajit            [.] api_gc_collect_cp
+     0.76%     0.00%  luajit   luajit            [.] lj_cf_collectgarbage
+     0.76%     0.00%  luajit   luajit            [.] lj_gc2_collect_active
+     0.76%     0.00%  luajit   luajit            [.] lj_vm_cpcall_asm
+     0.76%     0.00%  luajit   luajit            [.] lua_gc
+     0.70%     0.70%  luajit   luajit            [.] gc2_retained_candidate_valid
+     0.70%     0.70%  luajit   luajit            [.] lj_arena_hugetab_sweep_next
+     0.70%     0.00%  luajit   luajit            [.] lj_arena_hugetab_has_sweep_old
+     0.60%     0.20%  luajit   luajit            [.] gc2_sweep_dtor_obj
+     0.60%     0.30%  luajit   luajit            [.] lj_mem_freegco_defer
+     0.60%     0.60%  luajit   luajit            [.] gc2_small_containing_start
+     0.60%     0.60%  luajit   luajit            [.] lj_arena_hugetab_clear_marks
+     0.50%     0.50%  luajit   luajit            [.] gc2_small_lifetime_nearest
+     0.40%     0.00%  luajit   luajit            [.] lj_func_free
+     0.40%     0.00%  luajit   luajit            [.] gc2_valid_freeable_obj
+     0.40%     0.00%  luajit   luajit            [.] gc2_markmem_status
+     0.40%     0.00%  luajit   luajit            [.] gc2_preserve_tab_direct_bodies
+     0.40%     0.40%  luajit   luajit            [.] arena_reserve_lifetime_kind
+     0.40%     0.00%  luajit   luajit            [.] lj_gc2_sweep_pending
+     0.30%     0.30%  luajit   luajit            [.] gc2_publish_worker
+     0.30%     0.20%  luajit   luajit            [.] gc_root_link_claim_at
+     0.30%     0.20%  luajit   luajit            [.] lj_gc2_mem_registered_known
+     0.30%     0.10%  luajit   luajit            [.] gc2_size_fits_mem.part.0
+     0.30%     0.20%  luajit   luajit            [.] lj_arena_free_deferred
+     0.30%     0.10%  luajit   luajit            [.] lj_gc2_activation_reclaim_veto
+     0.30%     0.00%  luajit   luajit            [.] lj_gc2_sweep_live_aggregate.part.0
+     0.30%     0.30%  luajit   luajit            [.] gc2_mark_table_child_tv_worker
+     0.30%     0.10%  luajit   luajit            [.] arena_adopt_reclaimed_one
+     0.20%     0.20%  luajit   luajit            [.] gc2_ssb_published_empty
+     0.20%     0.20%  luajit   luajit            [.] gc2_valid_proto_for_traverse_held
+     0.20%     0.20%  luajit   luajit            [.] gc2_activation_matches_legacy
+     0.20%     0.00%  luajit   luajit            [.] lj_func_freeuv
+     0.20%     0.20%  luajit   luajit            [.] arena_clear_marks_list
+     0.20%     0.00%  luajit   luajit            [.] lj_arena_alloc_clear_marks
+     0.20%     0.20%  luajit   luajit            [.] lj_arena_hugetab_live_bytes
+     0.20%     0.20%  luajit   luajit            [.] arena_set_free_run
+     0.20%     0.20%  luajit   luajit            [.] lj_arena_hugetab_prepare_sweep
+     0.20%     0.20%  luajit   luajit            [.] lj_BC_JLOOP
+     0.10%     0.10%  luajit   libc.so.6         [.] 0x000000000010e7af
+     0.10%     0.00%  luajit   libc.so.6         [.] 0x00007fce526007af
+     0.10%     0.10%  luajit   luajit            [.] gc2_grey_pop
+     0.10%     0.00%  luajit   luajit            [.] gc_root_state_validate
+     0.10%     0.00%  luajit   luajit            [.] lj_gc2_ssb_empty
+     0.10%     0.10%  luajit   luajit            [.] lj_arena_remote_free_drain_sweep
+     0.10%     0.00%  luajit   luajit            [.] gc2_markmem_registered_scoped_status_impl
+     0.10%     0.10%  luajit   luajit            [.] gc2_sweep_pregrace_cap_ready.constprop.0
+     0.10%     0.10%  luajit   luajit            [.] lj_arena_alloc_quarantine_one
+     0.10%     0.10%  luajit   luajit            [.] lj_arena_reclaim_seal
+     0.10%     0.00%  luajit   luajit            [.] gc2_queue_obj_info
+     0.10%     0.00%  luajit   luajit            [.] lj_gc2_obj_valid_queued
+     0.10%     0.10%  luajit   luajit            [.] lj_gc2_worker_wake_n.part.0
+     0.10%     0.10%  luajit   luajit            [.] lj_gc2_sweep_prepare_bridge_boundary
+     0.10%     0.00%  luajit   luajit            [.] lj_safepoint_ack.part.0
+     0.10%     0.10%  luajit   luajit            [.] lj_arena_quarantine_owns_body
+     0.10%     0.00%  luajit   luajit            [.] gc2_small_arena_registered.constprop.0
+     0.10%     0.00%  luajit   luajit            [.] gc2_tg_for_registered_mem
+     0.10%     0.00%  luajit   luajit            [.] gc2_sweep_reclaim_enter
+     0.10%     0.10%  luajit   luajit            [.] gc2_sweep_live_cells
+     0.10%     0.10%  luajit   luajit            [.] hugetab_fold_deferred_free
+     0.10%     0.10%  luajit   luajit            [.] lj_BC_RET1
+     0.10%     0.10%  luajit   luajit            [.] lj_arena_rescue_leave
+     0.10%     0.10%  luajit   luajit            [.] lj_vm_exit_interp
+     0.10%     0.00%  luajit   luajit            [.] gc2_clear_container_needscan_chain.isra.0
+     0.10%     0.00%  luajit   luajit            [.] gc2_root_spine_admit
+     0.10%     0.00%  luajit   luajit            [.] gc2_root_spine_handoff
+     0.10%     0.10%  luajit   luajit            [.] gc_step_assist_top
+     0.10%     0.10%  luajit   luajit            [.] lj_state_stack_pubtv
+     0.10%     0.10%  luajit   luajit            [.] func_arena_set_alloc.constprop.0
+     0.10%     0.10%  luajit   luajit            [.] arena_clear_extent_range
+     0.10%     0.00%  luajit   luajit            [.] gc2_small_containing_admit
+     0.10%     0.00%  luajit   luajit            [.] lj_gc2_mark_proto_for_pc
+     0.10%     0.10%  luajit   luajit            [.] gc2_mark_thread_root_tv_status
+     0.10%     0.00%  luajit   luajit            [.] gc2_scan_owner_tg_roots
+     0.10%     0.00%  luajit   luajit            [.] gc2_scan_tg_thread_root
+     0.10%     0.00%  luajit   luajit            [.] gc2_scan_thread_stack
+     0.10%     0.00%  luajit   luajit            [.] lj_gc2_scan_cycle_owner_tg_roots
+     0.10%     0.00%  luajit   luajit            [.] gc2_traverse_proto
+     0.10%     0.00%  luajit   luajit            [.] gc2_weak_complete_result
+     0.10%     0.10%  luajit   luajit            [.] lj_gc2_sweep_publish_wake
+
+
+#
+# (Tip: Use --symfs <dir> if your symbol files are in non-standard locations)
+#

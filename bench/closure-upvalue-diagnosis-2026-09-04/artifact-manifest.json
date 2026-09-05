@@ -1,0 +1,397 @@
+[
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/README.md",
+    "bytes": 4221,
+    "sha256": "eb7307e1d414d597be98fbb0c11d23a6345a9fed31ebb755852cb4b476bcc5ad"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/counter-runs.json",
+    "bytes": 1929,
+    "sha256": "a23cbac228145255fc2a2281ba14cc45faf87275dd97f5ec88c5311b2672fb90"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/counters-filtered.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/counters-filtered.stdout",
+    "bytes": 6791,
+    "sha256": "fa18b68604cc8065bfcd8d735937cefd4fc9d7dc0a3cb0cb4ddb5e6ca317a571"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/counters-insertion-prefix.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/counters-insertion-prefix.stdout",
+    "bytes": 6910,
+    "sha256": "d7e59e8df3710883cbe81fdbe49d2a981703441c5307c366cbfdf0f6695ae1a8"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/filtered-01-leaf.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/filtered-01-leaf.stdout",
+    "bytes": 86,
+    "sha256": "0fbf39668773beeb51b240b5183d047d419358a8f858caec1f042a4e92daff4f"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/filtered-01-stock.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/filtered-01-stock.stdout",
+    "bytes": 86,
+    "sha256": "cf576793cc1e74f1b82ede65453b0de5b7c91a20fd3a0b28bf35a99b1e589c63"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/filtered-02-leaf.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/filtered-02-leaf.stdout",
+    "bytes": 86,
+    "sha256": "087fb87adecb28262b94a1b6f52d549c797791f22768e38c1e8b7077185cc0e6"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/filtered-02-stock.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/filtered-02-stock.stdout",
+    "bytes": 86,
+    "sha256": "6efd6fe02e0cfc64fe65197d46bb30451bccf91ff18da21efd95b8b5928c9ff8"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/filtered-03-leaf.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/filtered-03-leaf.stdout",
+    "bytes": 86,
+    "sha256": "c9df807940882fd3612983fb9a34574227c811bd52a971aee5bb9525f7e1f84e"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/filtered-03-stock.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/filtered-03-stock.stdout",
+    "bytes": 86,
+    "sha256": "65ffed627797aa2823de19fa6608906475782ebe8eb96b6df28c1d2cd479acea"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/filtered-runs.json",
+    "bytes": 6190,
+    "sha256": "cfd4d9602f1b86e1f059f40fa94fca9d558ddf359fb574a98df35a9c23581bdb"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/filtered-scale1-leaf.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/filtered-scale1-leaf.stdout",
+    "bytes": 86,
+    "sha256": "c24d95f825ce0830fb257e8fe9407909ff9c0439fde5bf25a71948b46e6498ee"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/filtered-scale1-runs.json",
+    "bytes": 2045,
+    "sha256": "636b1b489bf58e68d444ba55f57acda31b6dfe6cfe06598027a8213c4d5423a2"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/filtered-scale1-stock.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/filtered-scale1-stock.stdout",
+    "bytes": 86,
+    "sha256": "5a54a0e39dbbb64e61a47c49221e7e370b9b75e8bb889c92d69bd46154b45c3d"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/gcdiag.c",
+    "bytes": 3006,
+    "sha256": "b5556f0a338f1855a0d14ba3c5457895a13c56d9e25b894cd2077d4640660f66"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/local-evidence-path.txt",
+    "bytes": 52,
+    "sha256": "a7dc4e528a71084a0f5f973d2c7e09e61301772f304f9d1b9d2a510199026732"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/metadata.json",
+    "bytes": 5614,
+    "sha256": "967df8e69c3e1998a76c5ba2800dcdb93f07d9b12d68671b3dca924c738c5760"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/profile-filtered-flat.txt",
+    "bytes": 6996,
+    "sha256": "55e8a20debd07bb25c8f3ad3217a48f3a326ddcbc2b19b015244b579c965f9e4"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/profile-filtered-inclusive.txt",
+    "bytes": 16915,
+    "sha256": "c1ebbb98fa9cd3f5c9ef2930d39d23ec248a02c045dc38e1cdc298173a7c75c1"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/profile-filtered.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/profile-filtered.stdout",
+    "bytes": 86,
+    "sha256": "b21d51d88fc5497ab007de072c925c301652c176781d8d6313751435183ffd28"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/profile-prefix-flat.txt",
+    "bytes": 5605,
+    "sha256": "e189f46ff02ef766eda2c74b98e0480fe7305f36123cbcdaebc13b7e15ea9ae6"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/profile-prefix-inclusive.txt",
+    "bytes": 11479,
+    "sha256": "9b6f6b6843f57a7df5dd9e0e4a0f7963d2dba222ad331633ec7fb09bc1199c77"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/profile-prefix-perf.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/profile-prefix-perf.stdout",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/profile-prefix-report.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/profile-prefix-run.json",
+    "bytes": 1117,
+    "sha256": "112df66e83698eae4b2fab3fe2a8bd7a849ac7e1a70faef2b594ec83fe99488a"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/profile-prefix.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/profile-prefix.stdout",
+    "bytes": 152,
+    "sha256": "05e87214e5b166aed675d2ddaa67471197841d2b63c0073a1851f62936be11ec"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/profile-report.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/reachability-leaf-native-counter.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/reachability-leaf-native-counter.stdout",
+    "bytes": 7543,
+    "sha256": "aaf1b443ef934dacc681e11be1a918c50aceb8dc3c6598ae90a2f7214eb93c8d"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/reachability-runs.json",
+    "bytes": 1961,
+    "sha256": "b2e16436b42a5fd337071a4cdb4bb9773168495f21ffa22b9f0cfa717c41f65c"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/reachability-stock.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/reachability-stock.stdout",
+    "bytes": 304,
+    "sha256": "97e8e5ef4c648d1ec0621a0dd9555b3880110800a89a1e688ae855cdcaa75f0e"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/roots-0-leaf.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/roots-0-leaf.stdout",
+    "bytes": 86,
+    "sha256": "2d92168be146d72137268092132e019a1cb4126223db9660e9cd737d8b3eda0a"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/roots-0-stock.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/roots-0-stock.stdout",
+    "bytes": 86,
+    "sha256": "142c0a60e7656b115fa1644ca9b5eb1e688419224f59cd65bc9ba4263402df36"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/roots-8192-leaf.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/roots-8192-leaf.stdout",
+    "bytes": 86,
+    "sha256": "774041fde2229ca9f27844c3f6aa85985e3d165f0622da4ee4241bc486d84185"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/roots-8192-stock.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/roots-8192-stock.stdout",
+    "bytes": 86,
+    "sha256": "e4cee416599d6a6228047e204e51550fc9c29ca1ebba8939032ee013f414fb73"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/roots-runs.json",
+    "bytes": 4161,
+    "sha256": "d1d43b6a1791abf88fb66e26cfed54374e60b848a3d179f1bb99b5b28242ef00"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/run-filtered.py",
+    "bytes": 2097,
+    "sha256": "da0df258eb4111e844a93fc61fdc4e8ef574c9f2ad278a14b7ad64b772895a8b"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/sequence-counters.lua",
+    "bytes": 5304,
+    "sha256": "be564c2f943c66bb5cd9fe13ea6f14145d2e2a60b1deb755157c4bd60c02cb44"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/sequence-filtered-leaf.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/sequence-filtered-leaf.stdout",
+    "bytes": 86,
+    "sha256": "1b27198e6f65b94c681d2a152447b86ce9359d0dca890e0d1e573c1a909607b2"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/sequence-filtered-stock.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/sequence-filtered-stock.stdout",
+    "bytes": 86,
+    "sha256": "099b3de12308c21bdb8da6e6c841a65eed408d5a4043193b259d2705855462d6"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/sequence-full-prefix-leaf.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/sequence-full-prefix-leaf.stdout",
+    "bytes": 516,
+    "sha256": "b5cdfd63705b83bdf12c7ac5dfee80ebc367e5968d129c8c43f546dceb6620fc"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/sequence-full-prefix-stock.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/sequence-full-prefix-stock.stdout",
+    "bytes": 516,
+    "sha256": "e2ad343850147d39f8b675291eb82a762354ef0af10fdcd698b33bee2ca2f562"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/sequence-harness.patch",
+    "bytes": 1047,
+    "sha256": "590481a52ac7534ca7575cb995f6018be460c792e42aa7c0e44f51d3126ff3f2"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/sequence-insertion-prefix-leaf.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/sequence-insertion-prefix-leaf.stdout",
+    "bytes": 129,
+    "sha256": "10a3883ca937709a76b4a0692eb102328dadd595329b0342440c5ad19b6dc888"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/sequence-insertion-prefix-stock.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/sequence-insertion-prefix-stock.stdout",
+    "bytes": 129,
+    "sha256": "4e9e736713c2c188eaaf1a803513ac770215581b558bd0033cb9f27b736c94bf"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/sequence-profile.lua",
+    "bytes": 5261,
+    "sha256": "dc60e8a319dd2e5970b73d1aa32a5ca33c12acec50f9dfc22eabe12d9aa72267"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/sequence-reachability.lua",
+    "bytes": 5718,
+    "sha256": "8b4d8223b52d755b1a99b648fb3f3f58af0e512b59a0c5dcb5df2fd54e81c6b7"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/sequence-roots.lua",
+    "bytes": 5257,
+    "sha256": "0b387d27187fb9baf893740bd2d715ca2cf0b1e199fbd9b2df5475ed29267ffe"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/sequence-runs.json",
+    "bytes": 8819,
+    "sha256": "a8c0380b838e66b6142f1781001bc30ca39593837bb199dfbb4fcb448b9a73ac"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/sequence-strings-prefix-leaf.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/sequence-strings-prefix-leaf.stdout",
+    "bytes": 129,
+    "sha256": "820630a55b63114298892200cf345980de85da7007cb9faf6f38bd7a297cc6b5"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/sequence-strings-prefix-stock.stderr",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/sequence-strings-prefix-stock.stdout",
+    "bytes": 129,
+    "sha256": "04a5cff3623c0d4628e7949aa145a791aec800320aa2395be1370b99f280d091"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/sequence.lua",
+    "bytes": 5171,
+    "sha256": "fcbb0b59803619d3949698d937df1a4f0476dc143f366e290ab6a8f33859ad30"
+  },
+  {
+    "path": "bench/closure-upvalue-diagnosis-2026-09-04/summary.json",
+    "bytes": 7965,
+    "sha256": "557051a2b72ffdd945d6a8c950e44537c6db96dc7640239706c510b71210b625"
+  }
+]

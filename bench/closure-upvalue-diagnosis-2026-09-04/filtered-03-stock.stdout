@@ -1,0 +1,2 @@
+benchmark               total_s      ns/op
+closures_upval           0.0354      70.78

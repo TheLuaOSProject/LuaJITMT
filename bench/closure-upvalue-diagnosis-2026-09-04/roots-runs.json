@@ -1,0 +1,130 @@
+[
+  {
+    "roots": 0,
+    "kind": "leaf",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/luajit",
+      "-jon",
+      "-e",
+      "io.stdout:setvbuf(\"line\")",
+      "/workspaces/lj-lockless/bench/closure-upvalue-diagnosis-2026-09-04/sequence-roots.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "1",
+      "CLOSURE_SCALE": "0.1",
+      "DIAG_STOP_AFTER": "closures_upval",
+      "DIAG_ROOT_KEYS": "0",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.lua;/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.so;;"
+    },
+    "status": "complete",
+    "timeout_s": 30,
+    "exit_code": 0,
+    "wall_s": 1.2801111640001182,
+    "user_s": 1.271812,
+    "system_s": 0.004991,
+    "stdout": "roots-0-leaf.stdout",
+    "stderr": "roots-0-leaf.stderr"
+  },
+  {
+    "roots": 0,
+    "kind": "stock",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/luajit",
+      "-jon",
+      "-e",
+      "io.stdout:setvbuf(\"line\")",
+      "/workspaces/lj-lockless/bench/closure-upvalue-diagnosis-2026-09-04/sequence-roots.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "1",
+      "CLOSURE_SCALE": "0.1",
+      "DIAG_STOP_AFTER": "closures_upval",
+      "DIAG_ROOT_KEYS": "0",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?.lua;/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?.so;;"
+    },
+    "status": "complete",
+    "timeout_s": 30,
+    "exit_code": 0,
+    "wall_s": 0.14879758799997944,
+    "user_s": 0.14693599999999996,
+    "system_s": 0.0009989999999999999,
+    "stdout": "roots-0-stock.stdout",
+    "stderr": "roots-0-stock.stderr"
+  },
+  {
+    "roots": 8192,
+    "kind": "leaf",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/luajit",
+      "-jon",
+      "-e",
+      "io.stdout:setvbuf(\"line\")",
+      "/workspaces/lj-lockless/bench/closure-upvalue-diagnosis-2026-09-04/sequence-roots.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "1",
+      "CLOSURE_SCALE": "0.1",
+      "DIAG_STOP_AFTER": "closures_upval",
+      "DIAG_ROOT_KEYS": "8192",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.lua;/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-sweep-coalesce-review-20260904-2cpu_bml/tree-leaf/src/?.so;;"
+    },
+    "status": "complete",
+    "timeout_s": 30,
+    "exit_code": 0,
+    "wall_s": 4.9764505040002405,
+    "user_s": 4.94606,
+    "system_s": 0.018947,
+    "stdout": "roots-8192-leaf.stdout",
+    "stderr": "roots-8192-leaf.stderr"
+  },
+  {
+    "roots": 8192,
+    "kind": "stock",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/luajit",
+      "-jon",
+      "-e",
+      "io.stdout:setvbuf(\"line\")",
+      "/workspaces/lj-lockless/bench/closure-upvalue-diagnosis-2026-09-04/sequence-roots.lua",
+      "closures_upval"
+    ],
+    "environment": {
+      "BENCH_SCALE": "1",
+      "CLOSURE_SCALE": "0.1",
+      "DIAG_STOP_AFTER": "closures_upval",
+      "DIAG_ROOT_KEYS": "8192",
+      "BENCH_GC_MODE": null,
+      "LUA_PATH": "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?.lua;/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?/init.lua;;",
+      "LUA_CPATH": "/tmp/lj-runtime-performance-review-2026-09-04/stock/src/?.so;;"
+    },
+    "status": "complete",
+    "timeout_s": 30,
+    "exit_code": 0,
+    "wall_s": 0.18154584400053864,
+    "user_s": 0.17675600000000014,
+    "system_s": 0.003988000000000002,
+    "stdout": "roots-8192-stock.stdout",
+    "stderr": "roots-8192-stock.stderr"
+  }
+]

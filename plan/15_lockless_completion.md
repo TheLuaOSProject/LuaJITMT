@@ -224,6 +224,18 @@ interpreter aggregate from that incomplete run. Commands, frozen sources,
 raw samples, and measurement limits are in
 `notes/gc-sweep-leaf-performance-2026-09-04.md`.
 
+The closure follow-up separates live-graph work from retained capacity.
+Filtered closures remain about 28 times stock with the harness's permanent
+8,192-key graph, while an insertion prefix doubles fork closure time. Weak
+watchers, string/root counts, and bitmap observations show the large insertion
+graph is gone, but hundreds of empty reclaimed arenas repeat preparation and
+quarantine each cycle. Keep exactly certified empty CLOSED spares available
+for reuse while excluding redundant full-plane work; an advisory live-cell
+count is insufficient. Measure that change before adjusting pacing. The
+384-KiB allocation trigger cap also needs a separate pending-root/progress
+audit. Profiles, controls, raw counts, and required proofs are in
+`notes/closure-upvalue-performance-diagnosis-2026-09-04.md`.
+
 Continue removing demonstrably redundant publications while preserving receiver
 roots and exact post-CAS key/value handoff. Then replace unbounded whole-object
 work accounting with durable traversal progress measured in slots or bytes.
