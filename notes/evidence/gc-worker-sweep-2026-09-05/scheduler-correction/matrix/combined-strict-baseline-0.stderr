@@ -1,0 +1,1 @@
+LuaJIT ASSERT lj_gc2.c:4342: gc2_idle_transition_handshake: invalid borrowed IDLE transition gate

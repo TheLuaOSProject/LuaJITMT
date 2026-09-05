@@ -1,0 +1,38 @@
+{
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-safepoint-local-native-duplicate.c": {
+    "sha256": "2e0ae7c4ff8e8d8d605478ca3d33a5c9bf3eec74af37894091ae9b6543903ded",
+    "bytes": 6813
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-safepoint-local-native-duplicate": {
+    "sha256": "0ee047d47df0cf4d7ef2a7bd9d13f5fe58dfec36d99ba57613fd722f1b674e01",
+    "bytes": 19855976
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/libluajit.a": {
+    "sha256": "c8424d886b22c00756e961fcfa1781cc9694679f61ed8cfa048cdf39fc185428",
+    "bytes": 27222018
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-safepoint-native-root-hold.c": {
+    "sha256": "e7993ffdfd42218236986f960d95765b865d7a3f05b4637dbf4c7b33be8b5946",
+    "bytes": 8076
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-safepoint-native-root-hold": {
+    "sha256": "a0ac78d90c8f6bbe948725722bc6306e6a55f53ffb980c24730c4f7aadfc8bc6",
+    "bytes": 19874280
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-safepoint-remote-root-completion.c": {
+    "sha256": "9d8944de53856419fc82aefed90f7dac346cd5d014c2bb2b92f2904cf8566dfb",
+    "bytes": 12256
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-safepoint-remote-root-completion": {
+    "sha256": "6ac3216e0b43577577dfe3bb93fc093e00f1485c048c15446e6143e81a84d3e7",
+    "bytes": 19898944
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-worker-scheduler.c": {
+    "sha256": "f476733106d7e2552c9e47757b35f1c1dc78cf8b3cb0d47c17f17ed58fe70dca",
+    "bytes": 49341
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-gc2-worker-scheduler": {
+    "sha256": "3db6144be5d4ef2e51afb9466a64baf2c06251d5f01359bdd06b76710cfed7fc",
+    "bytes": 20090440
+  }
+}

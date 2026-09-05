@@ -1,0 +1,1 @@
+candidate-stop-v2-exe: /tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-stop.c:30: wait_value: Assertion `lj_thr_now_ns() - start < UINT64_C(10000000000)' failed.

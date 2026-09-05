@@ -1,0 +1,222 @@
+[
+  {
+    "name": "combined-untouched-compile",
+    "kind": "compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/t-gc2-worker-scheduler.c",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-o",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/combined-untouched"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.3148375769960694,
+    "stdout": "combined-untouched-compile.stdout",
+    "stderr": "combined-untouched-compile.stderr"
+  },
+  {
+    "name": "combined-untouched",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/combined-untouched"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06370002699986799,
+    "stdout": "combined-untouched.stdout",
+    "stderr": "combined-untouched.stderr"
+  },
+  {
+    "name": "combined-observer-compile",
+    "kind": "compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/t-gc2-worker-scheduler.c",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/diagnostic/abort-observer.c",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-Wl,--wrap=abort",
+      "-o",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/combined-observer"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.3143356799992034,
+    "stdout": "combined-observer-compile.stdout",
+    "stderr": "combined-observer-compile.stderr"
+  },
+  {
+    "name": "combined-observer",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/combined-observer"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+    },
+    "timeout_seconds": 60,
+    "exit_code": -6,
+    "timed_out": false,
+    "seconds": 0.11392002300271997,
+    "stdout": "combined-observer.stdout",
+    "stderr": "combined-observer.stderr"
+  },
+  {
+    "name": "baseline-untouched-compile",
+    "kind": "compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/t-gc2-worker-scheduler.c",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-o",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/baseline-untouched"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.314618115000485,
+    "stdout": "baseline-untouched-compile.stdout",
+    "stderr": "baseline-untouched-compile.stderr"
+  },
+  {
+    "name": "baseline-untouched",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/baseline-untouched"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06385037799918791,
+    "stdout": "baseline-untouched.stdout",
+    "stderr": "baseline-untouched.stderr"
+  },
+  {
+    "name": "baseline-observer-compile",
+    "kind": "compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/t-gc2-worker-scheduler.c",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/diagnostic/abort-observer.c",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-Wl,--wrap=abort",
+      "-o",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/baseline-observer"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.3146038339982624,
+    "stdout": "baseline-observer-compile.stdout",
+    "stderr": "baseline-observer-compile.stderr"
+  },
+  {
+    "name": "baseline-observer",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/baseline-observer"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06362007900315803,
+    "stdout": "baseline-observer.stdout",
+    "stderr": "baseline-observer.stderr"
+  }
+]

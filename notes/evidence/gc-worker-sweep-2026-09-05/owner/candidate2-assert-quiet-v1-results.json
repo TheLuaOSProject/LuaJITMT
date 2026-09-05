@@ -1,0 +1,56 @@
+[
+  {
+    "exit_code": 0,
+    "argv": [
+      "cc",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-quiet.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-Wl,--wrap=lj_gc_sweep_gc2_unmarked",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-quiet-v1-exe"
+    ],
+    "case": "compile",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.2145452379991184,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-quiet-v1-exe",
+      "1"
+    ],
+    "case": "1",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.06406893399980618,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-quiet-v1-exe",
+      "2"
+    ],
+    "case": "2",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.06379987399850506,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  }
+]

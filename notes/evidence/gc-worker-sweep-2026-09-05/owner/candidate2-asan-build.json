@@ -1,0 +1,38 @@
+{
+  "argv": [
+    "make",
+    "-C",
+    "src",
+    "-j2",
+    "BUILDMODE=static",
+    "CCDEBUG=-g",
+    "TARGET_STRIP=:",
+    "XCFLAGS=-DLUA_USE_ASSERT -DLUA_USE_APICHECK",
+    "CC=clang",
+    "HOST_CC=clang",
+    "CCOPT=-O1",
+    "TARGET_CFLAGS=-fsanitize=address -fno-omit-frame-pointer",
+    "TARGET_LDFLAGS=-fsanitize=address"
+  ],
+  "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan",
+  "exit_code": 0,
+  "seconds": 17.662574366004264,
+  "binaries": {
+    "luajit": {
+      "sha256": "7e11ebffc7325724b72127bd49668a487cb9c97afce9d200d7127e6a24dc4ce7",
+      "bytes": 19512528
+    },
+    "libluajit.a": {
+      "sha256": "9b6e1aa8c9990b68c4b839d056c3a0690e9134b60ee34786c860b82607ab7d49",
+      "bytes": 26698906
+    },
+    "host/buildvm": {
+      "sha256": "4c3aa29275ecf2cd85e05ce7c4dd940116e22a7dd6f8681d6b6141b292a115c9",
+      "bytes": 247264
+    },
+    "host/minilua": {
+      "sha256": "be63cc5bc8fa48a2308524cc354baa83d53a03c2101c3895251ef5b4ffa11bab",
+      "bytes": 550936
+    }
+  }
+}

@@ -1,0 +1,26 @@
+/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-asan/t-gc2-constructor-mixed: \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/tests/t-gc2-constructor-mixed.c \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/tests/t-gc2-constructor-defer.c \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lua.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/luaconf.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lauxlib.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lualib.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_arena.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_def.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_atomic.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_gc2token.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_func.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_obj.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_arch.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_tgregistry.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_tgslot.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_gc.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_gc2.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_state.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_tab.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_tg.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_bc.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_ctype.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_thr.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/tests/lib/lua_fixture_helpers.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_safepoint.h

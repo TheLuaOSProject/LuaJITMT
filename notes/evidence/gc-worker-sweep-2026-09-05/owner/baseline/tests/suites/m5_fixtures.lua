@@ -1,0 +1,123 @@
+local build = require("suite_build")
+local runtime = require("suite_runtime")
+
+local compile_and_run_c = build.compile_and_run_c
+local compile_and_run_sources = build.compile_and_run_sources
+
+return function(add)
+  add({
+    name = "m5_nbtab_model",
+    description = "concurrent table protocol standalone C model",
+    run = function(t)
+      compile_and_run_sources(t, t:tmp("lj_t-nbtab-model"),
+        { t:path("tests", "t-nbtab-model.c") }, {
+        default_cflags = false,
+        include_src = false,
+        link_luajit = false,
+        libs = {},
+        cflags = "-std=gnu11 -O2 -Wall -Wextra -Werror -pthread -mcx16"
+      })
+      print("M5 nbtab model tests passed")
+    end
+  })
+
+  runtime.add_luajit_c_fixture_cases(add, {
+    {
+      name = "m5_itype_nan",
+      description = "NaN TValue tag C fixture",
+      output = "lj_t-itype-nan",
+      cfile = "t-itype-nan.c",
+      message = "M5 NaN tag tests passed"
+    },
+    {
+      name = "m5_itype_sentinel",
+      description = "internal table sentinel TValue C fixture",
+      output = "lj_t-itype-sentinel",
+      cfile = "t-itype-sentinel.c",
+      message = "M5 internal table sentinel tag tests passed"
+    },
+    {
+      name = "m5_bcdump_compat",
+      description = "bytecode dump/load behavior C fixture",
+      output = "lj_t-bcdump-current",
+      cfile = "t-bcdump-current.c",
+      message = "M5 bytecode dump/load behavior tests passed"
+    },
+    {
+      name = "m5_registry_root",
+      description = "direct registry root publication C fixture",
+      output = "lj_t-registry-root",
+      cfile = "t-registry-root.c",
+      message = "M5 registry root tests passed"
+    },
+    {
+      name = "m5_nomm_cache",
+      description = "metatable negative-cache policy C fixture",
+      output = "lj_t-nomm-cache",
+      cfile = "t-nomm-cache.c",
+      message = "M5 nomm cache tests passed"
+    },
+    {
+      name = "m5_strtab_prep",
+      description = "string table representation prep C fixture",
+      output = "lj_t-strtab-prep",
+      cfile = "t-strtab-prep.c",
+      message = "M5 string table representation prep tests passed"
+    }
+  })
+
+  add({
+    name = "m5_strtab_cas",
+    description = "string table CAS publication and canonical quarantine model fixtures",
+    run = function(t)
+      local out = t:tmp("lj_t-strtab-cas")
+      local out_reclaim = t:tmp("lj_t-str-reclaim-sole")
+      local out_rehash = t:tmp("lj_t-strtab-rehash")
+      local out_canon = t:tmp("lj_t-strcanon-model")
+      compile_and_run_sources(t, out_canon,
+        { t:path("tests", "t-strcanon-model.c") }, {
+        default_cflags = false,
+        include_src = false,
+        link_luajit = false,
+        libs = {},
+        timeout = "20s",
+        cflags = "-std=c11 -O2 -Wall -Wextra -Werror -pthread"
+      })
+      t:build({ clean = true, quiet = true,
+                xcflags = "-DLJ_STR_TEST_HELPERS" })
+      compile_and_run_c(t, out, "t-strtab-cas.c", {
+        cflags = "-DLJ_STR_TEST_HELPERS",
+        timeout = "20s"
+      })
+      compile_and_run_c(t, out_reclaim, "t-str-reclaim-sole.c", {
+        cflags = "-DLJ_STR_TEST_HELPERS",
+        timeout = "20s"
+      })
+      compile_and_run_c(t, out_rehash, "t-strtab-rehash.c",
+                        { timeout = "20s" })
+      print("M5 string table CAS publication and canonical quarantine model tests passed")
+    end
+  })
+
+  runtime.add_luajit_script_cases(add, {
+    {
+      name = "m5_strtab_gc_stress",
+      description = "string interning under concurrent string sweep",
+      script = "t-strtab-gc-stress.lua",
+      opts = {
+	timeout = os.getenv("LJ_M5_STRTAB_GC_TIMEOUT") or "30s",
+	env = {
+	  LJ_M5_STRTAB_GC_THREADS =
+	    os.getenv("LJ_M5_STRTAB_GC_THREADS") or "4",
+	  LJ_M5_STRTAB_GC_ITERS =
+	    os.getenv("LJ_M5_STRTAB_GC_ITERS") or "5000",
+	  LJ_M5_STRTAB_GC_SHARED =
+	    os.getenv("LJ_M5_STRTAB_GC_SHARED") or "384",
+	  LJ_M5_STRTAB_GC_ROUNDS =
+	    os.getenv("LJ_M5_STRTAB_GC_ROUNDS") or "384"
+	}
+      },
+      message = "M5 string-table GC/interner stress passed"
+    }
+  })
+end

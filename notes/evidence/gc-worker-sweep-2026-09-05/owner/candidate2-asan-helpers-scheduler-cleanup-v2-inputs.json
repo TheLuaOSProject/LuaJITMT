@@ -1,0 +1,14 @@
+{
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/existing-cleanup-v2/tests/t-gc2-worker-scheduler.c": {
+    "sha256": "e9d2173e1279088d500b7bff816dae54e260b039ad5c5d6034f738d5ad2a1a27",
+    "bytes": 49484
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-scheduler-cleanup-v2-t-gc2-worker-scheduler": {
+    "sha256": "08de580deb67fe0b8578c8199f938e922c68478683cf2fcc61cb3317d1a58da2",
+    "bytes": 20090776
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/libluajit.a": {
+    "sha256": "c8424d886b22c00756e961fcfa1781cc9694679f61ed8cfa048cdf39fc185428",
+    "bytes": 27222018
+  }
+}

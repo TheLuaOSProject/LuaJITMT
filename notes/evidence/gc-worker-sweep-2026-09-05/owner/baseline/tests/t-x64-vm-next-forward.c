@@ -1,0 +1,233 @@
+/*
+** Focused x64 guard for lj_vm_next over forwarded table slots.
+*/
+
+#include <assert.h>
+#include <pthread.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+
+#include "lua.h"
+#include "lauxlib.h"
+#include "lualib.h"
+
+#include "lib/test_sleep.h"
+
+#include "lj_obj.h"
+#include "lj_str.h"
+#include "lj_tab.h"
+#include "lj_tg.h"
+#include "lj_vm.h"
+
+#include "lib/tab_forward_helpers.h"
+
+#ifndef __USER_LABEL_PREFIX__
+#define __USER_LABEL_PREFIX__
+#endif
+#define LJ_XSTR_(s)	#s
+#define LJ_XSTR(s)	LJ_XSTR_(s)
+#define LJ_ASM_SYM(s)	LJ_XSTR(__USER_LABEL_PREFIX__) #s
+
+typedef struct VMNextArrayReleaseCtx {
+  GCtab *t;
+  TValue *array;
+  MSize asize;
+  pthread_t thread;
+} VMNextArrayReleaseCtx;
+
+static void *vmnext_publish_array_after_delay(void *arg)
+{
+  VMNextArrayReleaseCtx *ctx = (VMNextArrayReleaseCtx *)arg;
+  sleep_ns(5000000L);
+  lj_tab_array_rel(ctx->t, ctx->array);
+  lj_tab_asize_rel(ctx->t, ctx->asize);
+  return NULL;
+}
+
+static uint32_t call_vm_next(lua_State *L, GCtab *t, uint32_t idx,
+			     TValue *val, TValue *key)
+{
+  TGState *tg = L2TG(L);
+  void *dispatch;
+  GCtab *tab_arg = t;
+  uint32_t idx_arg = idx;
+  uint64_t valu, keyu;
+  uint32_t next;
+  assert(tg != NULL);
+  dispatch = (void *)tg->dispatch;
+#if LJ_ABI_WIN
+  __asm__(
+    "subq $64, %%rsp\n\t"
+    "movq %%rbx, 56(%%rsp)\n\t"
+    "movq %[dispatch], %%rbx\n\t"
+    "call " LJ_ASM_SYM(lj_vm_next) "\n\t"
+    "movq (%%rax), %[valu]\n\t"
+    "movq 8(%%rax), %[keyu]\n\t"
+    "movl %%edx, %[next]\n\t"
+    "movq 56(%%rsp), %%rbx\n\t"
+    "addq $64, %%rsp\n\t"
+    : [valu] "=&r"(valu), [keyu] "=&r"(keyu), [next] "=&r"(next),
+      "+c"(tab_arg), "+d"(idx_arg)
+    : [dispatch] "r"(dispatch)
+    : "rax", "r8", "r9", "r10", "r11", "rbx", "memory", "cc");
+#else
+  __asm__(
+    "subq $48, %%rsp\n\t"
+    "movq %%r14, 40(%%rsp)\n\t"
+    "movq %[dispatch], %%r14\n\t"
+    "call " LJ_ASM_SYM(lj_vm_next) "\n\t"
+    "movq (%%rax), %[valu]\n\t"
+    "movq 8(%%rax), %[keyu]\n\t"
+    "movl %%edx, %[next]\n\t"
+    "movq 40(%%rsp), %%r14\n\t"
+    "addq $48, %%rsp\n\t"
+    : [valu] "=&r"(valu), [keyu] "=&r"(keyu), [next] "=&r"(next),
+      "+D"(tab_arg), "+S"(idx_arg)
+    : [dispatch] "r"(dispatch)
+    : "rax", "rcx", "rdx", "r8", "r9", "r10", "r11", "r14",
+      "memory", "cc");
+#endif
+  val->u64 = valu;
+  key->u64 = keyu;
+  return next;
+}
+
+static void exercise_array_forward(lua_State *L)
+{
+  GCtab *t;
+  TValue *oldarray, *newarray;
+  TValue val, key;
+  MSize oldasize, newasize, oldacap;
+  int32_t target = 3;
+  MSize i;
+  uint32_t next;
+
+  lua_createtable(L, LJ_MAX_COLOSIZE + 16, 0);
+  t = tabV(L->top-1);
+  assert(lj_tab_array_separated(t));
+  oldarray = lj_tab_array_acq(t);
+  oldasize = lj_tab_asize_acq(t);
+  oldacap = t->acap;
+  assert((MSize)target < oldasize);
+  for (i = 0; i < oldasize; i++) {
+    int32_t v = (int32_t)i + 7100;
+    tabfwd_set_int(L, t, (int32_t)i, v);
+    lj_tab_storeint(L, &oldarray[i], v);
+  }
+  assert(tabfwd_get_i32(t, target) == target + 7100);
+
+  lj_tab_resize(L, t, (uint32_t)oldasize + 8u, 0);
+  newarray = lj_tab_array_acq(t);
+  newasize = lj_tab_asize_acq(t);
+  assert(newarray != oldarray);
+  assert(lj_tab_array_nextgen_acq(oldarray) == newarray);
+
+  tabfwd_store_forward(&oldarray[target]);
+  la_store32_rel(&lj_tab_array_hdrw(oldarray)->acap,
+		 lj_tab_array_hdr_pack_acap(oldacap, 0));
+  lj_tab_asize_rel(t, oldasize);
+  lj_tab_array_rel(t, oldarray);
+  next = call_vm_next(L, t, (uint32_t)target, &val, &key);
+  assert(next != (uint32_t)-1);
+  assert(tvisnumber(&val));
+  assert((tvisint(&val) ? intV(&val) : (int32_t)numV(&val)) ==
+	 target + 7100);
+  assert(!tvistabinternal(&val));
+  assert(!tvistabinternal(&key));
+
+  {
+    VMNextArrayReleaseCtx ctx;
+    int32_t want = target + 7100;
+    lj_tab_storeint(L, &oldarray[target], target + 9000);
+    lj_tab_storeint(L, &newarray[target], want);
+    lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
+    lj_tab_asize_rel(t, oldasize);
+    lj_tab_array_rel(t, oldarray);
+    ctx.t = t;
+    ctx.array = newarray;
+    ctx.asize = newasize;
+    assert(pthread_create(&ctx.thread, NULL,
+			  vmnext_publish_array_after_delay, &ctx) == 0);
+    next = call_vm_next(L, t, (uint32_t)target, &val, &key);
+    assert(pthread_join(ctx.thread, NULL) == 0);
+    assert(next != (uint32_t)-1);
+    assert(tvisnumber(&val));
+    assert((tvisint(&val) ? intV(&val) : (int32_t)numV(&val)) == want);
+    assert(!tvistabinternal(&val));
+    assert(!tvistabinternal(&key));
+  }
+
+  lj_tab_array_rel(t, newarray);
+  lj_tab_asize_rel(t, newasize);
+  lj_tab_array_hdr_flags_or_rel(oldarray, TABARRAY_FLAG_RETIRING);
+  lj_tab_asize_rel(t, 0);
+  next = call_vm_next(L, t, (uint32_t)target, &val, &key);
+  assert(next != (uint32_t)-1);
+  assert(tvisnumber(&val));
+  assert((tvisint(&val) ? intV(&val) : (int32_t)numV(&val)) ==
+	 target + 7100);
+  assert(!tvistabinternal(&val));
+  assert(!tvistabinternal(&key));
+  lj_tab_asize_rel(t, newasize);
+  lua_pop(L, 1);
+}
+
+static void exercise_hash_forward(lua_State *L)
+{
+  GCtab *t;
+  GCstr *hkey;
+  Node *oldnode, *newnode, *oldn;
+  TValue val, key;
+  MSize oldhmask, newhmask;
+  uint32_t idx, next;
+
+  lua_createtable(L, 0, 8);
+  t = tabV(L->top-1);
+  hkey = lj_str_new(L, "vm_next_forward_field",
+		    sizeof("vm_next_forward_field") - 1u);
+  lj_tab_storeint(L, lj_tab_setstr(L, t, hkey), 8181);
+  oldnode = lj_tab_node_acq(t);
+  oldhmask = lj_tab_node_hmask_acq(oldnode);
+  assert(oldhmask > 0);
+  oldn = tabfwd_find_str_node(oldnode, oldhmask, hkey);
+  assert(oldn != NULL);
+
+  lj_tab_resize(L, t, t->asize, lj_fls(oldhmask) + 2u);
+  newnode = lj_tab_node_acq(t);
+  newhmask = lj_tab_node_hmask_acq(newnode);
+  assert(newnode != oldnode);
+  assert(lj_tab_node_nextgen_acq(oldnode) == newnode);
+
+  tabfwd_store_forward(&oldn->val);
+  la_store32_rel(&lj_tab_node_hdrw(oldnode)->flags, 0);
+  lj_tab_hmask_rel(t, oldhmask);
+  lj_tab_node_rel(t, oldnode);
+  idx = lj_tab_asize_acq(t) + (uint32_t)(oldn - oldnode);
+  next = call_vm_next(L, t, idx, &val, &key);
+  assert(next != (uint32_t)-1);
+  assert(tvisnumber(&val));
+  assert((tvisint(&val) ? intV(&val) : (int32_t)numV(&val)) == 8181);
+  assert(tvisstr(&key) && strV(&key) == hkey);
+  assert(!tvistabinternal(&val));
+  assert(!tvistabinternal(&key));
+
+  lj_tab_node_rel(t, newnode);
+  lj_tab_hmask_rel(t, newhmask);
+  lj_tab_node_hdr_flags_or_rel(oldnode, TABNODE_FLAG_RETIRING);
+  lua_pop(L, 1);
+}
+
+int main(void)
+{
+  lua_State *L = luaL_newstate();
+  assert(L != NULL);
+  luaL_openlibs(L);
+
+  exercise_array_forward(L);
+  exercise_hash_forward(L);
+
+  lua_close(L);
+  printf("t-x64-vm-next-forward OK: lj_vm_next resolves forwarded slots\n");
+  return 0;
+}

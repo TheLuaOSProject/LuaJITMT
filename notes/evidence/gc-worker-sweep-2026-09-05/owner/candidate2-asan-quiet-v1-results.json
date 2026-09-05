@@ -1,0 +1,58 @@
+[
+  {
+    "exit_code": 0,
+    "argv": [
+      "clang",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-quiet.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-Wl,--wrap=lj_gc_sweep_gc2_unmarked",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-quiet-v1-exe"
+    ],
+    "case": "compile",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.26498472900129855,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-quiet-v1-exe",
+      "1"
+    ],
+    "case": "1",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.0639284429998952,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-quiet-v1-exe",
+      "2"
+    ],
+    "case": "2",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.11417211200023303,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  }
+]

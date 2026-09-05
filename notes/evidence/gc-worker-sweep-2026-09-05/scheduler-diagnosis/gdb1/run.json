@@ -1,0 +1,22 @@
+{
+  "argv": [
+    "taskset",
+    "-c",
+    "0-15",
+    "gdb",
+    "-q",
+    "-batch",
+    "-x",
+    "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb1/commands.gdb",
+    "--args",
+    "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb1/combined-debug-fixture"
+  ],
+  "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+  "environment": {
+    "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+  },
+  "timeout_seconds": 60,
+  "timed_out": false,
+  "exit_code": 1,
+  "seconds": 0.114432490998297
+}

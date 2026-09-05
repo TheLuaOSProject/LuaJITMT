@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "make",
+    "-C",
+    "src",
+    "-j2",
+    "BUILDMODE=static",
+    "CCDEBUG=-g",
+    "TARGET_STRIP=:",
+    "XCFLAGS=-DLUA_USE_ASSERT -DLUA_USE_APICHECK"
+  ],
+  "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert",
+  "exit_code": 0,
+  "seconds": 18.066569131995493,
+  "binaries": {
+    "luajit": {
+      "sha256": "22a7e2afd5b246fd2301469172aaa292e3bec2f7f46902b55e074a7e9e3d6ce1",
+      "bytes": 13644944
+    },
+    "libluajit.a": {
+      "sha256": "7831b4d52b2db9f4cbaecf526e9ee2a1b9c02bb8e33f118dfa5aca2b437e6bd2",
+      "bytes": 29961184
+    },
+    "host/buildvm": {
+      "sha256": "564e24d878890abf573e4ce1cff5b17c249de188a54c5a79412125a9c0e51b8c",
+      "bytes": 269160
+    },
+    "host/minilua": {
+      "sha256": "5691d31f4257e6d696bcbaebd22d1b2347b5467c600d75510767090e7c5b3664",
+      "bytes": 668576
+    }
+  }
+}

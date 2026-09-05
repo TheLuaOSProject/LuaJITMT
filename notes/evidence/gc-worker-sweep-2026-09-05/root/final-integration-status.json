@@ -1,0 +1,31 @@
+{
+  "status": "accepted worker+fair runtime and corrected scheduler fixture; ready to commit",
+  "head": "6490b1273290ce9d2411419c1e02920bfa777975",
+  "runtime_inputs_verified": 900,
+  "isolated_passes": {
+    "candidate": 23,
+    "strict": 53,
+    "asan": 53
+  },
+  "canonical_passes": 58,
+  "root_passes": 187,
+  "original_canonical_failure_preserved": true,
+  "scheduler_correction_fixture": "e029d5e3c1789b54f3c08cd950fb8a18a1761c21e8530809c6acce5f0849df36",
+  "jit_matrix": {
+    "combined_pass": 9,
+    "combined_fail": 3,
+    "baseline_pass": 1,
+    "baseline_fail": 1,
+    "original_bounds": true,
+    "diagnosis": "complete bridge; foreground graph service does not keep pace with compiled allocation"
+  },
+  "cost": {
+    "processes": 42,
+    "samples": 210
+  },
+  "default_binaries": {
+    "luajit": "83cc2b89ef75caebd529e0cbcc880772b10e6cb7fe224bd9468cd3dc69c78e16",
+    "libluajit.a": "f12fc3f56d0526b88ca8bdeab4cf0068231efddbf2a44f3060e287c2ce2689d0",
+    "libluajit.so": "9b20c1705a8e07bf3a5883126502d2fa89a1c5fa8aeb6552a2922df9a07ff719"
+  }
+}

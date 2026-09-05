@@ -1,0 +1,1 @@
+baseline-positive-fault: /tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/t-gc2-worker-scheduler.c:445: test_manual_sweep_close_requires_ready: Assertion `lj_gc2_sweep_to_idle(g) == 1' failed.

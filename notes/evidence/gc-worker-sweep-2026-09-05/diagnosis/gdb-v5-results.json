@@ -1,0 +1,98 @@
+[
+  {
+    "exit_code": 0,
+    "case": "0-0-0",
+    "argv": [
+      "gdb",
+      "-q",
+      "-nx",
+      "-batch",
+      "-x",
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/gdb-sweep.py",
+      "--args",
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug-observed-v5-retention",
+      "0",
+      "0",
+      "0",
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/peer-control.lua"
+    ],
+    "seconds": 0.3142285579961026,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/?.lua;;",
+      "RETENTION_JIT": "0",
+      "SWEEP_GDB_OUT": "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/gdb-v5-0-0-0"
+    }
+  },
+  {
+    "exit_code": 0,
+    "case": "0-0-2",
+    "argv": [
+      "gdb",
+      "-q",
+      "-nx",
+      "-batch",
+      "-x",
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/gdb-sweep.py",
+      "--args",
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug-observed-v5-retention",
+      "0",
+      "0",
+      "2",
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/peer-control.lua"
+    ],
+    "seconds": 3.719165354996221,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/?.lua;;",
+      "RETENTION_JIT": "0",
+      "SWEEP_GDB_OUT": "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/gdb-v5-0-0-2"
+    }
+  },
+  {
+    "exit_code": 0,
+    "case": "0-1-0",
+    "argv": [
+      "gdb",
+      "-q",
+      "-nx",
+      "-batch",
+      "-x",
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/gdb-sweep.py",
+      "--args",
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug-observed-v5-retention",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/peer-control.lua"
+    ],
+    "seconds": 0.4650957350022509,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/?.lua;;",
+      "RETENTION_JIT": "0",
+      "SWEEP_GDB_OUT": "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/gdb-v5-0-1-0"
+    }
+  },
+  {
+    "exit_code": 0,
+    "case": "0-1-2",
+    "argv": [
+      "gdb",
+      "-q",
+      "-nx",
+      "-batch",
+      "-x",
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/gdb-sweep.py",
+      "--args",
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug-observed-v5-retention",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/peer-control.lua"
+    ],
+    "seconds": 4.0211816240043845,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/?.lua;;",
+      "RETENTION_JIT": "0",
+      "SWEEP_GDB_OUT": "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/gdb-v5-0-1-2"
+    }
+  }
+]

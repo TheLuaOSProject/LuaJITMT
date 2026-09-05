@@ -1,0 +1,17 @@
+{
+  "observed": "After completed diagnostic runs; runner scripts inherited the unchanged session environment and assigned only LUA_PATH.",
+  "variables": {
+    "PATH": "/home/vscode/.codex/packages/standalone/releases/0.153.3-x86_64-unknown-linux-musl/codex-path:/home/vscode/.local/bin:/home/vscode/.codex/tmp/arg0/codex-arg0QMSQjC:/home/vscode/.codex/packages/standalone/releases/0.153.3-x86_64-unknown-linux-musl/codex-path:/workspaces/lj-lockless/.devcontainer/osxcross/target/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/vscode/.local/bin",
+    "CC": null,
+    "CFLAGS": null,
+    "CPPFLAGS": null,
+    "LDFLAGS": null,
+    "ASAN_OPTIONS": null,
+    "LSAN_OPTIONS": null,
+    "UBSAN_OPTIONS": null,
+    "TSAN_OPTIONS": null,
+    "LD_PRELOAD": null,
+    "LD_LIBRARY_PATH": null
+  },
+  "core_dump_limit": "Both diagnostic drivers set soft/hard core limit 0 before runtime launch."
+}

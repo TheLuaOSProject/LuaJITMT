@@ -1,0 +1,16 @@
+
+/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/combined-observer:     file format elf64-x86-64
+
+
+Disassembly of section .init:
+
+Disassembly of section .plt:
+
+Disassembly of section .plt.got:
+
+Disassembly of section .text:
+
+000000000000a366 <gc2_idle_transition_handshake.part.0.isra.0.cold>:
+    a366:	e8 d5 3c 00 00       	call   e040 <__wrap_abort>
+
+Disassembly of section .fini:

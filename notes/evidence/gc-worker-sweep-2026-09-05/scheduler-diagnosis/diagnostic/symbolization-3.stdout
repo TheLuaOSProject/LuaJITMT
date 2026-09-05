@@ -1,0 +1,362 @@
+
+/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/combined-observer:     file format elf64-x86-64
+
+
+Disassembly of section .init:
+
+Disassembly of section .plt:
+
+Disassembly of section .plt.got:
+
+Disassembly of section .text:
+
+00000000000338c0 <lj_gc2_sweep_to_idle>:
+   338c0:	41 57                	push   %r15
+   338c2:	41 56                	push   %r14
+   338c4:	41 55                	push   %r13
+   338c6:	41 54                	push   %r12
+   338c8:	55                   	push   %rbp
+   338c9:	53                   	push   %rbx
+   338ca:	48 83 ec 08          	sub    $0x8,%rsp
+   338ce:	48 85 ff             	test   %rdi,%rdi
+   338d1:	74 0c                	je     338df <lj_gc2_sweep_to_idle+0x1f>
+   338d3:	48 89 fb             	mov    %rdi,%rbx
+   338d6:	e8 25 8c fe ff       	call   1c500 <gc2_jit_sweep_turn_deferred>
+   338db:	85 c0                	test   %eax,%eax
+   338dd:	74 19                	je     338f8 <lj_gc2_sweep_to_idle+0x38>
+   338df:	31 ed                	xor    %ebp,%ebp
+   338e1:	48 83 c4 08          	add    $0x8,%rsp
+   338e5:	89 e8                	mov    %ebp,%eax
+   338e7:	5b                   	pop    %rbx
+   338e8:	5d                   	pop    %rbp
+   338e9:	41 5c                	pop    %r12
+   338eb:	41 5d                	pop    %r13
+   338ed:	41 5e                	pop    %r14
+   338ef:	41 5f                	pop    %r15
+   338f1:	c3                   	ret
+   338f2:	66 0f 1f 44 00 00    	nopw   0x0(%rax,%rax,1)
+   338f8:	48 89 df             	mov    %rbx,%rdi
+   338fb:	e8 40 80 fe ff       	call   1b940 <gc2_worker_claim>
+   33900:	85 c0                	test   %eax,%eax
+   33902:	74 db                	je     338df <lj_gc2_sweep_to_idle+0x1f>
+   33904:	8b 83 50 04 00 00    	mov    0x450(%rbx),%eax
+   3390a:	4c 8d a3 50 04 00 00 	lea    0x450(%rbx),%r12
+   33911:	83 f8 03             	cmp    $0x3,%eax
+   33914:	0f 85 e9 00 00 00    	jne    33a03 <lj_gc2_sweep_to_idle+0x143>
+   3391a:	48 c7 83 40 07 00 00 	movq   $0x0,0x740(%rbx)
+   33921:	00 00 00 00 
+   33925:	48 c7 83 50 07 00 00 	movq   $0x0,0x750(%rbx)
+   3392c:	00 00 00 00 
+   33930:	c7 83 54 04 00 00 00 	movl   $0x0,0x454(%rbx)
+   33937:	00 00 00 
+   3393a:	f0 48 83 0c 24 00    	lock orq $0x0,(%rsp)
+   33940:	e8 cb 14 04 00       	call   74e10 <lj_tg_any_jit_active>
+   33945:	85 c0                	test   %eax,%eax
+   33947:	0f 85 9b 00 00 00    	jne    339e8 <lj_gc2_sweep_to_idle+0x128>
+   3394d:	48 8b 83 f0 03 00 00 	mov    0x3f0(%rbx),%rax
+   33954:	8b 80 1c 01 00 00    	mov    0x11c(%rax),%eax
+   3395a:	85 c0                	test   %eax,%eax
+   3395c:	0f 85 86 00 00 00    	jne    339e8 <lj_gc2_sweep_to_idle+0x128>
+   33962:	8b 93 50 04 00 00    	mov    0x450(%rbx),%edx
+   33968:	83 fa 03             	cmp    $0x3,%edx
+   3396b:	0f 85 d9 00 00 00    	jne    33a4a <lj_gc2_sweep_to_idle+0x18a>
+   33971:	4c 8d ab 80 04 00 00 	lea    0x480(%rbx),%r13
+   33978:	ba ff ff ff ff       	mov    $0xffffffff,%edx
+   3397d:	f0 41 0f b1 55 00    	lock cmpxchg %edx,0x0(%r13)
+   33983:	0f 85 34 02 00 00    	jne    33bbd <lj_gc2_sweep_to_idle+0x2fd>
+   33989:	8b 83 50 04 00 00    	mov    0x450(%rbx),%eax
+   3398f:	83 f8 03             	cmp    $0x3,%eax
+   33992:	75 2c                	jne    339c0 <lj_gc2_sweep_to_idle+0x100>
+   33994:	48 89 df             	mov    %rbx,%rdi
+   33997:	e8 44 b3 fe ff       	call   1ece0 <gc2_sweep_blocked_by_finalizer>
+   3399c:	85 c0                	test   %eax,%eax
+   3399e:	75 20                	jne    339c0 <lj_gc2_sweep_to_idle+0x100>
+   339a0:	8b 83 18 08 00 00    	mov    0x818(%rbx),%eax
+   339a6:	85 c0                	test   %eax,%eax
+   339a8:	74 16                	je     339c0 <lj_gc2_sweep_to_idle+0x100>
+   339aa:	8b 83 1c 08 00 00    	mov    0x81c(%rbx),%eax
+   339b0:	83 f8 01             	cmp    $0x1,%eax
+   339b3:	0f 84 bc 00 00 00    	je     33a75 <lj_gc2_sweep_to_idle+0x1b5>
+   339b9:	0f 1f 80 00 00 00 00 	nopl   0x0(%rax)
+   339c0:	31 f6                	xor    %esi,%esi
+   339c2:	48 89 df             	mov    %rbx,%rdi
+   339c5:	e8 a6 94 fe ff       	call   1ce70 <gc2_jit_phase_gate_open_sweep>
+   339ca:	b8 ff ff ff ff       	mov    $0xffffffff,%eax
+   339cf:	31 d2                	xor    %edx,%edx
+   339d1:	f0 41 0f b1 55 00    	lock cmpxchg %edx,0x0(%r13)
+   339d7:	74 2a                	je     33a03 <lj_gc2_sweep_to_idle+0x143>
+   339d9:	48 89 df             	mov    %rbx,%rdi
+   339dc:	e8 3f 6e fe ff       	call   1a820 <gc2_activation_pin_no_reclaim>
+   339e1:	eb 20                	jmp    33a03 <lj_gc2_sweep_to_idle+0x143>
+   339e3:	0f 1f 44 00 00       	nopl   0x0(%rax,%rax,1)
+   339e8:	48 8b 83 f0 03 00 00 	mov    0x3f0(%rbx),%rax
+   339ef:	8b 80 1c 01 00 00    	mov    0x11c(%rax),%eax
+   339f5:	85 c0                	test   %eax,%eax
+   339f7:	75 47                	jne    33a40 <lj_gc2_sweep_to_idle+0x180>
+   339f9:	c7 83 48 07 00 00 01 	movl   $0x1,0x748(%rbx)
+   33a00:	00 00 00 
+   33a03:	48 83 ec 08          	sub    $0x8,%rsp
+   33a07:	b9 ff ff ff 7f       	mov    $0x7fffffff,%ecx
+   33a0c:	ba 81 00 00 00       	mov    $0x81,%edx
+   33a11:	c7 83 40 11 00 00 00 	movl   $0x0,0x1140(%rbx)
+   33a18:	00 00 00 
+   33a1b:	6a 00                	push   $0x0
+   33a1d:	48 8d b3 40 11 00 00 	lea    0x1140(%rbx),%rsi
+   33a24:	45 31 c9             	xor    %r9d,%r9d
+   33a27:	45 31 c0             	xor    %r8d,%r8d
+   33a2a:	bf ca 00 00 00       	mov    $0xca,%edi
+   33a2f:	31 c0                	xor    %eax,%eax
+   33a31:	e8 9a 39 fd ff       	call   73d0 <syscall@plt>
+   33a36:	5a                   	pop    %rdx
+   33a37:	59                   	pop    %rcx
+   33a38:	e9 a2 fe ff ff       	jmp    338df <lj_gc2_sweep_to_idle+0x1f>
+   33a3d:	0f 1f 00             	nopl   (%rax)
+   33a40:	48 89 df             	mov    %rbx,%rdi
+   33a43:	e8 88 93 07 00       	call   acdd0 <lj_trace_abort>
+   33a48:	eb af                	jmp    339f9 <lj_gc2_sweep_to_idle+0x139>
+   33a4a:	8b 83 50 04 00 00    	mov    0x450(%rbx),%eax
+   33a50:	83 f8 03             	cmp    $0x3,%eax
+   33a53:	74 14                	je     33a69 <lj_gc2_sweep_to_idle+0x1a9>
+   33a55:	8b 83 50 04 00 00    	mov    0x450(%rbx),%eax
+   33a5b:	85 c0                	test   %eax,%eax
+   33a5d:	75 a4                	jne    33a03 <lj_gc2_sweep_to_idle+0x143>
+   33a5f:	48 89 df             	mov    %rbx,%rdi
+   33a62:	e8 19 6c fe ff       	call   1a680 <gc2_jit_phase_gate_open_idle>
+   33a67:	eb 9a                	jmp    33a03 <lj_gc2_sweep_to_idle+0x143>
+   33a69:	31 f6                	xor    %esi,%esi
+   33a6b:	48 89 df             	mov    %rbx,%rdi
+   33a6e:	e8 fd 93 fe ff       	call   1ce70 <gc2_jit_phase_gate_open_sweep>
+   33a73:	eb 8e                	jmp    33a03 <lj_gc2_sweep_to_idle+0x143>
+   33a75:	48 89 df             	mov    %rbx,%rdi
+   33a78:	e8 93 13 04 00       	call   74e10 <lj_tg_any_jit_active>
+   33a7d:	85 c0                	test   %eax,%eax
+   33a7f:	0f 85 3b ff ff ff    	jne    339c0 <lj_gc2_sweep_to_idle+0x100>
+   33a85:	48 8b 83 f0 03 00 00 	mov    0x3f0(%rbx),%rax
+   33a8c:	8b 80 1c 01 00 00    	mov    0x11c(%rax),%eax
+   33a92:	85 c0                	test   %eax,%eax
+   33a94:	0f 85 26 ff ff ff    	jne    339c0 <lj_gc2_sweep_to_idle+0x100>
+   33a9a:	48 89 df             	mov    %rbx,%rdi
+   33a9d:	e8 8e 6b fe ff       	call   1a630 <gc2_weak_owned_peer_active>
+   33aa2:	85 c0                	test   %eax,%eax
+   33aa4:	0f 85 16 ff ff ff    	jne    339c0 <lj_gc2_sweep_to_idle+0x100>
+   33aaa:	8b 83 c8 12 00 00    	mov    0x12c8(%rbx),%eax
+   33ab0:	85 c0                	test   %eax,%eax
+   33ab2:	0f 85 08 ff ff ff    	jne    339c0 <lj_gc2_sweep_to_idle+0x100>
+   33ab8:	8b 83 cc 12 00 00    	mov    0x12cc(%rbx),%eax
+   33abe:	85 c0                	test   %eax,%eax
+   33ac0:	0f 85 fa fe ff ff    	jne    339c0 <lj_gc2_sweep_to_idle+0x100>
+   33ac6:	8b 83 2c 08 00 00    	mov    0x82c(%rbx),%eax
+   33acc:	85 c0                	test   %eax,%eax
+   33ace:	0f 85 ec fe ff ff    	jne    339c0 <lj_gc2_sweep_to_idle+0x100>
+   33ad4:	e8 e7 bc fe ff       	call   1f7c0 <lj_gc2_ssb_empty>
+   33ad9:	85 c0                	test   %eax,%eax
+   33adb:	0f 84 df fe ff ff    	je     339c0 <lj_gc2_sweep_to_idle+0x100>
+   33ae1:	48 8b 83 90 07 00 00 	mov    0x790(%rbx),%rax
+   33ae8:	48 85 c0             	test   %rax,%rax
+   33aeb:	0f 85 cf fe ff ff    	jne    339c0 <lj_gc2_sweep_to_idle+0x100>
+   33af1:	8b 83 bc 07 00 00    	mov    0x7bc(%rbx),%eax
+   33af7:	85 c0                	test   %eax,%eax
+   33af9:	0f 85 c1 fe ff ff    	jne    339c0 <lj_gc2_sweep_to_idle+0x100>
+   33aff:	48 89 df             	mov    %rbx,%rdi
+   33b02:	e8 49 bc fe ff       	call   1f750 <gc2_grey_empty.part.0>
+   33b07:	85 c0                	test   %eax,%eax
+   33b09:	0f 84 b1 fe ff ff    	je     339c0 <lj_gc2_sweep_to_idle+0x100>
+   33b0f:	48 89 df             	mov    %rbx,%rdi
+   33b12:	e8 99 fd fe ff       	call   238b0 <lj_gc2_sweep_needs_prepare>
+   33b17:	85 c0                	test   %eax,%eax
+   33b19:	0f 85 a1 fe ff ff    	jne    339c0 <lj_gc2_sweep_to_idle+0x100>
+   33b1f:	e8 0c 02 ff ff       	call   23d30 <lj_gc2_sweep_pending>
+   33b24:	85 c0                	test   %eax,%eax
+   33b26:	0f 85 94 fe ff ff    	jne    339c0 <lj_gc2_sweep_to_idle+0x100>
+   33b2c:	4c 8d bb 28 07 00 00 	lea    0x728(%rbx),%r15
+   33b33:	31 c0                	xor    %eax,%eax
+   33b35:	49 87 07             	xchg   %rax,(%r15)
+   33b38:	48 85 c0             	test   %rax,%rax
+   33b3b:	0f 85 7f fe ff ff    	jne    339c0 <lj_gc2_sweep_to_idle+0x100>
+   33b41:	be 20 00 00 00       	mov    $0x20,%esi
+   33b46:	48 89 df             	mov    %rbx,%rdi
+   33b49:	e8 f2 34 01 00       	call   47040 <lj_safepoint_handshake>
+   33b4e:	48 89 df             	mov    %rbx,%rdi
+   33b51:	e8 2a 2b 04 00       	call   76680 <lj_thr_get_tg_fallback>
+   33b56:	31 d2                	xor    %edx,%edx
+   33b58:	48 89 df             	mov    %rbx,%rdi
+   33b5b:	48 89 c6             	mov    %rax,%rsi
+   33b5e:	e8 ad 72 ff ff       	call   2ae10 <gc2_flush_ssb>
+   33b63:	48 89 df             	mov    %rbx,%rdi
+   33b66:	e8 a5 f6 ff ff       	call   33210 <gc2_drain_ssb_owned.part.0>
+   33b6b:	8b 83 50 04 00 00    	mov    0x450(%rbx),%eax
+   33b71:	83 f8 03             	cmp    $0x3,%eax
+   33b74:	75 17                	jne    33b8d <lj_gc2_sweep_to_idle+0x2cd>
+   33b76:	48 89 df             	mov    %rbx,%rdi
+   33b79:	e8 62 b1 fe ff       	call   1ece0 <gc2_sweep_blocked_by_finalizer>
+   33b7e:	85 c0                	test   %eax,%eax
+   33b80:	75 0b                	jne    33b8d <lj_gc2_sweep_to_idle+0x2cd>
+   33b82:	8b 83 1c 08 00 00    	mov    0x81c(%rbx),%eax
+   33b88:	83 e8 01             	sub    $0x1,%eax
+   33b8b:	74 47                	je     33bd4 <lj_gc2_sweep_to_idle+0x314>
+   33b8d:	31 f6                	xor    %esi,%esi
+   33b8f:	48 89 df             	mov    %rbx,%rdi
+   33b92:	e8 d9 92 fe ff       	call   1ce70 <gc2_jit_phase_gate_open_sweep>
+   33b97:	83 c8 ff             	or     $0xffffffff,%eax
+   33b9a:	31 d2                	xor    %edx,%edx
+   33b9c:	f0 41 0f b1 55 00    	lock cmpxchg %edx,0x0(%r13)
+   33ba2:	0f 85 79 02 00 00    	jne    33e21 <lj_gc2_sweep_to_idle+0x561>
+   33ba8:	48 89 df             	mov    %rbx,%rdi
+   33bab:	e8 90 6b fe ff       	call   1a740 <gc2_worker_release>
+   33bb0:	48 89 df             	mov    %rbx,%rdi
+   33bb3:	e8 58 91 fe ff       	call   1cd10 <lj_gc2_worker_wake.part.0>
+   33bb8:	e9 22 fd ff ff       	jmp    338df <lj_gc2_sweep_to_idle+0x1f>
+   33bbd:	48 89 df             	mov    %rbx,%rdi
+   33bc0:	31 f6                	xor    %esi,%esi
+   33bc2:	e8 a9 92 fe ff       	call   1ce70 <gc2_jit_phase_gate_open_sweep>
+   33bc7:	48 89 df             	mov    %rbx,%rdi
+   33bca:	e8 71 6b fe ff       	call   1a740 <gc2_worker_release>
+   33bcf:	e9 0b fd ff ff       	jmp    338df <lj_gc2_sweep_to_idle+0x1f>
+   33bd4:	48 89 df             	mov    %rbx,%rdi
+   33bd7:	e8 34 12 04 00       	call   74e10 <lj_tg_any_jit_active>
+   33bdc:	85 c0                	test   %eax,%eax
+   33bde:	75 ad                	jne    33b8d <lj_gc2_sweep_to_idle+0x2cd>
+   33be0:	48 8b 83 f0 03 00 00 	mov    0x3f0(%rbx),%rax
+   33be7:	8b 80 1c 01 00 00    	mov    0x11c(%rax),%eax
+   33bed:	85 c0                	test   %eax,%eax
+   33bef:	75 9c                	jne    33b8d <lj_gc2_sweep_to_idle+0x2cd>
+   33bf1:	48 89 df             	mov    %rbx,%rdi
+   33bf4:	e8 37 6a fe ff       	call   1a630 <gc2_weak_owned_peer_active>
+   33bf9:	85 c0                	test   %eax,%eax
+   33bfb:	75 90                	jne    33b8d <lj_gc2_sweep_to_idle+0x2cd>
+   33bfd:	8b 83 c8 12 00 00    	mov    0x12c8(%rbx),%eax
+   33c03:	85 c0                	test   %eax,%eax
+   33c05:	75 86                	jne    33b8d <lj_gc2_sweep_to_idle+0x2cd>
+   33c07:	8b 83 cc 12 00 00    	mov    0x12cc(%rbx),%eax
+   33c0d:	85 c0                	test   %eax,%eax
+   33c0f:	0f 85 78 ff ff ff    	jne    33b8d <lj_gc2_sweep_to_idle+0x2cd>
+   33c15:	8b 83 2c 08 00 00    	mov    0x82c(%rbx),%eax
+   33c1b:	85 c0                	test   %eax,%eax
+   33c1d:	0f 85 6a ff ff ff    	jne    33b8d <lj_gc2_sweep_to_idle+0x2cd>
+   33c23:	e8 98 bb fe ff       	call   1f7c0 <lj_gc2_ssb_empty>
+   33c28:	85 c0                	test   %eax,%eax
+   33c2a:	0f 84 5d ff ff ff    	je     33b8d <lj_gc2_sweep_to_idle+0x2cd>
+   33c30:	48 8b 83 90 07 00 00 	mov    0x790(%rbx),%rax
+   33c37:	48 85 c0             	test   %rax,%rax
+   33c3a:	0f 85 4d ff ff ff    	jne    33b8d <lj_gc2_sweep_to_idle+0x2cd>
+   33c40:	8b 83 bc 07 00 00    	mov    0x7bc(%rbx),%eax
+   33c46:	85 c0                	test   %eax,%eax
+   33c48:	0f 85 3f ff ff ff    	jne    33b8d <lj_gc2_sweep_to_idle+0x2cd>
+   33c4e:	48 89 df             	mov    %rbx,%rdi
+   33c51:	e8 fa ba fe ff       	call   1f750 <gc2_grey_empty.part.0>
+   33c56:	89 c5                	mov    %eax,%ebp
+   33c58:	85 c0                	test   %eax,%eax
+   33c5a:	0f 84 2d ff ff ff    	je     33b8d <lj_gc2_sweep_to_idle+0x2cd>
+   33c60:	48 89 df             	mov    %rbx,%rdi
+   33c63:	e8 48 fc fe ff       	call   238b0 <lj_gc2_sweep_needs_prepare>
+   33c68:	85 c0                	test   %eax,%eax
+   33c6a:	0f 85 1d ff ff ff    	jne    33b8d <lj_gc2_sweep_to_idle+0x2cd>
+   33c70:	e8 bb 00 ff ff       	call   23d30 <lj_gc2_sweep_pending>
+   33c75:	85 c0                	test   %eax,%eax
+   33c77:	0f 85 10 ff ff ff    	jne    33b8d <lj_gc2_sweep_to_idle+0x2cd>
+   33c7d:	45 31 f6             	xor    %r14d,%r14d
+   33c80:	4d 87 37             	xchg   %r14,(%r15)
+   33c83:	4d 85 f6             	test   %r14,%r14
+   33c86:	0f 85 01 ff ff ff    	jne    33b8d <lj_gc2_sweep_to_idle+0x2cd>
+   33c8c:	48 89 df             	mov    %rbx,%rdi
+   33c8f:	e8 ec 93 01 00       	call   4d080 <lj_str_gc2_sweep_finish>
+   33c94:	48 89 df             	mov    %rbx,%rdi
+   33c97:	e8 f4 92 fe ff       	call   1cf90 <lj_gc2_sweep_live_aggregate.part.0>
+   33c9c:	48 89 df             	mov    %rbx,%rdi
+   33c9f:	48 89 c6             	mov    %rax,%rsi
+   33ca2:	e8 a9 94 fe ff       	call   1d150 <lj_gc2_update_minor_survival_policy.part.0>
+   33ca7:	c7 83 88 06 00 00 00 	movl   $0x0,0x688(%rbx)
+   33cae:	00 00 00 
+   33cb1:	c7 83 90 06 00 00 00 	movl   $0x0,0x690(%rbx)
+   33cb8:	00 00 00 
+   33cbb:	45 87 34 24          	xchg   %r14d,(%r12)
+   33cbf:	41 83 fe 03          	cmp    $0x3,%r14d
+   33cc3:	74 58                	je     33d1d <lj_gc2_sweep_to_idle+0x45d>
+   33cc5:	48 89 df             	mov    %rbx,%rdi
+   33cc8:	e8 53 6b fe ff       	call   1a820 <gc2_activation_pin_no_reclaim>
+   33ccd:	48 89 df             	mov    %rbx,%rdi
+   33cd0:	c7 83 30 07 00 00 00 	movl   $0x0,0x730(%rbx)
+   33cd7:	00 00 00 
+   33cda:	c7 83 44 11 00 00 00 	movl   $0x0,0x1144(%rbx)
+   33ce1:	00 00 00 
+   33ce4:	e8 27 90 fe ff       	call   1cd10 <lj_gc2_worker_wake.part.0>
+   33ce9:	8b 83 50 04 00 00    	mov    0x450(%rbx),%eax
+   33cef:	85 c0                	test   %eax,%eax
+   33cf1:	75 08                	jne    33cfb <lj_gc2_sweep_to_idle+0x43b>
+   33cf3:	48 89 df             	mov    %rbx,%rdi
+   33cf6:	e8 85 69 fe ff       	call   1a680 <gc2_jit_phase_gate_open_idle>
+   33cfb:	83 c8 ff             	or     $0xffffffff,%eax
+   33cfe:	31 d2                	xor    %edx,%edx
+   33d00:	f0 41 0f b1 55 00    	lock cmpxchg %edx,0x0(%r13)
+   33d06:	74 08                	je     33d10 <lj_gc2_sweep_to_idle+0x450>
+   33d08:	48 89 df             	mov    %rbx,%rdi
+   33d0b:	e8 10 6b fe ff       	call   1a820 <gc2_activation_pin_no_reclaim>
+   33d10:	48 89 df             	mov    %rbx,%rdi
+   33d13:	e8 28 6a fe ff       	call   1a740 <gc2_worker_release>
+   33d18:	e9 c2 fb ff ff       	jmp    338df <lj_gc2_sweep_to_idle+0x1f>
+   33d1d:	31 d2                	xor    %edx,%edx
+   33d1f:	be 03 00 00 00       	mov    $0x3,%esi
+   33d24:	48 89 df             	mov    %rbx,%rdi
+   33d27:	e8 34 6e fe ff       	call   1ab60 <gc2_activation_mirror_edge>
+   33d2c:	48 89 df             	mov    %rbx,%rdi
+   33d2f:	c7 83 30 07 00 00 00 	movl   $0x0,0x730(%rbx)
+   33d36:	00 00 00 
+   33d39:	c7 83 44 11 00 00 00 	movl   $0x0,0x1144(%rbx)
+   33d40:	00 00 00 
+   33d43:	e8 c8 8f fe ff       	call   1cd10 <lj_gc2_worker_wake.part.0>
+   33d48:	31 c0                	xor    %eax,%eax
+   33d4a:	c6 43 59 00          	movb   $0x0,0x59(%rbx)
+   33d4e:	48 89 83 88 00 00 00 	mov    %rax,0x88(%rbx)
+   33d55:	f0 48 83 83 30 08 00 	lock addq $0x1,0x830(%rbx)
+   33d5c:	00 01 
+   33d5e:	c7 83 2c 08 00 00 00 	movl   $0x0,0x82c(%rbx)
+   33d65:	00 00 00 
+   33d68:	48 89 df             	mov    %rbx,%rdi
+   33d6b:	c7 83 1c 08 00 00 00 	movl   $0x0,0x81c(%rbx)
+   33d72:	00 00 00 
+   33d75:	c7 83 28 08 00 00 00 	movl   $0x0,0x828(%rbx)
+   33d7c:	00 00 00 
+   33d7f:	48 c7 83 20 08 00 00 	movq   $0x0,0x820(%rbx)
+   33d86:	00 00 00 00 
+   33d8a:	e8 b1 69 fe ff       	call   1a740 <gc2_worker_release>
+   33d8f:	8b 83 cc 08 00 00    	mov    0x8cc(%rbx),%eax
+   33d95:	be 0a 00 00 00       	mov    $0xa,%esi
+   33d9a:	85 c0                	test   %eax,%eax
+   33d9c:	74 05                	je     33da3 <lj_gc2_sweep_to_idle+0x4e3>
+   33d9e:	be 09 00 00 00       	mov    $0x9,%esi
+   33da3:	48 89 df             	mov    %rbx,%rdi
+   33da6:	e8 75 95 fe ff       	call   1d320 <gc2_idle_transition_handshake.part.0.isra.0>
+   33dab:	48 89 df             	mov    %rbx,%rdi
+   33dae:	e8 0d 93 01 00       	call   4d0c0 <lj_str_gc2_reclaim_complete>
+   33db3:	85 c0                	test   %eax,%eax
+   33db5:	0f 84 4c 66 fd ff    	je     a407 <lj_gc2_sweep_to_idle.cold>
+   33dbb:	48 89 df             	mov    %rbx,%rdi
+   33dbe:	e8 cd 1e fe ff       	call   15c90 <lj_gc_flush_root_pending>
+   33dc3:	48 89 df             	mov    %rbx,%rdi
+   33dc6:	e8 25 f5 fd ff       	call   132f0 <lj_gc_repair_root_spine>
+   33dcb:	48 8b 73 60          	mov    0x60(%rbx),%rsi
+   33dcf:	48 89 df             	mov    %rbx,%rdi
+   33dd2:	e8 89 4e ff ff       	call   28c60 <gc2_clear_container_needscan_chain.isra.0>
+   33dd7:	48 8b 83 a0 01 00 00 	mov    0x1a0(%rbx),%rax
+   33dde:	48 85 c0             	test   %rax,%rax
+   33de1:	74 0b                	je     33dee <lj_gc2_sweep_to_idle+0x52e>
+   33de3:	48 8b 30             	mov    (%rax),%rsi
+   33de6:	48 89 df             	mov    %rbx,%rdi
+   33de9:	e8 72 4e ff ff       	call   28c60 <gc2_clear_container_needscan_chain.isra.0>
+   33dee:	48 89 df             	mov    %rbx,%rdi
+   33df1:	e8 7a 0b 04 00       	call   74970 <lj_tg_reclaim_dead>
+   33df6:	48 89 df             	mov    %rbx,%rdi
+   33df9:	e8 42 e4 fe ff       	call   22240 <lj_gc2_update_pacing>
+   33dfe:	48 89 df             	mov    %rbx,%rdi
+   33e01:	83 c8 ff             	or     $0xffffffff,%eax
+   33e04:	31 d2                	xor    %edx,%edx
+   33e06:	e8 75 68 fe ff       	call   1a680 <gc2_jit_phase_gate_open_idle>
+   33e0b:	f0 41 0f b1 55 00    	lock cmpxchg %edx,0x0(%r13)
+   33e11:	0f 84 ca fa ff ff    	je     338e1 <lj_gc2_sweep_to_idle+0x21>
+   33e17:	e8 04 6a fe ff       	call   1a820 <gc2_activation_pin_no_reclaim>
+   33e1c:	e9 c0 fa ff ff       	jmp    338e1 <lj_gc2_sweep_to_idle+0x21>
+   33e21:	48 89 df             	mov    %rbx,%rdi
+   33e24:	e8 f7 69 fe ff       	call   1a820 <gc2_activation_pin_no_reclaim>
+   33e29:	e9 7a fd ff ff       	jmp    33ba8 <lj_gc2_sweep_to_idle+0x2e8>
+
+Disassembly of section .fini:

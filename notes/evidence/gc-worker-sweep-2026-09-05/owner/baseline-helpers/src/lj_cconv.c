@@ -1,0 +1,1000 @@
+/*
+** C type conversions.
+** Copyright (C) 2005-2026 Mike Pall. See Copyright Notice in luajit.h
+*/
+
+#include "lj_obj.h"
+
+#if LJ_HASFFI
+
+#include "lj_err.h"
+#include "lj_buf.h"
+#include "lj_tab.h"
+#include "lj_ctype.h"
+#include "lj_cdata.h"
+#include "lj_cconv.h"
+#include "lj_ccallback.h"
+
+/* -- Conversion errors --------------------------------------------------- */
+
+/* Bad conversion. */
+LJ_NORET static void cconv_err_conv_l(lua_State *L, CTState *cts,
+				      CTypeID did, CTypeID sid, CType *s,
+				      CTInfo flags)
+{
+  const char *dst = strdata(lj_ctype_repr_wait(L, did, NULL));
+  const char *src;
+  UNUSED(cts);
+  if ((flags & CCF_FROMTV)) {
+    CTInfo sinfo = ctype_info_acq(s);
+    src = lj_obj_typename[1+(ctype_isnum(sinfo) ? LUA_TNUMBER :
+			     ctype_isarray(sinfo) ? LUA_TSTRING : LUA_TNIL)];
+  } else {
+    src = strdata(lj_ctype_repr_wait(L, sid, NULL));
+  }
+  if (CCF_GETARG(flags))
+    lj_err_argv(L, CCF_GETARG(flags), LJ_ERR_FFI_BADCONV, src, dst);
+  else
+    lj_err_callerv(L, LJ_ERR_FFI_BADCONV, src, dst);
+}
+
+/* Bad conversion from TValue. */
+LJ_NORET static void cconv_err_convtv_l(lua_State *L, CTState *cts,
+					CTypeID did, TValue *o, CTInfo flags)
+{
+  const char *dst = strdata(lj_ctype_repr_wait(L, did, NULL));
+  const char *src = lj_typename(o);
+  UNUSED(cts);
+  if (CCF_GETARG(flags))
+    lj_err_argv(L, CCF_GETARG(flags), LJ_ERR_FFI_BADCONV, src, dst);
+  else
+    lj_err_callerv(L, LJ_ERR_FFI_BADCONV, src, dst);
+}
+
+/* Initializer overflow. */
+LJ_NORET static void cconv_err_initov_l(lua_State *L, CTState *cts,
+					CTypeID did)
+{
+  const char *dst = strdata(lj_ctype_repr_wait(L, did, NULL));
+  UNUSED(cts);
+  lj_err_callerv(L, LJ_ERR_FFI_INITOV, dst);
+}
+
+static void cconv_ctype_copy(CType *out, CType *ct)
+{
+  GCobj *name;
+  out->info = ctype_info_acq(ct);
+  out->size = ctype_size_acq(ct);
+  out->sib = (CTypeID1)ctype_sib_acq(ct);
+  out->next = (CTypeID1)ctype_next_acq(ct);
+  name = ctype_nameobj_acq(ct);
+  setgcrefp(out->name, name);
+}
+
+static int cconv_ctype_snapshot_wait(lua_State *L, CTState *cts,
+				     CTypeID id, CType *out)
+{
+  if (id <= CTID_CTYPEID) {
+    if (id == 0)
+      return 0;
+    cconv_ctype_copy(out, ctype_get(cts, id));
+    return !ctype_isabandoned(ctype_info_acq(out));
+  }
+  for (;;) {
+    int ok = lj_ctype_snapshot(cts, id, out);
+    if (ok >= 0)
+      return ok;
+    lj_ctype_parse_wait(cts, L, ctype_parse_token_acq(cts));
+  }
+}
+
+static CTypeID cconv_rawid_wait(lua_State *L, CTState *cts, CTypeID id,
+				CTypeID errid, CType *out,
+				CTInfo *infop, CTSize *sizep)
+{
+  for (;;) {
+    CTInfo info;
+    if (!cconv_ctype_snapshot_wait(L, cts, id, out))
+      cconv_err_initov_l(L, cts, errid);
+    info = ctype_info_acq(out);
+    if (!ctype_isattrib(info)) {
+      if (infop) *infop = info;
+      if (sizep) *sizep = ctype_size_acq(out);
+      return id;
+    }
+    id = ctype_cid(info);
+  }
+}
+
+/* -- C type conversion checks -------------------------------------------- */
+
+/* Get raw type and qualifiers for a child type. Resolves enums, too. */
+static int cconv_childqual_l(lua_State *L, CTState *cts, CTypeID *idp,
+			     CType *ct, CType *out, CTInfo *qual)
+{
+  CTypeID id = ctype_cid(ctype_info_acq(ct));
+  if (!cconv_ctype_snapshot_wait(L, cts, id, out))
+    return 0;
+  for (;;) {
+    CTInfo info = ctype_info_acq(out);
+    if (ctype_isattrib(info)) {
+      if (ctype_attrib(info) == CTA_QUAL) *qual |= ctype_size_acq(out);
+    } else if (!ctype_isenum(info)) {
+      *qual |= (info & CTF_QUAL);
+      break;
+    }
+    id = ctype_cid(info);
+    if (!cconv_ctype_snapshot_wait(L, cts, id, out))
+      return 0;
+  }
+  *idp = id;
+  return 1;
+}
+
+/* Check for compatible types when converting to a pointer.
+** Note: these checks are more relaxed than what C99 mandates.
+*/
+int lj_cconv_compatptr_l(lua_State *L, CTState *cts, CTypeID did,
+			 CType *d0, CTypeID sid, CType *s0, CTInfo flags)
+{
+  CType d = *d0, s = *s0;
+  if (!((flags & CCF_CAST) || did == sid)) {
+    CTInfo dqual = 0, squal = 0;
+    CTInfo dinfo, sinfo;
+    CTSize dsize, ssize;
+    if (!cconv_childqual_l(L, cts, &did, &d, &d, &dqual))
+      return 0;
+    sinfo = ctype_info_acq(&s);
+    if (!ctype_isstruct(sinfo) &&
+	!cconv_childqual_l(L, cts, &sid, &s, &s, &squal))
+      return 0;
+    dinfo = ctype_info_acq(&d);
+    sinfo = ctype_info_acq(&s);
+    dsize = ctype_size_acq(&d);
+    ssize = ctype_size_acq(&s);
+    if ((flags & CCF_SAME)) {
+      if (dqual != squal)
+	return 0;  /* Different qualifiers. */
+    } else if (!(flags & CCF_IGNQUAL)) {
+      if ((dqual & squal) != squal)
+	return 0;  /* Discarded qualifiers. */
+      if (ctype_isvoid(dinfo) || ctype_isvoid(sinfo))
+	return 1;  /* Converting to/from void * is always ok. */
+    }
+    if (ctype_type(dinfo) != ctype_type(sinfo) || dsize != ssize)
+      return 0;  /* Different type or different size. */
+    if (ctype_isnum(dinfo)) {
+      if (((dinfo ^ sinfo) & (CTF_BOOL|CTF_FP)))
+	return 0;  /* Different numeric types. */
+    } else if (ctype_ispointer(dinfo)) {
+      /* Check child types recursively. */
+      return lj_cconv_compatptr_l(L, cts, did, &d, sid, &s,
+				  flags|CCF_SAME);
+    } else if (ctype_isstruct(dinfo)) {
+      if (did != sid)
+	return 0;  /* Must be exact same type for struct/union. */
+    } else if (ctype_isfunc(dinfo)) {
+      /* NYI: structural equality of functions. */
+    }
+  }
+  return 1;  /* Types are compatible. */
+}
+
+/* -- C type to C type conversion ----------------------------------------- */
+
+/* Convert C type to C type. Caveat: expects to get the raw CType!
+**
+** Note: This is only used by the interpreter and not optimized at all.
+** The JIT compiler will do a much better job specializing for each case.
+*/
+void lj_cconv_ct_ct_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
+		      CType *s, CTypeID sid, uint8_t *dp, uint8_t *sp,
+		      CTInfo flags)
+{
+  CType dsnap, ssnap, dcsnap, scsnap;
+  CTSize dsize, ssize;
+  CTInfo dinfo, sinfo;
+  void *tmpptr;
+  cconv_ctype_copy(&dsnap, d);
+  cconv_ctype_copy(&ssnap, s);
+  d = &dsnap;
+  s = &ssnap;
+  dsize = ctype_size_acq(d);
+  ssize = ctype_size_acq(s);
+  dinfo = ctype_info_acq(d);
+  sinfo = ctype_info_acq(s);
+
+  lj_assertCTS(!ctype_isenum(dinfo) && !ctype_isenum(sinfo),
+	       "unresolved enum");
+  lj_assertCTS(!ctype_isattrib(dinfo) && !ctype_isattrib(sinfo),
+	       "unstripped attribute");
+
+  if (ctype_type(dinfo) > CT_MAYCONVERT || ctype_type(sinfo) > CT_MAYCONVERT)
+    goto err_conv;
+
+  /* Some basic sanity checks. */
+  lj_assertCTS(!ctype_isnum(dinfo) || dsize > 0, "bad size for number type");
+  lj_assertCTS(!ctype_isnum(sinfo) || ssize > 0, "bad size for number type");
+  lj_assertCTS(!ctype_isbool(dinfo) || dsize == 1 || dsize == 4,
+	       "bad size for bool type");
+  lj_assertCTS(!ctype_isbool(sinfo) || ssize == 1 || ssize == 4,
+	       "bad size for bool type");
+  lj_assertCTS(!ctype_isinteger(dinfo) || (1u<<lj_fls(dsize)) == dsize,
+	       "bad size for integer type");
+  lj_assertCTS(!ctype_isinteger(sinfo) || (1u<<lj_fls(ssize)) == ssize,
+	       "bad size for integer type");
+
+  switch (cconv_idx2(dinfo, sinfo)) {
+  /* Destination is a bool. */
+  case CCX(B, B):
+    /* Source operand is already normalized. */
+    if (dsize == 1) *dp = *sp; else *(int *)dp = *sp;
+    break;
+  case CCX(B, I): {
+    MSize i;
+    uint8_t b = 0;
+    for (i = 0; i < ssize; i++) b |= sp[i];
+    b = (b != 0);
+    if (dsize == 1) *dp = b; else *(int *)dp = b;
+    break;
+    }
+  case CCX(B, F): {
+    uint8_t b;
+    if (ssize == sizeof(double)) b = (*(double *)sp != 0);
+    else if (ssize == sizeof(float)) b = (*(float *)sp != 0);
+    else goto err_conv;  /* NYI: long double. */
+    if (dsize == 1) *dp = b; else *(int *)dp = b;
+    break;
+    }
+
+  /* Destination is an integer. */
+  case CCX(I, B):
+  case CCX(I, I):
+  conv_I_I:
+    if (dsize > ssize) {  /* Zero-extend or sign-extend LSB. */
+#if LJ_LE
+      uint8_t fill = (!(sinfo & CTF_UNSIGNED) && (sp[ssize-1]&0x80)) ? 0xff : 0;
+      memcpy(dp, sp, ssize);
+      memset(dp + ssize, fill, dsize-ssize);
+#else
+      uint8_t fill = (!(sinfo & CTF_UNSIGNED) && (sp[0]&0x80)) ? 0xff : 0;
+      memset(dp, fill, dsize-ssize);
+      memcpy(dp + (dsize-ssize), sp, ssize);
+#endif
+    } else {  /* Copy LSB. */
+#if LJ_LE
+      memcpy(dp, sp, dsize);
+#else
+      memcpy(dp, sp + (ssize-dsize), dsize);
+#endif
+    }
+    break;
+  case CCX(I, F): {
+    double n;  /* Always convert via double. */
+  conv_I_F:
+    /* Convert source to double. */
+    if (ssize == sizeof(double)) n = *(double *)sp;
+    else if (ssize == sizeof(float)) n = (double)*(float *)sp;
+    else goto err_conv;  /* NYI: long double. */
+    /* Then convert double to integer. */
+    /* The conversion must exactly match the semantics of JIT-compiled code! */
+    if (dsize < 8) {
+      int64_t i = lj_num2i64(n);  /* Always convert via int64_t. */
+      if (dsize == 4) *(int32_t *)dp = i;
+      else if (dsize == 2) *(int16_t *)dp = (int16_t)i;
+      else *(int8_t *)dp = (int8_t)i;
+    } else if (dsize == 8) {
+      if ((dinfo & CTF_UNSIGNED))
+	*(uint64_t *)dp = lj_num2u64(n);
+      else
+	*(int64_t *)dp = lj_num2i64(n);
+    } else {
+      goto err_conv;  /* NYI: conversion to >64 bit integers. */
+    }
+    break;
+    }
+  case CCX(I, C):
+    sid = cconv_rawid_wait(L, cts, ctype_cid(sinfo), sid, &ssnap,
+			   &sinfo, &ssize);
+    s = &ssnap;
+    goto conv_I_F;  /* Just convert re. */
+  case CCX(I, P):
+    if (!(flags & CCF_CAST)) goto err_conv;
+    sinfo = CTINFO(CT_NUM, CTF_UNSIGNED);
+    goto conv_I_I;
+  case CCX(I, A):
+    if (!(flags & CCF_CAST)) goto err_conv;
+    sinfo = CTINFO(CT_NUM, CTF_UNSIGNED);
+    ssize = CTSIZE_PTR;
+    tmpptr = sp;
+    sp = (uint8_t *)&tmpptr;
+    goto conv_I_I;
+
+  /* Destination is a floating-point number. */
+  case CCX(F, B):
+  case CCX(F, I): {
+    double n;  /* Always convert via double. */
+  conv_F_I:
+    /* First convert source to double. */
+    /* The conversion must exactly match the semantics of JIT-compiled code! */
+    if (ssize < 4 || (ssize == 4 && !(sinfo & CTF_UNSIGNED))) {
+      int32_t i;
+      if (ssize == 4) {
+	i = *(int32_t *)sp;
+      } else if (!(sinfo & CTF_UNSIGNED)) {
+	if (ssize == 2) i = *(int16_t *)sp;
+	else i = *(int8_t *)sp;
+      } else {
+	if (ssize == 2) i = *(uint16_t *)sp;
+	else i = *(uint8_t *)sp;
+      }
+      n = (double)i;
+    } else if (ssize == 4) {
+      n = (double)*(uint32_t *)sp;
+    } else if (ssize == 8) {
+      if (!(sinfo & CTF_UNSIGNED)) n = (double)*(int64_t *)sp;
+      else n = (double)*(uint64_t *)sp;
+    } else {
+      goto err_conv;  /* NYI: conversion from >64 bit integers. */
+    }
+    /* Convert double to destination. */
+    if (dsize == sizeof(double)) *(double *)dp = n;
+    else if (dsize == sizeof(float)) *(float *)dp = (float)n;
+    else goto err_conv;  /* NYI: long double. */
+    break;
+    }
+  case CCX(F, F): {
+    double n;  /* Always convert via double. */
+  conv_F_F:
+    if (ssize == dsize) goto copyval;
+    /* Convert source to double. */
+    if (ssize == sizeof(double)) n = *(double *)sp;
+    else if (ssize == sizeof(float)) n = (double)*(float *)sp;
+    else goto err_conv;  /* NYI: long double. */
+    /* Convert double to destination. */
+    if (dsize == sizeof(double)) *(double *)dp = n;
+    else if (dsize == sizeof(float)) *(float *)dp = (float)n;
+    else goto err_conv;  /* NYI: long double. */
+    break;
+    }
+  case CCX(F, C):
+    sid = cconv_rawid_wait(L, cts, ctype_cid(sinfo), sid, &ssnap,
+			   &sinfo, &ssize);
+    s = &ssnap;
+    goto conv_F_F;  /* Ignore im, and convert from re. */
+
+  /* Destination is a complex number. */
+  case CCX(C, I):
+    did = cconv_rawid_wait(L, cts, ctype_cid(dinfo), did, &dsnap,
+			   &dinfo, &dsize);
+    d = &dsnap;
+    memset(dp + dsize, 0, dsize);  /* Clear im. */
+    goto conv_F_I;  /* Convert to re. */
+  case CCX(C, F):
+    did = cconv_rawid_wait(L, cts, ctype_cid(dinfo), did, &dsnap,
+			   &dinfo, &dsize);
+    d = &dsnap;
+    memset(dp + dsize, 0, dsize);  /* Clear im. */
+    goto conv_F_F;  /* Convert to re. */
+
+  case CCX(C, C):
+    if (dsize != ssize) {  /* Different types: convert re/im separately. */
+      CTSize dcsize, scsize;
+      CTypeID dcid = cconv_rawid_wait(L, cts, ctype_cid(dinfo), did,
+				      &dcsnap, NULL, &dcsize);
+      CTypeID scid = cconv_rawid_wait(L, cts, ctype_cid(sinfo), sid,
+				      &scsnap, NULL, &scsize);
+      lj_cconv_ct_ct_l(L, cts, &dcsnap, dcid, &scsnap, scid, dp, sp, flags);
+      lj_cconv_ct_ct_l(L, cts, &dcsnap, dcid, &scsnap, scid,
+		       dp + dcsize, sp + scsize, flags);
+      return;
+    }
+    goto copyval;  /* Otherwise this is easy. */
+
+  /* Destination is a vector. */
+  case CCX(V, I):
+  case CCX(V, F):
+  case CCX(V, C): {
+    CTSize esize;
+    CTypeID dcid = cconv_rawid_wait(L, cts, ctype_cid(dinfo), did,
+				    &dcsnap, NULL, &esize);
+    /* First convert the scalar to the first element. */
+    lj_cconv_ct_ct_l(L, cts, &dcsnap, dcid, s, sid, dp, sp, flags);
+    /* Then replicate it to the other elements (splat). */
+    for (sp = dp; dsize > esize; dsize -= esize) {
+      dp += esize;
+      memcpy(dp, sp, esize);
+    }
+    break;
+    }
+
+  case CCX(V, V):
+    /* Copy same-sized vectors, even for different lengths/element-types. */
+    if (dsize != ssize) goto err_conv;
+    goto copyval;
+
+  /* Destination is a pointer. */
+  case CCX(P, I):
+    if (!(flags & CCF_CAST)) goto err_conv;
+    dinfo = CTINFO(CT_NUM, CTF_UNSIGNED);
+    goto conv_I_I;
+
+  case CCX(P, F):
+    if (!(flags & CCF_CAST) || !(flags & CCF_FROMTV)) goto err_conv;
+    /* The signed conversion is cheaper. x64 really has 47 bit pointers. */
+    dinfo = CTINFO(CT_NUM, (LJ_64 && dsize == 8) ? 0 : CTF_UNSIGNED);
+    goto conv_I_F;
+
+  case CCX(P, P):
+    if (!lj_cconv_compatptr_l(L, cts, did, d, sid, s, flags)) goto err_conv;
+    cdata_setptr(dp, dsize, cdata_getptr(sp, ssize));
+    break;
+
+  case CCX(P, A):
+  case CCX(P, S):
+    if (!lj_cconv_compatptr_l(L, cts, did, d, sid, s, flags)) goto err_conv;
+    cdata_setptr(dp, dsize, sp);
+    break;
+
+  /* Destination is an array. */
+  case CCX(A, A):
+    if ((flags & CCF_CAST) || (dinfo & CTF_VLA) || dsize != ssize ||
+	dsize == CTSIZE_INVALID ||
+	!lj_cconv_compatptr_l(L, cts, did, d, sid, s, flags))
+      goto err_conv;
+    goto copyval;
+
+  /* Destination is a struct/union. */
+  case CCX(S, S):
+    if ((flags & CCF_CAST) || (dinfo & CTF_VLA) || did != sid)
+      goto err_conv;  /* Must be exact same type. */
+copyval:  /* Copy value. */
+    lj_assertCTS(dsize == ssize, "value copy with different sizes");
+    memcpy(dp, sp, dsize);
+    break;
+
+  default:
+  err_conv:
+    cconv_err_conv_l(L, cts, did, sid, s, flags);
+  }
+}
+
+static void cconv_ct_ct_id_l(lua_State *L, CTState *cts, CTypeID did,
+			     CType *s, CTypeID sid, uint8_t *dp,
+			     uint8_t *sp, CTInfo flags)
+{
+  CType dsnap;
+  CTypeID rid = cconv_rawid_wait(L, cts, did, did, &dsnap, NULL, NULL);
+  lj_cconv_ct_ct_l(L, cts, &dsnap, rid, s, sid, dp, sp, flags);
+}
+
+/* -- C type to TValue conversion ----------------------------------------- */
+
+/* Convert C type to TValue. Caveat: expects to get the raw CType! */
+int lj_cconv_tv_ct_l(lua_State *L, CTState *cts, CType *s, CTypeID sid,
+		     TValue *o, uint8_t *sp)
+{
+  CTInfo sinfo = ctype_info_acq(s);
+  CTSize ssize = ctype_size_acq(s);
+  if (ctype_isnum(sinfo)) {
+    if (!ctype_isbool(sinfo)) {
+      if (ctype_isinteger(sinfo) && ssize > 4) goto copyval;
+      if (LJ_DUALNUM && ctype_isinteger(sinfo)) {
+	int32_t i;
+	cconv_ct_ct_id_l(L, cts, CTID_INT32, s, sid, (uint8_t *)&i, sp, 0);
+	if ((sinfo & CTF_UNSIGNED) && i < 0)
+	  setnumV(o, (lua_Number)(uint32_t)i);
+	else
+	  setintV(o, i);
+      } else {
+	cconv_ct_ct_id_l(L, cts, CTID_DOUBLE, s, sid, (uint8_t *)&o->n,
+			 sp, 0);
+	/* Numbers are NOT canonicalized here! Beware of uninitialized data. */
+	lj_assertCTS(tvisnum(o), "non-canonical NaN passed");
+      }
+    } else {
+      uint32_t b = ssize == 1 ? (*sp != 0) : (*(int *)sp != 0);
+      setboolV(o, b);
+      setboolV(&L2TG(L)->tmptv2, b);  /* Remember for trace recorder. */
+    }
+    return 0;
+  } else if (ctype_isrefarray(sinfo) || ctype_isstruct(sinfo)) {
+    /* Create reference. */
+    setcdataV(L, o, lj_cdata_newref_l(L, cts, sp, sid));
+    return 1;  /* Need GC step. */
+  } else {
+    GCcdata *cd;
+    CTSize sz;
+  copyval:  /* Copy value. */
+    sz = ssize;
+    lj_assertCTS(sz != CTSIZE_INVALID, "value copy with invalid size");
+    /* Attributes are stripped, qualifiers are kept (but mostly ignored). */
+    cd = lj_cdata_new_l(L, cts, sid, sz);
+    setcdataV(L, o, cd);
+    memcpy(cdataptr(cd), sp, sz);
+    return 1;  /* Need GC step. */
+  }
+}
+
+/* Convert bitfield to TValue. */
+int lj_cconv_tv_bf_l(lua_State *L, CTState *cts, CType *s, TValue *o,
+		     uint8_t *sp)
+{
+  CTInfo info = ctype_info_acq(s);
+  CTSize pos, bsz;
+  uint32_t val;
+  lj_assertCTS(ctype_isbitfield(info), "bitfield expected");
+  /* NYI: packed bitfields may cause misaligned reads. */
+  switch (ctype_bitcsz(info)) {
+  case 4: val = *(uint32_t *)sp; break;
+  case 2: val = *(uint16_t *)sp; break;
+  case 1: val = *(uint8_t *)sp; break;
+  default:
+    lj_assertCTS(0, "bad bitfield container size %d", ctype_bitcsz(info));
+    val = 0;
+    break;
+  }
+  /* Check if a packed bitfield crosses a container boundary. */
+  pos = ctype_bitpos(info);
+  bsz = ctype_bitbsz(info);
+  lj_assertCTS(pos < 8*ctype_bitcsz(info), "bad bitfield position");
+  lj_assertCTS(bsz > 0 && bsz <= 8*ctype_bitcsz(info), "bad bitfield size");
+  if (pos + bsz > 8*ctype_bitcsz(info))
+    lj_err_caller(L, LJ_ERR_FFI_NYIPACKBIT);
+  if (!(info & CTF_BOOL)) {
+    CTSize shift = 32 - bsz;
+    if (!(info & CTF_UNSIGNED)) {
+      setintV(o, (int32_t)(val << (shift-pos)) >> shift);
+    } else {
+      val = (val << (shift-pos)) >> shift;
+      if (!LJ_DUALNUM || (int32_t)val < 0)
+	setnumV(o, (lua_Number)(uint32_t)val);
+      else
+	setintV(o, (int32_t)val);
+    }
+  } else {
+    uint32_t b = (val >> pos) & 1;
+    lj_assertCTS(bsz == 1, "bad bool bitfield size");
+    setboolV(o, b);
+    setboolV(&L2TG(L)->tmptv2, b);  /* Remember for trace recorder. */
+  }
+  return 0;  /* No GC step needed. */
+}
+
+/* -- TValue to C type conversion ----------------------------------------- */
+
+/* Convert table to array. */
+static void cconv_array_tab_l(lua_State *L, CTState *cts, CType *d,
+			      CTypeID did, uint8_t *dp, GCtab *t,
+			      CTInfo flags)
+{
+  CType dsnap, dcsnap;
+  int32_t i;
+  CTInfo dinfo;
+  CTypeID dcid;
+  CTSize size, esize, ofs = 0;
+  UNUSED(d);
+  if (!cconv_ctype_snapshot_wait(L, cts, did, &dsnap))
+    cconv_err_initov_l(L, cts, did);
+  dinfo = ctype_info_acq(&dsnap);
+  size = ctype_size_acq(&dsnap);
+  dcid = cconv_rawid_wait(L, cts, ctype_cid(dinfo), did, &dcsnap,
+			  NULL, &esize);
+  for (i = 0; ; i++) {
+    TValue *tv = (TValue *)lj_tab_getint(t, i);
+    TValue val;
+    if (tv)
+      lj_tv_load_acq(&val, tv);
+    if (!tv || tvisnil(&val)) {
+      if (i == 0) continue;  /* Try again for 1-based tables. */
+      break;  /* Stop at first nil. */
+    }
+    if (ofs >= size)
+      cconv_err_initov_l(L, cts, did);
+    lj_cconv_ct_tv_l(L, cts, &dcsnap, dcid, dp + ofs, &val, flags);
+    ofs += esize;
+  }
+  if (size != CTSIZE_INVALID) {  /* Only fill up arrays with known size. */
+    if (ofs == esize) {  /* Replicate a single element. */
+      for (; ofs < size; ofs += esize) memcpy(dp + ofs, dp, esize);
+    } else {  /* Otherwise fill the remainder with zero. */
+      memset(dp + ofs, 0, size - ofs);
+    }
+  }
+}
+
+/* Convert table to sub-struct/union. */
+static void cconv_substruct_tab_l(lua_State *L, CTState *cts, CType *d,
+				  CTypeID did, uint8_t *dp,
+				  GCtab *t, int32_t *ip, CTInfo flags)
+{
+  CType dsnap;
+  CTypeID id;
+  CTInfo dinfo;
+  UNUSED(d);
+  if (!cconv_ctype_snapshot_wait(L, cts, did, &dsnap))
+    cconv_err_initov_l(L, cts, did);
+  id = ctype_sib_acq(&dsnap);
+  dinfo = ctype_info_acq(&dsnap);
+  while (id) {
+    CType dfsnap;
+    CTInfo dfinfo;
+    CTSize dfsize;
+    if (!cconv_ctype_snapshot_wait(L, cts, id, &dfsnap))
+      cconv_err_initov_l(L, cts, did);
+    dfinfo = ctype_info_acq(&dfsnap);
+    dfsize = ctype_size_acq(&dfsnap);
+    id = ctype_sib_acq(&dfsnap);
+    if (ctype_isfield(dfinfo) || ctype_isbitfield(dfinfo)) {
+      GCstr *dfname = ctype_name_acq(&dfsnap);
+      TValue *tv;
+      TValue val;
+      int32_t i = *ip, iz = i;
+      if (!dfname) continue;  /* Ignore unnamed fields. */
+      if (i >= 0) {
+      retry:
+	tv = (TValue *)lj_tab_getint(t, i);
+	if (tv)
+	  lj_tv_load_acq(&val, tv);
+	if (!tv || tvisnil(&val)) {
+	  if (i == 0) { i = 1; goto retry; }  /* 1-based tables. */
+	  if (iz == 0) { *ip = i = -1; goto tryname; }  /* Init named fields. */
+	  break;  /* Stop at first nil. */
+	}
+	*ip = i + 1;
+      } else {
+      tryname:
+	tv = (TValue *)lj_tab_getstr(t, dfname);
+	if (tv)
+	  lj_tv_load_acq(&val, tv);
+	if (!tv || tvisnil(&val)) continue;
+      }
+      if (ctype_isfield(dfinfo)) {
+	CType fsnap;
+	CTypeID dfid = cconv_rawid_wait(L, cts, ctype_cid(dfinfo), did,
+					&fsnap, NULL, NULL);
+	lj_cconv_ct_tv_l(L, cts, &fsnap, dfid, dp+dfsize, &val, flags);
+      } else {
+	lj_cconv_bf_tv_l(L, cts, &dfsnap, dp+dfsize, &val);
+      }
+      if ((dinfo & CTF_UNION)) break;
+    } else if (ctype_isxattrib(dfinfo, CTA_SUBTYPE)) {
+      CType ssnap;
+      CTypeID dfid = cconv_rawid_wait(L, cts, ctype_cid(dfinfo), did,
+				      &ssnap, NULL, NULL);
+      cconv_substruct_tab_l(L, cts, &ssnap, dfid, dp+dfsize, t, ip,
+			    flags);
+    }  /* Ignore all other entries in the chain. */
+  }
+}
+
+/* Convert table to struct/union. */
+static void cconv_struct_tab_l(lua_State *L, CTState *cts, CType *d,
+			       CTypeID did, uint8_t *dp, GCtab *t,
+			       CTInfo flags)
+{
+  CType dsnap;
+  int32_t i = 0;
+  UNUSED(d);
+  if (!cconv_ctype_snapshot_wait(L, cts, did, &dsnap))
+    cconv_err_initov_l(L, cts, did);
+  memset(dp, 0, ctype_size_acq(&dsnap));  /* Clear the struct first. */
+  cconv_substruct_tab_l(L, cts, &dsnap, did, dp, t, &i, flags);
+}
+
+/* Convert TValue to C type. Caveat: expects to get the raw CType! */
+void lj_cconv_ct_tv_l(lua_State *L, CTState *cts, CType *d,
+		      CTypeID did, uint8_t *dp, TValue *o, CTInfo flags)
+{
+  CTypeID sid = CTID_P_VOID;
+  CType *s;
+  CType dsnap, ssnap;
+  CTInfo dinfo;
+  CTSize dsize;
+  void *tmpptr;
+  CTSize tmpenum;
+  uint8_t tmpbool, *sp = (uint8_t *)&tmpptr;
+  cconv_ctype_copy(&dsnap, d);
+  d = &dsnap;
+  dinfo = ctype_info_acq(d);
+  dsize = ctype_size_acq(d);
+  if (LJ_LIKELY(tvisint(o))) {
+    sp = (uint8_t *)&o->i;
+    sid = CTID_INT32;
+    flags |= CCF_FROMTV;
+  } else if (LJ_LIKELY(tvisnum(o))) {
+    sp = (uint8_t *)&o->n;
+    sid = CTID_DOUBLE;
+    flags |= CCF_FROMTV;
+  } else if (tviscdata(o)) {
+    sp = cdataptr(cdataV(o));
+    sid = cdataV(o)->ctypeid;
+    if (!cconv_ctype_snapshot_wait(L, cts, sid, &ssnap))
+      goto err_conv;
+    s = &ssnap;
+    {
+      CTInfo sinfo = ctype_info_acq(s);
+      if (ctype_isref(sinfo)) {  /* Resolve reference for value. */
+	lj_assertCTS(ctype_size_acq(s) == CTSIZE_PTR, "ref is not pointer-sized");
+	sp = *(void **)sp;
+	sid = ctype_cid(sinfo);
+      }
+    }
+    sid = cconv_rawid_wait(L, cts, sid, did, &ssnap, NULL, NULL);
+    s = &ssnap;
+    {
+      CTInfo sinfo = ctype_info_acq(s);
+      if (ctype_isfunc(sinfo)) {
+	sid = lj_ctype_intern_l(L, cts, CTINFO(CT_PTR, CTALIGN_PTR|sid),
+				CTSIZE_PTR);
+	if (!cconv_ctype_snapshot_wait(L, cts, did, &dsnap))
+	  cconv_err_initov_l(L, cts, did);
+	d = &dsnap;  /* C type table may have been reallocated. */
+	dinfo = ctype_info_acq(d);
+	dsize = ctype_size_acq(d);
+      } else {
+	if (ctype_isenum(sinfo)) {
+	  sid = cconv_rawid_wait(L, cts, ctype_cid(sinfo), did, &ssnap,
+				 NULL, NULL);
+	  s = &ssnap;
+	}
+	goto doconv;
+      }
+    }
+  } else if (tvisstr(o)) {
+    GCstr *str = strV(o);
+    if (ctype_isenum(dinfo)) {  /* Match string against enum constant. */
+      int ok = lj_ctype_enumconst_wait(L, cts, did, str, &tmpenum, &sid);
+      if (!ok)
+	goto err_conv;
+      lj_assertCTS(dsize == 4, "only 32 bit enum supported");  /* NYI */
+      sp = (uint8_t *)&tmpenum;
+    } else if (ctype_isrefarray(dinfo)) {  /* Copy string to array. */
+      CType dcsnap;
+      CTInfo dcinfo;
+      CTSize dcsize;
+      CTSize sz = str->len+1;
+      (void)cconv_rawid_wait(L, cts, ctype_cid(dinfo), did, &dcsnap,
+			     &dcinfo, &dcsize);
+      if (!ctype_isinteger(dcinfo) || dcsize != 1)
+	goto err_conv;
+      if (dsize != 0 && dsize < sz)
+	sz = dsize;
+      memcpy(dp, strdata(str), sz);
+      return;
+    } else {  /* Otherwise pass it as a const char[]. */
+      sp = (uint8_t *)strdata(str);
+      sid = CTID_A_CCHAR;
+      flags |= CCF_FROMTV;
+    }
+  } else if (tvistab(o)) {
+    if (ctype_isarray(dinfo)) {
+      cconv_array_tab_l(L, cts, d, did, dp, tabV(o), flags);
+      return;
+    } else if (ctype_isstruct(dinfo)) {
+      cconv_struct_tab_l(L, cts, d, did, dp, tabV(o), flags);
+      return;
+    } else {
+      goto err_conv;
+    }
+  } else if (tvisbool(o)) {
+    tmpbool = boolV(o);
+    sp = &tmpbool;
+    sid = CTID_BOOL;
+  } else if (tvisnil(o)) {
+    tmpptr = (void *)0;
+    flags |= CCF_FROMTV;
+  } else if (tvisudata(o)) {
+    GCudata *ud = udataV(o);
+    uint8_t udtype = lj_udata_udtype_acq(ud);
+    tmpptr = uddata(ud);
+    if (udtype == UDTYPE_IO_FILE)
+      tmpptr = *(void **)tmpptr;
+    else if (udtype == UDTYPE_BUFFER) {
+      MSize len;
+      tmpptr = (void *)lj_bufx_data_acq((SBufExt *)tmpptr, &len);
+      UNUSED(len);
+    }
+  } else if (tvislightud(o)) {
+    tmpptr = lightudV(cts->g, o);
+  } else if (tvisfunc(o)) {
+    void *p = lj_ccallback_new_l(L, cts, did, funcV(o));
+    if (p) {
+      *(void **)dp = p;
+      return;
+    }
+    goto err_conv;
+  } else {
+  err_conv:
+    cconv_err_convtv_l(L, cts, did, o, flags);
+  }
+  sid = cconv_rawid_wait(L, cts, sid, did, &ssnap, NULL, NULL);
+  s = &ssnap;
+doconv:
+  if (ctype_isenum(dinfo)) {
+    did = cconv_rawid_wait(L, cts, ctype_cid(dinfo), did, &dsnap,
+			   &dinfo, &dsize);
+    d = &dsnap;
+  }
+  lj_cconv_ct_ct_l(L, cts, d, did, s, sid, dp, sp, flags);
+}
+
+void lj_cconv_ct_tv_id_l(lua_State *L, CTState *cts, CTypeID did,
+			 uint8_t *dp, TValue *o, CTInfo flags)
+{
+  CType dsnap;
+  CTypeID rid = cconv_rawid_wait(L, cts, did, did, &dsnap, NULL, NULL);
+  lj_cconv_ct_tv_l(L, cts, &dsnap, rid, dp, o, flags);
+}
+
+/* Convert TValue to bitfield. */
+void lj_cconv_bf_tv_l(lua_State *L, CTState *cts, CType *d, uint8_t *dp,
+		      TValue *o)
+{
+  CTInfo info = ctype_info_acq(d);
+  CTSize pos, bsz;
+  uint32_t val, mask;
+  lj_assertCTS(ctype_isbitfield(info), "bitfield expected");
+  if ((info & CTF_BOOL)) {
+    uint8_t tmpbool;
+    lj_assertCTS(ctype_bitbsz(info) == 1, "bad bool bitfield size");
+    lj_cconv_ct_tv_id_l(L, cts, CTID_BOOL, &tmpbool, o, 0);
+    val = tmpbool;
+  } else {
+    CTypeID did = (info & CTF_UNSIGNED) ? CTID_UINT32 : CTID_INT32;
+    lj_cconv_ct_tv_id_l(L, cts, did, (uint8_t *)&val, o, 0);
+  }
+  pos = ctype_bitpos(info);
+  bsz = ctype_bitbsz(info);
+  lj_assertCTS(pos < 8*ctype_bitcsz(info), "bad bitfield position");
+  lj_assertCTS(bsz > 0 && bsz <= 8*ctype_bitcsz(info), "bad bitfield size");
+  /* Check if a packed bitfield crosses a container boundary. */
+  if (pos + bsz > 8*ctype_bitcsz(info))
+    lj_err_caller(L, LJ_ERR_FFI_NYIPACKBIT);
+  mask = ((1u << bsz) - 1u) << pos;
+  val = (val << pos) & mask;
+  /* NYI: packed bitfields may cause misaligned reads/writes. */
+  switch (ctype_bitcsz(info)) {
+  case 4: *(uint32_t *)dp = (*(uint32_t *)dp & ~mask) | (uint32_t)val; break;
+  case 2: *(uint16_t *)dp = (*(uint16_t *)dp & ~mask) | (uint16_t)val; break;
+  case 1: *(uint8_t *)dp = (*(uint8_t *)dp & ~mask) | (uint8_t)val; break;
+  default:
+    lj_assertCTS(0, "bad bitfield container size %d", ctype_bitcsz(info));
+    break;
+  }
+}
+
+/* -- Initialize C type with TValues -------------------------------------- */
+
+/* Initialize an array with TValues. */
+static void cconv_array_init_l(lua_State *L, CTState *cts, CType *d,
+			       CTypeID did, CTSize sz, uint8_t *dp,
+			       TValue *o, MSize len)
+{
+  CType dsnap, dcsnap;
+  CTInfo dinfo;
+  CTypeID dcid;
+  CTSize ofs, esize;
+  MSize i;
+  UNUSED(d);
+  if (!cconv_ctype_snapshot_wait(L, cts, did, &dsnap))
+    cconv_err_initov_l(L, cts, did);
+  dinfo = ctype_info_acq(&dsnap);
+  dcid = cconv_rawid_wait(L, cts, ctype_cid(dinfo), did, &dcsnap,
+			  NULL, &esize);
+  if (len*esize > sz)
+    cconv_err_initov_l(L, cts, did);
+  for (i = 0, ofs = 0; i < len; i++, ofs += esize) {
+    lj_cconv_ct_tv_l(L, cts, &dcsnap, dcid, dp + ofs, o + i, 0);
+  }
+  if (ofs == esize) {  /* Replicate a single element. */
+    for (; ofs < sz; ofs += esize) memcpy(dp + ofs, dp, esize);
+  } else {  /* Otherwise fill the remainder with zero. */
+    memset(dp + ofs, 0, sz - ofs);
+  }
+}
+
+/* Initialize a sub-struct/union with TValues. */
+static void cconv_substruct_init_l(lua_State *L, CTState *cts, CType *d,
+				   CTypeID did, uint8_t *dp,
+				   TValue *o, MSize len, MSize *ip)
+{
+  CType dsnap;
+  CTypeID id;
+  CTInfo dinfo;
+  UNUSED(d);
+  if (!cconv_ctype_snapshot_wait(L, cts, did, &dsnap))
+    cconv_err_initov_l(L, cts, did);
+  id = ctype_sib_acq(&dsnap);
+  dinfo = ctype_info_acq(&dsnap);
+  while (id) {
+    CType dfsnap;
+    CTInfo dfinfo;
+    CTSize dfsize;
+    if (!cconv_ctype_snapshot_wait(L, cts, id, &dfsnap))
+      cconv_err_initov_l(L, cts, did);
+    dfinfo = ctype_info_acq(&dfsnap);
+    dfsize = ctype_size_acq(&dfsnap);
+    id = ctype_sib_acq(&dfsnap);
+    if (ctype_isfield(dfinfo) || ctype_isbitfield(dfinfo)) {
+      MSize i = *ip;
+      if (!ctype_name_acq(&dfsnap)) continue;  /* Ignore unnamed fields. */
+      if (i >= len) break;
+      *ip = i + 1;
+      if (ctype_isfield(dfinfo)) {
+	CType fsnap;
+	CTypeID dfid = cconv_rawid_wait(L, cts, ctype_cid(dfinfo), did,
+					&fsnap, NULL, NULL);
+	lj_cconv_ct_tv_l(L, cts, &fsnap, dfid, dp+dfsize, o + i, 0);
+      } else {
+	lj_cconv_bf_tv_l(L, cts, &dfsnap, dp+dfsize, o + i);
+      }
+      if ((dinfo & CTF_UNION)) break;
+    } else if (ctype_isxattrib(dfinfo, CTA_SUBTYPE)) {
+      CType ssnap;
+      CTypeID dfid = cconv_rawid_wait(L, cts, ctype_cid(dfinfo), did,
+				      &ssnap, NULL, NULL);
+      cconv_substruct_init_l(L, cts, &ssnap, dfid, dp+dfsize, o, len,
+			     ip);
+      if ((dinfo & CTF_UNION)) break;
+    }  /* Ignore all other entries in the chain. */
+  }
+}
+
+/* Initialize a struct/union with TValues. */
+static void cconv_struct_init_l(lua_State *L, CTState *cts, CType *d,
+				CTypeID did, CTSize sz, uint8_t *dp,
+				TValue *o, MSize len)
+{
+  MSize i = 0;
+  memset(dp, 0, sz);  /* Much simpler to clear the struct first. */
+  cconv_substruct_init_l(L, cts, d, did, dp, o, len, &i);
+  if (i < len)
+    cconv_err_initov_l(L, cts, did);
+}
+
+/* Check whether to use a multi-value initializer.
+** This is true if an aggregate is to be initialized with a value.
+** Valarrays are treated as values here so ct_tv handles (V|C, I|F).
+*/
+int lj_cconv_multi_init_l(lua_State *L, CTState *cts, CTypeID did,
+			  CType *d, TValue *o)
+{
+  CTInfo dinfo = ctype_info_acq(d);
+  if (!(ctype_isrefarray(dinfo) || ctype_isstruct(dinfo)))
+    return 0;  /* Destination is not an aggregate. */
+  if (tvistab(o) || (tvisstr(o) && !ctype_isstruct(dinfo)))
+    return 0;  /* Initializer is not a value. */
+  if (tviscdata(o)) {
+    CTypeID sid;
+    if (lj_ctype_rawref_wait(L, cts, cdataV(o)->ctypeid, &sid, NULL) &&
+	sid == did)
+      return 0;  /* Source and destination are identical aggregates. */
+  }
+  return 1;  /* Otherwise the initializer is a value. */
+}
+
+/* Initialize C type with TValues. Caveat: expects to get the raw CType! */
+void lj_cconv_ct_init_l(lua_State *L, CTState *cts, CType *d, CTypeID did,
+			CTSize sz, uint8_t *dp, TValue *o, MSize len)
+{
+  if (len == 0)
+    memset(dp, 0, sz);
+  else {
+    CType dsnap;
+    CTInfo dinfo;
+    if (!cconv_ctype_snapshot_wait(L, cts, did, &dsnap))
+      cconv_err_initov_l(L, cts, did);
+    dinfo = ctype_info_acq(&dsnap);
+    if (len == 1 && !lj_cconv_multi_init_l(L, cts, did, &dsnap, o))
+      lj_cconv_ct_tv_l(L, cts, &dsnap, did, dp, o, 0);
+    else if (ctype_isarray(dinfo))  /* Also handles valarray init with len>1. */
+      cconv_array_init_l(L, cts, &dsnap, did, sz, dp, o, len);
+    else if (ctype_isstruct(dinfo))
+      cconv_struct_init_l(L, cts, &dsnap, did, sz, dp, o, len);
+    else
+      cconv_err_initov_l(L, cts, did);
+  }
+}
+
+#endif

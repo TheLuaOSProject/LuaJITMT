@@ -1,0 +1,26 @@
+# Scheduler terminal-close fixture correction — validated handoff
+
+The three-line fixture cleanup fixes the demonstrated skipped-close leak across all8 tested runtime variants. All8 full scheduler runs finish with their existing assertions and empty stderr; all4 ASan runs keep LeakSanitizer enabled. A positive read-only witness confirms real close admission, the ordinary shutdown path, GC2 teardown and return from lua_close. No runtime close-admission or other runtime source changes are made.
+
+Fixture-cleanup.patch SHA25667b54d179d8a6fb4e95920662344c7737828bf1f86d47977c350367eb2b55f23. Input publication-corrected fixture SHA256f476733106d7e2552c9e47757b35f1c1dc78cf8b3cb0d47c17f17ed58fe70dca; final candidate fixture SHA256e9d2173e1279088d500b7bff816dae54e260b039ad5c5d6034f738d5ad2a1a27. The patch is unchanged from the accepted source proposal and applies on top of the publication-precondition correction. No shared fixture/source/build has been edited.
+
+## Problem, correction and actual cleanup proof
+
+The fixture's test_multistate_terminal_tg_reclaim sets mt_shutdown(g2)=1 to exercise terminal TG unlink while raw TLS still names universe1. The prior fixture leaves that synthetic value set when it calls lua_close(L2). Its matching ASan control reports131280 leaked bytes in6 allocations. The original read-only witness observes mt_shutdown1 and lj_thr_main_close_claim returning0 at that exact call; production lua_close immediately returns on the rejected claim. Original leak reports, claim witness and unbuilt proposal checkpoint remain frozen and unchanged (proposal-manifest SHA2204511b394ec389fccc7b8527c6cc7f24892b45ef7081a0c276fafcb32ce667).
+
+The correction restores only that synthetic shutdown flag to0 after all existing terminal-unlink and retired-worker-empty assertions, before the unchanged lua_close. The terminal assertions still run with synthetic shutdown1. Real close admission retains its complete actor/lifecycle/shutdown guards, and real shutdown remains responsible for setting its own terminal state.
+
+The new read-only witness uses the exact successful pristine597b ASan fixture ELF. At entry to the intended lua_close it observes mt_shutdown0, n_threads1, n_workers0, worker_active0 and phaseIDLE. The actual lj_thr_main_close_claim returns1. The same L then enters close_state with mt_shutdown1 set by the ordinary shutdown path, enters lj_gc2_fini for that exact universe, and returns from lua_close to the original post-close TLS/root assertions. The debugger never assigns runtime fields, calls runtime functions, or dereferences the released state after close returns. The complete five records are in positive-witness-state.json. GDB exits0 after terminating the stopped inferior after return; that is a state witness, not a full fixture pass. Eight separate uninterrupted successful fixture runs establish full-test and leak-check completion.
+
+## Exact validation variants
+
+- Pristine597b, six helpers plus assertions/APICHECK: normal and target-only ASan both pass.
+- Isolated fair597b (four-file a62a8251 patch), the same six helpers plus assertions/APICHECK: normal and target-only ASan both pass.
+- Exact runtime79345529, original eight build defines including assertions/APICHECK: strict and target-only ASan both pass. The copied strict/ASan source trees match all225 runtime-input hashes supplied by the parent's current combined-source setup. These defines include ARENA/XSAVE helpers and are not treated as equivalent to the different597b six-helper set.
+- Runtime79345529 plus fair a62a8251, the parent's new ten-define strict/ASan builds in /tmp/lj-reclaim-fair-combined-20260905-yws2eaap: both pass. These are separately identified combined variants; the constructor baseline package was not modified or implicitly combined.
+
+Each full run completes in approximately64ms as measured by the process runner, within its unchanged60s outer bound. These are validation observations, not a throughput benchmark. Every ASan run uses detect_leaks=1:abort_on_error=1; no sanitizer/leak report is suppressed. The same pthread_create/pthread_join wrappers, graph, terminal checks, outer TLS/root preservation checks, SSB publication precondition, worker assertions and all original internal bounds remain.
+
+The first optional runtime793 compiles lacked fixture-only tests/lib headers in those archived trees and failed before runtime. Those outputs remain in validation/. A separate successor under validation-793-fixture-headers supplies byte-identical test_sleep.h and tg_stopreq_fixture_helpers.h from the frozen fixture source via an explicit include path; each runtime's own src headers, library and compile defines stay unchanged. This is a recorded fixture include prerequisite, not a runtime or assertion change.
+
+All archive/ELF/source identities, exact argv/CWD/LUA_PATH/ASAN_OPTIONS, build provenance, fixed bounds, stdout/stderr and results are preserved in validation/, validation-793-fixture-headers/ and final-runtime-summary.json. The original leak reports remain negative controls, and the broader fair-source validation stays frozen separately. This correction closes the scheduler fixture's demonstrated leak; it makes no claim about the unrelated idle-entry timeout or general runtime leak freedom.

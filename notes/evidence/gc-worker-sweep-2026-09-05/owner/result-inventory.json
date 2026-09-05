@@ -1,0 +1,3865 @@
+[
+  {
+    "result_file": "baseline-asan-helpers-duplicate-correction-forced-results.json",
+    "label": "t-safepoint-local-native-duplicate-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.26416941399656935,
+    "argv": [
+      "clang",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-asan-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/duplicate-correction-forced/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-asan-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-asan-helpers-duplicate-correction-forced-t-safepoint-local-native-duplicate",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "baseline-asan-helpers-duplicate-correction-forced-results.json",
+    "label": "t-safepoint-local-native-duplicate-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.015658624994102865,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-asan-helpers-duplicate-correction-forced-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "baseline-asan-helpers-duplicate-correction-results.json",
+    "label": "t-safepoint-local-native-duplicate-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.26452423799491953,
+    "argv": [
+      "clang",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-asan-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/duplicate-correction/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-asan-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-asan-helpers-duplicate-correction-t-safepoint-local-native-duplicate",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "baseline-asan-helpers-duplicate-correction-results.json",
+    "label": "t-safepoint-local-native-duplicate-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.015757729001052212,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-asan-helpers-duplicate-correction-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "baseline-asan-helpers-duplicate-correction-v2-forced-results.json",
+    "label": "t-safepoint-local-native-duplicate-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.26464487700286554,
+    "argv": [
+      "clang",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-asan-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/duplicate-correction-v2-forced/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-asan-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-asan-helpers-duplicate-correction-v2-forced-t-safepoint-local-native-duplicate",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "baseline-asan-helpers-duplicate-correction-v2-forced-results.json",
+    "label": "t-safepoint-local-native-duplicate-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.015723698001238517,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-asan-helpers-duplicate-correction-v2-forced-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "baseline-asan-helpers-duplicate-correction-v2-results.json",
+    "label": "t-safepoint-local-native-duplicate-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2641920050009503,
+    "argv": [
+      "clang",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-asan-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/duplicate-correction-v2/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-asan-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-asan-helpers-duplicate-correction-v2-t-safepoint-local-native-duplicate",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "baseline-asan-helpers-duplicate-correction-v2-results.json",
+    "label": "t-safepoint-local-native-duplicate-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.01575591000437271,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-asan-helpers-duplicate-correction-v2-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "baseline-helpers-duplicate-correction-forced-results.json",
+    "label": "t-safepoint-local-native-duplicate-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2644567979950807,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/duplicate-correction-forced/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers-duplicate-correction-forced-t-safepoint-local-native-duplicate",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "baseline-helpers-duplicate-correction-forced-results.json",
+    "label": "t-safepoint-local-native-duplicate-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.0078249189973576,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers-duplicate-correction-forced-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "baseline-helpers-duplicate-correction-results.json",
+    "label": "t-safepoint-local-native-duplicate-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2141868440012331,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/duplicate-correction/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers-duplicate-correction-t-safepoint-local-native-duplicate",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "baseline-helpers-duplicate-correction-results.json",
+    "label": "t-safepoint-local-native-duplicate-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007817217003321275,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers-duplicate-correction-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "baseline-helpers-duplicate-correction-v2-forced-results.json",
+    "label": "t-safepoint-local-native-duplicate-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2143219819990918,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/duplicate-correction-v2-forced/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers-duplicate-correction-v2-forced-t-safepoint-local-native-duplicate",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "baseline-helpers-duplicate-correction-v2-forced-results.json",
+    "label": "t-safepoint-local-native-duplicate-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007681125003728084,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers-duplicate-correction-v2-forced-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "baseline-helpers-duplicate-correction-v2-results.json",
+    "label": "t-safepoint-local-native-duplicate-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2142656869982602,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/duplicate-correction-v2/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers-duplicate-correction-v2-t-safepoint-local-native-duplicate",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "baseline-helpers-duplicate-correction-v2-results.json",
+    "label": "t-safepoint-local-native-duplicate-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007864949002396315,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers-duplicate-correction-v2-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "baseline-helpers-duplicate-diagnostic-results.json",
+    "label": "t-safepoint-local-native-duplicate-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.16440927700023167,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/duplicate-diagnostic/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers-duplicate-diagnostic-t-safepoint-local-native-duplicate",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "baseline-helpers-duplicate-diagnostic-results.json",
+    "label": "t-safepoint-local-native-duplicate-0",
+    "kind": "runtime",
+    "exit_code": -6,
+    "timeout": false,
+    "seconds": 0.11413450999680208,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers-duplicate-diagnostic-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "baseline-helpers-duplicate-repeat-results.json",
+    "label": "t-safepoint-local-native-duplicate-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.16420813399599865,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers-duplicate-repeat-t-safepoint-local-native-duplicate",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "baseline-helpers-duplicate-repeat-results.json",
+    "label": "t-safepoint-local-native-duplicate-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007563844003016129,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers-duplicate-repeat-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "baseline-helpers-duplicate-repeat-results.json",
+    "label": "t-safepoint-local-native-duplicate-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007370722996711265,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers-duplicate-repeat-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "baseline-helpers-duplicate-repeat-results.json",
+    "label": "t-safepoint-local-native-duplicate-2",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.00749031900340924,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers-duplicate-repeat-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "baseline-helpers-duplicate-repeat-results.json",
+    "label": "t-safepoint-local-native-duplicate-3",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007440562003466766,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers-duplicate-repeat-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "baseline-helpers-duplicate-repeat-results.json",
+    "label": "t-safepoint-local-native-duplicate-4",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007360684001469053,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers-duplicate-repeat-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "baseline-results.json",
+    "label": "compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.1644192980020307,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-string-retention.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-retention"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "baseline-results.json",
+    "label": "0-0-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2140586550012813,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-retention",
+      "0",
+      "0",
+      "0",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/peer-control.lua"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "baseline-results.json",
+    "label": "0-0-2",
+    "kind": "runtime",
+    "exit_code": 2,
+    "timeout": false,
+    "seconds": 3.123880684004689,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-retention",
+      "0",
+      "0",
+      "2",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/peer-control.lua"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "baseline-results.json",
+    "label": "0-1-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2147539730067365,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-retention",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/peer-control.lua"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "baseline-results.json",
+    "label": "0-1-2",
+    "kind": "runtime",
+    "exit_code": 2,
+    "timeout": false,
+    "seconds": 3.12572631900548,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-retention",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/peer-control.lua"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-detach-v1-results.json",
+    "label": "compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.3145964800060028,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-detach.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-Wl,--wrap=lj_gc2_flush_ssb_detach",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_arena_alloc_prepare_sweep_kind",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-detach-v1-exe"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-detach-v1-results.json",
+    "label": "0",
+    "kind": "runtime",
+    "exit_code": 2,
+    "timeout": false,
+    "seconds": 0.007532520001404919,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-detach-v1-exe",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-detach-v1-results.json",
+    "label": "1",
+    "kind": "runtime",
+    "exit_code": 2,
+    "timeout": false,
+    "seconds": 0.007509242001106031,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-detach-v1-exe",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v1-results.json",
+    "label": "compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.16412880199641222,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-stop.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v1-exe"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v1-results.json",
+    "label": "0-1-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007747768999252003,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v1-exe",
+      "0",
+      "1",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v1-results.json",
+    "label": "0-1-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007619691001309548,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v1-exe",
+      "0",
+      "1",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v1-results.json",
+    "label": "0-2-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007435677005560137,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v1-exe",
+      "0",
+      "2",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v1-results.json",
+    "label": "0-2-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007377997993899044,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v1-exe",
+      "0",
+      "2",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v1-results.json",
+    "label": "1-1-0",
+    "kind": "runtime",
+    "exit_code": -6,
+    "timeout": false,
+    "seconds": 0.11369557800207986,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v1-exe",
+      "1",
+      "1",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v1-results.json",
+    "label": "1-1-1",
+    "kind": "runtime",
+    "exit_code": -6,
+    "timeout": false,
+    "seconds": 0.06411805399693549,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v1-exe",
+      "1",
+      "1",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v1-results.json",
+    "label": "1-2-0",
+    "kind": "runtime",
+    "exit_code": -6,
+    "timeout": false,
+    "seconds": 0.11391010000079405,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v1-exe",
+      "1",
+      "2",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v1-results.json",
+    "label": "1-2-1",
+    "kind": "runtime",
+    "exit_code": -6,
+    "timeout": false,
+    "seconds": 0.11391649099823553,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v1-exe",
+      "1",
+      "2",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v2-results.json",
+    "label": "compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.11402352999721188,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-stop.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v2-exe"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v2-results.json",
+    "label": "0-1-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007551868999144062,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v2-exe",
+      "0",
+      "1",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v2-results.json",
+    "label": "0-1-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007342112003243528,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v2-exe",
+      "0",
+      "1",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v2-results.json",
+    "label": "0-2-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007311091001611203,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v2-exe",
+      "0",
+      "2",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v2-results.json",
+    "label": "0-2-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.00737123099679593,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v2-exe",
+      "0",
+      "2",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v2-results.json",
+    "label": "1-1-0",
+    "kind": "runtime",
+    "exit_code": -6,
+    "timeout": false,
+    "seconds": 10.092327020000084,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v2-exe",
+      "1",
+      "1",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v2-results.json",
+    "label": "1-1-1",
+    "kind": "runtime",
+    "exit_code": -6,
+    "timeout": false,
+    "seconds": 10.07903685799829,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v2-exe",
+      "1",
+      "1",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v2-results.json",
+    "label": "1-2-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007477202998416033,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v2-exe",
+      "1",
+      "2",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v2-results.json",
+    "label": "1-2-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007432735001202673,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v2-exe",
+      "1",
+      "2",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v3-results.json",
+    "label": "compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.1639446070039412,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-stop.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v3-exe"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v3-results.json",
+    "label": "0-1-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.0075123480055481195,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v3-exe",
+      "0",
+      "1",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v3-results.json",
+    "label": "0-1-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.0074474220018601045,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v3-exe",
+      "0",
+      "1",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v3-results.json",
+    "label": "0-2-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007414990999677684,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v3-exe",
+      "0",
+      "2",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v3-results.json",
+    "label": "0-2-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007412227998429444,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v3-exe",
+      "0",
+      "2",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v3-results.json",
+    "label": "1-1-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.0073568299994803965,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v3-exe",
+      "1",
+      "1",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v3-results.json",
+    "label": "1-1-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007344761994318105,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v3-exe",
+      "1",
+      "1",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v3-results.json",
+    "label": "1-2-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007369078004558105,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v3-exe",
+      "1",
+      "2",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate-stop-v3-results.json",
+    "label": "1-2-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.003487384004984051,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v3-exe",
+      "1",
+      "2",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-asan-consumed-v1-results.json",
+    "label": "compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2643192609975813,
+    "argv": [
+      "clang",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-consumed.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-Wl,--wrap=lj_native_leave_tg",
+      "-Wl,--wrap=lj_tg_detach",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_arena_alloc_prepare_sweep_kind",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-consumed-v1-exe"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-consumed-v1-results.json",
+    "label": "0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.06412672399892472,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-consumed-v1-exe",
+      "0"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-consumed-v1-results.json",
+    "label": "1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.06366998800513102,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-consumed-v1-exe",
+      "1"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-detach-v1-results.json",
+    "label": "compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.3144861660039169,
+    "argv": [
+      "clang",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-detach.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-Wl,--wrap=lj_gc2_flush_ssb_detach",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_arena_alloc_prepare_sweep_kind",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-detach-v1-exe"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-detach-v1-results.json",
+    "label": "0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.03186245599499671,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-detach-v1-exe",
+      "0"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-detach-v1-results.json",
+    "label": "1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.015798192005604506,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-detach-v1-exe",
+      "1"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-boundary-existing-results.json",
+    "label": "t-gc2-recovery-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.7662128450028831,
+    "argv": [
+      "clang",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-recovery.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-boundary-existing-t-gc2-recovery"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-boundary-existing-results.json",
+    "label": "t-gc2-recovery-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2641338889952749,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-boundary-existing-t-gc2-recovery"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-boundary-existing-results.json",
+    "label": "t-gc2-sweep-public-table-rescan-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.31433251799899153,
+    "argv": [
+      "clang",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-sweep-public-table-rescan.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-boundary-existing-t-gc2-sweep-public-table-rescan",
+      "-Wl,--wrap=lj_ctype_fin_istab"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-boundary-existing-results.json",
+    "label": "t-gc2-sweep-public-table-rescan-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.11403751799662132,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-boundary-existing-t-gc2-sweep-public-table-rescan"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-boundary-existing-results.json",
+    "label": "t-gc2-sweep-leaf-publication-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2642605180008104,
+    "argv": [
+      "clang",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-sweep-leaf-publication.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-boundary-existing-t-gc2-sweep-leaf-publication"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-boundary-existing-results.json",
+    "label": "t-gc2-sweep-leaf-publication-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.1138844790039002,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-boundary-existing-t-gc2-sweep-leaf-publication"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-boundary-existing-results.json",
+    "label": "t-gc2-sweep-edge-lease-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.31413536600302905,
+    "argv": [
+      "clang",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-sweep-edge-lease.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-boundary-existing-t-gc2-sweep-edge-lease",
+      "-Wl,--wrap=lj_arena_hugetab_mark",
+      "-Wl,--wrap=lj_arena_hugetab_mark_cdata_range_reader_acquire",
+      "-Wl,--wrap=lj_arena_hugetab_reader_cdata_range_acquire",
+      "-Wl,--wrap=lj_arena_hugetab_reader_release",
+      "-Wl,--wrap=lj_arena_hugetab_rescue_enter",
+      "-Wl,--wrap=lj_arena_rescue_enter"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-boundary-existing-results.json",
+    "label": "t-gc2-sweep-edge-lease-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.06384334999893326,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-boundary-existing-t-gc2-sweep-edge-lease"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-duplicate-correction-forced-results.json",
+    "label": "t-safepoint-local-native-duplicate-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.31453100300132064,
+    "argv": [
+      "clang",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/duplicate-correction-forced/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-duplicate-correction-forced-t-safepoint-local-native-duplicate",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-duplicate-correction-forced-results.json",
+    "label": "t-safepoint-local-native-duplicate-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.015846875998249743,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-duplicate-correction-forced-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-duplicate-correction-results.json",
+    "label": "t-safepoint-local-native-duplicate-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2644006369955605,
+    "argv": [
+      "clang",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/duplicate-correction/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-duplicate-correction-t-safepoint-local-native-duplicate",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-duplicate-correction-results.json",
+    "label": "t-safepoint-local-native-duplicate-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.015813592995982617,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-duplicate-correction-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-duplicate-correction-v2-forced-results.json",
+    "label": "t-safepoint-local-native-duplicate-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2643413760015392,
+    "argv": [
+      "clang",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/duplicate-correction-v2-forced/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-duplicate-correction-v2-forced-t-safepoint-local-native-duplicate",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-duplicate-correction-v2-forced-results.json",
+    "label": "t-safepoint-local-native-duplicate-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.031775117000506725,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-duplicate-correction-v2-forced-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-duplicate-correction-v2-results.json",
+    "label": "t-safepoint-local-native-duplicate-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2646428179941722,
+    "argv": [
+      "clang",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/duplicate-correction-v2/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-duplicate-correction-v2-t-safepoint-local-native-duplicate",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-duplicate-correction-v2-results.json",
+    "label": "t-safepoint-local-native-duplicate-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.015613689996825997,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-duplicate-correction-v2-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-existing-results.json",
+    "label": "t-safepoint-local-native-duplicate-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2644915840064641,
+    "argv": [
+      "clang",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-safepoint-local-native-duplicate",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-existing-results.json",
+    "label": "t-safepoint-local-native-duplicate-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.015997252994566225,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-existing-results.json",
+    "label": "t-safepoint-native-root-hold-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2642270930009545,
+    "argv": [
+      "clang",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-safepoint-native-root-hold.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-safepoint-native-root-hold",
+      "-Wl,--wrap=lj_gc2_flush_ssb",
+      "-Wl,--wrap=lj_gc2_scan_cycle_global_roots",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-existing-results.json",
+    "label": "t-safepoint-native-root-hold-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.015797188003489282,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-safepoint-native-root-hold",
+      "0"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-existing-results.json",
+    "label": "t-safepoint-native-root-hold-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.015477354994800407,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-safepoint-native-root-hold",
+      "1"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-existing-results.json",
+    "label": "t-safepoint-native-root-hold-2",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.015555202000541613,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-safepoint-native-root-hold",
+      "2"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-existing-results.json",
+    "label": "t-safepoint-native-root-hold-3",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.015461048002180178,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-safepoint-native-root-hold",
+      "3"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-existing-results.json",
+    "label": "t-safepoint-remote-root-completion-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2644541749978089,
+    "argv": [
+      "clang",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-safepoint-remote-root-completion.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-safepoint-remote-root-completion",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-existing-results.json",
+    "label": "t-safepoint-remote-root-completion-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.0321725379981217,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-safepoint-remote-root-completion",
+      "0"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-existing-results.json",
+    "label": "t-safepoint-remote-root-completion-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.031731825998576824,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-safepoint-remote-root-completion",
+      "1"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-existing-results.json",
+    "label": "t-safepoint-remote-root-completion-2",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.03160871100408258,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-safepoint-remote-root-completion",
+      "2"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-existing-results.json",
+    "label": "t-safepoint-remote-root-completion-3",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.03157408600236522,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-safepoint-remote-root-completion",
+      "3"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-existing-results.json",
+    "label": "t-safepoint-remote-root-completion-4",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.015471154998522252,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-safepoint-remote-root-completion",
+      "4"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-existing-results.json",
+    "label": "t-safepoint-remote-root-completion-5",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.01560723700094968,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-safepoint-remote-root-completion",
+      "5"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-existing-results.json",
+    "label": "t-gc2-worker-scheduler-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.5649646370002301,
+    "argv": [
+      "clang",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-worker-scheduler.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-gc2-worker-scheduler",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-existing-results.json",
+    "label": "t-gc2-worker-scheduler-0",
+    "kind": "runtime",
+    "exit_code": -6,
+    "timeout": false,
+    "seconds": 0.21454906900180504,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-gc2-worker-scheduler"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-scheduler-cleanup-v2-results.json",
+    "label": "t-gc2-worker-scheduler-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.5645319300019764,
+    "argv": [
+      "clang",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/existing-cleanup-v2/tests/t-gc2-worker-scheduler.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-scheduler-cleanup-v2-t-gc2-worker-scheduler",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-helpers-scheduler-cleanup-v2-results.json",
+    "label": "t-gc2-worker-scheduler-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.06420713100669673,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-scheduler-cleanup-v2-t-gc2-worker-scheduler"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-quiet-v1-results.json",
+    "label": "compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.26498472900129855,
+    "argv": [
+      "clang",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-quiet.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-Wl,--wrap=lj_gc_sweep_gc2_unmarked",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-quiet-v1-exe"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-quiet-v1-results.json",
+    "label": "1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.0639284429998952,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-quiet-v1-exe",
+      "1"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-quiet-v1-results.json",
+    "label": "2",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.11417211200023303,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-quiet-v1-exe",
+      "2"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-results.json",
+    "label": "compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2647547509986907,
+    "argv": [
+      "clang",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-string-retention.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-retention"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-results.json",
+    "label": "0-0-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2642217079992406,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-retention",
+      "0",
+      "0",
+      "0",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/peer-control.lua"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-results.json",
+    "label": "0-0-2",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 1.3172152120023384,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-retention",
+      "0",
+      "0",
+      "2",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/peer-control.lua"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-results.json",
+    "label": "0-1-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.4647783469990827,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-retention",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/peer-control.lua"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-results.json",
+    "label": "0-1-2",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 2.2178381539997645,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-retention",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/peer-control.lua"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-stop-v3-results.json",
+    "label": "compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.26437216799968155,
+    "argv": [
+      "clang",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-stop.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-stop-v3-exe"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-stop-v3-results.json",
+    "label": "0-1-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.01569135000318056,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-stop-v3-exe",
+      "0",
+      "1",
+      "0"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-stop-v3-results.json",
+    "label": "0-1-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.015478023997275159,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-stop-v3-exe",
+      "0",
+      "1",
+      "1"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-stop-v3-results.json",
+    "label": "0-2-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.015583898006298114,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-stop-v3-exe",
+      "0",
+      "2",
+      "0"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-stop-v3-results.json",
+    "label": "0-2-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.015465206000953913,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-stop-v3-exe",
+      "0",
+      "2",
+      "1"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-stop-v3-results.json",
+    "label": "1-1-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.015517742998781614,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-stop-v3-exe",
+      "1",
+      "1",
+      "0"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-stop-v3-results.json",
+    "label": "1-1-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.015555105004750658,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-stop-v3-exe",
+      "1",
+      "1",
+      "1"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-stop-v3-results.json",
+    "label": "1-2-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.015540617998340167,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-stop-v3-exe",
+      "1",
+      "2",
+      "0"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-asan-stop-v3-results.json",
+    "label": "1-2-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.03157237599953078,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-stop-v3-exe",
+      "1",
+      "2",
+      "1"
+    ],
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "result_file": "candidate2-assert-consumed-v1-results.json",
+    "label": "compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.21414062899566488,
+    "argv": [
+      "cc",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-consumed.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-Wl,--wrap=lj_native_leave_tg",
+      "-Wl,--wrap=lj_tg_detach",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_arena_alloc_prepare_sweep_kind",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-consumed-v1-exe"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-assert-consumed-v1-results.json",
+    "label": "0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.031912476995785255,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-consumed-v1-exe",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-assert-consumed-v1-results.json",
+    "label": "1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.03158840999822132,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-consumed-v1-exe",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-assert-detach-v1-results.json",
+    "label": "compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2650774369976716,
+    "argv": [
+      "cc",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-detach.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-Wl,--wrap=lj_gc2_flush_ssb_detach",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_arena_alloc_prepare_sweep_kind",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-detach-v1-exe"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-assert-detach-v1-results.json",
+    "label": "0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007570994996058289,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-detach-v1-exe",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-assert-detach-v1-results.json",
+    "label": "1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007531232004112098,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-detach-v1-exe",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-assert-quiet-v1-results.json",
+    "label": "compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2145452379991184,
+    "argv": [
+      "cc",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-quiet.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-Wl,--wrap=lj_gc_sweep_gc2_unmarked",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-quiet-v1-exe"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-assert-quiet-v1-results.json",
+    "label": "1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.06406893399980618,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-quiet-v1-exe",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-assert-quiet-v1-results.json",
+    "label": "2",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.06379987399850506,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-quiet-v1-exe",
+      "2"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-assert-results.json",
+    "label": "compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.21458630899724085,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-string-retention.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-retention"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-assert-results.json",
+    "label": "0-0-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2142468829988502,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-retention",
+      "0",
+      "0",
+      "0",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/peer-control.lua"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-assert-results.json",
+    "label": "0-0-2",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.4653445909934817,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-retention",
+      "0",
+      "0",
+      "2",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/peer-control.lua"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-assert-results.json",
+    "label": "0-1-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.26450367600045865,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-retention",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/peer-control.lua"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-assert-results.json",
+    "label": "0-1-2",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.46495957199658733,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-retention",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/peer-control.lua"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-assert-stop-v3-results.json",
+    "label": "compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.16402435900090495,
+    "argv": [
+      "cc",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-stop.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-stop-v3-exe"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-assert-stop-v3-results.json",
+    "label": "0-1-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007681200004299171,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-stop-v3-exe",
+      "0",
+      "1",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-assert-stop-v3-results.json",
+    "label": "0-1-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007695658998272847,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-stop-v3-exe",
+      "0",
+      "1",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-assert-stop-v3-results.json",
+    "label": "0-2-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007441951005603187,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-stop-v3-exe",
+      "0",
+      "2",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-assert-stop-v3-results.json",
+    "label": "0-2-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007388915997580625,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-stop-v3-exe",
+      "0",
+      "2",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-assert-stop-v3-results.json",
+    "label": "1-1-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007353348002652638,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-stop-v3-exe",
+      "1",
+      "1",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-assert-stop-v3-results.json",
+    "label": "1-1-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007369822997134179,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-stop-v3-exe",
+      "1",
+      "1",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-assert-stop-v3-results.json",
+    "label": "1-2-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007358167000347748,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-stop-v3-exe",
+      "1",
+      "2",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-assert-stop-v3-results.json",
+    "label": "1-2-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007409092999296263,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-stop-v3-exe",
+      "1",
+      "2",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-consumed-v1-results.json",
+    "label": "compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.16419947800022783,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-consumed.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-Wl,--wrap=lj_native_leave_tg",
+      "-Wl,--wrap=lj_tg_detach",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_arena_alloc_prepare_sweep_kind",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-consumed-v1-exe"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-consumed-v1-results.json",
+    "label": "0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.03213814899936551,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-consumed-v1-exe",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-consumed-v1-results.json",
+    "label": "1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.031804751000890974,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-consumed-v1-exe",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-detach-v1-results.json",
+    "label": "compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.21456804500485305,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-detach.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-Wl,--wrap=lj_gc2_flush_ssb_detach",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_arena_alloc_prepare_sweep_kind",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-detach-v1-exe"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-detach-v1-results.json",
+    "label": "0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007412621998810209,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-detach-v1-exe",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-detach-v1-results.json",
+    "label": "1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007344665995333344,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-detach-v1-exe",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-boundary-existing-results.json",
+    "label": "t-gc2-recovery-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.6156721040024422,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-recovery.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-boundary-existing-t-gc2-recovery"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-boundary-existing-results.json",
+    "label": "t-gc2-recovery-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2142869039962534,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-boundary-existing-t-gc2-recovery"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-boundary-existing-results.json",
+    "label": "t-gc2-sweep-public-table-rescan-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2640822460016352,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-sweep-public-table-rescan.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-boundary-existing-t-gc2-sweep-public-table-rescan",
+      "-Wl,--wrap=lj_ctype_fin_istab"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-boundary-existing-results.json",
+    "label": "t-gc2-sweep-public-table-rescan-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.06388378699921304,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-boundary-existing-t-gc2-sweep-public-table-rescan"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-boundary-existing-results.json",
+    "label": "t-gc2-sweep-leaf-publication-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2645014869995066,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-sweep-leaf-publication.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-boundary-existing-t-gc2-sweep-leaf-publication"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-boundary-existing-results.json",
+    "label": "t-gc2-sweep-leaf-publication-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.031843740995100234,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-boundary-existing-t-gc2-sweep-leaf-publication"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-boundary-existing-results.json",
+    "label": "t-gc2-sweep-edge-lease-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.26456999700167216,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-sweep-edge-lease.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-boundary-existing-t-gc2-sweep-edge-lease",
+      "-Wl,--wrap=lj_arena_hugetab_mark",
+      "-Wl,--wrap=lj_arena_hugetab_mark_cdata_range_reader_acquire",
+      "-Wl,--wrap=lj_arena_hugetab_reader_cdata_range_acquire",
+      "-Wl,--wrap=lj_arena_hugetab_reader_release",
+      "-Wl,--wrap=lj_arena_hugetab_rescue_enter",
+      "-Wl,--wrap=lj_arena_rescue_enter"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-boundary-existing-results.json",
+    "label": "t-gc2-sweep-edge-lease-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.032080523000331596,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-boundary-existing-t-gc2-sweep-edge-lease"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-duplicate-correction-forced-results.json",
+    "label": "t-safepoint-local-native-duplicate-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2142716609960189,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/duplicate-correction-forced/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-duplicate-correction-forced-t-safepoint-local-native-duplicate",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-duplicate-correction-forced-results.json",
+    "label": "t-safepoint-local-native-duplicate-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.0077549119960167445,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-duplicate-correction-forced-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-duplicate-correction-results.json",
+    "label": "t-safepoint-local-native-duplicate-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.21427726500405697,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/duplicate-correction/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-duplicate-correction-t-safepoint-local-native-duplicate",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-duplicate-correction-results.json",
+    "label": "t-safepoint-local-native-duplicate-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007820697996066883,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-duplicate-correction-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-duplicate-correction-v2-forced-results.json",
+    "label": "t-safepoint-local-native-duplicate-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.1641724310029531,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/duplicate-correction-v2-forced/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-duplicate-correction-v2-forced-t-safepoint-local-native-duplicate",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-duplicate-correction-v2-forced-results.json",
+    "label": "t-safepoint-local-native-duplicate-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007810871000401676,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-duplicate-correction-v2-forced-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-duplicate-correction-v2-results.json",
+    "label": "t-safepoint-local-native-duplicate-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.21460917999502271,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/duplicate-correction-v2/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-duplicate-correction-v2-t-safepoint-local-native-duplicate",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-duplicate-correction-v2-results.json",
+    "label": "t-safepoint-local-native-duplicate-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007506014997488819,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-duplicate-correction-v2-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-duplicate-diagnostic-results.json",
+    "label": "t-safepoint-local-native-duplicate-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.21444959200016456,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/duplicate-diagnostic/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-duplicate-diagnostic-t-safepoint-local-native-duplicate",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-duplicate-diagnostic-results.json",
+    "label": "t-safepoint-local-native-duplicate-0",
+    "kind": "runtime",
+    "exit_code": -6,
+    "timeout": false,
+    "seconds": 0.11406006799370516,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-duplicate-diagnostic-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-duplicate-repeat-results.json",
+    "label": "t-safepoint-local-native-duplicate-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.1641311279963702,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-duplicate-repeat-t-safepoint-local-native-duplicate",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-duplicate-repeat-results.json",
+    "label": "t-safepoint-local-native-duplicate-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007830601003661286,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-duplicate-repeat-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-duplicate-repeat-results.json",
+    "label": "t-safepoint-local-native-duplicate-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007589348002511542,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-duplicate-repeat-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-duplicate-repeat-results.json",
+    "label": "t-safepoint-local-native-duplicate-2",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007462753994332161,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-duplicate-repeat-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-duplicate-repeat-results.json",
+    "label": "t-safepoint-local-native-duplicate-3",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007374493005045224,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-duplicate-repeat-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-duplicate-repeat-results.json",
+    "label": "t-safepoint-local-native-duplicate-4",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.0073921059956774116,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-duplicate-repeat-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-existing-results.json",
+    "label": "t-safepoint-local-native-duplicate-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.21461775799980387,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-existing-t-safepoint-local-native-duplicate",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-existing-results.json",
+    "label": "t-safepoint-local-native-duplicate-0",
+    "kind": "runtime",
+    "exit_code": -6,
+    "timeout": false,
+    "seconds": 0.11415303400281118,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-existing-t-safepoint-local-native-duplicate"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-existing-results.json",
+    "label": "t-safepoint-native-root-hold-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.21417479899537284,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-safepoint-native-root-hold.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-existing-t-safepoint-native-root-hold",
+      "-Wl,--wrap=lj_gc2_flush_ssb",
+      "-Wl,--wrap=lj_gc2_scan_cycle_global_roots",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-existing-results.json",
+    "label": "t-safepoint-native-root-hold-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.00765609199879691,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-existing-t-safepoint-native-root-hold",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-existing-results.json",
+    "label": "t-safepoint-native-root-hold-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007710548001341522,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-existing-t-safepoint-native-root-hold",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-existing-results.json",
+    "label": "t-safepoint-native-root-hold-2",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007466932998795528,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-existing-t-safepoint-native-root-hold",
+      "2"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-existing-results.json",
+    "label": "t-safepoint-native-root-hold-3",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.0074108219996560365,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-existing-t-safepoint-native-root-hold",
+      "3"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-existing-results.json",
+    "label": "t-safepoint-remote-root-completion-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2143526979998569,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-safepoint-remote-root-completion.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-existing-t-safepoint-remote-root-completion",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-existing-results.json",
+    "label": "t-safepoint-remote-root-completion-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007729566001216881,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-existing-t-safepoint-remote-root-completion",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-existing-results.json",
+    "label": "t-safepoint-remote-root-completion-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007475405000150204,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-existing-t-safepoint-remote-root-completion",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-existing-results.json",
+    "label": "t-safepoint-remote-root-completion-2",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007427687996823806,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-existing-t-safepoint-remote-root-completion",
+      "2"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-existing-results.json",
+    "label": "t-safepoint-remote-root-completion-3",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.0073477040059515275,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-existing-t-safepoint-remote-root-completion",
+      "3"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-existing-results.json",
+    "label": "t-safepoint-remote-root-completion-4",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007371257001068443,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-existing-t-safepoint-remote-root-completion",
+      "4"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-existing-results.json",
+    "label": "t-safepoint-remote-root-completion-5",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007353043001785409,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-existing-t-safepoint-remote-root-completion",
+      "5"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-existing-results.json",
+    "label": "t-gc2-worker-scheduler-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.41494607200002065,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-worker-scheduler.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-existing-t-gc2-worker-scheduler",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-existing-results.json",
+    "label": "t-gc2-worker-scheduler-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.0641638159941067,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-existing-t-gc2-worker-scheduler"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-scheduler-cleanup-v2-results.json",
+    "label": "t-gc2-worker-scheduler-compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.41510306100099115,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/existing-cleanup-v2/tests/t-gc2-worker-scheduler.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-scheduler-cleanup-v2-t-gc2-worker-scheduler",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-helpers-scheduler-cleanup-v2-results.json",
+    "label": "t-gc2-worker-scheduler-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.06386556399957044,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-scheduler-cleanup-v2-t-gc2-worker-scheduler"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-quiet-v1-results.json",
+    "label": "compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.16449682399979793,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-quiet.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-Wl,--wrap=lj_gc_sweep_gc2_unmarked",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-quiet-v1-exe"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-quiet-v1-results.json",
+    "label": "1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.06380106799770147,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-quiet-v1-exe",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-quiet-v1-results.json",
+    "label": "2",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.06416170599550242,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-quiet-v1-exe",
+      "2"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-results.json",
+    "label": "compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.1639100359971053,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-string-retention.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-retention"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-results.json",
+    "label": "0-0-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.21388993300206494,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-retention",
+      "0",
+      "0",
+      "0",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/peer-control.lua"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-results.json",
+    "label": "0-0-2",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.5143775539982016,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-retention",
+      "0",
+      "0",
+      "2",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/peer-control.lua"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-results.json",
+    "label": "0-1-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.2647323459968902,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-retention",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/peer-control.lua"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-results.json",
+    "label": "0-1-2",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.6151415790009196,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-retention",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/peer-control.lua"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-stop-v3-results.json",
+    "label": "compile",
+    "kind": "compile",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.1641592399973888,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-stop.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-stop-v3-exe"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-stop-v3-results.json",
+    "label": "0-1-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007514504002756439,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-stop-v3-exe",
+      "0",
+      "1",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-stop-v3-results.json",
+    "label": "0-1-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007415189000312239,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-stop-v3-exe",
+      "0",
+      "1",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-stop-v3-results.json",
+    "label": "0-2-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007404454001516569,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-stop-v3-exe",
+      "0",
+      "2",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-stop-v3-results.json",
+    "label": "0-2-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007355276000453159,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-stop-v3-exe",
+      "0",
+      "2",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-stop-v3-results.json",
+    "label": "1-1-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007330530002946034,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-stop-v3-exe",
+      "1",
+      "1",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-stop-v3-results.json",
+    "label": "1-1-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.00332609900215175,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-stop-v3-exe",
+      "1",
+      "1",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-stop-v3-results.json",
+    "label": "1-2-0",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.0073524169929442,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-stop-v3-exe",
+      "1",
+      "2",
+      "0"
+    ],
+    "ASAN_OPTIONS": null
+  },
+  {
+    "result_file": "candidate2-stop-v3-results.json",
+    "label": "1-2-1",
+    "kind": "runtime",
+    "exit_code": 0,
+    "timeout": false,
+    "seconds": 0.007348093997279648,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-stop-v3-exe",
+      "1",
+      "2",
+      "1"
+    ],
+    "ASAN_OPTIONS": null
+  }
+]

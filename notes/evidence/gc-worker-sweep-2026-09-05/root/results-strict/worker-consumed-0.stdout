@@ -1,0 +1,2 @@
+{"stage":"native_leave_holds_consumed_action","wanted":64,"tid":3,"depth_before_leave":1,"native":0,"poll":1,"reqmask":0,"epoch_claimed":1,"detach_entered":0}
+PASS consumed remote action retains worker before private detach

@@ -1,0 +1,12 @@
+{
+  "command": [
+    "patch",
+    "-p1",
+    "--fuzz=0",
+    "-i",
+    "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-full.patch"
+  ],
+  "exit": 0,
+  "stdout": "patching file src/lj_gc2.c\nHunk #2 succeeded at 2778 (offset 1 line).\nHunk #3 succeeded at 2795 (offset 1 line).\nHunk #4 succeeded at 2820 (offset 1 line).\nHunk #5 succeeded at 2841 (offset 1 line).\nHunk #6 succeeded at 5602 (offset 1 line).\nHunk #7 succeeded at 5649 (offset 1 line).\nHunk #8 succeeded at 5665 (offset 1 line).\nHunk #9 succeeded at 5690 (offset 1 line).\nHunk #10 succeeded at 5709 (offset 1 line).\n",
+  "stderr": ""
+}

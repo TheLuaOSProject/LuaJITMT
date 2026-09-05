@@ -1,0 +1,5 @@
+{"stage":"startup_return","actions":64}
+{"stage":"before_target_release","actions":0}
+{"stage":"pending_before_stop","actions":16,"workers":2,"api":1,"phase":3,"cycle":2,"leader":2,"pending":4,"main_native":0,"epoch":23,"owner":4294967297}
+{"stage":"joined","actions":16,"workers":2,"api":1,"ns":1394748,"phase":3,"cycle":2,"exited":2,"canonical":true}
+PASS worker bridge pending handshake stop/join

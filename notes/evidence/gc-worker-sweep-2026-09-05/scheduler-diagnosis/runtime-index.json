@@ -1,0 +1,521 @@
+{
+  "total": 25,
+  "counts": {
+    "results/combined/0": 1,
+    "results/combined/-6": 1,
+    "results/baseline/0": 2,
+    "gdb2/combined/-6": 1,
+    "gdb2/baseline/0": 8,
+    "gdb3/combined/0": 1,
+    "gdb3/combined/-6": 1,
+    "gdb3/baseline/0": 8,
+    "gdb4/combined/-6": 1,
+    "gdb4/baseline/0": 1
+  },
+  "runs": [
+    {
+      "generation": "results/results.json",
+      "name": "combined-untouched",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/combined-untouched"
+      ],
+      "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "timeout_seconds": 60,
+      "exit_code": 0,
+      "timed_out": false,
+      "seconds": 0.06370002699986799,
+      "stdout": "combined-untouched.stdout",
+      "stderr": "combined-untouched.stderr"
+    },
+    {
+      "generation": "results/results.json",
+      "name": "combined-observer",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/combined-observer"
+      ],
+      "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "timeout_seconds": 60,
+      "exit_code": -6,
+      "timed_out": false,
+      "seconds": 0.11392002300271997,
+      "stdout": "combined-observer.stdout",
+      "stderr": "combined-observer.stderr"
+    },
+    {
+      "generation": "results/results.json",
+      "name": "baseline-untouched",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/baseline-untouched"
+      ],
+      "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "timeout_seconds": 60,
+      "exit_code": 0,
+      "timed_out": false,
+      "seconds": 0.06385037799918791,
+      "stdout": "baseline-untouched.stdout",
+      "stderr": "baseline-untouched.stderr"
+    },
+    {
+      "generation": "results/results.json",
+      "name": "baseline-observer",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/baseline-observer"
+      ],
+      "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "timeout_seconds": 60,
+      "exit_code": 0,
+      "timed_out": false,
+      "seconds": 0.06362007900315803,
+      "stdout": "baseline-observer.stdout",
+      "stderr": "baseline-observer.stderr"
+    },
+    {
+      "generation": "gdb2/results.json",
+      "name": "combined-0",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/combined-stop-observer"
+      ],
+      "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "exit_code": -6,
+      "seconds": 0.21121100500022294,
+      "timeout_seconds": 60,
+      "timed_out": false,
+      "abort_stop_observed": true
+    },
+    {
+      "generation": "gdb2/results.json",
+      "name": "baseline-0",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/baseline-stop-observer"
+      ],
+      "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "exit_code": 0,
+      "seconds": 0.03682644299988169,
+      "timeout_seconds": 60,
+      "timed_out": false,
+      "abort_stop_observed": false
+    },
+    {
+      "generation": "gdb2/results.json",
+      "name": "baseline-1",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/baseline-stop-observer"
+      ],
+      "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "exit_code": 0,
+      "seconds": 0.0392177530011395,
+      "timeout_seconds": 60,
+      "timed_out": false,
+      "abort_stop_observed": false
+    },
+    {
+      "generation": "gdb2/results.json",
+      "name": "baseline-2",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/baseline-stop-observer"
+      ],
+      "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "exit_code": 0,
+      "seconds": 0.034606934001203626,
+      "timeout_seconds": 60,
+      "timed_out": false,
+      "abort_stop_observed": false
+    },
+    {
+      "generation": "gdb2/results.json",
+      "name": "baseline-3",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/baseline-stop-observer"
+      ],
+      "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "exit_code": 0,
+      "seconds": 0.03456859900325071,
+      "timeout_seconds": 60,
+      "timed_out": false,
+      "abort_stop_observed": false
+    },
+    {
+      "generation": "gdb2/results.json",
+      "name": "baseline-4",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/baseline-stop-observer"
+      ],
+      "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "exit_code": 0,
+      "seconds": 0.035149709998222534,
+      "timeout_seconds": 60,
+      "timed_out": false,
+      "abort_stop_observed": false
+    },
+    {
+      "generation": "gdb2/results.json",
+      "name": "baseline-5",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/baseline-stop-observer"
+      ],
+      "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "exit_code": 0,
+      "seconds": 0.034690444997977465,
+      "timeout_seconds": 60,
+      "timed_out": false,
+      "abort_stop_observed": false
+    },
+    {
+      "generation": "gdb2/results.json",
+      "name": "baseline-6",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/baseline-stop-observer"
+      ],
+      "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "exit_code": 0,
+      "seconds": 0.0349331239995081,
+      "timeout_seconds": 60,
+      "timed_out": false,
+      "abort_stop_observed": false
+    },
+    {
+      "generation": "gdb2/results.json",
+      "name": "baseline-7",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/baseline-stop-observer"
+      ],
+      "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "exit_code": 0,
+      "seconds": 0.037923633004538715,
+      "timeout_seconds": 60,
+      "timed_out": false,
+      "abort_stop_observed": false
+    },
+    {
+      "generation": "gdb3/results.json",
+      "name": "combined-0",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb3/combined-stop-observer"
+      ],
+      "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "exit_code": 0,
+      "seconds": 0.03914069299935363,
+      "timeout_seconds": 60,
+      "timed_out": false,
+      "abort_stop_observed": false
+    },
+    {
+      "generation": "gdb3/results.json",
+      "name": "combined-1",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb3/combined-stop-observer"
+      ],
+      "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "exit_code": -6,
+      "seconds": 0.21211401199980173,
+      "timeout_seconds": 60,
+      "timed_out": false,
+      "abort_stop_observed": true
+    },
+    {
+      "generation": "gdb3/results.json",
+      "name": "baseline-0",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb3/baseline-stop-observer"
+      ],
+      "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "exit_code": 0,
+      "seconds": 0.03590539200376952,
+      "timeout_seconds": 60,
+      "timed_out": false,
+      "abort_stop_observed": false
+    },
+    {
+      "generation": "gdb3/results.json",
+      "name": "baseline-1",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb3/baseline-stop-observer"
+      ],
+      "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "exit_code": 0,
+      "seconds": 0.036011935997521505,
+      "timeout_seconds": 60,
+      "timed_out": false,
+      "abort_stop_observed": false
+    },
+    {
+      "generation": "gdb3/results.json",
+      "name": "baseline-2",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb3/baseline-stop-observer"
+      ],
+      "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "exit_code": 0,
+      "seconds": 0.040016689999902155,
+      "timeout_seconds": 60,
+      "timed_out": false,
+      "abort_stop_observed": false
+    },
+    {
+      "generation": "gdb3/results.json",
+      "name": "baseline-3",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb3/baseline-stop-observer"
+      ],
+      "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "exit_code": 0,
+      "seconds": 0.03483403399877716,
+      "timeout_seconds": 60,
+      "timed_out": false,
+      "abort_stop_observed": false
+    },
+    {
+      "generation": "gdb3/results.json",
+      "name": "baseline-4",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb3/baseline-stop-observer"
+      ],
+      "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "exit_code": 0,
+      "seconds": 0.034722146003332455,
+      "timeout_seconds": 60,
+      "timed_out": false,
+      "abort_stop_observed": false
+    },
+    {
+      "generation": "gdb3/results.json",
+      "name": "baseline-5",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb3/baseline-stop-observer"
+      ],
+      "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "exit_code": 0,
+      "seconds": 0.036720127005537506,
+      "timeout_seconds": 60,
+      "timed_out": false,
+      "abort_stop_observed": false
+    },
+    {
+      "generation": "gdb3/results.json",
+      "name": "baseline-6",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb3/baseline-stop-observer"
+      ],
+      "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "exit_code": 0,
+      "seconds": 0.038722008001059294,
+      "timeout_seconds": 60,
+      "timed_out": false,
+      "abort_stop_observed": false
+    },
+    {
+      "generation": "gdb3/results.json",
+      "name": "baseline-7",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb3/baseline-stop-observer"
+      ],
+      "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "exit_code": 0,
+      "seconds": 0.034418728995660786,
+      "timeout_seconds": 60,
+      "timed_out": false,
+      "abort_stop_observed": false
+    },
+    {
+      "generation": "gdb4/results.json",
+      "name": "combined-0",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb4/combined-stop-observer"
+      ],
+      "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "exit_code": -6,
+      "seconds": 0.1608870600030059,
+      "timeout_seconds": 60,
+      "timed_out": false,
+      "abort_stop_observed": true
+    },
+    {
+      "generation": "gdb4/results.json",
+      "name": "baseline-0",
+      "kind": "runtime",
+      "argv": [
+        "taskset",
+        "-c",
+        "0-15",
+        "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb4/baseline-stop-observer"
+      ],
+      "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+      "environment": {
+        "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+      },
+      "exit_code": 0,
+      "seconds": 0.03686077099700924,
+      "timeout_seconds": 60,
+      "timed_out": false,
+      "abort_stop_observed": false
+    }
+  ]
+}

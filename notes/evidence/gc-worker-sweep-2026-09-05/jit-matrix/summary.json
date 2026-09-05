@@ -1,0 +1,30 @@
+{
+  "all_jit_enabled": true,
+  "cases": 12,
+  "failed": [
+    {
+      "exit": 2,
+      "kind": "candidate",
+      "name": "jit-peer0-workers0",
+      "timed_out": false
+    },
+    {
+      "exit": 2,
+      "kind": "strict",
+      "name": "jit-peer0-workers0",
+      "timed_out": false
+    },
+    {
+      "exit": 2,
+      "kind": "asan",
+      "name": "jit-peer0-workers0",
+      "timed_out": false
+    }
+  ],
+  "passed": 9,
+  "source_checks_before_after": {
+    "inputs_per_tree": 225,
+    "mismatches": 0,
+    "trees": 3
+  }
+}

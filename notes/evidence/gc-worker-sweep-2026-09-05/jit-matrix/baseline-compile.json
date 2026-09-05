@@ -1,0 +1,38 @@
+{
+  "command": [
+    "cc",
+    "-std=gnu11",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-mcx16",
+    "-MMD",
+    "-MF",
+    "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/results-baseline/automatic-retention.d",
+    "-I/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src",
+    "-I/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/tests",
+    "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/fixtures/t-string-retention.c",
+    "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/libluajit.a",
+    "-Wl,-E",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-o",
+    "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/results-baseline/automatic-retention"
+  ],
+  "cwd": "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline",
+  "environment": {
+    "LUA_PATH": "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/?.lua;/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/tests/lib/?.lua;;",
+    "RETENTION_JIT": "1"
+  },
+  "exit": 0,
+  "removed_environment": [
+    "ASAN_OPTIONS"
+  ],
+  "seconds": 0.16382991900172783,
+  "stderr": "results-baseline/compile.stderr",
+  "stdout": "results-baseline/compile.stdout",
+  "timeout_seconds": 60
+}

@@ -1,0 +1,14 @@
+{
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/duplicate-correction-forced/t-safepoint-local-native-duplicate.c": {
+    "sha256": "e8a670e8c4ad08e53e68cf3577c07e794f44008bac4e3f8707e932737c2ce443",
+    "bytes": 7644
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-duplicate-correction-forced-t-safepoint-local-native-duplicate": {
+    "sha256": "01ab8c6c1e4793b930c9b96eed28a42989aa3e9df355331d22b18e5700ec0301",
+    "bytes": 13930048
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/libluajit.a": {
+    "sha256": "496b6d5e4fbbd63fe0da39a531b8a9cd67044055e0e3b0ab5fc1e9d6ae4cbfc2",
+    "bytes": 30676960
+  }
+}

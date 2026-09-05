@@ -1,0 +1,4 @@
+diagnostic consumed hook: reqmask=4128 epoch=19 ack=18 pending=2 leader=1 phase=1 workers=0
+local native winner remains in exact consumed-poll wait: 202 0x55a7a2d263b8 0x80 0x1 0x0 0x0 0x0 0x7f75f90fdb68 0x7f75fc6367b9
+signaled=3 real-remote-scan=1 owner-scan=1 local-clear=0 teardown-during-scan=0 exact-owner-wait=1 pending=0
+local native duplicate scan hold PASS

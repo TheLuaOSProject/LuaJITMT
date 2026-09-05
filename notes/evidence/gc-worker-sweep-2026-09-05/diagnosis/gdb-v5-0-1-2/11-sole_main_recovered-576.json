@@ -1,0 +1,5275 @@
+{
+  "where": "sole_main_recovered",
+  "tick": 576,
+  "g": "0x7ffff7c90130",
+  "threads": [
+    [
+      1,
+      [
+        369877,
+        369877,
+        0
+      ],
+      "debug-observed-",
+      true
+    ]
+  ],
+  "gc2": {
+    "phase": 0,
+    "jit_phase_gate": 1,
+    "cycle": 7,
+    "thread_scan_cycle": 7,
+    "activation": {
+      "value": {
+        "lo": 7,
+        "hi": 896
+      }
+    },
+    "cycle_leader": 0,
+    "hs_epoch": 3301,
+    "hs_pending": 0,
+    "hs_actions": 10,
+    "hs_leader": 0,
+    "hs_signal_ns": 40293065808129,
+    "hs_ack_latency_samples": 11,
+    "hs_ack_latency_sum_ns": 48024053,
+    "hs_ack_latency_max_ns": 46780582,
+    "smr_reclaim_runs": 4,
+    "smr_reclaimed": 4168,
+    "smr_readers": 0,
+    "smr_reclaiming": 0,
+    "cycle_requests": 7,
+    "cycle_starts": 7,
+    "major_cycle_starts": 7,
+    "minor_cycle_requests": 0,
+    "minor_cycle_starts": 0,
+    "cycle_minor_requested": 0,
+    "cycle_sweep_minor": 0,
+    "minor_sweep_enabled": 0,
+    "cycle_roots_minor": 0,
+    "minor_roots_enabled": 0,
+    "minor_sweep_deferred": 0,
+    "minor_sweep_arenas": 0,
+    "minor_roots_deferred": 0,
+    "major_root_scans": 21,
+    "minor_root_scans": 0,
+    "pending_root_flushes": 5,
+    "pending_root_flushed": 262462,
+    "pending_root_flush_max": 258048,
+    "minor_survival_base_live": 39504,
+    "minor_survival_bytes": 0,
+    "minor_survival_pct": 0,
+    "minor_survival_threshold_pct": 80,
+    "minor_survival_major_requests": 0,
+    "force_major": 0,
+    "remembered_barriers": 0,
+    "remembered_pushed": 0,
+    "remembered_overflows": 0,
+    "remembered_filtered": 0,
+    "remembered_drained": 0,
+    "marks_this_round": 2,
+    "mark_root_scanned": 0,
+    "jit_mark_resume": 0,
+    "jit_mark_auto_yield": 0,
+    "jit_mark_yield_until_ns": 0,
+    "jit_sweep_displaced": 0,
+    "jit_sweep_yield_until_ns": 0,
+    "small_arena_tab": "0x5555556c82f0",
+    "ssb_head": "0x0",
+    "ssb_drain": "0x0",
+    "ssb_consumer_active": 0,
+    "ssb_published": 1079,
+    "ssb_drained": 1079,
+    "ssb_items_published": 97224,
+    "ssb_items_drained": 97224,
+    "recovery_items": 0,
+    "recovery_huge_items": 0,
+    "recovery_published": 256168,
+    "recovery_redirtied": 0,
+    "recovery_drained": 256168,
+    "recovery_main_state": 0,
+    "recovery_failed": 0,
+    "recovery_scan_lane": 161,
+    "recovery_small_slot": 35033,
+    "recovery_small_cell": 4089,
+    "recovery_huge_slot": 0,
+    "fixpoint_rounds": 182,
+    "fixpoint_hits": 7,
+    "mark_complete_runs": 6533,
+    "mark_complete_hits": 7,
+    "mark_complete_peer_waits": 0,
+    "mark_to_weak": 7,
+    "weak_complete_runs": 29,
+    "weak_complete_progress": 7,
+    "weak_to_sweep": 7,
+    "sweep_bridge_ready": 1,
+    "sweep_root_scanned": 0,
+    "sweep_root_cursor": "0x0",
+    "sweep_root_done": 0,
+    "sweep_grace_needed": 0,
+    "sweep_to_idle": 7,
+    "preserve_abort_to_idle": 0,
+    "alloc_total_bytes": 28016089,
+    "alloc_since_trigger": 0,
+    "cycle_alloc_bytes": 33280,
+    "trigger_bytes": 393216,
+    "hard_bytes": 786432,
+    "hard_check_bytes": 786432,
+    "helper_soft_limit": 393086,
+    "assist_runs": 0,
+    "assist_grey_drained": 0,
+    "assist_ssb_converted": 0,
+    "assist_weak_drained": 0,
+    "jit_hard_checks": 0,
+    "interp_hard_checks": 0,
+    "jit_scoped_slots_retired": 0,
+    "clib_cache_retired": "0x0",
+    "clib_handle_retired": "0x0",
+    "gcpause_pct": 200,
+    "assist_shift": 1,
+    "assist_active": 0,
+    "generational": 0,
+    "grey_stack": "0x7ffff5a02680",
+    "grey_capacity": 1024,
+    "grey_top": 10278,
+    "grey_bottom": 10278,
+    "grey_pushed": 14618,
+    "grey_drained": 3690,
+    "worker_tg_retired": "0x5555556f00a0",
+    "n_workers": 0,
+    "worker_control": 0,
+    "worker_stop": 1,
+    "worker_wake": 6945365,
+    "worker_started": 2,
+    "worker_exited": 2,
+    "worker_active": 0,
+    "mark_close_intent": 0,
+    "worker_runs": 9439,
+    "worker_grey_drained": 0,
+    "worker_ssb_converted": 0,
+    "worker_weak_drained": 0,
+    "worker_idle_declares": 1893,
+    "worker_busy_retries": 2933654,
+    "worker_wakes": 6945365,
+    "worker_parks": 2067504,
+    "worker_async_progress": 346093,
+    "deferred_epoch": 24,
+    "tg_thread_roots": 30,
+    "tg_cur_roots": 0,
+    "tg_trace_roots": 0,
+    "thread_scan_claims": 35,
+    "thread_scan_busy": 3,
+    "thread_scan_requeues": 0,
+    "thread_scan_owner_scans": 3,
+    "thread_scan_needscan": 0,
+    "thread_scan_owner_needscans": 0,
+    "table_rescan_desc": {
+      "value": {
+        "lo": 0,
+        "hi": 0
+      }
+    },
+    "table_token_topology": {
+      "value": {
+        "lo": 557,
+        "hi": 0
+      }
+    },
+    "table_token_scan_requested": 0,
+    "table_token_small_slot": 0,
+    "table_token_small_cell": 616,
+    "table_token_huge_node": "0x0",
+    "table_token_huge_incarnation": 0,
+    "table_token_huge_slot": 0,
+    "table_token_huge_pad": 0,
+    "table_token_scan_visited": 0,
+    "table_token_scan_completed": 0,
+    "table_token_scan_terminal": 0,
+    "table_token_scan_transient": 0,
+    "table_token_scan_structural": 0,
+    "table_token_scan_smr_skips": 0,
+    "table_token_scan_payloads": 0,
+    "table_token_pass_epoch": 0,
+    "table_token_pass_desc": 0,
+    "table_token_pass_ack_epoch": 0,
+    "table_token_pass_ack_desc": 0,
+    "table_token_pass_act_epoch": 0,
+    "table_token_pass_act_control": 0,
+    "table_token_pass_ack_act_epoch": 0,
+    "table_token_pass_ack_act_control": 0,
+    "table_token_pass_restarts": 0,
+    "table_token_pass_acks": 0,
+    "table_token_pass_cycle": 0,
+    "table_token_pass_phase": 0,
+    "table_token_pass_lane": 0,
+    "table_token_pass_hazard": 0,
+    "table_token_pass_ack_cycle": 0,
+    "table_token_pass_ack_phase": 0,
+    "thread_scan_needscan_pending": 0,
+    "table_rescan_pending": 0,
+    "thread_scan_dirty_misses": 0,
+    "thread_scan_frame_fallbacks": 0,
+    "ffi_native_scan_attempts": 27,
+    "ffi_native_scan_stable_frames": 0,
+    "ffi_native_scan_retries": 0,
+    "ffi_native_scan_invalid": 0,
+    "sweep_owner_runs": 587,
+    "sweep_owner_arenas": 570,
+    "sweep_owner_live_cells": 103414,
+    "sweep_live_updates": 7,
+    "sweep_live_huge_bytes": 0,
+    "live_estimate": 39504,
+    "weak_stack": "0x7ffff7a7ae00",
+    "weak_ready": "0x7ffff7a7b200",
+    "weak_overflow": "0x0",
+    "weak_capacity": 128,
+    "weak_drain_active": 0,
+    "weak_write_active": 0,
+    "weak_mark_closed": 1,
+    "weak_root_scanned": 1,
+    "weak_count": 1,
+    "weak_tables_seen": 7,
+    "weak_tables_weakkey": 7,
+    "weak_tables_weakval": 7,
+    "weak_tables_allweak": 7,
+    "weak_tables_queued": 7,
+    "weak_tables_overflow": 0,
+    "weak_scan_cursor": 0,
+    "weak_scan_runs": 0,
+    "weak_scan_tables": 0,
+    "weak_scan_slots": 0,
+    "weak_scan_clearable": 0,
+    "weak_clear_cursor": 1,
+    "weak_clear_runs": 7,
+    "weak_clear_tables": 7,
+    "weak_clear_slots": 7,
+    "weak_clear_cleared": 0,
+    "weak_bridge_skipped": 7,
+    "weak_bridge_fallbacks": 0,
+    "weak_bridge_backfills": 0,
+    "weak_bridge_backfill_tables": 0,
+    "weak_bridge_backfill_slots": 0,
+    "weak_bridge_backfill_cleared": 0,
+    "finreg_cdata_sets": 0,
+    "finreg_cdata_clears": 0,
+    "finreg_cdata_queued": 0,
+    "finreg_cdata_sweep_queued": 0,
+    "finreg_cdata_pweak_queued": 0,
+    "finreg_cdata_preclaim_obj": "0x7ffff7a30080",
+    "finreg_cdata_preclaim_fin": "0x7ffff7a10080",
+    "finreg_cdata_preclaim_capacity": 4096,
+    "finreg_cdata_preclaim_head": 0,
+    "finreg_cdata_preclaim_count": 0,
+    "finreg_cdata_pweak_claimed": 0,
+    "finreg_cdata_preclaim_overflow": 0,
+    "finreg_cdata_preclaim_dispatched": 0,
+    "finreg_cdata_order_seen": 0,
+    "finreg_cdata_order_claimed": 0,
+    "finreg_cdata_order_unlinked": 0,
+    "finreg_cdata_order_queued": 0,
+    "finreg_cdata_order_retired": 0,
+    "finreg_cdata_order_tombstones": 0,
+    "finreg_cdata_order_fallbacks": 0,
+    "finreg_cdata_pending_order_hits": 0,
+    "finreg_udata_sets": 7,
+    "finreg_udata_clears": 0,
+    "finreg_udata_queued": 0,
+    "finreg_udata_head": "0x7ffff7a7c440",
+    "finreg_udata_retired": "0x0",
+    "finreg_udata_registered": 7,
+    "finreg_udata_retired_nodes": 0,
+    "finreg_udata_discovered": 0,
+    "finreg_udata_forgets": 0,
+    "finalizer_mpsc": "0x0",
+    "finalizer_tail": "0x0",
+    "finalizer_active": 0,
+    "finalizer_owner_actor": 0,
+    "finalizer_spawn_latch": 0,
+    "finalizer_queued": 0,
+    "finalizer_dequeued": 0,
+    "finalizer_mpsc_drained": 0,
+    "finalizer_enters": 21,
+    "finalizer_leaves": 21,
+    "finalizer_sweep_blocks": 0,
+    "finalizer_spawn_deferrals": 0,
+    "finalizer_spawn_release_wakes": 0,
+    "weak_keys_marked": 0,
+    "weak_values_marked": 0,
+    "tg_registry_head": "0x7fffec000bc0",
+    "tg_registry_nodes": 4,
+    "tg_registry_incomplete": 0,
+    "tg_registry_alloc_failures": 0,
+    "tg_list": "0x7ffff7c92d00",
+    "n_threads": 1,
+    "tg_reclaiming": 0
+  },
+  "gc": {
+    "total": 262014,
+    "threshold": 524000,
+    "currentwhite": 33,
+    "state": 0,
+    "auto_flags": 0,
+    "lightudnum": 0,
+    "sweepstr": 0,
+    "root": {
+      "gcptr64": 140736976802816
+    },
+    "sweep": {
+      "ptr64": 140737350533520
+    },
+    "gray": {
+      "gcptr64": 0
+    },
+    "grayagain": {
+      "gcptr64": 0
+    },
+    "weak": {
+      "gcptr64": 0
+    },
+    "debt": 0,
+    "estimate": 0,
+    "stepmul": 200,
+    "pause": 200,
+    "lightudseg": {
+      "ptr64": 140737348321024
+    }
+  },
+  "ssb_head": {
+    "nodes": [],
+    "end": "0x0",
+    "bounded": false
+  },
+  "ssb_drain": {
+    "nodes": [],
+    "end": "0x0",
+    "bounded": false
+  },
+  "grey": [],
+  "tg_list_end": "0x0",
+  "tgs": [
+    {
+      "address": "0x7ffff7c92d00",
+      "poll": 0,
+      "profile_request": 0,
+      "mark_active": 0,
+      "gl": "0x7ffff7c90130",
+      "cur_L": "0x7ffff7c90080",
+      "jit_base": "0x0",
+      "vmstate": -2,
+      "in_native": 0,
+      "strtab_active_hdr": "0x0",
+      "strtab_active_depth": 0,
+      "strtab_active_epoch": 3301,
+      "strq_active_hdr": "0x0",
+      "strq_active_depth": 0,
+      "strq_active_epoch": 0,
+      "tab_read_depth": 0,
+      "tab_read_epoch": 0,
+      "gc_assist": 0,
+      "hookmask_th": 0,
+      "tg_flags": 3,
+      "fini_state": 0,
+      "reqmask": 0,
+      "hs_epoch_ack": 3301,
+      "ssb_active": "0x7ffff7c95940",
+      "ssb_free": "0x7ffff7c93928",
+      "ssb_next": "0x7ffff7c95958",
+      "ssb_base": "0x7ffff7c95958",
+      "ssb_end": "0x7ffff7c97958",
+      "ssb_refs": 0,
+      "gcroot_pending": "0x0",
+      "gcroot_pending_after_main": "0x0",
+      "root_anchor_top": 0,
+      "thread_L": "0x7ffff7c90080",
+      "thread_ud": "0x0",
+      "tid": 1,
+      "actor_id": 1,
+      "next_tg": "0x0",
+      "local_total": 0,
+      "stack_dirty_epoch": 1588233,
+      "root_desc": {
+        "control": 1050244,
+        "flags": 195,
+        "reserved": 0,
+        "old_root": 18445195961197509072,
+        "new_root": 4607182418800017408,
+        "aux_root": 18445195960826090496,
+        "range": [
+          {
+            "lo": "0x0",
+            "hi": "0x0"
+          },
+          {
+            "lo": "0x0",
+            "hi": "0x0"
+          }
+        ],
+        "coverage": {
+          "lo": 0,
+          "hi": 0
+        }
+      },
+      "registry_key": {
+        "slot": "0x5555556c8310",
+        "incarnation": 1
+      },
+      "ffi_native_seq": 0,
+      "ffi_native_depth": 0,
+      "private_ssb_count": 0,
+      "private_ssb_slots": [],
+      "alloc": {
+        "smalltab": "0x5555556c82f0",
+        "sweep_epoch": 7,
+        "prepare_epoch": 7,
+        "huge_retire_cursor": 0,
+        "huge_reclaim_cursor": 0,
+        "huge_retire_done": 0,
+        "remote_pending": 0,
+        "owner_tid": 1,
+        "owner_tg": "0x7ffff7c92d00",
+        "alloc_black": 0,
+        "free_noinsert": 0,
+        "empty_reclaimed": "0x7ffff5cb0000"
+      },
+      "arena_lists": {
+        "owned0": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "owned1": {
+          "nodes": [
+            {
+              "flags": 8,
+              "owner_tid": 1,
+              "next": "0x7ffff5a00000",
+              "grey": "0x0",
+              "sweep_epoch": 0,
+              "live_cells": 0,
+              "retire_epoch": 0,
+              "reclaim_cell": 0,
+              "reclaim_deferred": 0,
+              "remote_active": 0,
+              "remote_free": "0x0",
+              "retire_obj": "0x0",
+              "progress_g": "0x7ffff7c90130",
+              "prep_bump_cell": 0,
+              "prep_bump_end": 0,
+              "gcprep_pending": 0,
+              "terminal_closed": 0,
+              "huge_tabstamp": {
+                "state": 0,
+                "token": {
+                  "control": 0
+                }
+              },
+              "gc2_tabledesc": "0x7ffff7c91310",
+              "address": "0x7ffff78d0000"
+            },
+            {
+              "flags": 8,
+              "owner_tid": 1,
+              "next": "0x7ffff7a70000",
+              "grey": "0x0",
+              "sweep_epoch": 0,
+              "live_cells": 0,
+              "retire_epoch": 0,
+              "reclaim_cell": 0,
+              "reclaim_deferred": 0,
+              "remote_active": 0,
+              "remote_free": "0x0",
+              "retire_obj": "0x0",
+              "progress_g": "0x7ffff7c90130",
+              "prep_bump_cell": 0,
+              "prep_bump_end": 0,
+              "gcprep_pending": 0,
+              "terminal_closed": 0,
+              "huge_tabstamp": {
+                "state": 0,
+                "token": {
+                  "control": 0
+                }
+              },
+              "gc2_tabledesc": "0x7ffff7c91310",
+              "address": "0x7ffff5a00000"
+            },
+            {
+              "flags": 8,
+              "owner_tid": 1,
+              "next": "0x0",
+              "grey": "0x0",
+              "sweep_epoch": 0,
+              "live_cells": 0,
+              "retire_epoch": 0,
+              "reclaim_cell": 0,
+              "reclaim_deferred": 0,
+              "remote_active": 0,
+              "remote_free": "0x0",
+              "retire_obj": "0x0",
+              "progress_g": "0x7ffff7c90130",
+              "prep_bump_cell": 0,
+              "prep_bump_end": 0,
+              "gcprep_pending": 0,
+              "terminal_closed": 0,
+              "huge_tabstamp": {
+                "state": 0,
+                "token": {
+                  "control": 0
+                }
+              },
+              "gc2_tabledesc": "0x7ffff7c91310",
+              "address": "0x7ffff7a70000"
+            }
+          ],
+          "end": "0x0",
+          "bounded": false
+        },
+        "needsweep0": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "needsweep1": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "quarantine0": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "quarantine1": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "reclaimed0": {
+          "nodes": [
+            {
+              "flags": 41,
+              "owner_tid": 1,
+              "next": "0x7ffff7a50000",
+              "grey": "0x0",
+              "sweep_epoch": 7,
+              "live_cells": 224,
+              "retire_epoch": 0,
+              "reclaim_cell": 616,
+              "reclaim_deferred": 0,
+              "remote_active": 11529215046068469760,
+              "remote_free": "0x0",
+              "retire_obj": "0x0",
+              "progress_g": "0x7ffff7c90130",
+              "prep_bump_cell": 0,
+              "prep_bump_end": 0,
+              "gcprep_pending": 0,
+              "terminal_closed": 0,
+              "huge_tabstamp": {
+                "state": 0,
+                "token": {
+                  "control": 0
+                }
+              },
+              "gc2_tabledesc": "0x7ffff7c91310",
+              "address": "0x7fffe1820000"
+            },
+            {
+              "flags": 41,
+              "owner_tid": 1,
+              "next": "0x0",
+              "grey": "0x0",
+              "sweep_epoch": 7,
+              "live_cells": 2245,
+              "retire_epoch": 0,
+              "reclaim_cell": 616,
+              "reclaim_deferred": 0,
+              "remote_active": 11529215046068469760,
+              "remote_free": "0x0",
+              "retire_obj": "0x0",
+              "progress_g": "0x7ffff7c90130",
+              "prep_bump_cell": 0,
+              "prep_bump_end": 0,
+              "gcprep_pending": 0,
+              "terminal_closed": 0,
+              "huge_tabstamp": {
+                "state": 0,
+                "token": {
+                  "control": 0
+                }
+              },
+              "gc2_tabledesc": "0x7ffff7c91310",
+              "address": "0x7ffff7a50000"
+            }
+          ],
+          "end": "0x0",
+          "bounded": false
+        },
+        "reclaimed1": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        }
+      },
+      "states": {
+        "0x7ffff7c90080": {
+          "nextgc": {
+            "gcptr64": 140737348226080
+          },
+          "marked": 97,
+          "gct": 6,
+          "dummy_ffid": 1,
+          "status": 0,
+          "glref": {
+            "ptr64": 140737350533424
+          },
+          "gclist": {
+            "gcptr64": 0
+          },
+          "base": "0x7ffff7a72690",
+          "top": "0x7ffff7a72690",
+          "maxstack": {
+            "ptr64": 140737348315064
+          },
+          "stack": {
+            "ptr64": 140737348314752
+          },
+          "openupval": {
+            "gcptr64": 0
+          },
+          "env": {
+            "gcptr64": 140737348183680
+          },
+          "mt_thread": {
+            "gcptr64": 0
+          },
+          "thread_next": "0x0",
+          "gcprep_next": "0x0",
+          "cframe": "0x0",
+          "stacksize": 48,
+          "tg_hint": "0x7ffff7c92d00",
+          "thr_owner": 4294967297,
+          "grayagain_cycle": 0,
+          "scan_epoch": 7,
+          "scan_dirty_epoch": 1588069,
+          "scan_handoff_epoch": 0,
+          "scan_needscan_counted": 0,
+          "gcprep_state": 0,
+          "active_stack_count": 2,
+          "active_stack_words": [
+            "0xfffcfffff7c90080",
+            "0xffffffffffffffff"
+          ]
+        }
+      }
+    }
+  ],
+  "objects": [
+    {
+      "address": "0x7fffe1a22680",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe19e0000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe1a20000"
+      },
+      "cell": 616,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe1a226f0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe19e0000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe1a20000"
+      },
+      "cell": 623,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe1a22760",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe19e0000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe1a20000"
+      },
+      "cell": 630,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe1a227d0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe19e0000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe1a20000"
+      },
+      "cell": 637,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe1a6f960",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe1a20000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe1a60000"
+      },
+      "cell": 3990,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe1a6f9d0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe1a20000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe1a60000"
+      },
+      "cell": 3997,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe1a6fa40",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe1a20000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe1a60000"
+      },
+      "cell": 4004,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe1a6fab0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe1a20000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe1a60000"
+      },
+      "cell": 4011,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe1a6fb20",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe1a20000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe1a60000"
+      },
+      "cell": 4018,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe1a6fb90",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe1a20000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe1a60000"
+      },
+      "cell": 4025,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe1a6fc00",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe1a20000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe1a60000"
+      },
+      "cell": 4032,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe1a6fc70",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe1a20000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe1a60000"
+      },
+      "cell": 4039,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe1a6fce0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe1a20000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe1a60000"
+      },
+      "cell": 4046,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe1a6fd50",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe1a20000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe1a60000"
+      },
+      "cell": 4053,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe1a6fdc0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe1a20000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe1a60000"
+      },
+      "cell": 4060,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe1a6fe30",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe1a20000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe1a60000"
+      },
+      "cell": 4067,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe1a6fea0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe1a20000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe1a60000"
+      },
+      "cell": 4074,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe1a6ff10",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe1a20000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe1a60000"
+      },
+      "cell": 4081,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe1a6ff80",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe1a20000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe1a60000"
+      },
+      "cell": 4088,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa2ed0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 749,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa2f40",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 756,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa2fb0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 763,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa3020",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 770,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa3090",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 777,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa3100",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 784,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa3170",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 791,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa31e0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 798,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa3250",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 805,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa32c0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 812,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa3330",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 819,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa33a0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 826,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa3410",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 833,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa3480",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 840,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa34f0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 847,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa3560",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 854,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa35d0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 861,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa3640",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 868,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa36b0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 875,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa3720",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 882,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa3790",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 889,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa3800",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 896,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa3870",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 903,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa38e0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 910,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa3950",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 917,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa39c0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 924,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe2aa3a30",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe2a60000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe2aa0000"
+      },
+      "cell": 931,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe582c470",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe57e0000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe5820000"
+      },
+      "cell": 3143,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe582c4e0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe57e0000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe5820000"
+      },
+      "cell": 3150,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe582c550",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe57e0000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe5820000"
+      },
+      "cell": 3157,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe582c5c0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe57e0000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe5820000"
+      },
+      "cell": 3164,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe582c630",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe57e0000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe5820000"
+      },
+      "cell": 3171,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe582c6a0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe57e0000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe5820000"
+      },
+      "cell": 3178,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe582c710",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe57e0000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe5820000"
+      },
+      "cell": 3185,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe582c780",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe57e0000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe5820000"
+      },
+      "cell": 3192,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe582c7f0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe57e0000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe5820000"
+      },
+      "cell": 3199,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe582c860",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe57e0000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe5820000"
+      },
+      "cell": 3206,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe582c8d0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe57e0000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe5820000"
+      },
+      "cell": 3213,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe582c940",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe57e0000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe5820000"
+      },
+      "cell": 3220,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe582c9b0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe57e0000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe5820000"
+      },
+      "cell": 3227,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe582ca20",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe57e0000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe5820000"
+      },
+      "cell": 3234,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe582ca90",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe57e0000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe5820000"
+      },
+      "cell": 3241,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe582cb00",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe57e0000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe5820000"
+      },
+      "cell": 3248,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe582cb70",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe57e0000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe5820000"
+      },
+      "cell": 3255,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe582cbe0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe57e0000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe5820000"
+      },
+      "cell": 3262,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7fffe582cc50",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7fffe57e0000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7fffe5820000"
+      },
+      "cell": 3269,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7ffff45680a0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7ffff4520000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff4560000"
+      },
+      "cell": 2058,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7ffff4568110",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7ffff4520000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff4560000"
+      },
+      "cell": 2065,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7ffff4568180",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7ffff4520000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff4560000"
+      },
+      "cell": 2072,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7ffff45681f0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7ffff4520000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff4560000"
+      },
+      "cell": 2079,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7ffff4568260",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7ffff4520000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff4560000"
+      },
+      "cell": 2086,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7ffff45682d0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7ffff4520000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff4560000"
+      },
+      "cell": 2093,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7ffff4568340",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7ffff4520000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff4560000"
+      },
+      "cell": 2100,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7ffff45683b0",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7ffff4520000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff4560000"
+      },
+      "cell": 2107,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7ffff4568420",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7ffff4520000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff4560000"
+      },
+      "cell": 2114,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7ffff4568490",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7ffff4520000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff4560000"
+      },
+      "cell": 2121,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7ffff4568500",
+      "arena": {
+        "flags": 169,
+        "owner_tid": 1,
+        "next": "0x7ffff4520000",
+        "grey": "0x0",
+        "sweep_epoch": 6,
+        "live_cells": 0,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 9223372036854775808,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff4560000"
+      },
+      "cell": 2128,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7ffff7a52680",
+      "arena": {
+        "flags": 41,
+        "owner_tid": 1,
+        "next": "0x0",
+        "grey": "0x0",
+        "sweep_epoch": 7,
+        "live_cells": 2245,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 11529215046068469760,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff7a50000"
+      },
+      "cell": 616,
+      "bits": {
+        "block": 1,
+        "mark": 0,
+        "sweep": 0,
+        "root": 3,
+        "lifetime": 1,
+        "recovery": 0,
+        "ready": 1,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      },
+      "header": {
+        "nextgc": {
+          "gcptr64": 140737350533248
+        },
+        "marked": 1,
+        "gct": 11,
+        "unused1": 0,
+        "unused2": 0,
+        "env": {
+          "gcptr64": 0
+        },
+        "gclist": {
+          "gcptr64": 0
+        },
+        "metatable": {
+          "gcptr64": 0
+        }
+      },
+      "table": {
+        "nextgc": {
+          "gcptr64": 140737350533248
+        },
+        "marked": 1,
+        "gct": 11,
+        "nomm": 0,
+        "colo": 0,
+        "gc2_rescan_state": 0,
+        "array": {
+          "ptr64": 0
+        },
+        "gclist": {
+          "gcptr64": 0
+        },
+        "metatable": {
+          "gcptr64": 0
+        },
+        "node": {
+          "ptr64": 140737348315152
+        },
+        "asize": 0,
+        "hmask": 63,
+        "freetop": {
+          "ptr64": 140737348316328
+        },
+        "acap": 0,
+        "struct_owner": 0,
+        "struct_control": 0,
+        "weak_record": 0
+      },
+      "array_words": [],
+      "tabstamp_type": "LJGC2TabStampArena *",
+      "tabstamp": {
+        "state": 30064773469,
+        "token": {
+          "control": 0
+        }
+      },
+      "tabstamp_wide": {
+        "proof": {
+          "lo": 0,
+          "hi": 0
+        }
+      }
+    },
+    {
+      "address": "0x7ffff7a526d0",
+      "arena": {
+        "flags": 41,
+        "owner_tid": 1,
+        "next": "0x0",
+        "grey": "0x0",
+        "sweep_epoch": 7,
+        "live_cells": 2245,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 11529215046068469760,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff7a50000"
+      },
+      "cell": 621,
+      "bits": {
+        "block": 1,
+        "mark": 1,
+        "sweep": 0,
+        "root": 3,
+        "lifetime": 1,
+        "recovery": 0,
+        "ready": 1,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      },
+      "header": {
+        "nextgc": {
+          "gcptr64": 140737348183680
+        },
+        "marked": 1,
+        "gct": 11,
+        "unused1": 0,
+        "unused2": 0,
+        "env": {
+          "gcptr64": 140737348349056
+        },
+        "gclist": {
+          "gcptr64": 0
+        },
+        "metatable": {
+          "gcptr64": 0
+        }
+      },
+      "table": {
+        "nextgc": {
+          "gcptr64": 140737348183680
+        },
+        "marked": 1,
+        "gct": 11,
+        "nomm": 0,
+        "colo": 0,
+        "gc2_rescan_state": 0,
+        "array": {
+          "ptr64": 140737348349056
+        },
+        "gclist": {
+          "gcptr64": 0
+        },
+        "metatable": {
+          "gcptr64": 0
+        },
+        "node": {
+          "ptr64": 140737348349152
+        },
+        "asize": 9,
+        "hmask": 7,
+        "freetop": {
+          "ptr64": 140737348349248
+        },
+        "acap": 9,
+        "struct_owner": 0,
+        "struct_control": 9,
+        "weak_record": 0
+      },
+      "array_words": [
+        "0xffffffffffffffff",
+        "0xfffa7ffff7a58950",
+        "0xfffbfffff7a5cad0",
+        "0xfffbfffff7a5ca70",
+        "0xfffbfffff7a5ca00",
+        "0xfffbfffff7a5c960",
+        "0xfffbfffff7a5c820",
+        "0xffffffffffffffff",
+        "0xffffffffffffffff"
+      ],
+      "tabstamp_type": "LJGC2TabStampArena *",
+      "tabstamp": {
+        "state": 30064771114,
+        "token": {
+          "control": 0
+        }
+      },
+      "tabstamp_wide": {
+        "proof": {
+          "lo": 0,
+          "hi": 0
+        }
+      }
+    },
+    {
+      "address": "0x7ffff7a53300",
+      "arena": {
+        "flags": 41,
+        "owner_tid": 1,
+        "next": "0x0",
+        "grey": "0x0",
+        "sweep_epoch": 7,
+        "live_cells": 2245,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 11529215046068469760,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff7a50000"
+      },
+      "cell": 816,
+      "bits": {
+        "block": 1,
+        "mark": 0,
+        "sweep": 0,
+        "root": 3,
+        "lifetime": 1,
+        "recovery": 0,
+        "ready": 1,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      },
+      "header": {
+        "nextgc": {
+          "gcptr64": 140737348186800
+        },
+        "marked": 1,
+        "gct": 8,
+        "unused1": 2,
+        "unused2": 0,
+        "env": {
+          "gcptr64": 140737348183680
+        },
+        "gclist": {
+          "gcptr64": 0
+        },
+        "metatable": {
+          "gcptr64": 140737350544408
+        }
+      },
+      "function": {
+        "nextgc": {
+          "gcptr64": 140737348186800
+        },
+        "marked": 1,
+        "gct": 8,
+        "ffid": 2,
+        "nupvalues": 0,
+        "env": {
+          "gcptr64": 140737348183680
+        },
+        "gclist": {
+          "gcptr64": 0
+        },
+        "pc": {
+          "ptr64": 140737350544408
+        },
+        "uvptr": [
+          {
+            "gcptr64": 93824993356208
+          }
+        ]
+      }
+    },
+    {
+      "address": "0x7ffff7a58220",
+      "arena": {
+        "flags": 41,
+        "owner_tid": 1,
+        "next": "0x0",
+        "grey": "0x0",
+        "sweep_epoch": 7,
+        "live_cells": 2245,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 11529215046068469760,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff7a50000"
+      },
+      "cell": 2082,
+      "bits": {
+        "block": 0,
+        "mark": 1,
+        "sweep": 0,
+        "root": 0,
+        "lifetime": 0,
+        "recovery": 0,
+        "ready": 0,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      }
+    },
+    {
+      "address": "0x7ffff7a58870",
+      "arena": {
+        "flags": 41,
+        "owner_tid": 1,
+        "next": "0x0",
+        "grey": "0x0",
+        "sweep_epoch": 7,
+        "live_cells": 2245,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 11529215046068469760,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff7a50000"
+      },
+      "cell": 2183,
+      "bits": {
+        "block": 1,
+        "mark": 0,
+        "sweep": 0,
+        "root": 3,
+        "lifetime": 1,
+        "recovery": 0,
+        "ready": 1,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      },
+      "header": {
+        "nextgc": {
+          "gcptr64": 140737348208656
+        },
+        "marked": 1,
+        "gct": 8,
+        "unused1": 1,
+        "unused2": 0,
+        "env": {
+          "gcptr64": 140737348183680
+        },
+        "gclist": {
+          "gcptr64": 0
+        },
+        "metatable": {
+          "gcptr64": 140737350534036
+        }
+      },
+      "function": {
+        "nextgc": {
+          "gcptr64": 140737348208656
+        },
+        "marked": 1,
+        "gct": 8,
+        "ffid": 1,
+        "nupvalues": 0,
+        "env": {
+          "gcptr64": 140737348183680
+        },
+        "gclist": {
+          "gcptr64": 0
+        },
+        "pc": {
+          "ptr64": 140737350534036
+        },
+        "uvptr": [
+          {
+            "gcptr64": 93824992276064
+          }
+        ]
+      }
+    },
+    {
+      "address": "0x7ffff7a588e0",
+      "arena": {
+        "flags": 41,
+        "owner_tid": 1,
+        "next": "0x0",
+        "grey": "0x0",
+        "sweep_epoch": 7,
+        "live_cells": 2245,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 11529215046068469760,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff7a50000"
+      },
+      "cell": 2190,
+      "bits": {
+        "block": 1,
+        "mark": 0,
+        "sweep": 0,
+        "root": 3,
+        "lifetime": 1,
+        "recovery": 0,
+        "ready": 1,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      },
+      "header": {
+        "nextgc": {
+          "gcptr64": 140737348208752
+        },
+        "marked": 1,
+        "gct": 8,
+        "unused1": 1,
+        "unused2": 0,
+        "env": {
+          "gcptr64": 140737348183680
+        },
+        "gclist": {
+          "gcptr64": 0
+        },
+        "metatable": {
+          "gcptr64": 140737350534036
+        }
+      },
+      "function": {
+        "nextgc": {
+          "gcptr64": 140737348208752
+        },
+        "marked": 1,
+        "gct": 8,
+        "ffid": 1,
+        "nupvalues": 0,
+        "env": {
+          "gcptr64": 140737348183680
+        },
+        "gclist": {
+          "gcptr64": 0
+        },
+        "pc": {
+          "ptr64": 140737350534036
+        },
+        "uvptr": [
+          {
+            "gcptr64": 93824992279024
+          }
+        ]
+      }
+    },
+    {
+      "address": "0x7ffff7a58950",
+      "arena": {
+        "flags": 41,
+        "owner_tid": 1,
+        "next": "0x0",
+        "grey": "0x0",
+        "sweep_epoch": 7,
+        "live_cells": 2245,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 11529215046068469760,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff7a50000"
+      },
+      "cell": 2197,
+      "bits": {
+        "block": 1,
+        "mark": 1,
+        "sweep": 0,
+        "root": 3,
+        "lifetime": 1,
+        "recovery": 0,
+        "ready": 1,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      },
+      "header": {
+        "nextgc": {
+          "gcptr64": 140737348208864
+        },
+        "marked": 1,
+        "gct": 11,
+        "unused1": 255,
+        "unused2": 0,
+        "env": {
+          "gcptr64": 140737348331264
+        },
+        "gclist": {
+          "gcptr64": 0
+        },
+        "metatable": {
+          "gcptr64": 0
+        }
+      },
+      "table": {
+        "nextgc": {
+          "gcptr64": 140737348208864
+        },
+        "marked": 1,
+        "gct": 11,
+        "nomm": 255,
+        "colo": 0,
+        "gc2_rescan_state": 0,
+        "array": {
+          "ptr64": 140737348331264
+        },
+        "gclist": {
+          "gcptr64": 0
+        },
+        "metatable": {
+          "gcptr64": 0
+        },
+        "node": {
+          "ptr64": 140737350533912
+        },
+        "asize": 33,
+        "hmask": 0,
+        "freetop": {
+          "ptr64": 140737350533912
+        },
+        "acap": 33,
+        "struct_owner": 0,
+        "struct_control": 33,
+        "weak_record": 132
+      },
+      "array_words": [
+        "0xffffffffffffffff",
+        "0xfffdfffff7a589a0",
+        "0xfffdfffff7a58a10",
+        "0xfffdfffff7a58a80",
+        "0xfffdfffff7a58af0",
+        "0xfffdfffff7a58b60",
+        "0xfffdfffff7a58bd0",
+        "0xfffdfffff7a58c40",
+        "0xfffdfffff7a58cb0",
+        "0xfffdfffff7a58d20",
+        "0xfffdfffff7a58d90",
+        "0xfffdfffff7a58e00",
+        "0xfffdfffff7a58e70",
+        "0xfffdfffff7a58ee0",
+        "0xfffdfffff7a58f50",
+        "0xfffdfffff7a58fc0",
+        "0xfffdfffff7a59030",
+        "0xfffdfffff7a590a0",
+        "0xfffdfffff7a59110",
+        "0xfffdfffff7a59180",
+        "0xfffdfffff7a591f0",
+        "0xfffdfffff7a59260",
+        "0xfffdfffff7a592d0",
+        "0xfffdfffff7a59340",
+        "0xfffdfffff7a593b0",
+        "0xfffdfffff7a59420",
+        "0xfffdfffff7a59490",
+        "0xfffdfffff7a59500",
+        "0xfffdfffff7a59570",
+        "0xfffdfffff7a595e0",
+        "0xfffdfffff7a59650",
+        "0xfffdfffff7a596c0",
+        "0xfffdfffff7a59730"
+      ],
+      "tabstamp_type": "LJGC2TabStampArena *",
+      "tabstamp": {
+        "state": 30064771497,
+        "token": {
+          "control": 0
+        }
+      },
+      "tabstamp_wide": {
+        "proof": {
+          "lo": 0,
+          "hi": 0
+        }
+      }
+    },
+    {
+      "address": "0x7ffff7a5b2f0",
+      "arena": {
+        "flags": 41,
+        "owner_tid": 1,
+        "next": "0x0",
+        "grey": "0x0",
+        "sweep_epoch": 7,
+        "live_cells": 2245,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 11529215046068469760,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff7a50000"
+      },
+      "cell": 2863,
+      "bits": {
+        "block": 1,
+        "mark": 0,
+        "sweep": 0,
+        "root": 3,
+        "lifetime": 1,
+        "recovery": 0,
+        "ready": 1,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      },
+      "header": {
+        "nextgc": {
+          "gcptr64": 140737348219536
+        },
+        "marked": 1,
+        "gct": 11,
+        "unused1": 0,
+        "unused2": 0,
+        "env": {
+          "gcptr64": 0
+        },
+        "gclist": {
+          "gcptr64": 0
+        },
+        "metatable": {
+          "gcptr64": 0
+        }
+      },
+      "table": {
+        "nextgc": {
+          "gcptr64": 140737348219536
+        },
+        "marked": 1,
+        "gct": 11,
+        "nomm": 0,
+        "colo": 0,
+        "gc2_rescan_state": 0,
+        "array": {
+          "ptr64": 0
+        },
+        "gclist": {
+          "gcptr64": 0
+        },
+        "metatable": {
+          "gcptr64": 0
+        },
+        "node": {
+          "ptr64": 140737348346832
+        },
+        "asize": 0,
+        "hmask": 7,
+        "freetop": {
+          "ptr64": 140737348346832
+        },
+        "acap": 0,
+        "struct_owner": 0,
+        "struct_control": 0,
+        "weak_record": 0
+      },
+      "array_words": [],
+      "tabstamp_type": "LJGC2TabStampArena *",
+      "tabstamp": {
+        "state": 30064771118,
+        "token": {
+          "control": 0
+        }
+      },
+      "tabstamp_wide": {
+        "proof": {
+          "lo": 0,
+          "hi": 0
+        }
+      }
+    },
+    {
+      "address": "0x7ffff7a5b340",
+      "arena": {
+        "flags": 41,
+        "owner_tid": 1,
+        "next": "0x0",
+        "grey": "0x0",
+        "sweep_epoch": 7,
+        "live_cells": 2245,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 11529215046068469760,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff7a50000"
+      },
+      "cell": 2868,
+      "bits": {
+        "block": 1,
+        "mark": 0,
+        "sweep": 0,
+        "root": 3,
+        "lifetime": 1,
+        "recovery": 0,
+        "ready": 1,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      },
+      "header": {
+        "nextgc": {
+          "gcptr64": 140737348219632
+        },
+        "marked": 1,
+        "gct": 8,
+        "unused1": 232,
+        "unused2": 0,
+        "env": {
+          "gcptr64": 140737348183680
+        },
+        "gclist": {
+          "gcptr64": 0
+        },
+        "metatable": {
+          "gcptr64": 140737350534032
+        }
+      },
+      "function": {
+        "nextgc": {
+          "gcptr64": 140737348219632
+        },
+        "marked": 1,
+        "gct": 8,
+        "ffid": 232,
+        "nupvalues": 0,
+        "env": {
+          "gcptr64": 140737348183680
+        },
+        "gclist": {
+          "gcptr64": 0
+        },
+        "pc": {
+          "ptr64": 140737350534032
+        },
+        "uvptr": [
+          {
+            "gcptr64": 93824992655088
+          }
+        ]
+      }
+    },
+    {
+      "address": "0x7ffff7a5b370",
+      "arena": {
+        "flags": 41,
+        "owner_tid": 1,
+        "next": "0x0",
+        "grey": "0x0",
+        "sweep_epoch": 7,
+        "live_cells": 2245,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 11529215046068469760,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff7a50000"
+      },
+      "cell": 2871,
+      "bits": {
+        "block": 1,
+        "mark": 0,
+        "sweep": 0,
+        "root": 3,
+        "lifetime": 1,
+        "recovery": 0,
+        "ready": 1,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      },
+      "header": {
+        "nextgc": {
+          "gcptr64": 140737348219712
+        },
+        "marked": 1,
+        "gct": 8,
+        "unused1": 233,
+        "unused2": 0,
+        "env": {
+          "gcptr64": 140737348183680
+        },
+        "gclist": {
+          "gcptr64": 0
+        },
+        "metatable": {
+          "gcptr64": 140737350534032
+        }
+      },
+      "function": {
+        "nextgc": {
+          "gcptr64": 140737348219712
+        },
+        "marked": 1,
+        "gct": 8,
+        "ffid": 233,
+        "nupvalues": 0,
+        "env": {
+          "gcptr64": 140737348183680
+        },
+        "gclist": {
+          "gcptr64": 0
+        },
+        "pc": {
+          "ptr64": 140737350534032
+        },
+        "uvptr": [
+          {
+            "gcptr64": 93824992656656
+          }
+        ]
+      }
+    },
+    {
+      "address": "0x7ffff7a5b880",
+      "arena": {
+        "flags": 41,
+        "owner_tid": 1,
+        "next": "0x0",
+        "grey": "0x0",
+        "sweep_epoch": 7,
+        "live_cells": 2245,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 11529215046068469760,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff7a50000"
+      },
+      "cell": 2952,
+      "bits": {
+        "block": 1,
+        "mark": 0,
+        "sweep": 0,
+        "root": 3,
+        "lifetime": 1,
+        "recovery": 0,
+        "ready": 1,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      },
+      "header": {
+        "nextgc": {
+          "gcptr64": 140737348197888
+        },
+        "marked": 17,
+        "gct": 12,
+        "unused1": 4,
+        "unused2": 0,
+        "env": {
+          "gcptr64": 140737348219632
+        },
+        "gclist": {
+          "gcptr64": 64
+        },
+        "metatable": {
+          "gcptr64": 140737348219632
+        }
+      }
+    },
+    {
+      "address": "0x7ffff7a5b8f0",
+      "arena": {
+        "flags": 41,
+        "owner_tid": 1,
+        "next": "0x0",
+        "grey": "0x0",
+        "sweep_epoch": 7,
+        "live_cells": 2245,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 11529215046068469760,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff7a50000"
+      },
+      "cell": 2959,
+      "bits": {
+        "block": 1,
+        "mark": 0,
+        "sweep": 0,
+        "root": 3,
+        "lifetime": 1,
+        "recovery": 0,
+        "ready": 1,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      },
+      "header": {
+        "nextgc": {
+          "gcptr64": 140737348221056
+        },
+        "marked": 17,
+        "gct": 12,
+        "unused1": 4,
+        "unused2": 0,
+        "env": {
+          "gcptr64": 140737348219632
+        },
+        "gclist": {
+          "gcptr64": 64
+        },
+        "metatable": {
+          "gcptr64": 140737348219632
+        }
+      }
+    },
+    {
+      "address": "0x7ffff7a5b960",
+      "arena": {
+        "flags": 41,
+        "owner_tid": 1,
+        "next": "0x0",
+        "grey": "0x0",
+        "sweep_epoch": 7,
+        "live_cells": 2245,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 11529215046068469760,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff7a50000"
+      },
+      "cell": 2966,
+      "bits": {
+        "block": 1,
+        "mark": 0,
+        "sweep": 0,
+        "root": 3,
+        "lifetime": 1,
+        "recovery": 0,
+        "ready": 1,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      },
+      "header": {
+        "nextgc": {
+          "gcptr64": 140737348221168
+        },
+        "marked": 17,
+        "gct": 12,
+        "unused1": 4,
+        "unused2": 0,
+        "env": {
+          "gcptr64": 140737348219632
+        },
+        "gclist": {
+          "gcptr64": 64
+        },
+        "metatable": {
+          "gcptr64": 140737348219632
+        }
+      }
+    },
+    {
+      "address": "0x7ffff7a5b9d0",
+      "arena": {
+        "flags": 41,
+        "owner_tid": 1,
+        "next": "0x0",
+        "grey": "0x0",
+        "sweep_epoch": 7,
+        "live_cells": 2245,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 11529215046068469760,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff7a50000"
+      },
+      "cell": 2973,
+      "bits": {
+        "block": 1,
+        "mark": 0,
+        "sweep": 0,
+        "root": 3,
+        "lifetime": 1,
+        "recovery": 0,
+        "ready": 1,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      },
+      "header": {
+        "nextgc": {
+          "gcptr64": 140737348221008
+        },
+        "marked": 1,
+        "gct": 11,
+        "unused1": 0,
+        "unused2": 0,
+        "env": {
+          "gcptr64": 140737348348048
+        },
+        "gclist": {
+          "gcptr64": 0
+        },
+        "metatable": {
+          "gcptr64": 0
+        }
+      },
+      "table": {
+        "nextgc": {
+          "gcptr64": 140737348221008
+        },
+        "marked": 1,
+        "gct": 11,
+        "nomm": 0,
+        "colo": 0,
+        "gc2_rescan_state": 0,
+        "array": {
+          "ptr64": 140737348348048
+        },
+        "gclist": {
+          "gcptr64": 0
+        },
+        "metatable": {
+          "gcptr64": 0
+        },
+        "node": {
+          "ptr64": 140737350533912
+        },
+        "asize": 33,
+        "hmask": 0,
+        "freetop": {
+          "ptr64": 140737350533912
+        },
+        "acap": 33,
+        "struct_owner": 0,
+        "struct_control": 33,
+        "weak_record": 0
+      },
+      "array_words": [
+        "0xffffffffffffffff",
+        "0xfffa7fffe1825400",
+        "0xfffa7fffe1824670",
+        "0xfffa7fffe18246e0",
+        "0xfffa7fffe1824750",
+        "0xfffa7fffe18247c0",
+        "0xfffa7fffe1824830",
+        "0xfffa7fffe18248a0",
+        "0xfffa7fffe1824910",
+        "0xfffa7fffe1824980",
+        "0xfffa7fffe18249f0",
+        "0xfffa7fffe1824a60",
+        "0xfffa7fffe1824ad0",
+        "0xfffa7fffe1824b40",
+        "0xfffa7fffe1824bb0",
+        "0xfffa7fffe1824c20",
+        "0xfffa7fffe1824c90",
+        "0xfffa7fffe1824d00",
+        "0xfffa7fffe1824d70",
+        "0xfffa7fffe1824de0",
+        "0xfffa7fffe1824e50",
+        "0xfffa7fffe1824ec0",
+        "0xfffa7fffe1824f30",
+        "0xfffa7fffe1824fa0",
+        "0xfffa7fffe1825010",
+        "0xfffa7fffe1825080",
+        "0xfffa7fffe18250f0",
+        "0xfffa7fffe1825160",
+        "0xfffa7fffe18251d0",
+        "0xfffa7fffe1825240",
+        "0xfffa7fffe18252b0",
+        "0xfffa7fffe1825320",
+        "0xfffa7fffe1825390"
+      ],
+      "tabstamp_type": "LJGC2TabStampArena *",
+      "tabstamp": {
+        "state": 30067892232,
+        "token": {
+          "control": 0
+        }
+      },
+      "tabstamp_wide": {
+        "proof": {
+          "lo": 0,
+          "hi": 0
+        }
+      }
+    },
+    {
+      "address": "0x7ffff7a5c960",
+      "arena": {
+        "flags": 41,
+        "owner_tid": 1,
+        "next": "0x0",
+        "grey": "0x0",
+        "sweep_epoch": 7,
+        "live_cells": 2245,
+        "retire_epoch": 0,
+        "reclaim_cell": 616,
+        "reclaim_deferred": 0,
+        "remote_active": 11529215046068469760,
+        "remote_free": "0x0",
+        "retire_obj": "0x0",
+        "progress_g": "0x7ffff7c90130",
+        "prep_bump_cell": 0,
+        "prep_bump_end": 0,
+        "gcprep_pending": 0,
+        "terminal_closed": 0,
+        "huge_tabstamp": {
+          "state": 0,
+          "token": {
+            "control": 0
+          }
+        },
+        "gc2_tabledesc": "0x7ffff7c91310",
+        "address": "0x7ffff7a50000"
+      },
+      "cell": 3222,
+      "bits": {
+        "block": 1,
+        "mark": 0,
+        "sweep": 0,
+        "root": 3,
+        "lifetime": 1,
+        "recovery": 0,
+        "ready": 1,
+        "late": 0,
+        "cdata": 0,
+        "dtor": 0
+      },
+      "header": {
+        "nextgc": {
+          "gcptr64": 140737348225328
+        },
+        "marked": 1,
+        "gct": 8,
+        "unused1": 0,
+        "unused2": 3,
+        "env": {
+          "gcptr64": 140737348183680
+        },
+        "gclist": {
+          "gcptr64": 0
+        },
+        "metatable": {
+          "gcptr64": 140737348215408
+        }
+      },
+      "function": {
+        "nextgc": {
+          "gcptr64": 140737348225328
+        },
+        "marked": 1,
+        "gct": 8,
+        "ffid": 0,
+        "nupvalues": 3,
+        "env": {
+          "gcptr64": 140737348183680
+        },
+        "gclist": {
+          "gcptr64": 0
+        },
+        "pc": {
+          "ptr64": 140737348215408
+        },
+        "uvptr": [
+          {
+            "gcptr64": 140737348225136
+          }
+        ]
+      }
+    }
+  ],
+  "backtraces": "\nThread 1 (Thread 0x7ffff7ca21c0 (LWP 369877) \"debug-observed-\"):\n#0  sweep_probe_checkpoint (where=where@entry=0x55555568d903 \"sole_main_recovered\") at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/sweep-probe.h:15\n#1  0x000055555555f5c7 in sweep_probe_report (where=where@entry=0x55555568d903 \"sole_main_recovered\", L=0x7ffff7c90080) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/sweep-probe.h:85\n#2  0x000055555555f91d in snapshot (L=L@entry=0x7ffff7c90080, stage=stage@entry=0x55555568d903 \"sole_main_recovered\", round=round@entry=1, filler=filler@entry=262144) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/t-string-retention-observed.c:148\n#3  0x000055555555e7aa in main (argc=<optimized out>, argv=<optimized out>) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/t-string-retention-observed.c:295\n"
+}

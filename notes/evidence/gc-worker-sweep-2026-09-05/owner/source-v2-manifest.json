@@ -1,0 +1,22 @@
+{
+  "candidate2-incremental.patch": {
+    "sha256": "72c1636f1a73c8f2887e0b5e7b4505590772cb605a971bb8c40543cbc2279346",
+    "bytes": 558
+  },
+  "candidate2-full.patch": {
+    "sha256": "5f59dcef6d97461c4475ba8852c84714b51a99f2c22f19a58a8d574beb136116",
+    "bytes": 10344
+  },
+  "source-v2/lj_gc2.c": {
+    "sha256": "582259b42e29e34f616763a8c4b565361a3798a8089871c3e1cd71519c313afb",
+    "bytes": 770314
+  },
+  "SOURCE-V2.md": {
+    "sha256": "bd25d4c0a934703b3570f03e619290a56b81b8d709e091e947b208a1f17120f3",
+    "bytes": 1190
+  },
+  "detach-v1-manifest.json": {
+    "sha256": "f0b541b624ee161297af59b125de4ab37ab6ef801a95d0e3defe4b087637169b",
+    "bytes": 2398
+  }
+}

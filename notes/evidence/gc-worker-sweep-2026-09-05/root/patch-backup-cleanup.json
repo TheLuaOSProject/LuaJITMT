@@ -1,0 +1,8 @@
+{
+  "path": "/workspaces/lj-lockless/src/lj_gc2.c.orig",
+  "sha256": "6efa3711a2a32cf49b741460de1353d903ff9ed375edec7b5fab0032304ded2d",
+  "bytes": 770031,
+  "mtime_ns": 1788606621088493298,
+  "promotion_mtime_ns": 1788610066753408997,
+  "reason": "GNU patch backup of the exact verified pre-promotion source; authoritative copy retained in base/src/lj_gc2.c"
+}

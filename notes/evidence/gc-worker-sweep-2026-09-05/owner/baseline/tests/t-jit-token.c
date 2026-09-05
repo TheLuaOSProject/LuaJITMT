@@ -1,0 +1,1165 @@
+/*
+** Focused regression test for the M6 JIT recorder token.
+*/
+
+#include <assert.h>
+#include <pthread.h>
+#include <stdio.h>
+#include <string.h>
+
+#include "lua.h"
+#include "lauxlib.h"
+#include "lualib.h"
+
+#include "lj_obj.h"
+#include "lj_atomic.h"
+#include "lj_err.h"
+#include "lj_gc2.h"
+#include "lj_jit.h"
+#include "lj_safepoint.h"
+#include "lj_state.h"
+#include "lj_trace.h"
+#include "lj_tg.h"
+#include "lj_thr.h"
+#include "lj_target.h"
+#include "lj_tgregistry.h"
+#include "lj_vmevent.h"
+
+#include "lib/lua_fixture_helpers.h"
+#include "lib/tg_stopreq_fixture_helpers.h"
+
+typedef struct TokenReleaseCtx {
+  global_State *g;
+  uint32_t owner;
+  uint32_t released;
+} TokenReleaseCtx;
+
+typedef struct TokenStopReqCtx {
+  global_State *g;
+  TGState *tg;
+  uint32_t owner;
+  uint32_t saw_native;
+  uint32_t signaled;
+  uint32_t released;
+} TokenStopReqCtx;
+
+static uint32_t foreign_token_owner(lua_State *L)
+{
+  uint32_t self = lj_tg_tid_acq(L2TG(L));
+  return self == 0x7fffffffu ? 0x7ffffffeu : 0x7fffffffu;
+}
+
+static uint32_t vmevent_calls;
+static lua_State *vmevent_expected_L;
+
+static int count_vmevent(lua_State *L)
+{
+  assert(L == vmevent_expected_L);
+  (void)la_add32_acqrel(&vmevent_calls, 1);
+  return 0;
+}
+
+static int force_vmevent_prepare_stack_growth(lua_State *L)
+{
+  ptrdiff_t entrytop = savestack(L, L->top);
+  ptrdiff_t eventtop;
+  ptrdiff_t argbase;
+  MSize oldsize = L->stacksize;
+
+  /* Leave exactly the reserve that lj_vmevent_prepare() requests. Its <= test
+  ** must grow this fresh coroutine's stack before acquiring the TRACE handler.
+  */
+  while ((mref(L->maxstack, char) - (char *)L->top) >
+	 (ptrdiff_t)LUA_MINSTACK * (ptrdiff_t)sizeof(TValue))
+    setnilV(L->top++);
+  eventtop = savestack(L, L->top);
+  argbase = lj_vmevent_prepare(L, LJ_VMEVENT_TRACE);
+  if (argbase) {
+    lua_pushliteral(L, "flush");
+    lj_vmevent_call(L, argbase, eventtop);
+  }
+
+  L->top = restorestack(L, entrytop);
+  lua_pushboolean(L, L->stacksize > oldsize);
+  lua_pushboolean(L, argbase != 0);
+  return 2;
+}
+
+static void expect_vmevent_owner_and_jit_pointer(lua_State *L)
+{
+  global_State *g = G(L);
+  jit_State *J = G2J(g);
+  lua_State *sentinel = vmthread_acq(g);
+  uint32_t foreign = foreign_token_owner(L);
+  uint32_t expect = LJ_GC2_SMR_OPEN;
+  uint32_t calls;
+  ptrdiff_t top;
+
+  vmevent_expected_L = L;
+  lua_pushcfunction(L, count_vmevent);
+  lua_setglobal(L, "lj_m6_count_vmevent");
+  ljt_lua_dostring(L,
+    "jit.attach(lj_m6_count_vmevent, 'trace')\n");
+
+  /* A competing callback owner must make this event a bounded drop. Argument
+  ** construction is local to L and the failed call restores the exact top. */
+  calls = la_load32_acq(&vmevent_calls);
+  top = savestack(L, L->top);
+  assert(vmevent_owner_cas(g, &expect, foreign));
+  lj_vmevent_send_l(L, TRACE,
+    lua_pushliteral(V, "flush");
+  );
+  assert(savestack(L, L->top) == top);
+  assert(la_load32_acq(&vmevent_calls) == calls);
+  assert(vmevent_owner_acq(g) == foreign);
+  vmevent_owner_rel(g, foreign);
+
+  /* A process-wide GC/debug hook owner is an independent exclusion domain.
+  ** VM events must drop without restoring a stale hookmask snapshot over it. */
+  calls = la_load32_acq(&vmevent_calls);
+  top = savestack(L, L->top);
+  (void)hookmask_update(g, 0, HOOK_ACTIVE|HOOK_GC);
+  lj_vmevent_send_l(L, TRACE,
+    lua_pushliteral(V, "flush");
+  );
+  assert(savestack(L, L->top) == top);
+  assert(la_load32_acq(&vmevent_calls) == calls);
+  assert((hookmask_load(g) & (HOOK_ACTIVE|HOOK_GC)) ==
+	 (HOOK_ACTIVE|HOOK_GC));
+  assert(vmevent_owner_acq(g) == 0);
+  (void)hookmask_update(g, HOOK_ACTIVE|HOOK_GC, 0);
+
+  /* A non-recorder event may run, but it must not replace the actual J->L
+  ** pointer owned by a foreign recorder TG with this event's initiating L. */
+  calls = la_load32_acq(&vmevent_calls);
+  jit_owner_l_rel(J, sentinel);
+  jit_owner_test_rel(g, foreign, 0);
+  lj_vmevent_send_l(L, TRACE,
+    lua_pushliteral(V, "flush");
+  );
+  assert(la_load32_acq(&vmevent_calls) == calls + 1u);
+  assert(jit_owner_l_acq(J) == sentinel);
+  assert(jit_token_acq(g) == foreign);
+  jit_owner_test_rel(g, 0, 0);
+  jit_owner_l_rel(J, NULL);
+
+  ljt_lua_dostring(L, "jit.attach(lj_m6_count_vmevent)\n");
+  lua_pushnil(L);
+  lua_setglobal(L, "lj_m6_count_vmevent");
+  vmevent_expected_L = NULL;
+}
+
+static void expect_vmevent_smr_try_drop(lua_State *L)
+{
+  global_State *g = G(L);
+  ptrdiff_t top;
+  uint32_t expect = 0;
+  uint8_t mask;
+
+  vmevent_expected_L = L;
+  lua_pushcfunction(L, count_vmevent);
+  lua_setglobal(L, "lj_m6_count_vmevent");
+  ljt_lua_dostring(L,
+    "jit.attach(lj_m6_count_vmevent, 'trace')\n");
+  mask = vmevmask_load_acq(g);
+  assert((mask & VMEVENT_MASK(LJ_VMEVENT_TRACE)) != 0);
+  assert(gc2_smr_readers_acq(g) == 0);
+  assert(gc2_smr_reclaiming_cas(
+	 g, &expect, LJ_GC2_SMR_META_EXCLUSIVE));
+
+  /* VM events are observational: a reclaimer collision is a one-shot drop,
+  ** not a wait. It must not consume the cache bit or leak a reader count. */
+  assert(lj_gc2_smr_read_try(g) == 0);
+  top = savestack(L, L->top);
+  assert(lj_vmevent_prepare(L, LJ_VMEVENT_TRACE) == 0);
+  assert(savestack(L, L->top) == top);
+  assert(vmevmask_load_acq(g) == mask);
+  assert(gc2_smr_readers_acq(g) == 0);
+  gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
+
+  assert(lj_gc2_smr_read_try(g) != 0);
+  assert(gc2_smr_readers_acq(g) == 1);
+  lj_gc2_smr_read_leave(g);
+  assert(gc2_smr_readers_acq(g) == 0);
+
+  ljt_lua_dostring(L, "jit.attach(lj_m6_count_vmevent)\n");
+  lua_pushnil(L);
+  lua_setglobal(L, "lj_m6_count_vmevent");
+  vmevent_expected_L = NULL;
+}
+
+static GCtrace *first_live_trace(jit_State *J);
+
+static void expect_jit_util_smr_try_drop_one(lua_State *L, const char *name,
+					      TraceNo tr, int second,
+					      int have_second)
+{
+  global_State *g = G(L);
+  int base = lua_gettop(L);
+  int status;
+  uint32_t expect = LJ_GC2_SMR_OPEN;
+
+  lua_getglobal(L, "require");
+  lua_pushliteral(L, "jit.util");
+  assert(lua_pcall(L, 1, 1, 0) == LUA_OK);
+  lua_getfield(L, -1, name);
+  lua_remove(L, -2);
+  if (!lua_isfunction(L, -1)) {
+    lua_settop(L, base);
+    return;  /* Target-specific optional reflection entry. */
+  }
+  lua_pushinteger(L, (lua_Integer)tr);
+  if (have_second)
+    lua_pushinteger(L, (lua_Integer)second);
+
+  assert(gc2_smr_readers_acq(g) == 0);
+  assert(jit_token_acq(g) == 0);
+  assert(gc2_smr_reclaiming_cas(
+	 g, &expect, LJ_GC2_SMR_META_EXCLUSIVE));
+  status = lua_pcall(L, have_second ? 2 : 1, LUA_MULTRET, 0);
+  gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
+  if (status != LUA_OK) {
+    const char *err = lua_tostring(L, -1);
+    fprintf(stderr, "jit.util %s under closed SMR failed: %s\n", name,
+	    err ? err : "(nil)");
+  }
+  assert(status == LUA_OK);
+  assert(lua_gettop(L) == base);  /* Contention is a no-result observation. */
+  assert(gc2_smr_readers_acq(g) == 0);
+  assert(jit_token_acq(g) == 0);  /* Failed SMR admission released its token. */
+}
+
+static void expect_jit_util_smr_try_drop(lua_State *L)
+{
+  GCtrace *T = first_live_trace(L2J(L));
+  TraceNo tr;
+  assert(T != NULL);
+  tr = trace_traceno_acq(T);
+  assert(tr != 0);
+  expect_jit_util_smr_try_drop_one(L, "traceinfo", tr, 0, 0);
+  expect_jit_util_smr_try_drop_one(L, "traceir", tr, 1, 1);
+  expect_jit_util_smr_try_drop_one(L, "tracek", tr, -1, 1);
+  expect_jit_util_smr_try_drop_one(L, "tracesnap", tr, 0, 1);
+  expect_jit_util_smr_try_drop_one(L, "tracemc", tr, 0, 0);
+  expect_jit_util_smr_try_drop_one(L, "traceexitstub", tr, 0, 1);
+}
+
+static GCtrace *first_live_trace(jit_State *J)
+{
+  TraceNo i;
+  for (i = 1; i < trace_sizetrace_acq(J); i++) {
+    GCtrace *T = traceref(J, i);
+    if (T && T->traceno == i)
+      return T;
+  }
+  return NULL;
+}
+
+static GCtrace *first_trace_without_runnable_inbound(jit_State *J)
+{
+  TraceNo targetno, sourceno;
+  MSize sizetrace = trace_sizetrace_acq(J);
+  for (targetno = 1; (MSize)targetno < sizetrace; targetno++) {
+    GCtrace *target = traceref_safe(J, targetno);
+    int inbound = 0;
+    if (!trace_runnable_acq(target, targetno))
+      continue;
+    for (sourceno = 1; (MSize)sourceno < sizetrace; sourceno++) {
+      GCtrace *source = traceref_safe(J, sourceno);
+      if (source && source != target &&
+	  trace_runnable_acq(source, sourceno) &&
+	  trace_link_acq(source) == targetno) {
+	inbound = 1;
+	break;
+      }
+    }
+    if (!inbound)
+      return target;
+  }
+  return NULL;
+}
+
+static uint32_t trace_ir_op_count(GCtrace *T, IROp op)
+{
+  IRIns *ir = trace_ir_acq(T);
+  IRRef i, nins = trace_nins_acq(T);
+  uint32_t n = 0;
+  for (i = REF_FIRST; i < nins; i++)
+    if (ir[i].o == op)
+      n++;
+  return n;
+}
+
+static uint32_t trace_ir_xpoll_wide_count(GCtrace *T)
+{
+  IRIns *ir = trace_ir_acq(T);
+  IRRef i, nins = trace_nins_acq(T);
+  uint32_t n = 0;
+  for (i = REF_FIRST; i < nins; i++)
+    if (ir[i].o == IR_XPOLL && ir[i].op1 != 0)
+      n++;
+  return n;
+}
+
+static uint32_t expect_nonloop_xpoll_snapshots(GCtrace *T,
+					       uint32_t *nonterminal)
+{
+  IRIns *ir = trace_ir_acq(T);
+  IRRef ref, nins = trace_nins_acq(T);
+  SnapShot *snap = trace_snap_acq(T);
+  SnapNo nsnap = trace_nsnap_acq(T);
+  uint32_t found = 0;
+  for (ref = REF_FIRST; ref < nins; ref++) {
+    SnapNo sn;
+    int exact = 0;
+    if (ir[ref].o != IR_XPOLL ||
+	(ref > REF_FIRST && ir[ref-1].o == IR_LOOP))
+      continue;  /* Optimized loop XPOLL intentionally uses the loop snap. */
+    for (sn = 0; sn < nsnap; sn++) {
+      if (snap_ref_acq(&snap[sn]) == ref) {
+	exact = 1;
+	break;
+      }
+    }
+    assert(exact && "non-loop XPOLL inherited an earlier guard snapshot");
+    if (nonterminal && ref + 1 < nins)
+      (*nonterminal)++;
+    found++;
+  }
+  return found;
+}
+
+static void expect_tail_xpoll_snapshot(lua_State *L)
+{
+  jit_State *J = G2J(G(L));
+  TraceNo tr;
+  uint32_t found = 0;
+  ljt_lua_dostring(L,
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1', 'minstitch=1')\n"
+    "function lj_m6_tail_xpoll(n, flag, seed)\n"
+    "  local s = seed\n"
+    "  for i = 1, n do\n"
+    "    if flag and i % 17 == 0 then s = s + i * 7\n"
+    "    else s = s + i end\n"
+    "  end\n"
+    "  return s\n"
+    "end\n"
+    "for r = 1, 64 do\n"
+    "  assert(lj_m6_tail_xpoll(80, false, r) == r + 3240)\n"
+    "  assert(lj_m6_tail_xpoll(80, true, r) == r + 4260)\n"
+    "end\n");
+  for (tr = 1; tr < trace_sizetrace_acq(J); tr++) {
+    GCtrace *T = traceref_safe(J, tr);
+    if (trace_runnable_acq(T, tr) && trace_root_acq(T) != 0) {
+      found += expect_nonloop_xpoll_snapshots(T, NULL);
+    }
+  }
+  /* Rooted mutable-global recording may now end the side trace at the
+  ** interpreter instead of linking it as LJ_TRLINK_ROOT. The safety invariant
+  ** is the exact non-loop XPOLL snapshot on every runnable side topology. */
+  assert(found > 0 && "hot side trace did not publish an exact XPOLL snapshot");
+}
+
+static void expect_func_xpoll_snapshot(lua_State *L)
+{
+  jit_State *J = G2J(G(L));
+  TraceNo tr;
+  uint32_t found = 0, nonterminal = 0;
+  ljt_lua_dostring(L,
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1', 'callunroll=32', 'recunroll=32')\n"
+    "local function f10(x) return x+1 end\n"
+    "local function f9(x) return f10(x)+1 end\n"
+    "local function f8(x) return f9(x)+1 end\n"
+    "local function f7(x) return f8(x)+1 end\n"
+    "local function f6(x) return f7(x)+1 end\n"
+    "local function f5(x) return f6(x)+1 end\n"
+    "local function f4(x) return f5(x)+1 end\n"
+    "local function f3(x) return f4(x)+1 end\n"
+    "local function f2(x) return f3(x)+1 end\n"
+    "local function f1(x) return f2(x)+1 end\n"
+    "local s = 0\n"
+    "for i = 1, 64 do s = s + f1(i) end\n"
+    "assert(s == 2720)\n");
+  for (tr = 1; tr < trace_sizetrace_acq(J); tr++) {
+    GCtrace *T = traceref_safe(J, tr);
+    if (trace_runnable_acq(T, tr))
+      found += expect_nonloop_xpoll_snapshots(T, &nonterminal);
+  }
+  assert(found > 0 && "deep inlined FUNCF trace did not publish an XPOLL");
+  assert(nonterminal > 0 &&
+	 "deep inlined FUNCF trace only published a terminal XPOLL");
+}
+
+static void expect_loop_xpoll_shape(lua_State *L, int want_xpoll)
+{
+  jit_State *J = G2J(G(L));
+  GCtrace *T;
+  ljt_lua_dostring(L,
+    "local util = require'jit.util'\n"
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local function lj_m6_xpoll_shape(n)\n"
+    "  local s = 0\n"
+    "  for i = 1, n do s = s + i end\n"
+    "  return s\n"
+    "end\n"
+    "for _ = 1, 20 do assert(lj_m6_xpoll_shape(80) == 3240) end\n"
+    "assert(util.traceinfo(1), 'expected loop trace')\n");
+  T = first_live_trace(J);
+  assert(T != NULL);
+  assert(trace_ir_op_count(T, IR_LOOP) > 0);
+  assert(trace_ir_op_count(T, IR_XPOLL) > 0);  /* Every mode checks the phase gate and TG request. */
+  if (want_xpoll)
+    assert(trace_ir_xpoll_wide_count(T) > 0);
+  else
+    assert(trace_ir_xpoll_wide_count(T) == 0);
+}
+
+static void *release_jit_token_after_delay(void *arg)
+{
+  TokenReleaseCtx *ctx = (TokenReleaseCtx *)arg;
+  (void)lj_thr_sleep_ns(NULL, 30000000);
+  assert(jit_token_acq(ctx->g) == ctx->owner);
+  la_store32_rel(&ctx->released, 1);
+  jit_owner_test_rel(ctx->g, 0, 0);
+  return NULL;
+}
+
+static void *publish_stopreq_while_token_waits(void *arg)
+{
+  TokenStopReqCtx *ctx = (TokenStopReqCtx *)arg;
+  int i;
+  for (i = 0; i < 5000; i++) {
+    if (lj_tg_in_native_acq(ctx->tg)) {
+      la_store32_rel(&ctx->saw_native, 1);
+      break;
+    }
+    (void)lj_thr_sleep_ns(NULL, 1000000);
+  }
+  assert(la_load32_acq(&ctx->saw_native) != 0);
+  la_store32_rel(&ctx->signaled,
+		 lj_safepoint_handshake(ctx->g, LJ_GC2_HS_STOPREQ));
+  assert(jit_token_acq(ctx->g) == ctx->owner);
+  jit_owner_test_rel(ctx->g, 0, 0);
+  la_store32_rel(&ctx->released, 1);
+  return NULL;
+}
+
+static void make_token_flush_trace(lua_State *L)
+{
+  ljt_lua_dostring(L,
+    "local util = require'jit.util'\n"
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "function lj_m6_token_tracecount()\n"
+    "  local n = 0\n"
+    "  for i = 1, 1024 do if util.traceinfo(i) then n = n + 1 end end\n"
+    "  return n\n"
+    "end\n"
+    "jit.off(lj_m6_token_tracecount, true)\n"
+    "function lj_m6_token_flush_f(n)\n"
+    "  local s = 0\n"
+    "  for i = 1, n do s = s + i end\n"
+    "  return s\n"
+    "end\n"
+    "for _ = 1, 20 do assert(lj_m6_token_flush_f(80) == 3240) end\n"
+    "assert(lj_m6_token_tracecount() > 0, 'expected live trace')\n");
+}
+
+static void settle_automatic_cycle(global_State *g)
+{
+  uint32_t attempts;
+  for (attempts = 0; attempts < 4096u; attempts++) {
+    uint32_t phase = gc2_phase_acq(g);
+    uint32_t leader = gc2_cycle_leader_acq(g);
+    if (phase == LJ_GC2_IDLE && leader == 0 &&
+        gc2_jit_phase_gate_acq(g) != 0)
+      return;
+    if (phase == LJ_GC2_IDLE && leader != 0 &&
+        leader != LJ_THREAD_GCSCAN)
+      lj_gc2_mark_begin(g);
+    else if (phase != LJ_GC2_IDLE) {
+      (void)lj_gc2_worker_drain(g, LJ_GC2_WORKER_DRAIN_BATCH);
+      lj_gc2_cycle_to_idle(g);
+    }
+    (void)lj_thr_retry_yield(NULL);
+  }
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE &&
+         gc2_cycle_leader_acq(g) == 0 &&
+         gc2_jit_phase_gate_acq(g) != 0);
+}
+
+static void expect_gc_trace_free_defers_for_token(lua_State *L)
+{
+  global_State *g = G(L);
+  jit_State *J = G2J(g);
+  GCtrace *T;
+  TraceNo traceno;
+  TraceNo freetrace;
+  uint32_t foreign = foreign_token_owner(L);
+  uint64_t retire_epoch;
+
+  make_token_flush_trace(L);
+  /* Trace creation may have started an automatic GC2 cycle. This fixture
+  ** exercises the separate IDLE reclaimer transaction, so drain that cycle
+  ** before claiming and disconnecting the selected live body. */
+  settle_automatic_cycle(g);
+  /* This case isolates token admission. A runnable terminal inbound edge is a
+  ** separate semantic root and correctly makes GC rescue its target. */
+  T = first_trace_without_runnable_inbound(J);
+  assert(T != NULL);
+  traceno = trace_traceno_acq(T);
+  assert(traceno != 0 && traceref_safe(J, traceno) == T);
+  freetrace = J->freetrace;
+
+  jit_owner_test_rel(g, foreign, 0);
+  /* A GC claimant never races the recorder's target validate->publish window.
+  ** Losing the single nonwaiting token try requests async abort and authorizes
+  ** neither an epoch claim nor a root-spine splice.
+  */
+  assert(lj_trace_retire_gc_claim(g, T) == 0);
+  assert(lj_trace_free_gc(g, T) == 0);
+  assert(jit_token_acq(g) == foreign);
+  assert(trace_traceno_acq(T) == traceno);
+  assert(traceref_safe(J, traceno) == T);
+  assert(J->freetrace == freetrace);
+  assert(la_load64_acq(&T->retire_epoch) == 0);
+  assert(!trace_retired_link_listed_acq(T));
+
+  /* Once the recorder releases, the claimant takes the token once, publishes
+  ** the encoded claim and intrusive list node, then authorizes root pruning.
+  ** The detached-body destructor disconnects the exact public slot; a gated
+  ** pass before the full epoch margin must retain the body and reservation.
+  */
+  jit_owner_test_rel(g, 0, 0);
+  assert(lj_trace_retire_gc_claim(g, T) == 1);
+  retire_epoch = la_load64_acq(&T->retire_epoch) - 1u;
+  assert(trace_retired_link_listed_acq(T));
+  assert(lj_trace_free_gc(g, T) == 1);
+  assert(trace_traceno_acq(T) == 0);
+  if (!lj_gc2_test_idle_reclaim_enter(g)) {
+    fprintf(stderr,
+      "idle reclaim preflight failed: state=%u phase=%u leader=%u gate=%u "
+      "worker=%u assist=%u weakdrain=%u weakwrite=%u readers=%u "
+      "reclaiming=%u active=%d veto=%d token=%u recovery=%u\n",
+      (unsigned)g->gc.state, gc2_phase_acq(g), gc2_cycle_leader_acq(g),
+      gc2_jit_phase_gate_acq(g), gc2_worker_active_acq(g),
+      gc2_assist_active_acq(g), gc2_weak_drain_active_acq(g),
+      gc2_weak_write_active_acq(g), gc2_smr_readers_acq(g),
+      gc2_smr_reclaiming_acq(g), lj_tg_any_jit_active(g),
+      lj_gc2_activation_reclaim_veto(g), jit_token_acq(g),
+      gc2_recovery_failed_acq(g));
+    assert(0);
+  }
+  assert(lj_jit_token_try(J));
+  /* The process-wide pass may reclaim unrelated entries retired by the
+  ** fixture's preceding jit.flush(). Only this body's pre-margin retention is
+  ** part of the assertion. */
+  (void)lj_trace_reclaim_retired(g, retire_epoch + 1u);
+  lj_jit_token_release(J);
+  lj_gc2_test_idle_reclaim_leave(g);
+  assert(jit_token_acq(g) == 0);
+  assert(trace_retired_link_listed_acq(T));
+  assert(trace_traceno_acq(T) == 0);
+  /* Sticky MT keeps the exact retired body in the slot until SMR grace. */
+  assert(traceref_safe(J, traceno) == T);
+  /* J->freetrace may move for an unrelated older body reclaimed by the same
+  ** process-wide pass; the exact target slot remaining T proves it was not
+  ** released for reuse. */
+}
+
+static void expect_flush_waits_for_token(lua_State *L, const char *code,
+					 int expect_all_flushed)
+{
+  TokenReleaseCtx ctx;
+  pthread_t th;
+  global_State *g = G(L);
+  make_token_flush_trace(L);
+  ctx.g = g;
+  ctx.owner = foreign_token_owner(L);
+  ctx.released = 0;
+  jit_owner_test_rel(g, ctx.owner, 0);
+  assert(pthread_create(&th, NULL, release_jit_token_after_delay, &ctx) == 0);
+  ljt_lua_dostring(L, code);
+  assert(pthread_join(th, NULL) == 0);
+  assert(la_load32_acq(&ctx.released) == 1);
+  assert(jit_token_acq(g) == 0);
+  if (expect_all_flushed)
+    ljt_lua_dostring(L, "assert(lj_m6_token_tracecount() == 0)\n");
+}
+
+static void expect_opt_start_waits_for_token(lua_State *L)
+{
+  TokenReleaseCtx ctx;
+  pthread_t th;
+  global_State *g = G(L);
+  ctx.g = g;
+  ctx.owner = foreign_token_owner(L);
+  ctx.released = 0;
+  jit_owner_test_rel(g, ctx.owner, 0);
+  assert(pthread_create(&th, NULL, release_jit_token_after_delay, &ctx) == 0);
+  ljt_lua_dostring(L, "jit.opt.start('hotloop=3', 'hotexit=4', '-sink')\n");
+  assert(pthread_join(th, NULL) == 0);
+  assert(la_load32_acq(&ctx.released) == 1);
+  assert(jit_token_acq(g) == 0);
+  assert(jit_param_acq(G2J(g), JIT_P_hotloop) == 3);
+  assert(jit_param_acq(G2J(g), JIT_P_hotexit) == 4);
+  assert((jit_flags_acq(G2J(g)) & JIT_F_OPT_SINK) == 0);
+
+  ljt_lua_dostring(L,
+    "local ok = pcall(jit.opt.start, 'hotloop=5', 'not_an_option')\n"
+    "assert(not ok)\n");
+  assert(jit_token_acq(g) == 0);
+  assert(jit_param_acq(G2J(g), JIT_P_hotloop) == 5);
+}
+
+static void expect_token_wait_stopreq(lua_State *L, const char *code)
+{
+  TokenStopReqCtx ctx;
+  pthread_t th;
+  global_State *g = G(L);
+  int status;
+
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.g = g;
+  ctx.tg = L2TG(L);
+  ctx.owner = foreign_token_owner(L);
+  ljt_tg_clear_stopreq(ctx.tg);
+  jit_owner_test_rel(g, ctx.owner, 0);
+
+  assert(pthread_create(&th, NULL, publish_stopreq_while_token_waits,
+			&ctx) == 0);
+  status = luaL_dostring(L, code);
+  assert(pthread_join(th, NULL) == 0);
+  assert(la_load32_acq(&ctx.saw_native) != 0);
+  assert(la_load32_acq(&ctx.signaled) >= 1u);
+  assert(la_load32_acq(&ctx.released) != 0);
+  assert(jit_token_acq(g) == 0);
+  ljt_tg_clear_stopreq(ctx.tg);
+
+  if (status != LUA_OK) {
+    const char *err = lua_tostring(L, -1);
+    fprintf(stderr, "unexpected token STOPREQ test error: %s\n",
+	    err ? err : "(nil)");
+  }
+  assert(status == LUA_OK);
+  lua_settop(L, 0);
+}
+
+static uint32_t detached_flush_event_calls;
+static uint32_t flush_setup_error_calls;
+static uint32_t deferred_flush_stopreq_calls;
+
+static void acquire_flush_event_session(lua_State *L, TGState *tg,
+                                        LJJitEventSessionSnapshot *session)
+{
+  uint32_t attempt;
+  int state = LJ_JIT_EVENT_SNAPSHOT_RETRY;
+  for (attempt = 0; attempt < 4096u; attempt++) {
+    state = lj_jit_event_session_snapshot_acquire(G(L), tg, session);
+    if (state != LJ_JIT_EVENT_SNAPSHOT_RETRY)
+      break;
+    (void)lj_thr_retry_yield(L);
+  }
+  assert(state == LJ_JIT_EVENT_SNAPSHOT_ACTIVE);
+}
+
+static void assert_flush_event_detached_state(lua_State *L)
+{
+  global_State *g = G(L);
+  jit_State *J = L2J(L);
+  TGState *tg = L2TG(L);
+  LJJitTraceStreamSnapshot stream;
+  LJJitEventCallbackSnapshot callback;
+  LJJitEventSessionSnapshot session;
+
+  assert(tg != NULL && tg->gl == g);
+  assert(jit_owner_word_acq(g) == jit_owner_pack(0, 0));
+  assert(jit_owner_l_acq(J) == NULL);
+  assert(!lj_jit_token_held_l(L, J));
+  assert(lj_jit_trace_stream_snapshot(g, &stream) ==
+         LJ_JIT_STREAM_SNAPSHOT_ACTIVE);
+  assert(stream.phase == LJ_JIT_STREAM_DETACHED_CALLBACK);
+  assert(stream.generation != 0 && stream.event_ordinal == 1u);
+  assert(lj_tgregistry_key_equal(&stream.owner_key, &tg->registry_key));
+  assert(stream.owner_tid == lj_tg_tid_acq(tg));
+  assert(stream.owner_actor == lj_tg_actor_acq(tg));
+  assert(stream.traceno == 0);
+  assert(stream.callback_event == LJ_JIT_EVENT_TRACE_FLUSH);
+  assert(stream.callback_slot == stream.terminal_slot);
+  assert(stream.callback_session_generation ==
+         stream.terminal_session_generation);
+  assert(stream.terminal_event == LJ_JIT_EVENT_TRACE_FLUSH);
+
+  assert(lj_jit_event_callback_snapshot(tg, &callback) ==
+         LJ_JIT_EVENT_CALLBACK_SNAPSHOT_ACTIVE);
+  assert(callback.tg == tg && callback.owner_L == L);
+  assert(callback.state == LJ_JIT_EVENT_CALLBACK_CALLING);
+  assert(callback.stream_generation == stream.generation);
+  assert(callback.session_generation ==
+         stream.callback_session_generation);
+  assert(callback.session_slot == stream.callback_slot);
+  assert(callback.event == LJ_JIT_EVENT_TRACE_FLUSH);
+  assert(callback.owner_actor == stream.owner_actor);
+  assert((lj_tg_hookmask_load(tg) & (HOOK_ACTIVE|HOOK_VMEVENT)) ==
+         (HOOK_ACTIVE|HOOK_VMEVENT));
+  assert(vmevent_owner_acq(g) == 0);
+
+  memset(&session, 0, sizeof(session));
+  acquire_flush_event_session(L, tg, &session);
+  assert(session.generation == callback.session_generation);
+  assert(session.slot_index == callback.session_slot);
+  assert(session.event == LJ_JIT_EVENT_TRACE_FLUSH);
+  assert(session.owner_mode == LJ_JIT_EVENT_OWNER_DETACHED_IMMUTABLE);
+  assert(session.edge_proof == LJ_JIT_EVENT_EDGE_NONE);
+  assert(session.callback_root_count == 1u);
+  assert(session.callback_handler != NULL);
+  assert(lj_jit_event_session_snapshot_release(&session));
+}
+
+static int assert_flush_event_detached(lua_State *L)
+{
+  assert_flush_event_detached_state(L);
+  /* A full GC must retain and rediscover the exact callback root while both
+  ** the low recorder word and legacy global VM-event owner remain empty. */
+  assert(lua_gc(L, LUA_GCCOLLECT, 0) == 0);
+  assert_flush_event_detached_state(L);
+  (void)la_add32_acqrel(&detached_flush_event_calls, 1u);
+  return 0;
+}
+
+static void inject_flush_setup_error(lua_State *L, VMEvent ev, int stage,
+                                     void *ud)
+{
+  LJJitTraceStreamSnapshot stream;
+  UNUSED(ud);
+  assert(ev == LJ_VMEVENT_TRACE);
+  if (stage != LJ_VMEVENT_TEST_AFTER_EVENT_LOOKUP) {
+    /* Preparation hooks are one-shot at every checkpoint. Walk the same
+    ** reader forward until the handler lookup has actually completed. */
+    lj_vmevent_test_set_prepare_hook(inject_flush_setup_error, NULL);
+    return;
+  }
+  assert(lj_jit_token_held_l(L, L2J(L)));
+  assert(jit_owner_l_acq(L2J(L)) == L);
+  assert(lj_jit_trace_stream_snapshot(G(L), &stream) ==
+         LJ_JIT_STREAM_SNAPSHOT_IDLE);
+  assert(lj_jit_event_callback_idle(L2TG(L)));
+  (void)la_add32_acqrel(&flush_setup_error_calls, 1u);
+  /* The protected setup path must preserve this fixed error object, release
+  ** its disposable low token exactly once, and rethrow to the public pcall. */
+  lj_err_mem(L);
+}
+
+static void inject_flush_deferred_stopreq(lua_State *L, void *ud)
+{
+  TGState *tg = (TGState *)ud;
+  LJJitTraceStreamSnapshot stream;
+  LJJitEventCallbackSnapshot callback;
+  assert(tg != NULL && L2TG(L) == tg);
+  assert(jit_owner_word_acq(G(L)) == jit_owner_pack(0, 0));
+  assert(jit_owner_l_acq(L2J(L)) == NULL);
+  assert(lj_jit_trace_stream_snapshot(G(L), &stream) ==
+         LJ_JIT_STREAM_SNAPSHOT_ACTIVE);
+  assert(stream.phase == LJ_JIT_STREAM_DETACHED_CALLBACK);
+  assert(lj_jit_event_callback_snapshot(tg, &callback) ==
+         LJ_JIT_EVENT_CALLBACK_SNAPSHOT_ACTIVE);
+  assert(callback.state == LJ_JIT_EVENT_CALLBACK_UNWINDING);
+  assert(callback.stream_generation == stream.generation);
+  assert(callback.session_generation ==
+         stream.callback_session_generation);
+  (void)lj_tg_flags_or_rlx(tg, TGF_STOPREQ|TGF_STOPREQ_FRESH);
+  (void)la_add32_acqrel(&deferred_flush_stopreq_calls, 1u);
+}
+
+static void assert_flush_event_transaction_idle(lua_State *L)
+{
+  LJJitTraceStreamSnapshot stream;
+  jit_State *J = L2J(L);
+  TGState *tg = L2TG(L);
+  assert(jit_owner_word_acq(G(L)) == jit_owner_pack(0, 0));
+  assert(jit_owner_l_acq(J) == NULL);
+  assert(lj_jit_trace_stream_snapshot(G(L), &stream) ==
+         LJ_JIT_STREAM_SNAPSHOT_IDLE);
+  assert(lj_jit_event_callback_idle(tg));
+  assert(lj_jit_event_sessions_quiescent(tg));
+}
+
+static void expect_jit_lifecycle_word_roundtrip(lua_State *L)
+{
+  global_State *g = G(L);
+  jit_State *J = L2J(L);
+  TGState *tg = L2TG(L);
+  uint32_t tid = lj_tg_tid_acq(tg);
+
+  assert(lj_trace_state_load(J) == LJ_TRACE_IDLE);
+  assert(jit_owner_word_acq(g) == jit_owner_pack(0, 0));
+  assert(lj_jit_token_try_l(L, J));
+  jit_owner_l_rel(J, L);
+  assert(jit_owner_word_acq(g) == jit_owner_pack(tid, 0));
+  assert(lj_jit_token_held_l(L, J));
+
+  assert(lj_jit_lifecycle_yield_l(L, J));
+  assert(jit_token_acq(g) == 0);
+  assert(jit_lifecycle_acq(g) == tid);
+  assert(!lj_jit_token_held_l(L, J));
+  assert(lj_jit_lifecycle_held_l(L, J));
+  assert(!lj_jit_token_try_l(L, J));
+  assert(!lj_jit_token_try(J));
+
+  /* Ordinary token release must neither erase the high-half reservation nor
+  ** detach its lua_State owner while a callback lifecycle is active. */
+  lj_jit_token_release(J);
+  lj_jit_token_release_l(L, J);
+  assert(jit_owner_word_acq(g) == jit_owner_pack(0, tid));
+  assert(jit_owner_l_acq(J) == L);
+
+  assert(lj_jit_lifecycle_resume_l(L, J));
+  assert(jit_owner_word_acq(g) == jit_owner_pack(tid, 0));
+  assert(lj_jit_token_held_l(L, J));
+  assert(!lj_jit_lifecycle_held_l(L, J));
+  lj_jit_token_release_l(L, J);
+  assert(jit_owner_word_acq(g) == jit_owner_pack(0, 0));
+  assert(jit_owner_l_acq(J) == NULL);
+}
+
+int main(void)
+{
+  lua_State *L = ljt_lua_newstate_openlibs();
+  global_State *g;
+
+  g = G(L);
+  assert(jit_token_acq(g) == 0);
+  expect_jit_lifecycle_word_roundtrip(L);
+  expect_vmevent_smr_try_drop(L);
+  expect_vmevent_owner_and_jit_pointer(L);
+
+  lua_pushcfunction(L, assert_flush_event_detached);
+  lua_setglobal(L, "lj_m6_assert_flush_event_detached");
+  {
+    uint32_t before = la_load32_acq(&detached_flush_event_calls);
+    /* Exercise the pre-MT direct callsite. The explicit nested flush must use
+    ** the now-free recorder token but cannot recursively enter the already
+    ** claimed same-TG callback/stream transaction. */
+    ljt_lua_dostring(L,
+      "local calls, nested = 0, false\n"
+      "local function hook(ev)\n"
+      "  assert(ev == 'flush')\n"
+      "  calls = calls + 1\n"
+      "  lj_m6_assert_flush_event_detached()\n"
+      "  if not nested then\n"
+      "    nested = true\n"
+      "    jit.flush()\n"
+      "    nested = false\n"
+      "  end\n"
+      "end\n"
+      "jit.attach(hook, 'trace')\n"
+      "jit.flush()\n"
+      "jit.attach(hook)\n"
+      "assert(calls == 1, calls)\n");
+    assert(la_load32_acq(&detached_flush_event_calls) == before + 1u);
+    assert_flush_event_transaction_idle(L);
+  }
+
+  {
+    GCtrace trace;
+    SnapShot snap;
+    uint8_t count;
+    memset(&trace, 0, sizeof(trace));
+    memset(&snap, 0, sizeof(snap));
+
+    trace_nchild_inc_acqrel(&trace);
+    assert(trace_nchild_acq(&trace) == 1);
+    trace_nchild_dec_acqrel(&trace);
+    assert(trace_nchild_acq(&trace) == 0);
+    trace_nchild_dec_acqrel(&trace);
+    assert(trace_nchild_acq(&trace) == 0);
+
+    count = 0;
+    assert(snap_count_cas_acqrel(&snap, &count, 1) != 0);
+    assert(count == 0);
+    assert(snap_count_acq(&snap) == 1);
+
+    count = 0;
+    assert(snap_count_cas_acqrel(&snap, &count, 2) == 0);
+    assert(count == 1);
+    assert(snap_count_acq(&snap) == 1);
+
+    snap_count_rel(&snap, SNAPCOUNT_DONE);
+    assert(snap_count_acq(&snap) == SNAPCOUNT_DONE);
+  }
+
+#if LJ_TARGET_X64 && !LJ_ABI_WIN
+  {
+    TGState secondary;
+    TGState *saved_tg = lj_thr_get_tg();
+    assert(g->main_tg != NULL);
+    lj_tg_init_thread(g, &secondary, NULL, 0);
+    secondary.tid = g->main_tg->tid == 0x7ffffffeu ? 0x7ffffffdu : 0x7ffffffeu;
+    secondary.alloc.owner_tid = secondary.tid;
+    lj_thr_set_tg(&secondary);
+    assert(G2TG(g) == &secondary);
+    assert(lj_jit_token_try(g->jitp) != 0);
+    assert(jit_token_acq(g) == secondary.tid);
+    assert(lj_jit_token_held(g->jitp) != 0);
+    lj_jit_token_release(g->jitp);
+    assert(jit_token_acq(g) == 0);
+    lj_thr_set_tg(saved_tg);
+    lj_tg_fini_thread(g, &secondary);
+  }
+#endif
+
+  ljt_lua_dostring(L,
+    "local util = require'jit.util'\n"
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local function tracecount()\n"
+    "  local n = 0\n"
+    "  for i = 1, 32 do if util.traceinfo(i) then n = n + 1 end end\n"
+    "  return n\n"
+    "end\n"
+    "jit.off(tracecount, true)\n"
+    "local function f(n)\n"
+    "  local s = 0\n"
+    "  for i = 1, n do s = s + i end\n"
+    "  return s\n"
+    "end\n"
+    "for _ = 1, 20 do assert(f(80) == 3240) end\n"
+    "assert(tracecount() > 0, 'expected token-owned recording')\n");
+  assert(jit_token_acq(g) == 0);
+  expect_jit_util_smr_try_drop(L);
+
+  assert(gc2_n_threads_acq(g) == 1);
+  assert(gc2_n_workers_acq(g) == 0);
+  expect_loop_xpoll_shape(L, 0);
+  {
+    uint32_t actions = 0;
+    assert(lj_gc2_workers_set_l(L, 1, &actions) == 1);
+    assert((actions & LJ_GC2_HS_STOPREQ) == 0);
+    assert(gc2_n_workers_acq(g) == 1);
+    expect_loop_xpoll_shape(L, 1);
+    assert(lj_gc2_workers_set_l(L, 0, &actions) == 1);
+    assert(gc2_n_workers_acq(g) == 0);
+  }
+
+  /* Sticky-MT full flushes use a safepoint leader. Their public TRACE event is
+  ** rooted by the initiating TG's immutable session and universe stream, then
+  ** runs with the recorder owner word and J->L already clear.
+  */
+  ljt_lua_dostring(L,
+    "local th = require('threading')\n"
+    "local w = th.spawn(function() return true end)\n"
+    "assert(w:join(5) == true)\n");
+  assert(mt_active_acq(g) != 0);
+  expect_tail_xpoll_snapshot(L);
+  expect_func_xpoll_snapshot(L);
+
+  /* Every iteration uses a fresh, deliberately exhausted coroutine stack.
+  ** Race its prepare-time growth against removal and collection of the event
+  ** handler's registry root. The SMR load->stack-publication handoff must keep
+  ** the ephemeral closure alive even when detach wins immediately afterward.
+  ** Successful calls also leave an ordinary popped handler above co->top; a
+  ** widened remote stack snapshot must validate that raw tail conservatively.
+  */
+  lua_pushcfunction(L, force_vmevent_prepare_stack_growth);
+  lua_setglobal(L, "lj_m6_force_vmevent_prepare_stack_growth");
+  assert(gc2_recovery_failed_acq(g) == 0);
+  ljt_lua_dostring(L,
+    "local th = require('threading')\n"
+    "local ready = th.channel(1)\n"
+    "local go = th.channel(1)\n"
+    "local done = th.channel(1)\n"
+    "local rounds = 48\n"
+    "local successes = 0\n"
+    "local worker = th.spawn(function(ready, go, done, rounds)\n"
+    "  for i = 1, rounds do\n"
+    "    local hook = function() end\n"
+    "    jit.attach(hook, 'trace')\n"
+    "    assert(ready:send(i, 5) == true)\n"
+    "    local token, ok = go:recv(5)\n"
+    "    assert(ok == true and token == i)\n"
+    "    jit.attach(hook)\n"
+    "    hook = nil\n"
+    "    collectgarbage('collect')\n"
+    "    assert(done:send(i, 5) == true)\n"
+    "  end\n"
+    "  return true\n"
+    "end, ready, go, done, rounds)\n"
+    "for i = 1, rounds do\n"
+    "  local co = coroutine.create(function()\n"
+    "    return lj_m6_force_vmevent_prepare_stack_growth()\n"
+    "  end)\n"
+    "  local token, ok = ready:recv(5)\n"
+    "  assert(ok == true and token == i,\n"
+    "         'ready round ' .. i .. ': ' .. tostring(token))\n"
+    "  local resumed, grew, prepared\n"
+    "  if i % 2 == 1 then\n"
+    "    resumed, grew, prepared = coroutine.resume(co)\n"
+    "    assert(go:send(i, 5) == true)\n"
+    "  else\n"
+    "    assert(go:send(i, 5) == true)\n"
+    "    resumed, grew, prepared = coroutine.resume(co)\n"
+    "  end\n"
+    "  assert(resumed == true, tostring(grew))\n"
+    "  assert(grew == true, 'VM-event prepare did not grow the stack')\n"
+    "  if prepared then successes = successes + 1 end\n"
+    "  token, ok = done:recv(5)\n"
+    "  assert(ok == true and token == i,\n"
+    "         'done round ' .. i .. ': ' .. tostring(token))\n"
+    "end\n"
+    "assert(successes > 0, 'VM-event handler was never stack-published')\n"
+    "assert(worker:join(10) == true)\n");
+  assert(gc2_recovery_failed_acq(g) == 0);
+  lua_pushnil(L);
+  lua_setglobal(L, "lj_m6_force_vmevent_prepare_stack_growth");
+
+  {
+    uint32_t before = la_load32_acq(&detached_flush_event_calls);
+    ljt_lua_dostring(L,
+      "local calls = 0\n"
+      "local function hook(ev)\n"
+      "  assert(ev == 'flush')\n"
+      "  calls = calls + 1\n"
+      "  lj_m6_assert_flush_event_detached()\n"
+      "end\n"
+      "jit.attach(hook, 'trace')\n"
+      "jit.flush()\n"
+      "jit.attach(hook)\n"
+      "assert(calls == 1, calls)\n");
+    assert(la_load32_acq(&detached_flush_event_calls) == before + 1u);
+    assert_flush_event_transaction_idle(L);
+  }
+
+  {
+    uint32_t before = la_load32_acq(&flush_setup_error_calls);
+    int base, status;
+    ljt_lua_dostring(L,
+      "lj_m6_flush_setup_handler_calls = 0\n"
+      "function lj_m6_flush_setup_error_hook(ev)\n"
+      "  assert(ev == 'flush')\n"
+      "  lj_m6_flush_setup_handler_calls = "
+      "lj_m6_flush_setup_handler_calls + 1\n"
+      "end\n"
+      "jit.attach(lj_m6_flush_setup_error_hook, 'trace')\n");
+    lj_vmevent_test_set_prepare_hook(inject_flush_setup_error, NULL);
+    base = lua_gettop(L);
+    lua_getglobal(L, "jit");
+    assert(lua_istable(L, -1));
+    lua_getfield(L, -1, "flush");
+    lua_remove(L, -2);
+    assert(lua_isfunction(L, -1));
+    status = lua_pcall(L, 0, 0, 0);
+    assert(status == LUA_ERRMEM);
+    assert(lua_isstring(L, -1));
+    assert(strstr(lua_tostring(L, -1), "not enough memory") != NULL);
+    assert(la_load32_acq(&flush_setup_error_calls) == before + 1u);
+    assert_flush_event_transaction_idle(L);
+    lj_vmevent_test_set_prepare_hook(NULL, NULL);
+    lua_settop(L, base);
+    ljt_lua_dostring(L,
+      "assert(lj_m6_flush_setup_handler_calls == 0)\n"
+      "jit.attach(lj_m6_flush_setup_error_hook)\n"
+      "lj_m6_flush_setup_error_hook = nil\n"
+      "lj_m6_flush_setup_handler_calls = nil\n");
+  }
+
+  {
+    TGState *tg = L2TG(L);
+    uint32_t before = la_load32_acq(&deferred_flush_stopreq_calls);
+    int base, status;
+    /* Inject a fresh STOPREQ only after protected callback return has published
+    ** UNWINDING. The public flush may throw it only after exact owner/stream/
+    ** session close; otherwise this post-pcall idle proof fails. */
+    ljt_tg_clear_stopreq(tg);
+    ljt_lua_dostring(L,
+      "function lj_m6_deferred_flush_hook(ev) assert(ev == 'flush') end\n"
+      "jit.attach(lj_m6_deferred_flush_hook, 'trace')\n");
+    lj_jit_vmevent_call_test_set_hook(inject_flush_deferred_stopreq, tg);
+    base = lua_gettop(L);
+    lua_getglobal(L, "jit");
+    assert(lua_istable(L, -1));
+    lua_getfield(L, -1, "flush");
+    lua_remove(L, -2);
+    assert(lua_isfunction(L, -1));
+    status = lua_pcall(L, 0, 0, 0);
+    assert(status != LUA_OK);
+    assert(lua_isstring(L, -1));
+    assert(strstr(lua_tostring(L, -1),
+                  "thread interrupted: VM shutdown") != NULL);
+    assert(la_load32_acq(&deferred_flush_stopreq_calls) == before + 1u);
+    assert_flush_event_transaction_idle(L);
+    ljt_tg_clear_stopreq(tg);
+    lua_settop(L, base);
+    ljt_lua_dostring(L,
+      "jit.attach(lj_m6_deferred_flush_hook)\n"
+      "lj_m6_deferred_flush_hook = nil\n");
+  }
+  lua_pushnil(L);
+  lua_setglobal(L, "lj_m6_assert_flush_event_detached");
+
+  ljt_lua_dostring(L,
+    "local util = require'jit.util'\n"
+    "jit.flush()\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "function lj_m6_busy_tracecount()\n"
+    "  local n = 0\n"
+    "  for i = 1, 1024 do if util.traceinfo(i) then n = n + 1 end end\n"
+    "  return n\n"
+    "end\n"
+    "jit.off(lj_m6_busy_tracecount, true)\n"
+    "function lj_m6_busy_f(n)\n"
+    "  local s = 0\n"
+    "  for i = 1, n do s = s + i end\n"
+    "  return s\n"
+    "end\n");
+  jit_owner_test_rel(g, 0x7fffffffu, 0);
+  ljt_lua_dostring(L,
+    "for _ = 1, 40 do assert(lj_m6_busy_f(80) == 3240) end\n"
+    "assert(lj_m6_busy_tracecount() == 0, 'busy recorder token must skip tracing')\n");
+  assert(jit_token_acq(g) == 0x7fffffffu);
+
+  jit_owner_test_rel(g, 0, 0);
+  ljt_lua_dostring(L,
+    "local util = require'jit.util'\n"
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local function tracecount()\n"
+    "  local n = 0\n"
+    "  for i = 1, 1024 do if util.traceinfo(i) then n = n + 1 end end\n"
+    "  return n\n"
+    "end\n"
+    "jit.off(tracecount, true)\n"
+    "local function f(n)\n"
+    "  local s = 0\n"
+    "  for i = 1, n do s = s + i end\n"
+    "  return s\n"
+    "end\n"
+    "for _ = 1, 20 do assert(f(80) == 3240) end\n"
+    "assert(tracecount() > 0, 'recording should resume after token release')\n");
+  assert(jit_token_acq(g) == 0);
+
+  expect_flush_waits_for_token(L, "jit.flush()\n", 1);
+  expect_flush_waits_for_token(L,
+    "local util = require('jit.util')\n"
+    "for tr = 1, 1024 do\n"
+    "  if util.traceinfo(tr) then jit.flush(tr); break end\n"
+    "end\n", 0);
+  expect_opt_start_waits_for_token(L);
+  expect_token_wait_stopreq(L,
+    "local ok, err = pcall(jit.flush)\n"
+    "assert(not ok and tostring(err):find('VM shutdown', 1, true))\n");
+  make_token_flush_trace(L);
+  expect_token_wait_stopreq(L,
+    "local ok, err = pcall(jit.flush, 1)\n"
+    "assert(not ok and tostring(err):find('VM shutdown', 1, true))\n");
+  expect_token_wait_stopreq(L,
+    "local ok, err = pcall(jit.opt.start, 'hotloop=9')\n"
+    "assert(not ok and tostring(err):find('VM shutdown', 1, true))\n");
+
+  expect_gc_trace_free_defers_for_token(L);
+
+  lua_close(L);
+  printf("t-jit-token OK: recorder token accepts secondary TGs and owns JIT controls\n");
+  return 0;
+}

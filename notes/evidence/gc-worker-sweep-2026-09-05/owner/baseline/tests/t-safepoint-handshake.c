@@ -1,0 +1,1838 @@
+/*
+** Focused test for the C-level soft-handshake scaffold.
+*/
+
+#include <assert.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <pthread.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include "lua.h"
+#include "lauxlib.h"
+#include "lualib.h"
+
+#include "lj_obj.h"
+#include "lj_atomic.h"
+#include "lj_arena.h"
+#include "lj_gc2.h"
+#include "lj_dispatch.h"
+#include "lj_profile.h"
+#include "lj_safepoint.h"
+#include "lj_tg.h"
+#include "lj_thr.h"
+#include "lj_trace.h"
+#include "lj_vm.h"
+
+#include "lib/test_sleep.h"
+
+typedef struct NativeStopReqCtx {
+  global_State *g;
+  TGState *tg;
+  pthread_t thread;
+  char path[PATH_MAX];
+  int active;
+  int open_fifo;
+  int open_errno;
+} NativeStopReqCtx;
+
+static NativeStopReqCtx native_stopreq_ctx;
+
+typedef struct PrintStopReqCtx {
+  global_State *g;
+  TGState *tg;
+  pthread_t thread;
+  int fd;
+  int err;
+  uint32_t done;
+} PrintStopReqCtx;
+
+typedef struct InputStopReqCtx {
+  global_State *g;
+  TGState *tg;
+  pthread_t thread;
+  int fd;
+  int err;
+} InputStopReqCtx;
+
+typedef struct DispatchUpdateWaitCtx {
+  global_State *g;
+  TGState *tg;
+  pthread_t thread;
+  uint8_t release_mode;
+  uint32_t saw_native;
+  uint32_t done;
+  int err;
+} DispatchUpdateWaitCtx;
+
+typedef struct ConsumedAckCtx {
+  global_State *g;
+  TGState *tg;
+  pthread_t thread;
+  uint32_t cleared;
+  uint32_t actions;
+} ConsumedAckCtx;
+
+static void publish_manual(global_State *g, TGState *tg, uint32_t actions)
+{
+  uint64_t epoch = la_load64_rlx(&g->gc2.hs_epoch) + 1u;
+  la_store32_rel(&g->gc2.hs_actions, actions);
+  la_store32_rel(&g->gc2.hs_pending, 1);  /* 05 section 5.4.2. */
+  la_store64_rel(&g->gc2.hs_epoch, epoch);  /* 05 section 5.4.2. */
+  la_store32_rel(&tg->reqmask, actions);  /* 05 section 5.4.2. */
+  la_store32_rel(&tg->poll, 1);  /* 05 section 5.4.2 signal word. */
+}
+
+static int publish_alloc_white_c(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  assert(tg != NULL);
+  publish_manual(g, tg, LJ_GC2_HS_ALLOC_WHITE);
+  return 0;
+}
+
+static int publish_stopreq_c(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  assert(tg != NULL);
+  publish_manual(g, tg, LJ_GC2_HS_STOPREQ);
+  return 0;
+}
+
+static int tg_only_stopreq_edge_c(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  uint32_t actions;
+  assert(tg != NULL);
+  publish_manual(g, tg, LJ_GC2_HS_STOPREQ);
+  lj_native_enter(tg);
+  actions = lj_native_leave_tg(tg);
+  assert(actions == LJ_GC2_HS_STOPREQ);
+  assert(g->gc2.hs_pending == 0 && tg->reqmask == 0 && tg->poll == 1);
+  /* Deliberately discard one L-aware acknowledgement. The synthetic edge must
+  ** remain armed, so the following checked acknowledgement still throws. */
+  (void)lj_safepoint_ack(L);
+  assert(tg->poll == 1);
+  (void)lj_safepoint_ack_check(L);
+  assert(0);  /* The checked edge above must throw. */
+  return 0;
+}
+
+static int publish_global_stopreq_c(lua_State *L)
+{
+  assert(lj_safepoint_handshake(G(L), LJ_GC2_HS_STOPREQ) >= 1u);
+  return 0;
+}
+
+static int publish_peer_stopreq_c(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = L2TG(L);
+  uint8_t flags;
+  assert(tg != NULL);
+  assert(lj_safepoint_handshake(g, LJ_GC2_HS_STOPREQ) >= 1u);
+  /* These cases target a blocked peer, not the publishing Lua state. Cancel
+  ** the publisher's synthetic STOP edge before returning to VM dispatch while
+  ** leaving every peer's independently acknowledged edge intact. */
+  assert(gc2_hs_leader_acq(g) == 0);
+  assert(gc2_hs_pending_acq(g) == 0);
+  assert(lj_tg_reqmask_acq(tg) == 0);
+  flags = la_load8_acq(&tg->tg_flags);
+  assert((flags & (TGF_STOPREQ|TGF_STOPREQ_FRESH)) ==
+	 (TGF_STOPREQ|TGF_STOPREQ_FRESH));
+  (void)lj_tg_flags_and_rlx(tg,
+	(uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH));
+  lj_tg_poll_rel(tg, 0);
+  return 0;
+}
+
+static int mark_sticky_stopreq_c(lua_State *L)
+{
+  TGState *tg = G2TG(G(L));
+  assert(tg != NULL);
+  la_or8_rlx(&tg->tg_flags, TGF_STOPREQ);
+  return 0;
+}
+
+static int assert_acked_alloc_white_c(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  assert(tg != NULL);
+  assert(g->gc2.hs_pending == 0);
+  assert(tg->poll == 0);
+  assert(tg->reqmask == 0);
+  assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
+  assert(tg->alloc.alloc_black == 0);
+  return 0;
+}
+
+static int assert_acked_c(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  assert(tg != NULL);
+  assert(g->gc2.hs_pending == 0);
+  assert(tg->poll == 0);
+  assert(tg->reqmask == 0);
+  assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
+  return 0;
+}
+
+static int clear_stopreq_c(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  uint8_t flags;
+  assert(tg != NULL);
+  assert(g->gc2.hs_pending == 0);
+  assert(tg->poll == 0);
+  assert(tg->reqmask == 0);
+  assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
+  flags = la_load8_acq(&tg->tg_flags);
+  assert((flags & TGF_STOPREQ) != 0);
+  la_store8_rel(&tg->tg_flags,
+		(uint8_t)(flags & ~(TGF_STOPREQ|TGF_STOPREQ_FRESH)));
+  return 0;
+}
+
+static int mkfifo_test_c(lua_State *L)
+{
+  const char *path = luaL_checkstring(L, 1);
+  if (mkfifo(path, 0600) != 0)
+    return luaL_error(L, "mkfifo failed: %s", strerror(errno));
+  lua_pushboolean(L, 1);
+  return 1;
+}
+
+static void *consumed_ack_clear_thread(void *arg)
+{
+  ConsumedAckCtx *ctx = (ConsumedAckCtx *)arg;
+  sleep_ns(20000000L);
+  la_store32_rel(&ctx->cleared, 1);
+  lj_tg_poll_rel(ctx->tg, 0);
+  lj_tg_poll_futex_wake(ctx->tg, 1);
+  return NULL;
+}
+
+static void *consumed_ack_reqmask_thread(void *arg)
+{
+  ConsumedAckCtx *ctx = (ConsumedAckCtx *)arg;
+  uint64_t epoch = la_load64_rlx(&ctx->g->gc2.hs_epoch) + 1u;
+  sleep_ns(20000000L);
+  la_store32_rel(&ctx->g->gc2.hs_actions, ctx->actions);
+  la_store32_rel(&ctx->g->gc2.hs_pending, 1);
+  la_store64_rel(&ctx->g->gc2.hs_epoch, epoch);
+  lj_tg_reqmask_rel(ctx->tg, ctx->actions);
+  lj_tg_poll_futex_wake(ctx->tg, 1);
+  return NULL;
+}
+
+static void test_consumed_ack_poll_gate(lua_State *L, TGState *tg)
+{
+  ConsumedAckCtx ctx;
+  int err;
+  ctx.g = G(L);
+  ctx.tg = tg;
+  ctx.cleared = 0;
+  ctx.actions = 0;
+  la_store32_rel(&tg->reqmask, 0);
+  la_store32_rel(&tg->poll, 1);
+  err = pthread_create(&ctx.thread, NULL, consumed_ack_clear_thread, &ctx);
+  assert(err == 0);
+  assert(lj_safepoint_ack(L) == 0);
+  assert(la_load32_acq(&ctx.cleared) == 1);
+  err = pthread_join(ctx.thread, NULL);
+  assert(err == 0);
+  assert(tg->poll == 0);
+  assert(tg->reqmask == 0);
+}
+
+static void test_consumed_ack_reqmask_wake(lua_State *L, TGState *tg)
+{
+  ConsumedAckCtx ctx;
+  int err;
+  ctx.g = G(L);
+  ctx.tg = tg;
+  ctx.cleared = 0;
+  ctx.actions = LJ_GC2_HS_ALLOC_WHITE;
+  la_store32_rel(&ctx.g->gc2.hs_pending, 0);
+  la_store32_rel(&tg->reqmask, 0);
+  la_store32_rel(&tg->poll, 1);
+  err = pthread_create(&ctx.thread, NULL, consumed_ack_reqmask_thread, &ctx);
+  assert(err == 0);
+  assert(lj_safepoint_ack(L) == ctx.actions);
+  err = pthread_join(ctx.thread, NULL);
+  assert(err == 0);
+  assert(ctx.g->gc2.hs_pending == 0);
+  assert(tg->poll == 0);
+  assert(tg->reqmask == 0);
+}
+
+static void *native_stopreq_thread(void *arg)
+{
+  NativeStopReqCtx *ctx = (NativeStopReqCtx *)arg;
+  int i;
+  for (i = 0; i < 1000 && lj_tg_in_native_acq(ctx->tg) == 0; i++)
+    sleep_ns(1000000L);
+  publish_manual(ctx->g, ctx->tg, LJ_GC2_HS_STOPREQ);
+  if (ctx->open_fifo) {
+    int fd = open(ctx->path, O_WRONLY);
+    if (fd == -1)
+      ctx->open_errno = errno;
+    else
+      (void)close(fd);
+  }
+  return NULL;
+}
+
+static int start_native_stopreq(lua_State *L, const char *path)
+{
+  size_t len = path ? strlen(path) : 0;
+  int err;
+  if (native_stopreq_ctx.active)
+    return luaL_error(L, "native STOPREQ helper already active");
+  if (len >= sizeof(native_stopreq_ctx.path))
+    return luaL_error(L, "FIFO path too long");
+  native_stopreq_ctx.g = G(L);
+  native_stopreq_ctx.tg = G2TG(native_stopreq_ctx.g);
+  native_stopreq_ctx.open_fifo = path != NULL;
+  native_stopreq_ctx.open_errno = 0;
+  if (path != NULL)
+    memcpy(native_stopreq_ctx.path, path, len + 1u);
+  else
+    native_stopreq_ctx.path[0] = '\0';
+  err = pthread_create(&native_stopreq_ctx.thread, NULL,
+		       native_stopreq_thread, &native_stopreq_ctx);
+  if (err != 0)
+    return luaL_error(L, "pthread_create failed: %s", strerror(err));
+  native_stopreq_ctx.active = 1;
+  return 0;
+}
+
+static int start_fifo_stopreq_c(lua_State *L)
+{
+  return start_native_stopreq(L, luaL_checkstring(L, 1));
+}
+
+static int start_native_stopreq_c(lua_State *L)
+{
+  return start_native_stopreq(L, NULL);
+}
+
+static int join_native_stopreq_c(lua_State *L)
+{
+  int err;
+  if (!native_stopreq_ctx.active)
+    return luaL_error(L, "native STOPREQ helper is not active");
+  err = pthread_join(native_stopreq_ctx.thread, NULL);
+  native_stopreq_ctx.active = 0;
+  if (err != 0)
+    return luaL_error(L, "pthread_join failed: %s", strerror(err));
+  if (native_stopreq_ctx.open_errno != 0)
+    return luaL_error(L, "FIFO writer open failed: %s",
+		      strerror(native_stopreq_ctx.open_errno));
+  return 0;
+}
+
+static int join_fifo_stopreq_c(lua_State *L)
+{
+  return join_native_stopreq_c(L);
+}
+
+static int assert_not_native_c(lua_State *L);
+
+static void *print_stopreq_thread(void *arg)
+{
+  PrintStopReqCtx *ctx = (PrintStopReqCtx *)arg;
+  char buf[4096];
+  int i;
+  for (i = 0; i < 1000 && lj_tg_in_native_acq(ctx->tg) == 0; i++)
+    sleep_ns(1000000L);
+  publish_manual(ctx->g, ctx->tg, LJ_GC2_HS_STOPREQ);
+  while (la_load32_acq(&ctx->done) == 0) {
+    ssize_t n = read(ctx->fd, buf, sizeof(buf));
+    if (n > 0)
+      continue;
+    if (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+      sleep_ns(1000000L);
+      continue;
+    }
+    if (n == 0) {
+      sleep_ns(1000000L);
+      continue;
+    }
+    ctx->err = errno;
+    break;
+  }
+  return NULL;
+}
+
+static void *input_stopreq_thread(void *arg)
+{
+  InputStopReqCtx *ctx = (InputStopReqCtx *)arg;
+  const char msg[] = "cont\n";
+  ssize_t n;
+  int i;
+  for (i = 0; i < 1000 && lj_tg_in_native_acq(ctx->tg) == 0; i++)
+    sleep_ns(1000000L);
+  publish_manual(ctx->g, ctx->tg, LJ_GC2_HS_STOPREQ);
+  n = write(ctx->fd, msg, sizeof(msg) - 1u);
+  if (n != (ssize_t)(sizeof(msg) - 1u))
+    ctx->err = n == -1 ? errno : EIO;
+  return NULL;
+}
+
+static void dispatch_test_sleep_1ms(void)
+{
+  sleep_ns(1000000L);
+}
+
+#define DISPMODE_UPDATE_TEST 0x80
+
+static void *dispatch_update_release_thread(void *arg)
+{
+  DispatchUpdateWaitCtx *ctx = (DispatchUpdateWaitCtx *)arg;
+  int i;
+  for (i = 0; i < 1000; i++) {
+    if (lj_tg_in_native_acq(ctx->tg) != 0) {
+      la_store32_rel(&ctx->saw_native, 1);
+      break;
+    }
+    dispatch_test_sleep_1ms();
+  }
+  if (la_load32_acq(&ctx->saw_native) == 0)
+    ctx->err = ETIMEDOUT;
+  dispatchmode_store_rel(ctx->g, ctx->release_mode);
+  return NULL;
+}
+
+static void *dispatch_update_async_thread(void *arg)
+{
+  DispatchUpdateWaitCtx *ctx = (DispatchUpdateWaitCtx *)arg;
+  lj_dispatch_update(ctx->g, 2);
+  la_store32_rel(&ctx->done, 1);
+  return NULL;
+}
+
+static void test_dispatch_update_regular_wait(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  DispatchUpdateWaitCtx ctx;
+  uint8_t mode = dispatchmode_load_acq(g);
+  int err;
+
+  assert(tg != NULL);
+  assert((mode & DISPMODE_UPDATE_TEST) == 0);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.g = g;
+  ctx.tg = tg;
+  ctx.release_mode = mode;
+  dispatchmode_store_rel(g, (uint8_t)(mode | DISPMODE_UPDATE_TEST));
+  err = pthread_create(&ctx.thread, NULL,
+		       dispatch_update_release_thread, &ctx);
+  assert(err == 0);
+  lj_dispatch_update(g, 0);
+  err = pthread_join(ctx.thread, NULL);
+  assert(err == 0);
+  assert(ctx.err == 0);
+  assert(la_load32_acq(&ctx.saw_native) == 1);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  assert(dispatchmode_load_acq(g) == mode);
+}
+
+static void test_dispatch_update_async_return(lua_State *L)
+{
+  global_State *g = G(L);
+  DispatchUpdateWaitCtx ctx;
+  uint8_t mode = dispatchmode_load_acq(g);
+  uint32_t immediate;
+  int i, err;
+
+  assert((mode & DISPMODE_UPDATE_TEST) == 0);
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.g = g;
+  ctx.release_mode = mode;
+  dispatchmode_store_rel(g, (uint8_t)(mode | DISPMODE_UPDATE_TEST));
+  err = pthread_create(&ctx.thread, NULL,
+		       dispatch_update_async_thread, &ctx);
+  assert(err == 0);
+  for (i = 0; i < 50 && la_load32_acq(&ctx.done) == 0; i++)
+    dispatch_test_sleep_1ms();
+  immediate = la_load32_acq(&ctx.done);
+  assert(dispatchmode_load_acq(g) == (uint8_t)(mode | DISPMODE_UPDATE_TEST));
+  dispatchmode_store_rel(g, mode);
+  err = pthread_join(ctx.thread, NULL);
+  assert(err == 0);
+  assert(immediate == 1);
+  assert(dispatchmode_load_acq(g) == mode);
+}
+
+#if LJ_HASJIT
+#define DISPMODE_PROF_TEST 0x40
+
+static ASMFunction dispatch_record_target(uint8_t mode)
+{
+  return (mode & DISPMODE_PROF_TEST) ? lj_vm_profhook : lj_vm_record;
+}
+
+static void test_dispatch_record_owner_overlay(lua_State *L)
+{
+  global_State *g = G(L);
+  jit_State *J = G2J(g);
+  TGState *tg = L2TG(L);
+  uint8_t mode = dispatchmode_load_acq(g);
+#if LJ_PROFILE_TGLOCAL
+  uint8_t tg_hookmask = lj_tg_hookmask_load(tg);
+#endif
+  ASMFunction ordinary_ins;
+
+  assert(tg != NULL);
+  assert(lj_tg_load_cur_L(tg) == L);
+  assert(lj_tg_owns_state_acq(tg, L));
+  assert(lj_trace_state_load(J) == LJ_TRACE_IDLE);
+  assert(jit_token_acq(g) == 0);
+  assert((mode & DISPMODE_UPDATE_TEST) == 0);
+
+  lj_tg_sync_dispatch_tg(g, tg);
+  ordinary_ins = tg->dispatch[BC_ADDVN];
+  assert(ordinary_ins == G2GG(g)->dispatch[BC_ADDVN]);
+  assert(lj_jit_token_try_l(L, J));
+  jit_owner_l_rel(J, L);
+  lj_trace_state_store_active(J, LJ_TRACE_RECORD);
+
+#if LJ_PROFILE_TGLOCAL
+  /* A pending TG-local profile sample takes precedence for exactly one
+  ** interpreter hook; clearing it reinstalls the recorder overlay. */
+  (void)lj_tg_hookmask_update(tg, 0, HOOK_PROFILE);
+  assert(lj_dispatch_record_start(L, J));
+  assert(tg->dispatch[BC_ADDVN] == lj_vm_profhook);
+  lj_dispatch_sync_tg(g, tg);
+  assert(tg->dispatch[BC_ADDVN] == lj_vm_profhook);
+  (void)lj_tg_hookmask_update(tg, HOOK_PROFILE,
+	(uint8_t)(tg_hookmask & HOOK_PROFILE));
+  assert(lj_dispatch_record_start(L, J));
+  assert(tg->dispatch[BC_ADDVN] == dispatch_record_target(mode));
+#endif
+
+  /* A peer may own the global template update claim. Recorder entry is a
+  ** bounded owner-local overlay and must neither wait for nor disturb it. */
+  dispatchmode_store_rel(g, (uint8_t)(mode | DISPMODE_UPDATE_TEST));
+  assert(lj_dispatch_record_start(L, J));
+  assert(dispatchmode_load_acq(g) ==
+	 (uint8_t)(mode | DISPMODE_UPDATE_TEST));
+  assert(tg->dispatch[BC_ADDVN] == dispatch_record_target(mode));
+  assert(tg->dispatch[BC_FUNCF] == lj_vm_callhook);
+
+  /* REDISPATCH must preserve the overlay even after an asynchronous abort;
+  ** trace_state() needs one more callback to consume it and release J. */
+  lj_safepoint_apply_tg(g, tg, LJ_GC2_HS_REDISPATCH);
+  assert(tg->dispatch[BC_ADDVN] == dispatch_record_target(mode));
+  assert(tg->dispatch[BC_FUNCF] == lj_vm_callhook);
+  lj_trace_state_abort(J);
+  assert(lj_trace_state_aborted(lj_trace_state_load(J)));
+  lj_dispatch_sync_tg(g, tg);
+  assert(tg->dispatch[BC_ADDVN] == dispatch_record_target(mode));
+  assert(tg->dispatch[BC_FUNCF] == lj_vm_callhook);
+
+  lj_trace_state_store(J, LJ_TRACE_IDLE);
+  lj_dispatch_sync_tg(g, tg);
+  assert(tg->dispatch[BC_ADDVN] == ordinary_ins);
+  lj_jit_token_release_l(L, J);
+  assert(jit_token_acq(g) == 0);
+  assert(jit_owner_l_acq(J) == NULL);
+  assert(!lj_dispatch_record_start(L, J));
+  dispatchmode_store_rel(g, mode);
+}
+
+static void dispatch_peer_sentinel(void)
+{
+}
+
+static void test_dispatch_update_never_writes_peer(lua_State *L)
+{
+  global_State *g = G(L);
+  jit_State *J = G2J(g);
+  TGState *main_tg = G2TG(g);
+  TGState peer;
+  TGState *saved_hint = L->tg_hint;
+  LJStateOwner saved_owner = lj_state_owner_word_acq(L);
+  uint8_t mode = dispatchmode_load_acq(g);
+  uint32_t peer_tid = lj_thr_newid();
+  ASMFunction baseline;
+
+  assert(main_tg != NULL && saved_hint == main_tg);
+  assert(lj_trace_state_load(J) == LJ_TRACE_IDLE);
+  assert(jit_token_acq(g) == 0);
+  assert(lj_thr_id_is_owner(peer_tid));
+  assert((mode & DISPMODE_UPDATE_TEST) == 0);
+
+  lj_tg_init_thread(g, &peer, NULL, 0);
+  lj_tg_tid_rel(&peer, peer_tid);
+  lj_tg_derive_prng(g, &peer, peer_tid);
+  lj_tg_attach(g, &peer);
+  assert(lj_tg_actor_acq(&peer) != 0);
+  assert(G2TG(g) == main_tg);  /* Attach does not transfer raw TLS. */
+
+  lj_tg_store_cur_L(&peer, L);
+  lj_tg_store_thread_L(&peer, L);
+  L->tg_hint = &peer;
+  lj_state_owner_word_rel(L,
+	lj_state_owner_pack(peer_tid, lj_tg_actor_acq(&peer)));
+  assert(lj_tg_owns_state_acq(&peer, L));
+  assert(lj_tg_load_cur_L(&peer) == L);
+  jit_owner_l_rel(J, L);
+  jit_owner_test_rel(g, peer_tid, 0);
+  lj_trace_state_store(J, LJ_TRACE_RECORD);
+
+  /* The explicit stopped-owner/ACK path is authorized to install the peer's
+  ** overlay. Replace one cell with a sentinel afterward so any foreign write
+  ** by the ordinary updater is observable. */
+  lj_dispatch_sync_tg(g, &peer);
+  assert(peer.dispatch[BC_MOV] == dispatch_record_target(mode));
+  baseline = G2GG(g)->dispatch[BC_MOV];
+  assert(baseline != dispatch_record_target(mode));
+  peer.dispatch[BC_MOV] = dispatch_peer_sentinel;
+
+  /* The main-TG updater sees the foreign recorder but has no certificate to
+  ** write its table. With no policy change this is bounded and
+  ** handshake-free. */
+  lj_dispatch_update(g, 0);
+  assert(dispatchmode_load_acq(g) == mode);
+  assert(peer.dispatch[BC_MOV] == dispatch_peer_sentinel);
+  assert(main_tg->dispatch[BC_MOV] == baseline);
+
+  lj_dispatch_sync_tg(g, &peer);
+  assert(peer.dispatch[BC_MOV] == dispatch_record_target(mode));
+
+  lj_trace_state_store(J, LJ_TRACE_IDLE);
+  jit_owner_l_rel(J, NULL);
+  jit_owner_test_rel(g, 0, 0);
+  L->tg_hint = saved_hint;
+  lj_state_owner_word_rel(L, saved_owner);
+  lj_tg_store_cur_L(&peer, NULL);
+  lj_tg_store_thread_L(&peer, NULL);
+  lj_tg_detach(g, &peer);
+  assert(lj_tg_reclaim_dead(g) == 1u);
+  assert(lj_tg_fini_thread(g, &peer));
+  assert(G2TG(g) == main_tg);
+  assert(lj_tg_owns_state_acq(main_tg, L));
+}
+#endif
+
+static void fill_pipe_until_full(int fd)
+{
+  char buf[4096];
+  int flags = fcntl(fd, F_GETFL, 0);
+  assert(flags != -1);
+  memset(buf, 'p', sizeof(buf));
+  assert(fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0);
+  for (;;) {
+    ssize_t n = write(fd, buf, sizeof(buf));
+    if (n == -1) {
+      assert(errno == EAGAIN || errno == EWOULDBLOCK);
+      break;
+    }
+    assert(n > 0);
+  }
+  assert(fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) == 0);
+}
+
+static void test_print_stopreq(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  PrintStopReqCtx ctx;
+  int pipefd[2];
+  int saved_stdout;
+  int flags;
+  int err;
+  int status;
+  assert(tg != NULL);
+  assert(pipe(pipefd) == 0);
+  fill_pipe_until_full(pipefd[1]);
+  flags = fcntl(pipefd[0], F_GETFL, 0);
+  assert(flags != -1);
+  assert(fcntl(pipefd[0], F_SETFL, flags | O_NONBLOCK) == 0);
+  assert(fflush(stdout) == 0);
+  saved_stdout = dup(STDOUT_FILENO);
+  assert(saved_stdout != -1);
+  assert(dup2(pipefd[1], STDOUT_FILENO) != -1);
+  (void)setvbuf(stdout, NULL, _IONBF, 0);
+
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.g = g;
+  ctx.tg = tg;
+  ctx.fd = pipefd[0];
+  err = pthread_create(&ctx.thread, NULL, print_stopreq_thread, &ctx);
+  assert(err == 0);
+  status = luaL_dostring(L, "print(string.rep('x', 4 * 1024 * 1024))");
+  la_store32_rel(&ctx.done, 1);
+  err = pthread_join(ctx.thread, NULL);
+  assert(err == 0);
+  assert(dup2(saved_stdout, STDOUT_FILENO) != -1);
+  close(saved_stdout);
+  close(pipefd[0]);
+  close(pipefd[1]);
+  clearerr(stdout);
+  assert(ctx.err == 0);
+  assert(status != LUA_OK);
+  assert(strstr(lua_tostring(L, -1),
+		"thread interrupted: VM shutdown") != NULL);
+  lua_pop(L, 1);
+  clear_stopreq_c(L);
+  assert_not_native_c(L);
+}
+
+static void test_debug_debug_stopreq(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  InputStopReqCtx ctx;
+  int pipefd[2];
+  int saved_stdin;
+  int err;
+  int status;
+  assert(tg != NULL);
+  assert(pipe(pipefd) == 0);
+  saved_stdin = dup(STDIN_FILENO);
+  assert(saved_stdin != -1);
+  assert(dup2(pipefd[0], STDIN_FILENO) != -1);
+
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.g = g;
+  ctx.tg = tg;
+  ctx.fd = pipefd[1];
+  err = pthread_create(&ctx.thread, NULL, input_stopreq_thread, &ctx);
+  assert(err == 0);
+  status = luaL_dostring(L, "debug.debug()");
+  err = pthread_join(ctx.thread, NULL);
+  assert(err == 0);
+  assert(dup2(saved_stdin, STDIN_FILENO) != -1);
+  close(saved_stdin);
+  close(pipefd[0]);
+  close(pipefd[1]);
+  assert(ctx.err == 0);
+  assert(status != LUA_OK);
+  assert(strstr(lua_tostring(L, -1),
+		"thread interrupted: VM shutdown") != NULL);
+  lua_pop(L, 1);
+  clear_stopreq_c(L);
+  assert_not_native_c(L);
+}
+
+static void test_debug_debug_sticky_ok(lua_State *L)
+{
+  int pipefd[2];
+  int saved_stdin;
+  int status;
+  assert(pipe(pipefd) == 0);
+  saved_stdin = dup(STDIN_FILENO);
+  assert(saved_stdin != -1);
+  assert(write(pipefd[1], "cont\n", 5) == 5);
+  close(pipefd[1]);
+  assert(dup2(pipefd[0], STDIN_FILENO) != -1);
+  status = luaL_dostring(L,
+    "mark_sticky_stopreq()\n"
+    "local ok, err = pcall(function() return debug.debug() end)\n"
+    "clear_stopreq()\n"
+    "assert_no_stopreq()\n"
+    "assert(ok, tostring(err))\n");
+  assert(dup2(saved_stdin, STDIN_FILENO) != -1);
+  close(saved_stdin);
+  close(pipefd[0]);
+  assert(status == LUA_OK);
+  assert_not_native_c(L);
+}
+
+static int assert_not_native_c(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  assert(tg != NULL);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  return 0;
+}
+
+static int assert_no_stopreq_c(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = G2TG(g);
+  assert(tg != NULL);
+  assert(g->gc2.hs_pending == 0);
+  assert(tg->poll == 0);
+  assert(tg->reqmask == 0);
+  assert((la_load8_acq(&tg->tg_flags) &
+	  (TGF_STOPREQ|TGF_STOPREQ_FRESH)) == 0);
+  return 0;
+}
+
+static void test_owner_only_root_handshake(lua_State *L, global_State *g,
+					   TGState *tg)
+{
+  uint64_t major0, minor0, owner0;
+  uint32_t cycle;
+  assert(L != NULL && g != NULL && tg != NULL);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+  lj_gc2_mark_begin(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
+  cycle = gc2_cycle_acq(g);
+  major0 = gc2_major_root_scans_acq(g);
+  minor0 = gc2_minor_root_scans_acq(g);
+  owner0 = gc2_tg_thread_roots_acq(g);
+  /* Force an observable owner-stack stamp. The owner-only action must service
+  ** that private root without repeating the already-latched process-global
+  ** snapshot used by MARK close. */
+  lj_state_scan_epoch_rel(L, 0);
+  assert(lj_gc2_handshake(g,
+	LJ_GC2_HS_SCAN_OWNER_ROOTS|LJ_GC2_HS_FLUSH_SSB) >= 1u);
+  assert(gc2_hs_actions_acq(g) ==
+	 (LJ_GC2_HS_SCAN_OWNER_ROOTS|LJ_GC2_HS_FLUSH_SSB));
+  assert(lj_state_scan_epoch_acq(L) == cycle);
+  assert(gc2_tg_thread_roots_acq(g) > owner0);
+  assert(gc2_major_root_scans_acq(g) == major0);
+  assert(gc2_minor_root_scans_acq(g) == minor0);
+  lj_gc2_cycle_to_idle(g);
+  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
+}
+
+#if LJ_HASFFI
+static global_State *ffi_stopreq_g;
+static TGState *ffi_stopreq_tg;
+typedef int (*ffi_stopreq_cb_t)(void);
+
+static int ffi_publish_stopreq(void)
+{
+  assert(ffi_stopreq_g != NULL);
+  assert(ffi_stopreq_tg != NULL);
+  publish_manual(ffi_stopreq_g, ffi_stopreq_tg, LJ_GC2_HS_STOPREQ);
+  return 123;
+}
+
+static int ffi_call_callback_stopreq(ffi_stopreq_cb_t cb)
+{
+  assert(ffi_stopreq_g != NULL);
+  assert(ffi_stopreq_tg != NULL);
+  publish_manual(ffi_stopreq_g, ffi_stopreq_tg, LJ_GC2_HS_STOPREQ);
+  return cb();
+}
+#endif
+
+static int arena_list_contains(GCArena *a, GCArena *needle)
+{
+  while (a) {
+    if (a == needle)
+      return 1;
+    a = lj_arena_next_acq(a);
+  }
+  return 0;
+}
+
+static int tg_list_contains(TGState *tg, TGState *needle)
+{
+  while (tg) {
+    if (tg == needle)
+      return 1;
+    tg = lj_tg_next_acq(tg);
+  }
+  return 0;
+}
+
+static void assert_attach_phase(lua_State *L, global_State *g, TGState *main_tg,
+				uint32_t phase, uint32_t mark_active,
+				uint32_t alloc_black)
+{
+  TGState phase_tg;
+  uint32_t oldphase = la_load32_acq(&g->gc2.phase);
+
+  lj_tg_init_thread(g, &phase_tg, NULL, 0);
+  phase_tg.tid = main_tg->tid + 2000u + phase;
+  phase_tg.alloc.owner_tid = phase_tg.tid;
+  phase_tg.cur_L = L;
+  la_store32_rel(&g->gc2.phase, phase);
+  lj_tg_attach(g, &phase_tg);
+  assert(g->gc2.n_threads == 2);
+  assert(tg_list_contains(g->gc2.tg_list, &phase_tg));
+  assert(phase_tg.mark_active == mark_active);
+  assert(phase_tg.alloc.alloc_black == alloc_black);
+  assert(phase_tg.hs_epoch_ack == g->gc2.hs_epoch);
+  lj_tg_detach(g, &phase_tg);
+  assert(g->gc2.n_threads == 1);
+  assert(phase_tg.tg_flags & TGF_DEAD);
+  assert(lj_tg_reclaim_dead(g) == 1u);
+  assert(!tg_list_contains(g->gc2.tg_list, &phase_tg));
+  la_store32_rel(&g->gc2.phase, oldphase);
+  lj_tg_fini_thread(g, &phase_tg);
+}
+
+static void test_multistate_public_api_gc(lua_State *L1)
+{
+  TGState *tg1 = G2TG(G(L1));
+  lua_State *L2;
+  global_State *g2;
+  TGState *tg2;
+  uint64_t epoch0;
+  uint32_t actions;
+
+  assert(lj_thr_get_tg() == tg1);
+  L2 = luaL_newstate();
+  assert(L2 != NULL);
+  assert(lj_thr_get_tg() == tg1);
+
+  g2 = G(L2);
+  tg2 = G2TG(g2);
+  assert(tg2 != NULL);
+  assert(tg2 != tg1);
+  assert(g2->gc2.tg_list == tg2);
+
+  epoch0 = g2->gc2.hs_epoch;
+  actions = LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK;
+  assert(lj_gc2_handshake(g2, actions) == 1);
+  assert(g2->gc2.hs_epoch == epoch0 + 1u);
+  assert(g2->gc2.hs_pending == 0);
+  assert(tg2->poll == 0);
+  assert(tg2->reqmask == 0);
+  assert(tg2->hs_epoch_ack == g2->gc2.hs_epoch);
+
+  assert(lj_gc2_test_finalizer_try_enter(g2));
+  assert(gc2_finalizer_owner_acq(g2) == lj_thr_actor_current());
+  lj_gc2_test_finalizer_leave(g2);
+  assert(gc2_finalizer_owner_acq(g2) == 0);
+
+  luaL_openlibs(L2);
+  assert(luaL_dostring(L2,
+    "local hold = {}\n"
+    "for i=1,20000 do hold[i] = {i, tostring(i)} end\n"
+    "collectgarbage('collect')\n") == LUA_OK);
+  lua_gc(L2, LUA_GCCOLLECT, 0);
+  assert(gc2_phase_acq(g2) == LJ_GC2_IDLE);
+  assert(lj_gc2_test_ssb_empty(g2));
+  assert(tg2->ssb_next == tg2->ssb_base);
+  assert(lj_thr_get_tg() == tg1);
+  lua_close(L2);
+  assert(lj_thr_get_tg() == tg1);
+}
+
+int main(void)
+{
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  TGState *tg;
+  TGState extra_tg;
+  TGState arena_tg;
+  GCtab *root_tab, *native_tab;
+  void *plain_reset, *plain_after_reset, *trav_reset;
+  void *transfer_small, *transfer_huge;
+  size_t transfer_huge_size = LJ_HUGE_THRESHOLD + 8192u;
+  GCArena *plain_reset_a, *trav_reset_a;
+  LJHugeInfo hi;
+  uint32_t i, ssb_published0, ssb_drained0;
+  uint64_t ssb_items_published0, ssb_items_drained0;
+  uint64_t epoch0;
+  uint64_t ack_samples0, ack_sum0, ack_max0;
+  uint64_t ffi_native_attempts0;
+  uint32_t actions;
+  ASMFunction saved_dispatch;
+
+  assert(L != NULL);
+  luaL_openlibs(L);
+  lua_pushcfunction(L, publish_alloc_white_c);
+  lua_setglobal(L, "publish_alloc_white");
+  lua_pushcfunction(L, publish_stopreq_c);
+  lua_setglobal(L, "publish_stopreq");
+  lua_pushcfunction(L, tg_only_stopreq_edge_c);
+  lua_setglobal(L, "tg_only_stopreq_edge");
+  lua_pushcfunction(L, publish_global_stopreq_c);
+  lua_setglobal(L, "publish_global_stopreq");
+  lua_pushcfunction(L, publish_peer_stopreq_c);
+  lua_setglobal(L, "publish_peer_stopreq");
+  lua_pushcfunction(L, mark_sticky_stopreq_c);
+  lua_setglobal(L, "mark_sticky_stopreq");
+  lua_pushcfunction(L, assert_acked_alloc_white_c);
+  lua_setglobal(L, "assert_acked_alloc_white");
+  lua_pushcfunction(L, assert_acked_c);
+  lua_setglobal(L, "assert_acked");
+  lua_pushcfunction(L, clear_stopreq_c);
+  lua_setglobal(L, "clear_stopreq");
+  lua_pushcfunction(L, assert_not_native_c);
+  lua_setglobal(L, "assert_not_native");
+  lua_pushcfunction(L, assert_no_stopreq_c);
+  lua_setglobal(L, "assert_no_stopreq");
+  lua_pushcfunction(L, mkfifo_test_c);
+  lua_setglobal(L, "mkfifo_test");
+  lua_pushcfunction(L, start_fifo_stopreq_c);
+  lua_setglobal(L, "start_fifo_stopreq");
+  lua_pushcfunction(L, join_fifo_stopreq_c);
+  lua_setglobal(L, "join_fifo_stopreq");
+  lua_pushcfunction(L, start_native_stopreq_c);
+  lua_setglobal(L, "start_native_stopreq");
+  lua_pushcfunction(L, join_native_stopreq_c);
+  lua_setglobal(L, "join_native_stopreq");
+
+  /* Live scalar table stores now retain setup-time library/global writes as
+  ** durable IDLE remembered/rescan work. Establish an explicit collected
+  ** baseline before this fixture begins asserting an empty SSB. */
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  g = G(L);
+  tg = G2TG(g);
+  assert(tg != NULL);
+  assert(g->gc2.tg_list == tg);
+  assert(g->gc2.n_threads == 1);
+  epoch0 = g->gc2.hs_epoch;
+  assert(g->gc2.hs_pending == 0);
+  assert(g->gc2.ssb_head == NULL);
+  assert(gc2_ssb_published_acq(g) == gc2_ssb_drained_acq(g));
+  assert(gc2_ssb_items_published_acq(g) ==
+	 gc2_ssb_items_drained_acq(g));
+  assert(lj_gc2_test_ssb_empty(g));
+  assert(tg->poll == 0);
+  assert(tg->reqmask == 0);
+  assert(tg->hs_epoch_ack == epoch0);
+  /* Collection may rotate either embedded node into the active role. The
+  ** contract is one active and one distinct available node, each owner-bound. */
+  assert(tg->ssb_active == &tg->ssb_node[0] ||
+         tg->ssb_active == &tg->ssb_node[1]);
+  assert(tg->ssb_free == &tg->ssb_node[0] ||
+         tg->ssb_free == &tg->ssb_node[1]);
+  assert(tg->ssb_active != tg->ssb_free);
+  assert(lj_gc2_ssb_owner_acq(tg->ssb_active) == tg);
+  assert(lj_gc2_ssb_owner_acq(tg->ssb_free) == tg);
+  assert(lj_gc2_ssb_next_acq(tg->ssb_free) == NULL);
+  assert(tg->ssb_base == tg->ssb_active->slot);
+  assert(tg->ssb_next == tg->ssb_base);
+  assert(tg->ssb_end == tg->ssb_base + TG_GC2_SSB_SLOTS);
+  test_owner_only_root_handshake(L, g, tg);
+
+  assert_attach_phase(L, g, tg, LJ_GC2_IDLE, 0, 0);
+  assert_attach_phase(L, g, tg, LJ_GC2_MARK, 1, 1);
+  assert_attach_phase(L, g, tg, LJ_GC2_WEAK, 1, 1);
+  assert_attach_phase(L, g, tg, LJ_GC2_SWEEP, 0, 1);
+  test_multistate_public_api_gc(L);
+
+  epoch0 = g->gc2.hs_epoch;
+  ack_samples0 = la_load64_acq(&g->gc2.hs_ack_latency_samples);
+  ack_sum0 = la_load64_acq(&g->gc2.hs_ack_latency_sum_ns);
+  ack_max0 = la_load64_acq(&g->gc2.hs_ack_latency_max_ns);
+  actions = LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK;
+  assert(lj_gc2_handshake(g, actions) == 1);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_pending == 0);
+  assert(g->gc2.hs_actions == actions);
+  assert(tg->poll == 0);
+  assert(tg->reqmask == 0);
+  assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
+  assert(tg->mark_active == 1);
+  assert(tg->alloc.alloc_black == 1);
+  assert(la_load64_acq(&g->gc2.hs_ack_latency_samples) == ack_samples0);
+  assert(la_load64_acq(&g->gc2.hs_ack_latency_sum_ns) == ack_sum0);
+  assert(la_load64_acq(&g->gc2.hs_ack_latency_max_ns) == ack_max0);
+
+  actions = LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE;
+  assert(lj_gc2_handshake(g, actions) == 1);
+  assert(g->gc2.hs_pending == 0);
+  assert(tg->mark_active == 0);
+  assert(tg->alloc.alloc_black == 0);
+
+  saved_dispatch = tg->dispatch[BC_RET];
+  assert(saved_dispatch == G2GG(g)->dispatch[BC_RET]);
+  tg->dispatch[BC_RET] = NULL;
+  assert(tg->dispatch[BC_RET] != G2GG(g)->dispatch[BC_RET]);
+  actions = LJ_GC2_HS_REDISPATCH;
+  epoch0 = g->gc2.hs_epoch;
+  assert(lj_gc2_handshake(g, actions) == 1);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_pending == 0);
+  assert(g->gc2.hs_actions == actions);
+  assert(tg->dispatch[BC_RET] == saved_dispatch);
+  assert(tg->dispatch[BC_RET] == G2GG(g)->dispatch[BC_RET]);
+  test_dispatch_update_regular_wait(L);
+  test_dispatch_update_async_return(L);
+#if LJ_HASJIT
+  test_dispatch_record_owner_overlay(L);
+  test_dispatch_update_never_writes_peer(L);
+#endif
+
+  assert((tg->tg_flags & TGF_STOPREQ) == 0);
+  actions = LJ_GC2_HS_STOPREQ;
+  epoch0 = g->gc2.hs_epoch;
+  assert(lj_gc2_handshake(g, actions) == 1);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_pending == 0);
+  assert(g->gc2.hs_actions == actions);
+  assert((tg->tg_flags & TGF_STOPREQ) != 0);
+  lj_tg_poll_rel(tg, 0);
+  tg->tg_flags &= (uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH);
+
+  publish_manual(g, tg, LJ_GC2_HS_STOPREQ);
+  assert(lj_safepoint_fresh_stopreq(L, 0, 0));
+  assert(g->gc2.hs_pending == 0);
+  assert(tg->poll == 1);  /* Discarded action remains dispatch-visible. */
+  assert(tg->reqmask == 0);
+  assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
+  assert((tg->tg_flags & TGF_STOPREQ) != 0);
+  lj_tg_poll_rel(tg, 0);
+  tg->tg_flags &= (uint8_t)~(TGF_STOPREQ|TGF_STOPREQ_FRESH);
+
+#if LJ_HASJIT
+  assert(luaL_dostring(L,
+    "jit.opt.start('hotloop=1', 'hotexit=1')\n"
+    "local s = 0\n"
+    "for i = 1, 200 do s = s + i end\n"
+    "return s\n") == LUA_OK);
+  lua_pop(L, 1);
+  assert(traceref(G2J(g), 1) != NULL || G2J(g)->freetrace > 0);
+  epoch0 = g->gc2.hs_epoch;
+  actions = LJ_GC2_HS_FLUSHJ;
+  assert(lj_gc2_handshake(g, actions) == 1);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_pending == 0);
+  assert(g->gc2.hs_actions == actions);
+  assert(G2J(g)->cur.traceno == 0);
+  assert(G2J(g)->freetrace == 0);
+
+  assert(lj_trace_state_load(G2J(g)) == LJ_TRACE_IDLE);
+  lj_trace_state_store_active(G2J(g), LJ_TRACE_RECORD);
+  assert(lj_trace_state_load(G2J(g)) == LJ_TRACE_RECORD);
+  epoch0 = g->gc2.hs_epoch;
+  actions = LJ_GC2_HS_EXIT_TRACES;
+  assert(lj_gc2_handshake(g, actions) == 1);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_pending == 0);
+  assert(g->gc2.hs_actions == actions);
+  assert((lj_trace_state_load(G2J(g)) & LJ_TRACE_ACTIVE) == 0);
+  lj_trace_state_store(G2J(g), LJ_TRACE_IDLE);
+
+  assert(lj_tg_load_jit_base(tg) == NULL);
+  lj_tg_store_jit_base(tg, L->base ? L->base : L->top);
+  epoch0 = g->gc2.hs_epoch;
+  actions = LJ_GC2_HS_EXIT_TRACES;
+  assert(lj_gc2_handshake(g, actions) == 1);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_pending == 0);
+  assert(g->gc2.hs_actions == actions);
+  assert(tg->reqmask == 0);
+  assert(tg->poll == 0);
+  assert(tg->hs_epoch_ack == g->gc2.hs_epoch);
+  assert(lj_tg_load_jit_base(tg) != NULL);
+  lj_tg_store_jit_base(tg, NULL);
+#endif
+
+  lua_newtable(L);
+  root_tab = tabV(L->top - 1);
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_ismarked(g, obj2gco(root_tab)) == 0);
+  epoch0 = g->gc2.hs_epoch;
+  assert(lj_gc2_handshake(g, LJ_GC2_HS_SCAN_ROOTS) == 1);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_pending == 0);
+  assert(lj_gc2_ismarked(g, obj2gco(root_tab)) == 1);
+  assert(la_load64_acq(&g->gc2.marks_this_round) > 0);
+  assert(!lj_gc2_test_ssb_empty(g));
+  /* A root-scan implementation may already have rotated the buffer while
+  ** leaving published work nonempty. Seed one exact active entry so this
+  ** section continues to exercise the active-to-published flush LP itself. */
+  assert(lj_gc2_test_ssb_push(g, obj2gco(root_tab)) == 1);
+  assert(tg->ssb_next > tg->ssb_base);
+  assert(lj_gc2_flush_ssb(g, tg) > 0);
+  assert(lj_gc2_test_ssb_drain(g) > 0);
+  assert(lj_gc2_test_ssb_empty(g));
+  ssb_published0 = gc2_ssb_published_acq(g);
+  ssb_drained0 = gc2_ssb_drained_acq(g);
+  ssb_items_published0 = gc2_ssb_items_published_acq(g);
+  ssb_items_drained0 = gc2_ssb_items_drained_acq(g);
+  assert(lj_gc2_test_ssb_push(g, obj2gco(root_tab)) == 1);
+  assert(lj_gc2_test_ssb_push(g, obj2gco(root_tab)) == 1);
+  assert(!lj_gc2_test_ssb_empty(g));
+  assert(tg->ssb_next == tg->ssb_base + 2);
+  epoch0 = g->gc2.hs_epoch;
+  assert(lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB) == 1);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_pending == 0);
+  assert(tg->ssb_next == tg->ssb_base);
+  assert(g->gc2.ssb_head != NULL);
+  assert(!lj_gc2_test_ssb_empty(g));
+  assert(gc2_ssb_published_acq(g) == ssb_published0 + 1u);
+  assert(gc2_ssb_items_published_acq(g) == ssb_items_published0 + 2u);
+  assert(lj_gc2_test_ssb_drain(g) == 2);
+  assert(g->gc2.ssb_head == NULL);
+  assert(lj_gc2_test_ssb_empty(g));
+  assert(gc2_ssb_drained_acq(g) == ssb_drained0 + 1u);
+  assert(gc2_ssb_items_drained_acq(g) == ssb_items_drained0 + 2u);
+  ssb_drained0 = gc2_ssb_drained_acq(g);
+  ssb_items_drained0 = gc2_ssb_items_drained_acq(g);
+  for (i = 0; i < TG_GC2_SSB_SLOTS; i++)
+    assert(lj_gc2_test_ssb_push(g, obj2gco(root_tab)) == 1);
+  assert(tg->ssb_next == tg->ssb_end);
+  ssb_published0 = gc2_ssb_published_acq(g);
+  assert(lj_gc2_test_ssb_push(g, obj2gco(root_tab)) == 1);
+  assert(gc2_ssb_published_acq(g) == ssb_published0 + 1u);
+  assert(tg->ssb_next == tg->ssb_base + 1);
+  assert(lj_gc2_test_ssb_drain(g) == TG_GC2_SSB_SLOTS + 1u);
+  assert(g->gc2.ssb_head == NULL);
+  assert(tg->ssb_next == tg->ssb_base);
+  assert(gc2_ssb_drained_acq(g) == ssb_drained0 + 1u);
+  assert(gc2_ssb_items_drained_acq(g) ==
+	 ssb_items_drained0 + TG_GC2_SSB_SLOTS);
+  ssb_drained0 = gc2_ssb_drained_acq(g);
+  ssb_items_drained0 = gc2_ssb_items_drained_acq(g);
+  assert(lj_gc2_test_ssb_push(g, obj2gco(root_tab)) == 1);
+  assert(lj_gc2_flush_ssb(g, tg) == 1);
+  assert(tg->ssb_next == tg->ssb_base);
+  assert(!lj_gc2_test_ssb_empty(g));
+  assert(lj_gc2_test_ssb_drain(g) == 1);
+  assert(lj_gc2_test_ssb_empty(g));
+  assert(gc2_ssb_drained_acq(g) == ssb_drained0 + 1u);
+  assert(gc2_ssb_items_drained_acq(g) == ssb_items_drained0 + 1u);
+  lua_pop(L, 1);
+  lj_gc2_cycle_to_idle(g);
+  assert(tg->mark_active == 0);
+  assert(tg->alloc.alloc_black == 0);
+
+  lua_newtable(L);
+  native_tab = tabV(L->top - 1);
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_ismarked(g, obj2gco(native_tab)) == 0);
+  ffi_native_attempts0 = gc2_ffi_native_scan_attempts_acq(g);
+  lj_native_enter(tg);
+  assert(lj_tg_in_native_acq(tg) == 1);
+  epoch0 = g->gc2.hs_epoch;
+  assert(lj_gc2_handshake(g, LJ_GC2_HS_SCAN_ROOTS) == 1);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_pending == 0);
+  assert(lj_tg_in_native_acq(tg) == 1);
+  assert(lj_gc2_ismarked(g, obj2gco(native_tab)) == 1);
+  /* A same-TG handshake is synchronous owner code, not the consumed remote
+  ** native-poll certificate used by the exact published-frame scanner. */
+  assert(gc2_ffi_native_scan_attempts_acq(g) == ffi_native_attempts0);
+  assert(lj_native_leave(L) == 0);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  /* The remote/native scan may publish its SSB before native leave. Seed an
+  ** active edge so this explicit flush assertion tests rotation, not timing. */
+  assert(lj_gc2_test_ssb_push(g, obj2gco(native_tab)) == 1);
+  assert(lj_gc2_flush_ssb(g, tg) > 0);
+  assert(lj_gc2_test_ssb_drain(g) > 0);
+  assert(lj_gc2_test_ssb_empty(g));
+  lua_pop(L, 1);
+  lj_gc2_cycle_to_idle(g);
+  assert(tg->mark_active == 0);
+  assert(tg->alloc.alloc_black == 0);
+
+  ack_samples0 = la_load64_acq(&g->gc2.hs_ack_latency_samples);
+  ack_sum0 = la_load64_acq(&g->gc2.hs_ack_latency_sum_ns);
+  ack_max0 = la_load64_acq(&g->gc2.hs_ack_latency_max_ns);
+  publish_manual(g, tg, LJ_GC2_HS_ENABLE_BARRIER);
+  assert(lj_safepoint_poll(L) == LJ_GC2_HS_ENABLE_BARRIER);
+  assert(g->gc2.hs_pending == 0);
+  assert(tg->poll == 0);
+  assert(tg->reqmask == 0);
+  assert(tg->mark_active == 1);
+  assert(la_load64_acq(&g->gc2.hs_ack_latency_samples) == ack_samples0 + 1u);
+  assert(la_load64_acq(&g->gc2.hs_ack_latency_sum_ns) >= ack_sum0);
+  assert(la_load64_acq(&g->gc2.hs_ack_latency_max_ns) >= ack_max0);
+  assert(lj_safepoint_poll(L) == 0);
+  test_consumed_ack_poll_gate(L, tg);
+  test_consumed_ack_reqmask_wake(L, tg);
+
+  lj_native_enter(tg);
+  assert(lj_tg_in_native_acq(tg) == 1);
+  actions = LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE;
+  assert(lj_gc2_handshake(g, actions) == 1);
+  assert(g->gc2.hs_pending == 0);
+  assert(lj_tg_in_native_acq(tg) == 1);
+  assert(tg->poll == 0);
+  assert(tg->reqmask == 0);
+  assert(tg->mark_active == 0);
+  assert(tg->alloc.alloc_black == 0);
+  assert(lj_native_leave(L) == 0);
+  assert(lj_tg_in_native_acq(tg) == 0);
+
+  lj_native_enter(tg);
+  publish_manual(g, tg, LJ_GC2_HS_ALLOC_BLACK);
+  assert(lj_native_leave(L) == LJ_GC2_HS_ALLOC_BLACK);
+  assert(lj_tg_in_native_acq(tg) == 0);
+  assert(g->gc2.hs_pending == 0);
+  assert(tg->alloc.alloc_black == 1);
+
+  assert(lj_gc2_handshake(g, 0) == 0);
+
+  /* A TG-only/native boundary has no lua_State from which STOPREQ can throw.
+  ** It must consume the counted handshake but preserve a synthetic poll until
+  ** the next L-aware acknowledgement observes TGF_STOPREQ_FRESH. */
+  publish_manual(g, tg, LJ_GC2_HS_STOPREQ);
+  lj_native_enter(tg);
+  actions = lj_native_leave_tg(tg);
+  assert(actions == LJ_GC2_HS_STOPREQ);
+  assert(g->gc2.hs_pending == 0);
+  assert(tg->reqmask == 0);
+  assert(tg->poll == 1);
+  assert(lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH));
+  assert(lj_safepoint_ack(L) == LJ_GC2_HS_STOPREQ);
+  assert(tg->poll == 1);  /* Discarded action remains dispatch-visible. */
+  lj_tg_poll_rel(tg, 0);
+  clear_stopreq_c(L);
+  assert_no_stopreq_c(L);
+  assert(luaL_dostring(L,
+    "local ok, err = pcall(tg_only_stopreq_edge)\n"
+    "assert(not ok and tostring(err):find('thread interrupted: VM shutdown', 1, true), tostring(err))\n"
+    "clear_stopreq()\n"
+    "assert_no_stopreq()\n") == LUA_OK);
+
+  assert(luaL_dostring(L,
+    "local p = os.tmpname()\n"
+    "local q = p .. '.renamed'\n"
+    "local f = assert(io.open(p, 'w'))\n"
+    "f:write('x')\n"
+    "f:close()\n"
+    "publish_alloc_white()\n"
+    "assert(os.rename(p, q))\n"
+    "assert_acked_alloc_white()\n"
+    "publish_alloc_white()\n"
+    "assert(os.remove(q))\n"
+    "assert_acked_alloc_white()\n"
+    "publish_alloc_white()\n"
+    "local r = os.tmpname()\n"
+    "assert_acked_alloc_white()\n"
+    "os.remove(r)\n") == LUA_OK);
+
+  if (luaL_dostring(L,
+    "local stopreq_case = 0\n"
+    "local function case_label(label)\n"
+    "  return label and (' (' .. label .. ')') or ''\n"
+    "end\n"
+    "local function expect_stopreq(fn, label)\n"
+    "  stopreq_case = stopreq_case + 1\n"
+    "  publish_stopreq()\n"
+    "  local ok, err = pcall(fn)\n"
+    "  if not ok then\n"
+    "    local msg = tostring(err)\n"
+    "    clear_stopreq()\n"
+    "    assert_no_stopreq()\n"
+    "    assert(msg:find('thread interrupted: VM shutdown', 1, true), msg)\n"
+    "    return\n"
+    "  end\n"
+    "  assert(false, 'expected STOPREQ case ' .. stopreq_case .. case_label(label) .. ', got ' .. tostring(err))\n"
+    "end\n"
+    "local function expect_fopen_stopreq(fn)\n"
+    "  stopreq_case = stopreq_case + 1\n"
+    "  local fifo = os.tmpname()\n"
+    "  os.remove(fifo)\n"
+    "  assert(mkfifo_test(fifo))\n"
+    "  start_fifo_stopreq(fifo)\n"
+    "  local ok, err = pcall(function() return fn(fifo) end)\n"
+    "  join_fifo_stopreq()\n"
+    "  if not ok then\n"
+    "    local msg = tostring(err)\n"
+    "    clear_stopreq()\n"
+    "    assert_no_stopreq()\n"
+    "    os.remove(fifo)\n"
+    "    assert(msg:find('thread interrupted: VM shutdown', 1, true), msg)\n"
+    "    return\n"
+    "  end\n"
+    "  os.remove(fifo)\n"
+    "  assert(false, 'expected STOPREQ case ' .. stopreq_case)\n"
+    "end\n"
+    "local function expect_native_stopreq(fn)\n"
+    "  stopreq_case = stopreq_case + 1\n"
+    "  start_native_stopreq()\n"
+    "  local ok, err = pcall(fn)\n"
+    "  join_native_stopreq()\n"
+    "  if not ok then\n"
+    "    local msg = tostring(err)\n"
+    "    clear_stopreq()\n"
+    "    assert_no_stopreq()\n"
+    "    assert(msg:find('thread interrupted: VM shutdown', 1, true), msg)\n"
+    "    return\n"
+    "  end\n"
+    "  assert(false, 'expected STOPREQ case ' .. stopreq_case)\n"
+    "end\n"
+    "local function expect_sticky_ok(fn, cleanup, label)\n"
+    "  stopreq_case = stopreq_case + 1\n"
+    "  mark_sticky_stopreq()\n"
+    "  local ok, res = pcall(fn)\n"
+    "  clear_stopreq()\n"
+    "  if ok and cleanup then cleanup(res) end\n"
+    "  assert_no_stopreq()\n"
+    "  assert(ok, 'unexpected sticky STOPREQ interruption case ' .. stopreq_case .. case_label(label) .. ': ' .. tostring(res))\n"
+    "end\n"
+    "local function expect_sticky_error(fn, check, label)\n"
+    "  stopreq_case = stopreq_case + 1\n"
+    "  mark_sticky_stopreq()\n"
+    "  local ok, res = pcall(fn)\n"
+    "  clear_stopreq()\n"
+    "  assert_no_stopreq()\n"
+    "  assert(not ok, 'expected sticky error case ' .. stopreq_case .. case_label(label))\n"
+    "  local msg = tostring(res)\n"
+    "  assert(not msg:find('thread interrupted: VM shutdown', 1, true),\n"
+    "         'unexpected sticky STOPREQ interruption case ' .. stopreq_case .. case_label(label) .. ': ' .. msg)\n"
+    "  check(msg)\n"
+    "end\n"
+    "local function expect_loadlib_stopreq()\n"
+    "  local so = os.getenv('LJ_LOADLIB_STOPREQ_SO')\n"
+    "  if not so or so == '' then return end\n"
+    "  expect_native_stopreq(function()\n"
+    "    return package.loadlib(so, 'luaopen_lj_loadlib_stopreq')\n"
+    "  end)\n"
+    "  local ffi = require('ffi')\n"
+    "  expect_native_stopreq(function() return ffi.load(so) end)\n"
+    "end\n"
+    "local function expect_package_loadlib_sticky_ok()\n"
+    "  local so = os.getenv('LJ_LOADLIB_STOPREQ_SO')\n"
+    "  if not so or so == '' then return end\n"
+    "  expect_sticky_ok(function()\n"
+    "    return assert(package.loadlib(so, 'luaopen_lj_loadlib_stopreq'))\n"
+    "  end, nil, 'package.loadlib sticky')\n"
+    "end\n"
+    "local function expect_ldscript_sticky_ok()\n"
+    "  if jit.os == 'OSX' then return end\n"
+    "  local so = os.getenv('LJ_LOADLIB_STOPREQ_SO')\n"
+    "  if not so or so == '' then return end\n"
+    "  local script = os.tmpname()\n"
+    "  local missing = script .. '.missing.' .. tostring({}):gsub('[^%w]', '') .. '.so'\n"
+    "  local out = assert(io.open(script, 'w'))\n"
+    "  out:write('/* GNU ld script */\\nINPUT(', missing, ')\\n')\n"
+    "  out:close()\n"
+    "  local ffi = require('ffi')\n"
+    "  expect_sticky_error(function()\n"
+    "    return ffi.load(script)\n"
+    "  end, function(msg)\n"
+    "    assert(msg:find('not a mach-o file', 1, true) or\n"
+    "           msg:find('invalid ELF header', 1, true) or\n"
+    "           msg:find('file too short', 1, true) or\n"
+    "           msg:find('not a dynamic library', 1, true) or\n"
+    "           msg:find('No such file', 1, true) or\n"
+    "           msg:find('no such file', 1, true) or\n"
+    "           msg:find('no such file or directory', 1, true), msg)\n"
+    "  end, 'ldscript ffi.load sticky')\n"
+    "  os.remove(script)\n"
+    "end\n"
+    "local function expect_loadfile_sticky_ok()\n"
+    "  local path = os.tmpname()\n"
+    "  local out = assert(io.open(path, 'w'))\n"
+    "  out:write('return 42\\n')\n"
+    "  out:close()\n"
+    "  expect_sticky_ok(function()\n"
+    "    local fn = assert(loadfile(path))\n"
+    "    assert(fn() == 42)\n"
+    "  end)\n"
+    "  os.remove(path)\n"
+    "  expect_sticky_ok(function()\n"
+    "    local fn, err = loadfile(path)\n"
+    "    assert(fn == nil and type(err) == 'string')\n"
+    "  end)\n"
+    "end\n"
+    "local function expect_mutex_lock_stopreq()\n"
+    "  local th = require('threading')\n"
+    "  local m = th.mutex()\n"
+    "  local done = th.channel(1)\n"
+    "  assert(m:lock() == nil)\n"
+    "  local worker = th.spawn(function(mm, out)\n"
+    "    local ok, err = pcall(function() return mm:lock() end)\n"
+    "    out:send({ok, tostring(err)})\n"
+    "  end, m, done)\n"
+    "  th.sleep(0.01)\n"
+    "  publish_peer_stopreq()\n"
+    "  local res, rok = done:recv(1)\n"
+    "  assert(rok == true, 'mutex lock STOPREQ did not wake before unlock')\n"
+    "  assert(res[1] == false)\n"
+    "  assert(res[2]:find('thread interrupted: VM shutdown', 1, true))\n"
+    "  assert(({ worker:join(1) })[1] == true)\n"
+    "  m:unlock()\n"
+    "  assert_no_stopreq()\n"
+    "end\n"
+    "local function expect_threading_sticky_ok()\n"
+    "  local th = require('threading')\n"
+    "  expect_sticky_ok(function() return th.sleep(0.001) end)\n"
+    "  local m = th.mutex()\n"
+    "  local unlocked = th.channel(1)\n"
+    "  assert(m:lock() == nil)\n"
+    "  local unlocker = th.spawn(function(mm, out)\n"
+    "    th.sleep(0.02)\n"
+    "    mm:unlock()\n"
+    "    out:send(true)\n"
+    "  end, m, unlocked)\n"
+    "  expect_sticky_ok(function() return m:lock() end)\n"
+    "  m:unlock()\n"
+    "  local _, uok = unlocked:recv(1)\n"
+    "  assert(uok == true)\n"
+    "  assert(({ unlocker:join(1) })[1] == true)\n"
+    "  local joiner = th.spawn(function()\n"
+    "    th.sleep(0.01)\n"
+    "    return 'sticky-joined'\n"
+    "  end)\n"
+    "  expect_sticky_ok(function()\n"
+    "    local ok, value = joiner:join()\n"
+    "    assert(ok == true and value == 'sticky-joined')\n"
+    "  end)\n"
+    "end\n"
+    "local function expect_channel_recv_stopreq()\n"
+    "  local th = require('threading')\n"
+    "  local q = th.channel(0)\n"
+    "  local done = th.channel(1)\n"
+    "  local worker = th.spawn(function(inq, out)\n"
+    "    local ok, err = pcall(function() return inq:recv() end)\n"
+    "    out:send({ok, tostring(err)})\n"
+    "  end, q, done)\n"
+    "  th.sleep(0.01)\n"
+    "  publish_peer_stopreq()\n"
+    "  local res, rok = done:recv(1)\n"
+    "  assert(rok == true, 'channel recv STOPREQ did not wake')\n"
+    "  assert(res[1] == false)\n"
+    "  assert(res[2]:find('thread interrupted: VM shutdown', 1, true))\n"
+    "  assert(({ worker:join(1) })[1] == true)\n"
+    "  assert_no_stopreq()\n"
+    "end\n"
+    "local function expect_channel_send_stopreq()\n"
+    "  local th = require('threading')\n"
+    "  local q = th.channel(1)\n"
+    "  local done = th.channel(1)\n"
+    "  assert(q:send('first') == true)\n"
+    "  local worker = th.spawn(function(outq, out)\n"
+    "    local ok, err = pcall(function() return outq:send('second') end)\n"
+    "    out:send({ok, tostring(err)})\n"
+    "  end, q, done)\n"
+    "  th.sleep(0.01)\n"
+    "  publish_peer_stopreq()\n"
+    "  local res, rok = done:recv(1)\n"
+    "  assert(rok == true, 'channel send STOPREQ did not wake')\n"
+    "  assert(res[1] == false)\n"
+    "  assert(res[2]:find('thread interrupted: VM shutdown', 1, true))\n"
+    "  assert(({ worker:join(1) })[1] == true)\n"
+    "  assert_no_stopreq()\n"
+    "end\n"
+    "local function expect_channel_sticky_ok()\n"
+    "  local th = require('threading')\n"
+    "  local q = th.channel(0)\n"
+    "  expect_sticky_ok(function()\n"
+    "    local v, ok = q:recv(0.001)\n"
+    "    assert(v == nil and ok == 'timeout')\n"
+    "  end)\n"
+    "  local full = th.channel(1)\n"
+    "  assert(full:send('first') == true)\n"
+    "  expect_sticky_ok(function()\n"
+    "    local sent, why = full:send('second', 0.001)\n"
+    "    assert(sent == nil and why == 'timeout')\n"
+    "  end)\n"
+    "end\n"
+    "expect_mutex_lock_stopreq()\n"
+    "expect_threading_sticky_ok()\n"
+    "expect_channel_recv_stopreq()\n"
+    "expect_channel_send_stopreq()\n"
+    "expect_channel_sticky_ok()\n"
+    "expect_stopreq(function() return os.tmpname() end, 'os.tmpname')\n"
+    "expect_stopreq(function() return io.tmpfile() end, 'io.tmpfile')\n"
+    "expect_native_stopreq(function() return os.execute('sleep 0.2') end)\n"
+    "local p = os.tmpname()\n"
+    "local q = p .. '.sticky'\n"
+    "expect_sticky_ok(function() return os.rename(p, q) end)\n"
+    "expect_sticky_ok(function() return os.rename(q, p) end)\n"
+    "os.remove(p)\n"
+    "p = os.tmpname()\n"
+    "expect_sticky_ok(function() return os.remove(p) end)\n"
+    "expect_sticky_ok(function() return os.execute(':') end)\n"
+    "expect_sticky_ok(function() return os.tmpname() end, function(name) os.remove(name) end)\n"
+    "expect_sticky_ok(function() return io.tmpfile() end, function(file) file:close() end)\n"
+    "expect_sticky_ok(function() return print() end)\n"
+    "p = os.tmpname()\n"
+    "f = assert(io.open(p, 'w'))\n"
+    "expect_sticky_ok(function() return f:setvbuf('no') end)\n"
+    "expect_sticky_ok(function() return f:close() end)\n"
+    "f = assert(io.open(p, 'w'))\n"
+    "expect_sticky_ok(function() return f:write('y') end)\n"
+    "f:write('z')\n"
+    "expect_sticky_ok(function() return f:flush() end)\n"
+    "expect_sticky_ok(function() return f:seek('set', 0) end)\n"
+    "f:close()\n"
+    "os.remove(p)\n"
+    "p = os.tmpname()\n"
+    "f = assert(io.open(p, 'w'))\n"
+    "f:write('12\\nabc\\nxyz')\n"
+    "f:close()\n"
+    "expect_sticky_ok(function() return io.open(p, 'r') end, function(file) file:close() end)\n"
+    "expect_sticky_ok(function() return io.popen(':', 'r') end, function(pipe) pipe:close() end)\n"
+    "local sticky_pipe = assert(io.popen(':', 'r'))\n"
+    "expect_sticky_ok(function() return sticky_pipe:close() end)\n"
+    "expect_fopen_stopreq(function(fifo) return io.open(fifo, 'r') end)\n"
+    "expect_fopen_stopreq(function(fifo) return io.lines(fifo) end)\n"
+    "expect_fopen_stopreq(function(fifo) return loadfile(fifo) end)\n"
+    "expect_fopen_stopreq(function(fifo) return dofile(fifo) end)\n"
+    "expect_loadfile_sticky_ok()\n"
+    "expect_fopen_stopreq(function(fifo)\n"
+    "  return package.searchpath('lj_stopreq_probe', fifo)\n"
+    "end)\n"
+    "expect_sticky_ok(function()\n"
+    "  return package.searchpath('lj_stopreq_probe', p)\n"
+    "end)\n"
+    "f = assert(io.open(p, 'r'))\n"
+    "expect_sticky_ok(function() return f:read(0) end)\n"
+    "expect_sticky_ok(function() return f:read('*n') end)\n"
+    "f:seek('set', 0)\n"
+    "expect_sticky_ok(function() return f:read('*l') end)\n"
+    "f:seek('set', 0)\n"
+    "expect_sticky_ok(function() return f:read(1) end)\n"
+    "f:seek('set', 0)\n"
+    "expect_sticky_ok(function() return f:read('*a') end)\n"
+    "f:seek('set', 0)\n"
+    "f:close()\n"
+    "local read_num_pipe = assert(io.popen(\"sh -c 'sleep 0.2; printf 12'\", 'r'))\n"
+    "expect_native_stopreq(function() return read_num_pipe:read('*n') end)\n"
+    "read_num_pipe:close()\n"
+    "local read_line_pipe = assert(io.popen(\"sh -c 'sleep 0.2; echo abc'\", 'r'))\n"
+    "expect_native_stopreq(function() return read_line_pipe:read('*l') end)\n"
+    "read_line_pipe:close()\n"
+    "local read_len_pipe = assert(io.popen(\"sh -c 'sleep 0.2; printf x'\", 'r'))\n"
+    "expect_native_stopreq(function() return read_len_pipe:read(1) end)\n"
+    "read_len_pipe:close()\n"
+    "local read_all_pipe = assert(io.popen(\"sh -c 'sleep 0.2; printf xyz'\", 'r'))\n"
+    "expect_native_stopreq(function() return read_all_pipe:read('*a') end)\n"
+    "read_all_pipe:close()\n"
+    "local read_zero_pipe = assert(io.popen(\"sh -c 'sleep 0.2; printf z'\", 'r'))\n"
+    "expect_native_stopreq(function() return read_zero_pipe:read(0) end)\n"
+    "read_zero_pipe:close()\n"
+    "local pipe = assert(io.popen('sleep 0.2', 'r'))\n"
+    "expect_native_stopreq(function() return pipe:close() end)\n"
+    "local write_pipe = assert(io.popen(\"sh -c 'sleep 0.2; cat >/dev/null'\", 'w'))\n"
+    "local big = string.rep('w', 4 * 1024 * 1024)\n"
+    "expect_native_stopreq(function() return write_pipe:write(big) end)\n"
+    "write_pipe:close()\n"
+    "expect_loadlib_stopreq()\n"
+    "expect_package_loadlib_sticky_ok()\n"
+    "expect_ldscript_sticky_ok()\n"
+    "os.remove(p)\n") != LUA_OK) {
+    fprintf(stderr, "STOPREQ coverage chunk failed: %s\n",
+	    lua_tostring(L, -1));
+    assert(0);
+  }
+
+  test_print_stopreq(L);
+  test_debug_debug_stopreq(L);
+  test_debug_debug_sticky_ok(L);
+
+  assert(luaL_dostring(L,
+    "local th = require('threading')\n"
+    "local worker = th.spawn(function() return 'joined' end)\n"
+    "while worker:running() do th.sleep(0.001) end\n"
+    "publish_stopreq()\n"
+    "local ok, err = pcall(function() return worker:join() end)\n"
+    "assert(not ok)\n"
+    "assert(tostring(err):find('thread interrupted: VM shutdown', 1, true), tostring(err))\n"
+    "clear_stopreq()\n"
+    "local jok, value = worker:join()\n"
+    "assert(jok == true and value == 'joined')\n") == LUA_OK);
+
+#if LJ_HASFFI
+#if LJ_HASJIT
+  assert(lj_trace_state_load(G2J(g)) == LJ_TRACE_IDLE);
+  assert(jit_token_acq(g) == 0);
+#endif
+  ffi_stopreq_g = g;
+  ffi_stopreq_tg = tg;
+  lua_pushlightuserdata(L, (void *)ffi_publish_stopreq);
+  lua_setglobal(L, "ffi_stopreq_ptr");
+  lua_pushlightuserdata(L, (void *)ffi_call_callback_stopreq);
+  lua_setglobal(L, "ffi_call_callback_stopreq_ptr");
+  if (luaL_dostring(L,
+    "local ffi = require('ffi')\n"
+    "ffi.cdef[[\n"
+    "int getpid(void);\n"
+    "typedef int (*cmp_t)(const void *, const void *);\n"
+    "typedef int (*stopreq_t)(void);\n"
+    "typedef int (*cb_stopreq_t)(void);\n"
+    "typedef int (*call_cb_stopreq_t)(cb_stopreq_t);\n"
+    "void qsort(void *base, unsigned long nmemb, unsigned long size,\n"
+    "           cmp_t compar);\n"
+    "]]\n"
+    "publish_alloc_white()\n"
+    "ffi.C.getpid()\n"
+    "assert_acked_alloc_white()\n"
+    "mark_sticky_stopreq()\n"
+    "local sticky_ok, sticky_err = pcall(function() return ffi.C.getpid() end)\n"
+    "clear_stopreq()\n"
+    "assert_no_stopreq()\n"
+    "assert(sticky_ok, tostring(sticky_err))\n"
+    "local arr = ffi.new('int[2]', {2, 1})\n"
+    "local cmp\n"
+    "cmp = ffi.cast('cmp_t', function(a, b)\n"
+    "  assert_not_native()\n"
+    "  local ia = ffi.cast('const int *', a)[0]\n"
+    "  local ib = ffi.cast('const int *', b)[0]\n"
+    "  return ia - ib\n"
+    "end)\n"
+    "publish_alloc_white()\n"
+    "ffi.C.qsort(arr, 2, ffi.sizeof('int'), cmp)\n"
+    "assert_acked()\n"
+    "cmp:free()\n"
+    "assert(arr[0] == 1 and arr[1] == 2)\n"
+    "local stopreq = ffi.cast('stopreq_t', ffi_stopreq_ptr)\n"
+    "local ok, err = pcall(function() return stopreq() end)\n"
+    "assert(not ok)\n"
+    "assert(tostring(err):find('thread interrupted: VM shutdown', 1, true), tostring(err))\n"
+    "clear_stopreq()\n"
+    "local call_cb_stopreq = ffi.cast('call_cb_stopreq_t', ffi_call_callback_stopreq_ptr)\n"
+    "local entered = false\n"
+    "local cb_stopreq = ffi.cast('cb_stopreq_t', function()\n"
+    "  entered = true\n"
+    "  return 77\n"
+    "end)\n"
+    "ok, err = pcall(function() return call_cb_stopreq(cb_stopreq) end)\n"
+    "assert(not ok)\n"
+    "assert(not entered)\n"
+    "assert(tostring(err):find('thread interrupted: VM shutdown', 1, true), tostring(err))\n"
+    "clear_stopreq()\n"
+    "cb_stopreq:free()\n") != LUA_OK) {
+    fprintf(stderr, "FFI STOPREQ coverage chunk failed: %s "
+	    "(flags=%u poll=%u req=%u pending=%u ack=%llu epoch=%llu)\n",
+	    lua_tostring(L, -1), (unsigned)la_load8_acq(&tg->tg_flags),
+	    (unsigned)la_load32_acq(&tg->poll),
+	    (unsigned)la_load32_acq(&tg->reqmask),
+	    (unsigned)la_load32_acq(&g->gc2.hs_pending),
+	    (unsigned long long)la_load64_acq(&tg->hs_epoch_ack),
+	    (unsigned long long)la_load64_acq(&g->gc2.hs_epoch));
+    assert(0);
+  }
+#endif
+
+  plain_reset = lj_arena_alloc(&tg->alloc, &tg->prng, 64, 0);
+  trav_reset = lj_arena_alloc(&tg->alloc, &tg->prng, 64,
+			      LJ_AF_TRAVERSABLE);
+  assert(plain_reset != NULL);
+  assert(trav_reset != NULL);
+  plain_reset_a = lj_arena_of(plain_reset);
+  trav_reset_a = lj_arena_of(trav_reset);
+  actions = LJ_GC2_HS_RESET_ALLOC;
+  epoch0 = g->gc2.hs_epoch;
+  assert(lj_gc2_handshake(g, actions) == 1);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_pending == 0);
+  assert(g->gc2.hs_actions == actions);
+  assert(tg->alloc.bump[LJ_ARENAK_TRAVERSABLE].a == NULL);
+  assert(arena_list_contains(tg->alloc.owned[LJ_ARENAK_PLAIN],
+			     plain_reset_a));
+  assert(tg->alloc.owned[LJ_ARENAK_TRAVERSABLE] == NULL);
+  assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
+  assert(arena_list_contains(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE],
+			     trav_reset_a));
+  assert((plain_reset_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
+  assert((trav_reset_a->hdr.flags & LJ_AF_NEEDSWEEP) != 0);
+  plain_after_reset = lj_arena_alloc(&tg->alloc, &tg->prng, 64, 0);
+  assert(plain_after_reset != NULL);
+  assert(arena_list_contains(tg->alloc.owned[LJ_ARENAK_PLAIN],
+			     lj_arena_of(plain_after_reset)));
+  lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_TRAVERSABLE);
+  lj_arena_alloc_restore_sweep_kind(&tg->alloc, LJ_ARENAK_PLAIN);
+  assert(tg->alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
+  assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
+  lj_arena_free(&tg->alloc, plain_after_reset, 64);
+  lj_arena_free(&tg->alloc, plain_reset, 64);
+  lj_arena_free(&tg->alloc, trav_reset, 64);
+
+  lj_tg_init_thread(g, &extra_tg, NULL, 0);
+  extra_tg.cur_L = L;
+  lj_native_enter(&extra_tg);
+  lj_tg_attach(g, &extra_tg);
+  assert(g->gc2.n_threads == 2);
+  assert(tg_list_contains(g->gc2.tg_list, tg));
+  assert(tg_list_contains(g->gc2.tg_list, &extra_tg));
+  assert(!(extra_tg.tg_flags & TGF_DEAD));
+  assert(extra_tg.hs_epoch_ack == g->gc2.hs_epoch);
+
+  epoch0 = g->gc2.hs_epoch;
+  ack_samples0 = la_load64_acq(&g->gc2.hs_ack_latency_samples);
+  ffi_native_attempts0 = gc2_ffi_native_scan_attempts_acq(g);
+  actions = LJ_GC2_HS_ENABLE_BARRIER|LJ_GC2_HS_ALLOC_BLACK|
+	    LJ_GC2_HS_SCAN_OWNER_ROOTS;
+  assert(lj_gc2_handshake(g, actions) == 2);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_pending == 0);
+  assert(extra_tg.poll == 0);
+  assert(extra_tg.reqmask == 0);
+  assert(extra_tg.hs_epoch_ack == g->gc2.hs_epoch);
+  assert(extra_tg.mark_active == 1);
+  assert(extra_tg.alloc.alloc_black == 1);
+  assert(lj_tg_in_native_acq(&extra_tg) == 1);
+  /* extra_tg is remote to the TLS owner and remains native while the leader
+  ** consumes its request. EMPTY still records certified-path admission. */
+  assert(gc2_ffi_native_scan_attempts_acq(g) ==
+	 ffi_native_attempts0 + 1u);
+  assert(la_load64_acq(&g->gc2.hs_ack_latency_samples) == ack_samples0);
+
+  lj_tg_detach(g, &extra_tg);
+  assert(g->gc2.n_threads == 1);
+  assert(extra_tg.tg_flags & TGF_DEAD);
+  assert(lj_tg_in_native_acq(&extra_tg) == 0);
+  epoch0 = g->gc2.hs_epoch;
+  actions = LJ_GC2_HS_DISABLE_BARRIER|LJ_GC2_HS_ALLOC_WHITE;
+  assert(lj_gc2_handshake(g, actions) == 1);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_pending == 0);
+  assert(extra_tg.hs_epoch_ack == epoch0);
+  assert(lj_tg_reclaim_dead(g) == 1u);
+  assert(!tg_list_contains(g->gc2.tg_list, &extra_tg));
+  lj_tg_fini_thread(g, &extra_tg);
+
+  lj_tg_init_thread(g, &extra_tg, NULL, 0);
+  lj_tg_attach(g, &extra_tg);
+  assert(g->gc2.n_threads == 2);
+  epoch0 = g->gc2.hs_epoch;
+  publish_manual(g, &extra_tg, LJ_GC2_HS_ALLOC_WHITE);
+  assert(g->gc2.hs_epoch == epoch0 + 1u);
+  assert(g->gc2.hs_pending == 1);
+  assert(extra_tg.reqmask == LJ_GC2_HS_ALLOC_WHITE);
+  assert(extra_tg.poll == 1);
+  assert(extra_tg.hs_epoch_ack == epoch0);
+  lj_tg_detach(g, &extra_tg);
+  assert(g->gc2.n_threads == 1);
+  assert(g->gc2.hs_pending == 0);
+  assert(extra_tg.reqmask == 0);
+  assert(extra_tg.poll == 0);
+  assert(extra_tg.hs_epoch_ack == g->gc2.hs_epoch);
+  assert(extra_tg.tg_flags & TGF_DEAD);
+  assert(lj_tg_reclaim_dead(g) == 1u);
+  assert(!tg_list_contains(g->gc2.tg_list, &extra_tg));
+  lj_tg_fini_thread(g, &extra_tg);
+
+  lj_tg_init_thread(g, &arena_tg, NULL, 1);
+  arena_tg.tid = tg->tid + 1000u;
+  arena_tg.alloc.owner_tid = arena_tg.tid;
+  transfer_small = lj_arena_allocf(&arena_tg.allocd, NULL, 0, 64);
+  transfer_huge = lj_arena_allocf(&arena_tg.allocd, NULL, 0,
+				  transfer_huge_size);
+  assert(transfer_small != NULL);
+  assert(transfer_huge != NULL);
+  assert(lj_arena_of(transfer_small)->hdr.owner_tid == arena_tg.tid);
+  assert(lj_arena_of(transfer_huge)->hdr.owner_tid == arena_tg.tid);
+  assert(lj_arena_hugetab_lookup(&arena_tg.huge, transfer_huge, &hi) == 1);
+  assert(hi.size == transfer_huge_size);
+  lj_tg_attach(g, &arena_tg);
+  assert(g->gc2.n_threads == 2);
+  assert(tg_list_contains(g->gc2.tg_list, &arena_tg));
+  lj_tg_detach(g, &arena_tg);
+  assert(g->gc2.n_threads == 1);
+  assert(arena_tg.tg_flags & TGF_DEAD);
+  assert(lj_tg_reclaim_dead(g) == 1u);
+  assert(!tg_list_contains(g->gc2.tg_list, &arena_tg));
+  assert((arena_tg.tg_flags & TGF_ARENA_INTERNAL) == 0);
+  assert((arena_tg.tg_flags & TGF_HUGETAB) == 0);
+  assert(arena_tg.huge.h == NULL);
+  assert(lj_arena_of(transfer_small)->hdr.owner_tid == tg->alloc.owner_tid);
+  assert(lj_arena_of(transfer_huge)->hdr.owner_tid == tg->alloc.owner_tid);
+  assert(lj_arena_hugetab_lookup(&tg->huge, transfer_huge, &hi) == 1);
+  assert(hi.size == transfer_huge_size);
+  assert(lj_arena_allocf(&tg->allocd, transfer_small, 64, 0) == NULL);
+  assert(lj_arena_allocf(&tg->allocd, transfer_huge, transfer_huge_size, 0) ==
+	 NULL);
+  lj_tg_fini_thread(g, &arena_tg);
+
+  lua_close(L);
+
+  printf("t-safepoint-handshake OK: C soft handshakes verified\n");
+  return 0;
+}

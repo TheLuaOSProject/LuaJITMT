@@ -1,0 +1,410 @@
+make: Entering directory '/workspaces/lj-lockless/src'
+rm -f luajit libluajit.a libluajit.so host/minilua host/buildvm lj_vm.S lj_bcdef.h lj_ffdef.h lj_libdef.h lj_recdef.h lj_folddef.h host/buildvm_arch.h luajit.h luajit_relver.txt jit/vmdef.lua *.o host/*.o *.obj *.lib *.exp *.dll *.exe *.manifest *.pdb *.ilk
+make: Leaving directory '/workspaces/lj-lockless/src'
+make: Entering directory '/workspaces/lj-lockless/src'
+HOSTCC    host/minilua.o
+HOSTCC    host/buildvm_asm.o
+HOSTCC    host/buildvm_peobj.o
+HOSTCC    host/buildvm_lib.o
+HOSTCC    host/buildvm_fold.o
+HOSTLINK  host/minilua
+VERSION   luajit.h
+DYNASM    host/buildvm_arch.h
+CC        luajit.o
+HOSTCC    host/buildvm.o
+HOSTLINK  host/buildvm
+BUILDVM   lj_vm.S
+BUILDVM   lj_bcdef.h
+BUILDVM   lj_ffdef.h
+BUILDVM   lj_libdef.h
+BUILDVM   lj_recdef.h
+BUILDVM   lj_folddef.h
+BUILDVM   jit/vmdef.lua
+ASM       lj_vm.o
+CC        lj_assert.o
+CC        lj_gc.o
+CC        lj_gc2.o
+CC        lj_safepoint.o
+CC        lj_err.o
+CC        lj_char.o
+CC        lj_bc.o
+CC        lj_obj.o
+CC        lj_buf.o
+CC        lj_str.o
+CC        lj_tab.o
+CC        lj_func.o
+CC        lj_udata.o
+CC        lj_meta.o
+CC        lj_debug.o
+CC        lj_prng.o
+CC        lj_state.o
+CC        lj_dispatch.o
+CC        lj_tg.o
+CC        lj_thr.o
+CC        lj_chan.o
+CC        lj_arena.o
+CC        lj_vmevent.o
+CC        lj_vmmath.o
+CC        lj_strscan.o
+CC        lj_strfmt.o
+CC        lj_strfmt_num.o
+CC        lj_serialize.o
+CC        lj_api.o
+CC        lj_profile.o
+CC        lj_lex.o
+CC        lj_parse.o
+CC        lj_bcread.o
+CC        lj_bcwrite.o
+CC        lj_load.o
+CC        lj_ir.o
+CC        lj_opt_mem.o
+CC        lj_opt_fold.o
+CC        lj_opt_narrow.o
+CC        lj_opt_dce.o
+CC        lj_opt_loop.o
+CC        lj_opt_split.o
+CC        lj_opt_sink.o
+CC        lj_mcode.o
+CC        lj_snap.o
+CC        lj_record.o
+CC        lj_crecord.o
+CC        lj_ffrecord.o
+CC        lj_asm.o
+CC        lj_trace.o
+CC        lj_gdbjit.o
+CC        lj_ctype.o
+CC        lj_cdata.o
+CC        lj_cconv.o
+CC        lj_ccall.o
+CC        lj_ccallback.o
+CC        lj_carith.o
+CC        lj_clib.o
+CC        lj_cparse.o
+CC        lj_lib.o
+CC        lj_alloc.o
+CC        lib_aux.o
+CC        lib_base.o
+CC        lib_math.o
+CC        lib_bit.o
+CC        lib_string.o
+CC        lib_table.o
+CC        lib_io.o
+CC        lib_os.o
+CC        lib_package.o
+CC        lib_debug.o
+CC        lib_jit.o
+CC        lib_ffi.o
+CC        lib_buffer.o
+CC        lib_threading.o
+CC        lib_init.o
+DYNASM    lj_vm_dyn.o
+DYNCC     lj_assert_dyn.o
+DYNCC     lj_gc_dyn.o
+DYNCC     lj_gc2_dyn.o
+DYNCC     lj_safepoint_dyn.o
+DYNCC     lj_err_dyn.o
+DYNCC     lj_char_dyn.o
+DYNCC     lj_bc_dyn.o
+DYNCC     lj_obj_dyn.o
+DYNCC     lj_buf_dyn.o
+DYNCC     lj_str_dyn.o
+DYNCC     lj_tab_dyn.o
+DYNCC     lj_func_dyn.o
+DYNCC     lj_udata_dyn.o
+DYNCC     lj_meta_dyn.o
+DYNCC     lj_debug_dyn.o
+DYNCC     lj_prng_dyn.o
+DYNCC     lj_state_dyn.o
+DYNCC     lj_dispatch_dyn.o
+DYNCC     lj_tg_dyn.o
+DYNCC     lj_thr_dyn.o
+DYNCC     lj_chan_dyn.o
+DYNCC     lj_arena_dyn.o
+DYNCC     lj_vmevent_dyn.o
+DYNCC     lj_vmmath_dyn.o
+DYNCC     lj_strscan_dyn.o
+DYNCC     lj_strfmt_dyn.o
+DYNCC     lj_strfmt_num_dyn.o
+DYNCC     lj_serialize_dyn.o
+DYNCC     lj_api_dyn.o
+DYNCC     lj_profile_dyn.o
+DYNCC     lj_lex_dyn.o
+DYNCC     lj_parse_dyn.o
+DYNCC     lj_bcread_dyn.o
+DYNCC     lj_bcwrite_dyn.o
+DYNCC     lj_load_dyn.o
+DYNCC     lj_ir_dyn.o
+DYNCC     lj_opt_mem_dyn.o
+DYNCC     lj_opt_fold_dyn.o
+DYNCC     lj_opt_narrow_dyn.o
+DYNCC     lj_opt_dce_dyn.o
+DYNCC     lj_opt_loop_dyn.o
+DYNCC     lj_opt_split_dyn.o
+DYNCC     lj_opt_sink_dyn.o
+DYNCC     lj_mcode_dyn.o
+DYNCC     lj_snap_dyn.o
+DYNCC     lj_record_dyn.o
+DYNCC     lj_crecord_dyn.o
+DYNCC     lj_ffrecord_dyn.o
+DYNCC     lj_asm_dyn.o
+DYNCC     lj_trace_dyn.o
+DYNCC     lj_gdbjit_dyn.o
+DYNCC     lj_ctype_dyn.o
+DYNCC     lj_cdata_dyn.o
+DYNCC     lj_cconv_dyn.o
+DYNCC     lj_ccall_dyn.o
+DYNCC     lj_ccallback_dyn.o
+DYNCC     lj_carith_dyn.o
+DYNCC     lj_clib_dyn.o
+DYNCC     lj_cparse_dyn.o
+DYNCC     lj_lib_dyn.o
+DYNCC     lj_alloc_dyn.o
+DYNCC     lib_aux_dyn.o
+DYNCC     lib_base_dyn.o
+DYNCC     lib_math_dyn.o
+DYNCC     lib_bit_dyn.o
+DYNCC     lib_string_dyn.o
+DYNCC     lib_table_dyn.o
+DYNCC     lib_io_dyn.o
+DYNCC     lib_os_dyn.o
+DYNCC     lib_package_dyn.o
+DYNCC     lib_debug_dyn.o
+DYNCC     lib_jit_dyn.o
+DYNCC     lib_ffi_dyn.o
+DYNCC     lib_buffer_dyn.o
+DYNCC     lib_threading_dyn.o
+DYNCC     lib_init_dyn.o
+AR        libluajit.a
+DYNLINK   libluajit.so
+LINK      luajit
+OK        Successfully built LuaJIT
+make: Leaving directory '/workspaces/lj-lockless/src'
+{"stage":"startup_return","actions":0}
+{"stage":"before_target_release","actions":0}
+{"stage":"pending_before_stop","actions":64,"workers":1,"api":0,"phase":3,"cycle":2,"leader":2,"pending":3,"main_native":0,"epoch":22,"owner":4294967297}
+{"stage":"joined","actions":64,"workers":1,"api":0,"ns":249947,"phase":3,"cycle":2,"exited":1,"canonical":true}
+PASS worker bridge pending handshake stop/join
+{"stage":"startup_return","actions":0}
+{"stage":"before_target_release","actions":0}
+{"stage":"pending_before_stop","actions":64,"workers":1,"api":1,"phase":3,"cycle":2,"leader":2,"pending":3,"main_native":0,"epoch":22,"owner":4294967297}
+{"stage":"joined","actions":64,"workers":1,"api":1,"ns":244685,"phase":3,"cycle":2,"exited":1,"canonical":true}
+PASS worker bridge pending handshake stop/join
+{"stage":"startup_return","actions":0}
+{"stage":"before_target_release","actions":0}
+{"stage":"pending_before_stop","actions":64,"workers":2,"api":0,"phase":3,"cycle":2,"leader":2,"pending":4,"main_native":0,"epoch":22,"owner":4294967297}
+{"stage":"joined","actions":64,"workers":2,"api":0,"ns":314888,"phase":3,"cycle":2,"exited":2,"canonical":true}
+PASS worker bridge pending handshake stop/join
+{"stage":"startup_return","actions":0}
+{"stage":"before_target_release","actions":0}
+{"stage":"pending_before_stop","actions":64,"workers":2,"api":1,"phase":3,"cycle":2,"leader":3,"pending":4,"main_native":0,"epoch":22,"owner":4294967297}
+{"stage":"joined","actions":64,"workers":2,"api":1,"ns":310432,"phase":3,"cycle":2,"exited":2,"canonical":true}
+PASS worker bridge pending handshake stop/join
+{"stage":"startup_return","actions":64}
+{"stage":"before_target_release","actions":0}
+{"stage":"pending_before_stop","actions":16,"workers":1,"api":0,"phase":3,"cycle":2,"leader":2,"pending":3,"main_native":0,"epoch":23,"owner":4294967297}
+{"stage":"joined","actions":16,"workers":1,"api":0,"ns":1152827,"phase":3,"cycle":2,"exited":1,"canonical":true}
+PASS worker bridge pending handshake stop/join
+{"stage":"startup_return","actions":64}
+{"stage":"before_target_release","actions":0}
+{"stage":"pending_before_stop","actions":16,"workers":1,"api":1,"phase":3,"cycle":2,"leader":2,"pending":3,"main_native":0,"epoch":23,"owner":4294967297}
+{"stage":"joined","actions":16,"workers":1,"api":1,"ns":1153284,"phase":3,"cycle":2,"exited":1,"canonical":true}
+PASS worker bridge pending handshake stop/join
+{"stage":"startup_return","actions":64}
+{"stage":"before_target_release","actions":0}
+{"stage":"pending_before_stop","actions":16,"workers":2,"api":0,"phase":3,"cycle":2,"leader":3,"pending":4,"main_native":0,"epoch":23,"owner":4294967297}
+{"stage":"joined","actions":16,"workers":2,"api":0,"ns":1234199,"phase":3,"cycle":2,"exited":2,"canonical":true}
+PASS worker bridge pending handshake stop/join
+{"stage":"startup_return","actions":64}
+{"stage":"before_target_release","actions":0}
+{"stage":"pending_before_stop","actions":16,"workers":2,"api":1,"phase":3,"cycle":2,"leader":2,"pending":4,"main_native":0,"epoch":23,"owner":4294967297}
+{"stage":"joined","actions":16,"workers":2,"api":1,"ns":1232858,"phase":3,"cycle":2,"exited":2,"canonical":true}
+PASS worker bridge pending handshake stop/join
+{"stage":"detach_after_own_poll","tid":3,"native":0,"reqmask":0,"poll":0}
+{"stage":"remote_action_refused_owner_pending","wanted":64,"tid":3,"native":0,"reqmask":64}
+{"stage":"joined","overlapped":0}
+{"stage":"detach_after_own_poll","tid":2,"native":0,"reqmask":0,"poll":0}
+{"stage":"remote_action_refused_owner_pending","wanted":16,"tid":2,"native":0,"reqmask":48}
+{"stage":"joined","overlapped":0}
+{"stage":"native_leave_holds_consumed_action","wanted":64,"tid":3,"depth_before_leave":1,"native":0,"poll":1,"reqmask":0,"epoch_claimed":1,"detach_entered":0}
+PASS consumed remote action retains worker before private detach
+{"stage":"native_leave_holds_consumed_action","wanted":16,"tid":3,"depth_before_leave":1,"native":0,"poll":1,"reqmask":0,"epoch_claimed":0,"detach_entered":0}
+PASS consumed remote action retains worker before private detach
+{"stage":"unchanged_claim_frontier","workers":1,"cycle":2,"cursor":"0x7fa6f7880190","pending":"0x7fa6f6cccca0","ns":20149041,"parks":0,"fake_progress":0}
+{"stage":"quiet_native_completed","workers":1,"cycle":2,"completed_delta":1,"ns":11722718,"prune_calls":6,"cursor_only":5,"unlinked":203}
+PASS real bridge frontier backoff and quiet native completion
+{"stage":"unchanged_claim_frontier","workers":2,"cycle":2,"cursor":"0x7fc81e450190","pending":"0x7fc81d77cca0","ns":20055469,"parks":19,"fake_progress":0}
+{"stage":"quiet_native_completed","workers":2,"cycle":2,"completed_delta":1,"ns":2122436,"prune_calls":6,"cursor_only":5,"unlinked":203}
+PASS real bridge frontier backoff and quiet native completion
+{"stage":"baseline","round":0,"explicit":0,"peer":0,"configured_workers":0,"strings":300,"raw_count":300,"local_credit":0,"peer_credit":0,"bytes":160682,"mask":511,"phase":0,"cycles":4,"major":4,"completed":4,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":0,"worker_async":0,"worker_runs":144,"peer_checks":0,"filler_tables":0}
+{"diagnostic":"baseline","round":0,"threshold":321200,"mt_threshold":0,"alloc_since":0,"trigger":321364,"hard":642728,"hard_check":642728,"local_total":0,"cycle_leader":0,"worker_active":0,"worker_busy":6,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":4,"major_roots":12,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"baseline","round":0,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"after_churn","round":1,"explicit":0,"peer":0,"configured_workers":0,"strings":4396,"raw_count":4396,"local_credit":0,"peer_credit":0,"bytes":693290,"mask":8191,"phase":0,"cycles":4,"major":4,"completed":4,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":0,"worker_async":0,"worker_runs":144,"peer_checks":0,"filler_tables":0}
+{"diagnostic":"after_churn","round":1,"threshold":489422,"mt_threshold":0,"alloc_since":500708,"trigger":321364,"hard":642728,"hard_check":642728,"local_total":31900,"cycle_leader":1,"worker_active":0,"worker_busy":6,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":5,"major_roots":12,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"after_churn","round":1,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"settled","round":1,"explicit":0,"peer":0,"configured_workers":0,"strings":4396,"raw_count":4396,"local_credit":0,"peer_credit":0,"bytes":697138,"mask":8191,"phase":0,"cycles":7,"major":7,"completed":7,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":0,"worker_async":0,"worker_runs":228,"peer_checks":0,"filler_tables":8192}
+{"diagnostic":"settled","round":1,"threshold":1024834,"mt_threshold":0,"alloc_since":33592,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":31928,"cycle_leader":0,"worker_active":0,"worker_busy":18,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":7,"major_roots":21,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"settled","round":1,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"after_churn","round":2,"explicit":0,"peer":0,"configured_workers":0,"strings":8492,"raw_count":8492,"local_credit":0,"peer_credit":0,"bytes":1237842,"mask":16383,"phase":0,"cycles":7,"major":7,"completed":7,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":0,"worker_async":0,"worker_runs":228,"peer_checks":0,"filler_tables":8192}
+{"diagnostic":"after_churn","round":2,"threshold":1026038,"mt_threshold":0,"alloc_since":574324,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":31900,"cycle_leader":1,"worker_active":0,"worker_busy":18,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":8,"major_roots":21,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"after_churn","round":2,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"settled","round":2,"explicit":0,"peer":0,"configured_workers":0,"strings":8492,"raw_count":8492,"local_credit":0,"peer_credit":0,"bytes":1172274,"mask":16383,"phase":0,"cycles":10,"major":10,"completed":10,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":0,"worker_async":0,"worker_runs":343,"peer_checks":0,"filler_tables":16384}
+{"diagnostic":"settled","round":2,"threshold":1499970,"mt_threshold":0,"alloc_since":33592,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":31928,"cycle_leader":0,"worker_active":0,"worker_busy":30,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":10,"major_roots":30,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"settled","round":2,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"after_churn","round":3,"explicit":0,"peer":0,"configured_workers":0,"strings":12588,"raw_count":12588,"local_credit":0,"peer_credit":0,"bytes":1581874,"mask":16383,"phase":0,"cycles":10,"major":10,"completed":10,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":0,"worker_async":0,"worker_runs":343,"peer_checks":0,"filler_tables":16384}
+{"diagnostic":"after_churn","round":3,"threshold":1501174,"mt_threshold":0,"alloc_since":460020,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":15100,"cycle_leader":1,"worker_active":0,"worker_busy":30,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":11,"major_roots":30,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"after_churn","round":3,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"settled","round":3,"explicit":0,"peer":0,"configured_workers":0,"strings":12588,"raw_count":12588,"local_credit":0,"peer_credit":0,"bytes":1581874,"mask":16383,"phase":0,"cycles":13,"major":13,"completed":13,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":0,"worker_async":0,"worker_runs":485,"peer_checks":0,"filler_tables":24576}
+{"diagnostic":"settled","round":3,"threshold":1909570,"mt_threshold":0,"alloc_since":33592,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":31928,"cycle_leader":0,"worker_active":0,"worker_busy":42,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":13,"major_roots":39,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"settled","round":3,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"after_churn","round":4,"explicit":0,"peer":0,"configured_workers":0,"strings":16684,"raw_count":16684,"local_credit":0,"peer_credit":0,"bytes":2253650,"mask":32767,"phase":0,"cycles":13,"major":13,"completed":13,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":0,"worker_async":0,"worker_runs":485,"peer_checks":0,"filler_tables":24576}
+{"diagnostic":"after_churn","round":4,"threshold":1910774,"mt_threshold":0,"alloc_since":705396,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":31900,"cycle_leader":1,"worker_active":0,"worker_busy":42,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":14,"major_roots":39,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"after_churn","round":4,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"settled","round":4,"explicit":0,"peer":0,"configured_workers":0,"strings":16684,"raw_count":16684,"local_credit":0,"peer_credit":0,"bytes":2122546,"mask":32767,"phase":0,"cycles":16,"major":16,"completed":16,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":0,"worker_async":0,"worker_runs":678,"peer_checks":0,"filler_tables":32768}
+{"diagnostic":"settled","round":4,"threshold":2450242,"mt_threshold":0,"alloc_since":37752,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":27768,"cycle_leader":0,"worker_active":0,"worker_busy":54,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":16,"major_roots":48,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"settled","round":4,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"after_churn","round":5,"explicit":0,"peer":0,"configured_workers":0,"strings":20780,"raw_count":20780,"local_credit":0,"peer_credit":0,"bytes":2532146,"mask":32767,"phase":0,"cycles":16,"major":16,"completed":16,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":0,"worker_async":0,"worker_runs":678,"peer_checks":0,"filler_tables":32768}
+{"diagnostic":"after_churn","round":5,"threshold":2455546,"mt_threshold":0,"alloc_since":464120,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":11000,"cycle_leader":1,"worker_active":0,"worker_busy":54,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":17,"major_roots":48,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"after_churn","round":5,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"settled","round":5,"explicit":0,"peer":0,"configured_workers":0,"strings":20780,"raw_count":20780,"local_credit":0,"peer_credit":0,"bytes":2532146,"mask":32767,"phase":0,"cycles":19,"major":19,"completed":19,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":0,"worker_async":0,"worker_runs":898,"peer_checks":0,"filler_tables":40960}
+{"diagnostic":"settled","round":5,"threshold":2859842,"mt_threshold":0,"alloc_since":37752,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":27768,"cycle_leader":0,"worker_active":0,"worker_busy":66,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":19,"major_roots":57,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"settled","round":5,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"after_churn","round":6,"explicit":0,"peer":0,"configured_workers":0,"strings":24876,"raw_count":24876,"local_credit":0,"peer_credit":0,"bytes":2941746,"mask":32767,"phase":0,"cycles":19,"major":19,"completed":19,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":0,"worker_async":0,"worker_runs":898,"peer_checks":0,"filler_tables":40960}
+{"diagnostic":"after_churn","round":6,"threshold":2865146,"mt_threshold":0,"alloc_since":464120,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":11000,"cycle_leader":1,"worker_active":0,"worker_busy":66,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":20,"major_roots":57,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"after_churn","round":6,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"settled","round":6,"explicit":0,"peer":0,"configured_workers":0,"strings":24876,"raw_count":24876,"local_credit":0,"peer_credit":0,"bytes":2941746,"mask":32767,"phase":0,"cycles":22,"major":22,"completed":22,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":0,"worker_async":0,"worker_runs":1158,"peer_checks":0,"filler_tables":49152}
+{"diagnostic":"settled","round":6,"threshold":3269442,"mt_threshold":0,"alloc_since":37752,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":27768,"cycle_leader":0,"worker_active":0,"worker_busy":78,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":22,"major_roots":66,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"settled","round":6,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"sole_main_recovered","round":6,"explicit":0,"peer":0,"configured_workers":0,"strings":300,"raw_count":300,"local_credit":0,"peer_credit":0,"bytes":418730,"mask":32767,"phase":0,"cycles":24,"major":24,"completed":24,"unlinked":24602,"reclaimed":24602,"mt_live":0,"n_workers":0,"worker_async":0,"worker_runs":4124,"peer_checks":0,"filler_tables":49152}
+{"diagnostic":"sole_main_recovered","round":6,"threshold":837400,"mt_threshold":0,"alloc_since":0,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":0,"cycle_leader":0,"worker_active":0,"worker_busy":82,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":24,"major_roots":72,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"sole_main_recovered","round":6,"jit_enabled":0,"jit_hard_checks":0}
+PASS rounds=6 batch=4096 payload=64 body_bytes=100 live=32 created_body_bytes=2457600 filler_tables=49152
+{"stage":"baseline","round":0,"explicit":0,"peer":0,"configured_workers":2,"strings":300,"raw_count":300,"local_credit":0,"peer_credit":0,"bytes":160682,"mask":511,"phase":0,"cycles":4,"major":4,"completed":4,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":2,"worker_async":6,"worker_runs":87,"peer_checks":0,"filler_tables":0}
+{"diagnostic":"baseline","round":0,"threshold":321200,"mt_threshold":0,"alloc_since":0,"trigger":321364,"hard":642728,"hard_check":642728,"local_total":0,"cycle_leader":0,"worker_active":0,"worker_busy":12,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":4,"major_roots":12,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"baseline","round":0,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"after_churn","round":1,"explicit":0,"peer":0,"configured_workers":2,"strings":4396,"raw_count":4396,"local_credit":0,"peer_credit":0,"bytes":693290,"mask":8191,"phase":0,"cycles":4,"major":4,"completed":4,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":2,"worker_async":6,"worker_runs":87,"peer_checks":0,"filler_tables":0}
+{"diagnostic":"after_churn","round":1,"threshold":489422,"mt_threshold":0,"alloc_since":500708,"trigger":321364,"hard":642728,"hard_check":642728,"local_total":31900,"cycle_leader":1,"worker_active":0,"worker_busy":12,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":5,"major_roots":12,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"after_churn","round":1,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"settled","round":1,"explicit":0,"peer":0,"configured_workers":2,"strings":4396,"raw_count":4396,"local_credit":0,"peer_credit":0,"bytes":697138,"mask":8191,"phase":0,"cycles":7,"major":7,"completed":7,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":2,"worker_async":6,"worker_runs":211,"peer_checks":0,"filler_tables":8192}
+{"diagnostic":"settled","round":1,"threshold":1024834,"mt_threshold":0,"alloc_since":37752,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":27768,"cycle_leader":0,"worker_active":0,"worker_busy":56,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":7,"major_roots":21,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"settled","round":1,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"after_churn","round":2,"explicit":0,"peer":0,"configured_workers":2,"strings":8492,"raw_count":8492,"local_credit":0,"peer_credit":0,"bytes":1237842,"mask":16383,"phase":0,"cycles":7,"major":7,"completed":7,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":2,"worker_async":6,"worker_runs":211,"peer_checks":0,"filler_tables":8192}
+{"diagnostic":"after_churn","round":2,"threshold":1030138,"mt_threshold":0,"alloc_since":574324,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":31900,"cycle_leader":1,"worker_active":0,"worker_busy":56,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":8,"major_roots":21,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"after_churn","round":2,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"settled","round":2,"explicit":0,"peer":0,"configured_workers":2,"strings":8492,"raw_count":8492,"local_credit":0,"peer_credit":0,"bytes":1172274,"mask":16383,"phase":0,"cycles":10,"major":10,"completed":10,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":2,"worker_async":6,"worker_runs":369,"peer_checks":0,"filler_tables":16384}
+{"diagnostic":"settled","round":2,"threshold":1499970,"mt_threshold":0,"alloc_since":37752,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":27768,"cycle_leader":0,"worker_active":0,"worker_busy":103,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":10,"major_roots":30,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"settled","round":2,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"after_churn","round":3,"explicit":0,"peer":0,"configured_workers":2,"strings":12588,"raw_count":12588,"local_credit":0,"peer_credit":0,"bytes":1581874,"mask":16383,"phase":0,"cycles":10,"major":10,"completed":10,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":2,"worker_async":6,"worker_runs":369,"peer_checks":0,"filler_tables":16384}
+{"diagnostic":"after_churn","round":3,"threshold":1505274,"mt_threshold":0,"alloc_since":464120,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":11000,"cycle_leader":1,"worker_active":0,"worker_busy":103,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":11,"major_roots":30,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"after_churn","round":3,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"settled","round":3,"explicit":0,"peer":0,"configured_workers":2,"strings":12588,"raw_count":12588,"local_credit":0,"peer_credit":0,"bytes":1581874,"mask":16383,"phase":0,"cycles":13,"major":13,"completed":13,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":2,"worker_async":6,"worker_runs":554,"peer_checks":0,"filler_tables":24576}
+{"diagnostic":"settled","round":3,"threshold":1909570,"mt_threshold":0,"alloc_since":37752,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":27768,"cycle_leader":0,"worker_active":0,"worker_busy":150,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":13,"major_roots":39,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"settled","round":3,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"after_churn","round":4,"explicit":0,"peer":0,"configured_workers":2,"strings":16684,"raw_count":16684,"local_credit":0,"peer_credit":0,"bytes":2253650,"mask":32767,"phase":0,"cycles":13,"major":13,"completed":13,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":2,"worker_async":6,"worker_runs":554,"peer_checks":0,"filler_tables":24576}
+{"diagnostic":"after_churn","round":4,"threshold":1914874,"mt_threshold":0,"alloc_since":705396,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":31900,"cycle_leader":1,"worker_active":0,"worker_busy":150,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":14,"major_roots":39,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"after_churn","round":4,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"settled","round":4,"explicit":0,"peer":0,"configured_workers":2,"strings":16684,"raw_count":16684,"local_credit":0,"peer_credit":0,"bytes":2122546,"mask":32767,"phase":0,"cycles":16,"major":16,"completed":16,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":2,"worker_async":6,"worker_runs":766,"peer_checks":0,"filler_tables":32768}
+{"diagnostic":"settled","round":4,"threshold":2450242,"mt_threshold":0,"alloc_since":37752,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":27768,"cycle_leader":0,"worker_active":0,"worker_busy":201,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":16,"major_roots":48,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"settled","round":4,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"after_churn","round":5,"explicit":0,"peer":0,"configured_workers":2,"strings":20780,"raw_count":20780,"local_credit":0,"peer_credit":0,"bytes":2532146,"mask":32767,"phase":0,"cycles":16,"major":16,"completed":16,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":2,"worker_async":6,"worker_runs":766,"peer_checks":0,"filler_tables":32768}
+{"diagnostic":"after_churn","round":5,"threshold":2455546,"mt_threshold":0,"alloc_since":464120,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":11000,"cycle_leader":1,"worker_active":0,"worker_busy":201,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":17,"major_roots":48,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"after_churn","round":5,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"settled","round":5,"explicit":0,"peer":0,"configured_workers":2,"strings":20780,"raw_count":20780,"local_credit":0,"peer_credit":0,"bytes":2785802,"mask":32767,"phase":0,"cycles":19,"major":19,"completed":19,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":2,"worker_async":7116,"worker_runs":1093,"peer_checks":0,"filler_tables":40960}
+{"diagnostic":"settled","round":5,"threshold":2927074,"mt_threshold":0,"alloc_since":319176,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":0,"cycle_leader":0,"worker_active":0,"worker_busy":5461,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":19,"major_roots":57,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"settled","round":5,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"after_churn","round":6,"explicit":0,"peer":0,"configured_workers":2,"strings":24876,"raw_count":24876,"local_credit":0,"peer_credit":0,"bytes":3195402,"mask":32767,"phase":0,"cycles":19,"major":19,"completed":19,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":2,"worker_async":7116,"worker_runs":1093,"peer_checks":0,"filler_tables":40960}
+{"diagnostic":"after_churn","round":6,"threshold":2884202,"mt_threshold":0,"alloc_since":712776,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":16000,"cycle_leader":1,"worker_active":0,"worker_busy":5461,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":20,"major_roots":57,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"after_churn","round":6,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"settled","round":6,"explicit":0,"peer":0,"configured_workers":2,"strings":24876,"raw_count":24876,"local_credit":0,"peer_credit":0,"bytes":3269346,"mask":32767,"phase":0,"cycles":22,"major":22,"completed":22,"unlinked":26,"reclaimed":26,"mt_live":0,"n_workers":2,"worker_async":25341,"worker_runs":1636,"peer_checks":0,"filler_tables":53248}
+{"diagnostic":"settled","round":6,"threshold":3719706,"mt_threshold":0,"alloc_since":393120,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":0,"cycle_leader":0,"worker_active":0,"worker_busy":24424,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":22,"major_roots":66,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"settled","round":6,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"sole_main_recovered","round":6,"explicit":0,"peer":0,"configured_workers":2,"strings":300,"raw_count":300,"local_credit":0,"peer_credit":0,"bytes":418730,"mask":32767,"phase":0,"cycles":24,"major":24,"completed":24,"unlinked":24602,"reclaimed":24602,"mt_live":0,"n_workers":0,"worker_async":25341,"worker_runs":4619,"peer_checks":0,"filler_tables":53248}
+{"diagnostic":"sole_main_recovered","round":6,"threshold":837400,"mt_threshold":0,"alloc_since":0,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":0,"cycle_leader":0,"worker_active":0,"worker_busy":24428,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":24,"major_roots":72,"worker_started":2,"worker_exited":2,"worker_stop":1}
+{"execution":"sole_main_recovered","round":6,"jit_enabled":0,"jit_hard_checks":0}
+PASS rounds=6 batch=4096 payload=64 body_bytes=100 live=32 created_body_bytes=2457600 filler_tables=53248
+{"stage":"baseline","round":0,"explicit":0,"peer":1,"configured_workers":0,"strings":300,"raw_count":300,"local_credit":0,"peer_credit":0,"bytes":192386,"mask":511,"phase":0,"cycles":4,"major":4,"completed":4,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":0,"worker_async":0,"worker_runs":86,"peer_checks":1,"filler_tables":0}
+{"diagnostic":"baseline","round":0,"threshold":140737488355328,"mt_threshold":384600,"alloc_since":0,"trigger":384772,"hard":769544,"hard_check":769544,"local_total":0,"cycle_leader":0,"worker_active":0,"worker_busy":10,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":4,"major_roots":12,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"baseline","round":0,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"after_churn","round":1,"explicit":0,"peer":1,"configured_workers":0,"strings":4396,"raw_count":4396,"local_credit":0,"peer_credit":0,"bytes":724994,"mask":8191,"phase":0,"cycles":4,"major":4,"completed":4,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":0,"worker_async":0,"worker_runs":86,"peer_checks":1,"filler_tables":0}
+{"diagnostic":"after_churn","round":1,"threshold":140737488355328,"mt_threshold":586726,"alloc_since":500708,"trigger":384772,"hard":769544,"hard_check":769544,"local_total":31900,"cycle_leader":1,"worker_active":0,"worker_busy":10,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":5,"major_roots":12,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"after_churn","round":1,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"settled","round":1,"explicit":0,"peer":1,"configured_workers":0,"strings":4396,"raw_count":4396,"local_credit":0,"peer_credit":0,"bytes":728842,"mask":8191,"phase":0,"cycles":7,"major":7,"completed":7,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":0,"worker_async":0,"worker_runs":173,"peer_checks":2,"filler_tables":8192}
+{"diagnostic":"settled","round":1,"threshold":1056538,"mt_threshold":1056546,"alloc_since":33592,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":31928,"cycle_leader":0,"worker_active":0,"worker_busy":22,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":7,"major_roots":21,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"settled","round":1,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"after_churn","round":2,"explicit":0,"peer":1,"configured_workers":0,"strings":8492,"raw_count":8492,"local_credit":0,"peer_credit":0,"bytes":1269546,"mask":16383,"phase":0,"cycles":7,"major":7,"completed":7,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":0,"worker_async":0,"worker_runs":173,"peer_checks":2,"filler_tables":8192}
+{"diagnostic":"after_churn","round":2,"threshold":1056538,"mt_threshold":1057742,"alloc_since":574324,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":31900,"cycle_leader":1,"worker_active":0,"worker_busy":22,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":8,"major_roots":21,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"after_churn","round":2,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"settled","round":2,"explicit":0,"peer":1,"configured_workers":0,"strings":8492,"raw_count":8492,"local_credit":0,"peer_credit":0,"bytes":1203978,"mask":16383,"phase":0,"cycles":10,"major":10,"completed":10,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":0,"worker_async":0,"worker_runs":295,"peer_checks":3,"filler_tables":16384}
+{"diagnostic":"settled","round":2,"threshold":1531674,"mt_threshold":1531682,"alloc_since":33592,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":31928,"cycle_leader":0,"worker_active":0,"worker_busy":34,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":10,"major_roots":30,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"settled","round":2,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"after_churn","round":3,"explicit":0,"peer":1,"configured_workers":0,"strings":12588,"raw_count":12588,"local_credit":0,"peer_credit":0,"bytes":1613578,"mask":16383,"phase":0,"cycles":10,"major":10,"completed":10,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":0,"worker_async":0,"worker_runs":295,"peer_checks":3,"filler_tables":16384}
+{"diagnostic":"after_churn","round":3,"threshold":1531674,"mt_threshold":1532878,"alloc_since":460020,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":15100,"cycle_leader":1,"worker_active":0,"worker_busy":34,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":11,"major_roots":30,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"after_churn","round":3,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"settled","round":3,"explicit":0,"peer":1,"configured_workers":0,"strings":12588,"raw_count":12588,"local_credit":0,"peer_credit":0,"bytes":1613578,"mask":16383,"phase":0,"cycles":13,"major":13,"completed":13,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":0,"worker_async":0,"worker_runs":444,"peer_checks":4,"filler_tables":24576}
+{"diagnostic":"settled","round":3,"threshold":1941274,"mt_threshold":1941282,"alloc_since":33592,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":31928,"cycle_leader":0,"worker_active":0,"worker_busy":46,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":13,"major_roots":39,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"settled","round":3,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"after_churn","round":4,"explicit":0,"peer":1,"configured_workers":0,"strings":16684,"raw_count":16684,"local_credit":0,"peer_credit":0,"bytes":2285354,"mask":32767,"phase":0,"cycles":13,"major":13,"completed":13,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":0,"worker_async":0,"worker_runs":444,"peer_checks":4,"filler_tables":24576}
+{"diagnostic":"after_churn","round":4,"threshold":1941274,"mt_threshold":1942478,"alloc_since":705396,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":31900,"cycle_leader":1,"worker_active":0,"worker_busy":46,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":14,"major_roots":39,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"after_churn","round":4,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"settled","round":4,"explicit":0,"peer":1,"configured_workers":0,"strings":16684,"raw_count":16684,"local_credit":0,"peer_credit":0,"bytes":2154250,"mask":32767,"phase":0,"cycles":16,"major":16,"completed":16,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":0,"worker_async":0,"worker_runs":642,"peer_checks":5,"filler_tables":32768}
+{"diagnostic":"settled","round":4,"threshold":2481946,"mt_threshold":2481954,"alloc_since":37752,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":27768,"cycle_leader":0,"worker_active":0,"worker_busy":58,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":16,"major_roots":48,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"settled","round":4,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"after_churn","round":5,"explicit":0,"peer":1,"configured_workers":0,"strings":20780,"raw_count":20780,"local_credit":0,"peer_credit":0,"bytes":2563850,"mask":32767,"phase":0,"cycles":16,"major":16,"completed":16,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":0,"worker_async":0,"worker_runs":642,"peer_checks":5,"filler_tables":32768}
+{"diagnostic":"after_churn","round":5,"threshold":2481946,"mt_threshold":2487250,"alloc_since":464120,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":11000,"cycle_leader":1,"worker_active":0,"worker_busy":58,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":17,"major_roots":48,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"after_churn","round":5,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"settled","round":5,"explicit":0,"peer":1,"configured_workers":0,"strings":20780,"raw_count":20780,"local_credit":0,"peer_credit":0,"bytes":2563850,"mask":32767,"phase":0,"cycles":19,"major":19,"completed":19,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":0,"worker_async":0,"worker_runs":867,"peer_checks":6,"filler_tables":40960}
+{"diagnostic":"settled","round":5,"threshold":2891546,"mt_threshold":2891554,"alloc_since":37752,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":27768,"cycle_leader":0,"worker_active":0,"worker_busy":70,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":19,"major_roots":57,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"settled","round":5,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"after_churn","round":6,"explicit":0,"peer":1,"configured_workers":0,"strings":24876,"raw_count":24876,"local_credit":0,"peer_credit":0,"bytes":2973450,"mask":32767,"phase":0,"cycles":19,"major":19,"completed":19,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":0,"worker_async":0,"worker_runs":867,"peer_checks":6,"filler_tables":40960}
+{"diagnostic":"after_churn","round":6,"threshold":2891546,"mt_threshold":2896850,"alloc_since":464120,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":11000,"cycle_leader":1,"worker_active":0,"worker_busy":70,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":20,"major_roots":57,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"after_churn","round":6,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"settled","round":6,"explicit":0,"peer":1,"configured_workers":0,"strings":24876,"raw_count":24876,"local_credit":0,"peer_credit":0,"bytes":2973450,"mask":32767,"phase":0,"cycles":22,"major":22,"completed":22,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":0,"worker_async":0,"worker_runs":1133,"peer_checks":7,"filler_tables":49152}
+{"diagnostic":"settled","round":6,"threshold":3301146,"mt_threshold":3301154,"alloc_since":37752,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":27768,"cycle_leader":0,"worker_active":0,"worker_busy":82,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":22,"major_roots":66,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"settled","round":6,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"sole_main_recovered","round":6,"explicit":0,"peer":1,"configured_workers":0,"strings":300,"raw_count":300,"local_credit":0,"peer_credit":0,"bytes":450394,"mask":32767,"phase":0,"cycles":24,"major":24,"completed":24,"unlinked":24602,"reclaimed":24602,"mt_live":0,"n_workers":0,"worker_async":0,"worker_runs":4101,"peer_checks":8,"filler_tables":49152}
+{"diagnostic":"sole_main_recovered","round":6,"threshold":900600,"mt_threshold":3301154,"alloc_since":0,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":0,"cycle_leader":0,"worker_active":0,"worker_busy":86,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":24,"major_roots":72,"worker_started":0,"worker_exited":0,"worker_stop":0}
+{"execution":"sole_main_recovered","round":6,"jit_enabled":0,"jit_hard_checks":0}
+PASS rounds=6 batch=4096 payload=64 body_bytes=100 live=32 created_body_bytes=2457600 filler_tables=49152
+{"stage":"baseline","round":0,"explicit":0,"peer":1,"configured_workers":2,"strings":300,"raw_count":300,"local_credit":0,"peer_credit":0,"bytes":192386,"mask":511,"phase":0,"cycles":4,"major":4,"completed":4,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":2,"worker_async":0,"worker_runs":86,"peer_checks":1,"filler_tables":0}
+{"diagnostic":"baseline","round":0,"threshold":140737488355328,"mt_threshold":384600,"alloc_since":0,"trigger":384772,"hard":769544,"hard_check":769544,"local_total":0,"cycle_leader":0,"worker_active":0,"worker_busy":17,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":4,"major_roots":12,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"baseline","round":0,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"after_churn","round":1,"explicit":0,"peer":1,"configured_workers":2,"strings":4396,"raw_count":4396,"local_credit":0,"peer_credit":0,"bytes":724994,"mask":8191,"phase":0,"cycles":4,"major":4,"completed":4,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":2,"worker_async":0,"worker_runs":86,"peer_checks":1,"filler_tables":0}
+{"diagnostic":"after_churn","round":1,"threshold":140737488355328,"mt_threshold":586726,"alloc_since":500708,"trigger":384772,"hard":769544,"hard_check":769544,"local_total":31900,"cycle_leader":1,"worker_active":0,"worker_busy":17,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":5,"major_roots":12,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"after_churn","round":1,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"settled","round":1,"explicit":0,"peer":1,"configured_workers":2,"strings":4396,"raw_count":4396,"local_credit":0,"peer_credit":0,"bytes":728842,"mask":8191,"phase":0,"cycles":7,"major":7,"completed":7,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":2,"worker_async":0,"worker_runs":210,"peer_checks":2,"filler_tables":8192}
+{"diagnostic":"settled","round":1,"threshold":1056538,"mt_threshold":1056546,"alloc_since":37752,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":27768,"cycle_leader":0,"worker_active":0,"worker_busy":62,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":7,"major_roots":21,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"settled","round":1,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"after_churn","round":2,"explicit":0,"peer":1,"configured_workers":2,"strings":8492,"raw_count":8492,"local_credit":0,"peer_credit":0,"bytes":1269546,"mask":16383,"phase":0,"cycles":7,"major":7,"completed":7,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":2,"worker_async":0,"worker_runs":210,"peer_checks":2,"filler_tables":8192}
+{"diagnostic":"after_churn","round":2,"threshold":1056538,"mt_threshold":1061842,"alloc_since":574324,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":31900,"cycle_leader":1,"worker_active":0,"worker_busy":62,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":8,"major_roots":21,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"after_churn","round":2,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"settled","round":2,"explicit":0,"peer":1,"configured_workers":2,"strings":8492,"raw_count":8492,"local_credit":0,"peer_credit":0,"bytes":1203978,"mask":16383,"phase":0,"cycles":10,"major":10,"completed":10,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":2,"worker_async":0,"worker_runs":369,"peer_checks":3,"filler_tables":16384}
+{"diagnostic":"settled","round":2,"threshold":1531674,"mt_threshold":1531682,"alloc_since":37752,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":27768,"cycle_leader":0,"worker_active":0,"worker_busy":111,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":10,"major_roots":30,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"settled","round":2,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"after_churn","round":3,"explicit":0,"peer":1,"configured_workers":2,"strings":12588,"raw_count":12588,"local_credit":0,"peer_credit":0,"bytes":1613578,"mask":16383,"phase":0,"cycles":10,"major":10,"completed":10,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":2,"worker_async":0,"worker_runs":369,"peer_checks":3,"filler_tables":16384}
+{"diagnostic":"after_churn","round":3,"threshold":1531674,"mt_threshold":1536978,"alloc_since":464120,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":11000,"cycle_leader":1,"worker_active":0,"worker_busy":111,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":11,"major_roots":30,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"after_churn","round":3,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"settled","round":3,"explicit":0,"peer":1,"configured_workers":2,"strings":12588,"raw_count":12588,"local_credit":0,"peer_credit":0,"bytes":1613578,"mask":16383,"phase":0,"cycles":13,"major":13,"completed":13,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":2,"worker_async":0,"worker_runs":555,"peer_checks":4,"filler_tables":24576}
+{"diagnostic":"settled","round":3,"threshold":1941274,"mt_threshold":1941282,"alloc_since":37752,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":27768,"cycle_leader":0,"worker_active":0,"worker_busy":164,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":13,"major_roots":39,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"settled","round":3,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"after_churn","round":4,"explicit":0,"peer":1,"configured_workers":2,"strings":16684,"raw_count":16684,"local_credit":0,"peer_credit":0,"bytes":2285354,"mask":32767,"phase":0,"cycles":13,"major":13,"completed":13,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":2,"worker_async":0,"worker_runs":555,"peer_checks":4,"filler_tables":24576}
+{"diagnostic":"after_churn","round":4,"threshold":1941274,"mt_threshold":1946578,"alloc_since":705396,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":31900,"cycle_leader":1,"worker_active":0,"worker_busy":164,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":14,"major_roots":39,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"after_churn","round":4,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"settled","round":4,"explicit":0,"peer":1,"configured_workers":2,"strings":16684,"raw_count":16684,"local_credit":0,"peer_credit":0,"bytes":2154250,"mask":32767,"phase":0,"cycles":16,"major":16,"completed":16,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":2,"worker_async":2584,"worker_runs":806,"peer_checks":5,"filler_tables":32768}
+{"diagnostic":"settled","round":4,"threshold":2441850,"mt_threshold":2481954,"alloc_since":65520,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":0,"cycle_leader":0,"worker_active":0,"worker_busy":1126,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":16,"major_roots":48,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"settled","round":4,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"after_churn","round":5,"explicit":0,"peer":1,"configured_workers":2,"strings":20780,"raw_count":20780,"local_credit":0,"peer_credit":0,"bytes":2563850,"mask":32767,"phase":0,"cycles":16,"major":16,"completed":16,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":2,"worker_async":2584,"worker_runs":806,"peer_checks":5,"filler_tables":32768}
+{"diagnostic":"after_churn","round":5,"threshold":2441850,"mt_threshold":2482250,"alloc_since":459120,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":16000,"cycle_leader":1,"worker_active":0,"worker_busy":1126,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":17,"major_roots":48,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"after_churn","round":5,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"settled","round":5,"explicit":0,"peer":1,"configured_workers":2,"strings":20780,"raw_count":20780,"local_credit":0,"peer_credit":0,"bytes":2563850,"mask":32767,"phase":0,"cycles":19,"major":19,"completed":19,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":2,"worker_async":2584,"worker_runs":1070,"peer_checks":6,"filler_tables":40960}
+{"diagnostic":"settled","round":5,"threshold":2891546,"mt_threshold":2891554,"alloc_since":41912,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":23608,"cycle_leader":0,"worker_active":0,"worker_busy":1184,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":19,"major_roots":57,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"settled","round":5,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"after_churn","round":6,"explicit":0,"peer":1,"configured_workers":2,"strings":24876,"raw_count":24876,"local_credit":0,"peer_credit":0,"bytes":2973450,"mask":32767,"phase":0,"cycles":19,"major":19,"completed":19,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":2,"worker_async":2584,"worker_runs":1070,"peer_checks":6,"filler_tables":40960}
+{"diagnostic":"after_churn","round":6,"threshold":2891546,"mt_threshold":2901050,"alloc_since":468320,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":6800,"cycle_leader":1,"worker_active":0,"worker_busy":1184,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":20,"major_roots":57,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"after_churn","round":6,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"settled","round":6,"explicit":0,"peer":1,"configured_workers":2,"strings":24876,"raw_count":24876,"local_credit":0,"peer_credit":0,"bytes":3301050,"mask":32767,"phase":0,"cycles":22,"major":22,"completed":22,"unlinked":26,"reclaimed":26,"mt_live":1,"n_workers":2,"worker_async":14772,"worker_runs":1528,"peer_checks":7,"filler_tables":53248}
+{"diagnostic":"settled","round":6,"threshold":3301146,"mt_threshold":3333914,"alloc_since":370552,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":22568,"cycle_leader":0,"worker_active":0,"worker_busy":13845,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":22,"major_roots":66,"worker_started":2,"worker_exited":0,"worker_stop":0}
+{"execution":"settled","round":6,"jit_enabled":0,"jit_hard_checks":0}
+{"stage":"sole_main_recovered","round":6,"explicit":0,"peer":1,"configured_workers":2,"strings":300,"raw_count":300,"local_credit":0,"peer_credit":0,"bytes":450394,"mask":32767,"phase":0,"cycles":24,"major":24,"completed":24,"unlinked":24602,"reclaimed":24602,"mt_live":0,"n_workers":0,"worker_async":14772,"worker_runs":4513,"peer_checks":8,"filler_tables":53248}
+{"diagnostic":"sole_main_recovered","round":6,"threshold":900600,"mt_threshold":3333914,"alloc_since":0,"trigger":393216,"hard":786432,"hard_check":786432,"local_total":0,"cycle_leader":0,"worker_active":0,"worker_busy":13849,"jit_gate":1,"mark_resume":0,"mark_close_intent":0,"interp_hard":0,"assist_runs":0,"cycle_requests":24,"major_roots":72,"worker_started":2,"worker_exited":2,"worker_stop":1}
+{"execution":"sole_main_recovered","round":6,"jit_enabled":0,"jit_hard_checks":0}
+PASS rounds=6 batch=4096 payload=64 body_bytes=100 live=32 created_body_bytes=2457600 filler_tables=53248
+M3 worker SWEEP completion and native action lifetime passed

@@ -1,0 +1,26 @@
+{
+  "candidate1.patch": {
+    "sha256": "f9505578ff66134980feb698bb2cf39f92f0f6df41d7309cdda107641992e2d8",
+    "bytes": 9824
+  },
+  "source-v1/lj_gc2.c": {
+    "sha256": "62550d5e0d57432b131bc135275e9d11e4a92eab5732b2a654783108ede7b351",
+    "bytes": 770043
+  },
+  "base-identity.json": {
+    "sha256": "ba28c6353f41ad44441b444028d080fed57eb0aeaed29f2b4503bb40cc33d609",
+    "bytes": 1384469
+  },
+  "SOURCE-V1.md": {
+    "sha256": "ee9f6579dbd2c31a42f093f2ba99679dcaf318380d6f8b72357e23fd531be337",
+    "bytes": 2789
+  },
+  "previous/HANDOFF.md": {
+    "sha256": "5302d068f1ba55bfe5bdc3555b76addc3ec5dd7d517a322debd761e4981a8c81",
+    "bytes": 9193
+  },
+  "previous/PROPOSAL.md": {
+    "sha256": "5d290d368e1b2335f408547fbd78e1cb82b08eb4c5236a4715bd0df73b5e047c",
+    "bytes": 10653
+  }
+}

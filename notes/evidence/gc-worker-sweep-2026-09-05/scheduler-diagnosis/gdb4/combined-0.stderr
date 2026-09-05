@@ -1,0 +1,1 @@
+combined-stop-observer: /tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/t-gc2-worker-scheduler.c:1445: test_async_sweep_and_stop: Assertion `gc2_worker_async_progress_acq(g) > async0' failed.

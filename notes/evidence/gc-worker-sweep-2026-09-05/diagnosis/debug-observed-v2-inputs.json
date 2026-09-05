@@ -1,0 +1,22 @@
+{
+  "debug-observed-v2-retention": {
+    "sha256": "3e40aa91855173bdfeccef0a5cf81c1883c553bb21dacc4c72172cbfb4b50b97",
+    "bytes": 12891968
+  },
+  "t-string-retention-observed.c": {
+    "sha256": "575550bc27d0ec5995bf98ce7cd844f3cd251f3d12a2c280450f477cf4680a17",
+    "bytes": 12240
+  },
+  "peer-control.lua": {
+    "sha256": "519ebf714b0a33b9a436d3452a153a1bc3eea3322ebf0bf74d8e76fea4ab8cb2",
+    "bytes": 1756
+  },
+  "libluajit.a": {
+    "sha256": "8af719e1453daf60c828ee67cfbf286c3f51021d46038a338a8e193dcc719b2a",
+    "bytes": 28561778
+  },
+  "sweep-probe.h": {
+    "sha256": "891c72e7e522306b186ce36b2e29cdf052deda14bef216ccbc6579a0ec374ce1",
+    "bytes": 5020
+  }
+}

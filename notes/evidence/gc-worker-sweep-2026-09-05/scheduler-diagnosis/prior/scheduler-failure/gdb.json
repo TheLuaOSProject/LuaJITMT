@@ -1,0 +1,28 @@
+{
+  "command": [
+    "gdb",
+    "-q",
+    "-batch",
+    "-ex",
+    "set pagination off",
+    "-ex",
+    "set confirm off",
+    "-ex",
+    "handle SIGUSR2 nostop noprint pass",
+    "-ex",
+    "run",
+    "-ex",
+    "thread apply all bt",
+    "-ex",
+    "info registers",
+    "--args",
+    "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/canonical-tmp/lj_t-gc2-worker-scheduler"
+  ],
+  "exit": 0,
+  "seconds": 0.11433420400135219,
+  "elf_sha256": "9c76bd3021401467822751d2505ece821a5ca2687b5894535b83c708e4e4fd91",
+  "fixture_sha256": "e9d2173e1279088d500b7bff816dae54e260b039ad5c5d6034f738d5ad2a1a27",
+  "runtime_archive_sha256": "8ccf78b4109544b92898d47453722dc3ceba1088bcc4a25f5c89aac96d645fdb",
+  "observation_only": true,
+  "timeout_seconds": 60
+}

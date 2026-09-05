@@ -1,0 +1,11 @@
+{
+  "agent": "/root/gc_scheduler_review",
+  "state": "errored",
+  "notice": "This content was flagged for possible cybersecurity risk.",
+  "specific_rejected_operation": "not supplied by review result",
+  "last_completed_package": "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr",
+  "completed_manifest_sha256": "550d64cc329f191f20c8854b59165694ea52c79c2a3e5eb7074dd45a9b2d0217",
+  "subsequent_action": "no retry, rephrase, agent revival or takeover of unknown rejected operation",
+  "independent_root_work": "Existing source review and registered scheduler execution completed successfully before notice; preserve completed artifacts and continue their integration.",
+  "rotation": "source-approved but functionally unvalidated at last frozen handoff"
+}

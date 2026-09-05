@@ -1,0 +1,1506 @@
+[
+  {
+    "name": "combined-default-candidate-compile",
+    "kind": "compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/t-gc2-worker-scheduler.c",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-o",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-default-candidate"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.3140798340027686,
+    "identities": {
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/t-gc2-worker-scheduler.c": "e029d5e3c1789b54f3c08cd950fb8a18a1761c21e8530809c6acce5f0849df36",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/libluajit.a": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-default-candidate": "5959d845174d97ef3665b3047c9792a0b628bcec1eb60f912994367679739d32"
+    }
+  },
+  {
+    "name": "combined-default-candidate-0",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-default-candidate"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06371806200331775
+  },
+  {
+    "name": "combined-default-candidate-1",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-default-candidate"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06366383400018094
+  },
+  {
+    "name": "combined-default-candidate-2",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-default-candidate"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.0636735360021703
+  },
+  {
+    "name": "combined-default-candidate-3",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-default-candidate"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06375299499632092
+  },
+  {
+    "name": "combined-default-candidate-4",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-default-candidate"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06371477299398975
+  },
+  {
+    "name": "combined-default-candidate-5",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-default-candidate"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06374892700114287
+  },
+  {
+    "name": "combined-default-candidate-6",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-default-candidate"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06373349299974507
+  },
+  {
+    "name": "combined-default-candidate-7",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-default-candidate"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06373601800441975
+  },
+  {
+    "name": "combined-default-candidate-8",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-default-candidate"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.0638087160041323
+  },
+  {
+    "name": "combined-default-candidate-9",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-default-candidate"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06373423399782041
+  },
+  {
+    "name": "combined-default-baseline-compile",
+    "kind": "compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/t-gc2-worker-scheduler.c",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-o",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-default-baseline"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.31424257600156125,
+    "identities": {
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/t-gc2-worker-scheduler.c": "e9d2173e1279088d500b7bff816dae54e260b039ad5c5d6034f738d5ad2a1a27",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/libluajit.a": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-default-baseline": "04b804b53bb1dbf980b4795ac2d453642066da468dddb042051d4fe657931a07"
+    }
+  },
+  {
+    "name": "combined-default-baseline-0",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-default-baseline"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06381252099527046
+  },
+  {
+    "name": "combined-default-baseline-1",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-default-baseline"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06375068399938755
+  },
+  {
+    "name": "combined-default-baseline-2",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-default-baseline"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06371250400115969
+  },
+  {
+    "name": "combined-strict-candidate-compile",
+    "kind": "compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_APICHECK",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "-I/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/t-gc2-worker-scheduler.c",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-o",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-strict-candidate"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.4148268030039617,
+    "identities": {
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/t-gc2-worker-scheduler.c": "e029d5e3c1789b54f3c08cd950fb8a18a1761c21e8530809c6acce5f0849df36",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/libluajit.a": "58ade6fefc9225c1442e54166ab39bff0edb621ed1e29a83c7456e38113b3b64",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-strict-candidate": "ef09460d05add85f08a0e58d057e432f0ceaa24e2a6845adb0e5bf3f869b32d9"
+    }
+  },
+  {
+    "name": "combined-strict-candidate-0",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-strict-candidate"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06373306800378487
+  },
+  {
+    "name": "combined-strict-candidate-1",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-strict-candidate"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06379796600231202
+  },
+  {
+    "name": "combined-strict-candidate-2",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-strict-candidate"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.0637299699956202
+  },
+  {
+    "name": "combined-strict-baseline-compile",
+    "kind": "compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_APICHECK",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "-I/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/t-gc2-worker-scheduler.c",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-o",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-strict-baseline"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.414213413001562,
+    "identities": {
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/t-gc2-worker-scheduler.c": "e9d2173e1279088d500b7bff816dae54e260b039ad5c5d6034f738d5ad2a1a27",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/libluajit.a": "58ade6fefc9225c1442e54166ab39bff0edb621ed1e29a83c7456e38113b3b64",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-strict-baseline": "76dceeacecb8ae6bdf6744a3d7cf97ea264597299abd174c4a5ccaf6f542c41e"
+    }
+  },
+  {
+    "name": "combined-strict-baseline-0",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-strict-baseline"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": -6,
+    "timed_out": false,
+    "seconds": 0.11387486800231272
+  },
+  {
+    "name": "combined-asan-candidate-compile",
+    "kind": "compile",
+    "argv": [
+      "clang",
+      "-std=gnu11",
+      "-O1",
+      "-g",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_APICHECK",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "-I/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/t-gc2-worker-scheduler.c",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-o",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-asan-candidate"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.5655540230000042,
+    "identities": {
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/t-gc2-worker-scheduler.c": "e029d5e3c1789b54f3c08cd950fb8a18a1761c21e8530809c6acce5f0849df36",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/libluajit.a": "b3e0e8d2d0905848485f6052a91c2af7bb9b62a76e3286765bb2637447760155",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-asan-candidate": "e9fe85847c40632f3f03539ca255a26f1992acd8710aa51d14158843ded9f0f4"
+    }
+  },
+  {
+    "name": "combined-asan-candidate-0",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-asan-candidate"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06395724599860841
+  },
+  {
+    "name": "combined-asan-candidate-1",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-asan-candidate"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06383337200531969
+  },
+  {
+    "name": "combined-asan-candidate-2",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-asan-candidate"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06379504699725658
+  },
+  {
+    "name": "combined-asan-baseline-compile",
+    "kind": "compile",
+    "argv": [
+      "clang",
+      "-std=gnu11",
+      "-O1",
+      "-g",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_APICHECK",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "-I/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/t-gc2-worker-scheduler.c",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-o",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-asan-baseline"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.5651163720031036,
+    "identities": {
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/t-gc2-worker-scheduler.c": "e9d2173e1279088d500b7bff816dae54e260b039ad5c5d6034f738d5ad2a1a27",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/libluajit.a": "b3e0e8d2d0905848485f6052a91c2af7bb9b62a76e3286765bb2637447760155",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-asan-baseline": "ed4d5ddc01b8a76bf721998b9661994dd9e6f097e15de0d78258ff3735fc9d18"
+    }
+  },
+  {
+    "name": "combined-asan-baseline-0",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/combined-asan-baseline"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.0642847580020316
+  },
+  {
+    "name": "baseline-default-candidate-compile",
+    "kind": "compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/t-gc2-worker-scheduler.c",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-o",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-default-candidate"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.3141882439958863,
+    "identities": {
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/t-gc2-worker-scheduler.c": "e029d5e3c1789b54f3c08cd950fb8a18a1761c21e8530809c6acce5f0849df36",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/libluajit.a": "e7e3beb9ff9f85ec932837f4162382f6c7a6701325b41b83f9642a761fd5a157",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-default-candidate": "dd0bfb0a1527175dac20518c5fd736570f6d14b5fd877ac4aef7e69aa4990099"
+    }
+  },
+  {
+    "name": "baseline-default-candidate-0",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-default-candidate"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.0637379809995764
+  },
+  {
+    "name": "baseline-default-candidate-1",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-default-candidate"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06375169099919731
+  },
+  {
+    "name": "baseline-default-candidate-2",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-default-candidate"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.0637867620025645
+  },
+  {
+    "name": "baseline-default-candidate-3",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-default-candidate"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06377080899983412
+  },
+  {
+    "name": "baseline-default-candidate-4",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-default-candidate"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06373640800302383
+  },
+  {
+    "name": "baseline-default-candidate-5",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-default-candidate"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06371860000217566
+  },
+  {
+    "name": "baseline-default-candidate-6",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-default-candidate"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.0637517380018835
+  },
+  {
+    "name": "baseline-default-candidate-7",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-default-candidate"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.0640063309983816
+  },
+  {
+    "name": "baseline-default-candidate-8",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-default-candidate"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06378625999786891
+  },
+  {
+    "name": "baseline-default-candidate-9",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-default-candidate"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06366350399912335
+  },
+  {
+    "name": "baseline-default-baseline-compile",
+    "kind": "compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/t-gc2-worker-scheduler.c",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-o",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-default-baseline"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.314279071004421,
+    "identities": {
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/t-gc2-worker-scheduler.c": "e9d2173e1279088d500b7bff816dae54e260b039ad5c5d6034f738d5ad2a1a27",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/libluajit.a": "e7e3beb9ff9f85ec932837f4162382f6c7a6701325b41b83f9642a761fd5a157",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-default-baseline": "6dc005b9d0f2b81897f7e71e5d3ca1dd3ca00e9659f8d3f9df7f16787dbbc0a2"
+    }
+  },
+  {
+    "name": "baseline-default-baseline-0",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-default-baseline"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06407798299915157
+  },
+  {
+    "name": "baseline-default-baseline-1",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-default-baseline"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06372378500236664
+  },
+  {
+    "name": "baseline-default-baseline-2",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-default-baseline"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06371188100456493
+  },
+  {
+    "name": "baseline-strict-candidate-compile",
+    "kind": "compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_APICHECK",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "-I/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/t-gc2-worker-scheduler.c",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-o",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-strict-candidate"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.4146782079988043,
+    "identities": {
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/t-gc2-worker-scheduler.c": "e029d5e3c1789b54f3c08cd950fb8a18a1761c21e8530809c6acce5f0849df36",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/libluajit.a": "a700a7df774dc10430d820aa3d3912d6e2b873705ff7fd92ee312a4a32df293f",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-strict-candidate": "59b42616e36a954d0b290931464bd8b60cebbbd52b6676c4ff2c4335b82ebb60"
+    }
+  },
+  {
+    "name": "baseline-strict-candidate-0",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-strict-candidate"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06403225399844814
+  },
+  {
+    "name": "baseline-strict-candidate-1",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-strict-candidate"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06365022400132148
+  },
+  {
+    "name": "baseline-strict-candidate-2",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-strict-candidate"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06391598700429313
+  },
+  {
+    "name": "baseline-strict-baseline-compile",
+    "kind": "compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_APICHECK",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "-I/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/t-gc2-worker-scheduler.c",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-o",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-strict-baseline"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.4141658200023812,
+    "identities": {
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/t-gc2-worker-scheduler.c": "e9d2173e1279088d500b7bff816dae54e260b039ad5c5d6034f738d5ad2a1a27",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/libluajit.a": "a700a7df774dc10430d820aa3d3912d6e2b873705ff7fd92ee312a4a32df293f",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-strict-baseline": "a778951296e69d93f4430e1251a41c6976d5c16f5787942d1cff9245711a56c5"
+    }
+  },
+  {
+    "name": "baseline-strict-baseline-0",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-strict-baseline"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/strict/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/lib/?.lua;;",
+      "ASAN_OPTIONS": null,
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.0640777070002514
+  },
+  {
+    "name": "baseline-asan-candidate-compile",
+    "kind": "compile",
+    "argv": [
+      "clang",
+      "-std=gnu11",
+      "-O1",
+      "-g",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_APICHECK",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "-I/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/t-gc2-worker-scheduler.c",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-o",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-asan-candidate"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.5644606370042311,
+    "identities": {
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/t-gc2-worker-scheduler.c": "e029d5e3c1789b54f3c08cd950fb8a18a1761c21e8530809c6acce5f0849df36",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/libluajit.a": "9e93b36f665464f03255ac0a34700f288e79be16ecd5d524768e1514e2c1dd95",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-asan-candidate": "550be1e92e699c37219c75f5b70750f2811c4ab8bdb8b2e8c346e0116d1a6a0b"
+    }
+  },
+  {
+    "name": "baseline-asan-candidate-0",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-asan-candidate"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06392053699528333
+  },
+  {
+    "name": "baseline-asan-candidate-1",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-asan-candidate"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06374547099403571
+  },
+  {
+    "name": "baseline-asan-candidate-2",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-asan-candidate"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/candidate/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06380738499865402
+  },
+  {
+    "name": "baseline-asan-baseline-compile",
+    "kind": "compile",
+    "argv": [
+      "clang",
+      "-std=gnu11",
+      "-O1",
+      "-g",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_APICHECK",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-DLJ_UDATA_TEST_HELPERS",
+      "-DLJ_STR_TEST_HELPERS",
+      "-I/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/t-gc2-worker-scheduler.c",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-o",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-asan-baseline"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.5152333179939887,
+    "identities": {
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/t-gc2-worker-scheduler.c": "e9d2173e1279088d500b7bff816dae54e260b039ad5c5d6034f738d5ad2a1a27",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/libluajit.a": "9e93b36f665464f03255ac0a34700f288e79be16ecd5d524768e1514e2c1dd95",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-asan-baseline": "3941e1381ef67483fb33f42391d8f01d5e23c90ec03cb458a2b4c56f2bc3526b"
+    }
+  },
+  {
+    "name": "baseline-asan-baseline-0",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/matrix/baseline-asan-baseline"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/asan/src/?.lua;/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/baseline/lib/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LSAN_OPTIONS": null,
+      "LD_PRELOAD": null,
+      "LD_LIBRARY_PATH": null
+    },
+    "timeout_seconds": 60,
+    "exit_code": 0,
+    "timed_out": false,
+    "seconds": 0.06398568499571411
+  }
+]

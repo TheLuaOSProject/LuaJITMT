@@ -1,0 +1,18 @@
+{
+  "candidate2-asan-retention": {
+    "sha256": "81065d1f6cc0cd86c30b413506ccbd685f61b1d3d1823f2feddb8868f8139198",
+    "bytes": 19508192
+  },
+  "t-string-retention.c": {
+    "sha256": "2e8e840fb4ba3a3b09168c06d828ff10ebafd41e9ff555b9737f34384fea3cf9",
+    "bytes": 12128
+  },
+  "peer-control.lua": {
+    "sha256": "519ebf714b0a33b9a436d3452a153a1bc3eea3322ebf0bf74d8e76fea4ab8cb2",
+    "bytes": 1756
+  },
+  "libluajit.a": {
+    "sha256": "9b6e1aa8c9990b68c4b839d056c3a0690e9134b60ee34786c860b82607ab7d49",
+    "bytes": 26698906
+  }
+}

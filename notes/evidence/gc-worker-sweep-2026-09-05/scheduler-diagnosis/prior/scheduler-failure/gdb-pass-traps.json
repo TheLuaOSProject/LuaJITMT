@@ -1,0 +1,29 @@
+{
+  "command": [
+    "gdb",
+    "-q",
+    "-batch",
+    "-ex",
+    "set pagination off",
+    "-ex",
+    "set confirm off",
+    "-ex",
+    "set startup-with-shell off",
+    "-ex",
+    "handle SIGUSR2 nostop noprint pass",
+    "-ex",
+    "handle SIGTRAP nostop noprint pass",
+    "-ex",
+    "run",
+    "-ex",
+    "thread apply all bt",
+    "-ex",
+    "info registers",
+    "--args",
+    "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/canonical-tmp/lj_t-gc2-worker-scheduler"
+  ],
+  "exit": 1,
+  "seconds": 0.1641002699980163,
+  "observation_only": true,
+  "timeout_seconds": 60
+}

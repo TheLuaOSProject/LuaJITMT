@@ -1,0 +1,886 @@
+[New LWP 448309]
+[New LWP 448308]
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+0x00007f90674139ee in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+$1 = 0x7f9067360130
+$2 = {
+  phase = 0,
+  jit_phase_gate = 1,
+  cycle = 4,
+  thread_scan_cycle = 3,
+  activation = {
+    value = {
+      lo = 5,
+      hi = 544
+    }
+  },
+  cycle_leader = 4294967295,
+  hs_epoch = 30,
+  hs_pending = 0,
+  hs_actions = 32,
+  hs_leader = 0,
+  hs_signal_ns = 49363033481658,
+  hs_ack_latency_samples = 1,
+  hs_ack_latency_sum_ns = 24521467,
+  hs_ack_latency_max_ns = 24521467,
+  hs_ack_latency_buckets = {0 <repeats 24 times>, 1, 0 <repeats 23 times>},
+  smr_reclaim_runs = 0,
+  smr_reclaimed = 0,
+  smr_readers = 0,
+  smr_reclaiming = 0,
+  cycle_requests = 3,
+  cycle_starts = 3,
+  major_cycle_starts = 3,
+  minor_cycle_requests = 0,
+  minor_cycle_starts = 0,
+  cycle_minor_requested = 0,
+  cycle_sweep_minor = 0,
+  minor_sweep_enabled = 0,
+  cycle_roots_minor = 0,
+  minor_roots_enabled = 0,
+  minor_sweep_deferred = 0,
+  minor_sweep_arenas = 0,
+  minor_roots_deferred = 0,
+  major_root_scans = 3,
+  minor_root_scans = 0,
+  pending_root_flushes = 11,
+  pending_root_flushed = 34,
+  pending_root_flush_max = 9,
+  minor_survival_base_live = 5040,
+  minor_survival_bytes = 0,
+  minor_survival_pct = 0,
+  minor_survival_threshold_pct = 80,
+  minor_survival_major_requests = 0,
+  force_major = 0,
+  remembered_barriers = 0,
+  remembered_pushed = 0,
+  remembered_overflows = 0,
+  remembered_filtered = 0,
+  remembered_drained = 0,
+  marks_this_round = 0,
+  mark_root_scanned = 0,
+  jit_mark_resume = 0,
+  jit_mark_auto_yield = 0,
+  jit_mark_yield_until_ns = 0,
+  jit_sweep_displaced = 0,
+  jit_sweep_yield_until_ns = 49363033494802,
+  small_arena_tab = 0x55579ca8f2f0,
+  ssb_head = 0x0,
+  ssb_drain = 0x0,
+  ssb_consumer_active = 0,
+  ssb_published = 8,
+  ssb_drained = 73,
+  ssb_items_published = 16,
+  ssb_items_drained = 81,
+  recovery_items = 0,
+  recovery_huge_items = 0,
+  recovery_published = 0,
+  recovery_redirtied = 0,
+  recovery_drained = 0,
+  recovery_main_state = 0,
+  recovery_failed = 0,
+  recovery_scan_lane = 0,
+  recovery_small_slot = 0,
+  recovery_small_cell = 616,
+  recovery_huge_slot = 0,
+  fixpoint_rounds = 2,
+  fixpoint_hits = 1,
+  mark_complete_runs = 1,
+  mark_complete_hits = 1,
+  mark_complete_peer_waits = 0,
+  mark_to_weak = 2,
+  weak_complete_runs = 3,
+  weak_complete_progress = 0,
+  weak_to_sweep = 1,
+  sweep_bridge_ready = 1,
+  sweep_root_scanned = 0,
+  sweep_root_cursor = 0x0,
+  sweep_root_done = 0,
+  sweep_grace_needed = 0,
+  sweep_to_idle = 2,
+  preserve_abort_to_idle = 0,
+  alloc_total_bytes = 107824,
+  alloc_since_trigger = 0,
+  cycle_alloc_bytes = 484,
+  trigger_bytes = 238432,
+  hard_bytes = 476864,
+  hard_check_bytes = 476864,
+  helper_soft_limit = 18446744073709551615,
+  assist_runs = 0,
+  assist_grey_drained = 0,
+  assist_ssb_converted = 0,
+  assist_weak_drained = 0,
+  jit_hard_checks = 0,
+  interp_hard_checks = 0,
+  jit_scoped_slots_retired = 0,
+  clib_cache_retired = 0x0,
+  clib_handle_retired = 0x0,
+  gcpause_pct = 200,
+  assist_shift = 1,
+  assist_active = 0,
+  generational = 0,
+  grey_stack = 0x7f9067360a30,
+  grey_capacity = 256,
+  sweep_owner_next_tid = 33,
+  grey_top = 8,
+  grey_bottom = 8,
+  grey_pushed = 27,
+  grey_drained = 27,
+  grey_embedded = {{
+      gcptr64 = 0
+    } <repeats 256 times>},
+  worker_thread = {0x55579caaf3c0, 0x55579caaf360},
+  worker_tg = {0x55579cab6d80, 0x55579cabe7a0},
+  worker_tg_retired = 0x0,
+  n_workers = 2,
+  worker_control = 0,
+  worker_stop = 0,
+  worker_wake = 42,
+  worker_started = 2,
+  worker_exited = 0,
+  worker_active = 0,
+  mark_close_intent = 0,
+  worker_runs = 101,
+  worker_grey_drained = 17,
+  worker_ssb_converted = 75,
+  worker_weak_drained = 1,
+  worker_idle_declares = 27,
+  worker_busy_retries = 10,
+  worker_wakes = 42,
+  worker_parks = 78,
+  worker_async_progress = 44,
+  deferred_epoch = 0,
+  tg_thread_roots = 3,
+  tg_cur_roots = 0,
+  tg_trace_roots = 0,
+  thread_scan_claims = 4,
+  thread_scan_busy = 0,
+  thread_scan_requeues = 0,
+  thread_scan_owner_scans = 0,
+  thread_scan_needscan = 0,
+  thread_scan_owner_needscans = 0,
+  table_rescan_desc = {
+    value = {
+      lo = 0,
+      hi = 0
+    }
+  },
+  table_token_topology = {
+    value = {
+      lo = 67,
+      hi = 0
+    }
+  },
+  table_token_scan_requested = 0,
+  table_token_small_slot = 0,
+  table_token_small_cell = 616,
+  table_token_huge_node = 0x0,
+  table_token_huge_incarnation = 0,
+  table_token_huge_slot = 0,
+  table_token_huge_pad = 0,
+  table_token_scan_visited = 0,
+  table_token_scan_completed = 0,
+  table_token_scan_terminal = 0,
+  table_token_scan_transient = 0,
+  table_token_scan_structural = 0,
+  table_token_scan_smr_skips = 0,
+  table_token_scan_payloads = 0,
+  table_token_pass_epoch = 0,
+  table_token_pass_desc = 0,
+  table_token_pass_ack_epoch = 0,
+  table_token_pass_ack_desc = 0,
+  table_token_pass_act_epoch = 0,
+  table_token_pass_act_control = 0,
+  table_token_pass_ack_act_epoch = 0,
+  table_token_pass_ack_act_control = 0,
+  table_token_pass_restarts = 0,
+  table_token_pass_acks = 0,
+  table_token_pass_cycle = 0,
+  table_token_pass_phase = 0,
+  table_token_pass_lane = 0,
+  table_token_pass_hazard = 0,
+  table_token_pass_ack_cycle = 0,
+  table_token_pass_ack_phase = 0,
+  thread_scan_needscan_pending = 0,
+  table_rescan_pending = 0,
+  thread_scan_dirty_misses = 0,
+  thread_scan_frame_fallbacks = 0,
+  ffi_native_scan_attempts = 0,
+  ffi_native_scan_stable_frames = 0,
+  ffi_native_scan_retries = 0,
+  ffi_native_scan_invalid = 0,
+  sweep_owner_runs = 8,
+  sweep_owner_arenas = 4,
+  sweep_owner_live_cells = 494,
+  sweep_live_updates = 2,
+  sweep_live_huge_bytes = 0,
+  live_estimate = 5040,
+  weak_stack = 0x7f9067143ab0,
+  weak_ready = 0x7f9067143eb0 "\001",
+  weak_overflow = 0x0,
+  weak_capacity = 128,
+  weak_drain_active = 0,
+  weak_write_active = 0,
+  weak_mark_closed = 1,
+  weak_root_scanned = 0,
+  weak_count = 1,
+  weak_tables_seen = 2,
+  weak_tables_weakkey = 0,
+  weak_tables_weakval = 2,
+  weak_tables_allweak = 0,
+  weak_tables_queued = 1,
+  weak_tables_overflow = 0,
+  weak_scan_cursor = 0,
+  weak_scan_runs = 0,
+  weak_scan_tables = 0,
+  weak_scan_slots = 0,
+  weak_scan_clearable = 0,
+  weak_clear_cursor = 1,
+  weak_clear_runs = 1,
+  weak_clear_tables = 1,
+  weak_clear_slots = 1,
+  weak_clear_cleared = 1,
+  weak_bridge_skipped = 1,
+  weak_bridge_fallbacks = 0,
+  weak_bridge_backfills = 0,
+  weak_bridge_backfill_tables = 0,
+  weak_bridge_backfill_slots = 0,
+  weak_bridge_backfill_cleared = 0,
+  finreg_cdata_sets = 0,
+  finreg_cdata_clears = 0,
+  finreg_cdata_queued = 0,
+  finreg_cdata_sweep_queued = 0,
+  finreg_cdata_pweak_queued = 0,
+  finreg_cdata_preclaim_obj = 0x7f9067100080,
+  finreg_cdata_preclaim_fin = 0x7f90670e0080,
+  finreg_cdata_preclaim_capacity = 4096,
+  finreg_cdata_preclaim_head = 0,
+  finreg_cdata_preclaim_count = 0,
+  finreg_cdata_pweak_claimed = 0,
+  finreg_cdata_preclaim_overflow = 0,
+  finreg_cdata_preclaim_dispatched = 0,
+  finreg_cdata_order_seen = 0,
+  finreg_cdata_order_claimed = 0,
+  finreg_cdata_order_unlinked = 0,
+  finreg_cdata_order_queued = 0,
+  finreg_cdata_order_retired = 0,
+  finreg_cdata_order_tombstones = 0,
+  finreg_cdata_order_fallbacks = 0,
+  finreg_cdata_pending_order_hits = 0,
+  finreg_udata_sets = 4,
+  finreg_udata_clears = 4,
+  finreg_udata_queued = 4,
+  finreg_udata_head = 0x0,
+  finreg_udata_retired = 0x7f9067144090,
+  finreg_udata_registered = 4,
+  finreg_udata_retired_nodes = 4,
+  finreg_udata_discovered = 4,
+  finreg_udata_forgets = 0,
+  finalizer_mpsc = 0x0,
+  finalizer_tail = 0x0,
+  finalizer_active = 0,
+  finalizer_owner_actor = 0,
+  finalizer_spawn_latch = 0,
+  finalizer_queued = 13,
+  finalizer_dequeued = 13,
+  finalizer_mpsc_drained = 13,
+  finalizer_enters = 39,
+  finalizer_leaves = 39,
+  finalizer_sweep_blocks = 2,
+  finalizer_spawn_deferrals = 0,
+  finalizer_spawn_release_wakes = 0,
+  weak_keys_marked = 0,
+  weak_values_marked = 0,
+  tg_registry_head = 0x55579caaf380,
+  tg_registry_nodes = 31,
+  tg_registry_incomplete = 0,
+  tg_registry_alloc_failures = 0,
+  tg_registry_test_fail_alloc = 0,
+  tg_list = 0x7ffee3fd9ac0,
+  n_threads = 4,
+  tg_reclaiming = 0
+}
+
+Thread 3 (Thread 0x7f9066fde6c0 (LWP 448308) "combined-stop-o"):
+#0  0x00007f906740d95c in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+No symbol table info available.
+#1  0x00007f90673b8cc2 in raise () from /lib/x86_64-linux-gnu/libc.so.6
+No symbol table info available.
+#2  0x000055578f91b02f in diag_abort_observe (raw_rdi=<optimized out>) at /tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/abort-stop-observer.c:12
+No locals.
+#3  0x000055578f91732b in gc2_idle_transition_handshake.part.0.isra[cold] ()
+No symbol table info available.
+#4  0x000055578f940dab in lj_gc2_sweep_to_idle ()
+No symbol table info available.
+#5  0x000055578f94d18b in gc2_worker_main ()
+No symbol table info available.
+#6  0x00007f906740bb7b in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+No symbol table info available.
+#7  0x00007f90674897f8 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+No symbol table info available.
+
+Thread 2 (Thread 0x7f90666dc6c0 (LWP 448309) "combined-stop-o"):
+#0  0x00007f90674877b9 in syscall () from /lib/x86_64-linux-gnu/libc.so.6
+No symbol table info available.
+#1  0x000055578f94d06c in gc2_worker_main ()
+No symbol table info available.
+#2  0x00007f906740bb7b in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+No symbol table info available.
+#3  0x00007f90674897f8 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+No symbol table info available.
+
+Thread 1 (Thread 0x7f90673781c0 (LWP 448277) "combined-stop-o"):
+#0  0x00007f90674139ee in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+No symbol table info available.
+#1  0x00007f9067408668 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+No symbol table info available.
+#2  0x00007f9067454fba in clock_nanosleep () from /lib/x86_64-linux-gnu/libc.so.6
+No symbol table info available.
+#3  0x00007f90674603d3 in nanosleep () from /lib/x86_64-linux-gnu/libc.so.6
+No symbol table info available.
+#4  0x000055578f91ae5b in sleep_ns (ns=1000000) at /tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/test_sleep.h:19
+        ts = {
+          tv_sec = 0,
+          tv_nsec = 904737
+        }
+#5  test_async_sweep_and_stop (L=L@entry=0x7f9067360080, g=g@entry=0x7f9067360130, tg=tg@entry=0x7f9067362d00) at /tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/t-gc2-worker-scheduler.c:1442
+        extra_tg = {
+          hotcount = {0 <repeats 64 times>},
+          dispatch = {0x55578f9e7a30 <lj_BC_ISLT>, 0x55578f9e7a8c <lj_BC_ISGE>, 0x55578f9e7ae8 <lj_BC_ISLE>, 0x55578f9e7b44 <lj_BC_ISGT>, 0x55578f9e7ba0 <lj_BC_ISEQV>, 0x55578f9e7c36 <lj_BC_ISNEV>, 0x55578f9e7ccf <lj_BC_ISEQS>, 0x55578f9e7d1f <lj_BC_ISNES>, 0x55578f9e7d6f <lj_BC_ISEQN>, 0x55578f9e7dbd <lj_BC_ISNEN>, 0x55578f9e7e0b <lj_BC_ISEQP>, 0x55578f9e7e47 <lj_BC_ISNEP>...},
+          poll = 0,
+          profile_request = 0,
+          mark_active = 0,
+          gl = 0x7f9067360130,
+          cur_L = 0x7f9067360080,
+          lexstate = 0x0,
+          jit_base = 0x0,
+          ffi_xsave_root = 0x0,
+          ffi_xsave_baseslot = 0,
+          ffi_xsave_nslots = 0,
+          jit_exitcode = 0,
+          vmstate = -1,
+          profile_samples = 0,
+          profile_vmstate = 78,
+          in_native = 1,
+          strtab_active_hdr = 0x0,
+          strtab_active_depth = 0,
+          strtab_active_epoch = 0,
+          strq_active_hdr = 0x0,
+          strq_active_depth = 0,
+          strq_active_epoch = 0,
+          tab_read_depth = 0,
+          tab_read_epoch = 0,
+          strid_next = 0,
+          strid_end = 0,
+          strnum_credit = 0,
+          gc_assist = 0 '\000',
+          hookmask_th = 0 '\000',
+          tg_flags = 3 '\003',
+          fini_state = 0 '\000',
+          reqmask = 0,
+          hs_epoch_ack = 30,
+          alloc = {
+            bump = {{
+                a = 0x0,
+                cell = 0,
+                end = 0
+              }, {
+                a = 0x0,
+                cell = 0,
+                end = 0
+              }},
+            bins = {{0x0 <repeats 32 times>}, {0x0 <repeats 31 times>, 0x7f90655a26c0}},
+            binmask = {0, 2147483648},
+            owned = {0x0, 0x7f90655a0000},
+            needsweep = {0x0, 0x0},
+            quarantine = {0x0, 0x0},
+            reclaimed = {0x7f9065580000, 0x0},
+            smalltab = 0x55579ca8f2f0,
+            sweep_epoch = 4,
+            prepare_epoch = 4,
+            huge_retire_cursor = 0,
+            huge_reclaim_cursor = 0,
+            huge_retire_done = 0 '\000',
+            remote_pending = 0,
+            owner_tid = 4001,
+            owner_tg = 0x7ffee3fd9ac0,
+            alloc_black = 0 '\000',
+            free_noinsert = 0 '\000',
+            owned_count = {0, 1},
+            needsweep_count = {0, 0},
+            empty_reclaimed = 0x0
+          },
+          allocd = {
+            alloc = 0x7ffee3fda400,
+            prng = 0x7ffee3fde830,
+            huge = 0x7ffee3fda6d8,
+            flags = 0
+          },
+          huge = {
+            h = 0x7f90655be000,
+            table_topology = 0x7f9067361320
+          },
+          ssb_node = {{
+              next = 0x0,
+              owner = 0x7ffee3fd9ac0,
+              n = 0,
+              pad = 0,
+              slot = {{
+                  gcptr64 = 0
+                } <repeats 1024 times>}
+            }, {
+              next = 0x0,
+              owner = 0x7ffee3fd9ac0,
+              n = 0,
+              pad = 0,
+              slot = {{
+                  gcptr64 = 0
+                } <repeats 1024 times>}
+            }},
+          ssb_active = 0x7ffee3fda6e8,
+          ssb_free = 0x7ffee3fdc700,
+          ssb_next = 0x7ffee3fda700,
+          ssb_end = 0x7ffee3fdc700,
+          ssb_base = 0x7ffee3fda700,
+          ssb_refs = 0,
+          fnew_cert_pt = 0x0,
+          fnew_cert_env = 0x0,
+          fnew_cert_cycle = 0,
+          gcroot_pending = 0x0,
+          gcroot_pending_after_main = 0x0,
+          tmpbuf = {
+            w = 0x0,
+            e = 0x0,
+            b = 0x0,
+            L = {
+              ptr64 = 0
+            }
+          },
+          tmptv = {
+            u64 = 18446744073709551615,
+            n = -nan(0xfffffffffffff),
+            gcr = {
+              gcptr64 = 18446744073709551615
+            },
+            it64 = -1,
+            {
+              i = -1,
+              it = 4294967295
+            },
+            ftsz = -1,
+            u32 = {
+              lo = 4294967295,
+              hi = 4294967295
+            }
+          },
+          tmptv2 = {
+            u64 = 18446744073709551615,
+            n = -nan(0xfffffffffffff),
+            gcr = {
+              gcptr64 = 18446744073709551615
+            },
+            it64 = -1,
+            {
+              i = -1,
+              it = 4294967295
+            },
+            ftsz = -1,
+            u32 = {
+              lo = 4294967295,
+              hi = 4294967295
+            }
+          },
+          root_anchor = {
+            next = 0x0,
+            slot = {{
+                u64 = 18446744073709551615,
+                n = -nan(0xfffffffffffff),
+                gcr = {
+                  gcptr64 = 18446744073709551615
+                },
+                it64 = -1,
+                {
+                  i = -1,
+                  it = 4294967295
+                },
+                ftsz = -1,
+                u32 = {
+                  lo = 4294967295,
+                  hi = 4294967295
+                }
+              } <repeats 16 times>}
+          },
+          root_anchor_top = 0,
+          prng = {
+            u = {654976313571023984, 14575833142944393460, 16299901946230245679, 16501467629955748448}
+          },
+          ffi_call_func = 0x0,
+          cb = {
+            fpr = {{
+                d = 0,
+                f = {0, 0}
+              }, {
+                d = 0,
+                f = {0, 0}
+              }, {
+                d = 0,
+                f = {0, 0}
+              }, {
+                d = 0,
+                f = {0, 0}
+              }, {
+                d = 0,
+                f = {0, 0}
+              }, {
+                d = 0,
+                f = {0, 0}
+              }, {
+                d = 0,
+                f = {0, 0}
+              }, {
+                d = 0,
+                f = {0, 0}
+              }},
+            gpr = {0, 0, 0, 0, 0, 0, 0, 0},
+            stack = 0x0,
+            L = 0x0,
+            slot = 0,
+            depth = 0,
+            auto_detach = 0 '\000',
+            native_had_stopreq = 0 '\000',
+            frame = {{
+                L = 0x0,
+                cont = 0,
+                native_depth = 0,
+                native_frame_depth = 0,
+                auto_detach = 0 '\000',
+                errphase = 0 '\000',
+                errnum = 0,
+                winerr = 0
+              } <repeats 200 times>}
+          },
+          thread_L = 0x0,
+          thread_ud = 0x0,
+          tid = 4001,
+          actor_id = 1,
+          next_tg = 0x55579cabe7a0,
+          worker_retire_next = 0x0,
+          local_total = 0,
+          stack_dirty_epoch = 0,
+          exittr = 0x0,
+          root_desc = {
+            control = 0,
+            flags = 0,
+            reserved = 0,
+            old_root = 0,
+            new_root = 0,
+            aux_root = 0,
+            range = {{
+                lo = 0x0,
+                hi = 0x0
+              }, {
+                lo = 0x0,
+                hi = 0x0
+              }},
+            coverage = {
+              lo = 0,
+              hi = 0
+            }
+          },
+          registry_key = {
+            slot = 0x55579caaf380,
+            incarnation = 1
+          },
+          registry_shadow_missed = 0 '\000',
+          ffi_native_seq = 0,
+          ffi_native_depth = 0,
+          ffi_native_frame = {{
+              trace = 0x0,
+              L = 0x0,
+              func = 0x0,
+              result_root = 0x0,
+              old_ffi_call_func = 0x0,
+              root_offset = 0,
+              base_offset = 0,
+              top_offset = 0,
+              jit_base_offset = 0,
+              entry_exit_epoch = 0,
+              trace_no = 0,
+              old_callback_slot = 0,
+              flags = 0,
+              old_native_had_stopreq = 0 '\000',
+              had_stopreq = 0 '\000'
+            } <repeats 16 times>},
+          jit_event_sessions = {
+            sequence = 0,
+            next_generation = 0,
+            active_generation = 0,
+            state = 0,
+            active_slot = 2,
+            slot = {{
+                generation = 0,
+                state = 0,
+                readers = 0,
+                flags = 0,
+                event = 0,
+                owner_mode = 0,
+                edge_proof = 0,
+                attachment_generation = 0,
+                control_borrow_state = 0,
+                control_borrow_generation = 0,
+                saved_jit_owner_L = 0x0,
+                root_count = 0,
+                owner_tid = 0,
+                owner_actor = 0,
+                owner_L = 0x0,
+                owner_root = {
+                  gcptr64 = 0
+                },
+                source = 0x0,
+                source_traceno = 0,
+                attachment_state = 0,
+                view = {
+                  data = 0x0,
+                  capacity = 0,
+                  size = 0,
+                  format = 0,
+                  flags = 0,
+                  trace = {
+                    version = 0,
+                    flags = 0,
+                    traceno = 0,
+                    root = 0,
+                    link = 0,
+                    linktype = 0,
+                    nins = 0,
+                    nk = 0,
+                    nsnap = 0,
+                    nsnapmap = 0,
+                    ir_ref_first = 0,
+                    ir_ref_count = 0,
+                    startpc_pos = 0,
+                    startins = 0,
+                    mcode_addr = 0,
+                    szmcode = 0,
+                    mcloop = 0,
+                    exitstub_addr = 0,
+                    nexits = 0,
+                    pad = 0
+                  },
+                  ir = {
+                    offset = 0,
+                    count = 0,
+                    stride = 0
+                  },
+                  snap = {
+                    offset = 0,
+                    count = 0,
+                    stride = 0
+                  },
+                  snapmap = {
+                    offset = 0,
+                    count = 0,
+                    stride = 0
+                  }
+                },
+                root_data = 0x7ffee3fe1040,
+                root_capacity = 8,
+                callback_root_count = 0,
+                root_inline = {{
+                    gcptr64 = 0
+                  }, {
+                    gcptr64 = 0
+                  }, {
+                    gcptr64 = 0
+                  }, {
+                    gcptr64 = 0
+                  }, {
+                    gcptr64 = 0
+                  }, {
+                    gcptr64 = 0
+                  }, {
+                    gcptr64 = 0
+                  }, {
+                    gcptr64 = 0
+                  }}
+              }, {
+                generation = 0,
+                state = 0,
+                readers = 0,
+                flags = 0,
+                event = 0,
+                owner_mode = 0,
+                edge_proof = 0,
+                attachment_generation = 0,
+                control_borrow_state = 0,
+                control_borrow_generation = 0,
+                saved_jit_owner_L = 0x0,
+                root_count = 0,
+                owner_tid = 0,
+                owner_actor = 0,
+                owner_L = 0x0,
+                owner_root = {
+                  gcptr64 = 0
+                },
+                source = 0x0,
+                source_traceno = 0,
+                attachment_state = 0,
+                view = {
+                  data = 0x0,
+                  capacity = 0,
+                  size = 0,
+                  format = 0,
+                  flags = 0,
+                  trace = {
+                    version = 0,
+                    flags = 0,
+                    traceno = 0,
+                    root = 0,
+                    link = 0,
+                    linktype = 0,
+                    nins = 0,
+                    nk = 0,
+                    nsnap = 0,
+                    nsnapmap = 0,
+                    ir_ref_first = 0,
+                    ir_ref_count = 0,
+                    startpc_pos = 0,
+                    startins = 0,
+                    mcode_addr = 0,
+                    szmcode = 0,
+                    mcloop = 0,
+                    exitstub_addr = 0,
+                    nexits = 0,
+                    pad = 0
+                  },
+                  ir = {
+                    offset = 0,
+                    count = 0,
+                    stride = 0
+                  },
+                  snap = {
+                    offset = 0,
+                    count = 0,
+                    stride = 0
+                  },
+                  snapmap = {
+                    offset = 0,
+                    count = 0,
+                    stride = 0
+                  }
+                },
+                root_data = 0x7ffee3fe1198,
+                root_capacity = 8,
+                callback_root_count = 0,
+                root_inline = {{
+                    gcptr64 = 0
+                  }, {
+                    gcptr64 = 0
+                  }, {
+                    gcptr64 = 0
+                  }, {
+                    gcptr64 = 0
+                  }, {
+                    gcptr64 = 0
+                  }, {
+                    gcptr64 = 0
+                  }, {
+                    gcptr64 = 0
+                  }, {
+                    gcptr64 = 0
+                  }}
+              }}
+          },
+          jit_trace_stream = {
+            sequence = 0,
+            next_generation = 0,
+            generation = 0,
+            event_ordinal = 0,
+            owner_key = {
+              slot = 0x0,
+              incarnation = 0
+            },
+            owner_tid = 0,
+            owner_actor = 0,
+            phase = 0,
+            traceno = 0,
+            callback_event = 0,
+            callback_slot = 0,
+            callback_session_generation = 0,
+            terminal_event = 0,
+            terminal_slot = 0,
+            terminal_session_generation = 0,
+            terminal_reason = 0,
+            flags = 0
+          },
+          jit_event_attachment = {{
+              sequence = 0,
+              next_generation = 0,
+              generation = 0
+            }, {
+              sequence = 0,
+              next_generation = 0,
+              generation = 0
+            }, {
+              sequence = 0,
+              next_generation = 0,
+              generation = 0
+            }, {
+              sequence = 0,
+              next_generation = 0,
+              generation = 0
+            }, {
+              sequence = 0,
+              next_generation = 0,
+              generation = 0
+            }, {
+              sequence = 0,
+              next_generation = 0,
+              generation = 0
+            }, {
+              sequence = 0,
+              next_generation = 0,
+              generation = 0
+            }, {
+              sequence = 0,
+              next_generation = 0,
+              generation = 0
+            }},
+          vmevent_regkey = 0x0,
+          jit_event_callback_owner = {
+            sequence = 0,
+            next_generation = 0,
+            generation = 0,
+            stream_generation = 0,
+            session_generation = 0,
+            state = 0,
+            owner_actor = 0,
+            event = 0,
+            session_slot = 0,
+            owner_L = 0x0
+          },
+          jit_trace_flush_reason = 0x0
+        }
+        async0 = 44
+        arenas0 = <optimized out>
+        blocks0 = <optimized out>
+        wakes0 = <optimized out>
+        sweep_cycle = <optimized out>
+        extra_plain = <optimized out>
+        extra_trav = <optimized out>
+        extra_plain_a = <optimized out>
+        extra_trav_a = <optimized out>
+        swept_a = <optimized out>
+        i = <optimized out>
+        __PRETTY_FUNCTION__ = "test_async_s"...
+#6  0x000055578f918e5d in main () at /tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/t-gc2-worker-scheduler.c:1499
+        L = 0x7f9067360080
+        g = 0x7f9067360130
+        tg = 0x7f9067362d00
+        __PRETTY_FUNCTION__ = "main"
+rbx            0x7f9067360130      140258183610672
+rdi            0x6d715             448277
+fs_base        0x7f9066fde6c0      140258179933888
+0x7f9066fde648:	0x0000000000000000
+[Inferior 1 (process 448277) detached]

@@ -1,0 +1,13 @@
+{
+  "source": "unpatched 0e2119e4 base archive; initial ASan build omitted candidate3 patch and is NOT candidate validation",
+  "archive_sha256": "c37911c0bf056bedb57df96b89cdf95381b408eee105153c7fdaa839062e25d5",
+  "files": {
+    "src/lj_obj.h": "4dddf105f8b3006efb495259340ea4acaae9579e283b769ff9e683810beb435b",
+    "src/lj_gc.h": "3d52d352f6280ee308f9ae71a8edbe4dde6f41f9a00256a0d3d6a3924fddc0dd",
+    "src/lj_gc.c": "7ceb24d2c755325c7c3d4113330bbb4fce6d3c893dd22fc1ef8bf924590ab4cb",
+    "src/lj_gc2.c": "5557bc243f94f5d310287494cc3560d91931455eaa8338ba480f84a33edf45a1",
+    "src/lj_api.c": "c2b43c2839509c8403c51729c72083be2701bdfc4b5efc9f116540d9c105d6af",
+    "src/vm_x64.dasc": "ad48405b4793e8514307cd4efc15238dcd3a29b0d1970b452ee77952b921d64b"
+  },
+  "results": "asan-results.json"
+}

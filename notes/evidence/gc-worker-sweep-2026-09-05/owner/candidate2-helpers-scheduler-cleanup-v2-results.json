@@ -1,0 +1,45 @@
+[
+  {
+    "exit_code": 0,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/existing-cleanup-v2/tests/t-gc2-worker-scheduler.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-scheduler-cleanup-v2-t-gc2-worker-scheduler",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join"
+    ],
+    "label": "t-gc2-worker-scheduler-compile",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.41510306100099115,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-scheduler-cleanup-v2-t-gc2-worker-scheduler"
+    ],
+    "label": "t-gc2-worker-scheduler-0",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.06386556399957044,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  }
+]

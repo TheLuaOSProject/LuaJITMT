@@ -1,0 +1,18 @@
+{
+  "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/t-gc2-worker-scheduler.c": {
+    "sha256": "e9d2173e1279088d500b7bff816dae54e260b039ad5c5d6034f738d5ad2a1a27",
+    "bytes": 49484
+  },
+  "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/libluajit.a": {
+    "sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "bytes": 2361258
+  },
+  "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/combined-observer": {
+    "sha256": "f403b0cff0dc57aaa3ffb42bc2278c908ab9b9c7841ea56b702cdf78420605ea",
+    "bytes": 1709256
+  },
+  "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/diagnostic/abort-observer.c": {
+    "sha256": "d07548a24be85a82fb4a650c764971801992b1ca6a58928f8b07b6e1a9bae165",
+    "bytes": 450
+  }
+}

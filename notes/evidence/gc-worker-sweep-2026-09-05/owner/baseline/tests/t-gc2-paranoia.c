@@ -1,0 +1,218 @@
+/*
+** Focused test for the GC2 paranoia fixpoint oracle.
+*/
+
+#include <assert.h>
+#include <stdio.h>
+
+#include "lua.h"
+#include "lauxlib.h"
+#include "lualib.h"
+
+#include "lj_obj.h"
+#include "lj_atomic.h"
+#include "lj_arena.h"
+#include "lj_gc.h"
+#include "lj_gc2.h"
+#include "lj_safepoint.h"
+#include "lj_tg.h"
+
+#include "lib/lua_fixture_helpers.h"
+
+/* Built by the M3 harness with LJ_GC2_PARANOIA enabled. */
+
+static int paranoia_finalizer(lua_State *L)
+{
+  int status = luaL_dostring(L,
+    "local t = {}\n"
+    "for i = 1, 80 do t[i] = {i, 'finalizer'..i} end\n");
+  if (status != LUA_OK)
+    lua_pop(L, 1);
+  return 0;
+}
+
+static void assert_typed_rootless_closure(lua_State *L)
+{
+  GCfunc *fn;
+  GCupval *uv;
+  GCArena *a;
+  uint32_t cell;
+  lua_getglobal(L, "__gc2_keep");
+  assert(lua_istable(L, -1));
+  lua_getfield(L, -1, "typed_closure");
+  assert(tvisfunc(L->top - 1));
+  fn = funcV(L->top - 1);
+  assert(isluafunc(fn) && lj_funcL_nupvalues(&fn->l) == 1u);
+  a = lj_arena_of(fn);
+  cell = lj_arena_cellof(fn);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+  assert(lj_arena_dtor_kind_acq(a, cell) == LJ_ARENA_DTOR_LFUNC1);
+  uv = func_uv_acq(&fn->l, 0);
+  a = lj_arena_of(uv);
+  cell = lj_arena_cellof(uv);
+  assert(lj_arena_root_state_acq(a, cell) == LJ_ARENA_ROOT_NONE);
+  assert(lj_arena_dtor_kind_acq(a, cell) == LJ_ARENA_DTOR_CLOSED_UV);
+  lua_pop(L, 2);
+}
+
+static void run_generational_major_fallback(lua_State *L, global_State *g,
+					     TGState *tg)
+{
+  int complete = 0, i;
+  uint32_t swept;
+  lj_gc2_mark_begin(g);
+  assert(la_load32_acq(&g->gc2.cycle_minor_requested) == 1);
+  assert(la_load32_acq(&g->gc2.cycle_sweep_minor) == 0);
+  assert(la_load32_acq(&g->gc2.cycle_roots_minor) == 0);
+  lj_gc2_scan_cycle_roots(g, L);
+  assert(lj_gc2_mark_complete(g, L, 64, ~(uint32_t)0) == 1);
+  lj_gc2_mark_to_weak(g);
+  for (i = 0; i < 128 && !complete; i++)
+    complete = lj_gc2_weak_complete(g, L, gcref(g->gc.weak),
+				    LJ_GC2_WEAK_DRAIN_BATCH);
+  assert(complete);
+  lj_gc2_weak_to_sweep(g, L);
+  /* Drive the real mandatory root certificate and bounded ownership-spine
+  ** preparation. Publishing the raw READY latch here would bypass the
+  ** certificate and manufacture an impossible post-READY state. */
+  for (i = 0; i < 10000 && !gc2_sweep_bridge_ready_acq(g); i++)
+    lj_gc2_sweep_prepare_bridge_boundary(
+      g, lj_gc_preserve_root_chain_for_gc2_sweep);
+  assert(i < 10000 && gc2_sweep_root_scanned_acq(g) == 1);
+  do {
+    swept = lj_gc2_test_sweep_owner_progress(g, tg, LJ_GC2_SWEEP_BATCH);
+  } while (swept != 0);
+  assert(!lj_gc2_sweep_pending(g));
+  lj_gc2_cycle_to_idle(g);
+}
+
+static void test_minor_major_paranoia(void)
+{
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  TGState *tg;
+  assert(L != NULL);
+  luaL_openlibs(L);
+  g = G(L);
+  tg = G2TG(g);
+  assert(tg != NULL);
+  lj_gc2_set_generational(g, 1);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(la_load32_acq(&g->gc2.minor_sweep_enabled) == 0);
+  assert(la_load32_acq(&g->gc2.minor_roots_enabled) == 0);
+  ljt_lua_dostring(L,
+    "_G.__gc2_minor_live = {}\n"
+    "for i = 1, 120 do __gc2_minor_live[i] = {i, 'live'..i} end\n"
+    "for i = 1, 400 do local t = {i, 'dead'..i}; t[3] = {i} end\n");
+  /* Finish any pacing cycle opened by setup allocation. Then white-box the
+  ** accepted generational request -> major fallback independently of the
+  ** survival policy's optional extra force-major request. */
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_IDLE);
+  la_store32_rel(&g->gc2.force_major, 0);
+  run_generational_major_fallback(L, g, tg);
+  /*
+  ** The reverse mark oracle still checks the fallback's non-preserving major
+  ** sweep. Disable generational remembered publication before the zero-diff
+  ** check so the following forced collection has the ordinary major contract.
+  */
+  lj_gc2_set_generational(g, 0);
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert(lj_gc2_test_paranoia_root_diff(g) == 0);
+  lua_close(L);
+}
+
+int main(void)
+{
+  lua_State *L = luaL_newstate();
+  global_State *g;
+  TGState *tg, extra_tg;
+  void *stray, *extra_stray;
+
+  assert(L != NULL);
+  luaL_openlibs(L);
+  g = G(L);
+  tg = G2TG(g);
+  assert(tg != NULL);
+  assert((tg->tg_flags & TGF_ARENA_INTERNAL) != 0);
+
+  ljt_lua_dostring(L,
+    "local keep = {}\n"
+    "for i = 1, 600 do\n"
+    "  local t = {}\n"
+    "  for j = 1, 80 do t[j] = 'value-'..i..'-'..j end\n"
+    "  t['hash'..i] = {i, tostring(i)}\n"
+    "  keep[i] = t\n"
+    "end\n"
+    "keep.dumped = string.dump(assert(loadstring("
+    "  'return function(x) return x * 11 end'))())\n"
+    "keep.closure = assert(loadstring(keep.dumped))\n"
+    "do local x = 41; keep.typed_closure = function() return x + 1 end end\n"
+    "assert(keep.typed_closure() == 42)\n"
+    "keep.co = coroutine.create(function()\n"
+    "  local s = 0\n"
+    "  for i = 1, 100 do s = s + i end\n"
+    "  coroutine.yield(s)\n"
+    "  return s\n"
+    "end)\n"
+    "assert(coroutine.resume(keep.co))\n"
+    "keep.wk = setmetatable({}, {__mode='kv'})\n"
+    "do local k, v = {}, {}; keep.wk[k] = v end\n"
+    "_G.__gc2_keep = keep\n");
+  assert_typed_rootless_closure(L);
+  lua_newuserdata(L, 1);
+  lua_newtable(L);
+  lua_pushcfunction(L, paranoia_finalizer);
+  lua_setfield(L, -2, "__gc");
+  lua_setmetatable(L, -2);
+  lua_setglobal(L, "__gc2_ud");
+
+  lua_gc(L, LUA_GCCOLLECT, 0);
+  assert_typed_rootless_closure(L);
+  assert(lj_gc2_test_paranoia_root_diff(g) == 0);
+  assert(lj_gc2_test_ssb_empty(g));
+  g->gc.stepmul = 1;
+  g->gc.threshold = 0;
+  while (lj_gc_step(L) <= 0)
+    ;
+  assert_typed_rootless_closure(L);
+  assert(lj_gc2_test_paranoia_root_diff(g) == 0);
+  assert(lj_gc2_test_ssb_empty(g));
+
+  lj_gc2_mark_begin(g);
+  assert(lj_gc2_test_ssb_empty(g));
+  stray = lj_arena_alloc(&tg->alloc, &tg->prng, 64, LJ_AF_TRAVERSABLE);
+  assert(stray != NULL);
+  assert(lj_gc2_test_paranoia_root_diff(g) == 1);
+  lj_arena_free(&tg->alloc, stray, 64);
+  assert(lj_gc2_test_paranoia_root_diff(g) == 0);
+
+  lj_gc2_cycle_to_idle(g);
+
+  lj_tg_init_thread(g, &extra_tg, NULL, 1);
+  extra_tg.tid = tg->tid + 3000u;
+  extra_tg.alloc.owner_tid = extra_tg.tid;
+  extra_tg.cur_L = L;
+  lj_native_enter(&extra_tg);
+  lj_tg_attach(g, &extra_tg);
+  assert(g->gc2.n_threads == 2);
+
+  lj_gc2_mark_begin(g);
+  extra_stray = lj_arena_alloc(&extra_tg.alloc, &extra_tg.prng, 64,
+			       LJ_AF_TRAVERSABLE);
+  assert(extra_stray != NULL);
+  assert(lj_gc2_test_paranoia_root_diff(g) == 1);
+  lj_arena_free(&extra_tg.alloc, extra_stray, 64);
+  assert(lj_gc2_test_paranoia_root_diff(g) == 0);
+  lj_gc2_cycle_to_idle(g);
+
+  lj_tg_detach(g, &extra_tg);
+  assert(g->gc2.n_threads == 1);
+  assert(lj_tg_reclaim_dead(g) == 1u);
+  lj_tg_fini_thread(g, &extra_tg);
+  lua_close(L);
+  test_minor_major_paranoia();
+
+  printf("t-gc2-paranoia OK: fixpoint oracle and stale-mark diff verified\n");
+  return 0;
+}

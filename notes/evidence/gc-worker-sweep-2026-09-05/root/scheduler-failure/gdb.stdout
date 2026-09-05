@@ -1,0 +1,71 @@
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+[New Thread 0x7ffff790e6c0 (LWP 442472)]
+[New Thread 0x7ffff700c6c0 (LWP 442473)]
+[Thread 0x7ffff700c6c0 (LWP 442473) exited]
+[Thread 0x7ffff790e6c0 (LWP 442472) exited]
+[New Thread 0x7ffff700c6c0 (LWP 442474)]
+[New Thread 0x7ffff790e6c0 (LWP 442475)]
+[Thread 0x7ffff790e6c0 (LWP 442475) exited]
+[Thread 0x7ffff700c6c0 (LWP 442474) exited]
+[New Thread 0x7ffff700c6c0 (LWP 442476)]
+[New Thread 0x7ffff790e6c0 (LWP 442477)]
+[Thread 0x7ffff790e6c0 (LWP 442477) exited]
+[Thread 0x7ffff700c6c0 (LWP 442476) exited]
+[New Thread 0x7ffff790e6c0 (LWP 442478)]
+[New Thread 0x7ffff700c6c0 (LWP 442479)]
+[Thread 0x7ffff790e6c0 (LWP 442478) exited]
+[Thread 0x7ffff700c6c0 (LWP 442479) exited]
+[New Thread 0x7ffff700c6c0 (LWP 442480)]
+[New Thread 0x7ffff790e6c0 (LWP 442481)]
+[Thread 0x7ffff790e6c0 (LWP 442481) exited]
+[Thread 0x7ffff700c6c0 (LWP 442480) exited]
+[New Thread 0x7ffff790e6c0 (LWP 442482)]
+[New Thread 0x7ffff700c6c0 (LWP 442483)]
+[Thread 0x7ffff700c6c0 (LWP 442483) exited]
+[Thread 0x7ffff790e6c0 (LWP 442482) exited]
+[New Thread 0x7ffff700c6c0 (LWP 442484)]
+
+Thread 14 "lj_t-gc2-worker" received signal SIGTRAP, Trace/breakpoint trap.
+[Switching to Thread 0x7ffff700c6c0 (LWP 442484)]
+0x00007ffff7db17bf in syscall () from /lib/x86_64-linux-gnu/libc.so.6
+
+Thread 14 (Thread 0x7ffff700c6c0 (LWP 442484) "lj_t-gc2-worker"):
+#0  0x00007ffff7db17bf in syscall () from /lib/x86_64-linux-gnu/libc.so.6
+#1  0x0000555555593eab in gc2_worker_main ()
+#2  0x00007ffff7d35b7b in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#3  0x00007ffff7db37f8 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+
+Thread 1 (Thread 0x7ffff7ca21c0 (LWP 442468) "lj_t-gc2-worker"):
+#0  0x00007ffff7d3d9ee in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#1  0x00007ffff7d32668 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#2  0x00007ffff7d7efba in clock_nanosleep () from /lib/x86_64-linux-gnu/libc.so.6
+#3  0x00007ffff7d8a3d3 in nanosleep () from /lib/x86_64-linux-gnu/libc.so.6
+#4  0x00005555555616eb in test_worker_wake_between_snapshot_and_park ()
+#5  0x000055555555eaa5 in main ()
+rax            0xfffffffffffffffc  -4
+rbx            0x7ffff7c91260      140737350537824
+rcx            0x7ffff7db17b9      140737351718841
+rdx            0x7                 7
+rsi            0x80                128
+rdi            0x7ffff7c91264      140737350537828
+rbp            0x5555556f3d80      0x5555556f3d80
+rsp            0x7ffff700bda8      0x7ffff700bda8
+r8             0x0                 0
+r9             0x0                 0
+r10            0x0                 0
+r11            0x246               582
+r12            0x7ffff700bdd0      140737337408976
+r13            0x7ffff7c90130      140737350533424
+r14            0x0                 0
+r15            0x0                 0
+rip            0x7ffff7db17bf      0x7ffff7db17bf <syscall+31>
+eflags         0x302               [ TF IF ]
+cs             0x33                51
+ss             0x2b                43
+ds             0x0                 0
+es             0x0                 0
+fs             0x0                 0
+gs             0x0                 0
+fs_base        0x7ffff700c6c0      140737337411264
+gs_base        0x0                 0

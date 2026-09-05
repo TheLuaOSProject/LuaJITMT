@@ -1,0 +1,1089 @@
+{
+  "where": "baseline",
+  "tick": 0,
+  "g": "0x7ffff7c90130",
+  "threads": [
+    [
+      4,
+      [
+        367074,
+        367080,
+        0
+      ],
+      "debug-observed-",
+      true
+    ],
+    [
+      3,
+      [
+        367074,
+        367079,
+        0
+      ],
+      "debug-observed-",
+      true
+    ],
+    [
+      2,
+      [
+        367074,
+        367078,
+        0
+      ],
+      "debug-observed-",
+      true
+    ],
+    [
+      1,
+      [
+        367074,
+        367074,
+        0
+      ],
+      "debug-observed-",
+      true
+    ]
+  ],
+  "gc2": {
+    "phase": 0,
+    "jit_phase_gate": 1,
+    "cycle": 4,
+    "thread_scan_cycle": 4,
+    "activation": {
+      "value": {
+        "lo": 4,
+        "hi": 512
+      }
+    },
+    "cycle_leader": 0,
+    "hs_epoch": 68,
+    "hs_pending": 0,
+    "hs_actions": 10,
+    "hs_leader": 0,
+    "hs_signal_ns": 40132889649305,
+    "hs_ack_latency_samples": 0,
+    "hs_ack_latency_sum_ns": 0,
+    "hs_ack_latency_max_ns": 0,
+    "smr_reclaim_runs": 2,
+    "smr_reclaimed": 68,
+    "smr_readers": 0,
+    "smr_reclaiming": 0,
+    "cycle_requests": 4,
+    "cycle_starts": 4,
+    "major_cycle_starts": 4,
+    "minor_cycle_requests": 0,
+    "minor_cycle_starts": 0,
+    "cycle_minor_requested": 0,
+    "cycle_sweep_minor": 0,
+    "minor_sweep_enabled": 0,
+    "cycle_roots_minor": 0,
+    "minor_roots_enabled": 0,
+    "minor_sweep_deferred": 0,
+    "minor_sweep_arenas": 0,
+    "minor_roots_deferred": 0,
+    "major_root_scans": 12,
+    "minor_root_scans": 0,
+    "pending_root_flushes": 2,
+    "pending_root_flushed": 318,
+    "pending_root_flush_max": 316,
+    "minor_survival_base_live": 39552,
+    "minor_survival_bytes": 0,
+    "minor_survival_pct": 0,
+    "minor_survival_threshold_pct": 80,
+    "minor_survival_major_requests": 0,
+    "force_major": 0,
+    "remembered_barriers": 0,
+    "remembered_pushed": 0,
+    "remembered_overflows": 0,
+    "remembered_filtered": 0,
+    "remembered_drained": 0,
+    "marks_this_round": 0,
+    "mark_root_scanned": 0,
+    "jit_mark_resume": 0,
+    "jit_mark_auto_yield": 0,
+    "jit_mark_yield_until_ns": 0,
+    "jit_sweep_displaced": 0,
+    "jit_sweep_yield_until_ns": 0,
+    "small_arena_tab": "0x5555556c82f0",
+    "ssb_head": "0x0",
+    "ssb_drain": "0x0",
+    "ssb_consumer_active": 0,
+    "ssb_published": 19,
+    "ssb_drained": 19,
+    "ssb_items_published": 137,
+    "ssb_items_drained": 137,
+    "recovery_items": 0,
+    "recovery_huge_items": 0,
+    "recovery_published": 0,
+    "recovery_redirtied": 0,
+    "recovery_drained": 0,
+    "recovery_main_state": 0,
+    "recovery_failed": 0,
+    "recovery_scan_lane": 0,
+    "recovery_small_slot": 0,
+    "recovery_small_cell": 616,
+    "recovery_huge_slot": 0,
+    "fixpoint_rounds": 8,
+    "fixpoint_hits": 4,
+    "mark_complete_runs": 4,
+    "mark_complete_hits": 4,
+    "mark_complete_peer_waits": 0,
+    "mark_to_weak": 4,
+    "weak_complete_runs": 16,
+    "weak_complete_progress": 4,
+    "weak_to_sweep": 4,
+    "sweep_bridge_ready": 1,
+    "sweep_root_scanned": 0,
+    "sweep_root_cursor": "0x0",
+    "sweep_root_done": 0,
+    "sweep_grace_needed": 0,
+    "sweep_to_idle": 4,
+    "preserve_abort_to_idle": 0,
+    "alloc_total_bytes": 174937,
+    "alloc_since_trigger": 0,
+    "cycle_alloc_bytes": 0,
+    "trigger_bytes": 384844,
+    "hard_bytes": 769688,
+    "hard_check_bytes": 769688,
+    "helper_soft_limit": 323494,
+    "assist_runs": 0,
+    "assist_grey_drained": 0,
+    "assist_ssb_converted": 0,
+    "assist_weak_drained": 0,
+    "jit_hard_checks": 0,
+    "interp_hard_checks": 0,
+    "jit_scoped_slots_retired": 0,
+    "clib_cache_retired": "0x0",
+    "clib_handle_retired": "0x0",
+    "gcpause_pct": 200,
+    "assist_shift": 1,
+    "assist_active": 0,
+    "generational": 0,
+    "grey_stack": "0x7ffff7c90a30",
+    "grey_capacity": 256,
+    "grey_top": 25,
+    "grey_bottom": 25,
+    "grey_pushed": 1557,
+    "grey_drained": 1428,
+    "worker_tg_retired": "0x0",
+    "n_workers": 2,
+    "worker_control": 0,
+    "worker_stop": 0,
+    "worker_wake": 938,
+    "worker_started": 2,
+    "worker_exited": 0,
+    "worker_active": 0,
+    "mark_close_intent": 0,
+    "worker_runs": 86,
+    "worker_grey_drained": 0,
+    "worker_ssb_converted": 0,
+    "worker_weak_drained": 0,
+    "worker_idle_declares": 7,
+    "worker_busy_retries": 633,
+    "worker_wakes": 938,
+    "worker_parks": 591,
+    "worker_async_progress": 18,
+    "deferred_epoch": 0,
+    "tg_thread_roots": 18,
+    "tg_cur_roots": 0,
+    "tg_trace_roots": 0,
+    "thread_scan_claims": 16,
+    "thread_scan_busy": 2,
+    "thread_scan_requeues": 0,
+    "thread_scan_owner_scans": 2,
+    "thread_scan_needscan": 0,
+    "thread_scan_owner_needscans": 0,
+    "table_rescan_desc": {
+      "value": {
+        "lo": 0,
+        "hi": 0
+      }
+    },
+    "table_token_topology": {
+      "value": {
+        "lo": 11,
+        "hi": 0
+      }
+    },
+    "table_token_scan_requested": 0,
+    "table_token_small_slot": 0,
+    "table_token_small_cell": 616,
+    "table_token_huge_node": "0x0",
+    "table_token_huge_incarnation": 0,
+    "table_token_huge_slot": 0,
+    "table_token_huge_pad": 0,
+    "table_token_scan_visited": 0,
+    "table_token_scan_completed": 0,
+    "table_token_scan_terminal": 0,
+    "table_token_scan_transient": 0,
+    "table_token_scan_structural": 0,
+    "table_token_scan_smr_skips": 0,
+    "table_token_scan_payloads": 0,
+    "table_token_pass_epoch": 0,
+    "table_token_pass_desc": 0,
+    "table_token_pass_ack_epoch": 0,
+    "table_token_pass_ack_desc": 0,
+    "table_token_pass_act_epoch": 0,
+    "table_token_pass_act_control": 0,
+    "table_token_pass_ack_act_epoch": 0,
+    "table_token_pass_ack_act_control": 0,
+    "table_token_pass_restarts": 0,
+    "table_token_pass_acks": 0,
+    "table_token_pass_cycle": 0,
+    "table_token_pass_phase": 0,
+    "table_token_pass_lane": 0,
+    "table_token_pass_hazard": 0,
+    "table_token_pass_ack_cycle": 0,
+    "table_token_pass_ack_phase": 0,
+    "thread_scan_needscan_pending": 0,
+    "table_rescan_pending": 0,
+    "thread_scan_dirty_misses": 0,
+    "thread_scan_frame_fallbacks": 0,
+    "ffi_native_scan_attempts": 18,
+    "ffi_native_scan_stable_frames": 0,
+    "ffi_native_scan_retries": 0,
+    "ffi_native_scan_invalid": 0,
+    "sweep_owner_runs": 8,
+    "sweep_owner_arenas": 4,
+    "sweep_owner_live_cells": 10030,
+    "sweep_live_updates": 4,
+    "sweep_live_huge_bytes": 0,
+    "live_estimate": 39552,
+    "weak_stack": "0x7ffff7a7ae00",
+    "weak_ready": "0x7ffff7a7b200",
+    "weak_overflow": "0x0",
+    "weak_capacity": 128,
+    "weak_drain_active": 0,
+    "weak_write_active": 0,
+    "weak_mark_closed": 1,
+    "weak_root_scanned": 1,
+    "weak_count": 1,
+    "weak_tables_seen": 4,
+    "weak_tables_weakkey": 4,
+    "weak_tables_weakval": 4,
+    "weak_tables_allweak": 4,
+    "weak_tables_queued": 4,
+    "weak_tables_overflow": 0,
+    "weak_scan_cursor": 0,
+    "weak_scan_runs": 0,
+    "weak_scan_tables": 0,
+    "weak_scan_slots": 0,
+    "weak_scan_clearable": 0,
+    "weak_clear_cursor": 1,
+    "weak_clear_runs": 4,
+    "weak_clear_tables": 4,
+    "weak_clear_slots": 4,
+    "weak_clear_cleared": 0,
+    "weak_bridge_skipped": 4,
+    "weak_bridge_fallbacks": 0,
+    "weak_bridge_backfills": 0,
+    "weak_bridge_backfill_tables": 0,
+    "weak_bridge_backfill_slots": 0,
+    "weak_bridge_backfill_cleared": 0,
+    "finreg_cdata_sets": 0,
+    "finreg_cdata_clears": 0,
+    "finreg_cdata_queued": 0,
+    "finreg_cdata_sweep_queued": 0,
+    "finreg_cdata_pweak_queued": 0,
+    "finreg_cdata_preclaim_obj": "0x7ffff7a30080",
+    "finreg_cdata_preclaim_fin": "0x7ffff7a10080",
+    "finreg_cdata_preclaim_capacity": 4096,
+    "finreg_cdata_preclaim_head": 0,
+    "finreg_cdata_preclaim_count": 0,
+    "finreg_cdata_pweak_claimed": 0,
+    "finreg_cdata_preclaim_overflow": 0,
+    "finreg_cdata_preclaim_dispatched": 0,
+    "finreg_cdata_order_seen": 0,
+    "finreg_cdata_order_claimed": 0,
+    "finreg_cdata_order_unlinked": 0,
+    "finreg_cdata_order_queued": 0,
+    "finreg_cdata_order_retired": 0,
+    "finreg_cdata_order_tombstones": 0,
+    "finreg_cdata_order_fallbacks": 0,
+    "finreg_cdata_pending_order_hits": 0,
+    "finreg_udata_sets": 7,
+    "finreg_udata_clears": 0,
+    "finreg_udata_queued": 0,
+    "finreg_udata_head": "0x7ffff7a7c440",
+    "finreg_udata_retired": "0x0",
+    "finreg_udata_registered": 7,
+    "finreg_udata_retired_nodes": 0,
+    "finreg_udata_discovered": 0,
+    "finreg_udata_forgets": 0,
+    "finalizer_mpsc": "0x0",
+    "finalizer_tail": "0x0",
+    "finalizer_active": 0,
+    "finalizer_owner_actor": 0,
+    "finalizer_spawn_latch": 0,
+    "finalizer_queued": 0,
+    "finalizer_dequeued": 0,
+    "finalizer_mpsc_drained": 0,
+    "finalizer_enters": 12,
+    "finalizer_leaves": 12,
+    "finalizer_sweep_blocks": 0,
+    "finalizer_spawn_deferrals": 0,
+    "finalizer_spawn_release_wakes": 0,
+    "weak_keys_marked": 0,
+    "weak_values_marked": 0,
+    "tg_registry_head": "0x7fffec000bc0",
+    "tg_registry_nodes": 4,
+    "tg_registry_incomplete": 0,
+    "tg_registry_alloc_failures": 0,
+    "tg_list": "0x5555556f00a0",
+    "n_threads": 4,
+    "tg_reclaiming": 0
+  },
+  "gc": {
+    "total": 192422,
+    "threshold": 140737488355328,
+    "currentwhite": 33,
+    "state": 0,
+    "auto_flags": 0,
+    "lightudnum": 0,
+    "sweepstr": 0,
+    "root": {
+      "gcptr64": 140737348225904
+    },
+    "sweep": {
+      "ptr64": 140737350533520
+    },
+    "gray": {
+      "gcptr64": 0
+    },
+    "grayagain": {
+      "gcptr64": 0
+    },
+    "weak": {
+      "gcptr64": 0
+    },
+    "debt": 0,
+    "estimate": 0,
+    "stepmul": 200,
+    "pause": 200,
+    "lightudseg": {
+      "ptr64": 140737348321024
+    }
+  },
+  "ssb_head": {
+    "nodes": [],
+    "end": "0x0",
+    "bounded": false
+  },
+  "ssb_drain": {
+    "nodes": [],
+    "end": "0x0",
+    "bounded": false
+  },
+  "grey": [],
+  "tg_list_end": "0x0",
+  "tgs": [
+    {
+      "address": "0x5555556e86a0",
+      "poll": 0,
+      "profile_request": 0,
+      "mark_active": 0,
+      "gl": "0x7ffff7c90130",
+      "cur_L": "0x0",
+      "jit_base": "0x0",
+      "vmstate": -1,
+      "in_native": 1,
+      "strtab_active_hdr": "0x0",
+      "strtab_active_depth": 0,
+      "strtab_active_epoch": 0,
+      "strq_active_hdr": "0x0",
+      "strq_active_depth": 0,
+      "strq_active_epoch": 0,
+      "tab_read_depth": 0,
+      "tab_read_epoch": 0,
+      "gc_assist": 0,
+      "hookmask_th": 0,
+      "tg_flags": 3,
+      "fini_state": 0,
+      "reqmask": 0,
+      "hs_epoch_ack": 68,
+      "ssb_active": "0x5555556e92c8",
+      "ssb_free": "0x5555556eb2e0",
+      "ssb_next": "0x5555556e92e0",
+      "ssb_base": "0x5555556e92e0",
+      "ssb_end": "0x5555556eb2e0",
+      "ssb_refs": 0,
+      "gcroot_pending": "0x0",
+      "gcroot_pending_after_main": "0x0",
+      "root_anchor_top": 0,
+      "thread_L": "0x0",
+      "thread_ud": "0x0",
+      "tid": 3,
+      "actor_id": 3,
+      "next_tg": "0x7ffff79f0080",
+      "local_total": 0,
+      "stack_dirty_epoch": 0,
+      "root_desc": {
+        "control": 0,
+        "flags": 0,
+        "reserved": 0,
+        "old_root": 0,
+        "new_root": 0,
+        "aux_root": 0,
+        "range": [
+          {
+            "lo": "0x0",
+            "hi": "0x0"
+          },
+          {
+            "lo": "0x0",
+            "hi": "0x0"
+          }
+        ],
+        "coverage": {
+          "lo": 0,
+          "hi": 0
+        }
+      },
+      "registry_key": {
+        "slot": "0x7fffe8000bc0",
+        "incarnation": 1
+      },
+      "ffi_native_seq": 0,
+      "ffi_native_depth": 0,
+      "private_ssb_count": 0,
+      "private_ssb_slots": [],
+      "alloc": {
+        "smalltab": "0x5555556c82f0",
+        "sweep_epoch": 4,
+        "prepare_epoch": 4,
+        "huge_retire_cursor": 0,
+        "huge_reclaim_cursor": 0,
+        "huge_retire_done": 0,
+        "remote_pending": 0,
+        "owner_tid": 3,
+        "owner_tg": "0x5555556e86a0",
+        "alloc_black": 0,
+        "free_noinsert": 0,
+        "empty_reclaimed": "0x0"
+      },
+      "arena_lists": {
+        "owned0": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "owned1": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "needsweep0": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "needsweep1": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "quarantine0": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "quarantine1": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "reclaimed0": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "reclaimed1": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        }
+      },
+      "states": {}
+    },
+    {
+      "address": "0x5555556f00a0",
+      "poll": 0,
+      "profile_request": 0,
+      "mark_active": 0,
+      "gl": "0x7ffff7c90130",
+      "cur_L": "0x0",
+      "jit_base": "0x0",
+      "vmstate": -1,
+      "in_native": 1,
+      "strtab_active_hdr": "0x0",
+      "strtab_active_depth": 0,
+      "strtab_active_epoch": 0,
+      "strq_active_hdr": "0x0",
+      "strq_active_depth": 0,
+      "strq_active_epoch": 0,
+      "tab_read_depth": 0,
+      "tab_read_epoch": 0,
+      "gc_assist": 0,
+      "hookmask_th": 0,
+      "tg_flags": 3,
+      "fini_state": 0,
+      "reqmask": 0,
+      "hs_epoch_ack": 68,
+      "ssb_active": "0x5555556f0cc8",
+      "ssb_free": "0x5555556f2ce0",
+      "ssb_next": "0x5555556f0ce0",
+      "ssb_base": "0x5555556f0ce0",
+      "ssb_end": "0x5555556f2ce0",
+      "ssb_refs": 0,
+      "gcroot_pending": "0x0",
+      "gcroot_pending_after_main": "0x0",
+      "root_anchor_top": 0,
+      "thread_L": "0x0",
+      "thread_ud": "0x0",
+      "tid": 4,
+      "actor_id": 4,
+      "next_tg": "0x5555556e86a0",
+      "local_total": 0,
+      "stack_dirty_epoch": 0,
+      "root_desc": {
+        "control": 0,
+        "flags": 0,
+        "reserved": 0,
+        "old_root": 0,
+        "new_root": 0,
+        "aux_root": 0,
+        "range": [
+          {
+            "lo": "0x0",
+            "hi": "0x0"
+          },
+          {
+            "lo": "0x0",
+            "hi": "0x0"
+          }
+        ],
+        "coverage": {
+          "lo": 0,
+          "hi": 0
+        }
+      },
+      "registry_key": {
+        "slot": "0x7fffec000bc0",
+        "incarnation": 1
+      },
+      "ffi_native_seq": 0,
+      "ffi_native_depth": 0,
+      "private_ssb_count": 0,
+      "private_ssb_slots": [],
+      "alloc": {
+        "smalltab": "0x5555556c82f0",
+        "sweep_epoch": 4,
+        "prepare_epoch": 4,
+        "huge_retire_cursor": 0,
+        "huge_reclaim_cursor": 0,
+        "huge_retire_done": 0,
+        "remote_pending": 0,
+        "owner_tid": 4,
+        "owner_tg": "0x5555556f00a0",
+        "alloc_black": 0,
+        "free_noinsert": 0,
+        "empty_reclaimed": "0x0"
+      },
+      "arena_lists": {
+        "owned0": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "owned1": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "needsweep0": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "needsweep1": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "quarantine0": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "quarantine1": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "reclaimed0": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "reclaimed1": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        }
+      },
+      "states": {}
+    },
+    {
+      "address": "0x7ffff79f0080",
+      "poll": 0,
+      "profile_request": 0,
+      "mark_active": 0,
+      "gl": "0x7ffff7c90130",
+      "cur_L": "0x7ffff7a5cb70",
+      "jit_base": "0x0",
+      "vmstate": -2,
+      "in_native": 1,
+      "strtab_active_hdr": "0x0",
+      "strtab_active_depth": 0,
+      "strtab_active_epoch": 38,
+      "strq_active_hdr": "0x0",
+      "strq_active_depth": 0,
+      "strq_active_epoch": 0,
+      "tab_read_depth": 0,
+      "tab_read_epoch": 0,
+      "gc_assist": 0,
+      "hookmask_th": 0,
+      "tg_flags": 67,
+      "fini_state": 0,
+      "reqmask": 0,
+      "hs_epoch_ack": 68,
+      "ssb_active": "0x7ffff79f0ca8",
+      "ssb_free": "0x7ffff79f2cc0",
+      "ssb_next": "0x7ffff79f0cc0",
+      "ssb_base": "0x7ffff79f0cc0",
+      "ssb_end": "0x7ffff79f2cc0",
+      "ssb_refs": 0,
+      "gcroot_pending": "0x0",
+      "gcroot_pending_after_main": "0x0",
+      "root_anchor_top": 0,
+      "thread_L": "0x7ffff7a5cb70",
+      "thread_ud": "0x7ffff7a5cc20",
+      "tid": 2,
+      "actor_id": 2,
+      "next_tg": "0x7ffff7c92d00",
+      "local_total": 0,
+      "stack_dirty_epoch": 216,
+      "root_desc": {
+        "control": 0,
+        "flags": 0,
+        "reserved": 0,
+        "old_root": 0,
+        "new_root": 0,
+        "aux_root": 0,
+        "range": [
+          {
+            "lo": "0x0",
+            "hi": "0x0"
+          },
+          {
+            "lo": "0x0",
+            "hi": "0x0"
+          }
+        ],
+        "coverage": {
+          "lo": 0,
+          "hi": 0
+        }
+      },
+      "registry_key": {
+        "slot": "0x7ffff0000bc0",
+        "incarnation": 1
+      },
+      "ffi_native_seq": 0,
+      "ffi_native_depth": 0,
+      "private_ssb_count": 0,
+      "private_ssb_slots": [],
+      "alloc": {
+        "smalltab": "0x5555556c82f0",
+        "sweep_epoch": 4,
+        "prepare_epoch": 4,
+        "huge_retire_cursor": 0,
+        "huge_reclaim_cursor": 0,
+        "huge_retire_done": 0,
+        "remote_pending": 0,
+        "owner_tid": 2,
+        "owner_tg": "0x7ffff79f0080",
+        "alloc_black": 0,
+        "free_noinsert": 0,
+        "empty_reclaimed": "0x0"
+      },
+      "arena_lists": {
+        "owned0": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "owned1": {
+          "nodes": [
+            {
+              "flags": 8,
+              "owner_tid": 2,
+              "next": "0x0",
+              "grey": "0x0",
+              "sweep_epoch": 0,
+              "live_cells": 0,
+              "retire_epoch": 0,
+              "reclaim_cell": 0,
+              "reclaim_deferred": 0,
+              "remote_active": 0,
+              "remote_free": "0x0",
+              "retire_obj": "0x0",
+              "progress_g": "0x7ffff7c90130",
+              "prep_bump_cell": 0,
+              "prep_bump_end": 0,
+              "gcprep_pending": 0,
+              "terminal_closed": 0,
+              "huge_tabstamp": {
+                "state": 0,
+                "token": {
+                  "control": 0
+                }
+              },
+              "gc2_tabledesc": "0x7ffff7c91310",
+              "address": "0x7ffff78d0000"
+            }
+          ],
+          "end": "0x0",
+          "bounded": false
+        },
+        "needsweep0": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "needsweep1": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "quarantine0": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "quarantine1": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "reclaimed0": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "reclaimed1": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        }
+      },
+      "states": {
+        "0x7ffff7a5cb70": {
+          "nextgc": {
+            "gcptr64": 140737348225856
+          },
+          "marked": 1,
+          "gct": 6,
+          "dummy_ffid": 1,
+          "status": 0,
+          "glref": {
+            "ptr64": 140737350533424
+          },
+          "gclist": {
+            "gcptr64": 0
+          },
+          "base": "0x7ffff78d26d0",
+          "top": "0x7ffff78d26e0",
+          "maxstack": {
+            "ptr64": 140737346611128
+          },
+          "stack": {
+            "ptr64": 140737346610816
+          },
+          "openupval": {
+            "gcptr64": 0
+          },
+          "env": {
+            "gcptr64": 140737348183680
+          },
+          "mt_thread": {
+            "gcptr64": 140737348226080
+          },
+          "thread_next": "0x0",
+          "gcprep_next": "0x0",
+          "cframe": "0x7ffff78ceb10",
+          "stacksize": 48,
+          "tg_hint": "0x7ffff79f0080",
+          "thr_owner": 8589934594,
+          "grayagain_cycle": 0,
+          "scan_epoch": 4,
+          "scan_dirty_epoch": 216,
+          "scan_handoff_epoch": 0,
+          "scan_needscan_counted": 0,
+          "gcprep_state": 0,
+          "active_stack_count": 12,
+          "active_stack_words": [
+            "0xfffcfffff7a5cb70",
+            "0xffffffffffffffff",
+            "0xfffbfffff7a58220",
+            "0x15",
+            "0xfff9fffff7a5b880",
+            "0xfff9fffff7a5b8f0",
+            "0xfff9fffff7a5b960",
+            "0xfffa7ffff7a58950",
+            "0xfffbfffff7a5b370",
+            "0x7ffff7a59d4c",
+            "0xfff9fffff7a5b8f0",
+            "0x403e000000000000"
+          ]
+        }
+      }
+    },
+    {
+      "address": "0x7ffff7c92d00",
+      "poll": 0,
+      "profile_request": 0,
+      "mark_active": 0,
+      "gl": "0x7ffff7c90130",
+      "cur_L": "0x7ffff7c90080",
+      "jit_base": "0x0",
+      "vmstate": -2,
+      "in_native": 0,
+      "strtab_active_hdr": "0x0",
+      "strtab_active_depth": 0,
+      "strtab_active_epoch": 0,
+      "strq_active_hdr": "0x0",
+      "strq_active_depth": 0,
+      "strq_active_epoch": 0,
+      "tab_read_depth": 0,
+      "tab_read_epoch": 0,
+      "gc_assist": 0,
+      "hookmask_th": 0,
+      "tg_flags": 3,
+      "fini_state": 0,
+      "reqmask": 0,
+      "hs_epoch_ack": 68,
+      "ssb_active": "0x7ffff7c95940",
+      "ssb_free": "0x7ffff7c93928",
+      "ssb_next": "0x7ffff7c95958",
+      "ssb_base": "0x7ffff7c95958",
+      "ssb_end": "0x7ffff7c97958",
+      "ssb_refs": 0,
+      "gcroot_pending": "0x0",
+      "gcroot_pending_after_main": "0x0",
+      "root_anchor_top": 0,
+      "thread_L": "0x7ffff7c90080",
+      "thread_ud": "0x0",
+      "tid": 1,
+      "actor_id": 1,
+      "next_tg": "0x0",
+      "local_total": 0,
+      "stack_dirty_epoch": 1301,
+      "root_desc": {
+        "control": 1668,
+        "flags": 195,
+        "reserved": 0,
+        "old_root": 18445195961197471440,
+        "new_root": 4618441417868443648,
+        "aux_root": 18445618173662578720,
+        "range": [
+          {
+            "lo": "0x0",
+            "hi": "0x0"
+          },
+          {
+            "lo": "0x0",
+            "hi": "0x0"
+          }
+        ],
+        "coverage": {
+          "lo": 0,
+          "hi": 0
+        }
+      },
+      "registry_key": {
+        "slot": "0x5555556c8310",
+        "incarnation": 1
+      },
+      "ffi_native_seq": 0,
+      "ffi_native_depth": 0,
+      "private_ssb_count": 0,
+      "private_ssb_slots": [],
+      "alloc": {
+        "smalltab": "0x5555556c82f0",
+        "sweep_epoch": 4,
+        "prepare_epoch": 4,
+        "huge_retire_cursor": 0,
+        "huge_reclaim_cursor": 0,
+        "huge_retire_done": 0,
+        "remote_pending": 0,
+        "owner_tid": 1,
+        "owner_tg": "0x7ffff7c92d00",
+        "alloc_black": 0,
+        "free_noinsert": 0,
+        "empty_reclaimed": "0x0"
+      },
+      "arena_lists": {
+        "owned0": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "owned1": {
+          "nodes": [
+            {
+              "flags": 8,
+              "owner_tid": 1,
+              "next": "0x0",
+              "grey": "0x0",
+              "sweep_epoch": 0,
+              "live_cells": 0,
+              "retire_epoch": 0,
+              "reclaim_cell": 0,
+              "reclaim_deferred": 0,
+              "remote_active": 0,
+              "remote_free": "0x0",
+              "retire_obj": "0x0",
+              "progress_g": "0x7ffff7c90130",
+              "prep_bump_cell": 0,
+              "prep_bump_end": 0,
+              "gcprep_pending": 0,
+              "terminal_closed": 0,
+              "huge_tabstamp": {
+                "state": 0,
+                "token": {
+                  "control": 0
+                }
+              },
+              "gc2_tabledesc": "0x7ffff7c91310",
+              "address": "0x7ffff7a70000"
+            }
+          ],
+          "end": "0x0",
+          "bounded": false
+        },
+        "needsweep0": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "needsweep1": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "quarantine0": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "quarantine1": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        },
+        "reclaimed0": {
+          "nodes": [
+            {
+              "flags": 41,
+              "owner_tid": 1,
+              "next": "0x0",
+              "grey": "0x0",
+              "sweep_epoch": 4,
+              "live_cells": 2472,
+              "retire_epoch": 0,
+              "reclaim_cell": 616,
+              "reclaim_deferred": 0,
+              "remote_active": 11529215046068469760,
+              "remote_free": "0x0",
+              "retire_obj": "0x0",
+              "progress_g": "0x7ffff7c90130",
+              "prep_bump_cell": 0,
+              "prep_bump_end": 0,
+              "gcprep_pending": 0,
+              "terminal_closed": 0,
+              "huge_tabstamp": {
+                "state": 0,
+                "token": {
+                  "control": 0
+                }
+              },
+              "gc2_tabledesc": "0x7ffff7c91310",
+              "address": "0x7ffff7a50000"
+            }
+          ],
+          "end": "0x0",
+          "bounded": false
+        },
+        "reclaimed1": {
+          "nodes": [],
+          "end": "0x0",
+          "bounded": false
+        }
+      },
+      "states": {
+        "0x7ffff7c90080": {
+          "nextgc": {
+            "gcptr64": 140737348226080
+          },
+          "marked": 97,
+          "gct": 6,
+          "dummy_ffid": 1,
+          "status": 0,
+          "glref": {
+            "ptr64": 140737350533424
+          },
+          "gclist": {
+            "gcptr64": 0
+          },
+          "base": "0x7ffff7a72690",
+          "top": "0x7ffff7a72690",
+          "maxstack": {
+            "ptr64": 140737348315064
+          },
+          "stack": {
+            "ptr64": 140737348314752
+          },
+          "openupval": {
+            "gcptr64": 0
+          },
+          "env": {
+            "gcptr64": 140737348183680
+          },
+          "mt_thread": {
+            "gcptr64": 0
+          },
+          "thread_next": "0x0",
+          "gcprep_next": "0x0",
+          "cframe": "0x0",
+          "stacksize": 48,
+          "tg_hint": "0x7ffff7c92d00",
+          "thr_owner": 4294967297,
+          "grayagain_cycle": 0,
+          "scan_epoch": 4,
+          "scan_dirty_epoch": 1301,
+          "scan_handoff_epoch": 0,
+          "scan_needscan_counted": 0,
+          "gcprep_state": 0,
+          "active_stack_count": 2,
+          "active_stack_words": [
+            "0xfffcfffff7c90080",
+            "0xffffffffffffffff"
+          ]
+        }
+      }
+    }
+  ],
+  "objects": [],
+  "backtraces": "\nThread 4 (Thread 0x7ffff66cb6c0 (LWP 367080) \"debug-observed-\"):\n#0  0x00007ffff7db17b9 in syscall () from /lib/x86_64-linux-gnu/libc.so.6\n#1  0x00005555555f9809 in la_futex_wait (p=<optimized out>, val=<optimized out>, ns=<optimized out>) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/lj_atomic.h:163\n#2  gc2_worker_wake_futex_wait (g=<optimized out>, wake=<optimized out>, timeout_ns=<optimized out>) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/lj_obj.h:5089\n#3  gc2_worker_main (arg=0x5555556f00a0) at lj_gc2.c:2816\n#4  0x00007ffff7d35b7b in ?? () from /lib/x86_64-linux-gnu/libc.so.6\n#5  0x00007ffff7db37f8 in ?? () from /lib/x86_64-linux-gnu/libc.so.6\n\nThread 3 (Thread 0x7ffff6fcd6c0 (LWP 367079) \"debug-observed-\"):\n#0  0x00007ffff7db17b9 in syscall () from /lib/x86_64-linux-gnu/libc.so.6\n#1  0x00005555555f9809 in la_futex_wait (p=<optimized out>, val=<optimized out>, ns=<optimized out>) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/lj_atomic.h:163\n#2  gc2_worker_wake_futex_wait (g=<optimized out>, wake=<optimized out>, timeout_ns=<optimized out>) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/lj_obj.h:5089\n#3  gc2_worker_main (arg=0x5555556e86a0) at lj_gc2.c:2816\n#4  0x00007ffff7d35b7b in ?? () from /lib/x86_64-linux-gnu/libc.so.6\n#5  0x00007ffff7db37f8 in ?? () from /lib/x86_64-linux-gnu/libc.so.6\n\nThread 2 (Thread 0x7ffff78cf6c0 (LWP 367078) \"debug-observed-\"):\n#0  0x00007ffff7db17b9 in syscall () from /lib/x86_64-linux-gnu/libc.so.6\n#1  0x000055555562688b in la_futex_wait (p=0x7ffff7a5b940, val=0, ns=1000000) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/lj_atomic.h:163\n#2  chan_wait_timeout (L=L@entry=0x7ffff7a5cb70, ch=ch@entry=0x7ffff7a5b920, ns=1000000, ns@entry=29996606822) at lj_chan.c:171\n#3  0x0000555555627884 in lj_chan_recv_timeout_gc (L=L@entry=0x7ffff7a5cb70, ch=ch@entry=0x7ffff7a5b920, out=out@entry=0x7ffff78cead8, ns=<optimized out>) at lj_chan.c:451\n#4  0x00005555555bbd97 in lj_cf_threading_channel_recv (L=0x7ffff7a5cb70) at lib_threading.c:1732\n#5  0x00005555555c4b78 in lj_BC_FUNCC ()\n#6  0x00005555555602a7 in lj_vm_pcall_unwind (L=L@entry=0x7ffff7a5cb70, base=0x7ffff78d26a0, nres1=nres1@entry=0, ef=ef@entry=0) at lj_state.c:130\n#7  0x0000555555589781 in lua_pcall (L=L@entry=0x7ffff7a5cb70, nargs=4, nresults=nresults@entry=-1, errfunc=errfunc@entry=0) at lj_api.c:2797\n#8  0x00005555555bc00c in threading_worker_cp (L=0x7ffff7a5cb70, dummy=<optimized out>, ud=<optimized out>) at lib_threading.c:1092\n#9  0x00005555555c5398 in lj_vm_cpcall_asm ()\n#10 0x0000555555560180 in lj_vm_cpcall (L=L@entry=0x7ffff7a5cb70, func=func@entry=0x0, ud=ud@entry=0x7ffff78cedb0, cp=cp@entry=0x5555555bbe80 <threading_worker_cp>) at lj_state.c:114\n#11 0x00005555555bc666 in threading_worker (arg=0x7ffff7a5cc50) at lib_threading.c:1202\n#12 0x00007ffff7d35b7b in ?? () from /lib/x86_64-linux-gnu/libc.so.6\n#13 0x00007ffff7db37f8 in ?? () from /lib/x86_64-linux-gnu/libc.so.6\n\nThread 1 (Thread 0x7ffff7ca21c0 (LWP 367074) \"debug-observed-\"):\n#0  sweep_probe_checkpoint (where=where@entry=0x55555568d8ae \"baseline\") at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/sweep-probe.h:15\n#1  0x000055555555f5c7 in sweep_probe_report (where=where@entry=0x55555568d8ae \"baseline\", L=0x7ffff7c90080) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/sweep-probe.h:85\n#2  0x000055555555f91d in snapshot (L=L@entry=0x7ffff7c90080, stage=stage@entry=0x55555568d8ae \"baseline\", round=round@entry=0, filler=filler@entry=0) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/t-string-retention-observed.c:148\n#3  0x000055555555e4b2 in main (argc=<optimized out>, argv=0x7fffffffe0b8) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/t-string-retention-observed.c:246\n"
+}

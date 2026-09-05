@@ -1,0 +1,14 @@
+{
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-stop-v3-exe": {
+    "sha256": "038b50477e24ac491c180921570b816850496fea50fb294bb6e33abe9c30ddb1",
+    "bytes": 19491504
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-stop.c": {
+    "sha256": "9f3b1a37e2906b04ad38e6e1b4b1725abdce295f0c595f45ab22caa50d3baa8c",
+    "bytes": 6465
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src/libluajit.a": {
+    "sha256": "9b6e1aa8c9990b68c4b839d056c3a0690e9134b60ee34786c860b82607ab7d49",
+    "bytes": 26698906
+  }
+}

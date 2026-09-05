@@ -1,0 +1,6 @@
+patching file src/lj_obj.h
+patching file src/lj_gc.h
+patching file src/lj_gc.c
+patching file src/lj_gc2.c
+patching file src/lj_api.c
+patching file src/vm_x64.dasc

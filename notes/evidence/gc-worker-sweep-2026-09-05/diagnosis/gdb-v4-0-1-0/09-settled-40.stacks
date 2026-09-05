@@ -1,0 +1,22 @@
+
+Thread 2 (Thread 0x7ffff78cf6c0 (LWP 367063) "debug-observed-"):
+#0  0x00007ffff7db17b9 in syscall () from /lib/x86_64-linux-gnu/libc.so.6
+#1  0x000055555562688b in la_futex_wait (p=0x7ffff7a5b940, val=8, ns=1000000) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/lj_atomic.h:163
+#2  chan_wait_timeout (L=L@entry=0x7ffff7a5cb70, ch=ch@entry=0x7ffff7a5b920, ns=1000000, ns@entry=29999999989) at lj_chan.c:171
+#3  0x0000555555627884 in lj_chan_recv_timeout_gc (L=L@entry=0x7ffff7a5cb70, ch=ch@entry=0x7ffff7a5b920, out=out@entry=0x7ffff78cead8, ns=<optimized out>) at lj_chan.c:451
+#4  0x00005555555bbd97 in lj_cf_threading_channel_recv (L=0x7ffff7a5cb70) at lib_threading.c:1732
+#5  0x00005555555c4b78 in lj_BC_FUNCC ()
+#6  0x00005555555602a7 in lj_vm_pcall_unwind (L=L@entry=0x7ffff7a5cb70, base=0x7ffff78d26a0, nres1=nres1@entry=0, ef=ef@entry=0) at lj_state.c:130
+#7  0x0000555555589781 in lua_pcall (L=L@entry=0x7ffff7a5cb70, nargs=4, nresults=nresults@entry=-1, errfunc=errfunc@entry=0) at lj_api.c:2797
+#8  0x00005555555bc00c in threading_worker_cp (L=0x7ffff7a5cb70, dummy=<optimized out>, ud=<optimized out>) at lib_threading.c:1092
+#9  0x00005555555c5398 in lj_vm_cpcall_asm ()
+#10 0x0000555555560180 in lj_vm_cpcall (L=L@entry=0x7ffff7a5cb70, func=func@entry=0x0, ud=ud@entry=0x7ffff78cedb0, cp=cp@entry=0x5555555bbe80 <threading_worker_cp>) at lj_state.c:114
+#11 0x00005555555bc666 in threading_worker (arg=0x7ffff7a5cc50) at lib_threading.c:1202
+#12 0x00007ffff7d35b7b in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#13 0x00007ffff7db37f8 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+
+Thread 1 (Thread 0x7ffff7ca21c0 (LWP 367060) "debug-observed-"):
+#0  sweep_probe_checkpoint (where=where@entry=0x55555568d82c "settled") at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/sweep-probe.h:15
+#1  0x000055555555f5c7 in sweep_probe_report (where=where@entry=0x55555568d82c "settled", L=0x7ffff7c90080) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/sweep-probe.h:85
+#2  0x000055555555f91d in snapshot (L=L@entry=0x7ffff7c90080, stage=0x55555568d82c "settled", round=round@entry=4, filler=filler@entry=32768) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/t-string-retention-observed.c:148
+#3  0x000055555555e647 in main (argc=<optimized out>, argv=<optimized out>) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/t-string-retention-observed.c:264

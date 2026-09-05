@@ -1,0 +1,18 @@
+{
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-detach-v1-exe": {
+    "sha256": "78811832a10d29b8b516cc2ece5e14c796a05519c54417b9ac62baa9fac59324",
+    "bytes": 19519352
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-detach.c": {
+    "sha256": "e9a568c6029bf7982545c5cfcc9493d87d72f3036f62206716c2fd3e33d83457",
+    "bytes": 6860
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-stop.c": {
+    "sha256": "9f3b1a37e2906b04ad38e6e1b4b1725abdce295f0c595f45ab22caa50d3baa8c",
+    "bytes": 6465
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src/libluajit.a": {
+    "sha256": "9b6e1aa8c9990b68c4b839d056c3a0690e9134b60ee34786c860b82607ab7d49",
+    "bytes": 26698906
+  }
+}

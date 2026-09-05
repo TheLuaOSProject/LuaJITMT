@@ -1,0 +1,22 @@
+{
+  "head": "24e2e2b1eef40f55676010ad823488a1fcced1d6",
+  "command": [
+    "patch",
+    "-p1",
+    "--fuzz=0",
+    "-i",
+    "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate2-full.patch"
+  ],
+  "exit": 0,
+  "stdout": "patching file src/lj_gc2.c\nHunk #2 succeeded at 2778 (offset 1 line).\nHunk #3 succeeded at 2795 (offset 1 line).\nHunk #4 succeeded at 2820 (offset 1 line).\nHunk #5 succeeded at 2841 (offset 1 line).\nHunk #6 succeeded at 5602 (offset 1 line).\nHunk #7 succeeded at 5649 (offset 1 line).\nHunk #8 succeeded at 5665 (offset 1 line).\nHunk #9 succeeded at 5690 (offset 1 line).\nHunk #10 succeeded at 5709 (offset 1 line).\n",
+  "stderr": "",
+  "fixtures": {
+    "t-worker-bridge-stop.c": "9f3b1a37e2906b04ad38e6e1b4b1725abdce295f0c595f45ab22caa50d3baa8c",
+    "t-worker-bridge-detach.c": "e9a568c6029bf7982545c5cfcc9493d87d72f3036f62206716c2fd3e33d83457",
+    "t-worker-bridge-consumed.c": "6a049faaa29c08e5ed0b167c50a3422b0cede1d9881becf00cfa0dd10f63a5bb",
+    "t-worker-bridge-quiet.c": "94b28cd078aa8c65d388c1075016d1bc61b63414d054a47e073c1820a621ef12",
+    "t-string-retention.c": "2e8e840fb4ba3a3b09168c06d828ff10ebafd41e9ff555b9737f34384fea3cf9",
+    "peer-control.lua": "519ebf714b0a33b9a436d3452a153a1bc3eea3322ebf0bf74d8e76fea4ab8cb2"
+  },
+  "source_inputs_verified": 225
+}

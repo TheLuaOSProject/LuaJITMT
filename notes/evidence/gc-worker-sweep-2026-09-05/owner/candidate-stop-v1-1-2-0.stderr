@@ -1,0 +1,1 @@
+candidate-stop-v1-exe: /tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-stop.c:111: main: Assertion `actions == 0 && lj_tg_in_native_acq(tg) == 0' failed.

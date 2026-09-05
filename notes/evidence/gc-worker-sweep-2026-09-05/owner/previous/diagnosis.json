@@ -1,0 +1,6138 @@
+{
+  "production_source": "candidate3",
+  "runtime_patch_added": false,
+  "direct_controls": {
+    "runtime": [
+      {
+        "case": "0-0-0",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.21405404200049816,
+        "stage": "settled",
+        "phase": 0,
+        "cycle_starts": 18,
+        "completed_cycles": 18,
+        "filler_tables": 49152,
+        "rounds": 6,
+        "stderr_bytes": 0,
+        "stdout_sha256": "d998dfd78270d615266bf324a9a1abbbc09875bbc825090252f94b01fdab75fd",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "case": "0-0-2",
+        "exit_code": 2,
+        "timeout": false,
+        "seconds": 3.2734173179997015,
+        "stage": "automatic_progress_missing",
+        "phase": 3,
+        "cycle_starts": 2,
+        "completed_cycles": 1,
+        "filler_tables": 262144,
+        "rounds": 1,
+        "stderr_bytes": 0,
+        "stdout_sha256": "770a60f2a4df74cc8fa3610af78cc5ef5022deb6df7ed80d38513c63dfead7b9",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "case": "0-1-0",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.21467483000014909,
+        "stage": "settled",
+        "phase": 0,
+        "cycle_starts": 18,
+        "completed_cycles": 18,
+        "filler_tables": 49152,
+        "rounds": 6,
+        "stderr_bytes": 0,
+        "stdout_sha256": "b988851d59dcd1914809b938f37b69113ac799afb00d1563fa5d1f00ff333bb9",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "case": "0-1-2",
+        "exit_code": 2,
+        "timeout": false,
+        "seconds": 3.170613221001986,
+        "stage": "automatic_progress_missing",
+        "phase": 3,
+        "cycle_starts": 1,
+        "completed_cycles": 0,
+        "filler_tables": 262144,
+        "rounds": 1,
+        "stderr_bytes": 0,
+        "stdout_sha256": "4ba5fcfde4da62ef7c28724330a1169ed525736b586c251c8199de8b27247da6",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "debug": [
+      {
+        "case": "0-0-0",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.16385893899860093,
+        "stage": "settled",
+        "phase": 0,
+        "cycle_starts": 18,
+        "completed_cycles": 18,
+        "filler_tables": 49152,
+        "rounds": 6,
+        "stderr_bytes": 0,
+        "stdout_sha256": "b3c46f45543c3c7a2c2719bbcb359044134e927269f4219a8ddeb75e739d9183",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "case": "0-0-2",
+        "exit_code": 2,
+        "timeout": false,
+        "seconds": 3.1733626970017212,
+        "stage": "automatic_progress_missing",
+        "phase": 3,
+        "cycle_starts": 2,
+        "completed_cycles": 1,
+        "filler_tables": 262144,
+        "rounds": 1,
+        "stderr_bytes": 0,
+        "stdout_sha256": "f79c829e905b0ba0ef37ada852793fdbf88333bba9f51da1c6a65e2a7c9b820b",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "case": "0-1-0",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.26504750499589136,
+        "stage": "settled",
+        "phase": 0,
+        "cycle_starts": 18,
+        "completed_cycles": 18,
+        "filler_tables": 49152,
+        "rounds": 6,
+        "stderr_bytes": 0,
+        "stdout_sha256": "f32b57338d8817792cfdee36691e1ca8aadba415aba20576c1edc856e4acdd29",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "case": "0-1-2",
+        "exit_code": 2,
+        "timeout": false,
+        "seconds": 3.171622068999568,
+        "stage": "automatic_progress_missing",
+        "phase": 3,
+        "cycle_starts": 2,
+        "completed_cycles": 1,
+        "filler_tables": 262144,
+        "rounds": 1,
+        "stderr_bytes": 0,
+        "stdout_sha256": "0640f5ce6616997cb0467ca825c80449c777b9dd8782f31a6a3eada525837c03",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "asan-candidate": [
+      {
+        "case": "0-0-0",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.26492049200169276,
+        "stage": "settled",
+        "phase": 0,
+        "cycle_starts": 18,
+        "completed_cycles": 18,
+        "filler_tables": 49152,
+        "rounds": 6,
+        "stderr_bytes": 0,
+        "stdout_sha256": "d3160c5e9a63ba90605907337d2aaafe732c0a3fd8ee4a45cfdd519e3e3ba069",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "case": "0-0-2",
+        "exit_code": 2,
+        "timeout": false,
+        "seconds": 4.625568241994188,
+        "stage": "automatic_progress_missing",
+        "phase": 3,
+        "cycle_starts": 2,
+        "completed_cycles": 1,
+        "filler_tables": 262144,
+        "rounds": 1,
+        "stderr_bytes": 0,
+        "stdout_sha256": "4aa0ee8f273b0973d54e1aab18918f00b7b97b434a8631ac77db63432f504ac2",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "case": "0-1-0",
+        "exit_code": 0,
+        "timeout": false,
+        "seconds": 0.4145904059987515,
+        "stage": "settled",
+        "phase": 0,
+        "cycle_starts": 18,
+        "completed_cycles": 18,
+        "filler_tables": 49152,
+        "rounds": 6,
+        "stderr_bytes": 0,
+        "stdout_sha256": "2c4c6aae3abc25e3214e758e47421d409029879551a0025f943d8ca813485b45",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "case": "0-1-2",
+        "exit_code": 2,
+        "timeout": false,
+        "seconds": 4.729489546996774,
+        "stage": "automatic_progress_missing",
+        "phase": 3,
+        "cycle_starts": 1,
+        "completed_cycles": 0,
+        "filler_tables": 262144,
+        "rounds": 1,
+        "stderr_bytes": 0,
+        "stdout_sha256": "4e3364c12250946ea682cef282ad27426a34b4e3e00542164417e50335f50b49",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ]
+  },
+  "observational_timeline": {
+    "0-0-2": [
+      {
+        "input": "gdb-v7-0-0-2/01-baseline-0.json",
+        "sha256": "f22d35f905ec9b9ede768a553cf22aa7fae866e736ba43a5afdadeda34b43529",
+        "where": "baseline",
+        "tick": 0,
+        "gc2": {
+          "phase": 0,
+          "cycle": 4,
+          "sweep_to_idle": 4,
+          "cycle_leader": 0,
+          "sweep_root_scanned": 0,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x0",
+          "sweep_bridge_ready": 1,
+          "worker_active": 0,
+          "worker_runs": 88,
+          "worker_async_progress": 51,
+          "worker_parks": 588,
+          "worker_busy_retries": 766,
+          "deferred_epoch": 0,
+          "hs_epoch": 68,
+          "hs_pending": 0,
+          "hs_actions": 10,
+          "grey_top": 29,
+          "grey_bottom": 29,
+          "ssb_published": 21,
+          "ssb_drained": 21,
+          "ssb_items_published": 75,
+          "ssb_items_drained": 75,
+          "recovery_items": 0,
+          "recovery_failed": 0,
+          "table_rescan_pending": 0,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 0,
+          "alloc_since_trigger": 0,
+          "trigger_bytes": 321436,
+          "hard_bytes": 642872,
+          "sweep_owner_runs": 8,
+          "sweep_owner_arenas": 4,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 1
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 2,
+            "actor_id": 2,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 4,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 3,
+            "actor_id": 3,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 4,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 4,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 1,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 1,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      },
+      {
+        "input": "gdb-v7-0-0-2/02-after_churn-0.json",
+        "sha256": "09c8bf8e9188a22660477331c7aedb9af07325fdae23d07a8d767b34271d6a2d",
+        "where": "after_churn",
+        "tick": 0,
+        "gc2": {
+          "phase": 0,
+          "cycle": 4,
+          "sweep_to_idle": 4,
+          "cycle_leader": 1,
+          "sweep_root_scanned": 0,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x0",
+          "sweep_bridge_ready": 1,
+          "worker_active": 0,
+          "worker_runs": 88,
+          "worker_async_progress": 51,
+          "worker_parks": 590,
+          "worker_busy_retries": 766,
+          "deferred_epoch": 0,
+          "hs_epoch": 68,
+          "hs_pending": 0,
+          "hs_actions": 10,
+          "grey_top": 29,
+          "grey_bottom": 29,
+          "ssb_published": 21,
+          "ssb_drained": 21,
+          "ssb_items_published": 75,
+          "ssb_items_drained": 75,
+          "recovery_items": 0,
+          "recovery_failed": 0,
+          "table_rescan_pending": 0,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 0,
+          "alloc_since_trigger": 500708,
+          "trigger_bytes": 321436,
+          "hard_bytes": 642872,
+          "sweep_owner_runs": 8,
+          "sweep_owner_arenas": 4,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 1
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 2,
+            "actor_id": 2,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 4,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 3,
+            "actor_id": 3,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 4,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 4,
+            "arena_counts": {
+              "owned0": 9,
+              "owned1": 1,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      },
+      {
+        "input": "gdb-v7-0-0-2/03-automatic_check-100.json",
+        "sha256": "e4adf2dfd0ca4910c28569e8c8ad0e98e342d97766bfe46e80982f2a56124edd",
+        "where": "automatic_check",
+        "tick": 100,
+        "gc2": {
+          "phase": 3,
+          "cycle": 6,
+          "sweep_to_idle": 5,
+          "cycle_leader": 0,
+          "sweep_root_scanned": 1,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x7ffff7c90190",
+          "sweep_bridge_ready": 0,
+          "worker_active": 1,
+          "worker_runs": 1173,
+          "worker_async_progress": 56514,
+          "worker_parks": 386862,
+          "worker_busy_retries": 521170,
+          "deferred_epoch": 2,
+          "hs_epoch": 173,
+          "hs_pending": 1,
+          "hs_actions": 32,
+          "grey_top": 1030,
+          "grey_bottom": 1030,
+          "ssb_published": 209,
+          "ssb_drained": 208,
+          "ssb_items_published": 17898,
+          "ssb_items_drained": 17482,
+          "recovery_items": 4015,
+          "recovery_failed": 0,
+          "table_rescan_pending": 1,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 0,
+          "alloc_since_trigger": 3355680,
+          "trigger_bytes": 393216,
+          "hard_bytes": 786432,
+          "sweep_owner_runs": 18,
+          "sweep_owner_arenas": 13,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 0
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [
+            {
+              "address": "0x7ffff7c95940",
+              "owner": "0x7ffff7c92d00",
+              "n": 416,
+              "top_objects": [
+                [
+                  "0x7ffff7a5b9d0",
+                  217
+                ],
+                [
+                  "0x7ffff4f08810",
+                  8
+                ],
+                [
+                  "0x7ffff4f08880",
+                  8
+                ],
+                [
+                  "0x7ffff4f088f0",
+                  8
+                ]
+              ]
+            }
+          ],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 2,
+            "actor_id": 2,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 3,
+            "actor_id": 3,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 1024,
+            "private_ssb_top": [
+              [
+                "0x7ffff7a5b9d0",
+                541
+              ],
+              [
+                "0x7ffff4f09290",
+                8
+              ],
+              [
+                "0x7ffff4f09300",
+                8
+              ],
+              [
+                "0x7ffff4f09370",
+                8
+              ]
+            ],
+            "pending_root": "0x7ffff4d0bc20",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 58,
+              "owned1": 1,
+              "needsweep0": 51,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      },
+      {
+        "input": "gdb-v7-0-0-2/04-automatic_check-298.json",
+        "sha256": "8c080f65813b2dd5f7d86c3acefcf0b8cd191a3df2e6fafdce0bad46775972bc",
+        "where": "automatic_check",
+        "tick": 298,
+        "gc2": {
+          "phase": 3,
+          "cycle": 6,
+          "sweep_to_idle": 5,
+          "cycle_leader": 0,
+          "sweep_root_scanned": 1,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x7ffff7c90190",
+          "sweep_bridge_ready": 0,
+          "worker_active": 1,
+          "worker_runs": 3491,
+          "worker_async_progress": 176871,
+          "worker_parks": 1128768,
+          "worker_busy_retries": 1483507,
+          "deferred_epoch": 2,
+          "hs_epoch": 351,
+          "hs_pending": 1,
+          "hs_actions": 32,
+          "grey_top": 4570,
+          "grey_bottom": 4570,
+          "ssb_published": 578,
+          "ssb_drained": 577,
+          "ssb_items_published": 49733,
+          "ssb_items_drained": 49181,
+          "recovery_items": 4007,
+          "recovery_failed": 0,
+          "table_rescan_pending": 1,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 0,
+          "alloc_since_trigger": 12727328,
+          "trigger_bytes": 393216,
+          "hard_bytes": 786432,
+          "sweep_owner_runs": 18,
+          "sweep_owner_arenas": 13,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 0
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [
+            {
+              "address": "0x7ffff7c93928",
+              "owner": "0x7ffff7c92d00",
+              "n": 552,
+              "top_objects": [
+                [
+                  "0x7ffff7a5b9d0",
+                  289
+                ],
+                [
+                  "0x7fffee1acbe0",
+                  8
+                ],
+                [
+                  "0x7fffee1acc50",
+                  8
+                ],
+                [
+                  "0x7fffee1accc0",
+                  8
+                ]
+              ]
+            }
+          ],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 2,
+            "actor_id": 2,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 3,
+            "actor_id": 3,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 1024,
+            "private_ssb_top": [
+              [
+                "0x7ffff7a5b9d0",
+                541
+              ],
+              [
+                "0x7fffee1ad9e0",
+                8
+              ],
+              [
+                "0x7fffee1ada50",
+                8
+              ],
+              [
+                "0x7fffee1adac0",
+                8
+              ]
+            ],
+            "pending_root": "0x7fffedf62680",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 240,
+              "owned1": 1,
+              "needsweep0": 51,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      },
+      {
+        "input": "gdb-v7-0-0-2/05-automatic_check-496.json",
+        "sha256": "b0cf533fa82c52750b9afcfeb7d865bf7944909a4ee3110aff374d3ace9711f4",
+        "where": "automatic_check",
+        "tick": 496,
+        "gc2": {
+          "phase": 3,
+          "cycle": 6,
+          "sweep_to_idle": 5,
+          "cycle_leader": 0,
+          "sweep_root_scanned": 1,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x7ffff7c90190",
+          "sweep_bridge_ready": 0,
+          "worker_active": 1,
+          "worker_runs": 5791,
+          "worker_async_progress": 297457,
+          "worker_parks": 1868205,
+          "worker_busy_retries": 2453223,
+          "deferred_epoch": 2,
+          "hs_epoch": 520,
+          "hs_pending": 1,
+          "hs_actions": 32,
+          "grey_top": 8121,
+          "grey_bottom": 8121,
+          "ssb_published": 934,
+          "ssb_drained": 933,
+          "ssb_items_published": 81141,
+          "ssb_items_drained": 81134,
+          "recovery_items": 4039,
+          "recovery_failed": 0,
+          "table_rescan_pending": 1,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 0,
+          "alloc_since_trigger": 22098976,
+          "trigger_bytes": 393216,
+          "hard_bytes": 786432,
+          "sweep_owner_runs": 18,
+          "sweep_owner_arenas": 13,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 0
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [
+            {
+              "address": "0x7ffff7c95940",
+              "owner": "0x7ffff7c92d00",
+              "n": 7,
+              "top_objects": [
+                [
+                  "0x7ffff7a588e0",
+                  4
+                ],
+                [
+                  "0x7ffff7a52680",
+                  3
+                ]
+              ]
+            }
+          ],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 2,
+            "actor_id": 2,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 3,
+            "actor_id": 3,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 1024,
+            "private_ssb_top": [
+              [
+                "0x7ffff7a5b9d0",
+                542
+              ],
+              [
+                "0x7fffe7423640",
+                8
+              ],
+              [
+                "0x7fffe74236b0",
+                8
+              ],
+              [
+                "0x7fffe7423720",
+                8
+              ]
+            ],
+            "pending_root": "0x7fffe7226a50",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 421,
+              "owned1": 1,
+              "needsweep0": 51,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      },
+      {
+        "input": "gdb-v7-0-0-2/06-automatic_check-568.json",
+        "sha256": "729228efa269d3402dc0e4ff64b593e98912c2a0c2dfb8b90f9b7ffd6760a06e",
+        "where": "automatic_check",
+        "tick": 568,
+        "gc2": {
+          "phase": 3,
+          "cycle": 6,
+          "sweep_to_idle": 5,
+          "cycle_leader": 0,
+          "sweep_root_scanned": 1,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x7ffff7c90190",
+          "sweep_bridge_ready": 0,
+          "worker_active": 1,
+          "worker_runs": 6629,
+          "worker_async_progress": 341351,
+          "worker_parks": 2140216,
+          "worker_busy_retries": 2805036,
+          "deferred_epoch": 2,
+          "hs_epoch": 583,
+          "hs_pending": 1,
+          "hs_actions": 32,
+          "grey_top": 9407,
+          "grey_bottom": 9407,
+          "ssb_published": 1063,
+          "ssb_drained": 1062,
+          "ssb_items_published": 93357,
+          "ssb_items_drained": 92805,
+          "recovery_items": 4007,
+          "recovery_failed": 0,
+          "table_rescan_pending": 1,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 0,
+          "alloc_since_trigger": 25506848,
+          "trigger_bytes": 393216,
+          "hard_bytes": 786432,
+          "sweep_owner_runs": 18,
+          "sweep_owner_arenas": 13,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 0
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [
+            {
+              "address": "0x7ffff7c95940",
+              "owner": "0x7ffff7c92d00",
+              "n": 552,
+              "top_objects": [
+                [
+                  "0x7ffff7a5b9d0",
+                  289
+                ],
+                [
+                  "0x7fffe63a2760",
+                  8
+                ],
+                [
+                  "0x7fffe63a27d0",
+                  8
+                ],
+                [
+                  "0x7fffe63a2840",
+                  8
+                ]
+              ]
+            }
+          ],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 2,
+            "actor_id": 2,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 3,
+            "actor_id": 3,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 1024,
+            "private_ssb_top": [
+              [
+                "0x7ffff7a5b9d0",
+                541
+              ],
+              [
+                "0x7fffe63a3560",
+                8
+              ],
+              [
+                "0x7fffe63a35d0",
+                8
+              ],
+              [
+                "0x7fffe63a3640",
+                8
+              ]
+            ],
+            "pending_root": "0x7fffe61a5b70",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 487,
+              "owned1": 1,
+              "needsweep0": 51,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      },
+      {
+        "input": "gdb-v7-0-0-2/07-automatic_check-569.json",
+        "sha256": "8268794f188127329477d24a30096949a0db5926e0d2180f0a1f7c638e896755",
+        "where": "automatic_check",
+        "tick": 569,
+        "gc2": {
+          "phase": 3,
+          "cycle": 6,
+          "sweep_to_idle": 5,
+          "cycle_leader": 0,
+          "sweep_root_scanned": 1,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x7ffff7c90190",
+          "sweep_bridge_ready": 0,
+          "worker_active": 1,
+          "worker_runs": 6659,
+          "worker_async_progress": 342952,
+          "worker_parks": 2140637,
+          "worker_busy_retries": 2805473,
+          "deferred_epoch": 2,
+          "hs_epoch": 583,
+          "hs_pending": 0,
+          "hs_actions": 32,
+          "grey_top": 9495,
+          "grey_bottom": 9495,
+          "ssb_published": 1066,
+          "ssb_drained": 1065,
+          "ssb_items_published": 94415,
+          "ssb_items_drained": 93693,
+          "recovery_items": 2994,
+          "recovery_failed": 0,
+          "table_rescan_pending": 0,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 0,
+          "alloc_since_trigger": 25538464,
+          "trigger_bytes": 393216,
+          "hard_bytes": 786432,
+          "sweep_owner_runs": 18,
+          "sweep_owner_arenas": 13,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 0
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 2,
+            "actor_id": 2,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 3,
+            "actor_id": 3,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 7,
+            "private_ssb_top": [
+              [
+                "0x7ffff7a588e0",
+                4
+              ],
+              [
+                "0x7ffff7a52680",
+                3
+              ]
+            ],
+            "pending_root": "0x7fffe61a5b70",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 487,
+              "owned1": 1,
+              "needsweep0": 51,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      },
+      {
+        "input": "gdb-v7-0-0-2/08-native_return-571.json",
+        "sha256": "c38297365615f5010293129b4c580461ede87d2b17df89c287f758e04859245f",
+        "where": "native_return",
+        "tick": 571,
+        "gc2": {
+          "phase": 3,
+          "cycle": 6,
+          "sweep_to_idle": 5,
+          "cycle_leader": 0,
+          "sweep_root_scanned": 1,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x7ffff7c90190",
+          "sweep_bridge_ready": 0,
+          "worker_active": 0,
+          "worker_runs": 6723,
+          "worker_async_progress": 347001,
+          "worker_parks": 2141410,
+          "worker_busy_retries": 2806289,
+          "deferred_epoch": 2,
+          "hs_epoch": 585,
+          "hs_pending": 0,
+          "hs_actions": 32,
+          "grey_top": 9556,
+          "grey_bottom": 9556,
+          "ssb_published": 1069,
+          "ssb_drained": 1069,
+          "ssb_items_published": 94444,
+          "ssb_items_drained": 94444,
+          "recovery_items": 0,
+          "recovery_failed": 0,
+          "table_rescan_pending": 0,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 0,
+          "alloc_since_trigger": 25538464,
+          "trigger_bytes": 393216,
+          "hard_bytes": 786432,
+          "sweep_owner_runs": 18,
+          "sweep_owner_arenas": 13,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 0
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 2,
+            "actor_id": 2,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 3,
+            "actor_id": 3,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x7fffe61a5b70",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 487,
+              "owned1": 1,
+              "needsweep0": 51,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      },
+      {
+        "input": "gdb-v7-0-0-2/09-automatic_check-572.json",
+        "sha256": "18b70bfe0a221b2f5d56c0ef98eb9c326fb964a83f90a0f2599fcb8732c7880f",
+        "where": "automatic_check",
+        "tick": 572,
+        "gc2": {
+          "phase": 3,
+          "cycle": 6,
+          "sweep_to_idle": 5,
+          "cycle_leader": 0,
+          "sweep_root_scanned": 1,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x7ffff7c90190",
+          "sweep_bridge_ready": 0,
+          "worker_active": 1,
+          "worker_runs": 6723,
+          "worker_async_progress": 347001,
+          "worker_parks": 2141413,
+          "worker_busy_retries": 2806291,
+          "deferred_epoch": 2,
+          "hs_epoch": 586,
+          "hs_pending": 1,
+          "hs_actions": 32,
+          "grey_top": 9556,
+          "grey_bottom": 9556,
+          "ssb_published": 1069,
+          "ssb_drained": 1069,
+          "ssb_items_published": 94444,
+          "ssb_items_drained": 94444,
+          "recovery_items": 0,
+          "recovery_failed": 0,
+          "table_rescan_pending": 0,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 0,
+          "alloc_since_trigger": 25538464,
+          "trigger_bytes": 393216,
+          "hard_bytes": 786432,
+          "sweep_owner_runs": 18,
+          "sweep_owner_arenas": 13,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 0
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 2,
+            "actor_id": 2,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 3,
+            "actor_id": 3,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 7,
+            "private_ssb_top": [
+              [
+                "0x7ffff7a588e0",
+                4
+              ],
+              [
+                "0x7ffff7a52680",
+                3
+              ]
+            ],
+            "pending_root": "0x7fffe61a5b70",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 487,
+              "owned1": 1,
+              "needsweep0": 51,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      },
+      {
+        "input": "gdb-v7-0-0-2/10-native_return-575.json",
+        "sha256": "016f7a5bec8a89856753a9931453cc0f8f1ffa82597a8f281e104c4645edd0c4",
+        "where": "native_return",
+        "tick": 575,
+        "gc2": {
+          "phase": 3,
+          "cycle": 6,
+          "sweep_to_idle": 5,
+          "cycle_leader": 0,
+          "sweep_root_scanned": 1,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x7ffff7c90190",
+          "sweep_bridge_ready": 0,
+          "worker_active": 0,
+          "worker_runs": 6735,
+          "worker_async_progress": 347049,
+          "worker_parks": 2141428,
+          "worker_busy_retries": 2806298,
+          "deferred_epoch": 2,
+          "hs_epoch": 589,
+          "hs_pending": 0,
+          "hs_actions": 32,
+          "grey_top": 9584,
+          "grey_bottom": 9584,
+          "ssb_published": 1077,
+          "ssb_drained": 1077,
+          "ssb_items_published": 94488,
+          "ssb_items_drained": 94488,
+          "recovery_items": 0,
+          "recovery_failed": 0,
+          "table_rescan_pending": 0,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 0,
+          "alloc_since_trigger": 25538464,
+          "trigger_bytes": 393216,
+          "hard_bytes": 786432,
+          "sweep_owner_runs": 18,
+          "sweep_owner_arenas": 13,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 0
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 2,
+            "actor_id": 2,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 3,
+            "actor_id": 3,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x7fffe61a5b70",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 487,
+              "owned1": 1,
+              "needsweep0": 51,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      },
+      {
+        "input": "gdb-v7-0-0-2/11-automatic_check-576.json",
+        "sha256": "88c077c057a6c2222754a2fb5472718f9909ae141300900bcf2f53cd70e175b3",
+        "where": "automatic_check",
+        "tick": 576,
+        "gc2": {
+          "phase": 3,
+          "cycle": 6,
+          "sweep_to_idle": 5,
+          "cycle_leader": 0,
+          "sweep_root_scanned": 1,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x7ffff7c90190",
+          "sweep_bridge_ready": 0,
+          "worker_active": 1,
+          "worker_runs": 6735,
+          "worker_async_progress": 347049,
+          "worker_parks": 2141431,
+          "worker_busy_retries": 2806300,
+          "deferred_epoch": 2,
+          "hs_epoch": 590,
+          "hs_pending": 1,
+          "hs_actions": 32,
+          "grey_top": 9584,
+          "grey_bottom": 9584,
+          "ssb_published": 1077,
+          "ssb_drained": 1077,
+          "ssb_items_published": 94488,
+          "ssb_items_drained": 94488,
+          "recovery_items": 0,
+          "recovery_failed": 0,
+          "table_rescan_pending": 0,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 0,
+          "alloc_since_trigger": 25538464,
+          "trigger_bytes": 393216,
+          "hard_bytes": 786432,
+          "sweep_owner_runs": 18,
+          "sweep_owner_arenas": 13,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 0
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 2,
+            "actor_id": 2,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 3,
+            "actor_id": 3,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 7,
+            "private_ssb_top": [
+              [
+                "0x7ffff7a588e0",
+                4
+              ],
+              [
+                "0x7ffff7a52680",
+                3
+              ]
+            ],
+            "pending_root": "0x7fffe61a5b70",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 487,
+              "owned1": 1,
+              "needsweep0": 51,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      },
+      {
+        "input": "gdb-v7-0-0-2/12-automatic_progress_missing-576.json",
+        "sha256": "108a77dd7fd990720d791d9bce207451def08ee27fc8b7ef0350c05d6c437868",
+        "where": "automatic_progress_missing",
+        "tick": 576,
+        "gc2": {
+          "phase": 3,
+          "cycle": 6,
+          "sweep_to_idle": 5,
+          "cycle_leader": 0,
+          "sweep_root_scanned": 1,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x7ffff7c90190",
+          "sweep_bridge_ready": 0,
+          "worker_active": 0,
+          "worker_runs": 6741,
+          "worker_async_progress": 347167,
+          "worker_parks": 2141524,
+          "worker_busy_retries": 2806397,
+          "deferred_epoch": 2,
+          "hs_epoch": 591,
+          "hs_pending": 0,
+          "hs_actions": 32,
+          "grey_top": 9593,
+          "grey_bottom": 9593,
+          "ssb_published": 1081,
+          "ssb_drained": 1081,
+          "ssb_items_published": 94604,
+          "ssb_items_drained": 94604,
+          "recovery_items": 0,
+          "recovery_failed": 0,
+          "table_rescan_pending": 0,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 36,
+          "alloc_since_trigger": 25538464,
+          "trigger_bytes": 393216,
+          "hard_bytes": 786432,
+          "sweep_owner_runs": 18,
+          "sweep_owner_arenas": 13,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 0
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 2,
+            "actor_id": 2,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 3,
+            "actor_id": 3,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x7fffe61a5b70",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 487,
+              "owned1": 1,
+              "needsweep0": 51,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      },
+      {
+        "input": "gdb-v7-0-0-2/13-sole_main_recovered-576.json",
+        "sha256": "4deda4258a3335fa3e02ed00c3a206b4a95b06350871beab951c4ed65fbb6338",
+        "where": "sole_main_recovered",
+        "tick": 576,
+        "gc2": {
+          "phase": 0,
+          "cycle": 8,
+          "sweep_to_idle": 8,
+          "cycle_leader": 0,
+          "sweep_root_scanned": 0,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x0",
+          "sweep_bridge_ready": 1,
+          "worker_active": 0,
+          "worker_runs": 9034,
+          "worker_async_progress": 347168,
+          "worker_parks": 2141526,
+          "worker_busy_retries": 2806401,
+          "deferred_epoch": 2,
+          "hs_epoch": 2716,
+          "hs_pending": 0,
+          "hs_actions": 10,
+          "grey_top": 9606,
+          "grey_bottom": 9606,
+          "ssb_published": 1092,
+          "ssb_drained": 1092,
+          "ssb_items_published": 94627,
+          "ssb_items_drained": 94627,
+          "recovery_items": 0,
+          "recovery_failed": 0,
+          "table_rescan_pending": 0,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 2,
+          "alloc_since_trigger": 0,
+          "trigger_bytes": 393216,
+          "hard_bytes": 786432,
+          "sweep_owner_runs": 594,
+          "sweep_owner_arenas": 579,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 1
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 8,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 2,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 2,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      }
+    ],
+    "0-1-2": [
+      {
+        "input": "gdb-v7-0-1-2/01-baseline-0.json",
+        "sha256": "9d69bf3fbe35c7cf4eb803ca781d4b8626be087336bfe9e4ab45579643c08497",
+        "where": "baseline",
+        "tick": 0,
+        "gc2": {
+          "phase": 0,
+          "cycle": 4,
+          "sweep_to_idle": 4,
+          "cycle_leader": 0,
+          "sweep_root_scanned": 0,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x0",
+          "sweep_bridge_ready": 1,
+          "worker_active": 0,
+          "worker_runs": 86,
+          "worker_async_progress": 80,
+          "worker_parks": 535,
+          "worker_busy_retries": 690,
+          "deferred_epoch": 0,
+          "hs_epoch": 68,
+          "hs_pending": 0,
+          "hs_actions": 10,
+          "grey_top": 25,
+          "grey_bottom": 25,
+          "ssb_published": 19,
+          "ssb_drained": 19,
+          "ssb_items_published": 137,
+          "ssb_items_drained": 137,
+          "recovery_items": 0,
+          "recovery_failed": 0,
+          "table_rescan_pending": 0,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 0,
+          "alloc_since_trigger": 0,
+          "trigger_bytes": 384844,
+          "hard_bytes": 769688,
+          "sweep_owner_runs": 8,
+          "sweep_owner_arenas": 4,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 1
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 3,
+            "actor_id": 3,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 4,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 4,
+            "actor_id": 4,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 4,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 2,
+            "actor_id": 2,
+            "cur_L": "0x7ffff7a5cb70",
+            "thread_L": "0x7ffff7a5cb70",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 4,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 1,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 4,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 1,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 1,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      },
+      {
+        "input": "gdb-v7-0-1-2/02-after_churn-0.json",
+        "sha256": "92ccbbc42d4a41d9a55cfdd8f75688a91f79b3757a8c1b7fc7083de93ebb316e",
+        "where": "after_churn",
+        "tick": 0,
+        "gc2": {
+          "phase": 0,
+          "cycle": 4,
+          "sweep_to_idle": 4,
+          "cycle_leader": 1,
+          "sweep_root_scanned": 0,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x0",
+          "sweep_bridge_ready": 1,
+          "worker_active": 0,
+          "worker_runs": 86,
+          "worker_async_progress": 80,
+          "worker_parks": 537,
+          "worker_busy_retries": 690,
+          "deferred_epoch": 0,
+          "hs_epoch": 68,
+          "hs_pending": 0,
+          "hs_actions": 10,
+          "grey_top": 25,
+          "grey_bottom": 25,
+          "ssb_published": 19,
+          "ssb_drained": 19,
+          "ssb_items_published": 137,
+          "ssb_items_drained": 137,
+          "recovery_items": 0,
+          "recovery_failed": 0,
+          "table_rescan_pending": 0,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 0,
+          "alloc_since_trigger": 500708,
+          "trigger_bytes": 384844,
+          "hard_bytes": 769688,
+          "sweep_owner_runs": 8,
+          "sweep_owner_arenas": 4,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 1
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 3,
+            "actor_id": 3,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 4,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 4,
+            "actor_id": 4,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 4,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 2,
+            "actor_id": 2,
+            "cur_L": "0x7ffff7a5cb70",
+            "thread_L": "0x7ffff7a5cb70",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 4,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 1,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 4,
+            "arena_counts": {
+              "owned0": 9,
+              "owned1": 1,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      },
+      {
+        "input": "gdb-v7-0-1-2/03-automatic_check-100.json",
+        "sha256": "543685491296967912c5db789648effba1357d1f7e628b71015e36e31f35c843",
+        "where": "automatic_check",
+        "tick": 100,
+        "gc2": {
+          "phase": 3,
+          "cycle": 6,
+          "sweep_to_idle": 5,
+          "cycle_leader": 0,
+          "sweep_root_scanned": 1,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x7ffff7c90190",
+          "sweep_bridge_ready": 0,
+          "worker_active": 1,
+          "worker_runs": 1268,
+          "worker_async_progress": 61118,
+          "worker_parks": 396773,
+          "worker_busy_retries": 542098,
+          "deferred_epoch": 0,
+          "hs_epoch": 178,
+          "hs_pending": 1,
+          "hs_actions": 32,
+          "grey_top": 1926,
+          "grey_bottom": 1926,
+          "ssb_published": 222,
+          "ssb_drained": 221,
+          "ssb_items_published": 17401,
+          "ssb_items_drained": 17342,
+          "recovery_items": 4036,
+          "recovery_failed": 0,
+          "table_rescan_pending": 1,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 0,
+          "alloc_since_trigger": 4621344,
+          "trigger_bytes": 393216,
+          "hard_bytes": 786432,
+          "sweep_owner_runs": 18,
+          "sweep_owner_arenas": 13,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 0
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [
+            {
+              "address": "0x7ffff7c93928",
+              "owner": "0x7ffff7c92d00",
+              "n": 59,
+              "top_objects": [
+                [
+                  "0x7ffff7a5b9d0",
+                  28
+                ],
+                [
+                  "0x7ffff460ccc0",
+                  8
+                ],
+                [
+                  "0x7ffff460cd30",
+                  8
+                ],
+                [
+                  "0x7ffff460cda0",
+                  8
+                ]
+              ]
+            }
+          ],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 3,
+            "actor_id": 3,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 4,
+            "actor_id": 4,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 2,
+            "actor_id": 2,
+            "cur_L": "0x7ffff7a5cb70",
+            "thread_L": "0x7ffff7a5cb70",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 1,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 1024,
+            "private_ssb_top": [
+              [
+                "0x7ffff7a5b9d0",
+                541
+              ],
+              [
+                "0x7ffff460ce10",
+                8
+              ],
+              [
+                "0x7ffff460ce80",
+                8
+              ],
+              [
+                "0x7ffff460cef0",
+                8
+              ]
+            ],
+            "pending_root": "0x7ffff43c2760",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 91,
+              "owned1": 1,
+              "needsweep0": 18,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      },
+      {
+        "input": "gdb-v7-0-1-2/04-automatic_check-298.json",
+        "sha256": "1fef6f4e940bed7de854a3d66ba788806d78d6b6fd6850a1c5a1548b41914738",
+        "where": "automatic_check",
+        "tick": 298,
+        "gc2": {
+          "phase": 3,
+          "cycle": 6,
+          "sweep_to_idle": 5,
+          "cycle_leader": 0,
+          "sweep_root_scanned": 1,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x7ffff7c90190",
+          "sweep_bridge_ready": 0,
+          "worker_active": 1,
+          "worker_runs": 3592,
+          "worker_async_progress": 181833,
+          "worker_parks": 1109473,
+          "worker_busy_retries": 1507689,
+          "deferred_epoch": 0,
+          "hs_epoch": 353,
+          "hs_pending": 1,
+          "hs_actions": 32,
+          "grey_top": 5553,
+          "grey_bottom": 5553,
+          "ssb_published": 586,
+          "ssb_drained": 585,
+          "ssb_items_published": 49607,
+          "ssb_items_drained": 49412,
+          "recovery_items": 4028,
+          "recovery_failed": 0,
+          "table_rescan_pending": 1,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 0,
+          "alloc_since_trigger": 13992992,
+          "trigger_bytes": 393216,
+          "hard_bytes": 786432,
+          "sweep_owner_runs": 18,
+          "sweep_owner_arenas": 13,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 0
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [
+            {
+              "address": "0x7ffff7c93928",
+              "owner": "0x7ffff7c92d00",
+              "n": 195,
+              "top_objects": [
+                [
+                  "0x7ffff7a5b9d0",
+                  100
+                ],
+                [
+                  "0x7fffe5863720",
+                  8
+                ],
+                [
+                  "0x7fffe5863790",
+                  8
+                ],
+                [
+                  "0x7fffe5863800",
+                  8
+                ]
+              ]
+            }
+          ],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 3,
+            "actor_id": 3,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 4,
+            "actor_id": 4,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 2,
+            "actor_id": 2,
+            "cur_L": "0x7ffff7a5cb70",
+            "thread_L": "0x7ffff7a5cb70",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 1,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 1024,
+            "private_ssb_top": [
+              [
+                "0x7ffff7a5b9d0",
+                541
+              ],
+              [
+                "0x7fffe5863bf0",
+                8
+              ],
+              [
+                "0x7fffe5863c60",
+                8
+              ],
+              [
+                "0x7fffe5863cd0",
+                8
+              ]
+            ],
+            "pending_root": "0x7fffe5666b30",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 272,
+              "owned1": 1,
+              "needsweep0": 18,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      },
+      {
+        "input": "gdb-v7-0-1-2/05-automatic_check-496.json",
+        "sha256": "1f563121d86a8068a7c4255237aa874ab956f6fa09677094de87701703ee524a",
+        "where": "automatic_check",
+        "tick": 496,
+        "gc2": {
+          "phase": 3,
+          "cycle": 6,
+          "sweep_to_idle": 5,
+          "cycle_leader": 0,
+          "sweep_root_scanned": 1,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x7ffff7c90190",
+          "sweep_bridge_ready": 0,
+          "worker_active": 1,
+          "worker_runs": 5923,
+          "worker_async_progress": 302804,
+          "worker_parks": 1799346,
+          "worker_busy_retries": 2465283,
+          "deferred_epoch": 0,
+          "hs_epoch": 528,
+          "hs_pending": 1,
+          "hs_actions": 32,
+          "grey_top": 9197,
+          "grey_bottom": 9197,
+          "ssb_published": 954,
+          "ssb_drained": 953,
+          "ssb_items_published": 82085,
+          "ssb_items_drained": 81754,
+          "recovery_items": 4020,
+          "recovery_failed": 0,
+          "table_rescan_pending": 1,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 0,
+          "alloc_since_trigger": 23364640,
+          "trigger_bytes": 393216,
+          "hard_bytes": 786432,
+          "sweep_owner_runs": 18,
+          "sweep_owner_arenas": 13,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 0
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [
+            {
+              "address": "0x7ffff7c95940",
+              "owner": "0x7ffff7c92d00",
+              "n": 331,
+              "top_objects": [
+                [
+                  "0x7ffff7a5b9d0",
+                  172
+                ],
+                [
+                  "0x7fffe2b27af0",
+                  8
+                ],
+                [
+                  "0x7fffe2b27b60",
+                  8
+                ],
+                [
+                  "0x7fffe2b27bd0",
+                  8
+                ]
+              ]
+            }
+          ],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 3,
+            "actor_id": 3,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 4,
+            "actor_id": 4,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 2,
+            "actor_id": 2,
+            "cur_L": "0x7ffff7a5cb70",
+            "thread_L": "0x7ffff7a5cb70",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 1,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 1024,
+            "private_ssb_top": [
+              [
+                "0x7ffff7a5b9d0",
+                541
+              ],
+              [
+                "0x7fffe2b28340",
+                8
+              ],
+              [
+                "0x7fffe2b283b0",
+                8
+              ],
+              [
+                "0x7fffe2b28420",
+                8
+              ]
+            ],
+            "pending_root": "0x7fffe292af00",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 453,
+              "owned1": 1,
+              "needsweep0": 18,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      },
+      {
+        "input": "gdb-v7-0-1-2/06-automatic_check-568.json",
+        "sha256": "b45e407998bf37f3809c1bc6d1eaa0d8aa5e7506647cefabc9b0743008ab532c",
+        "where": "automatic_check",
+        "tick": 568,
+        "gc2": {
+          "phase": 3,
+          "cycle": 6,
+          "sweep_to_idle": 5,
+          "cycle_leader": 0,
+          "sweep_root_scanned": 1,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x7ffff7c90190",
+          "sweep_bridge_ready": 0,
+          "worker_active": 1,
+          "worker_runs": 6769,
+          "worker_async_progress": 346620,
+          "worker_parks": 2058677,
+          "worker_busy_retries": 2816635,
+          "deferred_epoch": 0,
+          "hs_epoch": 592,
+          "hs_pending": 1,
+          "hs_actions": 32,
+          "grey_top": 10511,
+          "grey_bottom": 10511,
+          "ssb_published": 1088,
+          "ssb_drained": 1087,
+          "ssb_items_published": 93525,
+          "ssb_items_drained": 93330,
+          "recovery_items": 4028,
+          "recovery_failed": 0,
+          "table_rescan_pending": 1,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 0,
+          "alloc_since_trigger": 26772512,
+          "trigger_bytes": 393216,
+          "hard_bytes": 786432,
+          "sweep_owner_runs": 18,
+          "sweep_owner_arenas": 13,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 0
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [
+            {
+              "address": "0x7ffff7c95940",
+              "owner": "0x7ffff7c92d00",
+              "n": 195,
+              "top_objects": [
+                [
+                  "0x7ffff7a5b9d0",
+                  100
+                ],
+                [
+                  "0x7fffe1aa6c10",
+                  8
+                ],
+                [
+                  "0x7fffe1aa6c80",
+                  8
+                ],
+                [
+                  "0x7fffe1aa6cf0",
+                  8
+                ]
+              ]
+            }
+          ],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 3,
+            "actor_id": 3,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 4,
+            "actor_id": 4,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 2,
+            "actor_id": 2,
+            "cur_L": "0x7ffff7a5cb70",
+            "thread_L": "0x7ffff7a5cb70",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 1,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 1024,
+            "private_ssb_top": [
+              [
+                "0x7ffff7a5b9d0",
+                541
+              ],
+              [
+                "0x7fffe1aa70e0",
+                8
+              ],
+              [
+                "0x7fffe1aa7150",
+                8
+              ],
+              [
+                "0x7fffe1aa71c0",
+                8
+              ]
+            ],
+            "pending_root": "0x7fffe18aa020",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 519,
+              "owned1": 1,
+              "needsweep0": 18,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      },
+      {
+        "input": "gdb-v7-0-1-2/07-automatic_check-569.json",
+        "sha256": "0d7e6c965e12dd566853efcffa3d3ef598877d43e4c92ae7b9bb07232c658d6e",
+        "where": "automatic_check",
+        "tick": 569,
+        "gc2": {
+          "phase": 3,
+          "cycle": 6,
+          "sweep_to_idle": 5,
+          "cycle_leader": 0,
+          "sweep_root_scanned": 1,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x7ffff7c90190",
+          "sweep_bridge_ready": 0,
+          "worker_active": 1,
+          "worker_runs": 6826,
+          "worker_async_progress": 349181,
+          "worker_parks": 2059650,
+          "worker_busy_retries": 2817691,
+          "deferred_epoch": 0,
+          "hs_epoch": 592,
+          "hs_pending": 0,
+          "hs_actions": 32,
+          "grey_top": 10580,
+          "grey_bottom": 10580,
+          "ssb_published": 1091,
+          "ssb_drained": 1090,
+          "ssb_items_published": 94583,
+          "ssb_items_drained": 93889,
+          "recovery_items": 962,
+          "recovery_failed": 0,
+          "table_rescan_pending": 0,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 0,
+          "alloc_since_trigger": 26804128,
+          "trigger_bytes": 393216,
+          "hard_bytes": 786432,
+          "sweep_owner_runs": 18,
+          "sweep_owner_arenas": 13,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 0
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 3,
+            "actor_id": 3,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 4,
+            "actor_id": 4,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 2,
+            "actor_id": 2,
+            "cur_L": "0x7ffff7a5cb70",
+            "thread_L": "0x7ffff7a5cb70",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 1,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 7,
+            "private_ssb_top": [
+              [
+                "0x7ffff7a588e0",
+                4
+              ],
+              [
+                "0x7ffff7a52680",
+                3
+              ]
+            ],
+            "pending_root": "0x7fffe18aa020",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 519,
+              "owned1": 1,
+              "needsweep0": 18,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      },
+      {
+        "input": "gdb-v7-0-1-2/08-native_return-571.json",
+        "sha256": "26645f46bb9c89b2cdbf1d982ab306e93c31b211ee1b23b146877414908a4eb8",
+        "where": "native_return",
+        "tick": 571,
+        "gc2": {
+          "phase": 3,
+          "cycle": 6,
+          "sweep_to_idle": 5,
+          "cycle_leader": 0,
+          "sweep_root_scanned": 1,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x7ffff7c90190",
+          "sweep_bridge_ready": 0,
+          "worker_active": 0,
+          "worker_runs": 6861,
+          "worker_async_progress": 351937,
+          "worker_parks": 2060007,
+          "worker_busy_retries": 2818076,
+          "deferred_epoch": 0,
+          "hs_epoch": 595,
+          "hs_pending": 0,
+          "hs_actions": 32,
+          "grey_top": 10640,
+          "grey_bottom": 10640,
+          "ssb_published": 1096,
+          "ssb_drained": 1096,
+          "ssb_items_published": 94614,
+          "ssb_items_drained": 94614,
+          "recovery_items": 0,
+          "recovery_failed": 0,
+          "table_rescan_pending": 0,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 0,
+          "alloc_since_trigger": 26804128,
+          "trigger_bytes": 393216,
+          "hard_bytes": 786432,
+          "sweep_owner_runs": 18,
+          "sweep_owner_arenas": 13,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 0
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 3,
+            "actor_id": 3,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 4,
+            "actor_id": 4,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 2,
+            "actor_id": 2,
+            "cur_L": "0x7ffff7a5cb70",
+            "thread_L": "0x7ffff7a5cb70",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 1,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x7fffe18aa020",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 519,
+              "owned1": 1,
+              "needsweep0": 18,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      },
+      {
+        "input": "gdb-v7-0-1-2/09-automatic_check-572.json",
+        "sha256": "fedc759a8522aff6324317bcd375ae1c23f43a0f61c6f777df91e9fa0ce4b366",
+        "where": "automatic_check",
+        "tick": 572,
+        "gc2": {
+          "phase": 3,
+          "cycle": 6,
+          "sweep_to_idle": 5,
+          "cycle_leader": 0,
+          "sweep_root_scanned": 1,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x7ffff7c90190",
+          "sweep_bridge_ready": 0,
+          "worker_active": 1,
+          "worker_runs": 6861,
+          "worker_async_progress": 351937,
+          "worker_parks": 2060010,
+          "worker_busy_retries": 2818078,
+          "deferred_epoch": 0,
+          "hs_epoch": 596,
+          "hs_pending": 1,
+          "hs_actions": 32,
+          "grey_top": 10640,
+          "grey_bottom": 10640,
+          "ssb_published": 1096,
+          "ssb_drained": 1096,
+          "ssb_items_published": 94614,
+          "ssb_items_drained": 94614,
+          "recovery_items": 0,
+          "recovery_failed": 0,
+          "table_rescan_pending": 0,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 0,
+          "alloc_since_trigger": 26804128,
+          "trigger_bytes": 393216,
+          "hard_bytes": 786432,
+          "sweep_owner_runs": 18,
+          "sweep_owner_arenas": 13,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 0
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 3,
+            "actor_id": 3,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 4,
+            "actor_id": 4,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 2,
+            "actor_id": 2,
+            "cur_L": "0x7ffff7a5cb70",
+            "thread_L": "0x7ffff7a5cb70",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 1,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 7,
+            "private_ssb_top": [
+              [
+                "0x7ffff7a588e0",
+                4
+              ],
+              [
+                "0x7ffff7a52680",
+                3
+              ]
+            ],
+            "pending_root": "0x7fffe18aa020",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 519,
+              "owned1": 1,
+              "needsweep0": 18,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      },
+      {
+        "input": "gdb-v7-0-1-2/10-native_return-575.json",
+        "sha256": "24d7699c9762debe844246592c817c9abaea788f25d5cac1b5af1ceb365e55d6",
+        "where": "native_return",
+        "tick": 575,
+        "gc2": {
+          "phase": 3,
+          "cycle": 6,
+          "sweep_to_idle": 5,
+          "cycle_leader": 0,
+          "sweep_root_scanned": 1,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x7ffff7c90190",
+          "sweep_bridge_ready": 0,
+          "worker_active": 0,
+          "worker_runs": 6873,
+          "worker_async_progress": 351985,
+          "worker_parks": 2060021,
+          "worker_busy_retries": 2818082,
+          "deferred_epoch": 0,
+          "hs_epoch": 599,
+          "hs_pending": 0,
+          "hs_actions": 32,
+          "grey_top": 10668,
+          "grey_bottom": 10668,
+          "ssb_published": 1104,
+          "ssb_drained": 1104,
+          "ssb_items_published": 94658,
+          "ssb_items_drained": 94658,
+          "recovery_items": 0,
+          "recovery_failed": 0,
+          "table_rescan_pending": 0,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 0,
+          "alloc_since_trigger": 26804128,
+          "trigger_bytes": 393216,
+          "hard_bytes": 786432,
+          "sweep_owner_runs": 18,
+          "sweep_owner_arenas": 13,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 0
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 3,
+            "actor_id": 3,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 4,
+            "actor_id": 4,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 2,
+            "actor_id": 2,
+            "cur_L": "0x7ffff7a5cb70",
+            "thread_L": "0x7ffff7a5cb70",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 1,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x7fffe18aa020",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 519,
+              "owned1": 1,
+              "needsweep0": 18,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      },
+      {
+        "input": "gdb-v7-0-1-2/11-automatic_check-576.json",
+        "sha256": "ebea2552142360ab47992b48fcb4c16554b6cf1866f32cf53486820c9017a68c",
+        "where": "automatic_check",
+        "tick": 576,
+        "gc2": {
+          "phase": 3,
+          "cycle": 6,
+          "sweep_to_idle": 5,
+          "cycle_leader": 0,
+          "sweep_root_scanned": 1,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x7ffff7c90190",
+          "sweep_bridge_ready": 0,
+          "worker_active": 1,
+          "worker_runs": 6873,
+          "worker_async_progress": 351985,
+          "worker_parks": 2060024,
+          "worker_busy_retries": 2818083,
+          "deferred_epoch": 0,
+          "hs_epoch": 600,
+          "hs_pending": 1,
+          "hs_actions": 32,
+          "grey_top": 10668,
+          "grey_bottom": 10668,
+          "ssb_published": 1104,
+          "ssb_drained": 1104,
+          "ssb_items_published": 94658,
+          "ssb_items_drained": 94658,
+          "recovery_items": 0,
+          "recovery_failed": 0,
+          "table_rescan_pending": 0,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 0,
+          "alloc_since_trigger": 26804128,
+          "trigger_bytes": 393216,
+          "hard_bytes": 786432,
+          "sweep_owner_runs": 18,
+          "sweep_owner_arenas": 13,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 0
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 3,
+            "actor_id": 3,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 4,
+            "actor_id": 4,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 2,
+            "actor_id": 2,
+            "cur_L": "0x7ffff7a5cb70",
+            "thread_L": "0x7ffff7a5cb70",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 1,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 7,
+            "private_ssb_top": [
+              [
+                "0x7ffff7a588e0",
+                4
+              ],
+              [
+                "0x7ffff7a52680",
+                3
+              ]
+            ],
+            "pending_root": "0x7fffe18aa020",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 519,
+              "owned1": 1,
+              "needsweep0": 18,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      },
+      {
+        "input": "gdb-v7-0-1-2/12-automatic_progress_missing-576.json",
+        "sha256": "c0f77e9c171972066f581576ccc0af42721c7d74f4bac679a59bb7bfce88fbb6",
+        "where": "automatic_progress_missing",
+        "tick": 576,
+        "gc2": {
+          "phase": 3,
+          "cycle": 6,
+          "sweep_to_idle": 5,
+          "cycle_leader": 0,
+          "sweep_root_scanned": 1,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x7ffff7c90190",
+          "sweep_bridge_ready": 0,
+          "worker_active": 0,
+          "worker_runs": 6877,
+          "worker_async_progress": 351993,
+          "worker_parks": 2060026,
+          "worker_busy_retries": 2818083,
+          "deferred_epoch": 4,
+          "hs_epoch": 600,
+          "hs_pending": 0,
+          "hs_actions": 32,
+          "grey_top": 10675,
+          "grey_bottom": 10676,
+          "ssb_published": 1106,
+          "ssb_drained": 1105,
+          "ssb_items_published": 94668,
+          "ssb_items_drained": 94667,
+          "recovery_items": 0,
+          "recovery_failed": 0,
+          "table_rescan_pending": 1,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 36,
+          "alloc_since_trigger": 26804128,
+          "trigger_bytes": 393216,
+          "hard_bytes": 786432,
+          "sweep_owner_runs": 18,
+          "sweep_owner_arenas": 13,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 0
+        },
+        "grey": [
+          "0x7ffff7a58950"
+        ],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [],
+          "ssb_drain": [
+            {
+              "address": "0x5555556e92c8",
+              "owner": "0x5555556e86a0",
+              "n": 1,
+              "top_objects": [
+                [
+                  "0x7ffff7a52680",
+                  1
+                ]
+              ]
+            }
+          ]
+        },
+        "tgs": [
+          {
+            "tid": 3,
+            "actor_id": 3,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 1,
+            "private_ssb_top": [
+              [
+                "0x7ffff7a58950",
+                1
+              ]
+            ],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 4,
+            "actor_id": 4,
+            "cur_L": "0x0",
+            "thread_L": "0x0",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 1,
+            "private_ssb_top": [
+              [
+                "0x7ffff7a58950",
+                1
+              ]
+            ],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 0,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 2,
+            "actor_id": 2,
+            "cur_L": "0x7ffff7a5cb70",
+            "thread_L": "0x7ffff7a5cb70",
+            "native": 1,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 142,
+            "private_ssb_top": [
+              [
+                "0x7ffff7a58950",
+                97
+              ],
+              [
+                "0x7ffff7a52680",
+                9
+              ],
+              [
+                "0x7ffff7a53300",
+                8
+              ],
+              [
+                "0x7ffff7a5b2f0",
+                8
+              ]
+            ],
+            "pending_root": "0x0",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 1,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          },
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 141,
+            "private_ssb_top": [
+              [
+                "0x7ffff7a58950",
+                98
+              ],
+              [
+                "0x7ffff7a53300",
+                8
+              ],
+              [
+                "0x7ffff7a5b2f0",
+                8
+              ],
+              [
+                "0x7ffff7a526d0",
+                6
+              ]
+            ],
+            "pending_root": "0x7fffe18aa020",
+            "prepare_epoch": 6,
+            "arena_counts": {
+              "owned0": 519,
+              "owned1": 1,
+              "needsweep0": 18,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 0,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      },
+      {
+        "input": "gdb-v7-0-1-2/13-sole_main_recovered-576.json",
+        "sha256": "0aa39b9d8cf475e8137890dd95425582ee2329a436edc0babf6edef3d73aa005",
+        "where": "sole_main_recovered",
+        "tick": 576,
+        "gc2": {
+          "phase": 0,
+          "cycle": 8,
+          "sweep_to_idle": 8,
+          "cycle_leader": 0,
+          "sweep_root_scanned": 0,
+          "sweep_root_done": 0,
+          "sweep_root_cursor": "0x0",
+          "sweep_bridge_ready": 1,
+          "worker_active": 0,
+          "worker_runs": 9160,
+          "worker_async_progress": 351993,
+          "worker_parks": 2060026,
+          "worker_busy_retries": 2818087,
+          "deferred_epoch": 4,
+          "hs_epoch": 2712,
+          "hs_pending": 0,
+          "hs_actions": 10,
+          "grey_top": 10693,
+          "grey_bottom": 10693,
+          "ssb_published": 1122,
+          "ssb_drained": 1122,
+          "ssb_items_published": 95160,
+          "ssb_items_drained": 95160,
+          "recovery_items": 0,
+          "recovery_failed": 0,
+          "table_rescan_pending": 0,
+          "thread_scan_needscan_pending": 0,
+          "marks_this_round": 2,
+          "alloc_since_trigger": 0,
+          "trigger_bytes": 393216,
+          "hard_bytes": 786432,
+          "sweep_owner_runs": 589,
+          "sweep_owner_arenas": 570,
+          "smr_readers": 0,
+          "smr_reclaiming": 0,
+          "weak_drain_active": 0,
+          "weak_write_active": 0,
+          "finalizer_active": 0,
+          "finalizer_owner_actor": 0,
+          "finalizer_mpsc": "0x0",
+          "finalizer_spawn_latch": 0,
+          "jit_phase_gate": 1
+        },
+        "grey": [],
+        "all_threads_stopped": true,
+        "ssb": {
+          "ssb_head": [],
+          "ssb_drain": []
+        },
+        "tgs": [
+          {
+            "tid": 1,
+            "actor_id": 1,
+            "cur_L": "0x7ffff7c90080",
+            "thread_L": "0x7ffff7c90080",
+            "native": 0,
+            "reader_depths": [
+              0,
+              0,
+              0
+            ],
+            "private_ssb_count": 0,
+            "private_ssb_top": [],
+            "pending_root": "0x0",
+            "prepare_epoch": 8,
+            "arena_counts": {
+              "owned0": 0,
+              "owned1": 2,
+              "needsweep0": 0,
+              "needsweep1": 0,
+              "quarantine0": 0,
+              "quarantine1": 0,
+              "reclaimed0": 2,
+              "reclaimed1": 0
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "exact_native_frontier": {
+    "0-0-2": {
+      "input": "gdb-v7-0-0-2/10-native_return-575.json",
+      "sha256": "016f7a5bec8a89856753a9931453cc0f8f1ffa82597a8f281e104c4645edd0c4",
+      "root_chains": {
+        "global": {
+          "start": "0x7ffff5c43790",
+          "end": "0x0",
+          "count": 19241,
+          "cycle": false,
+          "bound_exhausted": false,
+          "histogram": {
+            "11,block:1,mark:1,root:3,lifetime:1,ready:1,sweep:0": 2304,
+            "11,block:1,mark:0,root:3,lifetime:1,ready:1,sweep:0": 16700,
+            "5,block:1,mark:1,root:3,lifetime:1,ready:1,sweep:0": 11,
+            "8,block:1,mark:1,root:3,lifetime:1,ready:1,sweep:0": 203,
+            "7,block:1,mark:1,root:3,lifetime:1,ready:1,sweep:0": 14,
+            "12,block:1,mark:1,root:3,lifetime:1,ready:1,sweep:0": 7,
+            "6,embedded_thread:1": 2
+          },
+          "arenas": {
+            "0x7ffff5c40000": 40,
+            "0x7ffff5c80000": 497,
+            "0x7ffff5cc0000": 497,
+            "0x7ffff5d00000": 497,
+            "0x7ffff5d40000": 497,
+            "0x7ffff6770000": 497,
+            "0x7ffff65f0000": 18,
+            "0x7ffff5d80000": 497,
+            "0x7ffff7a50000": 296,
+            "0x7ffff5dc0000": 497,
+            "0x7ffff5e00000": 497,
+            "0x7ffff5e40000": 497,
+            "0x7ffff5e80000": 497,
+            "0x7ffff5ec0000": 497,
+            "0x7ffff5f00000": 497,
+            "0x7ffff5f40000": 497,
+            "0x7ffff5f80000": 497,
+            "0x7ffff5fc0000": 497,
+            "0x7ffff6000000": 497,
+            "0x7ffff6040000": 497,
+            "0x7ffff6080000": 497,
+            "0x7ffff60c0000": 497,
+            "0x7ffff6100000": 497,
+            "0x7ffff6140000": 497,
+            "0x7ffff6180000": 497,
+            "0x7ffff61c0000": 497,
+            "0x7ffff6200000": 497,
+            "0x7ffff6240000": 497,
+            "0x7ffff6280000": 497,
+            "0x7ffff62c0000": 497,
+            "0x7ffff6300000": 497,
+            "0x7ffff6340000": 497,
+            "0x7ffff6380000": 497,
+            "0x7ffff63c0000": 497,
+            "0x7ffff6400000": 497,
+            "0x7ffff6440000": 497,
+            "0x7ffff6480000": 497,
+            "0x7ffff64c0000": 497,
+            "0x7ffff6500000": 497,
+            "0x7ffff6540000": 497,
+            "0x7ffff6580000": 497,
+            "0x7ffff7c90000": 1
+          },
+          "ordered_address_sha256": "1c2981bbfd8ab2d31f778059e8795b412a72b2cfbf572c0748f379a4fd99f1d1",
+          "first": [
+            {
+              "address": "0x7ffff5c43790",
+              "next": "0x7ffff5c43720",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 1,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7ffff5c43720",
+              "next": "0x7ffff5c436b0",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 1,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7ffff5c436b0",
+              "next": "0x7ffff5c43640",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 1,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7ffff5c43640",
+              "next": "0x7ffff5c435d0",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 1,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7ffff5c435d0",
+              "next": "0x7ffff5c43560",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 1,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7ffff5c43560",
+              "next": "0x7ffff5c434f0",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 1,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7ffff5c434f0",
+              "next": "0x7ffff5c43480",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 1,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7ffff5c43480",
+              "next": "0x7ffff5c43410",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 1,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            }
+          ],
+          "last": {
+            "address": "0x7ffff7a53040",
+            "next": "0x0",
+            "gct": 6,
+            "planes": {
+              "embedded_thread": 1
+            }
+          },
+          "error": null
+        },
+        "tid2-gcroot_pending": {
+          "start": "0x0",
+          "end": "0x0",
+          "count": 0,
+          "cycle": false,
+          "bound_exhausted": false,
+          "histogram": {},
+          "arenas": {},
+          "ordered_address_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "first": [],
+          "last": null,
+          "error": null
+        },
+        "tid2-gcroot_pending_after_main": {
+          "start": "0x0",
+          "end": "0x0",
+          "count": 0,
+          "cycle": false,
+          "bound_exhausted": false,
+          "histogram": {},
+          "arenas": {},
+          "ordered_address_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "first": [],
+          "last": null,
+          "error": null
+        },
+        "tid3-gcroot_pending": {
+          "start": "0x0",
+          "end": "0x0",
+          "count": 0,
+          "cycle": false,
+          "bound_exhausted": false,
+          "histogram": {},
+          "arenas": {},
+          "ordered_address_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "first": [],
+          "last": null,
+          "error": null
+        },
+        "tid3-gcroot_pending_after_main": {
+          "start": "0x0",
+          "end": "0x0",
+          "count": 0,
+          "cycle": false,
+          "bound_exhausted": false,
+          "histogram": {},
+          "arenas": {},
+          "ordered_address_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "first": [],
+          "last": null,
+          "error": null
+        },
+        "tid1-gcroot_pending": {
+          "start": "0x7fffe61a5b70",
+          "end": "0x0",
+          "count": 241664,
+          "cycle": false,
+          "bound_exhausted": false,
+          "histogram": {
+            "11,block:1,mark:1,root:3,lifetime:1,ready:1,sweep:0": 241664
+          },
+          "arenas": {
+            "0x7fffe61a0000": 122,
+            "0x7fffe61e0000": 497,
+            "0x7fffe6220000": 497,
+            "0x7fffe6260000": 497,
+            "0x7fffe62a0000": 497,
+            "0x7fffe62e0000": 497,
+            "0x7fffe6320000": 497,
+            "0x7fffe6360000": 497,
+            "0x7fffe63a0000": 497,
+            "0x7fffe63e0000": 497,
+            "0x7fffe6420000": 497,
+            "0x7fffe6460000": 497,
+            "0x7fffe64a0000": 497,
+            "0x7fffe64e0000": 497,
+            "0x7fffe6520000": 497,
+            "0x7fffe6560000": 497,
+            "0x7fffe65a0000": 497,
+            "0x7fffe65e0000": 497,
+            "0x7fffe6620000": 497,
+            "0x7fffe6660000": 497,
+            "0x7fffe66a0000": 497,
+            "0x7fffe66e0000": 497,
+            "0x7fffe6720000": 497,
+            "0x7fffe6760000": 497,
+            "0x7fffe67a0000": 497,
+            "0x7fffe67e0000": 497,
+            "0x7fffe6820000": 497,
+            "0x7fffe6860000": 497,
+            "0x7fffe68a0000": 497,
+            "0x7fffe68e0000": 497,
+            "0x7fffe6920000": 497,
+            "0x7fffe6960000": 497,
+            "0x7fffe69a0000": 497,
+            "0x7fffe69e0000": 497,
+            "0x7fffe6a20000": 497,
+            "0x7fffe6a60000": 497,
+            "0x7fffe6aa0000": 497,
+            "0x7fffe6ae0000": 497,
+            "0x7fffe6b20000": 497,
+            "0x7fffe6b60000": 497,
+            "0x7fffe6ba0000": 497,
+            "0x7fffe6be0000": 497,
+            "0x7fffe6c20000": 497,
+            "0x7fffe6c60000": 497,
+            "0x7fffe6ca0000": 497,
+            "0x7fffe6ce0000": 497,
+            "0x7fffe6d20000": 497,
+            "0x7fffe6d60000": 497,
+            "0x7fffe6da0000": 497,
+            "0x7fffe6de0000": 497,
+            "0x7fffe6e20000": 497,
+            "0x7fffe6e60000": 497,
+            "0x7fffe6ea0000": 497,
+            "0x7fffe6ee0000": 497,
+            "0x7fffe6f20000": 497,
+            "0x7fffe6f60000": 497,
+            "0x7fffe6fa0000": 497,
+            "0x7fffe6fe0000": 497,
+            "0x7fffe7020000": 497,
+            "0x7fffe7060000": 497,
+            "0x7fffe70a0000": 497,
+            "0x7fffe70e0000": 497,
+            "0x7fffe7120000": 497,
+            "0x7fffe7160000": 497,
+            "0x7fffe71a0000": 497,
+            "0x7fffe71e0000": 497,
+            "0x7fffe7220000": 497,
+            "0x7fffe7260000": 497,
+            "0x7fffe72a0000": 497,
+            "0x7fffe72e0000": 497,
+            "0x7fffe7320000": 497,
+            "0x7fffe7360000": 497,
+            "0x7fffe73a0000": 497,
+            "0x7fffe73e0000": 497,
+            "0x7fffe7420000": 497,
+            "0x7fffe7460000": 497,
+            "0x7fffe74a0000": 497,
+            "0x7fffe74e0000": 497,
+            "0x7fffe7520000": 497,
+            "0x7fffe7560000": 497,
+            "0x7fffe75a0000": 497,
+            "0x7fffe75e0000": 497,
+            "0x7fffe7620000": 497,
+            "0x7fffe7660000": 497,
+            "0x7fffe76a0000": 497,
+            "0x7fffe76e0000": 497,
+            "0x7fffe7720000": 497,
+            "0x7fffe7760000": 497,
+            "0x7fffe77a0000": 497,
+            "0x7fffe77e0000": 497,
+            "0x7fffe7820000": 497,
+            "0x7fffe7860000": 497,
+            "0x7fffe78a0000": 497,
+            "0x7fffe78e0000": 497,
+            "0x7fffe7920000": 497,
+            "0x7fffe7960000": 497,
+            "0x7fffe79a0000": 497,
+            "0x7fffe79e0000": 497,
+            "0x7fffe7a20000": 497,
+            "0x7fffe7a60000": 497,
+            "0x7fffe7aa0000": 497,
+            "0x7fffe7ae0000": 497,
+            "0x7fffe7b20000": 497,
+            "0x7fffe7b60000": 497,
+            "0x7fffe7ba0000": 497,
+            "0x7fffe7be0000": 497,
+            "0x7fffe7c20000": 497,
+            "0x7fffe7c60000": 497,
+            "0x7fffe7ca0000": 497,
+            "0x7fffe7ce0000": 497,
+            "0x7fffe7d20000": 497,
+            "0x7fffe7d60000": 497,
+            "0x7fffe7da0000": 497,
+            "0x7fffe7de0000": 497,
+            "0x7fffe7e20000": 497,
+            "0x7fffe7e60000": 497,
+            "0x7fffe7ea0000": 497,
+            "0x7fffe7ee0000": 497,
+            "0x7fffe7f20000": 497,
+            "0x7fffe7f60000": 497,
+            "0x7fffe7fa0000": 497,
+            "0x7fffec000000": 497,
+            "0x7fffec020000": 497,
+            "0x7fffec060000": 497,
+            "0x7fffec0a0000": 497,
+            "0x7fffec0e0000": 497,
+            "0x7fffec120000": 497,
+            "0x7fffec160000": 497,
+            "0x7fffec1a0000": 497,
+            "0x7fffec1e0000": 497,
+            "0x7fffec220000": 497,
+            "0x7fffec260000": 497,
+            "0x7fffec2a0000": 497,
+            "0x7fffec2e0000": 497,
+            "0x7fffec320000": 497,
+            "0x7fffec360000": 497,
+            "0x7fffec3a0000": 497,
+            "0x7fffec3e0000": 497,
+            "0x7fffec420000": 497,
+            "0x7fffec460000": 497,
+            "0x7fffec4a0000": 497,
+            "0x7fffec4e0000": 497,
+            "0x7fffec520000": 497,
+            "0x7fffec560000": 497,
+            "0x7fffec5a0000": 497,
+            "0x7fffec5e0000": 497,
+            "0x7fffec620000": 497,
+            "0x7fffec660000": 497,
+            "0x7fffec6a0000": 497,
+            "0x7fffec6e0000": 497,
+            "0x7fffec720000": 497,
+            "0x7fffec760000": 497,
+            "0x7fffec7a0000": 497,
+            "0x7fffec7e0000": 497,
+            "0x7fffec820000": 497,
+            "0x7fffec860000": 497,
+            "0x7fffec8a0000": 497,
+            "0x7fffec8e0000": 497,
+            "0x7fffec920000": 497,
+            "0x7fffec960000": 497,
+            "0x7fffec9a0000": 497,
+            "0x7fffec9e0000": 497,
+            "0x7fffeca20000": 497,
+            "0x7fffeca60000": 497,
+            "0x7fffecaa0000": 497,
+            "0x7fffecae0000": 497,
+            "0x7fffecb20000": 497,
+            "0x7fffecb60000": 497,
+            "0x7fffecba0000": 497,
+            "0x7fffecbe0000": 497,
+            "0x7fffecc20000": 497,
+            "0x7fffecc60000": 497,
+            "0x7fffecca0000": 497,
+            "0x7fffecce0000": 497,
+            "0x7fffecd20000": 497,
+            "0x7fffecd60000": 497,
+            "0x7fffecda0000": 497,
+            "0x7fffecde0000": 497,
+            "0x7fffece20000": 497,
+            "0x7fffece60000": 497,
+            "0x7fffecea0000": 497,
+            "0x7fffecee0000": 497,
+            "0x7fffecf20000": 497,
+            "0x7fffecf60000": 497,
+            "0x7fffecfa0000": 497,
+            "0x7fffecfe0000": 497,
+            "0x7fffed020000": 497,
+            "0x7fffed060000": 497,
+            "0x7fffed0a0000": 497,
+            "0x7fffed0e0000": 497,
+            "0x7fffed120000": 497,
+            "0x7fffed160000": 497,
+            "0x7fffed1a0000": 497,
+            "0x7fffed1e0000": 497,
+            "0x7fffed220000": 497,
+            "0x7fffed260000": 497,
+            "0x7fffed2a0000": 497,
+            "0x7fffed2e0000": 497,
+            "0x7fffed320000": 497,
+            "0x7fffed360000": 497,
+            "0x7fffed3a0000": 497,
+            "0x7fffed3e0000": 497,
+            "0x7fffed420000": 497,
+            "0x7fffed460000": 497,
+            "0x7fffed4a0000": 497,
+            "0x7fffed4e0000": 497,
+            "0x7fffed520000": 497,
+            "0x7fffed560000": 497,
+            "0x7fffed5a0000": 497,
+            "0x7fffed5e0000": 497,
+            "0x7fffed620000": 497,
+            "0x7fffed660000": 497,
+            "0x7fffed6a0000": 497,
+            "0x7fffed6e0000": 497,
+            "0x7fffed720000": 497,
+            "0x7fffed760000": 497,
+            "0x7fffed7a0000": 497,
+            "0x7fffed7e0000": 497,
+            "0x7fffed820000": 497,
+            "0x7fffed860000": 497,
+            "0x7fffed8a0000": 497,
+            "0x7fffed8e0000": 497,
+            "0x7fffed920000": 497,
+            "0x7fffed960000": 497,
+            "0x7fffed9a0000": 497,
+            "0x7fffed9e0000": 497,
+            "0x7fffeda20000": 497,
+            "0x7fffeda60000": 497,
+            "0x7fffedaa0000": 497,
+            "0x7fffedae0000": 497,
+            "0x7fffedb20000": 497,
+            "0x7fffedb60000": 497,
+            "0x7fffedba0000": 497,
+            "0x7fffedbe0000": 497,
+            "0x7fffedc20000": 497,
+            "0x7fffedc60000": 497,
+            "0x7fffedca0000": 497,
+            "0x7fffedce0000": 497,
+            "0x7fffedd20000": 497,
+            "0x7fffedd60000": 497,
+            "0x7fffedda0000": 497,
+            "0x7fffedde0000": 497,
+            "0x7fffede20000": 497,
+            "0x7fffede60000": 497,
+            "0x7fffedea0000": 497,
+            "0x7fffedee0000": 497,
+            "0x7fffedf20000": 497,
+            "0x7fffedf60000": 497,
+            "0x7fffedfa0000": 497,
+            "0x7fffedfe0000": 497,
+            "0x7fffee020000": 497,
+            "0x7fffee060000": 497,
+            "0x7fffee0a0000": 497,
+            "0x7fffee0e0000": 497,
+            "0x7fffee120000": 497,
+            "0x7fffee160000": 497,
+            "0x7fffee1a0000": 497,
+            "0x7fffee1e0000": 497,
+            "0x7fffee220000": 497,
+            "0x7fffee260000": 497,
+            "0x7fffee2a0000": 497,
+            "0x7fffee2e0000": 497,
+            "0x7fffee320000": 497,
+            "0x7fffee360000": 497,
+            "0x7fffee3a0000": 497,
+            "0x7fffee3e0000": 497,
+            "0x7fffee420000": 497,
+            "0x7fffee460000": 497,
+            "0x7fffee4a0000": 497,
+            "0x7fffee4e0000": 497,
+            "0x7fffee520000": 497,
+            "0x7fffee560000": 497,
+            "0x7fffee5a0000": 497,
+            "0x7fffee5e0000": 497,
+            "0x7fffee620000": 497,
+            "0x7fffee660000": 497,
+            "0x7fffee6a0000": 497,
+            "0x7fffee6e0000": 497,
+            "0x7fffee720000": 497,
+            "0x7fffee760000": 497,
+            "0x7fffee7a0000": 497,
+            "0x7fffee7e0000": 497,
+            "0x7fffee820000": 497,
+            "0x7fffee860000": 497,
+            "0x7fffee8a0000": 497,
+            "0x7fffee8e0000": 497,
+            "0x7fffee920000": 497,
+            "0x7fffee960000": 497,
+            "0x7fffee9a0000": 497,
+            "0x7fffee9e0000": 497,
+            "0x7fffeea20000": 497,
+            "0x7fffeea60000": 497,
+            "0x7fffeeaa0000": 497,
+            "0x7fffeeae0000": 497,
+            "0x7fffeeb20000": 497,
+            "0x7fffeeb60000": 497,
+            "0x7fffeeba0000": 497,
+            "0x7fffeebe0000": 497,
+            "0x7fffeec20000": 497,
+            "0x7fffeec60000": 497,
+            "0x7fffeeca0000": 497,
+            "0x7fffeece0000": 497,
+            "0x7fffeed20000": 497,
+            "0x7fffeed60000": 497,
+            "0x7fffeeda0000": 497,
+            "0x7fffeede0000": 497,
+            "0x7fffeee20000": 497,
+            "0x7fffeee60000": 497,
+            "0x7fffeeea0000": 497,
+            "0x7fffeeee0000": 497,
+            "0x7fffeef20000": 497,
+            "0x7fffeef60000": 497,
+            "0x7fffeefa0000": 497,
+            "0x7fffeefe0000": 497,
+            "0x7fffef020000": 497,
+            "0x7fffef060000": 497,
+            "0x7fffef0a0000": 497,
+            "0x7fffef0e0000": 497,
+            "0x7fffef120000": 497,
+            "0x7fffef160000": 497,
+            "0x7fffef1a0000": 497,
+            "0x7fffef1e0000": 497,
+            "0x7fffef220000": 497,
+            "0x7fffef260000": 497,
+            "0x7fffef2a0000": 497,
+            "0x7fffef2e0000": 497,
+            "0x7fffef320000": 497,
+            "0x7fffef360000": 497,
+            "0x7fffef3a0000": 497,
+            "0x7fffef3e0000": 497,
+            "0x7fffef420000": 497,
+            "0x7fffef460000": 497,
+            "0x7fffef4a0000": 497,
+            "0x7fffef4e0000": 497,
+            "0x7fffef520000": 497,
+            "0x7fffef560000": 497,
+            "0x7fffef5a0000": 497,
+            "0x7fffef5e0000": 497,
+            "0x7fffef620000": 497,
+            "0x7fffef660000": 497,
+            "0x7fffef6a0000": 497,
+            "0x7fffef6e0000": 497,
+            "0x7fffef720000": 497,
+            "0x7fffef760000": 497,
+            "0x7fffef7a0000": 497,
+            "0x7fffef7e0000": 497,
+            "0x7fffef820000": 497,
+            "0x7fffef860000": 497,
+            "0x7fffef8a0000": 497,
+            "0x7fffef8e0000": 497,
+            "0x7fffef920000": 497,
+            "0x7fffef960000": 497,
+            "0x7fffef9a0000": 497,
+            "0x7fffef9e0000": 497,
+            "0x7fffefa20000": 497,
+            "0x7fffefa60000": 497,
+            "0x7fffefaa0000": 497,
+            "0x7fffefae0000": 497,
+            "0x7fffefb20000": 497,
+            "0x7fffefb60000": 497,
+            "0x7fffefba0000": 497,
+            "0x7fffefbe0000": 497,
+            "0x7fffefc20000": 497,
+            "0x7fffefc60000": 497,
+            "0x7fffefca0000": 497,
+            "0x7fffefce0000": 497,
+            "0x7fffefd20000": 497,
+            "0x7fffefd60000": 497,
+            "0x7fffefda0000": 497,
+            "0x7fffefde0000": 497,
+            "0x7fffefe20000": 497,
+            "0x7fffefe60000": 497,
+            "0x7fffefea0000": 497,
+            "0x7fffefee0000": 497,
+            "0x7fffeff20000": 497,
+            "0x7fffeff60000": 497,
+            "0x7fffeffa0000": 497,
+            "0x7fffeffe0000": 497,
+            "0x7ffff4040000": 497,
+            "0x7ffff4080000": 497,
+            "0x7ffff40c0000": 497,
+            "0x7ffff4100000": 497,
+            "0x7ffff4140000": 497,
+            "0x7ffff4180000": 497,
+            "0x7ffff41c0000": 497,
+            "0x7ffff4200000": 497,
+            "0x7ffff4240000": 497,
+            "0x7ffff4280000": 497,
+            "0x7ffff42c0000": 497,
+            "0x7ffff4300000": 497,
+            "0x7ffff4340000": 497,
+            "0x7ffff4380000": 497,
+            "0x7ffff43c0000": 497,
+            "0x7ffff4400000": 497,
+            "0x7ffff4440000": 497,
+            "0x7ffff4480000": 497,
+            "0x7ffff44c0000": 497,
+            "0x7ffff4500000": 497,
+            "0x7ffff4540000": 497,
+            "0x7ffff4580000": 497,
+            "0x7ffff45c0000": 497,
+            "0x7ffff4600000": 497,
+            "0x7ffff4640000": 497,
+            "0x7ffff4680000": 497,
+            "0x7ffff46c0000": 497,
+            "0x7ffff4700000": 497,
+            "0x7ffff4740000": 497,
+            "0x7ffff4780000": 497,
+            "0x7ffff47c0000": 497,
+            "0x7ffff4800000": 497,
+            "0x7ffff4840000": 497,
+            "0x7ffff4880000": 497,
+            "0x7ffff48c0000": 497,
+            "0x7ffff4900000": 497,
+            "0x7ffff4940000": 497,
+            "0x7ffff4980000": 497,
+            "0x7ffff49c0000": 497,
+            "0x7ffff4a00000": 497,
+            "0x7ffff4a40000": 497,
+            "0x7ffff4a80000": 497,
+            "0x7ffff4ac0000": 497,
+            "0x7ffff4b00000": 497,
+            "0x7ffff4b40000": 497,
+            "0x7ffff4b80000": 497,
+            "0x7ffff4bc0000": 497,
+            "0x7ffff4c00000": 497,
+            "0x7ffff4c40000": 497,
+            "0x7ffff4c80000": 497,
+            "0x7ffff4cc0000": 497,
+            "0x7ffff4d00000": 497,
+            "0x7ffff4d40000": 497,
+            "0x7ffff4d80000": 497,
+            "0x7ffff4dc0000": 497,
+            "0x7ffff4e00000": 497,
+            "0x7ffff4e40000": 497,
+            "0x7ffff4e80000": 497,
+            "0x7ffff4ec0000": 497,
+            "0x7ffff4f00000": 497,
+            "0x7ffff4f40000": 497,
+            "0x7ffff4f80000": 497,
+            "0x7ffff4fc0000": 497,
+            "0x7ffff5000000": 497,
+            "0x7ffff5040000": 497,
+            "0x7ffff5080000": 497,
+            "0x7ffff50c0000": 497,
+            "0x7ffff5100000": 497,
+            "0x7ffff5140000": 497,
+            "0x7ffff5180000": 497,
+            "0x7ffff51c0000": 497,
+            "0x7ffff5200000": 497,
+            "0x7ffff5240000": 497,
+            "0x7ffff5280000": 497,
+            "0x7ffff52c0000": 497,
+            "0x7ffff5300000": 497,
+            "0x7ffff5340000": 497,
+            "0x7ffff5380000": 497,
+            "0x7ffff53c0000": 497,
+            "0x7ffff5400000": 497,
+            "0x7ffff5440000": 497,
+            "0x7ffff5480000": 497,
+            "0x7ffff54c0000": 497,
+            "0x7ffff5500000": 497,
+            "0x7ffff5540000": 497,
+            "0x7ffff5580000": 497,
+            "0x7ffff55c0000": 497,
+            "0x7ffff5600000": 497,
+            "0x7ffff5640000": 497,
+            "0x7ffff5680000": 497,
+            "0x7ffff56c0000": 497,
+            "0x7ffff5700000": 497,
+            "0x7ffff5740000": 497,
+            "0x7ffff5780000": 497,
+            "0x7ffff57c0000": 497,
+            "0x7ffff5800000": 497,
+            "0x7ffff5840000": 497,
+            "0x7ffff5880000": 497,
+            "0x7ffff58c0000": 497,
+            "0x7ffff5900000": 497,
+            "0x7ffff5940000": 497,
+            "0x7ffff5980000": 497,
+            "0x7ffff59c0000": 497,
+            "0x7ffff5a00000": 497,
+            "0x7ffff5a40000": 497,
+            "0x7ffff5a80000": 497,
+            "0x7ffff5ac0000": 497,
+            "0x7ffff5b00000": 497,
+            "0x7ffff5b40000": 497
+          },
+          "ordered_address_sha256": "e74520664e1c4db7dae2a71f22046c3b8af3de9a891848191f85ac011ed6b40d",
+          "first": [
+            {
+              "address": "0x7fffe61a5b70",
+              "next": "0x7fffe61a5b00",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 1,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7fffe61a5b00",
+              "next": "0x7fffe61a5a90",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 1,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7fffe61a5a90",
+              "next": "0x7fffe61a5a20",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 1,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7fffe61a5a20",
+              "next": "0x7fffe61a59b0",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 1,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7fffe61a59b0",
+              "next": "0x7fffe61a5940",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 1,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7fffe61a5940",
+              "next": "0x7fffe61a58d0",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 1,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7fffe61a58d0",
+              "next": "0x7fffe61a5860",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 1,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7fffe61a5860",
+              "next": "0x7fffe61a57f0",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 1,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            }
+          ],
+          "last": {
+            "address": "0x7ffff5b42680",
+            "next": "0x0",
+            "gct": 11,
+            "planes": {
+              "block": 1,
+              "mark": 1,
+              "root": 3,
+              "lifetime": 1,
+              "ready": 1,
+              "sweep": 0
+            }
+          },
+          "error": null
+        },
+        "tid1-gcroot_pending_after_main": {
+          "start": "0x0",
+          "end": "0x0",
+          "count": 0,
+          "cycle": false,
+          "bound_exhausted": false,
+          "histogram": {},
+          "arenas": {},
+          "ordered_address_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "first": [],
+          "last": null,
+          "error": null
+        }
+      }
+    },
+    "0-1-2": {
+      "input": "gdb-v7-0-1-2/10-native_return-575.json",
+      "sha256": "24d7699c9762debe844246592c817c9abaea788f25d5cac1b5af1ceb365e55d6",
+      "root_chains": {
+        "global": {
+          "start": "0x7ffff5a474d0",
+          "end": "0x0",
+          "count": 4462,
+          "cycle": false,
+          "bound_exhausted": false,
+          "histogram": {
+            "11,block:1,mark:0,root:3,lifetime:1,ready:1,sweep:0": 4194,
+            "6,embedded_thread:1": 3,
+            "5,block:1,mark:1,root:3,lifetime:1,ready:1,sweep:0": 11,
+            "8,block:1,mark:1,root:3,lifetime:1,ready:1,sweep:0": 203,
+            "11,block:1,mark:1,root:3,lifetime:1,ready:1,sweep:0": 29,
+            "7,block:1,mark:1,root:3,lifetime:1,ready:1,sweep:0": 14,
+            "12,block:1,mark:1,root:3,lifetime:1,ready:1,sweep:0": 8
+          },
+          "arenas": {
+            "0x7ffff5a40000": 180,
+            "0x7ffff5cb0000": 7,
+            "0x7ffff7a50000": 298,
+            "0x7ffff5a80000": 497,
+            "0x7ffff5ac0000": 497,
+            "0x7ffff5b00000": 497,
+            "0x7ffff5b40000": 497,
+            "0x7ffff5b80000": 497,
+            "0x7ffff5bc0000": 497,
+            "0x7ffff5c00000": 497,
+            "0x7ffff5c40000": 497,
+            "0x7ffff7c90000": 1
+          },
+          "ordered_address_sha256": "45be38f04a830ca4309a5eaadd4e51d76a4e9705d6455f3be64642e19cb12dc2",
+          "first": [
+            {
+              "address": "0x7ffff5a474d0",
+              "next": "0x7ffff5a47460",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 0,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7ffff5a47460",
+              "next": "0x7ffff5a473f0",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 0,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7ffff5a473f0",
+              "next": "0x7ffff5a47380",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 0,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7ffff5a47380",
+              "next": "0x7ffff5a47310",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 0,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7ffff5a47310",
+              "next": "0x7ffff5a472a0",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 0,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7ffff5a472a0",
+              "next": "0x7ffff5a47230",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 0,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7ffff5a47230",
+              "next": "0x7ffff5a471c0",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 0,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7ffff5a471c0",
+              "next": "0x7ffff5a47150",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 0,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            }
+          ],
+          "last": {
+            "address": "0x7ffff7a53040",
+            "next": "0x0",
+            "gct": 6,
+            "planes": {
+              "embedded_thread": 1
+            }
+          },
+          "error": null
+        },
+        "tid3-gcroot_pending": {
+          "start": "0x0",
+          "end": "0x0",
+          "count": 0,
+          "cycle": false,
+          "bound_exhausted": false,
+          "histogram": {},
+          "arenas": {},
+          "ordered_address_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "first": [],
+          "last": null,
+          "error": null
+        },
+        "tid3-gcroot_pending_after_main": {
+          "start": "0x0",
+          "end": "0x0",
+          "count": 0,
+          "cycle": false,
+          "bound_exhausted": false,
+          "histogram": {},
+          "arenas": {},
+          "ordered_address_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "first": [],
+          "last": null,
+          "error": null
+        },
+        "tid4-gcroot_pending": {
+          "start": "0x0",
+          "end": "0x0",
+          "count": 0,
+          "cycle": false,
+          "bound_exhausted": false,
+          "histogram": {},
+          "arenas": {},
+          "ordered_address_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "first": [],
+          "last": null,
+          "error": null
+        },
+        "tid4-gcroot_pending_after_main": {
+          "start": "0x0",
+          "end": "0x0",
+          "count": 0,
+          "cycle": false,
+          "bound_exhausted": false,
+          "histogram": {},
+          "arenas": {},
+          "ordered_address_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "first": [],
+          "last": null,
+          "error": null
+        },
+        "tid2-gcroot_pending": {
+          "start": "0x0",
+          "end": "0x0",
+          "count": 0,
+          "cycle": false,
+          "bound_exhausted": false,
+          "histogram": {},
+          "arenas": {},
+          "ordered_address_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "first": [],
+          "last": null,
+          "error": null
+        },
+        "tid2-gcroot_pending_after_main": {
+          "start": "0x0",
+          "end": "0x0",
+          "count": 0,
+          "cycle": false,
+          "bound_exhausted": false,
+          "histogram": {},
+          "arenas": {},
+          "ordered_address_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "first": [],
+          "last": null,
+          "error": null
+        },
+        "tid1-gcroot_pending": {
+          "start": "0x7fffe18aa020",
+          "end": "0x0",
+          "count": 257725,
+          "cycle": false,
+          "bound_exhausted": false,
+          "histogram": {
+            "11,block:1,mark:1,root:3,lifetime:1,ready:1,sweep:0": 257725
+          },
+          "arenas": {
+            "0x7fffe18a0000": 279,
+            "0x7fffe18e0000": 497,
+            "0x7fffe1920000": 497,
+            "0x7fffe1960000": 497,
+            "0x7fffe19a0000": 497,
+            "0x7fffe19e0000": 497,
+            "0x7fffe1a20000": 497,
+            "0x7fffe1a60000": 497,
+            "0x7fffe1aa0000": 497,
+            "0x7fffe1ae0000": 497,
+            "0x7fffe1b20000": 497,
+            "0x7fffe1b60000": 497,
+            "0x7fffe1ba0000": 497,
+            "0x7fffe1be0000": 497,
+            "0x7fffe1c20000": 497,
+            "0x7fffe1c60000": 497,
+            "0x7fffe1ca0000": 497,
+            "0x7fffe1ce0000": 497,
+            "0x7fffe1d20000": 497,
+            "0x7fffe1d60000": 497,
+            "0x7fffe1da0000": 497,
+            "0x7fffe1de0000": 497,
+            "0x7fffe1e20000": 497,
+            "0x7fffe1e60000": 497,
+            "0x7fffe1ea0000": 497,
+            "0x7fffe1ee0000": 497,
+            "0x7fffe1f20000": 497,
+            "0x7fffe1f60000": 497,
+            "0x7fffe1fa0000": 497,
+            "0x7fffe1fe0000": 497,
+            "0x7fffe2020000": 497,
+            "0x7fffe2060000": 497,
+            "0x7fffe20a0000": 497,
+            "0x7fffe20e0000": 497,
+            "0x7fffe2120000": 497,
+            "0x7fffe2160000": 497,
+            "0x7fffe21a0000": 497,
+            "0x7fffe21e0000": 497,
+            "0x7fffe2220000": 497,
+            "0x7fffe2260000": 497,
+            "0x7fffe22a0000": 497,
+            "0x7fffe22e0000": 497,
+            "0x7fffe2320000": 497,
+            "0x7fffe2360000": 497,
+            "0x7fffe23a0000": 497,
+            "0x7fffe23e0000": 497,
+            "0x7fffe2420000": 497,
+            "0x7fffe2460000": 497,
+            "0x7fffe24a0000": 497,
+            "0x7fffe24e0000": 497,
+            "0x7fffe2520000": 497,
+            "0x7fffe2560000": 497,
+            "0x7fffe25a0000": 497,
+            "0x7fffe25e0000": 497,
+            "0x7fffe2620000": 497,
+            "0x7fffe2660000": 497,
+            "0x7fffe26a0000": 497,
+            "0x7fffe26e0000": 497,
+            "0x7fffe2720000": 497,
+            "0x7fffe2760000": 497,
+            "0x7fffe27a0000": 497,
+            "0x7fffe27e0000": 497,
+            "0x7fffe2820000": 497,
+            "0x7fffe2860000": 497,
+            "0x7fffe28a0000": 497,
+            "0x7fffe28e0000": 497,
+            "0x7fffe2920000": 497,
+            "0x7fffe2960000": 497,
+            "0x7fffe29a0000": 497,
+            "0x7fffe29e0000": 497,
+            "0x7fffe2a20000": 497,
+            "0x7fffe2a60000": 497,
+            "0x7fffe2aa0000": 497,
+            "0x7fffe2ae0000": 497,
+            "0x7fffe2b20000": 497,
+            "0x7fffe2b60000": 497,
+            "0x7fffe2ba0000": 497,
+            "0x7fffe2be0000": 497,
+            "0x7fffe2c20000": 497,
+            "0x7fffe2c60000": 497,
+            "0x7fffe2ca0000": 497,
+            "0x7fffe2ce0000": 497,
+            "0x7fffe2d20000": 497,
+            "0x7fffe2d60000": 497,
+            "0x7fffe2da0000": 497,
+            "0x7fffe2de0000": 497,
+            "0x7fffe2e20000": 497,
+            "0x7fffe2e60000": 497,
+            "0x7fffe2ea0000": 497,
+            "0x7fffe2ee0000": 497,
+            "0x7fffe2f20000": 497,
+            "0x7fffe2f60000": 497,
+            "0x7fffe2fa0000": 497,
+            "0x7fffe2fe0000": 497,
+            "0x7fffe3020000": 497,
+            "0x7fffe3060000": 497,
+            "0x7fffe30a0000": 497,
+            "0x7fffe30e0000": 497,
+            "0x7fffe3120000": 497,
+            "0x7fffe3160000": 497,
+            "0x7fffe31a0000": 497,
+            "0x7fffe31e0000": 497,
+            "0x7fffe3220000": 497,
+            "0x7fffe3260000": 497,
+            "0x7fffe32a0000": 497,
+            "0x7fffe32e0000": 497,
+            "0x7fffe3320000": 497,
+            "0x7fffe3360000": 497,
+            "0x7fffe33a0000": 497,
+            "0x7fffe33e0000": 497,
+            "0x7fffe3420000": 497,
+            "0x7fffe3460000": 497,
+            "0x7fffe34a0000": 497,
+            "0x7fffe34e0000": 497,
+            "0x7fffe3520000": 497,
+            "0x7fffe3560000": 497,
+            "0x7fffe35a0000": 497,
+            "0x7fffe35e0000": 497,
+            "0x7fffe3620000": 497,
+            "0x7fffe3660000": 497,
+            "0x7fffe36a0000": 497,
+            "0x7fffe36e0000": 497,
+            "0x7fffe3720000": 497,
+            "0x7fffe3760000": 497,
+            "0x7fffe37a0000": 497,
+            "0x7fffe37e0000": 497,
+            "0x7fffe3820000": 497,
+            "0x7fffe3860000": 497,
+            "0x7fffe38a0000": 497,
+            "0x7fffe38e0000": 497,
+            "0x7fffe3920000": 497,
+            "0x7fffe3960000": 497,
+            "0x7fffe39a0000": 497,
+            "0x7fffe39e0000": 497,
+            "0x7fffe3a20000": 497,
+            "0x7fffe3a60000": 497,
+            "0x7fffe3aa0000": 497,
+            "0x7fffe3ae0000": 497,
+            "0x7fffe3b20000": 497,
+            "0x7fffe3b60000": 497,
+            "0x7fffe3ba0000": 497,
+            "0x7fffe3be0000": 497,
+            "0x7fffe3c20000": 497,
+            "0x7fffe3c60000": 497,
+            "0x7fffe3ca0000": 497,
+            "0x7fffe3ce0000": 497,
+            "0x7fffe3d20000": 497,
+            "0x7fffe3d60000": 497,
+            "0x7fffe3da0000": 497,
+            "0x7fffe3de0000": 497,
+            "0x7fffe3e20000": 497,
+            "0x7fffe3e60000": 497,
+            "0x7fffe3ea0000": 497,
+            "0x7fffe3ee0000": 497,
+            "0x7fffe3f20000": 497,
+            "0x7fffe3f60000": 497,
+            "0x7fffe3fa0000": 497,
+            "0x7fffe3fe0000": 497,
+            "0x7fffe4020000": 497,
+            "0x7fffe4060000": 497,
+            "0x7fffe40a0000": 497,
+            "0x7fffe40e0000": 497,
+            "0x7fffe4120000": 497,
+            "0x7fffe4160000": 497,
+            "0x7fffe41a0000": 497,
+            "0x7fffe41e0000": 497,
+            "0x7fffe4220000": 497,
+            "0x7fffe4260000": 497,
+            "0x7fffe42a0000": 497,
+            "0x7fffe42e0000": 497,
+            "0x7fffe4320000": 497,
+            "0x7fffe4360000": 497,
+            "0x7fffe43a0000": 497,
+            "0x7fffe43e0000": 497,
+            "0x7fffe4420000": 497,
+            "0x7fffe4460000": 497,
+            "0x7fffe44a0000": 497,
+            "0x7fffe44e0000": 497,
+            "0x7fffe4520000": 497,
+            "0x7fffe4560000": 497,
+            "0x7fffe45a0000": 497,
+            "0x7fffe45e0000": 497,
+            "0x7fffe4620000": 497,
+            "0x7fffe4660000": 497,
+            "0x7fffe46a0000": 497,
+            "0x7fffe46e0000": 497,
+            "0x7fffe4720000": 497,
+            "0x7fffe4760000": 497,
+            "0x7fffe47a0000": 497,
+            "0x7fffe47e0000": 497,
+            "0x7fffe4820000": 497,
+            "0x7fffe4860000": 497,
+            "0x7fffe48a0000": 497,
+            "0x7fffe48e0000": 497,
+            "0x7fffe4920000": 497,
+            "0x7fffe4960000": 497,
+            "0x7fffe49a0000": 497,
+            "0x7fffe49e0000": 497,
+            "0x7fffe4a20000": 497,
+            "0x7fffe4a60000": 497,
+            "0x7fffe4aa0000": 497,
+            "0x7fffe4ae0000": 497,
+            "0x7fffe4b20000": 497,
+            "0x7fffe4b60000": 497,
+            "0x7fffe4ba0000": 497,
+            "0x7fffe4be0000": 497,
+            "0x7fffe4c20000": 497,
+            "0x7fffe4c60000": 497,
+            "0x7fffe4ca0000": 497,
+            "0x7fffe4ce0000": 497,
+            "0x7fffe4d20000": 497,
+            "0x7fffe4d60000": 497,
+            "0x7fffe4da0000": 497,
+            "0x7fffe4de0000": 497,
+            "0x7fffe4e20000": 497,
+            "0x7fffe4e60000": 497,
+            "0x7fffe4ea0000": 497,
+            "0x7fffe4ee0000": 497,
+            "0x7fffe4f20000": 497,
+            "0x7fffe4f60000": 497,
+            "0x7fffe4fa0000": 497,
+            "0x7fffe4fe0000": 497,
+            "0x7fffe5020000": 497,
+            "0x7fffe5060000": 497,
+            "0x7fffe50a0000": 497,
+            "0x7fffe50e0000": 497,
+            "0x7fffe5120000": 497,
+            "0x7fffe5160000": 497,
+            "0x7fffe51a0000": 497,
+            "0x7fffe51e0000": 497,
+            "0x7fffe5220000": 497,
+            "0x7fffe5260000": 497,
+            "0x7fffe52a0000": 497,
+            "0x7fffe52e0000": 497,
+            "0x7fffe5320000": 497,
+            "0x7fffe5360000": 497,
+            "0x7fffe53a0000": 497,
+            "0x7fffe53e0000": 497,
+            "0x7fffe5420000": 497,
+            "0x7fffe5460000": 497,
+            "0x7fffe54a0000": 497,
+            "0x7fffe54e0000": 497,
+            "0x7fffe5520000": 497,
+            "0x7fffe5560000": 497,
+            "0x7fffe55a0000": 497,
+            "0x7fffe55e0000": 497,
+            "0x7fffe5620000": 497,
+            "0x7fffe5660000": 497,
+            "0x7fffe56a0000": 497,
+            "0x7fffe56e0000": 497,
+            "0x7fffe5720000": 497,
+            "0x7fffe5760000": 497,
+            "0x7fffe57a0000": 497,
+            "0x7fffe57e0000": 497,
+            "0x7fffe5820000": 497,
+            "0x7fffe5860000": 497,
+            "0x7fffe58a0000": 497,
+            "0x7fffe58e0000": 497,
+            "0x7fffe5920000": 497,
+            "0x7fffe5960000": 497,
+            "0x7fffe59a0000": 497,
+            "0x7fffe59e0000": 497,
+            "0x7fffe5a20000": 497,
+            "0x7fffe5a60000": 497,
+            "0x7fffe5aa0000": 497,
+            "0x7fffe5ae0000": 497,
+            "0x7fffe5b20000": 497,
+            "0x7fffe5b60000": 497,
+            "0x7fffe5ba0000": 497,
+            "0x7fffe5be0000": 497,
+            "0x7fffe5c20000": 497,
+            "0x7fffe5c60000": 497,
+            "0x7fffe5ca0000": 497,
+            "0x7fffe5ce0000": 497,
+            "0x7fffe5d20000": 497,
+            "0x7fffe5d60000": 497,
+            "0x7fffe5da0000": 497,
+            "0x7fffe5de0000": 497,
+            "0x7fffe5e20000": 497,
+            "0x7fffe5e60000": 497,
+            "0x7fffe5ea0000": 497,
+            "0x7fffe5ee0000": 497,
+            "0x7fffe5f20000": 497,
+            "0x7fffe5f60000": 497,
+            "0x7fffe5fa0000": 497,
+            "0x7fffe5fe0000": 497,
+            "0x7fffe6020000": 497,
+            "0x7fffe6060000": 497,
+            "0x7fffe60a0000": 497,
+            "0x7fffe60e0000": 497,
+            "0x7fffe6120000": 497,
+            "0x7fffe6160000": 497,
+            "0x7fffe61a0000": 497,
+            "0x7fffe61e0000": 497,
+            "0x7fffe6220000": 497,
+            "0x7fffe6260000": 497,
+            "0x7fffe62a0000": 497,
+            "0x7fffe62e0000": 497,
+            "0x7fffe6320000": 497,
+            "0x7fffe6360000": 497,
+            "0x7fffe63a0000": 497,
+            "0x7fffe63e0000": 497,
+            "0x7fffe6420000": 497,
+            "0x7fffe6460000": 497,
+            "0x7fffe64a0000": 497,
+            "0x7fffe64e0000": 497,
+            "0x7fffe6520000": 497,
+            "0x7fffe6560000": 497,
+            "0x7fffe65a0000": 497,
+            "0x7fffe65e0000": 497,
+            "0x7fffe6620000": 497,
+            "0x7fffe6660000": 497,
+            "0x7fffe66a0000": 497,
+            "0x7fffe66e0000": 497,
+            "0x7fffe6720000": 497,
+            "0x7fffe6760000": 497,
+            "0x7fffe67a0000": 497,
+            "0x7fffe67e0000": 497,
+            "0x7fffe6820000": 497,
+            "0x7fffe6860000": 497,
+            "0x7fffe68a0000": 497,
+            "0x7fffe68e0000": 497,
+            "0x7fffe6920000": 497,
+            "0x7fffe6960000": 497,
+            "0x7fffe69a0000": 497,
+            "0x7fffe69e0000": 497,
+            "0x7fffe6a20000": 497,
+            "0x7fffe6a60000": 497,
+            "0x7fffe6aa0000": 497,
+            "0x7fffe6ae0000": 497,
+            "0x7fffe6b20000": 497,
+            "0x7fffe6b60000": 497,
+            "0x7fffe6ba0000": 497,
+            "0x7fffe6be0000": 497,
+            "0x7fffe6c20000": 497,
+            "0x7fffe6c60000": 497,
+            "0x7fffe6ca0000": 497,
+            "0x7fffe6ce0000": 497,
+            "0x7fffe6d20000": 497,
+            "0x7fffe6d60000": 497,
+            "0x7fffe6da0000": 497,
+            "0x7fffe6de0000": 497,
+            "0x7fffe6e20000": 497,
+            "0x7fffe6e60000": 497,
+            "0x7fffe6ea0000": 497,
+            "0x7fffe6ee0000": 497,
+            "0x7fffe6f20000": 497,
+            "0x7fffe6f60000": 497,
+            "0x7fffe6fa0000": 497,
+            "0x7fffe6fe0000": 497,
+            "0x7fffe7020000": 497,
+            "0x7fffe7060000": 497,
+            "0x7fffe70a0000": 497,
+            "0x7fffe70e0000": 497,
+            "0x7fffe7120000": 497,
+            "0x7fffe7160000": 497,
+            "0x7fffe71a0000": 497,
+            "0x7fffe71e0000": 497,
+            "0x7fffe7220000": 497,
+            "0x7fffe7260000": 497,
+            "0x7fffe72a0000": 497,
+            "0x7fffe72e0000": 497,
+            "0x7fffe7320000": 497,
+            "0x7fffe7360000": 497,
+            "0x7fffe73a0000": 497,
+            "0x7fffe73e0000": 497,
+            "0x7fffe7420000": 497,
+            "0x7fffe7460000": 497,
+            "0x7fffe74a0000": 497,
+            "0x7fffe74e0000": 497,
+            "0x7fffe7520000": 497,
+            "0x7fffe7560000": 497,
+            "0x7fffe75a0000": 497,
+            "0x7fffe75e0000": 497,
+            "0x7fffe7620000": 497,
+            "0x7fffe7660000": 497,
+            "0x7fffe76a0000": 497,
+            "0x7fffe76e0000": 497,
+            "0x7fffe7720000": 497,
+            "0x7fffe7760000": 497,
+            "0x7fffe77a0000": 497,
+            "0x7fffe77e0000": 497,
+            "0x7fffe7820000": 497,
+            "0x7fffe7860000": 497,
+            "0x7fffe78a0000": 497,
+            "0x7fffe78e0000": 497,
+            "0x7fffe7920000": 497,
+            "0x7fffe7960000": 497,
+            "0x7fffe79a0000": 497,
+            "0x7fffe79e0000": 497,
+            "0x7fffe7a20000": 497,
+            "0x7fffe7a60000": 497,
+            "0x7fffe7aa0000": 497,
+            "0x7fffe7ae0000": 497,
+            "0x7fffe7b20000": 497,
+            "0x7fffe7b60000": 497,
+            "0x7fffe7ba0000": 497,
+            "0x7fffe7be0000": 497,
+            "0x7fffe7c20000": 497,
+            "0x7fffe7c60000": 497,
+            "0x7fffe7ca0000": 497,
+            "0x7fffe7ce0000": 497,
+            "0x7fffe7d20000": 497,
+            "0x7fffe7d60000": 497,
+            "0x7fffe7da0000": 497,
+            "0x7fffe7de0000": 497,
+            "0x7fffe7e20000": 497,
+            "0x7fffe7e60000": 497,
+            "0x7fffe7ea0000": 497,
+            "0x7fffe7ee0000": 497,
+            "0x7fffe7f20000": 497,
+            "0x7fffe7f60000": 497,
+            "0x7fffe7fa0000": 497,
+            "0x7fffe7fe0000": 497,
+            "0x7ffff4040000": 497,
+            "0x7ffff4080000": 497,
+            "0x7ffff40c0000": 497,
+            "0x7ffff4100000": 497,
+            "0x7ffff4140000": 497,
+            "0x7ffff4180000": 497,
+            "0x7ffff41c0000": 497,
+            "0x7ffff4200000": 497,
+            "0x7ffff4240000": 497,
+            "0x7ffff4280000": 497,
+            "0x7ffff42c0000": 497,
+            "0x7ffff4300000": 497,
+            "0x7ffff4340000": 497,
+            "0x7ffff4380000": 497,
+            "0x7ffff43c0000": 497,
+            "0x7ffff4400000": 497,
+            "0x7ffff4440000": 497,
+            "0x7ffff4480000": 497,
+            "0x7ffff44c0000": 497,
+            "0x7ffff4500000": 497,
+            "0x7ffff4540000": 497,
+            "0x7ffff4580000": 497,
+            "0x7ffff45c0000": 497,
+            "0x7ffff4600000": 497,
+            "0x7ffff4640000": 497,
+            "0x7ffff4680000": 497,
+            "0x7ffff46c0000": 497,
+            "0x7ffff4700000": 497,
+            "0x7ffff4740000": 497,
+            "0x7ffff4780000": 497,
+            "0x7ffff47c0000": 497,
+            "0x7ffff4800000": 497,
+            "0x7ffff4840000": 497,
+            "0x7ffff4880000": 497,
+            "0x7ffff48c0000": 497,
+            "0x7ffff4900000": 497,
+            "0x7ffff4940000": 497,
+            "0x7ffff4980000": 497,
+            "0x7ffff49c0000": 497,
+            "0x7ffff4a00000": 497,
+            "0x7ffff4a40000": 497,
+            "0x7ffff4a80000": 497,
+            "0x7ffff4ac0000": 497,
+            "0x7ffff4b00000": 497,
+            "0x7ffff4b40000": 497,
+            "0x7ffff4b80000": 497,
+            "0x7ffff4bc0000": 497,
+            "0x7ffff4c00000": 497,
+            "0x7ffff4c40000": 497,
+            "0x7ffff4c80000": 497,
+            "0x7ffff4cc0000": 497,
+            "0x7ffff4d00000": 497,
+            "0x7ffff4d40000": 497,
+            "0x7ffff4d80000": 497,
+            "0x7ffff4dc0000": 497,
+            "0x7ffff4e00000": 497,
+            "0x7ffff4e40000": 497,
+            "0x7ffff4e80000": 497,
+            "0x7ffff4ec0000": 497,
+            "0x7ffff4f00000": 497,
+            "0x7ffff4f40000": 497,
+            "0x7ffff4f80000": 497,
+            "0x7ffff4fc0000": 497,
+            "0x7ffff5000000": 497,
+            "0x7ffff5040000": 497,
+            "0x7ffff5080000": 497,
+            "0x7ffff50c0000": 497,
+            "0x7ffff5100000": 497,
+            "0x7ffff5140000": 497,
+            "0x7ffff5180000": 497,
+            "0x7ffff51c0000": 497,
+            "0x7ffff5200000": 497,
+            "0x7ffff5240000": 497,
+            "0x7ffff5280000": 497,
+            "0x7ffff52c0000": 497,
+            "0x7ffff5300000": 497,
+            "0x7ffff5340000": 497,
+            "0x7ffff5380000": 497,
+            "0x7ffff53c0000": 497,
+            "0x7ffff5400000": 497,
+            "0x7ffff5440000": 497,
+            "0x7ffff5480000": 497,
+            "0x7ffff54c0000": 497,
+            "0x7ffff5500000": 497,
+            "0x7ffff5540000": 497,
+            "0x7ffff5580000": 497,
+            "0x7ffff55c0000": 497,
+            "0x7ffff5600000": 497,
+            "0x7ffff5640000": 497,
+            "0x7ffff5680000": 497,
+            "0x7ffff56c0000": 497,
+            "0x7ffff5700000": 497,
+            "0x7ffff5740000": 497,
+            "0x7ffff5780000": 497,
+            "0x7ffff57c0000": 497,
+            "0x7ffff5800000": 497,
+            "0x7ffff5840000": 497,
+            "0x7ffff5880000": 497,
+            "0x7ffff58c0000": 497,
+            "0x7ffff5900000": 497,
+            "0x7ffff5940000": 497,
+            "0x7ffff5980000": 497,
+            "0x7ffff59c0000": 497,
+            "0x7ffff5a00000": 497,
+            "0x7ffff5e30000": 497
+          },
+          "ordered_address_sha256": "42cf5ea3d05d180ff4e2bf474b7aa3380083699448ff4a0eedcee752f3f871d8",
+          "first": [
+            {
+              "address": "0x7fffe18aa020",
+              "next": "0x7fffe18a9fb0",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 1,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7fffe18a9fb0",
+              "next": "0x7fffe18a9f40",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 1,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7fffe18a9f40",
+              "next": "0x7fffe18a9ed0",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 1,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7fffe18a9ed0",
+              "next": "0x7fffe18a9e60",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 1,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7fffe18a9e60",
+              "next": "0x7fffe18a9df0",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 1,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7fffe18a9df0",
+              "next": "0x7fffe18a9d80",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 1,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7fffe18a9d80",
+              "next": "0x7fffe18a9d10",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 1,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            },
+            {
+              "address": "0x7fffe18a9d10",
+              "next": "0x7fffe18a9ca0",
+              "gct": 11,
+              "planes": {
+                "block": 1,
+                "mark": 1,
+                "root": 3,
+                "lifetime": 1,
+                "ready": 1,
+                "sweep": 0
+              }
+            }
+          ],
+          "last": {
+            "address": "0x7ffff5e32680",
+            "next": "0x0",
+            "gct": 11,
+            "planes": {
+              "block": 1,
+              "mark": 1,
+              "root": 3,
+              "lifetime": 1,
+              "ready": 1,
+              "sweep": 0
+            }
+          },
+          "error": null
+        },
+        "tid1-gcroot_pending_after_main": {
+          "start": "0x0",
+          "end": "0x0",
+          "count": 0,
+          "cycle": false,
+          "bound_exhausted": false,
+          "histogram": {},
+          "arenas": {},
+          "ordered_address_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "first": [],
+          "last": null,
+          "error": null
+        }
+      }
+    }
+  }
+}

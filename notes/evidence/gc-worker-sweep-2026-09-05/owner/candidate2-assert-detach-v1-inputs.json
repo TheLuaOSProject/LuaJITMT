@@ -1,0 +1,18 @@
+{
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-detach-v1-exe": {
+    "sha256": "eeb903ab6dc3719b430c44c83ee64a95eba8be83d8f82793fd65956e47ff8c77",
+    "bytes": 13653792
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-detach.c": {
+    "sha256": "e9a568c6029bf7982545c5cfcc9493d87d72f3036f62206716c2fd3e33d83457",
+    "bytes": 6860
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-stop.c": {
+    "sha256": "9f3b1a37e2906b04ad38e6e1b4b1725abdce295f0c595f45ab22caa50d3baa8c",
+    "bytes": 6465
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/libluajit.a": {
+    "sha256": "7831b4d52b2db9f4cbaecf526e9ee2a1b9c02bb8e33f118dfa5aca2b437e6bd2",
+    "bytes": 29961184
+  }
+}

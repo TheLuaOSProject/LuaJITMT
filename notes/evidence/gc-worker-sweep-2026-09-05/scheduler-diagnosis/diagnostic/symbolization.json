@@ -1,0 +1,52 @@
+[
+  {
+    "argv": [
+      "addr2line",
+      "-f",
+      "-C",
+      "-i",
+      "-e",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/combined-observer",
+      "0xe06b",
+      "0xa36a",
+      "0x33daa",
+      "0x4018a"
+    ],
+    "exit_code": 0,
+    "stdout": "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/diagnostic/symbolization-0.stdout",
+    "stderr": "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/diagnostic/symbolization-0.stderr"
+  },
+  {
+    "argv": [
+      "objdump",
+      "-d",
+      "--disassemble=gc2_idle_transition_handshake.part.0.isra.0",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/combined-observer"
+    ],
+    "exit_code": 0,
+    "stdout": "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/diagnostic/symbolization-1.stdout",
+    "stderr": "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/diagnostic/symbolization-1.stderr"
+  },
+  {
+    "argv": [
+      "objdump",
+      "-d",
+      "--disassemble=gc2_idle_transition_handshake.part.0.isra.0.cold",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/combined-observer"
+    ],
+    "exit_code": 0,
+    "stdout": "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/diagnostic/symbolization-2.stdout",
+    "stderr": "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/diagnostic/symbolization-2.stderr"
+  },
+  {
+    "argv": [
+      "objdump",
+      "-d",
+      "--disassemble=lj_gc2_sweep_to_idle",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/combined-observer"
+    ],
+    "exit_code": 0,
+    "stdout": "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/diagnostic/symbolization-3.stdout",
+    "stderr": "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/diagnostic/symbolization-3.stderr"
+  }
+]

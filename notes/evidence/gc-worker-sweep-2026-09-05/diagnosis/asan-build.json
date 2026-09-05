@@ -1,0 +1,30 @@
+{
+  "argv": [
+    "make",
+    "-C",
+    "src",
+    "-j4",
+    "BUILDMODE=static",
+    "CC=clang",
+    "HOST_CC=clang",
+    "CCOPT=-O1",
+    "CCDEBUG=-g",
+    "XCFLAGS=-DLUA_USE_ASSERT -DLUA_USE_APICHECK",
+    "TARGET_CFLAGS=-fsanitize=address -fno-omit-frame-pointer",
+    "TARGET_LDFLAGS=-fsanitize=address",
+    "TARGET_STRIP=:"
+  ],
+  "cwd": "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/asan",
+  "exit_code": 0,
+  "seconds": 9.926817832005327,
+  "binaries": {
+    "luajit": {
+      "sha256": "ff2bc578b7ec62231b5d2702efb2c6ec3caa0698ccb9f2c90ad97b29d6f06e40",
+      "bytes": 19475680
+    },
+    "libluajit.a": {
+      "sha256": "0b0661ec8e0dd723b68d94442da46c03f18976846f8ba03e11b49e30ed65db4b",
+      "bytes": 26653496
+    }
+  }
+}

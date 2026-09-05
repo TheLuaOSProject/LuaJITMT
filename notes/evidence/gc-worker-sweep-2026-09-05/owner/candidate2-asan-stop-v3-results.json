@@ -1,0 +1,145 @@
+[
+  {
+    "exit_code": 0,
+    "argv": [
+      "clang",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-stop.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-stop-v3-exe"
+    ],
+    "case": "compile",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.26437216799968155,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-stop-v3-exe",
+      "0",
+      "1",
+      "0"
+    ],
+    "case": "0-1-0",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.01569135000318056,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-stop-v3-exe",
+      "0",
+      "1",
+      "1"
+    ],
+    "case": "0-1-1",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.015478023997275159,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-stop-v3-exe",
+      "0",
+      "2",
+      "0"
+    ],
+    "case": "0-2-0",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.015583898006298114,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-stop-v3-exe",
+      "0",
+      "2",
+      "1"
+    ],
+    "case": "0-2-1",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.015465206000953913,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-stop-v3-exe",
+      "1",
+      "1",
+      "0"
+    ],
+    "case": "1-1-0",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.015517742998781614,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-stop-v3-exe",
+      "1",
+      "1",
+      "1"
+    ],
+    "case": "1-1-1",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.015555105004750658,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-stop-v3-exe",
+      "1",
+      "2",
+      "0"
+    ],
+    "case": "1-2-0",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.015540617998340167,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-stop-v3-exe",
+      "1",
+      "2",
+      "1"
+    ],
+    "case": "1-2-1",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.03157237599953078,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan/src/?.lua;;",
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+  }
+]

@@ -1,0 +1,10 @@
+== m3_gc2_worker_scheduler ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLJ_GC2_TEST_HELPERS -I'/workspaces/lj-lockless/src' '/workspaces/lj-lockless/tests/t-gc2-worker-scheduler.c' '/workspaces/lj-lockless/src/libluajit.a' -lm -ldl -pthread -Wl,--wrap=pthread_create -Wl,--wrap=pthread_join -o '/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/canonical-tmp/lj_t-gc2-worker-scheduler'
++ '/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/canonical-tmp/lj_t-gc2-worker-scheduler'
+Aborted (core dumped)
+/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/luajit: /workspaces/lj-lockless/tests/lib/suite_build.lua:172: command failed (34304): '/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/canonical-tmp/lj_t-gc2-worker-scheduler'
+stack traceback:
+	[C]: in function 'error'
+	/workspaces/lj-lockless/tests/lib/suite_utils.lua:123: in function 'with_directory_lock'
+	/workspaces/lj-lockless/tools/test.lua:95: in main chunk
+	[C]: at 0x55b44c880fc0

@@ -1,0 +1,3 @@
+{"stage":"unchanged_claim_frontier","workers":1,"cycle":2,"cursor":"0x7f500a9f0190","pending":"0x7f5009e3cca0","ns":20056629,"parks":0,"fake_progress":0}
+{"stage":"quiet_native_completed","workers":1,"cycle":2,"completed_delta":1,"ns":11605158,"prune_calls":6,"cursor_only":5,"unlinked":203}
+PASS real bridge frontier backoff and quiet native completion

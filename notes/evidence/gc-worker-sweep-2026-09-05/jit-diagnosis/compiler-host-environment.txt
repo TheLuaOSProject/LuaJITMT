@@ -1,0 +1,11 @@
+Linux 7f3bd9b38fd8 7.2.1-ogc4.1.fc44.x86_64 #1 SMP PREEMPT_DYNAMIC Tue Sep  1 22:10:56 UTC 2026 x86_64 GNU/Linux
+cc (Debian 14.2.0-19) 14.2.0
+Copyright (C) 2024 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+Debian clang version 19.1.7 (3+b1)
+Target: x86_64-pc-linux-gnu
+Thread model: posix
+InstalledDir: /usr/lib/llvm-19/bin
+affinity=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]

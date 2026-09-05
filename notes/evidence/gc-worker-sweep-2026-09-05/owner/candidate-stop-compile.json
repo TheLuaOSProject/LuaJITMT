@@ -1,0 +1,35 @@
+{
+  "argv": [
+    "cc",
+    "-std=gnu11",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate/src",
+    "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-stop.c",
+    "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate/src/libluajit.a",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-Wl,-E",
+    "-Wl,--wrap=lj_safepoint_handshake",
+    "-o",
+    "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop"
+  ],
+  "exit_code": 0,
+  "seconds": 0.11394634600583231,
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-stop.c": {
+    "sha256": "f4fb488b090e9fd55ab99ccad9648f9dc4766cceb374eacec77e70d8ebd1b743",
+    "bytes": 5755
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop": {
+    "sha256": "460773c5461d4dd3e1593221fa9fd4eb58c7b3b4adf99b1d0d2099cc1e8eacfc",
+    "bytes": 1739192
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate/src/libluajit.a": {
+    "sha256": "7e8cf75bb1a3f8a33448b39155ac0114131cb660ceb18acbe13855fa7788c269",
+    "bytes": 2360534
+  }
+}

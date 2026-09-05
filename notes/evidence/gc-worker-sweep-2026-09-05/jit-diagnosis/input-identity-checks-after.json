@@ -1,0 +1,52 @@
+{
+  "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/libluajit.a": {
+    "expected": {
+      "sha256": "cbc7e955549f291850dd5693dce77ce1d1f56461ced87eacc77e069603880343",
+      "bytes": 2360716
+    },
+    "actual": {
+      "sha256": "cbc7e955549f291850dd5693dce77ce1d1f56461ced87eacc77e069603880343",
+      "bytes": 2360716
+    }
+  },
+  "/tmp/lj-jit-sweep-diagnosis-20260905-jjdidw9u/automatic-retention": {
+    "expected": {
+      "sha256": "da2762397f59fdd73903e15c1ff7c5767bf64e210b1fa2ed85902e95a7ff5437",
+      "bytes": 1752280
+    },
+    "actual": {
+      "sha256": "da2762397f59fdd73903e15c1ff7c5767bf64e210b1fa2ed85902e95a7ff5437",
+      "bytes": 1752280
+    }
+  },
+  "/tmp/lj-jit-sweep-diagnosis-20260905-jjdidw9u/t-string-retention.c": {
+    "expected": {
+      "sha256": "2e8e840fb4ba3a3b09168c06d828ff10ebafd41e9ff555b9737f34384fea3cf9",
+      "bytes": 12128
+    },
+    "actual": {
+      "sha256": "2e8e840fb4ba3a3b09168c06d828ff10ebafd41e9ff555b9737f34384fea3cf9",
+      "bytes": 12128
+    }
+  },
+  "/tmp/lj-jit-sweep-diagnosis-20260905-jjdidw9u/peer-control.lua": {
+    "expected": {
+      "sha256": "519ebf714b0a33b9a436d3452a153a1bc3eea3322ebf0bf74d8e76fea4ab8cb2",
+      "bytes": 1756
+    },
+    "actual": {
+      "sha256": "519ebf714b0a33b9a436d3452a153a1bc3eea3322ebf0bf74d8e76fea4ab8cb2",
+      "bytes": 1756
+    }
+  },
+  "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/artifact-manifest.json": {
+    "expected": {
+      "sha256": "e64ca159e9742fd23f2622617336aab3fed2eb05348a8b5f34d8a8a745dfceb1",
+      "bytes": 10559
+    },
+    "actual": {
+      "sha256": "e64ca159e9742fd23f2622617336aab3fed2eb05348a8b5f34d8a8a745dfceb1",
+      "bytes": 10559
+    }
+  }
+}

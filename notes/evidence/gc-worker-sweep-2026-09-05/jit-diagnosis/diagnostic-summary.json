@@ -1,0 +1,145 @@
+{
+  "diagnostics_only": true,
+  "runtime_matrix": "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri",
+  "frozen_utc": "2026-09-05T12:59:42.430386+00:00",
+  "cases": [
+    {
+      "name": "snapshot",
+      "gdb_exit": 0,
+      "inferior_exit": 2,
+      "seconds": 2.2177063039998757,
+      "round": 4,
+      "cycle": 15,
+      "completed": 14,
+      "recovery_items": 258143,
+      "recovery_drained": 0,
+      "sweep_owner_runs": 317,
+      "sweep_owner_arenas": 302,
+      "cleanup_completed": 17,
+      "errors": [],
+      "stderr_bytes": 0
+    },
+    {
+      "name": "handoff-events",
+      "gdb_exit": 0,
+      "inferior_exit": 2,
+      "seconds": 2.3697933980001835,
+      "round": 3,
+      "cycle": 13,
+      "completed": 12,
+      "recovery_items": 254362,
+      "recovery_drained": 0,
+      "sweep_owner_runs": 235,
+      "sweep_owner_arenas": 222,
+      "cleanup_completed": 15,
+      "errors": [],
+      "stderr_bytes": 0
+    },
+    {
+      "name": "handoff-events-v2",
+      "gdb_exit": 0,
+      "inferior_exit": 2,
+      "seconds": 2.5179940039961366,
+      "round": 4,
+      "cycle": 15,
+      "completed": 14,
+      "recovery_items": 258143,
+      "recovery_drained": 0,
+      "sweep_owner_runs": 312,
+      "sweep_owner_arenas": 297,
+      "cleanup_completed": 17,
+      "errors": [],
+      "stderr_bytes": 0
+    },
+    {
+      "name": "retained",
+      "gdb_exit": 0,
+      "inferior_exit": 2,
+      "seconds": 2.4712419810020947,
+      "round": 4,
+      "cycle": 15,
+      "completed": 14,
+      "recovery_items": 258143,
+      "recovery_drained": 0,
+      "sweep_owner_runs": 317,
+      "sweep_owner_arenas": 302,
+      "cleanup_completed": 17,
+      "errors": [],
+      "stderr_bytes": 0
+    },
+    {
+      "name": "lease-decision",
+      "gdb_exit": 0,
+      "inferior_exit": 2,
+      "seconds": 2.2177916029977496,
+      "round": 4,
+      "cycle": 15,
+      "completed": 14,
+      "recovery_items": 256139,
+      "recovery_drained": 1917,
+      "sweep_owner_runs": 317,
+      "sweep_owner_arenas": 302,
+      "cleanup_completed": 17,
+      "errors": [],
+      "stderr_bytes": 0
+    },
+    {
+      "name": "retained-v2",
+      "gdb_exit": 0,
+      "inferior_exit": 2,
+      "seconds": 2.570694656998967,
+      "round": 4,
+      "cycle": 15,
+      "completed": 14,
+      "recovery_items": 258143,
+      "recovery_drained": 0,
+      "sweep_owner_runs": 317,
+      "sweep_owner_arenas": 302,
+      "cleanup_completed": 17,
+      "errors": [],
+      "stderr_bytes": 0
+    }
+  ],
+  "retained": {
+    "arena_cap_reached": false,
+    "published_recovery_items": 258143,
+    "ready_recovery_gct_counts": {
+      "8": 4,
+      "11": 258139
+    },
+    "recovery_block_counts": {
+      "1": 258143
+    },
+    "recovery_count_from_planes": 258143,
+    "recovery_lifetime_counts": {
+      "1": 258143
+    },
+    "recovery_ready_counts": {
+      "1": 258143
+    },
+    "recovery_root_counts": {
+      "3": 258143
+    },
+    "recovery_state_counts": {
+      "1": 258143
+    },
+    "arena_lanes": {
+      "owned/0": 551,
+      "owned/1": 1,
+      "quarantine/0": 6
+    },
+    "ssb": {
+      "drain": {
+        "count": 896,
+        "unique_count": 42
+      },
+      "head": null,
+      "private": {
+        "count": 1024,
+        "unique_count": 48
+      }
+    },
+    "next_ssb_address": 140737348221568,
+    "pending_root_head": 140737201999968
+  }
+}

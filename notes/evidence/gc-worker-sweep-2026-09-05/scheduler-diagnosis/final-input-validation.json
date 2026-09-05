@@ -1,0 +1,14 @@
+[
+  {
+    "variant": "combined",
+    "all_source_inputs": 225,
+    "archive": "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/archives/combined-libluajit.a",
+    "sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75"
+  },
+  {
+    "variant": "baseline",
+    "all_source_inputs": 225,
+    "archive": "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/archives/baseline-libluajit.a",
+    "sha256": "e7e3beb9ff9f85ec932837f4162382f6c7a6701325b41b83f9642a761fd5a157"
+  }
+]

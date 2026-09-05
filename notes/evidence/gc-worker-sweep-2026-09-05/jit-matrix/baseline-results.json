@@ -1,0 +1,177 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/results-baseline/automatic-retention",
+      "0",
+      "0",
+      "0",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/fixtures/peer-control.lua"
+    ],
+    "cwd": "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/?.lua;/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/tests/lib/?.lua;;",
+      "RETENTION_JIT": "1"
+    },
+    "exit": 2,
+    "internal_alarm_seconds": 45,
+    "kind": "eb8-baseline",
+    "name": "jit-peer0-workers0",
+    "peer": 0,
+    "removed_environment": [
+      "ASAN_OPTIONS"
+    ],
+    "seconds": 2.1185370149978553,
+    "started_utc": "2026-09-05T12:25:14.353302+00:00",
+    "stderr": "results-baseline/jit-peer0-workers0.stderr",
+    "stdout": "results-baseline/jit-peer0-workers0.stdout",
+    "summary": {
+      "jit_enabled_values": [
+        1
+      ],
+      "jit_hard_checks_max": 50,
+      "last_snapshot": {
+        "bytes": 429178,
+        "completed": 17,
+        "configured_workers": 0,
+        "cycles": 17,
+        "explicit": 0,
+        "filler_tables": 286720,
+        "local_credit": 0,
+        "major": 17,
+        "mask": 32767,
+        "mt_live": 0,
+        "n_workers": 0,
+        "peer": 0,
+        "peer_checks": 0,
+        "peer_credit": 0,
+        "phase": 0,
+        "raw_count": 300,
+        "reclaimed": 16410,
+        "round": 4,
+        "stage": "sole_main_recovered",
+        "strings": 300,
+        "unlinked": 16410,
+        "worker_async": 0,
+        "worker_runs": 8952
+      },
+      "settled_completed": [
+        7,
+        10,
+        13
+      ],
+      "stages": [
+        "baseline",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "automatic_progress_missing",
+        "sole_main_recovered"
+      ],
+      "stderr_bytes": 0,
+      "terminal_lines": [
+        "INCOMPLETE_AUTO rounds=4 batch=4096 payload=64 body_bytes=100 live=32 created_body_bytes=1638400 filler_tables=286720"
+      ]
+    },
+    "timed_out": false,
+    "timeout_seconds": 50,
+    "workers": 0
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/results-baseline/automatic-retention",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/fixtures/peer-control.lua"
+    ],
+    "cwd": "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/?.lua;/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/tests/lib/?.lua;;",
+      "RETENTION_JIT": "1"
+    },
+    "exit": 0,
+    "internal_alarm_seconds": 45,
+    "kind": "eb8-baseline",
+    "name": "jit-peer1-workers0",
+    "peer": 1,
+    "removed_environment": [
+      "ASAN_OPTIONS"
+    ],
+    "seconds": 0.21453884699440096,
+    "started_utc": "2026-09-05T12:25:16.472212+00:00",
+    "stderr": "results-baseline/jit-peer1-workers0.stderr",
+    "stdout": "results-baseline/jit-peer1-workers0.stdout",
+    "summary": {
+      "jit_enabled_values": [
+        1
+      ],
+      "jit_hard_checks_max": 0,
+      "last_snapshot": {
+        "bytes": 459230,
+        "completed": 24,
+        "configured_workers": 0,
+        "cycles": 24,
+        "explicit": 0,
+        "filler_tables": 49152,
+        "local_credit": 0,
+        "major": 24,
+        "mask": 32767,
+        "mt_live": 0,
+        "n_workers": 0,
+        "peer": 1,
+        "peer_checks": 8,
+        "peer_credit": 0,
+        "phase": 0,
+        "raw_count": 300,
+        "reclaimed": 24602,
+        "round": 6,
+        "stage": "sole_main_recovered",
+        "strings": 300,
+        "unlinked": 24602,
+        "worker_async": 0,
+        "worker_runs": 4097
+      },
+      "settled_completed": [
+        7,
+        10,
+        13,
+        16,
+        19,
+        22
+      ],
+      "stages": [
+        "baseline",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "sole_main_recovered"
+      ],
+      "stderr_bytes": 0,
+      "terminal_lines": [
+        "PASS rounds=6 batch=4096 payload=64 body_bytes=100 live=32 created_body_bytes=2457600 filler_tables=49152"
+      ]
+    },
+    "timed_out": false,
+    "timeout_seconds": 50,
+    "workers": 0
+  }
+]

@@ -1,0 +1,590 @@
+[
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 0,
+    "variant": "baseline",
+    "samples_seconds": [
+      0.785691,
+      1.032299,
+      1.024856,
+      1.032082,
+      1.03061
+    ],
+    "median_ns": 10306.1
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 0,
+    "variant": "candidate",
+    "samples_seconds": [
+      0.786596,
+      1.032568,
+      1.028884,
+      1.031845,
+      1.030596
+    ],
+    "median_ns": 10305.960000000001
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 1,
+    "variant": "candidate",
+    "samples_seconds": [
+      0.785534,
+      1.030777,
+      1.026782,
+      1.030053,
+      1.029284
+    ],
+    "median_ns": 10292.84
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 1,
+    "variant": "baseline",
+    "samples_seconds": [
+      0.790531,
+      1.036271,
+      1.029717,
+      1.034881,
+      1.034065
+    ],
+    "median_ns": 10340.65
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 2,
+    "variant": "baseline",
+    "samples_seconds": [
+      0.784992,
+      1.035372,
+      1.033678,
+      1.035863,
+      1.035277
+    ],
+    "median_ns": 10352.77
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 2,
+    "variant": "candidate",
+    "samples_seconds": [
+      0.784984,
+      1.031246,
+      1.02714,
+      1.029987,
+      1.029304
+    ],
+    "median_ns": 10293.04
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 3,
+    "variant": "candidate",
+    "samples_seconds": [
+      0.785581,
+      1.03329,
+      1.028378,
+      1.031553,
+      1.030535
+    ],
+    "median_ns": 10305.35
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 3,
+    "variant": "baseline",
+    "samples_seconds": [
+      0.78668,
+      1.032917,
+      1.029427,
+      1.032595,
+      1.03144
+    ],
+    "median_ns": 10314.4
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 4,
+    "variant": "baseline",
+    "samples_seconds": [
+      0.790541,
+      1.037873,
+      1.033865,
+      1.033721,
+      1.034293
+    ],
+    "median_ns": 10338.65
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 4,
+    "variant": "candidate",
+    "samples_seconds": [
+      0.791069,
+      1.038019,
+      1.034737,
+      1.037243,
+      1.036122
+    ],
+    "median_ns": 10361.22
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 5,
+    "variant": "candidate",
+    "samples_seconds": [
+      0.785522,
+      1.029055,
+      1.027804,
+      1.030619,
+      1.030085
+    ],
+    "median_ns": 10290.550000000001
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 5,
+    "variant": "baseline",
+    "samples_seconds": [
+      0.785871,
+      1.029144,
+      1.028907,
+      1.031955,
+      1.030109
+    ],
+    "median_ns": 10291.44
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 6,
+    "variant": "baseline",
+    "samples_seconds": [
+      0.787249,
+      1.033596,
+      1.029479,
+      1.032062,
+      1.031027
+    ],
+    "median_ns": 10310.269999999999
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 6,
+    "variant": "candidate",
+    "samples_seconds": [
+      0.786046,
+      1.03219,
+      1.028416,
+      1.030369,
+      1.029926
+    ],
+    "median_ns": 10299.259999999998
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 0,
+    "variant": "baseline",
+    "samples_seconds": [
+      0.713543,
+      1.003966,
+      1.02427,
+      1.041654,
+      1.056856
+    ],
+    "median_ns": 10242.7
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 0,
+    "variant": "candidate",
+    "samples_seconds": [
+      0.713782,
+      1.000118,
+      1.021122,
+      1.03787,
+      1.053907
+    ],
+    "median_ns": 10211.220000000001
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 1,
+    "variant": "candidate",
+    "samples_seconds": [
+      0.710059,
+      0.9961,
+      1.016754,
+      1.034828,
+      1.050339
+    ],
+    "median_ns": 10167.539999999999
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 1,
+    "variant": "baseline",
+    "samples_seconds": [
+      0.71134,
+      0.997489,
+      1.018414,
+      1.035403,
+      1.05099
+    ],
+    "median_ns": 10184.14
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 2,
+    "variant": "baseline",
+    "samples_seconds": [
+      0.716268,
+      1.002403,
+      1.02396,
+      1.040641,
+      1.057072
+    ],
+    "median_ns": 10239.6
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 2,
+    "variant": "candidate",
+    "samples_seconds": [
+      0.71019,
+      0.99644,
+      1.017824,
+      1.035294,
+      1.051417
+    ],
+    "median_ns": 10178.24
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 3,
+    "variant": "candidate",
+    "samples_seconds": [
+      0.715644,
+      1.004288,
+      1.023046,
+      1.039936,
+      1.055634
+    ],
+    "median_ns": 10230.46
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 3,
+    "variant": "baseline",
+    "samples_seconds": [
+      0.710579,
+      0.996644,
+      1.017911,
+      1.036085,
+      1.051727
+    ],
+    "median_ns": 10179.11
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 4,
+    "variant": "baseline",
+    "samples_seconds": [
+      0.703907,
+      1.002845,
+      1.022613,
+      1.040539,
+      1.056252
+    ],
+    "median_ns": 10226.13
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 4,
+    "variant": "candidate",
+    "samples_seconds": [
+      0.713661,
+      0.999346,
+      1.019577,
+      1.036803,
+      1.053045
+    ],
+    "median_ns": 10195.77
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 5,
+    "variant": "candidate",
+    "samples_seconds": [
+      0.709444,
+      0.994749,
+      1.01658,
+      1.034324,
+      1.050585
+    ],
+    "median_ns": 10165.800000000001
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 5,
+    "variant": "baseline",
+    "samples_seconds": [
+      0.710774,
+      0.996852,
+      1.018252,
+      1.036031,
+      1.05149
+    ],
+    "median_ns": 10182.519999999999
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 6,
+    "variant": "baseline",
+    "samples_seconds": [
+      0.715163,
+      1.00338,
+      1.025765,
+      1.041476,
+      1.059006
+    ],
+    "median_ns": 10257.65
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 6,
+    "variant": "candidate",
+    "samples_seconds": [
+      0.714953,
+      1.00222,
+      1.022203,
+      1.039324,
+      1.054964
+    ],
+    "median_ns": 10222.029999999999
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 0,
+    "variant": "baseline",
+    "samples_seconds": [
+      0.757114,
+      0.751121,
+      0.752416,
+      0.752533,
+      0.751314
+    ],
+    "median_ns": 7524.16
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 0,
+    "variant": "candidate",
+    "samples_seconds": [
+      0.757305,
+      0.75296,
+      0.75245,
+      0.751525,
+      0.750626
+    ],
+    "median_ns": 7524.499999999999
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 1,
+    "variant": "candidate",
+    "samples_seconds": [
+      0.757465,
+      0.752554,
+      0.753842,
+      0.75379,
+      0.753435
+    ],
+    "median_ns": 7537.9
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 1,
+    "variant": "baseline",
+    "samples_seconds": [
+      0.760906,
+      0.755753,
+      0.756202,
+      0.756801,
+      0.7564
+    ],
+    "median_ns": 7564.0
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 2,
+    "variant": "baseline",
+    "samples_seconds": [
+      0.756187,
+      0.752245,
+      0.750509,
+      0.750119,
+      0.75048
+    ],
+    "median_ns": 7505.09
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 2,
+    "variant": "candidate",
+    "samples_seconds": [
+      0.755506,
+      0.751982,
+      0.751875,
+      0.751255,
+      0.752252
+    ],
+    "median_ns": 7519.820000000001
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 3,
+    "variant": "candidate",
+    "samples_seconds": [
+      0.75887,
+      0.753312,
+      0.754238,
+      0.752485,
+      0.752241
+    ],
+    "median_ns": 7533.12
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 3,
+    "variant": "baseline",
+    "samples_seconds": [
+      0.755558,
+      0.751228,
+      0.750445,
+      0.750902,
+      0.750663
+    ],
+    "median_ns": 7509.0199999999995
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 4,
+    "variant": "baseline",
+    "samples_seconds": [
+      0.760384,
+      0.755639,
+      0.754942,
+      0.753567,
+      0.753436
+    ],
+    "median_ns": 7549.42
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 4,
+    "variant": "candidate",
+    "samples_seconds": [
+      0.762216,
+      0.756405,
+      0.756713,
+      0.757818,
+      0.75727
+    ],
+    "median_ns": 7572.7
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 5,
+    "variant": "candidate",
+    "samples_seconds": [
+      0.76079,
+      0.756144,
+      0.757621,
+      0.756848,
+      0.755679
+    ],
+    "median_ns": 7568.48
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 5,
+    "variant": "baseline",
+    "samples_seconds": [
+      0.762419,
+      0.756495,
+      0.755507,
+      0.753125,
+      0.755339
+    ],
+    "median_ns": 7555.070000000001
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 6,
+    "variant": "baseline",
+    "samples_seconds": [
+      0.756259,
+      0.752373,
+      0.750824,
+      0.751224,
+      0.750641
+    ],
+    "median_ns": 7512.24
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 6,
+    "variant": "candidate",
+    "samples_seconds": [
+      0.761821,
+      0.757183,
+      0.757779,
+      0.757618,
+      0.757001
+    ],
+    "median_ns": 7576.18
+  }
+]

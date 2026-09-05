@@ -1,7 +1,7 @@
 # Lockless completion plan
 
 Reviewed: 2026-09-04, starting at `a649f737`.
-Updated: 2026-09-05 after GC control, retained-cdata lookup and constructor fairness.
+Updated: 2026-09-05 after worker SWEEP scheduling and native teardown validation.
 
 This is the operative continuation of the original plan. It preserves the
 requested end state: one shared Lua heap, safe ordinary racy Lua programs,
@@ -80,7 +80,7 @@ are verified reasons the full goal is still open:
 | Table resize | Structural owner plus source `FORWARD` can strand the only value in an owner's local variable; descriptor migration is dormant | Durable exact payloads, helpable migration/publication, GC and native grace |
 | Table iteration | Ordinary scalar ITERN waits for global SMR while an unrelated IDLE reclaimer is suspended | Prove independently leased iteration progress, including exact source validation and terminal END; preserve general hash/GC-result lifetime requirements |
 | Descriptor installation | Separate capacity-shadow store can corrupt a winning descriptor before the losing ownership CAS | Publish control and capacity in one atomic pair; deterministic competing-generation test |
-| Automatic GC | Durable IDLE requests now enter at safe boundaries; public control survives delayed attachment stores; worker-enabled cycles still miss SWEEP completion bounds | Resolve worker completion and unfinished-owner deferral, then complete asynchronous phase ownership; retain independent finalizer suppression |
+| Automatic GC | Safe boundaries consume durable requests and workers now schedule missing SWEEP preparation; a sole-main JIT workload still exceeds its automatic completion bound | Resolve compiled-allocation assistance, same-TG arena fairness and unbounded EOF work, then complete asynchronous phase ownership; retain independent finalizer suppression |
 | Closure construction | Test-injected nested collection now defers an unfinished owner, and scalar continuation preserves sweep turns for other TGs | Complete same-TG arena fairness and asynchronous phase ownership; retain exact construction state and eventual publish/cancel completion |
 | Native acknowledgement | Completed exact owner-root actions can release through the unique remote executor; local/duplicate and broader actions still hold | Replace mutable-root borrowing and retain exact completion authority; local native-depth polls can overlap a remote pre-claim scan |
 | First MT attachment | Mode-0 traces omitted the TG request poll and real attachment waited for natural exit | Every XPOLL now observes the TG request; the larger attachment/flush ownership dependencies still require asynchronous completion |
@@ -381,6 +381,15 @@ controls and post-fix completion tests:
   needs shared-consumer ownership, incarnation retention and reentrancy proofs;
   prefix cutting conflicts with unfinished constructor link reads. No runtime
   implementation is ready. See `notes/gc-pending-root-eof-2026-09-05.md`.
+- Workers now schedule SWEEP preparation and continue only after a certified
+  frontier advance. Closing their startup native scope also preserves consumed
+  action lifetime before detach. The current combination passes 129 isolated
+  and 58 registered components, with unchanged allocation-cost ranges. A real
+  scheduler fixture READY/close race is corrected under actual token authority;
+  its original default abort and strict invalid-gate assertion remain recorded.
+  The JIT-enabled sole-main case still exceeds its bound on both old and new
+  runtimes; same-TG fairness, EOF work and synchronous handshakes remain open.
+  See `notes/gc-worker-sweep-2026-09-05.md`.
 - `1bce0fa5`: promote exhausted inline table dirty authority into pre-reserved
   persistent wide proof, retaining common stamp/token geometry. Small mappings
   use a dense sidecar plane and Huge mappings use checked tail reservation.
@@ -597,15 +606,20 @@ unsafe admission and STOP-veto prototypes, lost-RESTART schedules, and the
 later rejected finalizer query remain immutable evidence. Public ISRUNNING
 now reports the explicit setting consistently across actors; internal automatic
 admission still observes the pause. See `notes/gc-auto-control-2026-09-05.md`.
-Next resolve worker-two SWEEP completion and unfinished-owner deferral while
-preserving eventual reclamation and useful progress for other owners, then
-replace the synchronous driver and borrowed root/action completion protocols.
+The worker-two SWEEP preparation gap is now repaired, and unfinished-owner
+deferral retains turns for other TGs. Next resolve the sole-main JIT assistance
+bound, fairness between arenas of one TG, and the whole pending-chain EOF tail
+while preserving eventual reclamation and useful progress for other owners.
+Then replace the synchronous driver and borrowed root/action completion
+protocols. See `notes/gc-worker-sweep-2026-09-05.md` and
+`notes/gc-pending-root-eof-2026-09-05.md`.
 The scheduler SSB-empty assertion now reproduces on all three frozen variants:
 the fixture ignored a refused owner flush. It now establishes publication
 before the unchanged worker-drain checks; 60 corrected runs and six negative
 controls validate that precondition. See
-`notes/gc-scheduler-publication-2026-09-05.md`. The separate SWEEP completion
-failure and other recorded waits remain open.
+`notes/gc-scheduler-publication-2026-09-05.md`. The later READY ownership
+correction and worker SWEEP repair preserve those checks; other recorded waits
+remain open.
 
 The real four-position consumed-ack probe and finite mode-0 attachment probe
 are recorded in `notes/native-progress-boundaries-2026-09-05.md`. The missing

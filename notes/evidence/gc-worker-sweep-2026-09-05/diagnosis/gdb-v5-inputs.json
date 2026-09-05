@@ -1,0 +1,46 @@
+{
+  "compile": [
+    "cc",
+    "-std=gnu11",
+    "-O2",
+    "-g",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-I/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src",
+    "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/t-string-retention-observed.c",
+    "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/libluajit.a",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-Wl,-E",
+    "-o",
+    "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug-observed-v5-retention"
+  ],
+  "identities": {
+    "debug-observed-v5-retention": {
+      "sha256": "326bcabf71964f9fa42ce10f57415554ba29302304f76c2bb72074fc7ebc5779",
+      "bytes": 12892008
+    },
+    "libluajit.a": {
+      "sha256": "8af719e1453daf60c828ee67cfbf286c3f51021d46038a338a8e193dcc719b2a",
+      "bytes": 28561778
+    },
+    "sweep-probe.h": {
+      "sha256": "5500c45b82325f367c8ba28c4b2a6f784ba181f0a90496025f7b76ac8ed84a05",
+      "bytes": 5074
+    },
+    "t-string-retention-observed.c": {
+      "sha256": "575550bc27d0ec5995bf98ce7cd844f3cd251f3d12a2c280450f477cf4680a17",
+      "bytes": 12240
+    },
+    "peer-control.lua": {
+      "sha256": "519ebf714b0a33b9a436d3452a153a1bc3eea3322ebf0bf74d8e76fea4ab8cb2",
+      "bytes": 1756
+    },
+    "gdb-sweep.py": {
+      "sha256": "a4b57f669a547f413ba64d8be56803bc017cef8f29befe11e3d8a2603c14c676",
+      "bytes": 9567
+    }
+  }
+}

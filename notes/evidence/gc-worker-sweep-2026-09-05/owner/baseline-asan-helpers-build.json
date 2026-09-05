@@ -1,0 +1,38 @@
+{
+  "argv": [
+    "make",
+    "-C",
+    "src",
+    "-j2",
+    "BUILDMODE=static",
+    "CCDEBUG=-g",
+    "TARGET_STRIP=:",
+    "XCFLAGS=-DLUA_USE_ASSERT -DLUA_USE_APICHECK -DLJ_GC2_TEST_HELPERS",
+    "CC=clang",
+    "HOST_CC=clang",
+    "CCOPT=-O1",
+    "TARGET_CFLAGS=-fsanitize=address -fno-omit-frame-pointer",
+    "TARGET_LDFLAGS=-fsanitize=address"
+  ],
+  "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-asan-helpers",
+  "exit_code": 0,
+  "seconds": 17.44553180499497,
+  "binaries": {
+    "luajit": {
+      "sha256": "76468d734a9ef279a8ea65bd6de9596c34c99dc26be8f1218ee03b35a87fe880",
+      "bytes": 19880280
+    },
+    "libluajit.a": {
+      "sha256": "35e3eb21fbfda2c8c52dd5ee7e0eccb46852bc3e2db359515f48a387cb657e6a",
+      "bytes": 27217202
+    },
+    "host/buildvm": {
+      "sha256": "d77fa5f069e081bb2f293c2bee952517703c47db007776726db454fcb81909f9",
+      "bytes": 247384
+    },
+    "host/minilua": {
+      "sha256": "6ffd6b88ef801fdad13045b36b076db893cfb84288bfd468413d0c0baac30c25",
+      "bytes": 550952
+    }
+  }
+}

@@ -1,0 +1,27 @@
+
+/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb4/combined-stop-observer:     file format elf64-x86-64
+
+
+Disassembly of section .init:
+
+Disassembly of section .plt:
+
+Disassembly of section .plt.got:
+
+Disassembly of section .text:
+
+000000000000e0a0 <diag_abort_observe>:
+    e0a0:	48 83 ec 08          	sub    $0x8,%rsp
+    e0a4:	45 31 c0             	xor    %r8d,%r8d
+    e0a7:	48 89 3d 0a b4 16 00 	mov    %rdi,0x16b40a(%rip)        # 1794b8 <diag_abort_rdi>
+    e0ae:	31 c9                	xor    %ecx,%ecx
+    e0b0:	31 d2                	xor    %edx,%edx
+    e0b2:	48 c7 c6 ff ff ff ff 	mov    $0xffffffffffffffff,%rsi
+    e0b9:	bf 61 6d 61 59       	mov    $0x59616d61,%edi
+    e0be:	31 c0                	xor    %eax,%eax
+    e0c0:	e8 0b 91 ff ff       	call   71d0 <prctl@plt>
+    e0c5:	bf 13 00 00 00       	mov    $0x13,%edi
+    e0ca:	e8 a1 93 ff ff       	call   7470 <raise@plt>
+    e0cf:	e8 4c 90 ff ff       	call   7120 <abort@plt>
+
+Disassembly of section .fini:

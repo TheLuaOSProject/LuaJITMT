@@ -1,0 +1,14 @@
+{
+  "status": "runtime promotion held for canonical scheduler fixture concurrency diagnosis",
+  "runtime_inputs_verified": 900,
+  "isolated_runtime_pass": 129,
+  "canonical_runtime_pass": 55,
+  "canonical_failed_fixture": "t-gc2-worker-scheduler C aborted; subsequent Lua worker on/off components unrun",
+  "canonical_failure_preserved": true,
+  "cost_processes": 42,
+  "cost_samples": 210,
+  "independent_jit_matrix": "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri",
+  "jit_scope": "9/12 combined passes; sole-main worker0 JIT-enabled bound failure reproduced byte-identically on exact eb8 baseline; separate diagnosis pending",
+  "shared_head": "6490b127",
+  "shared_runtime_not_committed": true
+}

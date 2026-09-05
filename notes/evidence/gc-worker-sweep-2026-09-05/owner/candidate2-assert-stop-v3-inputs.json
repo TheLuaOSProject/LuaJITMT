@@ -1,0 +1,14 @@
+{
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-stop-v3-exe": {
+    "sha256": "1356193fb09d58c6779a3c9a383512b6034c90c4b0403cd9170d1642b3010065",
+    "bytes": 13622064
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-stop.c": {
+    "sha256": "9f3b1a37e2906b04ad38e6e1b4b1725abdce295f0c595f45ab22caa50d3baa8c",
+    "bytes": 6465
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/libluajit.a": {
+    "sha256": "7831b4d52b2db9f4cbaecf526e9ee2a1b9c02bb8e33f118dfa5aca2b437e6bd2",
+    "bytes": 29961184
+  }
+}

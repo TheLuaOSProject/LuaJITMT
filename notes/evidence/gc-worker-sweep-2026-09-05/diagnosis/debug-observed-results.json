@@ -1,0 +1,30 @@
+[
+  {
+    "exit_code": 1,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src",
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/t-string-retention-observed.c",
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug-observed-retention"
+    ],
+    "case": "compile",
+    "cwd": "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc",
+    "seconds": 0.06388963800418423,
+    "stdout": "debug-observed-compile.stdout",
+    "stderr": "debug-observed-compile.stderr",
+    "LUA_PATH": "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  }
+]

@@ -1,0 +1,1 @@
+baseline-helpers-duplicate-diagnostic-t-safepoint-local-native-duplicate: /tmp/lj-gc-worker-bridge-20260905-bheds8jz/duplicate-diagnostic/t-safepoint-local-native-duplicate.c:66: completion_hook: Assertion `observed == 0' failed.

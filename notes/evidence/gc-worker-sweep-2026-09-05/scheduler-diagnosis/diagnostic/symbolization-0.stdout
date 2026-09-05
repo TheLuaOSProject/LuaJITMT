@@ -1,0 +1,8 @@
+__wrap_abort
+??:?
+gc2_idle_transition_handshake.part.0.isra.0.cold
+lj_gc2.c:?
+lj_gc2_sweep_to_idle
+:?
+gc2_worker_main
+lj_gc2.c:?

@@ -1,0 +1,549 @@
+/*
+** Bytecode writer.
+** Copyright (C) 2005-2026 Mike Pall. See Copyright Notice in luajit.h
+*/
+
+#define lj_bcwrite_c
+#define LUA_CORE
+
+#include "lj_obj.h"
+#include "lj_gc.h"
+#include "lj_gc2.h"
+#include "lj_buf.h"
+#include "lj_tab.h"
+#include "lj_tg.h"
+#include "lj_bc.h"
+#include "lj_err.h"
+#if LJ_HASFFI
+#include "lj_ctype.h"
+#endif
+#if LJ_HASJIT
+#include "lj_dispatch.h"
+#include "lj_jit.h"
+#endif
+#include "lj_strfmt.h"
+#include "lj_bcdump.h"
+#include "lj_vm.h"
+
+typedef struct BCWriteHashSnap {
+  TValue key;
+  TValue val;
+} BCWriteHashSnap;
+
+/* Context for bytecode writer. */
+typedef struct BCWriteCtx {
+  SBuf sb;			/* Output buffer. */
+  GCproto *pt;			/* Root prototype. */
+  lua_Writer wfunc;		/* Writer callback. */
+  void *wdata;			/* Writer callback data. */
+  BCWriteHashSnap **heap;	/* Heap used for deterministic sorting. */
+  BCWriteHashSnap *hsnap;	/* Hash key/value snapshots for the heap. */
+  uint32_t heapsz;		/* Size of heap. */
+  uint32_t hsnapsz;		/* Number of hash snapshots. */
+  uint32_t flags;		/* BCDUMP_F_* flags. */
+  int status;			/* Status from writer callback. */
+#ifdef LUA_USE_ASSERT
+  global_State *g;
+#endif
+} BCWriteCtx;
+
+#ifdef LUA_USE_ASSERT
+#define lj_assertBCW(c, ...)	lj_assertG_(ctx->g, (c), __VA_ARGS__)
+#else
+#define lj_assertBCW(c, ...)	((void)ctx)
+#endif
+
+/* -- Bytecode writer ----------------------------------------------------- */
+
+/* Write a single constant key/value of a template table. */
+static void bcwrite_ktabk(BCWriteCtx *ctx, cTValue *o, int narrow)
+{
+  char *p = lj_buf_more(&ctx->sb, 1+10);
+  if (tvisstr(o)) {
+    const GCstr *str = strV(o);
+    MSize len = str->len;
+    p = lj_buf_more(&ctx->sb, 5+len);
+    p = lj_strfmt_wuleb128(p, BCDUMP_KTAB_STR+len);
+    p = lj_buf_wmem(p, strdata(str), len);
+  } else if (tvisint(o)) {
+    *p++ = BCDUMP_KTAB_INT;
+    p = lj_strfmt_wuleb128(p, intV(o));
+  } else if (tvisnum(o)) {
+    if (!LJ_DUALNUM && narrow) {  /* Narrow number constants to integers. */
+      int64_t i64;
+      int32_t k;
+      if (lj_num2int_check(numV(o), i64, k)) {  /* -0 is never a constant. */
+	*p++ = BCDUMP_KTAB_INT;
+	p = lj_strfmt_wuleb128(p, k);
+	ctx->sb.w = p;
+	return;
+      }
+    }
+    *p++ = BCDUMP_KTAB_NUM;
+    p = lj_strfmt_wuleb128(p, o->u32.lo);
+    p = lj_strfmt_wuleb128(p, o->u32.hi);
+  } else if (tvistab(o)) { /* Write the nil value marker as a nil. */
+    *p++ = BCDUMP_KTAB_NIL;
+  } else {
+    lj_assertBCW(tvispri(o), "unhandled type %d", itype(o));
+    *p++ = BCDUMP_KTAB_NIL+~itype(o);
+  }
+  ctx->sb.w = p;
+}
+
+/* Compare two template table keys. */
+static LJ_AINLINE int bcwrite_ktabk_lt(const TValue *a, const TValue *b)
+{
+  uint32_t at = itype(a), bt = itype(b);
+  if (at != bt) {  /* This also handles false and true keys. */
+    return at < bt;
+  } else if (at == LJ_TSTR) {
+    return lj_str_cmp(strV(a), strV(b)) < 0;
+  } else {
+    return a->u64 < b->u64;  /* This works for numbers and integers. */
+  }
+}
+
+/* Insert key into a sorted heap. */
+static void bcwrite_ktabk_heap_insert(BCWriteHashSnap **heap, MSize idx,
+				      MSize end, BCWriteHashSnap *snap)
+{
+  MSize child;
+  while ((child = idx * 2 + 1) < end) {
+    /* Find lower of the two children. */
+    BCWriteHashSnap *c0 = heap[child];
+    if (child + 1 < end) {
+      BCWriteHashSnap *c1 = heap[child + 1];
+      if (bcwrite_ktabk_lt(&c1->key, &c0->key)) {
+	c0 = c1;
+	child++;
+      }
+    }
+    if (bcwrite_ktabk_lt(&snap->key, &c0->key))
+      break;  /* Key lower? Found our position. */
+    heap[idx] = c0;  /* Move lower child up. */
+    idx = child;  /* Descend. */
+  }
+  heap[idx] = snap;  /* Insert key here. */
+}
+
+/* Resize heap, dropping content. */
+static void bcwrite_heap_resize(BCWriteCtx *ctx, uint32_t nsz)
+{
+  lua_State *L = sbufL(&ctx->sb);
+  if (ctx->heapsz) {
+    lj_mem_freevec(G(L), ctx->heap, ctx->heapsz, BCWriteHashSnap *);
+    ctx->heapsz = 0;
+  }
+  if (ctx->hsnapsz) {
+    lj_mem_freevec(G(L), ctx->hsnap, ctx->hsnapsz, BCWriteHashSnap);
+    ctx->hsnapsz = 0;
+  }
+  if (nsz) {
+    ctx->heap = lj_mem_newvec(L, nsz, BCWriteHashSnap *);
+    ctx->heapsz = nsz;
+    ctx->hsnap = lj_mem_newvec(L, nsz, BCWriteHashSnap);
+    ctx->hsnapsz = nsz;
+  }
+}
+
+/* Write hash part of template table in sorted order. */
+static void bcwrite_ktab_sorted_hash(BCWriteCtx *ctx, Node *node, MSize nhash)
+{
+  BCWriteHashSnap **heap = ctx->heap;
+  BCWriteHashSnap *snap = ctx->hsnap;
+  MSize i = nhash;
+  MSize j = 0;
+  for (;; node--) {  /* Build heap. */
+    TValue val;
+    lj_tv_load_acq(&val, &node->val);
+    if (!tvisnil(&val)) {
+      BCWriteHashSnap *s = &snap[j++];
+      lj_tv_load_acq(&s->key, &node->key);
+      s->val = val;
+      bcwrite_ktabk_heap_insert(heap, --i, nhash, s);
+      if (i == 0) break;
+    }
+  }
+  do {  /* Drain heap. */
+    BCWriteHashSnap *s = heap[0];  /* Output lowest key from top. */
+    bcwrite_ktabk(ctx, &s->key, 0);
+    bcwrite_ktabk(ctx, &s->val, 1);
+    s = heap[--nhash];  /* Remove last key. */
+    bcwrite_ktabk_heap_insert(heap, 0, nhash, s);  /* Re-insert. */
+  } while (nhash);
+}
+
+/* Write a template table. */
+static void bcwrite_ktab(BCWriteCtx *ctx, char *p, const GCtab *t)
+{
+  lua_State *L = sbufL(&ctx->sb);
+  MSize narray = 0, nhash = 0;
+  Node *hashnode = NULL;
+  TValue *array = NULL;
+  MSize hmask = 0;
+  MSize asize;
+  /* Buffer/heap growth can allocate between scan iterations. The TG-local pin
+  ** protects the raw template generation; the central Lua throw boundary
+  ** clears it if an allocation error unwinds this protected bytecode write. */
+  lj_tab_read_enter(L2TG(L));
+  asize = lj_tab_array_snapshot_acq(t, &array);
+  if (asize > 0) {  /* Determine max. length of array part. */
+    ptrdiff_t i;
+    for (i = (ptrdiff_t)asize-1; i >= 0; i--) {
+      TValue val;
+      lj_tv_load_acq(&val, &array[i]);
+      if (!tvisnil(&val))
+	break;
+    }
+    narray = (MSize)(i+1);
+  }
+  hashnode = lj_tab_node_snapshot_acq(t, &hmask);
+  if (hmask > 0) {  /* Count number of used hash slots. */
+    MSize i;
+    for (i = 0; i <= hmask; i++)
+      nhash += !lj_tv_isnil_acq(&hashnode[i].val);
+  }
+  /* Write number of array slots and hash slots. */
+  p = lj_strfmt_wuleb128(p, narray);
+  p = lj_strfmt_wuleb128(p, nhash);
+  ctx->sb.w = p;
+  if (narray) {  /* Write array entries (may contain nil). */
+    MSize i;
+    for (i = 0; i < narray; i++) {
+      TValue val;
+      lj_tv_load_acq(&val, &array[i]);
+      bcwrite_ktabk(ctx, &val, 1);
+    }
+  }
+  if (nhash) {  /* Write hash entries. */
+    Node *node = hashnode + hmask;
+    if ((ctx->flags & BCDUMP_F_DETERMINISTIC) && nhash > 1) {
+      if (ctx->heapsz < nhash)
+	bcwrite_heap_resize(ctx, hmask + 1);
+      bcwrite_ktab_sorted_hash(ctx, node, nhash);
+    } else {
+      MSize i = nhash;
+      for (;; node--) {
+	TValue key, val;
+	lj_tv_load_acq(&val, &node->val);
+	if (!tvisnil(&val)) {
+	  lj_tv_load_acq(&key, &node->key);
+	  bcwrite_ktabk(ctx, &key, 0);
+	  bcwrite_ktabk(ctx, &val, 1);
+	  if (--i == 0) break;
+	}
+      }
+    }
+  }
+  lj_tab_read_leave(L2TG(L));
+}
+
+/* Write GC constants of a prototype. */
+static void bcwrite_kgc(BCWriteCtx *ctx, GCproto *pt)
+{
+  MSize i, sizekgc = proto_sizekgc_acq(pt);
+  GCRef *kr = mref(pt->k, GCRef) - (ptrdiff_t)sizekgc;
+  for (i = 0; i < sizekgc; i++, kr++) {
+    GCobj *o = gcref_acq(*kr);
+    MSize tp, need = 1;
+    char *p;
+    /* Determine constant type and needed size. */
+    if (o->gch.gct == ~LJ_TSTR) {
+      tp = BCDUMP_KGC_STR + gco2str(o)->len;
+      need = 5+gco2str(o)->len;
+    } else if (o->gch.gct == ~LJ_TPROTO) {
+      lj_assertBCW((pt->flags & PROTO_CHILD), "prototype has unexpected child");
+      tp = BCDUMP_KGC_CHILD;
+#if LJ_HASFFI
+    } else if (o->gch.gct == ~LJ_TCDATA) {
+      CTypeID id = gco2cd(o)->ctypeid;
+      need = 1+4*5;
+      if (id == CTID_INT64) {
+	tp = BCDUMP_KGC_I64;
+      } else if (id == CTID_UINT64) {
+	tp = BCDUMP_KGC_U64;
+      } else {
+	lj_assertBCW(id == CTID_COMPLEX_DOUBLE,
+		     "bad cdata constant CTID %d", id);
+	tp = BCDUMP_KGC_COMPLEX;
+      }
+#endif
+    } else {
+      lj_assertBCW(o->gch.gct == ~LJ_TTAB,
+		   "bad constant GC type %d", o->gch.gct);
+      tp = BCDUMP_KGC_TAB;
+      need = 1+2*5;
+    }
+    /* Write constant type. */
+    p = lj_buf_more(&ctx->sb, need);
+    p = lj_strfmt_wuleb128(p, tp);
+    /* Write constant data (if any). */
+    if (tp >= BCDUMP_KGC_STR) {
+      p = lj_buf_wmem(p, strdata(gco2str(o)), gco2str(o)->len);
+    } else if (tp == BCDUMP_KGC_TAB) {
+      bcwrite_ktab(ctx, p, gco2tab(o));
+      continue;
+#if LJ_HASFFI
+    } else if (tp != BCDUMP_KGC_CHILD) {
+      cTValue *q = (TValue *)cdataptr(gco2cd(o));
+      p = lj_strfmt_wuleb128(p, q[0].u32.lo);
+      p = lj_strfmt_wuleb128(p, q[0].u32.hi);
+      if (tp == BCDUMP_KGC_COMPLEX) {
+	p = lj_strfmt_wuleb128(p, q[1].u32.lo);
+	p = lj_strfmt_wuleb128(p, q[1].u32.hi);
+      }
+#endif
+    }
+    ctx->sb.w = p;
+  }
+}
+
+/* Write number constants of a prototype. */
+static void bcwrite_knum(BCWriteCtx *ctx, GCproto *pt)
+{
+  MSize i, sizekn = pt->sizekn;
+  char *p = lj_buf_more(&ctx->sb, 10*sizekn);
+  for (i = 0; i < sizekn; i++) {
+    TValue tv;
+    cTValue *o = &tv;
+    int32_t k;
+    proto_knumtv_load_acq(&tv, pt, i);
+    if (tvisint(o)) {
+      k = intV(o);
+      goto save_int;
+    } else {
+      /* Write a 33 bit ULEB128 for the int (lsb=0) or loword (lsb=1). */
+      if (!LJ_DUALNUM && o->u32.hi != LJ_KEYINDEX) {
+	/* Narrow number constants to integers. */
+	int64_t i64;
+	if (lj_num2int_check(numV(o), i64, k)) {  /* -0 is never a constant. */
+	save_int:
+	  p = lj_strfmt_wuleb128(p, 2*(uint32_t)k | ((uint32_t)k&0x80000000u));
+	  if (k < 0)
+	    p[-1] = (p[-1] & 7) | ((k>>27) & 0x18);
+	  continue;
+	}
+      }
+      p = lj_strfmt_wuleb128(p, 1+(2*o->u32.lo | (o->u32.lo & 0x80000000u)));
+      if (o->u32.lo >= 0x80000000u)
+	p[-1] = (p[-1] & 7) | ((o->u32.lo>>27) & 0x18);
+      p = lj_strfmt_wuleb128(p, o->u32.hi);
+    }
+  }
+  ctx->sb.w = p;
+}
+
+/* Write bytecode instructions. */
+#if LJ_HASJIT
+static int bcwrite_unpatch_jitins(jit_State *J, GCproto *pt,
+				  const BCIns *pc, BCIns ins, BCIns *out)
+{
+  BCOp op = bc_op(ins);
+  if (op == BC_IFORL || op == BC_IITERL || op == BC_ILOOP ||
+      op == BC_JFORI) {
+    setbc_op(&ins, (BCOp)((int)op - (int)BC_IFORL + (int)BC_FORL));
+    *out = ins;
+    return 1;
+  } else if (op == BC_JFORL || op == BC_JITERL || op == BC_JLOOP) {
+    TraceNo traceno = bc_d(ins);
+    GCtrace *T;
+    BCIns shadow = proto_jit_startins_acq(pt, pc);
+    /* Every published root patch first records its immutable original beside
+    ** the prototype. Prefer that state-owned recovery copy, which remains
+    ** available while trace-body SMR is exclusively closed. */
+    if (shadow != 0) {
+      *out = shadow;
+      return 1;
+    }
+    /* Compatibility fallback for a pre-sidecar or concurrently superseded
+    ** patch is one-shot. The bounded outer resample may observe a new live
+    ** instruction; bytecode dumping never waits for the trace reclaimer. */
+    if (!lj_gc2_smr_read_try(J2G(J)))
+      return 0;
+    T = traceref_safe(J, traceno);
+    if (trace_runnable_acq(T, traceno)) {
+      *out = trace_startins_acq(T);
+      lj_gc2_smr_read_leave(J2G(J));
+      return 1;
+    }
+    lj_gc2_smr_read_leave(J2G(J));
+    return 0;
+  }
+  *out = ins;
+  return 1;
+}
+#endif
+
+static char *bcwrite_bytecode(BCWriteCtx *ctx, char *p, GCproto *pt)
+{
+  MSize nbc = pt->sizebc-1;  /* Omit the [JI]FUNC* header. */
+  MSize i;
+#if LJ_HASJIT
+  jit_State *J = L2J(sbufL(&ctx->sb));
+#else
+  UNUSED(ctx);
+#endif
+  /* Patch publication is atomic, but a bulk copy can tear an instruction while
+  ** a peer flushes or publishes a root trace. Capture each word independently
+  ** and serialize one complete generation after JIT-op recovery. */
+  for (i = 0; i < nbc; i++) {
+    const BCIns *pc = &proto_bc(pt)[1+i];
+    BCIns out;
+#if LJ_HASJIT
+    int retry;
+    for (retry = 0; retry < 8; retry++) {
+      BCIns ins = (BCIns)la_load32_acq((const uint32_t *)pc);
+      if (bcwrite_unpatch_jitins(J, pt, pc, ins, &out))
+	break;
+    }
+    if (retry == 8)
+      lj_err_callermsg(sbufL(&ctx->sb),
+		       "cannot dump bytecode during trace flush");
+#else
+    out = (BCIns)la_load32_acq((const uint32_t *)pc);
+#endif
+    memcpy(p, &out, sizeof(out));
+    p += sizeof(out);
+  }
+  return p;
+}
+
+/* Write prototype. */
+static void bcwrite_proto(BCWriteCtx *ctx, GCproto *pt)
+{
+  MSize sizedbg = 0;
+  uint8_t flags;
+  char *p;
+
+  /* Recursively write children of prototype. */
+  if ((pt->flags & PROTO_CHILD)) {
+    ptrdiff_t i, n = (ptrdiff_t)proto_sizekgc_acq(pt);
+    GCRef *kr = mref(pt->k, GCRef) - 1;
+    for (i = 0; i < n; i++, kr--) {
+      GCobj *o = gcref_acq(*kr);
+      if (o->gch.gct == ~LJ_TPROTO)
+	bcwrite_proto(ctx, gco2pt(o));
+    }
+  }
+
+  /* Start writing the prototype info to a buffer. */
+  p = lj_buf_need(&ctx->sb,
+		  5+4+6*5+(pt->sizebc-1)*(MSize)sizeof(BCIns)+pt->sizeuv*2);
+  p += 5;  /* Leave room for final size. */
+
+  /* Write prototype header. */
+  flags = (uint8_t)(pt->flags & (PROTO_CHILD|PROTO_VARARG|PROTO_FFI));
+  if (proto_legacyuv(pt))
+    flags |= BCDUMP_PF_LEGACYUV;
+  *p++ = flags;
+  *p++ = pt->numparams;
+  *p++ = pt->framesize;
+  *p++ = pt->sizeuv;
+  p = lj_strfmt_wuleb128(p, proto_sizekgc_acq(pt));
+  p = lj_strfmt_wuleb128(p, pt->sizekn);
+  p = lj_strfmt_wuleb128(p, pt->sizebc-1);
+  if (!(ctx->flags & BCDUMP_F_STRIP)) {
+    if (proto_lineinfo(pt))
+      sizedbg = pt->sizept - (MSize)((char *)proto_lineinfo(pt) - (char *)pt);
+    p = lj_strfmt_wuleb128(p, sizedbg);
+    if (sizedbg) {
+      p = lj_strfmt_wuleb128(p, pt->firstline);
+      p = lj_strfmt_wuleb128(p, pt->numline);
+    }
+  }
+
+  /* Write bytecode instructions and upvalue refs. */
+  p = bcwrite_bytecode(ctx, p, pt);
+  p = lj_buf_wmem(p, proto_uv(pt), pt->sizeuv*2);
+  ctx->sb.w = p;
+
+  /* Write constants. */
+  bcwrite_kgc(ctx, pt);
+  bcwrite_knum(ctx, pt);
+
+  /* Write debug info, if not stripped. */
+  if (sizedbg) {
+    p = lj_buf_more(&ctx->sb, sizedbg);
+    p = lj_buf_wmem(p, proto_lineinfo(pt), sizedbg);
+    ctx->sb.w = p;
+  }
+
+  /* Pass buffer to writer function. */
+  if (ctx->status == 0) {
+    MSize n = sbuflen(&ctx->sb) - 5;
+    MSize nn = (lj_fls(n)+8)*9 >> 6;
+    char *q = ctx->sb.b + (5 - nn);
+    p = lj_strfmt_wuleb128(q, n);  /* Fill in final size. */
+    lj_assertBCW(p == ctx->sb.b + 5, "bad ULEB128 write");
+    ctx->status = ctx->wfunc(sbufL(&ctx->sb), q, nn+n, ctx->wdata);
+  }
+}
+
+/* Write header of bytecode dump. */
+static void bcwrite_header(BCWriteCtx *ctx)
+{
+  GCstr *chunkname = proto_chunkname_acq(ctx->pt);
+  const char *name = strdata(chunkname);
+  MSize len = chunkname->len;
+  char *p = lj_buf_need(&ctx->sb, 5+5+len);
+  *p++ = BCDUMP_HEAD1;
+  *p++ = BCDUMP_HEAD2;
+  *p++ = BCDUMP_HEAD3;
+  *p++ = BCDUMP_VERSION;
+  *p++ = (ctx->flags & (BCDUMP_F_STRIP | BCDUMP_F_FR2)) +
+	 LJ_BE*BCDUMP_F_BE +
+	 ((ctx->pt->flags & PROTO_FFI) ? BCDUMP_F_FFI : 0);
+  if (!(ctx->flags & BCDUMP_F_STRIP)) {
+    p = lj_strfmt_wuleb128(p, len);
+    p = lj_buf_wmem(p, name, len);
+  }
+  ctx->status = ctx->wfunc(sbufL(&ctx->sb), ctx->sb.b,
+			   (MSize)(p - ctx->sb.b), ctx->wdata);
+}
+
+/* Write footer of bytecode dump. */
+static void bcwrite_footer(BCWriteCtx *ctx)
+{
+  if (ctx->status == 0) {
+    uint8_t zero = 0;
+    ctx->status = ctx->wfunc(sbufL(&ctx->sb), &zero, 1, ctx->wdata);
+  }
+}
+
+/* Protected callback for bytecode writer. */
+static TValue *cpwriter(lua_State *L, lua_CFunction dummy, void *ud)
+{
+  BCWriteCtx *ctx = (BCWriteCtx *)ud;
+  UNUSED(L); UNUSED(dummy);
+  lj_buf_need(&ctx->sb, 1024);  /* Avoids resize for most prototypes. */
+  bcwrite_header(ctx);
+  bcwrite_proto(ctx, ctx->pt);
+  bcwrite_footer(ctx);
+  return NULL;
+}
+
+/* Write bytecode for a prototype. */
+int lj_bcwrite(lua_State *L, GCproto *pt, lua_Writer writer, void *data,
+	      uint32_t flags)
+{
+  BCWriteCtx ctx;
+  int status;
+  ctx.pt = pt;
+  ctx.wfunc = writer;
+  ctx.wdata = data;
+  ctx.heapsz = 0;
+  ctx.hsnapsz = 0;
+  if ((bc_op(proto_bc(pt)[0]) != BC_NOT) == LJ_FR2) flags |= BCDUMP_F_FR2;
+  ctx.flags = flags;
+  ctx.status = 0;
+#ifdef LUA_USE_ASSERT
+  ctx.g = G(L);
+#endif
+  lj_buf_init(L, &ctx.sb);
+  status = lj_vm_cpcall(L, NULL, &ctx, cpwriter);
+  if (status == 0) status = ctx.status;
+  lj_buf_free(G(sbufL(&ctx.sb)), &ctx.sb);
+  bcwrite_heap_resize(&ctx, 0);
+  return status;
+}

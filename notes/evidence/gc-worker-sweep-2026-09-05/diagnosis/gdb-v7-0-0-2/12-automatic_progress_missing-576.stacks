@@ -1,0 +1,22 @@
+
+Thread 3 (Thread 0x7ffff700c6c0 (LWP 379261) "debug-observed-"):
+#0  0x00007ffff7db17b9 in syscall () from /lib/x86_64-linux-gnu/libc.so.6
+#1  0x00005555555f9809 in la_futex_wait (p=<optimized out>, val=<optimized out>, ns=<optimized out>) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/lj_atomic.h:163
+#2  gc2_worker_wake_futex_wait (g=<optimized out>, wake=<optimized out>, timeout_ns=<optimized out>) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/lj_obj.h:5089
+#3  gc2_worker_main (arg=0x5555556eff60) at lj_gc2.c:2816
+#4  0x00007ffff7d35b7b in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#5  0x00007ffff7db37f8 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+
+Thread 2 (Thread 0x7ffff790e6c0 (LWP 379260) "debug-observed-"):
+#0  0x00007ffff7db17b9 in syscall () from /lib/x86_64-linux-gnu/libc.so.6
+#1  0x00005555555f9809 in la_futex_wait (p=<optimized out>, val=<optimized out>, ns=<optimized out>) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/lj_atomic.h:163
+#2  gc2_worker_wake_futex_wait (g=<optimized out>, wake=<optimized out>, timeout_ns=<optimized out>) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/lj_obj.h:5089
+#3  gc2_worker_main (arg=0x5555556e8560) at lj_gc2.c:2816
+#4  0x00007ffff7d35b7b in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#5  0x00007ffff7db37f8 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+
+Thread 1 (Thread 0x7ffff7ca21c0 (LWP 379257) "debug-observed-"):
+#0  sweep_probe_checkpoint (where=where@entry=0x55555568d811 "automatic_progress_missing") at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/sweep-probe.h:15
+#1  0x000055555555f5c7 in sweep_probe_report (where=where@entry=0x55555568d811 "automatic_progress_missing", L=0x7ffff7c90080) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/sweep-probe.h:85
+#2  0x000055555555f91d in snapshot (L=L@entry=0x7ffff7c90080, stage=0x55555568d811 "automatic_progress_missing", round=round@entry=1, filler=filler@entry=262144) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/t-string-retention-observed.c:148
+#3  0x000055555555e647 in main (argc=<optimized out>, argv=<optimized out>) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/t-string-retention-observed.c:264

@@ -1,0 +1,141 @@
+local th = require"threading"
+local harness = require"thread_harness"
+local util = require"jit.util"
+local traceinfo = assert(util.traceinfo)
+local traceir = assert(util.traceir)
+local tracek = assert(util.tracek)
+local tracesnap = assert(util.tracesnap)
+local tracemc = assert(util.tracemc)
+local traceexitstub = assert(util.traceexitstub)
+
+jit.flush()
+jit.opt.start("hotloop=1", "hotexit=1", "sizemcode=4", "maxmcode=2048")
+jit.off()
+
+local rounds = harness.env_number("LJ_M6_JIT_UTIL_FLUSH_RACE_ROUNDS", 48)
+local trace_limit = harness.env_number("LJ_M6_JIT_UTIL_FLUSH_RACE_TRACE_LIMIT", 512)
+local max_probes = harness.env_number("LJ_M6_JIT_UTIL_FLUSH_RACE_MAX_PROBES", 256)
+local ready, start = harness.channels(1)
+local done = th.channel(1)
+local done_recv = assert(done.recv)
+
+local function make_hot(seed)
+  assert(type(seed) == "number")
+  local src = "return function(n) local s=" .. seed ..
+    "; for i=1,n do s=s+i end return s end"
+  return assert(loadstring(src))()
+end
+
+local function publish_trace(seed)
+  jit.on()
+  local f = make_hot(seed)
+  for _ = 1, 12 do
+    assert(f(64) == seed + 2080)
+  end
+  jit.off()
+end
+
+local function call_ok(fn)
+  local ok, err = pcall(fn)
+  assert(ok, err)
+end
+
+-- A missing trace in the two-argument form must not be reinterpreted as the
+-- one-argument global exit number. Immediately after a full flush, that old
+-- fallthrough could index an already-retired exit-stub group.
+call_ok(function()
+  assert(traceexitstub(32, 0) == nil)
+end)
+
+local function probe_snap_pos(tr, sn)
+  local snap, pcpos = tracesnap(tr, sn, true)
+  if snap == nil then
+    assert(pcpos == nil)
+  else
+    assert(type(snap) == "table")
+    assert(type(pcpos) == "number")
+    assert(pcpos >= 0 and pcpos % 1 == 0)
+  end
+end
+
+local function probe_trace(tr)
+  local info = traceinfo(tr)
+  if not info then
+    call_ok(function() traceir(tr, 1) end)
+    call_ok(function() tracek(tr, -1) end)
+    call_ok(function() tracesnap(tr, 0) end)
+    call_ok(function() probe_snap_pos(tr, 0) end)
+    call_ok(function() tracemc(tr) end)
+    call_ok(function() traceexitstub(tr, 0) end)
+    return 0
+  end
+
+  assert(type(info.nins) == "number")
+  assert(type(info.nk) == "number")
+  assert(type(info.nexit) == "number")
+  assert(type(info.linktype) == "string")
+
+  traceir(tr, 1)
+  traceir(tr, info.nins)
+  tracek(tr, -1)
+  if info.nk > 0 then tracek(tr, -info.nk) end
+  tracesnap(tr, 0)
+  probe_snap_pos(tr, 0)
+  if info.nexit > 0 then
+    tracesnap(tr, info.nexit - 1)
+    probe_snap_pos(tr, info.nexit - 1)
+  end
+  tracemc(tr)
+  traceexitstub(tr, 0)
+  return 1
+end
+jit.off(probe_trace, true)
+
+local worker = th.spawn(function(ready_ch, start_ch, done_ch, count)
+  jit.opt.start("hotloop=1", "hotexit=1", "sizemcode=4", "maxmcode=2048")
+  ready_ch:send("ready")
+  local token, ok = start_ch:recv(10)
+  assert(ok == true and token == "go")
+  for r = 1, count do
+    jit.flush()
+    publish_trace(r * 10000)
+    if r % 8 == 0 then collectgarbage("step", 20) end
+  end
+  done_ch:send("done")
+  return true
+end, ready, start, done, rounds)
+
+harness.wait_ready(ready, 1)
+harness.release_start(start, 1)
+
+local probes = 0
+local live_seen = 0
+local finished = false
+while not finished and probes < max_probes do
+  local token, ok = done_recv(done, 0.001)
+  if ok == true then
+    assert(token == "done")
+    finished = true
+  end
+  publish_trace(900000 + probes)
+  for tr = 1, trace_limit do
+    live_seen = live_seen + probe_trace(tr)
+  end
+  probes = probes + 1
+end
+
+local ok, result = worker:join(20)
+assert(ok == true and result == true)
+if not finished then
+  -- Fast probe loops can exhaust max_probes before the worker schedules its
+  -- final channel send. A successful join orders that send before this receive.
+  local token, sent = done_recv(done, 0)
+  assert(sent == true and token == "done")
+  finished = true
+end
+assert(finished, "worker joined without sending done token")
+assert(probes > 0)
+assert(live_seen > 0)
+
+print(("t-jit-util-flush-race OK: %d probe rounds, %d live snapshots"):format(
+  probes, live_seen))

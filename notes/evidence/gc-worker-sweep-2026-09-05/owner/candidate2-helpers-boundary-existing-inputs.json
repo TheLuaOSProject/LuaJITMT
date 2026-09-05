@@ -1,0 +1,38 @@
+{
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-recovery.c": {
+    "sha256": "7a11a96b3da06431d5e480d759c8fabe81a6db7bd160e30d6afb7b8c41e909fe",
+    "bytes": 84023
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-boundary-existing-t-gc2-recovery": {
+    "sha256": "18c988996ff4b5b1733d98593829329dbb304c9002f3c04c075040a671d8838e",
+    "bytes": 14208008
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/libluajit.a": {
+    "sha256": "496b6d5e4fbbd63fe0da39a531b8a9cd67044055e0e3b0ab5fc1e9d6ae4cbfc2",
+    "bytes": 30676960
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-sweep-public-table-rescan.c": {
+    "sha256": "81d79757038e0dabba677b85ebf3c5c635b92c9ff6cb06891e3078c0669855fe",
+    "bytes": 15992
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-boundary-existing-t-gc2-sweep-public-table-rescan": {
+    "sha256": "bc8e83b906ccccc23e2468c72b9d6549b3f5d976b222f11ef4a87d0073456070",
+    "bytes": 13978744
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-sweep-leaf-publication.c": {
+    "sha256": "fc8424ba778dbd25bdd998e9ee68d3f081bea82fba651b35a128762cd4f2966c",
+    "bytes": 8650
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-boundary-existing-t-gc2-sweep-leaf-publication": {
+    "sha256": "dee3de225823e74d31fb9ceb037a23bdaad92fb6a745d51512a71599f30d879b",
+    "bytes": 13943264
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-sweep-edge-lease.c": {
+    "sha256": "0cd61c04b7b877b636d0363b5b4f4d8903a38fe49ccaf99e99b7fafe03e945dd",
+    "bytes": 18523
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-boundary-existing-t-gc2-sweep-edge-lease": {
+    "sha256": "d5a6e9c6afe1aaec304dbfcb3800ecb64ceb6bef8fd9a1b12dbc8aeea6214831",
+    "bytes": 13976608
+  }
+}

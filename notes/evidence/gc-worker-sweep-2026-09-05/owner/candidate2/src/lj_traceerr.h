@@ -1,0 +1,66 @@
+/*
+** Trace compiler error messages.
+** Copyright (C) 2005-2026 Mike Pall. See Copyright Notice in luajit.h
+*/
+
+/* This file may be included multiple times with different TREDEF macros. */
+
+/* Recording. */
+TREDEF(RECERR,	"error thrown or hook called during recording")
+TREDEF(TRACEUV,	"trace too short")
+TREDEF(TRACEOV,	"trace too long")
+TREDEF(STACKOV,	"trace too deep")
+TREDEF(SNAPOV,	"too many snapshots")
+TREDEF(BLACKL,	"blacklisted")
+TREDEF(RETRY,	"retry recording")
+TREDEF(NYIBC,	"NYI: bytecode %s")
+
+/* Recording loop ops. */
+TREDEF(LLEAVE,	"leaving loop in root trace")
+TREDEF(LINNER,	"inner loop in root trace")
+TREDEF(LUNROLL,	"loop unroll limit reached")
+
+/* Recording calls/returns. */
+TREDEF(BADTYPE,	"bad argument type")
+TREDEF(CJITOFF,	"JIT compilation disabled for function")
+TREDEF(CUNROLL,	"call unroll limit reached")
+TREDEF(DOWNREC,	"down-recursion, restarting")
+TREDEF(NYIFFU,	"NYI: unsupported variant of FastFunc %s")
+TREDEF(NYIRETL,	"NYI: return to lower frame")
+
+/* Recording indexed load/store. */
+TREDEF(STORENN,	"store with nil or NaN key")
+TREDEF(NOMM,	"missing metamethod")
+TREDEF(IDXLOOP,	"looping index lookup")
+TREDEF(NYITMIX,	"NYI: mixed sparse/dense table")
+
+/* Recording C data operations. */
+TREDEF(NOCACHE,	"symbol not in cache")
+TREDEF(CTBUSY,	"ctype parser busy")
+TREDEF(NYICONV,	"NYI: unsupported C type conversion")
+TREDEF(NYICALL,	"NYI: unsupported C function type")
+
+/* Optimizations. */
+TREDEF(GFAIL,	"guard would always fail")
+TREDEF(PHIOV,	"too many PHIs")
+TREDEF(TYPEINS,	"persistent type instability")
+
+/* Assembler. */
+TREDEF(MCODEAL,	"failed to allocate mcode memory")
+TREDEF(MCODEOV,	"machine code too long")
+TREDEF(MCODELM,	"hit mcode limit (retrying)")
+TREDEF(SPILLOV,	"too many spill slots")
+TREDEF(BADRA,	"inconsistent register allocation")
+TREDEF(NYIIR,	"NYI: cannot assemble IR instruction %d")
+TREDEF(NYIPHI,	"NYI: PHI shuffling too complex")
+TREDEF(NYICOAL,	"NYI: register coalescing too complex")
+
+/* Keep admission-only errors appended so existing TraceError values remain
+** ABI-stable for external diagnostics which expose the numeric reason. */
+TREDEF(SMRRETRY,	"retry recording")
+
+#undef TREDEF
+
+/* When adding/removing trace errors, keep this catalog synchronized with
+** TraceErr uses. This is a bookkeeping contract for the enum users, not
+** runtime behavior. */

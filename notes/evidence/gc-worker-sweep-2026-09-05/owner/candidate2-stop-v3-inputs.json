@@ -1,0 +1,14 @@
+{
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-stop-v3-exe": {
+    "sha256": "b7f35b086e36f0c25b981bd6999a5159365558e4bcd7dbdf2139303bc96962e7",
+    "bytes": 1739560
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-stop.c": {
+    "sha256": "9f3b1a37e2906b04ad38e6e1b4b1725abdce295f0c595f45ab22caa50d3baa8c",
+    "bytes": 6465
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2/src/libluajit.a": {
+    "sha256": "d45a1de3783d29668de6a00e8ba4aee500337dded07c65520835f82a62ed9fda",
+    "bytes": 2360558
+  }
+}

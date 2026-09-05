@@ -1,0 +1,842 @@
+/*
+** I/O library.
+** Copyright (C) 2005-2026 Mike Pall. See Copyright Notice in luajit.h
+**
+** Major portions taken verbatim or adapted from the Lua interpreter.
+** Copyright (C) 1994-2011 Lua.org, PUC-Rio. See Copyright Notice in lua.h
+*/
+
+#include <errno.h>
+#include <stdio.h>
+
+#define lib_io_c
+#define LUA_LIB
+
+#include "lua.h"
+#include "lauxlib.h"
+#include "lualib.h"
+
+#include "lj_obj.h"
+#include "lj_atomic.h"
+#include "lj_gc.h"
+#include "lj_gc2.h"
+#include "lj_err.h"
+#include "lj_buf.h"
+#include "lj_str.h"
+#include "lj_state.h"
+#include "lj_strfmt.h"
+#include "lj_ff.h"
+#include "lj_lib.h"
+#include "lj_safepoint.h"
+#include "lj_strscan.h"
+#include "lj_tg.h"
+#include "lj_udata.h"
+
+/* Userdata payload for I/O file. */
+typedef struct IOFileUD {
+  FILE *fp;		/* File handle. */
+  uint32_t type;	/* File type. */
+} IOFileUD;
+
+#define IOFILE_TYPE_FILE	0	/* Regular file. */
+#define IOFILE_TYPE_PIPE	1	/* Pipe. */
+#define IOFILE_TYPE_STDF	2	/* Standard file handle. */
+#define IOFILE_TYPE_MASK	3
+
+#define IOFILE_FLAG_CLOSE	4	/* Close after io.lines() iterator. */
+
+#define IOSTDF_UD(L, id)	(gco2ud(lj_gcroot_acq(G(L), (GCRootID)(id))))
+#define IOSTDF_IOF(L, id)	((IOFileUD *)uddata(IOSTDF_UD(L, (id))))
+
+/* -- Native-state wrappers ---------------------------------------------- */
+
+static FILE *io_native_fopen(lua_State *L, const char *fname,
+			     const char *mode, uint32_t *actionsp)
+{
+  FILE *fp;
+  lj_native_enter(L2TG(L));
+  fp = fopen(fname, mode);
+  *actionsp = lj_native_leave(L);
+  return fp;
+}
+
+static int io_native_fclose(lua_State *L, FILE *fp, uint32_t *actionsp)
+{
+  int ok;
+  lj_native_enter(L2TG(L));
+  ok = fclose(fp);
+  *actionsp = lj_native_leave(L);
+  return ok;
+}
+
+static void io_fopen_checkstop(lua_State *L, IOFileUD *iof, uint32_t actions,
+			       int had_stopreq)
+{
+  if (lj_safepoint_fresh_stopreq(L, actions, had_stopreq)) {
+    if (iof->fp != NULL) {
+      uint32_t close_actions;
+      FILE *fp = iof->fp;
+      iof->fp = NULL;
+      (void)io_native_fclose(L, fp, &close_actions);
+      actions |= close_actions;
+    }
+  }
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+}
+
+static int io_native_fflush(lua_State *L, FILE *fp)
+{
+  uint32_t actions;
+  int had_stopreq = lj_safepoint_had_stopreq(L);
+  int ok;
+  lj_native_enter(L2TG(L));
+  ok = fflush(fp);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+  return ok;
+}
+
+static int io_native_setvbuf(lua_State *L, FILE *fp, int mode, size_t size)
+{
+  uint32_t actions;
+  int had_stopreq = lj_safepoint_had_stopreq(L);
+  int ok;
+  lj_native_enter(L2TG(L));
+  ok = setvbuf(fp, NULL, mode, size);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+  return ok;
+}
+
+static void io_native_clearerr(lua_State *L, FILE *fp)
+{
+  uint32_t actions;
+  int had_stopreq = lj_safepoint_had_stopreq(L);
+  lj_native_enter(L2TG(L));
+  clearerr(fp);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+}
+
+static int io_native_ferror(lua_State *L, FILE *fp)
+{
+  uint32_t actions;
+  int had_stopreq = lj_safepoint_had_stopreq(L);
+  int err;
+  lj_native_enter(L2TG(L));
+  err = ferror(fp);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+  return err;
+}
+
+static int io_native_fscanf_num(lua_State *L, FILE *fp, lua_Number *dp)
+{
+  uint32_t actions;
+  int had_stopreq = lj_safepoint_had_stopreq(L);
+  int ok;
+  lj_safepoint_checkstop_fresh(L, 0, had_stopreq);
+  had_stopreq = lj_safepoint_had_stopreq(L);
+  lj_native_enter(L2TG(L));
+  ok = fscanf(fp, LUA_NUMBER_SCAN, dp);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+  return ok;
+}
+
+static char *io_native_fgets(lua_State *L, char *buf, int size, FILE *fp)
+{
+  uint32_t actions;
+  int had_stopreq = lj_safepoint_had_stopreq(L);
+  char *p;
+  lj_safepoint_checkstop_fresh(L, 0, had_stopreq);
+  had_stopreq = lj_safepoint_had_stopreq(L);
+  lj_native_enter(L2TG(L));
+  p = fgets(buf, size, fp);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+  return p;
+}
+
+static size_t io_native_fread(lua_State *L, void *buf, size_t size,
+			      size_t n, FILE *fp)
+{
+  uint32_t actions;
+  int had_stopreq = lj_safepoint_had_stopreq(L);
+  size_t nr;
+  lj_safepoint_checkstop_fresh(L, 0, had_stopreq);
+  had_stopreq = lj_safepoint_had_stopreq(L);
+  lj_native_enter(L2TG(L));
+  nr = fread(buf, size, n, fp);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+  return nr;
+}
+
+static int io_native_ungetc(lua_State *L, int c, FILE *fp)
+{
+  uint32_t actions;
+  int had_stopreq = lj_safepoint_had_stopreq(L);
+  int rc;
+  lj_native_enter(L2TG(L));
+  rc = ungetc(c, fp);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+  return rc;
+}
+
+static int io_native_getc(lua_State *L, FILE *fp, uint32_t *actionsp)
+{
+  int had_stopreq = lj_safepoint_had_stopreq(L);
+  int c;
+  lj_safepoint_checkstop_fresh(L, 0, had_stopreq);
+  lj_native_enter(L2TG(L));
+  c = getc(fp);
+  *actionsp = lj_native_leave(L);
+  return c;
+}
+
+static size_t io_native_fwrite(lua_State *L, const void *buf, size_t size,
+			       size_t n, FILE *fp, uint32_t *actionsp)
+{
+  int had_stopreq = lj_safepoint_had_stopreq(L);
+  size_t nw;
+  lj_safepoint_checkstop_fresh(L, 0, had_stopreq);
+  lj_native_enter(L2TG(L));
+  nw = fwrite(buf, size, n, fp);
+  *actionsp = lj_native_leave(L);
+  return nw;
+}
+
+#if LJ_TARGET_POSIX || (LJ_TARGET_WINDOWS && !LJ_TARGET_XBOXONE && !LJ_TARGET_UWP)
+static FILE *io_native_popen(lua_State *L, const char *fname,
+			     const char *mode, uint32_t *actionsp)
+{
+  FILE *fp;
+  lj_native_enter(L2TG(L));
+#if LJ_TARGET_POSIX
+  fp = popen(fname, mode);
+#else
+  fp = _popen(fname, mode);
+#endif
+  *actionsp = lj_native_leave(L);
+  return fp;
+}
+
+static int io_native_pclose(lua_State *L, FILE *fp, uint32_t *actionsp)
+{
+  int stat;
+  lj_native_enter(L2TG(L));
+#if LJ_TARGET_POSIX
+  stat = pclose(fp);
+#else
+  stat = _pclose(fp);
+#endif
+  *actionsp = lj_native_leave(L);
+  return stat;
+}
+#endif
+
+/* -- Open/close helpers -------------------------------------------------- */
+
+static IOFileUD *io_tofilep(lua_State *L)
+{
+  if (!(L->base < L->top && tvisudata(L->base) &&
+	lj_udata_udtype_acq(udataV(L->base)) == UDTYPE_IO_FILE))
+    lj_err_argtype(L, 1, "FILE*");
+  return (IOFileUD *)uddata(udataV(L->base));
+}
+
+static IOFileUD *io_tofile(lua_State *L)
+{
+  IOFileUD *iof = io_tofilep(L);
+  if (iof->fp == NULL)
+    lj_err_caller(L, LJ_ERR_IOCLFL);
+  return iof;
+}
+
+static IOFileUD *io_stdfile(lua_State *L, ptrdiff_t id)
+{
+  IOFileUD *iof = IOSTDF_IOF(L, id);
+  if (iof->fp == NULL)
+    lj_err_caller(L, LJ_ERR_IOSTDCL);
+  return iof;
+}
+
+static IOFileUD *io_file_new(lua_State *L)
+{
+  IOFileUD *iof = (IOFileUD *)lua_newuserdata(L, sizeof(IOFileUD));
+  GCudata *ud = udataV(L->top-1);
+  {
+    GCtab *mt = lj_func_env_acq(curr_func(L));
+    lj_udata_metatable_rel(ud, mt);
+    lj_gc_pubobjobj(L, ud, mt);
+    lj_gc2_finreg_udata_register_mt(L, G(L), ud, mt);
+  }
+  iof->fp = NULL;
+  iof->type = IOFILE_TYPE_FILE;
+  lj_udata_specialize(L, ud, UDTYPE_IO_FILE);
+  return iof;
+}
+
+static IOFileUD *io_file_open(lua_State *L, const char *mode)
+{
+  const char *fname = strdata(lj_lib_checkstr(L, 1));
+  int had_stopreq = lj_safepoint_had_stopreq(L);
+  IOFileUD *iof = io_file_new(L);
+  uint32_t actions;
+  int err = 0;
+  iof->fp = io_native_fopen(L, fname, mode, &actions);
+  if (iof->fp == NULL)
+    err = errno;
+  io_fopen_checkstop(L, iof, actions, had_stopreq);
+  if (iof->fp == NULL) {
+    char errbuf[LJ_ERR_ERRNO_BUFSZ];
+    const char *emsg = lj_err_strerrno(err, errbuf, sizeof(errbuf));
+    luaL_argerror(L, 1, lj_strfmt_pushf(L, "%s: %s", fname, emsg));
+  }
+  return iof;
+}
+
+static int io_file_close(lua_State *L, IOFileUD *iof)
+{
+  int ok;
+  if ((iof->type & IOFILE_TYPE_MASK) == IOFILE_TYPE_FILE) {
+    int had_stopreq = lj_safepoint_had_stopreq(L);
+    uint32_t actions;
+    ok = (io_native_fclose(L, iof->fp, &actions) == 0);
+    iof->fp = NULL;
+    lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+  } else if ((iof->type & IOFILE_TYPE_MASK) == IOFILE_TYPE_PIPE) {
+    int had_stopreq = lj_safepoint_had_stopreq(L);
+    uint32_t actions = 0;
+    int stat = -1;
+#if LJ_TARGET_POSIX || (LJ_TARGET_WINDOWS && !LJ_TARGET_XBOXONE && !LJ_TARGET_UWP)
+    stat = io_native_pclose(L, iof->fp, &actions);
+#endif
+    iof->fp = NULL;
+    lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+#if LJ_52
+    return luaL_execresult(L, stat);
+#else
+    ok = (stat != -1);
+#endif
+  } else {
+    lj_assertL((iof->type & IOFILE_TYPE_MASK) == IOFILE_TYPE_STDF,
+	       "close of unknown FILE* type");
+    setnilV(L->top++);
+    lua_pushliteral(L, "cannot close standard file");
+    return 2;
+  }
+  iof->fp = NULL;
+  return luaL_fileresult(L, ok, NULL);
+}
+
+/* -- Read/write helpers -------------------------------------------------- */
+
+static int io_file_readnum(lua_State *L, FILE *fp)
+{
+  lua_Number d;
+  if (io_native_fscanf_num(L, fp, &d) == 1) {
+    if (LJ_DUALNUM) {
+      int64_t i64;
+      int32_t i;
+      if (lj_num2int_check(d, i64, i) && !tvismzero((cTValue *)&d)) {
+	setintV(L->top++, i);
+	return 1;
+      }
+    }
+    setnumV(L->top++, d);
+    return 1;
+  } else {
+    setnilV(L->top++);
+    return 0;
+  }
+}
+
+static int io_file_readline(lua_State *L, FILE *fp, MSize chop)
+{
+  MSize m = LUAL_BUFFERSIZE, n = 0, ok = 0;
+  char *buf;
+  for (;;) {
+    buf = lj_buf_tmp(L, m);
+    if (io_native_fgets(L, buf+n, (int)(m-n), fp) == NULL) break;
+    n += (MSize)strlen(buf+n);
+    ok |= n;
+    if (n && buf[n-1] == '\n') { n -= chop; break; }
+    if (n >= m - 64) m += m;
+  }
+  setstrV(L, L->top++, lj_str_new(L, buf, (size_t)n));
+  lj_gc_check(L);
+  return (int)ok;
+}
+
+static void io_file_readall(lua_State *L, FILE *fp)
+{
+  MSize m, n;
+  for (m = LUAL_BUFFERSIZE, n = 0; ; m += m) {
+    char *buf = lj_buf_tmp(L, m);
+    n += (MSize)io_native_fread(L, buf+n, 1, m-n, fp);
+    if (n != m) {
+      setstrV(L, L->top++, lj_str_new(L, buf, (size_t)n));
+      lj_gc_check(L);
+      return;
+    }
+  }
+}
+
+static int io_file_readlen(lua_State *L, FILE *fp, MSize m)
+{
+  if (m) {
+    char *buf = lj_buf_tmp(L, m);
+    MSize n = (MSize)io_native_fread(L, buf, 1, m, fp);
+    setstrV(L, L->top++, lj_str_new(L, buf, (size_t)n));
+    lj_gc_check(L);
+    return n > 0;
+  } else {
+    uint32_t actions;
+    int had_stopreq = lj_safepoint_had_stopreq(L);
+    int c = io_native_getc(L, fp, &actions);
+    (void)io_native_ungetc(L, c, fp);
+    lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+    setstrV(L, L->top++, &G(L)->strempty);
+    return (c != EOF);
+  }
+}
+
+static int io_file_read(lua_State *L, IOFileUD *iof, int start)
+{
+  FILE *fp = iof->fp;
+  int ok, n, nargs = (int)(L->top - L->base) - start;
+  io_native_clearerr(L, fp);
+  if (nargs == 0) {
+    ok = io_file_readline(L, fp, 1);
+    n = start+1;  /* Return 1 result. */
+  } else {
+    /* The results plus the buffers go on top of the args. */
+    luaL_checkstack(L, nargs+LUA_MINSTACK, "too many arguments");
+    ok = 1;
+    for (n = start; nargs-- && ok; n++) {
+      if (tvisstr(L->base+n)) {
+	const char *p = strVdata(L->base+n);
+	if (p[0] == '*') p++;
+	if (p[0] == 'n')
+	  ok = io_file_readnum(L, fp);
+	else if ((p[0] & ~0x20) == 'L')
+	  ok = io_file_readline(L, fp, (p[0] == 'l'));
+	else if (p[0] == 'a')
+	  io_file_readall(L, fp);
+	else
+	  lj_err_arg(L, n+1, LJ_ERR_INVFMT);
+      } else if (tvisnumber(L->base+n)) {
+	ok = io_file_readlen(L, fp, (MSize)lj_lib_checkint(L, n+1));
+      } else {
+	lj_err_arg(L, n+1, LJ_ERR_INVOPT);
+      }
+    }
+  }
+  if (io_native_ferror(L, fp))
+    return luaL_fileresult(L, 0, NULL);
+  if (!ok)
+    setnilV(L->top-1);  /* Replace last result with nil. */
+  return n - start;
+}
+
+static int io_file_write(lua_State *L, IOFileUD *iof, int start)
+{
+  FILE *fp = iof->fp;
+  int had_stopreq = lj_safepoint_had_stopreq(L);
+  cTValue *tv;
+  int status = 1;
+  for (tv = L->base+start; tv < L->top; tv++) {
+    MSize len;
+    const char *p = lj_strfmt_wstrnum(L, tv, &len);
+    if (!p)
+      lj_err_argt(L, (int)(tv - L->base) + 1, LUA_TSTRING);
+    if (status) {
+      uint32_t actions;
+      status = (io_native_fwrite(L, p, 1, len, fp, &actions) == len);
+      lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+    }
+  }
+  if (LJ_52 && status) {
+    L->top = L->base+1;
+    if (start == 0)
+      setudataV(L, L->base, IOSTDF_UD(L, GCROOT_IO_OUTPUT));
+    return 1;
+  }
+  return luaL_fileresult(L, status, NULL);
+}
+
+static int io_file_iter(lua_State *L)
+{
+  GCfunc *fn = curr_func(L);
+  TValue fileuv;
+  IOFileUD *iof;
+  int n = (int)lj_funcC_nupvalues(&fn->c) - 1;
+  int i;
+  lj_tv_load_acq(&fileuv, &fn->c.upvalue[0]);
+  if (!tvisudata(&fileuv) ||
+      lj_udata_udtype_acq(udataV(&fileuv)) != UDTYPE_IO_FILE)
+    lj_err_caller(L, LJ_ERR_IOCLFL);
+  iof = uddata(udataV(&fileuv));
+  if (iof->fp == NULL)
+    lj_err_caller(L, LJ_ERR_IOCLFL);
+  L->top = L->base;
+  if (n) {  /* Copy upvalues with options to stack. */
+    lj_state_checkstack(L, (MSize)n);
+    for (i = 0; i < n; i++)
+      lj_tv_load_acq(L->top+i, &fn->c.upvalue[1+i]);
+    L->top += n;
+  }
+  n = io_file_read(L, iof, 0);
+  if (io_native_ferror(L, iof->fp))
+    lj_err_callermsg(L, strVdata(L->top-2));
+  if (tvisnil(L->base) && (iof->type & IOFILE_FLAG_CLOSE)) {
+    io_file_close(L, iof);  /* Return values are ignored. */
+    return 0;
+  }
+  return n;
+}
+
+static int io_file_lines(lua_State *L)
+{
+  int n = (int)(L->top - L->base);
+  if (n > LJ_MAX_UPVAL)
+    lj_err_caller(L, LJ_ERR_UNPACK);
+  lua_pushcclosure(L, io_file_iter, n);
+  return 1;
+}
+
+/* -- I/O file methods ---------------------------------------------------- */
+
+#define LJLIB_MODULE_io_method
+
+LJLIB_CF(io_method_close)
+{
+  IOFileUD *iof;
+  if (L->base < L->top) {
+    iof = io_tofile(L);
+  } else {
+    iof = IOSTDF_IOF(L, GCROOT_IO_OUTPUT);
+    if (iof->fp == NULL)
+      lj_err_caller(L, LJ_ERR_IOCLFL);
+  }
+  return io_file_close(L, iof);
+}
+
+LJLIB_CF(io_method_read)
+{
+  return io_file_read(L, io_tofile(L), 1);
+}
+
+LJLIB_CF(io_method_write)		LJLIB_REC(io_write 0)
+{
+  return io_file_write(L, io_tofile(L), 1);
+}
+
+LJLIB_CF(io_method_flush)		LJLIB_REC(io_flush 0)
+{
+  return luaL_fileresult(L, io_native_fflush(L, io_tofile(L)->fp) == 0, NULL);
+}
+
+#if LJ_32 && defined(__ANDROID__) && __ANDROID_API__ < 24
+/* The Android NDK is such an unmatched marvel of engineering. */
+extern int fseeko32(FILE *, long int, int) __asm__("fseeko");
+extern long int ftello32(FILE *) __asm__("ftello");
+#define fseeko(fp, pos, whence)	(fseeko32((fp), (pos), (whence)))
+#define ftello(fp)		(ftello32((fp)))
+#endif
+
+LJLIB_CF(io_method_seek)
+{
+  FILE *fp = io_tofile(L)->fp;
+  int opt = lj_lib_checkopt(L, 2, 1, "\3set\3cur\3end");
+  int64_t ofs = 0;
+  TValue *o;
+  uint32_t actions;
+  int had_stopreq = lj_safepoint_had_stopreq(L);
+  int res;
+  if (opt == 0) opt = SEEK_SET;
+  else if (opt == 1) opt = SEEK_CUR;
+  else if (opt == 2) opt = SEEK_END;
+  o = L->base+2;
+  if (o < L->top) {
+    if (tvisstr(o)) lj_strscan_num(strV(o), o);
+    if (tvisint(o))
+      ofs = (int64_t)intV(o);
+    else if (tvisnum(o))
+      ofs = lj_num2i64(numV(o));
+    else if (!tvisnil(o))
+      lj_err_argt(L, 3, LUA_TNUMBER);
+  }
+#if LJ_TARGET_POSIX
+  lj_native_enter(L2TG(L));
+  res = fseeko(fp, ofs, opt);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+#elif _MSC_VER >= 1400
+  lj_native_enter(L2TG(L));
+  res = _fseeki64(fp, ofs, opt);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+#elif defined(__MINGW32__)
+  lj_native_enter(L2TG(L));
+  res = fseeko64(fp, ofs, opt);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+#else
+  lj_native_enter(L2TG(L));
+  res = fseek(fp, (long)ofs, opt);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+#endif
+  if (res)
+    return luaL_fileresult(L, 0, NULL);
+#if LJ_TARGET_POSIX
+  lj_native_enter(L2TG(L));
+  ofs = ftello(fp);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+#elif _MSC_VER >= 1400
+  lj_native_enter(L2TG(L));
+  ofs = _ftelli64(fp);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+#elif defined(__MINGW32__)
+  lj_native_enter(L2TG(L));
+  ofs = ftello64(fp);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+#else
+  lj_native_enter(L2TG(L));
+  ofs = (int64_t)ftell(fp);
+  actions = lj_native_leave(L);
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+#endif
+  setint64V(L->top-1, ofs);
+  return 1;
+}
+
+LJLIB_CF(io_method_setvbuf)
+{
+  FILE *fp = io_tofile(L)->fp;
+  int opt = lj_lib_checkopt(L, 2, -1, "\4full\4line\2no");
+  size_t sz = (size_t)lj_lib_optint(L, 3, LUAL_BUFFERSIZE);
+  if (opt == 0) opt = _IOFBF;
+  else if (opt == 1) opt = _IOLBF;
+  else if (opt == 2) opt = _IONBF;
+  return luaL_fileresult(L, io_native_setvbuf(L, fp, opt, sz) == 0, NULL);
+}
+
+LJLIB_CF(io_method_lines)
+{
+  io_tofile(L);
+  return io_file_lines(L);
+}
+
+LJLIB_CF(io_method___gc)
+{
+  IOFileUD *iof = io_tofilep(L);
+  if (iof->fp != NULL && (iof->type & IOFILE_TYPE_MASK) != IOFILE_TYPE_STDF)
+    io_file_close(L, iof);
+  return 0;
+}
+
+LJLIB_CF(io_method___tostring)
+{
+  IOFileUD *iof = io_tofilep(L);
+  if (iof->fp != NULL)
+    lua_pushfstring(L, "file (%p)", iof->fp);
+  else
+    lua_pushliteral(L, "file (closed)");
+  return 1;
+}
+
+LJLIB_PUSH(top-1) LJLIB_SET(__index)
+
+#include "lj_libdef.h"
+
+/* -- I/O library functions ----------------------------------------------- */
+
+#define LJLIB_MODULE_io
+
+LJLIB_PUSH(top-2) LJLIB_SET(!)  /* Set environment. */
+
+LJLIB_CF(io_open)
+{
+  const char *fname = strdata(lj_lib_checkstr(L, 1));
+  GCstr *s = lj_lib_optstr(L, 2);
+  const char *mode = s ? strdata(s) : "r";
+  int had_stopreq = lj_safepoint_had_stopreq(L);
+  IOFileUD *iof = io_file_new(L);
+  uint32_t actions;
+  iof->fp = io_native_fopen(L, fname, mode, &actions);
+  io_fopen_checkstop(L, iof, actions, had_stopreq);
+  return iof->fp != NULL ? 1 : luaL_fileresult(L, 0, fname);
+}
+
+LJLIB_CF(io_popen)
+{
+#if LJ_TARGET_POSIX || (LJ_TARGET_WINDOWS && !LJ_TARGET_XBOXONE && !LJ_TARGET_UWP)
+  const char *fname = strdata(lj_lib_checkstr(L, 1));
+  GCstr *s = lj_lib_optstr(L, 2);
+  const char *mode = s ? strdata(s) : "r";
+  int had_stopreq = lj_safepoint_had_stopreq(L);
+  IOFileUD *iof = io_file_new(L);
+  uint32_t actions;
+  iof->type = IOFILE_TYPE_PIPE;
+#if LJ_TARGET_POSIX
+  (void)io_native_fflush(L, NULL);
+  iof->fp = io_native_popen(L, fname, mode, &actions);
+#else
+  iof->fp = io_native_popen(L, fname, mode, &actions);
+#endif
+  if (lj_safepoint_fresh_stopreq(L, actions, had_stopreq)) {
+    if (iof->fp != NULL) {
+      uint32_t close_actions;
+      FILE *fp = iof->fp;
+      iof->fp = NULL;
+      (void)io_native_pclose(L, fp, &close_actions);
+      actions |= close_actions;
+    }
+  }
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+  return iof->fp != NULL ? 1 : luaL_fileresult(L, 0, fname);
+#else
+  return luaL_error(L, LUA_QL("popen") " not supported");
+#endif
+}
+
+LJLIB_CF(io_tmpfile)
+{
+  IOFileUD *iof;
+#if LJ_TARGET_PS3 || LJ_TARGET_PS4 || LJ_TARGET_PS5 || LJ_TARGET_PSVITA || LJ_TARGET_NX
+  iof = io_file_new(L);
+  iof->fp = NULL; errno = ENOSYS;
+#else
+  TGState *tg = L2TG(L);
+  int had_stopreq = lj_safepoint_had_stopreq(L);
+  uint32_t actions;
+  iof = io_file_new(L);
+  lj_native_enter(tg);
+  iof->fp = tmpfile();
+  actions = lj_native_leave(L);
+  if (iof->fp != NULL && lj_safepoint_fresh_stopreq(L, actions, had_stopreq)) {
+    uint32_t close_actions;
+    FILE *fp = iof->fp;
+    iof->fp = NULL;
+    (void)io_native_fclose(L, fp, &close_actions);
+    actions |= close_actions;
+  }
+  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
+#endif
+  return iof->fp != NULL ? 1 : luaL_fileresult(L, 0, NULL);
+}
+
+LJLIB_CF(io_close)
+{
+  return lj_cf_io_method_close(L);
+}
+
+LJLIB_CF(io_read)
+{
+  return io_file_read(L, io_stdfile(L, GCROOT_IO_INPUT), 0);
+}
+
+LJLIB_CF(io_write)		LJLIB_REC(io_write GCROOT_IO_OUTPUT)
+{
+  return io_file_write(L, io_stdfile(L, GCROOT_IO_OUTPUT), 0);
+}
+
+LJLIB_CF(io_flush)		LJLIB_REC(io_flush GCROOT_IO_OUTPUT)
+{
+  return luaL_fileresult(L,
+    io_native_fflush(L, io_stdfile(L, GCROOT_IO_OUTPUT)->fp) == 0, NULL);
+}
+
+static int io_std_getset(lua_State *L, ptrdiff_t id, const char *mode)
+{
+  if (L->base < L->top && !tvisnil(L->base)) {
+    if (tvisudata(L->base)) {
+      io_tofile(L);
+      L->top = L->base+1;
+    } else {
+      io_file_open(L, mode);
+    }
+    /* NOBARRIER: The standard I/O handles are GC roots. */
+    lj_gcroot_rel(G(L), (GCRootID)id, gcV(L->top-1));
+  } else {
+    setudataV(L, L->top++, IOSTDF_UD(L, id));
+  }
+  return 1;
+}
+
+LJLIB_CF(io_input)
+{
+  return io_std_getset(L, GCROOT_IO_INPUT, "r");
+}
+
+LJLIB_CF(io_output)
+{
+  return io_std_getset(L, GCROOT_IO_OUTPUT, "w");
+}
+
+LJLIB_CF(io_lines)
+{
+  if (L->base == L->top) setnilV(L->top++);
+  if (!tvisnil(L->base)) {  /* io.lines(fname) */
+    IOFileUD *iof = io_file_open(L, "r");
+    iof->type = IOFILE_TYPE_FILE|IOFILE_FLAG_CLOSE;
+    L->top--;
+    setudataV(L, L->base, udataV(L->top));
+  } else {  /* io.lines() iterates over stdin. */
+    setudataV(L, L->base, IOSTDF_UD(L, GCROOT_IO_INPUT));
+  }
+  return io_file_lines(L);
+}
+
+LJLIB_CF(io_type)
+{
+  cTValue *o = lj_lib_checkany(L, 1);
+  if (!(tvisudata(o) && lj_udata_udtype_acq(udataV(o)) == UDTYPE_IO_FILE))
+    setnilV(L->top++);
+  else if (((IOFileUD *)uddata(udataV(o)))->fp != NULL)
+    lua_pushliteral(L, "file");
+  else
+    lua_pushliteral(L, "closed file");
+  return 1;
+}
+
+#include "lj_libdef.h"
+
+/* ------------------------------------------------------------------------ */
+
+static GCobj *io_std_new(lua_State *L, FILE *fp, const char *name)
+{
+  IOFileUD *iof = (IOFileUD *)lua_newuserdata(L, sizeof(IOFileUD));
+  GCudata *ud = udataV(L->top-1);
+  {
+    GCtab *mt = tabV(L->top-3);
+    lj_udata_metatable_rel(ud, mt);
+    lj_gc_pubobjobj(L, ud, mt);
+    lj_gc2_finreg_udata_register_mt(L, G(L), ud, mt);
+  }
+  iof->fp = fp;
+  iof->type = IOFILE_TYPE_STDF;
+  lj_udata_specialize(L, ud, UDTYPE_IO_FILE);
+  lua_setfield(L, -2, name);
+  return obj2gco(ud);
+}
+
+LUALIB_API int luaopen_io(lua_State *L)
+{
+  LJ_LIB_REG(L, NULL, io_method);
+  copyTV(L, L->top, L->top-1); L->top++;
+  lua_setfield(L, LUA_REGISTRYINDEX, LUA_FILEHANDLE);
+  LJ_LIB_REG(L, LUA_IOLIBNAME, io);
+  lj_gcroot_rel(G(L), GCROOT_IO_INPUT, io_std_new(L, stdin, "stdin"));
+  lj_gcroot_rel(G(L), GCROOT_IO_OUTPUT, io_std_new(L, stdout, "stdout"));
+  io_std_new(L, stderr, "stderr");
+  return 1;
+}

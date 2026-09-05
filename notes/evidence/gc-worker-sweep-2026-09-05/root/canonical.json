@@ -1,0 +1,155 @@
+[
+  {
+    "name": "m3_gc2_worker_sweep_bridge",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/luajit",
+      "/workspaces/lj-lockless/tools/test.lua",
+      "m3_gc2_worker_sweep_bridge"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "expected_runtime_processes": 18,
+    "environment": {
+      "LJ_TEST_ROOT": "/workspaces/lj-lockless",
+      "JOBS": "4",
+      "MAKE_JOBS": "4",
+      "TMPDIR": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/canonical-tmp",
+      "LUA_PATH": "/workspaces/lj-lockless/src/?.lua;;"
+    },
+    "runner_sha256": "914c42cc9565b3b61117de954446da8ca8ffbcab091d338f4cfa036f1443be27",
+    "inputs": {
+      "tests/t-worker-bridge-stop.c": "9f3b1a37e2906b04ad38e6e1b4b1725abdce295f0c595f45ab22caa50d3baa8c",
+      "tests/t-worker-bridge-detach.c": "e9a568c6029bf7982545c5cfcc9493d87d72f3036f62206716c2fd3e33d83457",
+      "tests/t-worker-bridge-consumed.c": "6a049faaa29c08e5ed0b167c50a3422b0cede1d9881becf00cfa0dd10f63a5bb",
+      "tests/t-worker-bridge-quiet.c": "94b28cd078aa8c65d388c1075016d1bc61b63414d054a47e073c1820a621ef12",
+      "tests/t-string-retention.c": "2e8e840fb4ba3a3b09168c06d828ff10ebafd41e9ff555b9737f34384fea3cf9",
+      "tests/peer-control.lua": "519ebf714b0a33b9a436d3452a153a1bc3eea3322ebf0bf74d8e76fea4ab8cb2",
+      "tests/suites/m3_gc.lua": "1052a569f308c5cf29aa7b2329057eca5ca290672329de3d2ffb30ce97e4fa95",
+      "tests/t-safepoint-local-native-duplicate.c": "f0c3258e02d5a24f1a1892efa640b6e5b7925c86638ece86eba15d954fd630c7",
+      "tests/t-gc2-worker-scheduler.c": "e9d2173e1279088d500b7bff816dae54e260b039ad5c5d6034f738d5ad2a1a27"
+    },
+    "exit": 0,
+    "seconds": 15.153379454997776,
+    "binaries": {
+      "luajit": "bc7175a9c6151e5e586e4bf455458a04905d8ebf95434cb397eaa6273d69394b",
+      "libluajit.a": "8ccf78b4109544b92898d47453722dc3ceba1088bcc4a25f5c89aac96d645fdb",
+      "libluajit.so": "90a940a2092f594fa4266b61dae27c7c106b378c0bfcc96ecaab6015673fb6cd"
+    },
+    "temporary_files": {
+      "canonical-tmp/lj_t-worker-bridge-stop": "b3fb112d9d80cd8e7e9ef3ab2638e2cd5523aaa22df0ab21d4b2a1cbe856ec0c",
+      "canonical-tmp/lj_t-worker-bridge-detach": "8202fdf8bb4d89ba7e9a8d0f8675c664a0504904f0b3087ec537cd1cdaa658ca",
+      "canonical-tmp/lj_t-worker-bridge-consumed": "dc085f2695023871f81ffa4420c750a8f2bd6907653a3f64aed043802d2edc57",
+      "canonical-tmp/lj_t-worker-bridge-quiet": "747185cfac40c257caddca6d1894d59cd2f1a096fb8957a844670d7fdef1ddd5",
+      "canonical-tmp/lj_t-string-retention": "08b496bc624bee18eb0036321c8f220b79fdd0f3b595c6f64f9f3722557d9fbe"
+    }
+  },
+  {
+    "name": "m3_gc2_auto_control",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/luajit",
+      "/workspaces/lj-lockless/tools/test.lua",
+      "m3_gc2_auto_control"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "expected_runtime_processes": 37,
+    "environment": {
+      "LJ_TEST_ROOT": "/workspaces/lj-lockless",
+      "JOBS": "4",
+      "MAKE_JOBS": "4",
+      "TMPDIR": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/canonical-tmp",
+      "LUA_PATH": "/workspaces/lj-lockless/src/?.lua;;"
+    },
+    "runner_sha256": "914c42cc9565b3b61117de954446da8ca8ffbcab091d338f4cfa036f1443be27",
+    "inputs": {
+      "tests/t-worker-bridge-stop.c": "9f3b1a37e2906b04ad38e6e1b4b1725abdce295f0c595f45ab22caa50d3baa8c",
+      "tests/t-worker-bridge-detach.c": "e9a568c6029bf7982545c5cfcc9493d87d72f3036f62206716c2fd3e33d83457",
+      "tests/t-worker-bridge-consumed.c": "6a049faaa29c08e5ed0b167c50a3422b0cede1d9881becf00cfa0dd10f63a5bb",
+      "tests/t-worker-bridge-quiet.c": "94b28cd078aa8c65d388c1075016d1bc61b63414d054a47e073c1820a621ef12",
+      "tests/t-string-retention.c": "2e8e840fb4ba3a3b09168c06d828ff10ebafd41e9ff555b9737f34384fea3cf9",
+      "tests/peer-control.lua": "519ebf714b0a33b9a436d3452a153a1bc3eea3322ebf0bf74d8e76fea4ab8cb2",
+      "tests/suites/m3_gc.lua": "1052a569f308c5cf29aa7b2329057eca5ca290672329de3d2ffb30ce97e4fa95",
+      "tests/t-safepoint-local-native-duplicate.c": "f0c3258e02d5a24f1a1892efa640b6e5b7925c86638ece86eba15d954fd630c7",
+      "tests/t-gc2-worker-scheduler.c": "e9d2173e1279088d500b7bff816dae54e260b039ad5c5d6034f738d5ad2a1a27"
+    },
+    "exit": 0,
+    "seconds": 47.49286616899917,
+    "binaries": {
+      "luajit": "bc7175a9c6151e5e586e4bf455458a04905d8ebf95434cb397eaa6273d69394b",
+      "libluajit.a": "8ccf78b4109544b92898d47453722dc3ceba1088bcc4a25f5c89aac96d645fdb",
+      "libluajit.so": "90a940a2092f594fa4266b61dae27c7c106b378c0bfcc96ecaab6015673fb6cd"
+    },
+    "temporary_files": {
+      "canonical-tmp/lj_t-worker-bridge-stop": "b3fb112d9d80cd8e7e9ef3ab2638e2cd5523aaa22df0ab21d4b2a1cbe856ec0c",
+      "canonical-tmp/lj_t-worker-bridge-detach": "8202fdf8bb4d89ba7e9a8d0f8675c664a0504904f0b3087ec537cd1cdaa658ca",
+      "canonical-tmp/lj_t-worker-bridge-consumed": "dc085f2695023871f81ffa4420c750a8f2bd6907653a3f64aed043802d2edc57",
+      "canonical-tmp/lj_t-worker-bridge-quiet": "747185cfac40c257caddca6d1894d59cd2f1a096fb8957a844670d7fdef1ddd5",
+      "canonical-tmp/lj_t-string-retention": "08b496bc624bee18eb0036321c8f220b79fdd0f3b595c6f64f9f3722557d9fbe",
+      "canonical-tmp/lj_t-stop-first-attach": "4b71fcd7677a35c2c16ecb79e22d505080ce7889d8f3892dee06215e2dccc42a",
+      "canonical-tmp/lj_t-auto-restart-numeric-max": "74ecf9ed559aaecfcf376bdbe5c3cd55d1d1b550f95cd55fc71532e2ce766323",
+      "canonical-tmp/lj_auto-control-compiler-macros.txt": "3718ff27868c37c361d501270a31436095a1fb75e6b898ff66959bb5b0fceddf",
+      "canonical-tmp/lj_t-restart-first-attach": "4ecd98431e84af7c40ba8ea48a011aba42a0372021ff7a69d8b0facac5b5b2b1",
+      "canonical-tmp/lj_t-restart-last-detach": "51b09a7642b25124ff8633b6cea131e9cef50dc6bbc67f8065615178cef4737f",
+      "canonical-tmp/lj_t-auto-finalizer-controls-v3": "fd48abf4318dc5311ed94e384ad9049dfa385cd1a883925cd2ab7f8a867c9060",
+      "canonical-tmp/lj_t-auto-controls-v2": "0bf865c08e30bfb1a1d0e3b087c48ea468dbb423a3330edda116bdef45837be8"
+    }
+  },
+  {
+    "name": "m3_gc2_worker_scheduler",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cdata-combined-20260905-bxrxos7h/strict/src/luajit",
+      "/workspaces/lj-lockless/tools/test.lua",
+      "m3_gc2_worker_scheduler"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "expected_runtime_processes": 3,
+    "environment": {
+      "LJ_TEST_ROOT": "/workspaces/lj-lockless",
+      "JOBS": "4",
+      "MAKE_JOBS": "4",
+      "TMPDIR": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/canonical-tmp",
+      "LUA_PATH": "/workspaces/lj-lockless/src/?.lua;;"
+    },
+    "runner_sha256": "914c42cc9565b3b61117de954446da8ca8ffbcab091d338f4cfa036f1443be27",
+    "inputs": {
+      "tests/t-worker-bridge-stop.c": "9f3b1a37e2906b04ad38e6e1b4b1725abdce295f0c595f45ab22caa50d3baa8c",
+      "tests/t-worker-bridge-detach.c": "e9a568c6029bf7982545c5cfcc9493d87d72f3036f62206716c2fd3e33d83457",
+      "tests/t-worker-bridge-consumed.c": "6a049faaa29c08e5ed0b167c50a3422b0cede1d9881becf00cfa0dd10f63a5bb",
+      "tests/t-worker-bridge-quiet.c": "94b28cd078aa8c65d388c1075016d1bc61b63414d054a47e073c1820a621ef12",
+      "tests/t-string-retention.c": "2e8e840fb4ba3a3b09168c06d828ff10ebafd41e9ff555b9737f34384fea3cf9",
+      "tests/peer-control.lua": "519ebf714b0a33b9a436d3452a153a1bc3eea3322ebf0bf74d8e76fea4ab8cb2",
+      "tests/suites/m3_gc.lua": "1052a569f308c5cf29aa7b2329057eca5ca290672329de3d2ffb30ce97e4fa95",
+      "tests/t-safepoint-local-native-duplicate.c": "f0c3258e02d5a24f1a1892efa640b6e5b7925c86638ece86eba15d954fd630c7",
+      "tests/t-gc2-worker-scheduler.c": "e9d2173e1279088d500b7bff816dae54e260b039ad5c5d6034f738d5ad2a1a27"
+    },
+    "exit": 1,
+    "seconds": 46.34707432099822,
+    "binaries": {
+      "luajit": "bc7175a9c6151e5e586e4bf455458a04905d8ebf95434cb397eaa6273d69394b",
+      "libluajit.a": "8ccf78b4109544b92898d47453722dc3ceba1088bcc4a25f5c89aac96d645fdb",
+      "libluajit.so": "90a940a2092f594fa4266b61dae27c7c106b378c0bfcc96ecaab6015673fb6cd"
+    },
+    "temporary_files": {
+      "canonical-tmp/lj_t-worker-bridge-stop": "b3fb112d9d80cd8e7e9ef3ab2638e2cd5523aaa22df0ab21d4b2a1cbe856ec0c",
+      "canonical-tmp/lj_t-worker-bridge-detach": "8202fdf8bb4d89ba7e9a8d0f8675c664a0504904f0b3087ec537cd1cdaa658ca",
+      "canonical-tmp/lj_t-worker-bridge-consumed": "dc085f2695023871f81ffa4420c750a8f2bd6907653a3f64aed043802d2edc57",
+      "canonical-tmp/lj_t-worker-bridge-quiet": "747185cfac40c257caddca6d1894d59cd2f1a096fb8957a844670d7fdef1ddd5",
+      "canonical-tmp/lj_t-string-retention": "08b496bc624bee18eb0036321c8f220b79fdd0f3b595c6f64f9f3722557d9fbe",
+      "canonical-tmp/lj_t-stop-first-attach": "4b71fcd7677a35c2c16ecb79e22d505080ce7889d8f3892dee06215e2dccc42a",
+      "canonical-tmp/lj_t-auto-restart-numeric-max": "74ecf9ed559aaecfcf376bdbe5c3cd55d1d1b550f95cd55fc71532e2ce766323",
+      "canonical-tmp/lj_auto-control-compiler-macros.txt": "3718ff27868c37c361d501270a31436095a1fb75e6b898ff66959bb5b0fceddf",
+      "canonical-tmp/lj_t-restart-first-attach": "4ecd98431e84af7c40ba8ea48a011aba42a0372021ff7a69d8b0facac5b5b2b1",
+      "canonical-tmp/lj_t-restart-last-detach": "51b09a7642b25124ff8633b6cea131e9cef50dc6bbc67f8065615178cef4737f",
+      "canonical-tmp/lj_t-auto-finalizer-controls-v3": "fd48abf4318dc5311ed94e384ad9049dfa385cd1a883925cd2ab7f8a867c9060",
+      "canonical-tmp/lj_t-auto-controls-v2": "0bf865c08e30bfb1a1d0e3b087c48ea468dbb423a3330edda116bdef45837be8",
+      "canonical-tmp/lj_t-gc2-worker-scheduler": "9c76bd3021401467822751d2505ece821a5ca2687b5894535b83c708e4e4fd91"
+    }
+  }
+]

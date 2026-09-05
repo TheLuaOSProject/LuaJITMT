@@ -1,0 +1,54 @@
+{
+  "artifacts": [
+    {
+      "path": "fixture.patch",
+      "bytes": 7094,
+      "sha256": "666cadc179e77d7ba9d543007d445e6c8c7ea682e555159c8bb06f9126889247"
+    },
+    {
+      "path": "candidate/t-gc2-worker-scheduler.c",
+      "bytes": 52359,
+      "sha256": "e029d5e3c1789b54f3c08cd950fb8a18a1761c21e8530809c6acce5f0849df36"
+    },
+    {
+      "path": "baseline/t-gc2-worker-scheduler.c",
+      "bytes": 49484,
+      "sha256": "e9d2173e1279088d500b7bff816dae54e260b039ad5c5d6034f738d5ad2a1a27"
+    },
+    {
+      "path": "SOURCE-PROPOSAL.md",
+      "bytes": 4170,
+      "sha256": "2e85de1f7efa4188c5fe656b58969d3d2f715e5cc06960e29c4a9694beb6782a"
+    },
+    {
+      "path": "setup.json",
+      "bytes": 44564,
+      "sha256": "8a965a4b9d0e6c9972afa23d29386261ad4704710c421341f1c007ee536d0851"
+    },
+    {
+      "path": "apply-check.json",
+      "bytes": 255,
+      "sha256": "ebddb0bdb293b8a2657d539951faf518e4a2b81be3f50b8190f7eefa581da055"
+    },
+    {
+      "path": "apply-check.stdout",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "apply-check.stderr",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "initial-source.patch",
+      "bytes": 6919,
+      "sha256": "fd401fc9b4c22876cfd83d93432d62ea341141bfbbabe5398416885c0eeca6e4"
+    },
+    {
+      "path": "initial-setup.json",
+      "bytes": 44333,
+      "sha256": "57ed76a5ec02883b8fb1f014cff8a6d04f551b5ff0133e87df755ad818d39f3b"
+    }
+  ]
+}

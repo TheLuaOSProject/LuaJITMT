@@ -1,0 +1,98 @@
+[
+  {
+    "exit_code": 0,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src",
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/t-string-retention.c",
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug-retention"
+    ],
+    "case": "compile",
+    "cwd": "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc",
+    "seconds": 0.21408878100191941,
+    "stdout": "debug-compile.stdout",
+    "stderr": "debug-compile.stderr",
+    "LUA_PATH": "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug-retention",
+      "0",
+      "0",
+      "0",
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/peer-control.lua"
+    ],
+    "case": "0-0-0",
+    "cwd": "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc",
+    "seconds": 0.16385893899860093,
+    "stdout": "debug-0-0-0.stdout",
+    "stderr": "debug-0-0-0.stderr",
+    "LUA_PATH": "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 2,
+    "argv": [
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug-retention",
+      "0",
+      "0",
+      "2",
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/peer-control.lua"
+    ],
+    "case": "0-0-2",
+    "cwd": "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc",
+    "seconds": 3.1733626970017212,
+    "stdout": "debug-0-0-2.stdout",
+    "stderr": "debug-0-0-2.stderr",
+    "LUA_PATH": "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug-retention",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/peer-control.lua"
+    ],
+    "case": "0-1-0",
+    "cwd": "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc",
+    "seconds": 0.26504750499589136,
+    "stdout": "debug-0-1-0.stdout",
+    "stderr": "debug-0-1-0.stderr",
+    "LUA_PATH": "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  },
+  {
+    "exit_code": 2,
+    "argv": [
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug-retention",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/peer-control.lua"
+    ],
+    "case": "0-1-2",
+    "cwd": "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc",
+    "seconds": 3.171622068999568,
+    "stdout": "debug-0-1-2.stdout",
+    "stderr": "debug-0-1-2.stderr",
+    "LUA_PATH": "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/?.lua;;",
+    "RETENTION_JIT": "0"
+  }
+]

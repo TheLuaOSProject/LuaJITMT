@@ -1,0 +1,34 @@
+{
+  "source_tree": "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline",
+  "runtime_commit": "eb8a5b2f9ce2fd6128f4dbeef25b03896b81cfcd",
+  "prior_validation": "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri",
+  "inputs": {
+    "/tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/libluajit.a": {
+      "sha256": "cbc7e955549f291850dd5693dce77ce1d1f56461ced87eacc77e069603880343",
+      "bytes": 2360716
+    },
+    "/tmp/lj-jit-sweep-diagnosis-20260905-jjdidw9u/automatic-retention": {
+      "sha256": "da2762397f59fdd73903e15c1ff7c5767bf64e210b1fa2ed85902e95a7ff5437",
+      "bytes": 1752280
+    },
+    "/tmp/lj-jit-sweep-diagnosis-20260905-jjdidw9u/t-string-retention.c": {
+      "sha256": "2e8e840fb4ba3a3b09168c06d828ff10ebafd41e9ff555b9737f34384fea3cf9",
+      "bytes": 12128
+    },
+    "/tmp/lj-jit-sweep-diagnosis-20260905-jjdidw9u/peer-control.lua": {
+      "sha256": "519ebf714b0a33b9a436d3452a153a1bc3eea3322ebf0bf74d8e76fea4ab8cb2",
+      "bytes": 1756
+    },
+    "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/artifact-manifest.json": {
+      "sha256": "e64ca159e9742fd23f2622617336aab3fed2eb05348a8b5f34d8a8a745dfceb1",
+      "bytes": 10559
+    }
+  },
+  "source_inputs": 225,
+  "flags": [],
+  "bounds_unchanged": {
+    "alarm_seconds": 45,
+    "external_timeout_seconds": 50,
+    "max_round_tables": 262144
+  }
+}

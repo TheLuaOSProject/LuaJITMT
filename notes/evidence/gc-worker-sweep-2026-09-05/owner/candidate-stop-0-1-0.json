@@ -1,0 +1,11 @@
+{
+  "exit_code": 0,
+  "argv": [
+    "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop",
+    "0",
+    "1",
+    "0"
+  ],
+  "seconds": 0.007614950001880061,
+  "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate/src/?.lua;;"
+}

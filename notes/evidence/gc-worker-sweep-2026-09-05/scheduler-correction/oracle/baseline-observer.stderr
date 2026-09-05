@@ -1,0 +1,7 @@
+DIAG_PREPARE_CALLS 1
+PREPARE 0 caller=0x55e100c886aa actions=64 cycle=1 phase=3 ready=0 scanned=0 leader=0 worker=1 main=0->1 worker0=4294967295->4294967295 worker1=4294967295->4294967295 returned=1
+DIAG_BOUNDARIES 4
+BOUNDARY 0 close caller=0x55e100c62457 result=0 phase=3->3 cycle=2 ready=0->0 scanned=1->1 jit=1->0 leader=0->0 worker=0->0 nworkers=0 nthreads=1
+BOUNDARY 1 ready caller=0x55e100c6249a result=0 phase=3->3 cycle=2 ready=0->1 scanned=1->1 jit=0->1 leader=0->0 worker=1->1 nworkers=0 nthreads=1
+BOUNDARY 2 close caller=0x55e100c624b9 result=1 phase=3->0 cycle=2 ready=1->1 scanned=1->0 jit=1->1 leader=0->0 worker=0->0 nworkers=0 nthreads=1
+BOUNDARY 3 ready caller=0x55e100c63238 result=0 phase=3->3 cycle=5 ready=0->1 scanned=1->1 jit=1->1 leader=0->0 worker=1->1 nworkers=2 nthreads=4

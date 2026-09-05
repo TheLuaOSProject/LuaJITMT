@@ -1,0 +1,132 @@
+[
+  {
+    "exit_code": 0,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-stop.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v3-exe"
+    ],
+    "case": "compile",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.1639446070039412,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate/src/?.lua;;"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v3-exe",
+      "0",
+      "1",
+      "0"
+    ],
+    "case": "0-1-0",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.0075123480055481195,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate/src/?.lua;;"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v3-exe",
+      "0",
+      "1",
+      "1"
+    ],
+    "case": "0-1-1",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.0074474220018601045,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate/src/?.lua;;"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v3-exe",
+      "0",
+      "2",
+      "0"
+    ],
+    "case": "0-2-0",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.007414990999677684,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate/src/?.lua;;"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v3-exe",
+      "0",
+      "2",
+      "1"
+    ],
+    "case": "0-2-1",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.007412227998429444,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate/src/?.lua;;"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v3-exe",
+      "1",
+      "1",
+      "0"
+    ],
+    "case": "1-1-0",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.0073568299994803965,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate/src/?.lua;;"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v3-exe",
+      "1",
+      "1",
+      "1"
+    ],
+    "case": "1-1-1",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.007344761994318105,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate/src/?.lua;;"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v3-exe",
+      "1",
+      "2",
+      "0"
+    ],
+    "case": "1-2-0",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.007369078004558105,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate/src/?.lua;;"
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate-stop-v3-exe",
+      "1",
+      "2",
+      "1"
+    ],
+    "case": "1-2-1",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.003487384004984051,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate/src/?.lua;;"
+  }
+]

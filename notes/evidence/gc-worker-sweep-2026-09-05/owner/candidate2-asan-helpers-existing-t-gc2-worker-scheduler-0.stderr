@@ -1,0 +1,52 @@
+
+=================================================================
+==415554==ERROR: LeakSanitizer: detected memory leaks
+
+Direct leak of 131072 byte(s) in 1 object(s) allocated from:
+    #0 0x555b1f73471d in calloc (/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-gc2-worker-scheduler+0x11271d) (BuildId: 9e5205110c3bf93d45b50c8370986a0b8720f2c1)
+    #1 0x555b1f8fff3d in lj_arena_map /tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/lj_arena.c:1871:31
+    #2 0x555b1f8fff3d in arena_alloc_fresh /tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/lj_arena.c:8036:16
+    #3 0x555b1f8fd077 in lj_arena_alloc /tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/lj_arena.c:8418:7
+    #4 0x555b1f796ada in gc_mem_newgco_raw_nothrow /tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/lj_gc.c:4778:18
+    #5 0x555b1f796ada in lj_mem_newgco_unlinked_deferred_nothrow /tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/lj_gc.c:4941:10
+    #6 0x555b1f85f5f3 in newtab_rooted /tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/lj_tab.c:2759:16
+    #7 0x555b1f8b5073 in cpluaopen /tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/lj_state.c:328:23
+    #8 0x555b1fa0f993 in lj_vm_cpcall_asm (/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-gc2-worker-scheduler+0x3ed993) (BuildId: 9e5205110c3bf93d45b50c8370986a0b8720f2c1)
+
+Direct leak of 48 byte(s) in 1 object(s) allocated from:
+    #0 0x555b1f734533 in malloc (/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-gc2-worker-scheduler+0x112533) (BuildId: 9e5205110c3bf93d45b50c8370986a0b8720f2c1)
+    #1 0x555b1f8c0dc6 in tg_registry_link_attaching /tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/lj_tg.c:590:32
+    #2 0x555b1f8c0dc6 in lj_tg_attach /tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/lj_tg.c:653:10
+    #3 0x555b1f7773e2 in test_multistate_terminal_tg_reclaim /tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-worker-scheduler.c:597:3
+    #4 0x555b1f7773e2 in main /tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-worker-scheduler.c:1483:3
+    #5 0x7f9b9edfeca7  (/lib/x86_64-linux-gnu/libc.so.6+0x29ca7) (BuildId: c495b62edadd6c356265942ec1282d98058a7b41)
+
+Direct leak of 16 byte(s) in 1 object(s) allocated from:
+    #0 0x555b1f734533 in malloc (/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-gc2-worker-scheduler+0x112533) (BuildId: 9e5205110c3bf93d45b50c8370986a0b8720f2c1)
+    #1 0x555b1f7a9842 in gc2_small_arena_registry_new /tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/lj_gc2.c:1584:29
+    #2 0x555b1f7a9842 in gc2_small_arena_registry_init /tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/lj_gc2.c:1623:9
+    #3 0x555b1f7a9842 in lj_gc2_init /tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/lj_gc2.c:1966:9
+    #4 0x555b1f8b4b42 in lua_newstate /tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/lj_state.c:1347:3
+    #5 0x555b1f9e07c6 in luaL_newstate /tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/lib_aux.c:386:7
+    #6 0x555b1f7770f1 in test_multistate_terminal_tg_reclaim /tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-worker-scheduler.c:573:8
+    #7 0x555b1f7770f1 in main /tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-worker-scheduler.c:1483:3
+    #8 0x7f9b9edfeca7  (/lib/x86_64-linux-gnu/libc.so.6+0x29ca7) (BuildId: c495b62edadd6c356265942ec1282d98058a7b41)
+
+Indirect leak of 96 byte(s) in 2 object(s) allocated from:
+    #0 0x555b1f734533 in malloc (/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-gc2-worker-scheduler+0x112533) (BuildId: 9e5205110c3bf93d45b50c8370986a0b8720f2c1)
+    #1 0x555b1f8c0dc6 in tg_registry_link_attaching /tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/lj_tg.c:590:32
+    #2 0x555b1f8c0dc6 in lj_tg_attach /tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/lj_tg.c:653:10
+    #3 0x555b1f813f48 in gc2_worker_main /tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/lj_gc2.c:2774:3
+    #4 0x555b1f731e8a in asan_thread_start(void*) asan_interceptors.cpp.o
+
+Indirect leak of 48 byte(s) in 1 object(s) allocated from:
+    #0 0x555b1f734533 in malloc (/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers-existing-t-gc2-worker-scheduler+0x112533) (BuildId: 9e5205110c3bf93d45b50c8370986a0b8720f2c1)
+    #1 0x555b1f8c0dc6 in tg_registry_link_attaching /tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/lj_tg.c:590:32
+    #2 0x555b1f8c0dc6 in lj_tg_attach /tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/lj_tg.c:653:10
+    #3 0x555b1f8b4b42 in lua_newstate /tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/lj_state.c:1347:3
+    #4 0x555b1f9e07c6 in luaL_newstate /tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-asan-helpers/src/lib_aux.c:386:7
+    #5 0x555b1f7770f1 in test_multistate_terminal_tg_reclaim /tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-worker-scheduler.c:573:8
+    #6 0x555b1f7770f1 in main /tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-worker-scheduler.c:1483:3
+    #7 0x7f9b9edfeca7  (/lib/x86_64-linux-gnu/libc.so.6+0x29ca7) (BuildId: c495b62edadd6c356265942ec1282d98058a7b41)
+
+SUMMARY: AddressSanitizer: 131280 byte(s) leaked in 6 allocation(s).

@@ -1,0 +1,70 @@
+{
+  "DETACH-WITNESS-V1.md": {
+    "sha256": "4f09b7c47448a990090bc16e0ec7bc0e7672a260546f09c72033cfdbf14582c8",
+    "bytes": 2911
+  },
+  "candidate1.patch": {
+    "sha256": "f9505578ff66134980feb698bb2cf39f92f0f6df41d7309cdda107641992e2d8",
+    "bytes": 9824
+  },
+  "source-v1/lj_gc2.c": {
+    "sha256": "62550d5e0d57432b131bc135275e9d11e4a92eab5732b2a654783108ede7b351",
+    "bytes": 770043
+  },
+  "candidate-build.json": {
+    "sha256": "f58992e6e26ae6ab0d5bdd2d4190b13f36d7fb3db644880ebb28eac945d02af9",
+    "bytes": 869
+  },
+  "candidate-stop-v3-inputs.json": {
+    "sha256": "8fddb3375046b3c2fec3b8639bacef7969203342f3ec5404680ce65706749d76",
+    "bytes": 545
+  },
+  "candidate-stop-v3-results.json": {
+    "sha256": "5ff3cf013c00a4f8a9f700f55096d868751ec2ee927871f20c7c92c361dc116d",
+    "bytes": 3602
+  },
+  "candidate-detach-v1-inputs.json": {
+    "sha256": "2e30ceb3ed3b8ba100102b752a2eb8df06425f3ed681e7d08f3194446a052856",
+    "bytes": 549
+  },
+  "candidate-detach-v1-results.json": {
+    "sha256": "2f44a825eb35eb180374b4c8393de91edeb024d4dd9f7534e6c02b6513b52d0f",
+    "bytes": 1596
+  },
+  "candidate-detach-v1-0.stdout": {
+    "sha256": "3d37615b6b580ae5b04523ae960d3dbff6585d643e14919d87f15e74d9a41f66",
+    "bytes": 363
+  },
+  "candidate-detach-v1-1.stdout": {
+    "sha256": "16a3a45802ce32b6928cf3e8fbe09423ff505b664aa44bcfdf7cd3534ac5f2d9",
+    "bytes": 363
+  },
+  "candidate-detach-v1-compile.stdout": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "candidate-detach-v1-0.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "candidate-detach-v1-1.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "candidate-detach-v1-compile.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "detach-fixture-v1/detach-run.py": {
+    "sha256": "956a101f30f306220bef6c3551953e963ca992a308949c64c219b1b51ea61a0d",
+    "bytes": 1575
+  },
+  "detach-fixture-v1/t-worker-bridge-detach.c": {
+    "sha256": "e9a568c6029bf7982545c5cfcc9493d87d72f3036f62206716c2fd3e33d83457",
+    "bytes": 6860
+  },
+  "detach-fixture-v1/t-worker-bridge-stop.c": {
+    "sha256": "9f3b1a37e2906b04ad38e6e1b4b1725abdce295f0c595f45ab22caa50d3baa8c",
+    "bytes": 6465
+  }
+}

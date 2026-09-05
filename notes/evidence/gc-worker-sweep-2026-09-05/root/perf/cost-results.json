@@ -1,0 +1,1136 @@
+[
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 0,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.040367631001573,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.785691000\nsample\t2\t1.032299000\nsample\t3\t1.024856000\nsample\t4\t1.032082000\nsample\t5\t1.030610000\nresult\ttnew\t100000\t0.785691000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 0,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.045282506995136,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "exit": 0,
+    "stdout": "sample\t1\t0.786596000\nsample\t2\t1.032568000\nsample\t3\t1.028884000\nsample\t4\t1.031845000\nsample\t5\t1.030596000\nresult\ttnew\t100000\t0.786596000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.036863638997602,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "exit": 0,
+    "stdout": "sample\t1\t0.785534000\nsample\t2\t1.030777000\nsample\t3\t1.026782000\nsample\t4\t1.030053000\nsample\t5\t1.029284000\nresult\ttnew\t100000\t0.785534000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 1,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.06044392700278,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.790531000\nsample\t2\t1.036271000\nsample\t3\t1.029717000\nsample\t4\t1.034881000\nsample\t5\t1.034065000\nresult\ttnew\t100000\t0.790531000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 2,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.060274629002379,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.784992000\nsample\t2\t1.035372000\nsample\t3\t1.033678000\nsample\t4\t1.035863000\nsample\t5\t1.035277000\nresult\ttnew\t100000\t0.784992000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 2,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.037260349999997,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "exit": 0,
+    "stdout": "sample\t1\t0.784984000\nsample\t2\t1.031246000\nsample\t3\t1.027140000\nsample\t4\t1.029987000\nsample\t5\t1.029304000\nresult\ttnew\t100000\t0.784984000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.044494686997496,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "exit": 0,
+    "stdout": "sample\t1\t0.785581000\nsample\t2\t1.033290000\nsample\t3\t1.028378000\nsample\t4\t1.031553000\nsample\t5\t1.030535000\nresult\ttnew\t100000\t0.785581000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 3,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.048213033995125,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.786680000\nsample\t2\t1.032917000\nsample\t3\t1.029427000\nsample\t4\t1.032595000\nsample\t5\t1.031440000\nresult\ttnew\t100000\t0.786680000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 4,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.065015788997698,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.790541000\nsample\t2\t1.037873000\nsample\t3\t1.033865000\nsample\t4\t1.033721000\nsample\t5\t1.034293000\nresult\ttnew\t100000\t0.790541000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 4,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.072823614995286,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "exit": 0,
+    "stdout": "sample\t1\t0.791069000\nsample\t2\t1.038019000\nsample\t3\t1.034737000\nsample\t4\t1.037243000\nsample\t5\t1.036122000\nresult\ttnew\t100000\t0.791069000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.037847271996725,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "exit": 0,
+    "stdout": "sample\t1\t0.785522000\nsample\t2\t1.029055000\nsample\t3\t1.027804000\nsample\t4\t1.030619000\nsample\t5\t1.030085000\nresult\ttnew\t100000\t0.785522000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 5,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.0410796370051685,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.785871000\nsample\t2\t1.029144000\nsample\t3\t1.028907000\nsample\t4\t1.031955000\nsample\t5\t1.030109000\nresult\ttnew\t100000\t0.785871000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 6,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.047988231002819,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.787249000\nsample\t2\t1.033596000\nsample\t3\t1.029479000\nsample\t4\t1.032062000\nsample\t5\t1.031027000\nresult\ttnew\t100000\t0.787249000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-joff",
+    "pair": 6,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 5.042091261006135,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "exit": 0,
+    "stdout": "sample\t1\t0.786046000\nsample\t2\t1.032190000\nsample\t3\t1.028416000\nsample\t4\t1.030369000\nsample\t5\t1.029926000\nresult\ttnew\t100000\t0.786046000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 0,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.918368329999794,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.713543000\nsample\t2\t1.003966000\nsample\t3\t1.024270000\nsample\t4\t1.041654000\nsample\t5\t1.056856000\nresult\ttdup\t100000\t0.713543000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 0,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.904567537996627,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "exit": 0,
+    "stdout": "sample\t1\t0.713782000\nsample\t2\t1.000118000\nsample\t3\t1.021122000\nsample\t4\t1.037870000\nsample\t5\t1.053907000\nresult\ttdup\t100000\t0.713782000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.885641366003256,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "exit": 0,
+    "stdout": "sample\t1\t0.710059000\nsample\t2\t0.996100000\nsample\t3\t1.016754000\nsample\t4\t1.034828000\nsample\t5\t1.050339000\nresult\ttdup\t100000\t0.710059000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 1,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.892734000000928,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.711340000\nsample\t2\t0.997489000\nsample\t3\t1.018414000\nsample\t4\t1.035403000\nsample\t5\t1.050990000\nresult\ttdup\t100000\t0.711340000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 2,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.919774014997529,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.716268000\nsample\t2\t1.002403000\nsample\t3\t1.023960000\nsample\t4\t1.040641000\nsample\t5\t1.057072000\nresult\ttdup\t100000\t0.716268000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 2,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.891413614001067,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "exit": 0,
+    "stdout": "sample\t1\t0.710190000\nsample\t2\t0.996440000\nsample\t3\t1.017824000\nsample\t4\t1.035294000\nsample\t5\t1.051417000\nresult\ttdup\t100000\t0.710190000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.916989259996626,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "exit": 0,
+    "stdout": "sample\t1\t0.715644000\nsample\t2\t1.004288000\nsample\t3\t1.023046000\nsample\t4\t1.039936000\nsample\t5\t1.055634000\nresult\ttdup\t100000\t0.715644000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 3,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.89123494100204,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.710579000\nsample\t2\t0.996644000\nsample\t3\t1.017911000\nsample\t4\t1.036085000\nsample\t5\t1.051727000\nresult\ttdup\t100000\t0.710579000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 4,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.905793856996752,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.703907000\nsample\t2\t1.002845000\nsample\t3\t1.022613000\nsample\t4\t1.040539000\nsample\t5\t1.056252000\nresult\ttdup\t100000\t0.703907000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 4,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.901929243998893,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "exit": 0,
+    "stdout": "sample\t1\t0.713661000\nsample\t2\t0.999346000\nsample\t3\t1.019577000\nsample\t4\t1.036803000\nsample\t5\t1.053045000\nresult\ttdup\t100000\t0.713661000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.8850051350018475,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "exit": 0,
+    "stdout": "sample\t1\t0.709444000\nsample\t2\t0.994749000\nsample\t3\t1.016580000\nsample\t4\t1.034324000\nsample\t5\t1.050585000\nresult\ttdup\t100000\t0.709444000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 5,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.892218797998794,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.710774000\nsample\t2\t0.996852000\nsample\t3\t1.018252000\nsample\t4\t1.036031000\nsample\t5\t1.051490000\nresult\ttdup\t100000\t0.710774000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 6,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.924597265999182,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.715163000\nsample\t2\t1.003380000\nsample\t3\t1.025765000\nsample\t4\t1.041476000\nsample\t5\t1.059006000\nresult\ttdup\t100000\t0.715163000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tdup",
+    "mode": "-joff",
+    "pair": 6,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tdup",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 4.913693541006069,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "exit": 0,
+    "stdout": "sample\t1\t0.714953000\nsample\t2\t1.002220000\nsample\t3\t1.022203000\nsample\t4\t1.039324000\nsample\t5\t1.054964000\nresult\ttdup\t100000\t0.714953000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 0,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.032478157998412,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.757114000\nsample\t2\t0.751121000\nsample\t3\t0.752416000\nsample\t4\t0.752533000\nsample\t5\t0.751314000\nresult\ttnew\t100000\t0.751121000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 0,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.025784070996451,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "exit": 0,
+    "stdout": "sample\t1\t0.757305000\nsample\t2\t0.752960000\nsample\t3\t0.752450000\nsample\t4\t0.751525000\nsample\t5\t0.750626000\nresult\ttnew\t100000\t0.750626000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.087900141996215,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "exit": 0,
+    "stdout": "sample\t1\t0.757465000\nsample\t2\t0.752554000\nsample\t3\t0.753842000\nsample\t4\t0.753790000\nsample\t5\t0.753435000\nresult\ttnew\t100000\t0.752554000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 1,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.122052727005212,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.760906000\nsample\t2\t0.755753000\nsample\t3\t0.756202000\nsample\t4\t0.756801000\nsample\t5\t0.756400000\nresult\ttnew\t100000\t0.755753000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 2,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.025219688999641,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.756187000\nsample\t2\t0.752245000\nsample\t3\t0.750509000\nsample\t4\t0.750119000\nsample\t5\t0.750480000\nresult\ttnew\t100000\t0.750119000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 2,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.077704661998723,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "exit": 0,
+    "stdout": "sample\t1\t0.755506000\nsample\t2\t0.751982000\nsample\t3\t0.751875000\nsample\t4\t0.751255000\nsample\t5\t0.752252000\nresult\ttnew\t100000\t0.751255000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.028159170993604,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "exit": 0,
+    "stdout": "sample\t1\t0.758870000\nsample\t2\t0.753312000\nsample\t3\t0.754238000\nsample\t4\t0.752485000\nsample\t5\t0.752241000\nresult\ttnew\t100000\t0.752241000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 3,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.01209953900252,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.755558000\nsample\t2\t0.751228000\nsample\t3\t0.750445000\nsample\t4\t0.750902000\nsample\t5\t0.750663000\nresult\ttnew\t100000\t0.750445000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 4,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.06626982200396,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.760384000\nsample\t2\t0.755639000\nsample\t3\t0.754942000\nsample\t4\t0.753567000\nsample\t5\t0.753436000\nresult\ttnew\t100000\t0.753436000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 4,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.047532770004182,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "exit": 0,
+    "stdout": "sample\t1\t0.762216000\nsample\t2\t0.756405000\nsample\t3\t0.756713000\nsample\t4\t0.757818000\nsample\t5\t0.757270000\nresult\ttnew\t100000\t0.756405000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.125610554001469,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "exit": 0,
+    "stdout": "sample\t1\t0.760790000\nsample\t2\t0.756144000\nsample\t3\t0.757621000\nsample\t4\t0.756848000\nsample\t5\t0.755679000\nresult\ttnew\t100000\t0.755679000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 5,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.072939956997288,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.762419000\nsample\t2\t0.756495000\nsample\t3\t0.755507000\nsample\t4\t0.753125000\nsample\t5\t0.755339000\nresult\ttnew\t100000\t0.753125000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 6,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.022582562996831,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "c783991bec2b7686fe6b178a7cf7e88fa81d23e311695399c84dd32285430fb3",
+    "exit": 0,
+    "stdout": "sample\t1\t0.756259000\nsample\t2\t0.752373000\nsample\t3\t0.750824000\nsample\t4\t0.751224000\nsample\t5\t0.750641000\nresult\ttnew\t100000\t0.750641000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "tnew",
+    "mode": "-jon",
+    "pair": 6,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "30",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/perf/allocation-cost.lua",
+      "tnew",
+      "100000"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 13.049904529005289,
+    "fixture_sha256": "0f09bbeb40bf5816763f2ede85c2ca1666a344a0fbf93877bc864cb8c4cc7d52",
+    "exe_sha256": "4c78c6a478a546497369202040189bb591debdf5d3a7729fdd1638a83c6d41a0",
+    "exit": 0,
+    "stdout": "sample\t1\t0.761821000\nsample\t2\t0.757183000\nsample\t3\t0.757779000\nsample\t4\t0.757618000\nsample\t5\t0.757001000\nresult\ttnew\t100000\t0.757001000\n",
+    "stderr": ""
+  }
+]

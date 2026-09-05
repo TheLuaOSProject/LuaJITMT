@@ -1,0 +1,11 @@
+{
+  "argv": [
+    "git",
+    "apply",
+    "--check",
+    "--whitespace=error-all",
+    "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/fixture.patch"
+  ],
+  "cwd": "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/apply-check",
+  "exit_code": 0
+}

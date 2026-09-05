@@ -1,0 +1,32 @@
+{
+  "argv": [
+    "make",
+    "-C",
+    "src",
+    "-j4",
+    "BUILDMODE=static",
+    "CCDEBUG=-g",
+    "TARGET_STRIP=:"
+  ],
+  "cwd": "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug",
+  "exit_code": 0,
+  "seconds": 9.932958390003478,
+  "binaries": {
+    "luajit": {
+      "sha256": "78693a6211c4f76cbf2294dd144cb2db4590292a35134524fcec2e1589aff277",
+      "bytes": 12883456
+    },
+    "libluajit.a": {
+      "sha256": "8af719e1453daf60c828ee67cfbf286c3f51021d46038a338a8e193dcc719b2a",
+      "bytes": 28561778
+    },
+    "host/buildvm": {
+      "sha256": "64a6e182e9579eb3f2dcf645a79caf88a895517292a1f205ceebe0619a280ce1",
+      "bytes": 268664
+    },
+    "host/minilua": {
+      "sha256": "6f6389a52a28daa0996036bd13c265c9d0dfd8cc53ef41fc8793b47e4cdcd6c8",
+      "bytes": 668560
+    }
+  }
+}

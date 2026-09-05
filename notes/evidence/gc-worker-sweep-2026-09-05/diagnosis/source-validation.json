@@ -1,0 +1,22 @@
+{
+  "runtime": {
+    "source": "candidate3",
+    "checked": 815,
+    "mismatches": []
+  },
+  "debug": {
+    "source": "candidate3",
+    "checked": 815,
+    "mismatches": []
+  },
+  "asan-candidate": {
+    "source": "candidate3",
+    "checked": 815,
+    "mismatches": []
+  },
+  "asan": {
+    "source": "base",
+    "checked": 815,
+    "mismatches": []
+  }
+}

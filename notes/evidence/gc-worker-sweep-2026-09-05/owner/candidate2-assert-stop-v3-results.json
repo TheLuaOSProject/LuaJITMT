@@ -1,0 +1,143 @@
+[
+  {
+    "exit_code": 0,
+    "argv": [
+      "cc",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-stop.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-stop-v3-exe"
+    ],
+    "case": "compile",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.16402435900090495,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-stop-v3-exe",
+      "0",
+      "1",
+      "0"
+    ],
+    "case": "0-1-0",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.007681200004299171,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-stop-v3-exe",
+      "0",
+      "1",
+      "1"
+    ],
+    "case": "0-1-1",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.007695658998272847,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-stop-v3-exe",
+      "0",
+      "2",
+      "0"
+    ],
+    "case": "0-2-0",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.007441951005603187,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-stop-v3-exe",
+      "0",
+      "2",
+      "1"
+    ],
+    "case": "0-2-1",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.007388915997580625,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-stop-v3-exe",
+      "1",
+      "1",
+      "0"
+    ],
+    "case": "1-1-0",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.007353348002652638,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-stop-v3-exe",
+      "1",
+      "1",
+      "1"
+    ],
+    "case": "1-1-1",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.007369822997134179,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-stop-v3-exe",
+      "1",
+      "2",
+      "0"
+    ],
+    "case": "1-2-0",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.007358167000347748,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-stop-v3-exe",
+      "1",
+      "2",
+      "1"
+    ],
+    "case": "1-2-1",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.007409092999296263,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  }
+]

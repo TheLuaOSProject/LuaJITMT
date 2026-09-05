@@ -1,0 +1,4 @@
+{"stage":"detach_after_own_poll","tid":3,"native":1,"reqmask":0,"poll":0}
+{"stage":"remote_private_action_admitted","wanted":64,"tid":3,"native":1,"reqmask":0,"poll":1,"leader":2,"epoch":22}
+{"stage":"retired_before_remote_action_return","wanted":64,"tid":3,"native":0,"reqmask":0,"poll":0,"registry_state":4,"actor":4294967295}
+{"stage":"joined","overlapped":1}

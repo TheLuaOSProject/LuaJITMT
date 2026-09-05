@@ -1,0 +1,35 @@
+
+/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/combined-observer:     file format elf64-x86-64
+
+
+Disassembly of section .init:
+
+Disassembly of section .plt:
+
+Disassembly of section .plt.got:
+
+Disassembly of section .text:
+
+000000000001d320 <gc2_idle_transition_handshake.part.0.isra.0>:
+   1d320:	48 83 ec 08          	sub    $0x8,%rsp
+   1d324:	8b 87 50 04 00 00    	mov    0x450(%rdi),%eax
+   1d32a:	85 c0                	test   %eax,%eax
+   1d32c:	0f 85 34 d0 fe ff    	jne    a366 <gc2_idle_transition_handshake.part.0.isra.0.cold>
+   1d332:	8b 87 80 04 00 00    	mov    0x480(%rdi),%eax
+   1d338:	83 f8 ff             	cmp    $0xffffffff,%eax
+   1d33b:	0f 85 25 d0 fe ff    	jne    a366 <gc2_idle_transition_handshake.part.0.isra.0.cold>
+   1d341:	8b 87 54 04 00 00    	mov    0x454(%rdi),%eax
+   1d347:	85 c0                	test   %eax,%eax
+   1d349:	0f 85 17 d0 fe ff    	jne    a366 <gc2_idle_transition_handshake.part.0.isra.0.cold>
+   1d34f:	64 48 83 3c 25 88 ff 	cmpq   $0x0,%fs:0xffffffffffffff88
+   1d356:	ff ff 00 
+   1d359:	0f 85 07 d0 fe ff    	jne    a366 <gc2_idle_transition_handshake.part.0.isra.0.cold>
+   1d35f:	64 48 89 3c 25 88 ff 	mov    %rdi,%fs:0xffffffffffffff88
+   1d366:	ff ff 
+   1d368:	e8 d3 9c 02 00       	call   47040 <lj_safepoint_handshake>
+   1d36d:	64 48 c7 04 25 88 ff 	movq   $0x0,%fs:0xffffffffffffff88
+   1d374:	ff ff 00 00 00 00 
+   1d37a:	48 83 c4 08          	add    $0x8,%rsp
+   1d37e:	c3                   	ret
+
+Disassembly of section .fini:

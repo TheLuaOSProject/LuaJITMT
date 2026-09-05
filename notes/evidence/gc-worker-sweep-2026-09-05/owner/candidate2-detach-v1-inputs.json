@@ -1,0 +1,14 @@
+{
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-detach-v1-exe": {
+    "sha256": "6477d224a4ddfd76a1fbba1732efa6a50a9e4de2e6089d3a781978cc4b0610bd",
+    "bytes": 1772088
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-detach.c": {
+    "sha256": "e9a568c6029bf7982545c5cfcc9493d87d72f3036f62206716c2fd3e33d83457",
+    "bytes": 6860
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2/src/libluajit.a": {
+    "sha256": "d45a1de3783d29668de6a00e8ba4aee500337dded07c65520835f82a62ed9fda",
+    "bytes": 2360558
+  }
+}

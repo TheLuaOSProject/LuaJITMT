@@ -1,0 +1,251 @@
+local utils = require("suite_utils")
+local build = require("suite_build")
+local runtime = require("suite_runtime")
+
+local build_and_run_c = build.build_and_run_c
+local compile_and_run_sources = build.compile_and_run_sources
+
+local M2_ORDER = {
+  "m2_arena_bitmap",
+  "m2_arena_publication",
+  "m2_arena_map",
+  "m2_arena_alloc",
+  "m2_arena_hugetab",
+  "m2_arena_huge_tail",
+  "m2_arena_sweep",
+  "m2_arena_empty_reclaimed",
+  "m2_arena_empty_reclaimed_runtime",
+  "m2_arena_state",
+  "m2_arena_gcmark",
+  "m2_arena_gcverify",
+  "m2_arena_gcclose",
+  "m2_arena_gcsweep",
+  "m2_arena_gcphase"
+}
+
+local function arena_sources(t, cfile)
+  return {
+    t:path("tests", cfile),
+    t:path("tests", "t-arena-tls-stub.c"),
+    t:path("src", "lj_arena.c"),
+    t:path("src", "lj_prng.c")
+  }
+end
+
+local function run_standalone_fixture(t, out, cfile)
+  compile_and_run_sources(t, out, arena_sources(t, cfile), {
+    cflags = "-DLUAJIT_SECURITY_PRNG=0",
+    link_luajit = false,
+    libs = {}
+  })
+end
+
+local function run_luajit_fixture(t, out, cfile, opts)
+  opts = opts or {}
+  opts.pthread = false
+  if opts.clean == nil then opts.clean = true end
+  if opts.quiet == nil then opts.quiet = true end
+  build_and_run_c(t, out, cfile, opts)
+end
+
+return function(add)
+  local cases, register = utils.case_registry(add)
+
+  register({
+    name = "m2_arena_bitmap",
+    description = "arena bitmap scaffold C fixture",
+    run = function(t)
+      run_standalone_fixture(t, t:tmp("lj_t_arena_bitmap"),
+                             "t-arena-bitmap.c")
+    end
+  })
+
+  register({
+    name = "m2_arena_publication",
+    description = "arena header/mark-before-block publication regression",
+    run = function(t)
+      local pthread = os.getenv("PTHREAD") or "-pthread"
+      local out = t:tmp("lj_t_arena_publication")
+      compile_and_run_sources(t, out .. ".publication",
+        arena_sources(t, "t-arena-publication.c"), {
+        cflags = "-DLUAJIT_SECURITY_PRNG=0 " .. pthread,
+        link_luajit = false,
+        libs = { pthread }
+      })
+      compile_and_run_sources(t, out .. ".remote_pending",
+        arena_sources(t, "t-arena-remote-pending.c"), {
+        cflags = "-DLUAJIT_SECURITY_PRNG=0 -DLJ_ARENA_TEST_HELPERS " ..
+                 pthread,
+        link_luajit = false,
+        libs = { pthread }
+      })
+    end
+  })
+
+  register({
+    name = "m2_arena_map",
+    description = "arena mmap and huge-object scaffold C fixtures",
+    run = function(t)
+      local out = t:tmp("lj_t_arena_map")
+      run_standalone_fixture(t, out .. ".map", "t-arena-map.c")
+      run_standalone_fixture(t, out .. ".huge", "t-arena-huge.c")
+    end
+  })
+
+  register({
+    name = "m2_arena_alloc",
+    description = "arena allocation, reallocation, and allocf C fixtures",
+    run = function(t)
+      local out = t:tmp("lj_t_arena_alloc")
+      run_standalone_fixture(t, out .. ".alloc", "t-arena-alloc.c")
+      run_standalone_fixture(t, out .. ".realloc", "t-arena-realloc.c")
+      run_standalone_fixture(t, out .. ".allocf", "t-arena-allocf.c")
+    end
+  })
+
+  register({
+    name = "m2_arena_huge_tail",
+    description = "Huge overflow tail geometry, failure, reader and realloc lifetime",
+    run = function(t)
+      if jit.os ~= "Linux" then
+        print("M2 Huge-tail fixture requires Linux mmap64 and linker wrappers")
+        return
+      end
+      local flags = "-DLJ_ARENA_TEST_HELPERS -DLUA_USE_ASSERT"
+      build.with_default_build_restore(t, function()
+        build.clean_build(t, { quiet = true, xcflags = flags })
+        build.compile_and_run_c(t, t:tmp("lj-t-arena-huge-tail"),
+                               "t-arena-huge-tail.c", {
+          cflags = flags,
+          libs = {
+            "-lm", "-ldl", os.getenv("PTHREAD") or "-pthread",
+            "-Wl,--wrap=mmap", "-Wl,--wrap=mmap64", "-Wl,--wrap=munmap",
+            "-Wl,--wrap=calloc", "-Wl,--wrap=free"
+          },
+          timeout = "60s"
+        })
+      end)
+    end
+  })
+
+  register({
+    name = "m2_arena_hugetab",
+    description = "huge-object side-table scaffold C fixture",
+    run = function(t)
+      local pthread = os.getenv("PTHREAD") or "-pthread"
+      compile_and_run_sources(t, t:tmp("lj_t_arena_hugetab"),
+        arena_sources(t, "t-arena-hugetab.c"), {
+        cflags = "-DLUAJIT_SECURITY_PRNG=0 -DLJ_ARENA_TEST_HELPERS " ..
+                 pthread,
+        link_luajit = false,
+        libs = { pthread }
+      })
+    end
+  })
+
+  register({
+    name = "m2_arena_sweep",
+    description = "owner-local arena sweep scaffold C fixture",
+    run = function(t)
+      compile_and_run_sources(t, t:tmp("lj_t_arena_sweep"),
+        arena_sources(t, "t-arena-sweep.c"), {
+        cflags = "-DLUAJIT_SECURITY_PRNG=0 -DLJ_ARENA_TEST_HELPERS",
+        link_luajit = false,
+        libs = {}
+      })
+    end
+  })
+
+  register({
+    name = "m2_arena_empty_reclaimed",
+    description = "terminal empty arena retention, races, and eventual reuse",
+    run = function(t)
+      local pthread = os.getenv("PTHREAD") or "-pthread"
+      compile_and_run_sources(t, t:tmp("lj_t_arena_empty_reclaimed"),
+        arena_sources(t, "t-arena-empty-reclaimed.c"), {
+        cflags = "-DLUAJIT_SECURITY_PRNG=0 -DLJ_ARENA_TEST_HELPERS " ..
+                 pthread,
+        link_luajit = false,
+        libs = { pthread }
+      })
+    end
+  })
+
+  register({
+    name = "m2_arena_empty_reclaimed_runtime",
+    description = "empty arena accounting and stale runtime publisher rejection",
+    run = function(t)
+      local flags = "-DLJ_GC2_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS " ..
+                    "-DLUA_USE_ASSERT"
+      run_luajit_fixture(t, t:tmp("lj_t_arena_empty_reclaimed_runtime"),
+        "t-arena-empty-reclaimed-runtime.c", {
+          clean = true, xcflags = flags, cflags = flags
+        })
+    end
+  })
+
+  register({
+    name = "m2_arena_state",
+    description = "arena-backed lua_State lifecycle C fixture",
+    run = function(t)
+      run_luajit_fixture(t, t:tmp("lj_t_arena_state"),
+                         "t-arena-state.c")
+    end
+  })
+
+  register({
+    name = "m2_arena_gcmark",
+    description = "arena metadata mark mirror C fixture",
+    run = function(t)
+      run_luajit_fixture(t, t:tmp("lj_t_arena_gcmark"),
+                         "t-arena-gcmark.c")
+    end
+  })
+
+  register({
+    name = "m2_arena_gcverify",
+    description = "arena GC metadata verifier path under assertions",
+    run = function(t)
+      run_luajit_fixture(t, t:tmp("lj_t_arena_gcverify"),
+                         "t-arena-gcmark.c", build.assert_opts())
+    end
+  })
+
+  register({
+    name = "m2_arena_gcclose",
+    description = "lua_close proto/closure churn under assertions",
+    run = function(t)
+      run_luajit_fixture(t, t:tmp("lj_t_arena_gcclose"),
+                         "t-arena-gcclose.c", build.assert_opts())
+    end
+  })
+
+  register({
+    name = "m2_arena_gcsweep",
+    description = "runtime traversable arena sweep bridge C fixture",
+    run = function(t)
+      run_luajit_fixture(t, t:tmp("lj_t_arena_gcsweep"),
+                         "t-arena-gcsweep.c",
+                         build.gc2_test_helper_opts())
+    end
+  })
+
+  register({
+    name = "m2_arena_gcphase",
+    description = "arena allocation-color GC phase C fixture",
+    run = function(t)
+      run_luajit_fixture(t, t:tmp("lj_t_arena_gcphase"),
+                         "t-arena-gcphase.c")
+    end
+  })
+
+  add({
+    name = "m2_arena_all",
+    description = "all focused M2 arena scaffold tests",
+    deps = M2_ORDER,
+    run = function(t)
+      utils.run_cases(cases, t, M2_ORDER)
+      print("M2 arena focused tests passed")
+    end
+  })
+end

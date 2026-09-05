@@ -1,0 +1,58 @@
+[
+  {
+    "exit_code": 0,
+    "argv": [
+      "cc",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/t-worker-bridge-detach.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-Wl,--wrap=lj_gc2_flush_ssb_detach",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_arena_alloc_prepare_sweep_kind",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-detach-v1-exe"
+    ],
+    "case": "compile",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.2650774369976716,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-detach-v1-exe",
+      "0"
+    ],
+    "case": "0",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.007570994996058289,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert-detach-v1-exe",
+      "1"
+    ],
+    "case": "1",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.007531232004112098,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-assert/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  }
+]

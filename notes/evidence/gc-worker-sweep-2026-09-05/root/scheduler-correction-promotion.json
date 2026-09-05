@@ -1,0 +1,12 @@
+{
+  "source_manifest_sha256": "282fad1fdeaad8ff40cd4f83b4b706ad42bf8a442b325dcb5a966b53174ab0d6",
+  "patch_sha256": "666cadc179e77d7ba9d543007d445e6c8c7ea682e555159c8bb06f9126889247",
+  "fixture_sha256": "e029d5e3c1789b54f3c08cd950fb8a18a1761c21e8530809c6acce5f0849df36",
+  "runtime_inputs_verified": 225,
+  "head": "6490b1273290ce9d2411419c1e02920bfa777975",
+  "command": [
+    "git",
+    "apply",
+    "/tmp/lj-scheduler-ready-authority-20260905-ceov_nqr/fixture.patch"
+  ]
+}

@@ -1,0 +1,263 @@
+[
+  {
+    "name": "combined-compile",
+    "kind": "compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/t-gc2-worker-scheduler.c",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/abort-stop-observer.c",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-Wl,--wrap=abort",
+      "-o",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/combined-stop-observer"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "exit_code": 0,
+    "seconds": 0.36842770100338385,
+    "identities": {
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/libluajit.a": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/t-gc2-worker-scheduler.c": "e9d2173e1279088d500b7bff816dae54e260b039ad5c5d6034f738d5ad2a1a27",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/abort-stop-observer.c": "f0251c885ad4aa05d679e935d34eef46e4c020ead54b1e7b5595d1801cadb3f0",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/combined-stop-observer": "240eed4164d59d84d07bc3591cdf0e1fb0333ae403a805343c293295b2b11f68"
+    }
+  },
+  {
+    "name": "combined-0-gdb",
+    "kind": "gdb",
+    "argv": [
+      "gdb",
+      "-q",
+      "-batch",
+      "-x",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/commands.gdb",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/combined-stop-observer",
+      "-p",
+      "448277"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "exit_code": 0,
+    "seconds": 0.11375439199764514,
+    "timeout_seconds": 30
+  },
+  {
+    "name": "combined-0",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/combined-stop-observer"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+    },
+    "exit_code": -6,
+    "seconds": 0.21121100500022294,
+    "timeout_seconds": 60,
+    "timed_out": false,
+    "abort_stop_observed": true
+  },
+  {
+    "name": "baseline-compile",
+    "kind": "compile",
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/t-gc2-worker-scheduler.c",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/abort-stop-observer.c",
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=pthread_create",
+      "-Wl,--wrap=pthread_join",
+      "-Wl,--wrap=abort",
+      "-o",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/baseline-stop-observer"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "exit_code": 0,
+    "seconds": 0.3585919079996529,
+    "identities": {
+      "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/libluajit.a": "e7e3beb9ff9f85ec932837f4162382f6c7a6701325b41b83f9642a761fd5a157",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/t-gc2-worker-scheduler.c": "e9d2173e1279088d500b7bff816dae54e260b039ad5c5d6034f738d5ad2a1a27",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/abort-stop-observer.c": "f0251c885ad4aa05d679e935d34eef46e4c020ead54b1e7b5595d1801cadb3f0",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/baseline-stop-observer": "b8eb56b31137008e5e0ba23bc1127ca35897b206e529e6ea2d993c16ef7b1cd8"
+    }
+  },
+  {
+    "name": "baseline-0",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/baseline-stop-observer"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+    },
+    "exit_code": 0,
+    "seconds": 0.03682644299988169,
+    "timeout_seconds": 60,
+    "timed_out": false,
+    "abort_stop_observed": false
+  },
+  {
+    "name": "baseline-1",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/baseline-stop-observer"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+    },
+    "exit_code": 0,
+    "seconds": 0.0392177530011395,
+    "timeout_seconds": 60,
+    "timed_out": false,
+    "abort_stop_observed": false
+  },
+  {
+    "name": "baseline-2",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/baseline-stop-observer"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+    },
+    "exit_code": 0,
+    "seconds": 0.034606934001203626,
+    "timeout_seconds": 60,
+    "timed_out": false,
+    "abort_stop_observed": false
+  },
+  {
+    "name": "baseline-3",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/baseline-stop-observer"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+    },
+    "exit_code": 0,
+    "seconds": 0.03456859900325071,
+    "timeout_seconds": 60,
+    "timed_out": false,
+    "abort_stop_observed": false
+  },
+  {
+    "name": "baseline-4",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/baseline-stop-observer"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+    },
+    "exit_code": 0,
+    "seconds": 0.035149709998222534,
+    "timeout_seconds": 60,
+    "timed_out": false,
+    "abort_stop_observed": false
+  },
+  {
+    "name": "baseline-5",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/baseline-stop-observer"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+    },
+    "exit_code": 0,
+    "seconds": 0.034690444997977465,
+    "timeout_seconds": 60,
+    "timed_out": false,
+    "abort_stop_observed": false
+  },
+  {
+    "name": "baseline-6",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/baseline-stop-observer"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+    },
+    "exit_code": 0,
+    "seconds": 0.0349331239995081,
+    "timeout_seconds": 60,
+    "timed_out": false,
+    "abort_stop_observed": false
+  },
+  {
+    "name": "baseline-7",
+    "kind": "runtime",
+    "argv": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb2/baseline-stop-observer"
+    ],
+    "cwd": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-reclaim-fair-combined-20260905-yws2eaap/candidate/src/?.lua;/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/lib/?.lua;;"
+    },
+    "exit_code": 0,
+    "seconds": 0.037923633004538715,
+    "timeout_seconds": 60,
+    "timed_out": false,
+    "abort_stop_observed": false
+  }
+]

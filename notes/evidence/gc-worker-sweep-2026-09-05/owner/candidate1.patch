@@ -1,0 +1,259 @@
+--- a/src/lj_gc2.c
++++ b/src/lj_gc2.c
+@@ -1241,6 +1241,13 @@
+ 			     int mark_mode, int smr_held,
+ 			     int semantic_admission, int *retryp);
+ static void *gc2_worker_main(void *arg);
++typedef enum GC2SweepBridgeResult {
++  GC2_SWEEP_BRIDGE_BLOCKED,
++  GC2_SWEEP_BRIDGE_PROGRESS,
++  GC2_SWEEP_BRIDGE_COMPLETE,
++  GC2_SWEEP_BRIDGE_DEFERRED
++} GC2SweepBridgeResult;
++static GC2SweepBridgeResult gc2_sweep_prepare_bridge_result(global_State *g);
+ static uint32_t gc2_worker_drain_inner(global_State *g, TGState *logical_tg,
+ 				       uint32_t limit, uint32_t *progress,
+ 				       int hold_mark_gate);
+@@ -2770,7 +2777,7 @@
+   while (gc2_worker_stop_acq(g) == 0) {
+     uint32_t wake = gc2_worker_wake_acq(g);
+     uint32_t total = 0;
+-    int deferred = 0;
++    int deferred = 0, bridge_progress = 0;
+     for (;;) {
+       uint32_t step, forward = 0;
+       uint64_t defer0;
+@@ -2787,6 +2794,20 @@
+ 	break;
+       total = step > ~(uint32_t)0 - total ? ~(uint32_t)0 : total + step;
+     }
++    if (!deferred && gc2_worker_stop_acq(g) == 0 &&
++	gc2_phase_acq(g) == LJ_GC2_SWEEP) {
++      GC2SweepBridgeResult result = gc2_sweep_prepare_bridge_result(g);
++      if (result == GC2_SWEEP_BRIDGE_PROGRESS) {
++	bridge_progress = 1;
++	if (total != ~(uint32_t)0)
++	  total++;
++      } else if (result != GC2_SWEEP_BRIDGE_COMPLETE) {
++	/* An unchanged frontier or refused claim is durable work, not progress.
++	** Reabsorb the boundary's retry wake instead of ping-ponging it between
++	** workers while its root, reader, recorder or phase owner cannot move. */
++	deferred = 1;
++      }
++    }
+     if (!deferred && total == 0 && gc2_phase_acq(g) == LJ_GC2_SWEEP &&
+ 	lj_gc2_sweep_to_idle(g))
+       total = 1;  /* 05 section 5.8: scheduler-owned idle close. */
+@@ -2798,6 +2819,10 @@
+       gc2_worker_deferred_backoff(g);
+       continue;
+     }
++    /* A certified bridge advance may need another bounded pruning unit even
++    ** when no publisher changed worker_wake. Do not park on that frontier. */
++    if (bridge_progress)
++      continue;
+     /* Snapshot-before-check closes the wake-before-wait window. A publisher
+     ** which made work visible after this iteration began either changes the
+     ** sequence here or makes the futex wait fail its expected-value check. */
+@@ -5572,36 +5597,46 @@
+   return gc2_sweep_root_scanned_cas(g, &expect, 1);
+ }
+ 
+-void lj_gc2_sweep_prepare_bridge_boundary(global_State *g,
+-					  GC2SweepBridgePreserveFunc preserve)
+-{
++static GC2SweepBridgeResult gc2_sweep_prepare_bridge_result(global_State *g)
++{
++  GCRef *cursor0;
++  uint32_t cycle, scanned0, done0, ready0, unlinked = 0;
+   uint64_t defer0;
+-  UNUSED(preserve);  /* Per-entry preservation is folded into bounded pruning. */
++  int prepare0, wake = 0;
++  GC2SweepBridgeResult result = GC2_SWEEP_BRIDGE_BLOCKED;
+   /* Keep the direct null guard even though can_progress() also has one. Apart
+   ** from documenting this public boundary, it prevents GCC's interprocedural
+   ** object-size pass from retaining a spurious null path into the inlined
+   ** atomic accessors under -Werror=stringop-overflow. */
+   if (!g || !lj_gc2_sweep_bridge_can_progress(g))
+-    return;
++    return result;
+   defer0 = gc2_deferred_epoch_acq(g);
+   if (!gc2_worker_claim(g))
+-    return;  /* Serialize list mutation with sweep batches and close. */
++    return result;  /* Serialize list mutation with sweep batches and close. */
+   if (!lj_gc2_sweep_bridge_can_progress(g)) {
+     gc2_worker_release(g);
+-    return;
+-  }
++    return result;
++  }
++  /* Compare only frontiers owned by this claim and SWEEP generation. A null
++  ** cursor denotes the root-head slot until EOF; normalizing it avoids calling
++  ** the first failed validation an advance merely because it saved that slot. */
++  cycle = gc2_cycle_acq(g);
++  scanned0 = gc2_sweep_root_scanned_acq(g);
++  done0 = gc2_sweep_root_done_acq(g);
++  ready0 = gc2_sweep_bridge_ready_acq(g);
++  cursor0 = gc2_sweep_root_cursor_acq(g);
++  if (!cursor0)
++    cursor0 = lj_gc_root_ref(g);
++  prepare0 = lj_gc2_sweep_needs_prepare(g);
+   /*
+   ** Allocation cursors are owner-local. Request the boundary reset through a
+   ** safepoint so each TG moves its own traversable bump/free state to sweep
+   ** while it is not concurrently allocating from that state.
+   */
+-  if (lj_gc2_sweep_needs_prepare(g))
++  if (prepare0)
+     lj_gc2_handshake(g, LJ_GC2_HS_RESET_ALLOC);
+-  if (gc2_deferred_epoch_acq(g) != defer0) {
+-    gc2_worker_release(g);
+-    lj_gc2_worker_wake(g);
+-    return;
+-  }
++  if (gc2_deferred_epoch_acq(g) != defer0)
++    goto retry;
+   if (!gc2_sweep_bridge_ready_acq(g)) {
+     TGState *self = G2TG(g);
+     /* The mandatory SWEEP semantic snapshot is distinct from bounded pruning
+@@ -5609,22 +5644,14 @@
+     ** another all-TG scan on every batch. A real thread NEEDSCAN handoff is the
+     ** only condition which requests an additional owner snapshot. */
+     if (gc2_sweep_root_scanned_acq(g) != 1) {
+-      if (!gc2_sweep_root_snapshot(g)) {
+-	gc2_worker_release(g);
+-	lj_gc2_worker_wake(g);
+-	return;
+-      }
+-      if (gc2_deferred_epoch_acq(g) != defer0) {
+-	gc2_worker_release(g);
+-	lj_gc2_worker_wake(g);
+-	return;
+-      }
++      if (!gc2_sweep_root_snapshot(g))
++	goto retry;
++      if (gc2_deferred_epoch_acq(g) != defer0)
++	goto retry;
+     }
+     if (gc2_sweep_bridge_owner_roots_pending(g)) {
+       lj_gc2_trace_sweep_roots(g);
+-      gc2_worker_release(g);
+-      lj_gc2_worker_wake(g);
+-      return;
++      goto retry;
+     }
+     /* Rotate post-snapshot rescue entries, including the initiating TG which
+     ** is not necessarily a remote handshake target. The ordinary SWEEP worker
+@@ -5633,30 +5660,20 @@
+     if (self && self->gl == g && !lj_tg_flags_test_acq(self, TGF_DEAD))
+       (void)gc2_flush_ssb(g, self, 0);
+     (void)gc2_mark_drain_owned_bounded(g, LJ_GC2_SWEEP_BATCH);
+-    if (gc2_deferred_epoch_acq(g) != defer0) {
+-      gc2_worker_release(g);
+-      lj_gc2_worker_wake(g);
+-      return;
+-    }
++    if (gc2_deferred_epoch_acq(g) != defer0)
++      goto retry;
+     if (!lj_gc2_ssb_empty(g)) {
+       (void)lj_gc2_handshake(g, LJ_GC2_HS_FLUSH_SSB);
+-      gc2_worker_release(g);
+-      lj_gc2_worker_wake(g);
+-      return;
++      goto retry;
+     }
+     if (gc2_table_rescan_pending_acq(g) != 0) {
+       /* Exact table tokens also cover publishers between reservation and queue
+       ** visibility. Never erase their aggregate credit from a close observer. */
+-      gc2_worker_release(g);
+-      lj_gc2_worker_wake(g);
+-      return;
++      goto retry;
+     }
+     if (lj_tg_any_jit_active(g) || gc2_jit_recorder_active(g) ||
+-	gc2_weak_owned_peer_active(g)) {
+-      gc2_worker_release(g);
+-      lj_gc2_worker_wake(g);
+-      return;
+-    }
++	gc2_weak_owned_peer_active(g))
++      goto retry;
+     /* Retire the marks produced by the completed snapshot/drain, then sample
+     ** the real work publications again. A racing producer either increments
+     ** the counter after this LP or leaves SSB/grey/NEEDSCAN work visible. */
+@@ -5668,19 +5685,13 @@
+ 	!lj_gc2_ssb_empty(g) || !gc2_recovery_empty(g) ||
+ 	gc2_sweep_bridge_owner_roots_pending(g) ||
+ 	gc2_table_rescan_pending_acq(g) != 0 ||
+-	gc2_marks_this_round_acq(g) != 0) {
+-      gc2_worker_release(g);
+-      lj_gc2_worker_wake(g);
+-      return;
+-    }
++	gc2_marks_this_round_acq(g) != 0)
++      goto retry;
+     /* One bounded ownership-spine batch. It only unlinks old mark-zero entries
+     ** and preserves destructor side bodies; no destructor runs here. */
+-    (void)lj_gc_sweep_gc2_unmarked(g);
+-    if (!gc2_sweep_root_done_acq(g)) {
+-      gc2_worker_release(g);
+-      lj_gc2_worker_wake(g);
+-      return;
+-    }
++    unlinked = lj_gc_sweep_gc2_unmarked(g);
++    if (!gc2_sweep_root_done_acq(g))
++      goto retry;
+     /* Revalidate every concrete producer at the READY LP. Stack dirty epochs
+     ** are deliberately absent: after the mandatory snapshot, phase-aware
+     ** barriers publish actual rescue work and freshness is not a lease. */
+@@ -5693,14 +5704,45 @@
+ 	!gc2_recovery_empty(g) ||
+ 	gc2_sweep_bridge_owner_roots_pending(g) ||
+ 	gc2_table_rescan_pending_acq(g) != 0 ||
+-	gc2_marks_this_round_acq(g) != 0) {
+-      gc2_worker_release(g);
+-      lj_gc2_worker_wake(g);
+-      return;
+-    }
++	gc2_marks_this_round_acq(g) != 0)
++      goto retry;
+     lj_gc2_sweep_bridge_ready(g);
+   }
++  goto out;
++retry:
++  wake = 1;
++out:
++  /* Decide before releasing worker_active. Neither a helper invocation nor a
++  ** pruning 'seen' count proves progress: validation can fail at the same edge.
++  ** A defer wins even if this unit advanced another frontier first. Graph-only
++  ** work is left to the ordinary drain; this outcome certifies bridge work. */
++  if (gc2_deferred_epoch_acq(g) != defer0) {
++    result = GC2_SWEEP_BRIDGE_DEFERRED;
++  } else if (gc2_phase_acq(g) == LJ_GC2_SWEEP && gc2_cycle_acq(g) == cycle) {
++    GCRef *cursor = gc2_sweep_root_cursor_acq(g);
++    uint32_t ready = gc2_sweep_bridge_ready_acq(g);
++    int prepared = prepare0 && !lj_gc2_sweep_needs_prepare(g);
++    if (!cursor)
++      cursor = lj_gc_root_ref(g);
++    if (unlinked != 0 || cursor != cursor0 ||
++	(!done0 && gc2_sweep_root_done_acq(g)) ||
++	(scanned0 != 1 && gc2_sweep_root_scanned_acq(g) == 1) ||
++	(!ready0 && ready) || prepared)
++      result = GC2_SWEEP_BRIDGE_PROGRESS;
++    else if (ready && (!prepare0 || prepared))
++      result = GC2_SWEEP_BRIDGE_COMPLETE;
++  }
+   gc2_worker_release(g);
++  if (wake)
++    lj_gc2_worker_wake(g);
++  return result;
++}
++
++void lj_gc2_sweep_prepare_bridge_boundary(global_State *g,
++					  GC2SweepBridgePreserveFunc preserve)
++{
++  UNUSED(preserve);  /* Per-entry preservation is folded into bounded pruning. */
++  (void)gc2_sweep_prepare_bridge_result(g);
+ }
+ 
+ int lj_gc2_sweep_pending(global_State *g)

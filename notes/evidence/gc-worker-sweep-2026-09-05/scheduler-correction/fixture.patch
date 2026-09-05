@@ -1,0 +1,174 @@
+diff --git a/tests/t-gc2-worker-scheduler.c b/tests/t-gc2-worker-scheduler.c
+index 1d705f00..7d009281 100644
+--- a/tests/t-gc2-worker-scheduler.c
++++ b/tests/t-gc2-worker-scheduler.c
+@@ -366,6 +366,32 @@ static int scheduler_tg_registered(global_State *g, TGState *target)
+   return 0;
+ }
+ 
++/* Acquire the same worker/phase exclusion required by the synthetic bridge
++** publisher. A sampled busy token never authorizes this fixture to borrow it. */
++static void claim_synthetic_sweep_worker(global_State *g)
++{
++  int i;
++  for (i = 0; i < 1000; i++) {
++    uint32_t expect = 0;
++    if (gc2_cycle_leader_acq(g) == 0 &&
++        gc2_smr_reclaiming_acq(g) == 0 &&
++        gc2_worker_active_cas(g, &expect, 1)) {
++      if (gc2_cycle_leader_acq(g) == 0 &&
++          gc2_smr_reclaiming_acq(g) == 0)
++        return;
++      gc2_worker_active_rel(g, 0);
++    }
++    sleep_ns(1000000L);
++  }
++  assert(0 && "synthetic SWEEP worker claim timed out");
++}
++
++static void release_synthetic_sweep_worker(global_State *g)
++{
++  gc2_worker_active_rel(g, 0);
++  lj_gc2_test_worker_wake(g);
++}
++
+ static void mark_worker_tgs_sweep_ready(global_State *g, uint32_t sweep_cycle)
+ {
+   uint32_t i;
+@@ -373,11 +399,54 @@ static void mark_worker_tgs_sweep_ready(global_State *g, uint32_t sweep_cycle)
+     TGState *worker = gc2_worker_tg_acq(g, i);
+     if (!worker)
+       continue;
++    assert(worker->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
++    assert(worker->alloc.quarantine[LJ_ARENAK_TRAVERSABLE] == NULL);
+     worker->alloc.prepare_epoch = sweep_cycle;
+     worker->alloc.sweep_epoch = sweep_cycle;
+   }
+ }
+ 
++static void test_manual_sweep_close_requires_ready(global_State *g, TGState *tg)
++{
++  uint32_t sweep_cycle;
++  uint64_t closes0 = gc2_sweep_to_idle_acq(g);
++
++  /* The negative and positive close use the same uncontended synthetic phase.
++  ** No pool or peer can make the negative return zero by owning its token. */
++  assert(gc2_n_workers_acq(g) == 0);
++  assert(gc2_n_threads_acq(g) == 1);
++  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
++  claim_synthetic_sweep_worker(g);
++  sweep_cycle = gc2_cycle_inc_acqrel(g);
++  /* Initialize this new synthetic cycle while IDLE and exclusively owned. */
++  gc2_sweep_bridge_ready_rel(g, 0);
++  test_publish_sweep_phase(g);
++  assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
++  assert(tg->alloc.quarantine[LJ_ARENAK_TRAVERSABLE] == NULL);
++  tg->alloc.prepare_epoch = sweep_cycle;
++  tg->alloc.sweep_epoch = sweep_cycle;
++  release_synthetic_sweep_worker(g);
++
++  assert(gc2_worker_active_acq(g) == 0);
++  assert(gc2_cycle_leader_acq(g) == 0);
++  assert(gc2_smr_reclaiming_acq(g) == 0);
++  assert(!lj_gc2_sweep_needs_prepare(g));
++  assert(!lj_gc2_sweep_pending(g));
++  assert(gc2_sweep_bridge_ready_acq(g) == 0);
++  assert(lj_gc2_sweep_to_idle(g) == 0);
++  assert(gc2_phase_acq(g) == LJ_GC2_SWEEP);
++  assert(gc2_worker_active_acq(g) == 0);
++  assert(gc2_cycle_leader_acq(g) == 0);
++
++  claim_synthetic_sweep_worker(g);
++  lj_gc2_sweep_bridge_ready(g);
++  assert(gc2_sweep_bridge_ready_acq(g) == 1);
++  release_synthetic_sweep_worker(g);
++  assert(lj_gc2_sweep_to_idle(g) == 1);
++  assert(gc2_phase_acq(g) == LJ_GC2_IDLE);
++  assert(gc2_sweep_to_idle_acq(g) == closes0 + 1u);
++}
++
+ static int unlink_root_object(global_State *g, GCobj *needle)
+ {
+   GCRef *p = &g->gc.root;
+@@ -1343,7 +1412,7 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
+ 				      TGState *tg)
+ {
+   TGState extra_tg;
+-  uint64_t async0, arenas0, blocks0, wakes0;
++  uint64_t async0, arenas0, blocks0, wakes0, closes0;
+   uint32_t sweep_cycle;
+   void *extra_plain, *extra_trav;
+   GCArena *extra_plain_a, *extra_trav_a, *swept_a;
+@@ -1368,14 +1437,25 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
+ 
+   lj_gc2_test_finalizer_enter(g);
+   assert(lj_gc2_test_finalizer_pending(g));
++  claim_synthetic_sweep_worker(g);
+   g->gc2.cycle++;
+   sweep_cycle = g->gc2.cycle;
++  gc2_sweep_bridge_ready_rel(g, 0);  /* Fresh owned IDLE -> SWEEP setup. */
+   test_publish_sweep_phase(g);
+   lj_arena_alloc_prepare_sweep_kind(&extra_tg.alloc, LJ_ARENAK_PLAIN);
+   lj_arena_alloc_prepare_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
+   lj_arena_alloc_restore_sweep_kind(&extra_tg.alloc, LJ_ARENAK_PLAIN);
+   extra_tg.alloc.prepare_epoch = sweep_cycle;
++  /* This synthetic phase prepares only the extra arena. Make every other
++  ** owner's empty prepared frontier explicit before a worker can help it. */
++  assert(tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] == NULL);
++  assert(tg->alloc.quarantine[LJ_ARENAK_TRAVERSABLE] == NULL);
++  tg->alloc.prepare_epoch = sweep_cycle;
++  tg->alloc.sweep_epoch = sweep_cycle;
++  mark_worker_tgs_sweep_ready(g, sweep_cycle);
+   lj_gc2_sweep_bridge_ready(g);
++  assert(gc2_sweep_bridge_ready_acq(g) == 1);
++  release_synthetic_sweep_worker(g);
+   assert(extra_tg.alloc.needsweep[LJ_ARENAK_PLAIN] == NULL);
+   assert(arena_list_contains(extra_tg.alloc.owned[LJ_ARENAK_PLAIN],
+ 			     extra_plain_a));
+@@ -1386,6 +1466,7 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
+ 
+   async0 = gc2_worker_async_progress_acq(g);
+   arenas0 = gc2_sweep_owner_arenas_acq(g);
++  closes0 = gc2_sweep_to_idle_acq(g);
+   blocks0 = gc2_finalizer_sweep_blocks_acq(g);
+   wakes0 = gc2_worker_wakes_acq(g);
+   for (i = 0; i < 1000 &&
+@@ -1422,26 +1503,17 @@ static void test_async_sweep_and_stop(lua_State *L, global_State *g,
+   assert((extra_plain_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
+   assert((swept_a->hdr.flags & LJ_AF_NEEDSWEEP) == 0);
+   assert(swept_a->hdr.sweep_epoch == sweep_cycle);
+-  assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
++  /* The worker may already have completed the phase after that arena. READY
++  ** stays irreversible while asynchronous owners can drain or close SWEEP. */
++  assert(gc2_phase_acq(g) == LJ_GC2_SWEEP || gc2_phase_acq(g) == LJ_GC2_IDLE);
+   assert(!lj_gc2_sweep_pending(g));
+-
+-  /* Keep the later close-boundary assertion synthetic and explicit. */
+-  gc2_sweep_bridge_ready_rel(g, 0);
+-  lj_arena_alloc_restore_sweep_kind(&extra_tg.alloc, LJ_ARENAK_TRAVERSABLE);
+-  /* Synthetic boundary: main TG had no prepared work. */
+-  tg->alloc.prepare_epoch = sweep_cycle;
+-  tg->alloc.sweep_epoch = sweep_cycle;
+-  mark_worker_tgs_sweep_ready(g, sweep_cycle);
+-  assert(lj_gc2_sweep_to_idle(g) == 0);
+-  assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP);
+-  async0 = gc2_worker_async_progress_acq(g);
+-  lj_gc2_sweep_bridge_ready(g);
+   for (i = 0; i < 1000 && la_load32_acq(&g->gc2.phase) == LJ_GC2_SWEEP; i++) {
+     lj_gc2_test_worker_wake(g);
+     (void)lj_safepoint_poll(L);
+     sleep_ns(1000000L);
+   }
+   assert(la_load32_acq(&g->gc2.phase) == LJ_GC2_IDLE);
++  assert(gc2_sweep_to_idle_acq(g) > closes0);
+   assert(gc2_worker_async_progress_acq(g) > async0);
+ 
+   lj_gc2_worker_stop(g);
+@@ -1472,6 +1544,7 @@ int main(void)
+   g = G(L);
+   tg = G2TG(g);
+   assert(tg != NULL);
++  test_manual_sweep_close_requires_ready(g, tg);
+ 
+   assert(lj_gc2_workers_set(g, 2) == 1);
+   assert(gc2_worker_thread_acq(g, 0) != NULL);

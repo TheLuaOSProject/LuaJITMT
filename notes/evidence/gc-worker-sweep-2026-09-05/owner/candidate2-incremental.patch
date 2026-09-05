@@ -1,0 +1,13 @@
+--- a/src/lj_gc2.c
++++ b/src/lj_gc2.c
+@@ -2840,6 +2840,10 @@
+     ** holder remains a separate helpability problem. */
+     gc2_worker_wake_futex_wait(g, wake, gc2_worker_park_timeout_ns(g));
+   }
++  /* Close the startup native scope before detach changes owner-private state.
++  ** An already-consumed root/allocator action must finish its poll hold first;
++  ** a later request cannot remotely borrow this TG during private teardown. */
++  (void)lj_native_leave_tg(tg);
+   lj_tg_detach(g, tg);
+   lj_thr_set_tg(NULL);
+   (void)gc2_worker_exited_add(g, 1);

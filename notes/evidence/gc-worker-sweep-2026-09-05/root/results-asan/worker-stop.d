@@ -1,0 +1,22 @@
+/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-asan/worker-stop: \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/fixtures/t-worker-bridge-stop.c \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lua.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/luaconf.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lauxlib.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lualib.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/luajit.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_obj.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_def.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_arch.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_atomic.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_gc2token.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_tgregistry.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_tgslot.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_gc.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_gc2.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_arena.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_safepoint.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_tg.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_bc.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_ctype.h \
+  /tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/lj_thr.h

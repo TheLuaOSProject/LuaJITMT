@@ -1,0 +1,33 @@
+{
+  "argv": [
+    "make",
+    "-C",
+    "src",
+    "-j2"
+  ],
+  "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline",
+  "exit_code": 0,
+  "seconds": 24.690372856995964,
+  "binaries": {
+    "luajit": {
+      "sha256": "7deaa9837e489ec69dc590f02be79143ddd1d60631614a2b91d2e75ad9e19b0f",
+      "bytes": 1518832
+    },
+    "libluajit.a": {
+      "sha256": "cdd20fa9f9566bbddcfc9562eec3cc3490c909803e459ed06a7ad0280aedc871",
+      "bytes": 2360014
+    },
+    "libluajit.so": {
+      "sha256": "d09161092725712cabc7355d52dc1a4ab3387c302d1fd3ef59cdd50989dccfb7",
+      "bytes": 1515256
+    },
+    "host/buildvm": {
+      "sha256": "bce909c794db11e99f2702c1f8231f9e5809c35b57a644e2062adc2632c6e5c3",
+      "bytes": 122336
+    },
+    "host/minilua": {
+      "sha256": "8ab7d5a14b0525e3759effc570de0f02965b5618600fbfe15499924a399f1538",
+      "bytes": 154760
+    }
+  }
+}

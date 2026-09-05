@@ -1,0 +1,14 @@
+{
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/duplicate-correction/t-safepoint-local-native-duplicate.c": {
+    "sha256": "a734a086a8901a1ab2938a18e4ae9b476c31a76c1f7f031b8bf13b7aabf3d2a0",
+    "bytes": 7228
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-asan-helpers-duplicate-correction-t-safepoint-local-native-duplicate": {
+    "sha256": "14ee1e2524e99f9b14bf284cfaf38bf900d267ba3ccba3d5cc5a9d52eac3e9b2",
+    "bytes": 19853168
+  },
+  "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-asan-helpers/src/libluajit.a": {
+    "sha256": "35e3eb21fbfda2c8c52dd5ee7e0eccb46852bc3e2db359515f48a387cb657e6a",
+    "bytes": 27217202
+  }
+}

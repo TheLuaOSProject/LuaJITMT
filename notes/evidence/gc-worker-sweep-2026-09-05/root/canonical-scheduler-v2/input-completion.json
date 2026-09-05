@@ -1,0 +1,7 @@
+{
+  "note": "The driver named a nonexistent scheduler Lua file; its conditional map omitted it. Actual t-gc-workers.lua is recorded here after the run, byte-identical to both initial base and candidate copies. Command logs identify both executions.",
+  "path": "tests/t-gc-workers.lua",
+  "sha256": "cdfe55b4879aeb3398d5c2a2e12aec3fccb97670b8060026cc43f67ea35ebdb9",
+  "base_sha256": "cdfe55b4879aeb3398d5c2a2e12aec3fccb97670b8060026cc43f67ea35ebdb9",
+  "candidate_sha256": "cdfe55b4879aeb3398d5c2a2e12aec3fccb97670b8060026cc43f67ea35ebdb9"
+}

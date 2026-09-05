@@ -1,0 +1,64 @@
+[
+  {
+    "argv": [
+      "cc",
+      "--version"
+    ],
+    "exit_code": 0,
+    "stdout": "diagnostic/source-proof-0.stdout",
+    "stderr": "diagnostic/source-proof-0.stderr"
+  },
+  {
+    "argv": [
+      "gdb",
+      "--version"
+    ],
+    "exit_code": 0,
+    "stdout": "diagnostic/source-proof-1.stdout",
+    "stderr": "diagnostic/source-proof-1.stderr"
+  },
+  {
+    "argv": [
+      "uname",
+      "-a"
+    ],
+    "exit_code": 0,
+    "stdout": "diagnostic/source-proof-2.stdout",
+    "stderr": "diagnostic/source-proof-2.stderr"
+  },
+  {
+    "argv": [
+      "git",
+      "diff",
+      "--no-index",
+      "--",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/source/baseline/src/lj_gc2.c",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/source/combined/src/lj_gc2.c"
+    ],
+    "exit_code": 1,
+    "stdout": "diagnostic/source-proof-3.stdout",
+    "stderr": "diagnostic/source-proof-3.stderr"
+  },
+  {
+    "argv": [
+      "objdump",
+      "-d",
+      "--disassemble=__wrap_abort",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb4/combined-stop-observer"
+    ],
+    "exit_code": 0,
+    "stdout": "diagnostic/source-proof-4.stdout",
+    "stderr": "diagnostic/source-proof-4.stderr"
+  },
+  {
+    "argv": [
+      "objdump",
+      "-d",
+      "--disassemble=diag_abort_observe",
+      "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/gdb4/combined-stop-observer"
+    ],
+    "exit_code": 0,
+    "stdout": "diagnostic/source-proof-5.stdout",
+    "stderr": "diagnostic/source-proof-5.stderr"
+  }
+]

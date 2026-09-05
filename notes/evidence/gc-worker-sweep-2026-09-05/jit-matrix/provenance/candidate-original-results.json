@@ -1,0 +1,781 @@
+[
+  {
+    "name": "stock-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "test.lua",
+      "--quiet"
+    ],
+    "test": true,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/stock/test",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 60,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 1.4178398369986098,
+    "stdout": "stock-joff.stdout",
+    "stderr": "stock-joff.stderr"
+  },
+  {
+    "name": "generational-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/t-gc-generational-mode.lua"
+    ],
+    "test": true,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 60,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.015992503002053127,
+    "stdout": "generational-joff.stdout",
+    "stderr": "generational-joff.stderr"
+  },
+  {
+    "name": "stock-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-jon",
+      "test.lua",
+      "--quiet"
+    ],
+    "test": true,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/stock/test",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 60,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 1.8682609659954323,
+    "stdout": "stock-jon.stdout",
+    "stderr": "stock-jon.stderr"
+  },
+  {
+    "name": "generational-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/t-gc-generational-mode.lua"
+    ],
+    "test": true,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 60,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.015833312994800508,
+    "stdout": "generational-jon.stdout",
+    "stderr": "generational-jon.stderr"
+  },
+  {
+    "name": "worker-stop-compile",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/worker-stop.d",
+      "-I/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src",
+      "-I/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/fixtures/t-worker-bridge-stop.c",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-o",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/worker-stop"
+    ],
+    "test": false,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 60,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.1641426060014055,
+    "stdout": "worker-stop-compile.stdout",
+    "stderr": "worker-stop-compile.stderr"
+  },
+  {
+    "name": "worker-stop-0",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/worker-stop",
+      "0",
+      "1",
+      "0"
+    ],
+    "test": true,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 35,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.007763775000057649,
+    "stdout": "worker-stop-0.stdout",
+    "stderr": "worker-stop-0.stderr"
+  },
+  {
+    "name": "worker-stop-1",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/worker-stop",
+      "0",
+      "1",
+      "1"
+    ],
+    "test": true,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 35,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.007593743001052644,
+    "stdout": "worker-stop-1.stdout",
+    "stderr": "worker-stop-1.stderr"
+  },
+  {
+    "name": "worker-stop-2",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/worker-stop",
+      "0",
+      "2",
+      "0"
+    ],
+    "test": true,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 35,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.007519161998061463,
+    "stdout": "worker-stop-2.stdout",
+    "stderr": "worker-stop-2.stderr"
+  },
+  {
+    "name": "worker-stop-3",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/worker-stop",
+      "0",
+      "2",
+      "1"
+    ],
+    "test": true,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 35,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.007682773000851739,
+    "stdout": "worker-stop-3.stdout",
+    "stderr": "worker-stop-3.stderr"
+  },
+  {
+    "name": "worker-stop-4",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/worker-stop",
+      "1",
+      "1",
+      "0"
+    ],
+    "test": true,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 35,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.0076389169989852235,
+    "stdout": "worker-stop-4.stdout",
+    "stderr": "worker-stop-4.stderr"
+  },
+  {
+    "name": "worker-stop-5",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/worker-stop",
+      "1",
+      "1",
+      "1"
+    ],
+    "test": true,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 35,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.007606339000631124,
+    "stdout": "worker-stop-5.stdout",
+    "stderr": "worker-stop-5.stderr"
+  },
+  {
+    "name": "worker-stop-6",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/worker-stop",
+      "1",
+      "2",
+      "0"
+    ],
+    "test": true,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 35,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.007614226000441704,
+    "stdout": "worker-stop-6.stdout",
+    "stderr": "worker-stop-6.stderr"
+  },
+  {
+    "name": "worker-stop-7",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/worker-stop",
+      "1",
+      "2",
+      "1"
+    ],
+    "test": true,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 35,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.007604762002301868,
+    "stdout": "worker-stop-7.stdout",
+    "stderr": "worker-stop-7.stderr"
+  },
+  {
+    "name": "worker-detach-compile",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/worker-detach.d",
+      "-I/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src",
+      "-I/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/fixtures/t-worker-bridge-detach.c",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-Wl,--wrap=lj_gc2_flush_ssb_detach",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_arena_alloc_prepare_sweep_kind",
+      "-o",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/worker-detach"
+    ],
+    "test": false,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 60,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.21407170800375752,
+    "stdout": "worker-detach-compile.stdout",
+    "stderr": "worker-detach-compile.stderr"
+  },
+  {
+    "name": "worker-detach-0",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/worker-detach",
+      "0"
+    ],
+    "test": true,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 35,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.007686087999900337,
+    "stdout": "worker-detach-0.stdout",
+    "stderr": "worker-detach-0.stderr"
+  },
+  {
+    "name": "worker-detach-1",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/worker-detach",
+      "1"
+    ],
+    "test": true,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 35,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.00763760299741989,
+    "stdout": "worker-detach-1.stdout",
+    "stderr": "worker-detach-1.stderr"
+  },
+  {
+    "name": "worker-consumed-compile",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/worker-consumed.d",
+      "-I/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src",
+      "-I/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/fixtures/t-worker-bridge-consumed.c",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-Wl,--wrap=lj_native_leave_tg",
+      "-Wl,--wrap=lj_tg_detach",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_arena_alloc_prepare_sweep_kind",
+      "-o",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/worker-consumed"
+    ],
+    "test": false,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 60,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.21417794699664228,
+    "stdout": "worker-consumed-compile.stdout",
+    "stderr": "worker-consumed-compile.stderr"
+  },
+  {
+    "name": "worker-consumed-0",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/worker-consumed",
+      "0"
+    ],
+    "test": true,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 35,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.031817649003642146,
+    "stdout": "worker-consumed-0.stdout",
+    "stderr": "worker-consumed-0.stderr"
+  },
+  {
+    "name": "worker-consumed-1",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/worker-consumed",
+      "1"
+    ],
+    "test": true,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 35,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.031746360000397544,
+    "stdout": "worker-consumed-1.stdout",
+    "stderr": "worker-consumed-1.stderr"
+  },
+  {
+    "name": "worker-quiet-compile",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/worker-quiet.d",
+      "-I/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src",
+      "-I/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/fixtures/t-worker-bridge-quiet.c",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=lj_safepoint_handshake",
+      "-Wl,--wrap=lj_gc_sweep_gc2_unmarked",
+      "-o",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/worker-quiet"
+    ],
+    "test": false,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 60,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.21417395400203532,
+    "stdout": "worker-quiet-compile.stdout",
+    "stderr": "worker-quiet-compile.stderr"
+  },
+  {
+    "name": "worker-quiet-0",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/worker-quiet",
+      "1"
+    ],
+    "test": true,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 35,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.06397853700036649,
+    "stdout": "worker-quiet-0.stdout",
+    "stderr": "worker-quiet-0.stderr"
+  },
+  {
+    "name": "worker-quiet-1",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/worker-quiet",
+      "2"
+    ],
+    "test": true,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 35,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.06425730399496388,
+    "stdout": "worker-quiet-1.stdout",
+    "stderr": "worker-quiet-1.stderr"
+  },
+  {
+    "name": "automatic-retention-compile",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/automatic-retention.d",
+      "-I/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src",
+      "-I/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/fixtures/t-string-retention.c",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/automatic-retention"
+    ],
+    "test": false,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 60,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.16432144200371113,
+    "stdout": "automatic-retention-compile.stdout",
+    "stderr": "automatic-retention-compile.stderr"
+  },
+  {
+    "name": "automatic-retention-0",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/automatic-retention",
+      "0",
+      "0",
+      "0",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/fixtures/peer-control.lua"
+    ],
+    "test": true,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 50,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.21420713599945884,
+    "stdout": "automatic-retention-0.stdout",
+    "stderr": "automatic-retention-0.stderr"
+  },
+  {
+    "name": "automatic-retention-1",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/automatic-retention",
+      "0",
+      "0",
+      "2",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/fixtures/peer-control.lua"
+    ],
+    "test": true,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 50,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.8163099630037323,
+    "stdout": "automatic-retention-1.stdout",
+    "stderr": "automatic-retention-1.stderr"
+  },
+  {
+    "name": "automatic-retention-2",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/automatic-retention",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/fixtures/peer-control.lua"
+    ],
+    "test": true,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 50,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.26522392500191927,
+    "stdout": "automatic-retention-2.stdout",
+    "stderr": "automatic-retention-2.stderr"
+  },
+  {
+    "name": "automatic-retention-3",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/automatic-retention",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/fixtures/peer-control.lua"
+    ],
+    "test": true,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 50,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.7159839629966882,
+    "stdout": "automatic-retention-3.stdout",
+    "stderr": "automatic-retention-3.stderr"
+  },
+  {
+    "name": "t-gc2-alloc-account-compile",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/t-gc2-alloc-account.d",
+      "-I/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src",
+      "-I/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/t-gc2-alloc-account.c",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/libluajit.a",
+      "-Wl,-E",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/t-gc2-alloc-account"
+    ],
+    "test": false,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 60,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.4150303639980848,
+    "stdout": "t-gc2-alloc-account-compile.stdout",
+    "stderr": "t-gc2-alloc-account-compile.stderr"
+  },
+  {
+    "name": "t-gc2-alloc-account-0",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/results-candidate/t-gc2-alloc-account"
+    ],
+    "test": true,
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "0"
+    },
+    "timeout_seconds": 60,
+    "exit": 0,
+    "timed_out": false,
+    "seconds": 0.007663834003324155,
+    "stdout": "t-gc2-alloc-account-0.stdout",
+    "stderr": "t-gc2-alloc-account-0.stderr"
+  }
+]

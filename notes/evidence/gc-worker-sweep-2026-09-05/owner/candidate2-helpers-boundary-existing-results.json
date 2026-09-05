@@ -1,0 +1,169 @@
+[
+  {
+    "exit_code": 0,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-recovery.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-boundary-existing-t-gc2-recovery"
+    ],
+    "label": "t-gc2-recovery-compile",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.6156721040024422,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-boundary-existing-t-gc2-recovery"
+    ],
+    "label": "t-gc2-recovery-0",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.2142869039962534,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-sweep-public-table-rescan.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-boundary-existing-t-gc2-sweep-public-table-rescan",
+      "-Wl,--wrap=lj_ctype_fin_istab"
+    ],
+    "label": "t-gc2-sweep-public-table-rescan-compile",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.2640822460016352,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-boundary-existing-t-gc2-sweep-public-table-rescan"
+    ],
+    "label": "t-gc2-sweep-public-table-rescan-0",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.06388378699921304,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-sweep-leaf-publication.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-boundary-existing-t-gc2-sweep-leaf-publication"
+    ],
+    "label": "t-gc2-sweep-leaf-publication-compile",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.2645014869995066,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-boundary-existing-t-gc2-sweep-leaf-publication"
+    ],
+    "label": "t-gc2-sweep-leaf-publication-0",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.031843740995100234,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-gc2-sweep-edge-lease.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-boundary-existing-t-gc2-sweep-edge-lease",
+      "-Wl,--wrap=lj_arena_hugetab_mark",
+      "-Wl,--wrap=lj_arena_hugetab_mark_cdata_range_reader_acquire",
+      "-Wl,--wrap=lj_arena_hugetab_reader_cdata_range_acquire",
+      "-Wl,--wrap=lj_arena_hugetab_reader_release",
+      "-Wl,--wrap=lj_arena_hugetab_rescue_enter",
+      "-Wl,--wrap=lj_arena_rescue_enter"
+    ],
+    "label": "t-gc2-sweep-edge-lease-compile",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.26456999700167216,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers-boundary-existing-t-gc2-sweep-edge-lease"
+    ],
+    "label": "t-gc2-sweep-edge-lease-0",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.032080523000331596,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/candidate2-helpers/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  }
+]

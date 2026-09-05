@@ -1,0 +1,24 @@
+/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/results-baseline/automatic-retention: \
+ /tmp/lj-worker-jit-matrix-20260905-a6_4rjri/fixtures/t-string-retention.c \
+ /tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/lua.h \
+ /tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/luaconf.h \
+ /tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/lauxlib.h \
+ /tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/lua.h \
+ /tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/lualib.h \
+ /tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/luajit.h \
+ /tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/lj_gc.h \
+ /tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/lj_obj.h \
+ /tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/lj_def.h \
+ /tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/lj_arch.h \
+ /tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/lj_atomic.h \
+ /tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/lj_gc2token.h \
+ /tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/lj_tgregistry.h \
+ /tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/lj_tgslot.h \
+ /tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/lj_gc2.h \
+ /tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/lj_arena.h \
+ /tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/lj_str.h \
+ /tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/lj_tg.h \
+ /tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/lj_bc.h \
+ /tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/lj_ctype.h \
+ /tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/lj_gc.h \
+ /tmp/lj-gc-pending-root-design-20260905-blju2qsh/baseline/src/lj_gc2.h

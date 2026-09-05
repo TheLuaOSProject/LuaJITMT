@@ -1,0 +1,1069 @@
+[
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/results-candidate/automatic-retention",
+      "0",
+      "0",
+      "0",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/fixtures/peer-control.lua"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "1"
+    },
+    "exit": 2,
+    "internal_alarm_seconds": 45,
+    "kind": "candidate",
+    "name": "jit-peer0-workers0",
+    "peer": 0,
+    "removed_environment": [
+      "ASAN_OPTIONS"
+    ],
+    "seconds": 2.1710491519988864,
+    "started_utc": "2026-09-05T12:23:14.308323+00:00",
+    "stderr": "results-candidate/jit-peer0-workers0.stderr",
+    "stdout": "results-candidate/jit-peer0-workers0.stdout",
+    "summary": {
+      "jit_enabled_values": [
+        1
+      ],
+      "jit_hard_checks_max": 50,
+      "last_snapshot": {
+        "bytes": 429178,
+        "completed": 17,
+        "configured_workers": 0,
+        "cycles": 17,
+        "explicit": 0,
+        "filler_tables": 286720,
+        "local_credit": 0,
+        "major": 17,
+        "mask": 32767,
+        "mt_live": 0,
+        "n_workers": 0,
+        "peer": 0,
+        "peer_checks": 0,
+        "peer_credit": 0,
+        "phase": 0,
+        "raw_count": 300,
+        "reclaimed": 16410,
+        "round": 4,
+        "stage": "sole_main_recovered",
+        "strings": 300,
+        "unlinked": 16410,
+        "worker_async": 0,
+        "worker_runs": 8952
+      },
+      "settled_completed": [
+        7,
+        10,
+        13
+      ],
+      "stages": [
+        "baseline",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "automatic_progress_missing",
+        "sole_main_recovered"
+      ],
+      "stderr_bytes": 0,
+      "terminal_lines": [
+        "INCOMPLETE_AUTO rounds=4 batch=4096 payload=64 body_bytes=100 live=32 created_body_bytes=1638400 filler_tables=286720"
+      ]
+    },
+    "timed_out": false,
+    "timeout_seconds": 50,
+    "workers": 0
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/results-candidate/automatic-retention",
+      "0",
+      "0",
+      "2",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/fixtures/peer-control.lua"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "1"
+    },
+    "exit": 0,
+    "internal_alarm_seconds": 45,
+    "kind": "candidate",
+    "name": "jit-peer0-workers2",
+    "peer": 0,
+    "removed_environment": [
+      "ASAN_OPTIONS"
+    ],
+    "seconds": 0.36488688999816077,
+    "started_utc": "2026-09-05T12:23:16.479871+00:00",
+    "stderr": "results-candidate/jit-peer0-workers2.stderr",
+    "stdout": "results-candidate/jit-peer0-workers2.stdout",
+    "summary": {
+      "jit_enabled_values": [
+        1
+      ],
+      "jit_hard_checks_max": 0,
+      "last_snapshot": {
+        "bytes": 427566,
+        "completed": 24,
+        "configured_workers": 2,
+        "cycles": 24,
+        "explicit": 0,
+        "filler_tables": 53248,
+        "local_credit": 0,
+        "major": 24,
+        "mask": 32767,
+        "mt_live": 0,
+        "n_workers": 0,
+        "peer": 0,
+        "peer_checks": 0,
+        "peer_credit": 0,
+        "phase": 0,
+        "raw_count": 300,
+        "reclaimed": 24602,
+        "round": 6,
+        "stage": "sole_main_recovered",
+        "strings": 300,
+        "unlinked": 24602,
+        "worker_async": 20965,
+        "worker_runs": 4555
+      },
+      "settled_completed": [
+        7,
+        10,
+        13,
+        16,
+        19,
+        22
+      ],
+      "stages": [
+        "baseline",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "sole_main_recovered"
+      ],
+      "stderr_bytes": 0,
+      "terminal_lines": [
+        "PASS rounds=6 batch=4096 payload=64 body_bytes=100 live=32 created_body_bytes=2457600 filler_tables=53248"
+      ]
+    },
+    "timed_out": false,
+    "timeout_seconds": 50,
+    "workers": 2
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/results-candidate/automatic-retention",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/fixtures/peer-control.lua"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "1"
+    },
+    "exit": 0,
+    "internal_alarm_seconds": 45,
+    "kind": "candidate",
+    "name": "jit-peer1-workers0",
+    "peer": 1,
+    "removed_environment": [
+      "ASAN_OPTIONS"
+    ],
+    "seconds": 0.26458194999577245,
+    "started_utc": "2026-09-05T12:23:16.845299+00:00",
+    "stderr": "results-candidate/jit-peer1-workers0.stderr",
+    "stdout": "results-candidate/jit-peer1-workers0.stdout",
+    "summary": {
+      "jit_enabled_values": [
+        1
+      ],
+      "jit_hard_checks_max": 0,
+      "last_snapshot": {
+        "bytes": 459230,
+        "completed": 24,
+        "configured_workers": 0,
+        "cycles": 24,
+        "explicit": 0,
+        "filler_tables": 49152,
+        "local_credit": 0,
+        "major": 24,
+        "mask": 32767,
+        "mt_live": 0,
+        "n_workers": 0,
+        "peer": 1,
+        "peer_checks": 8,
+        "peer_credit": 0,
+        "phase": 0,
+        "raw_count": 300,
+        "reclaimed": 24602,
+        "round": 6,
+        "stage": "sole_main_recovered",
+        "strings": 300,
+        "unlinked": 24602,
+        "worker_async": 0,
+        "worker_runs": 4097
+      },
+      "settled_completed": [
+        7,
+        10,
+        13,
+        16,
+        19,
+        22
+      ],
+      "stages": [
+        "baseline",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "sole_main_recovered"
+      ],
+      "stderr_bytes": 0,
+      "terminal_lines": [
+        "PASS rounds=6 batch=4096 payload=64 body_bytes=100 live=32 created_body_bytes=2457600 filler_tables=49152"
+      ]
+    },
+    "timed_out": false,
+    "timeout_seconds": 50,
+    "workers": 0
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/results-candidate/automatic-retention",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/fixtures/peer-control.lua"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/tests/lib/?.lua;;",
+      "RETENTION_JIT": "1"
+    },
+    "exit": 0,
+    "internal_alarm_seconds": 45,
+    "kind": "candidate",
+    "name": "jit-peer1-workers2",
+    "peer": 1,
+    "removed_environment": [
+      "ASAN_OPTIONS"
+    ],
+    "seconds": 0.4648183350000181,
+    "started_utc": "2026-09-05T12:23:17.110360+00:00",
+    "stderr": "results-candidate/jit-peer1-workers2.stderr",
+    "stdout": "results-candidate/jit-peer1-workers2.stdout",
+    "summary": {
+      "jit_enabled_values": [
+        1
+      ],
+      "jit_hard_checks_max": 0,
+      "last_snapshot": {
+        "bytes": 459230,
+        "completed": 24,
+        "configured_workers": 2,
+        "cycles": 24,
+        "explicit": 0,
+        "filler_tables": 53248,
+        "local_credit": 0,
+        "major": 24,
+        "mask": 32767,
+        "mt_live": 0,
+        "n_workers": 0,
+        "peer": 1,
+        "peer_checks": 8,
+        "peer_credit": 0,
+        "phase": 0,
+        "raw_count": 300,
+        "reclaimed": 24602,
+        "round": 6,
+        "stage": "sole_main_recovered",
+        "strings": 300,
+        "unlinked": 24602,
+        "worker_async": 23906,
+        "worker_runs": 4827
+      },
+      "settled_completed": [
+        7,
+        10,
+        13,
+        16,
+        19,
+        22
+      ],
+      "stages": [
+        "baseline",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "sole_main_recovered"
+      ],
+      "stderr_bytes": 0,
+      "terminal_lines": [
+        "PASS rounds=6 batch=4096 payload=64 body_bytes=100 live=32 created_body_bytes=2457600 filler_tables=53248"
+      ]
+    },
+    "timed_out": false,
+    "timeout_seconds": 50,
+    "workers": 2
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/results-strict/automatic-retention",
+      "0",
+      "0",
+      "0",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/fixtures/peer-control.lua"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/tests/lib/?.lua;;",
+      "RETENTION_JIT": "1"
+    },
+    "exit": 2,
+    "internal_alarm_seconds": 45,
+    "kind": "strict",
+    "name": "jit-peer0-workers0",
+    "peer": 0,
+    "removed_environment": [
+      "ASAN_OPTIONS"
+    ],
+    "seconds": 2.1695726529942476,
+    "started_utc": "2026-09-05T12:23:17.575985+00:00",
+    "stderr": "results-strict/jit-peer0-workers0.stderr",
+    "stdout": "results-strict/jit-peer0-workers0.stdout",
+    "summary": {
+      "jit_enabled_values": [
+        1
+      ],
+      "jit_hard_checks_max": 50,
+      "last_snapshot": {
+        "bytes": 429202,
+        "completed": 17,
+        "configured_workers": 0,
+        "cycles": 17,
+        "explicit": 0,
+        "filler_tables": 286720,
+        "local_credit": 0,
+        "major": 17,
+        "mask": 32767,
+        "mt_live": 0,
+        "n_workers": 0,
+        "peer": 0,
+        "peer_checks": 0,
+        "peer_credit": 0,
+        "phase": 0,
+        "raw_count": 300,
+        "reclaimed": 16410,
+        "round": 4,
+        "stage": "sole_main_recovered",
+        "strings": 300,
+        "unlinked": 16410,
+        "worker_async": 0,
+        "worker_runs": 8951
+      },
+      "settled_completed": [
+        7,
+        10,
+        13
+      ],
+      "stages": [
+        "baseline",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "automatic_progress_missing",
+        "sole_main_recovered"
+      ],
+      "stderr_bytes": 0,
+      "terminal_lines": [
+        "INCOMPLETE_AUTO rounds=4 batch=4096 payload=64 body_bytes=100 live=32 created_body_bytes=1638400 filler_tables=286720"
+      ]
+    },
+    "timed_out": false,
+    "timeout_seconds": 50,
+    "workers": 0
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/results-strict/automatic-retention",
+      "0",
+      "0",
+      "2",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/fixtures/peer-control.lua"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/tests/lib/?.lua;;",
+      "RETENTION_JIT": "1"
+    },
+    "exit": 0,
+    "internal_alarm_seconds": 45,
+    "kind": "strict",
+    "name": "jit-peer0-workers2",
+    "peer": 0,
+    "removed_environment": [
+      "ASAN_OPTIONS"
+    ],
+    "seconds": 0.41493564599659294,
+    "started_utc": "2026-09-05T12:23:19.746188+00:00",
+    "stderr": "results-strict/jit-peer0-workers2.stderr",
+    "stdout": "results-strict/jit-peer0-workers2.stdout",
+    "summary": {
+      "jit_enabled_values": [
+        1
+      ],
+      "jit_hard_checks_max": 0,
+      "last_snapshot": {
+        "bytes": 435782,
+        "completed": 24,
+        "configured_workers": 2,
+        "cycles": 24,
+        "explicit": 0,
+        "filler_tables": 57344,
+        "local_credit": 0,
+        "major": 24,
+        "mask": 32767,
+        "mt_live": 0,
+        "n_workers": 0,
+        "peer": 0,
+        "peer_checks": 0,
+        "peer_credit": 0,
+        "phase": 0,
+        "raw_count": 300,
+        "reclaimed": 24602,
+        "round": 6,
+        "stage": "sole_main_recovered",
+        "strings": 300,
+        "unlinked": 24602,
+        "worker_async": 24018,
+        "worker_runs": 4643
+      },
+      "settled_completed": [
+        7,
+        10,
+        13,
+        16,
+        19,
+        22
+      ],
+      "stages": [
+        "baseline",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "sole_main_recovered"
+      ],
+      "stderr_bytes": 0,
+      "terminal_lines": [
+        "PASS rounds=6 batch=4096 payload=64 body_bytes=100 live=32 created_body_bytes=2457600 filler_tables=57344"
+      ]
+    },
+    "timed_out": false,
+    "timeout_seconds": 50,
+    "workers": 2
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/results-strict/automatic-retention",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/fixtures/peer-control.lua"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/tests/lib/?.lua;;",
+      "RETENTION_JIT": "1"
+    },
+    "exit": 0,
+    "internal_alarm_seconds": 45,
+    "kind": "strict",
+    "name": "jit-peer1-workers0",
+    "peer": 1,
+    "removed_environment": [
+      "ASAN_OPTIONS"
+    ],
+    "seconds": 0.2648428820029949,
+    "started_utc": "2026-09-05T12:23:20.161657+00:00",
+    "stderr": "results-strict/jit-peer1-workers0.stderr",
+    "stdout": "results-strict/jit-peer1-workers0.stdout",
+    "summary": {
+      "jit_enabled_values": [
+        1
+      ],
+      "jit_hard_checks_max": 0,
+      "last_snapshot": {
+        "bytes": 459254,
+        "completed": 24,
+        "configured_workers": 0,
+        "cycles": 24,
+        "explicit": 0,
+        "filler_tables": 49152,
+        "local_credit": 0,
+        "major": 24,
+        "mask": 32767,
+        "mt_live": 0,
+        "n_workers": 0,
+        "peer": 1,
+        "peer_checks": 8,
+        "peer_credit": 0,
+        "phase": 0,
+        "raw_count": 300,
+        "reclaimed": 24602,
+        "round": 6,
+        "stage": "sole_main_recovered",
+        "strings": 300,
+        "unlinked": 24602,
+        "worker_async": 0,
+        "worker_runs": 4097
+      },
+      "settled_completed": [
+        7,
+        10,
+        13,
+        16,
+        19,
+        22
+      ],
+      "stages": [
+        "baseline",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "sole_main_recovered"
+      ],
+      "stderr_bytes": 0,
+      "terminal_lines": [
+        "PASS rounds=6 batch=4096 payload=64 body_bytes=100 live=32 created_body_bytes=2457600 filler_tables=49152"
+      ]
+    },
+    "timed_out": false,
+    "timeout_seconds": 50,
+    "workers": 0
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/results-strict/automatic-retention",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/fixtures/peer-control.lua"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/strict/tests/lib/?.lua;;",
+      "RETENTION_JIT": "1"
+    },
+    "exit": 0,
+    "internal_alarm_seconds": 45,
+    "kind": "strict",
+    "name": "jit-peer1-workers2",
+    "peer": 1,
+    "removed_environment": [
+      "ASAN_OPTIONS"
+    ],
+    "seconds": 0.4152779939977336,
+    "started_utc": "2026-09-05T12:23:20.427035+00:00",
+    "stderr": "results-strict/jit-peer1-workers2.stderr",
+    "stdout": "results-strict/jit-peer1-workers2.stdout",
+    "summary": {
+      "jit_enabled_values": [
+        1
+      ],
+      "jit_hard_checks_max": 0,
+      "last_snapshot": {
+        "bytes": 459254,
+        "completed": 24,
+        "configured_workers": 2,
+        "cycles": 24,
+        "explicit": 0,
+        "filler_tables": 53248,
+        "local_credit": 0,
+        "major": 24,
+        "mask": 32767,
+        "mt_live": 0,
+        "n_workers": 0,
+        "peer": 1,
+        "peer_checks": 8,
+        "peer_credit": 0,
+        "phase": 0,
+        "raw_count": 300,
+        "reclaimed": 24602,
+        "round": 6,
+        "stage": "sole_main_recovered",
+        "strings": 300,
+        "unlinked": 24602,
+        "worker_async": 23842,
+        "worker_runs": 5204
+      },
+      "settled_completed": [
+        7,
+        10,
+        13,
+        16,
+        19,
+        22
+      ],
+      "stages": [
+        "baseline",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "sole_main_recovered"
+      ],
+      "stderr_bytes": 0,
+      "terminal_lines": [
+        "PASS rounds=6 batch=4096 payload=64 body_bytes=100 live=32 created_body_bytes=2457600 filler_tables=53248"
+      ]
+    },
+    "timed_out": false,
+    "timeout_seconds": 50,
+    "workers": 2
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/results-asan/automatic-retention",
+      "0",
+      "0",
+      "0",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/fixtures/peer-control.lua"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/tests/lib/?.lua;;",
+      "RETENTION_JIT": "1"
+    },
+    "exit": 2,
+    "internal_alarm_seconds": 45,
+    "kind": "asan",
+    "name": "jit-peer0-workers0",
+    "peer": 0,
+    "removed_environment": [],
+    "seconds": 3.8243024659968796,
+    "started_utc": "2026-09-05T12:23:20.843153+00:00",
+    "stderr": "results-asan/jit-peer0-workers0.stderr",
+    "stdout": "results-asan/jit-peer0-workers0.stdout",
+    "summary": {
+      "jit_enabled_values": [
+        1
+      ],
+      "jit_hard_checks_max": 50,
+      "last_snapshot": {
+        "bytes": 429198,
+        "completed": 17,
+        "configured_workers": 0,
+        "cycles": 17,
+        "explicit": 0,
+        "filler_tables": 286720,
+        "local_credit": 0,
+        "major": 17,
+        "mask": 32767,
+        "mt_live": 0,
+        "n_workers": 0,
+        "peer": 0,
+        "peer_checks": 0,
+        "peer_credit": 0,
+        "phase": 0,
+        "raw_count": 300,
+        "reclaimed": 16410,
+        "round": 4,
+        "stage": "sole_main_recovered",
+        "strings": 300,
+        "unlinked": 16410,
+        "worker_async": 0,
+        "worker_runs": 8952
+      },
+      "settled_completed": [
+        7,
+        10,
+        13
+      ],
+      "stages": [
+        "baseline",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "automatic_progress_missing",
+        "sole_main_recovered"
+      ],
+      "stderr_bytes": 0,
+      "terminal_lines": [
+        "INCOMPLETE_AUTO rounds=4 batch=4096 payload=64 body_bytes=100 live=32 created_body_bytes=1638400 filler_tables=286720"
+      ]
+    },
+    "timed_out": false,
+    "timeout_seconds": 50,
+    "workers": 0
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/results-asan/automatic-retention",
+      "0",
+      "0",
+      "2",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/fixtures/peer-control.lua"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/tests/lib/?.lua;;",
+      "RETENTION_JIT": "1"
+    },
+    "exit": 0,
+    "internal_alarm_seconds": 45,
+    "kind": "asan",
+    "name": "jit-peer0-workers2",
+    "peer": 0,
+    "removed_environment": [],
+    "seconds": 0.9165054249970126,
+    "started_utc": "2026-09-05T12:23:24.668119+00:00",
+    "stderr": "results-asan/jit-peer0-workers2.stderr",
+    "stdout": "results-asan/jit-peer0-workers2.stdout",
+    "summary": {
+      "jit_enabled_values": [
+        1
+      ],
+      "jit_hard_checks_max": 0,
+      "last_snapshot": {
+        "bytes": 427586,
+        "completed": 24,
+        "configured_workers": 2,
+        "cycles": 24,
+        "explicit": 0,
+        "filler_tables": 61440,
+        "local_credit": 0,
+        "major": 24,
+        "mask": 32767,
+        "mt_live": 0,
+        "n_workers": 0,
+        "peer": 0,
+        "peer_checks": 0,
+        "peer_credit": 0,
+        "phase": 0,
+        "raw_count": 300,
+        "reclaimed": 24602,
+        "round": 6,
+        "stage": "sole_main_recovered",
+        "strings": 300,
+        "unlinked": 24602,
+        "worker_async": 59494,
+        "worker_runs": 5415
+      },
+      "settled_completed": [
+        7,
+        10,
+        13,
+        16,
+        19,
+        22
+      ],
+      "stages": [
+        "baseline",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "sole_main_recovered"
+      ],
+      "stderr_bytes": 0,
+      "terminal_lines": [
+        "PASS rounds=6 batch=4096 payload=64 body_bytes=100 live=32 created_body_bytes=2457600 filler_tables=61440"
+      ]
+    },
+    "timed_out": false,
+    "timeout_seconds": 50,
+    "workers": 2
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/results-asan/automatic-retention",
+      "0",
+      "1",
+      "0",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/fixtures/peer-control.lua"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/tests/lib/?.lua;;",
+      "RETENTION_JIT": "1"
+    },
+    "exit": 0,
+    "internal_alarm_seconds": 45,
+    "kind": "asan",
+    "name": "jit-peer1-workers0",
+    "peer": 1,
+    "removed_environment": [],
+    "seconds": 0.4149109909994877,
+    "started_utc": "2026-09-05T12:23:25.585300+00:00",
+    "stderr": "results-asan/jit-peer1-workers0.stderr",
+    "stdout": "results-asan/jit-peer1-workers0.stdout",
+    "summary": {
+      "jit_enabled_values": [
+        1
+      ],
+      "jit_hard_checks_max": 0,
+      "last_snapshot": {
+        "bytes": 459250,
+        "completed": 24,
+        "configured_workers": 0,
+        "cycles": 24,
+        "explicit": 0,
+        "filler_tables": 49152,
+        "local_credit": 0,
+        "major": 24,
+        "mask": 32767,
+        "mt_live": 0,
+        "n_workers": 0,
+        "peer": 1,
+        "peer_checks": 8,
+        "peer_credit": 0,
+        "phase": 0,
+        "raw_count": 300,
+        "reclaimed": 24602,
+        "round": 6,
+        "stage": "sole_main_recovered",
+        "strings": 300,
+        "unlinked": 24602,
+        "worker_async": 0,
+        "worker_runs": 4097
+      },
+      "settled_completed": [
+        7,
+        10,
+        13,
+        16,
+        19,
+        22
+      ],
+      "stages": [
+        "baseline",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "sole_main_recovered"
+      ],
+      "stderr_bytes": 0,
+      "terminal_lines": [
+        "PASS rounds=6 batch=4096 payload=64 body_bytes=100 live=32 created_body_bytes=2457600 filler_tables=49152"
+      ]
+    },
+    "timed_out": false,
+    "timeout_seconds": 50,
+    "workers": 0
+  },
+  {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/results-asan/automatic-retention",
+      "0",
+      "1",
+      "2",
+      "/tmp/lj-worker-jit-matrix-20260905-a6_4rjri/fixtures/peer-control.lua"
+    ],
+    "cwd": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan",
+    "environment": {
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LUA_PATH": "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/src/?.lua;/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/asan/tests/lib/?.lua;;",
+      "RETENTION_JIT": "1"
+    },
+    "exit": 0,
+    "internal_alarm_seconds": 45,
+    "kind": "asan",
+    "name": "jit-peer1-workers2",
+    "peer": 1,
+    "removed_environment": [],
+    "seconds": 1.0670034300055704,
+    "started_utc": "2026-09-05T12:23:26.000944+00:00",
+    "stderr": "results-asan/jit-peer1-workers2.stderr",
+    "stdout": "results-asan/jit-peer1-workers2.stdout",
+    "summary": {
+      "jit_enabled_values": [
+        1
+      ],
+      "jit_hard_checks_max": 0,
+      "last_snapshot": {
+        "bytes": 467442,
+        "completed": 24,
+        "configured_workers": 2,
+        "cycles": 24,
+        "explicit": 0,
+        "filler_tables": 69632,
+        "local_credit": 0,
+        "major": 24,
+        "mask": 32767,
+        "mt_live": 0,
+        "n_workers": 0,
+        "peer": 1,
+        "peer_checks": 8,
+        "peer_credit": 0,
+        "phase": 0,
+        "raw_count": 300,
+        "reclaimed": 24602,
+        "round": 6,
+        "stage": "sole_main_recovered",
+        "strings": 300,
+        "unlinked": 24602,
+        "worker_async": 69545,
+        "worker_runs": 5372
+      },
+      "settled_completed": [
+        7,
+        10,
+        13,
+        16,
+        19,
+        22
+      ],
+      "stages": [
+        "baseline",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "after_churn",
+        "settled",
+        "sole_main_recovered"
+      ],
+      "stderr_bytes": 0,
+      "terminal_lines": [
+        "PASS rounds=6 batch=4096 payload=64 body_bytes=100 live=32 created_body_bytes=2457600 filler_tables=69632"
+      ]
+    },
+    "timed_out": false,
+    "timeout_seconds": 50,
+    "workers": 2
+  }
+]

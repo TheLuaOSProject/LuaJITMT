@@ -1,0 +1,12 @@
+{
+  "command": [
+    "patch",
+    "-p1",
+    "--fuzz=0",
+    "-i",
+    "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/duplicate-publication-v2.patch"
+  ],
+  "exit": 0,
+  "stdout": "patching file tests/t-safepoint-local-native-duplicate.c\n",
+  "stderr": ""
+}

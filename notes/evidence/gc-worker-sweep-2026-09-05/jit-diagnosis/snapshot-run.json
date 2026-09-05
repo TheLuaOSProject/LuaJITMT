@@ -1,0 +1,21 @@
+{
+  "exit": 0,
+  "timed_out": false,
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "gdb",
+    "-q",
+    "-nx",
+    "-batch",
+    "-x",
+    "/tmp/lj-jit-sweep-diagnosis-20260905-jjdidw9u/snapshot.gdb",
+    "/tmp/lj-jit-sweep-diagnosis-20260905-jjdidw9u/automatic-retention"
+  ],
+  "cwd": "/tmp/lj-jit-sweep-diagnosis-20260905-jjdidw9u",
+  "seconds": 2.2177063039998757,
+  "external_timeout_seconds": 50,
+  "internal_fixture_alarm_seconds": 45,
+  "gdb_diagnostic": true
+}

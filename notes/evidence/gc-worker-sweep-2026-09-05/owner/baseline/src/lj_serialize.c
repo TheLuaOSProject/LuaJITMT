@@ -1,0 +1,791 @@
+/*
+** Object de/serialization.
+** Copyright (C) 2005-2026 Mike Pall. See Copyright Notice in luajit.h
+*/
+
+#define lj_serialize_c
+#define LUA_CORE
+
+#include "lj_obj.h"
+#include "lj_atomic.h"
+
+#if LJ_HASBUFFER
+#include "lj_err.h"
+#include "lj_buf.h"
+#include "lj_gc.h"
+#include "lj_str.h"
+#include "lj_tab.h"
+#include "lj_thr.h"
+#include "lj_udata.h"
+#include "lj_vm.h"
+#if LJ_HASFFI
+#include "lj_ctype.h"
+#include "lj_cdata.h"
+#endif
+#if LJ_HASJIT
+#include "lj_ir.h"
+#endif
+#include "lj_serialize.h"
+
+/* Tags for internal serialization format. */
+enum {
+  SER_TAG_NIL,		/* 0x00 */
+  SER_TAG_FALSE,
+  SER_TAG_TRUE,
+  SER_TAG_NULL,
+  SER_TAG_LIGHTUD32,
+  SER_TAG_LIGHTUD64,
+  SER_TAG_INT,
+  SER_TAG_NUM,
+  SER_TAG_TAB,		/* 0x08 */
+  SER_TAG_DICT_MT = SER_TAG_TAB+6,
+  SER_TAG_DICT_STR,
+  SER_TAG_INT64,	/* 0x10 */
+  SER_TAG_UINT64,
+  SER_TAG_COMPLEX,
+  SER_TAG_0x13,
+  SER_TAG_0x14,
+  SER_TAG_0x15,
+  SER_TAG_0x16,
+  SER_TAG_0x17,
+  SER_TAG_0x18,		/* 0x18 */
+  SER_TAG_0x19,
+  SER_TAG_0x1a,
+  SER_TAG_0x1b,
+  SER_TAG_0x1c,
+  SER_TAG_0x1d,
+  SER_TAG_0x1e,
+  SER_TAG_0x1f,
+  SER_TAG_STR,		/* 0x20 + str->len */
+};
+LJ_STATIC_ASSERT((SER_TAG_TAB & 7) == 0);
+
+/* -- Helper functions ---------------------------------------------------- */
+
+static LJ_AINLINE char *serialize_more(char *w, SBufExt *sbx, MSize sz)
+{
+  char *e = lj_buf_eptr_acq((SBuf *)sbx);
+  if (LJ_UNLIKELY(sz > (MSize)(e - w))) {
+    lj_buf_wptr_rel((SBuf *)sbx, w);
+    w = lj_buf_more2((SBuf *)sbx, sz);
+  }
+  return w;
+}
+
+/* Write U124 to buffer. */
+static LJ_NOINLINE char *serialize_wu124_(char *w, uint32_t v)
+{
+  if (v < 0x1fe0) {
+    v -= 0xe0;
+    *w++ = (char)(0xe0 | (v >> 8)); *w++ = (char)v;
+  } else {
+    *w++ = (char)0xff;
+#if LJ_BE
+    v = lj_bswap(v);
+#endif
+    memcpy(w, &v, 4); w += 4;
+  }
+  return w;
+}
+
+static LJ_AINLINE char *serialize_wu124(char *w, uint32_t v)
+{
+  if (LJ_LIKELY(v < 0xe0)) {
+    *w++ = (char)v;
+    return w;
+  } else {
+    return serialize_wu124_(w, v);
+  }
+}
+
+static LJ_NOINLINE char *serialize_ru124_(char *r, char *w, uint32_t *pv)
+{
+  uint32_t v = *pv;
+  if (v != 0xff) {
+    if (r >= w) return NULL;
+    v = ((v & 0x1f) << 8) + *(uint8_t *)r + 0xe0; r++;
+  } else {
+    if (r + 4 > w) return NULL;
+    v = lj_getu32(r); r += 4;
+#if LJ_BE
+    v = lj_bswap(v);
+#endif
+  }
+  *pv = v;
+  return r;
+}
+
+static LJ_AINLINE char *serialize_ru124(char *r, char *w, uint32_t *pv)
+{
+  if (LJ_LIKELY(r < w)) {
+    uint32_t v = *(uint8_t *)r; r++;
+    *pv = v;
+    if (LJ_UNLIKELY(v >= 0xe0)) {
+      r = serialize_ru124_(r, w, pv);
+    }
+    return r;
+  }
+  return NULL;
+}
+
+static LJ_AINLINE void serialize_dict_wait(lua_State *L)
+{
+  /*
+  ** Serializer dictionary preparation retries after table resize forwarding or
+  ** a slot CAS loss. The constructor has a current Lua state, so wait as
+  ** native time for that TG without millisecond parking.
+  */
+  (void)lj_thr_retry_yield(L);
+}
+
+static void serialize_dict_storeint(lua_State *L, GCtab *dict, cTValue *key,
+				    int32_t idx)
+{
+  TValue val, old, *dst;
+  setintV(&val, idx);
+  for (;;) {
+    int rc;
+    dst = lj_tab_set(L, dict, key);
+    rc = lj_tab_trysetnil_cas_keyed(L, dict, dst, key, &val, &old);
+    if (rc == LJ_TAB_STORE_CAS_OK || rc == LJ_TAB_STORE_CAS_EXISTS)
+      return;
+    /* Dictionary saw stale/FORWARD slot after lookup. */
+    serialize_dict_wait(L);
+  }
+}
+
+/* Prepare string dictionary for use (once). */
+static void serialize_dict_prep_str(lua_State *L, GCtab *dict)
+{
+  MSize hmask;
+  (void)lj_tab_node_snapshot_acq(dict, &hmask);
+  if (!hmask) {
+    /* No hash part means not prepared, yet. */
+    MSize i, len = lj_tab_len(dict), asize;
+    TValue *array;
+    if (!len) return;
+    asize = lj_tab_array_snapshot_acq(dict, &array);
+    lj_tab_resize(L, dict, asize, hsize2hbits(len));
+    lj_tab_read_enter(L2TG(L));
+    asize = lj_tab_array_snapshot_acq(dict, &array);
+    for (i = 1; i <= len && i < asize; i++) {
+      TValue tv;
+      lj_tv_load_acq(&tv, &array[i]);
+      if (tvisstr(&tv)) {
+	if (!lj_tab_getstr(dict, strV(&tv))) {  /* Ignore dups. */
+	  serialize_dict_storeint(L, dict, &tv, (int32_t)(i-1));
+	}
+      } else if (!tvisfalse(&tv)) {
+	lj_err_caller(L, LJ_ERR_BUFFER_BADOPT);
+      }
+    }
+    lj_tab_read_leave(L2TG(L));
+    lj_gc_pubtab(L, dict);
+  }
+}
+
+/* Prepare metatable dictionary for use (once). */
+static void serialize_dict_prep_mt(lua_State *L, GCtab *dict)
+{
+  MSize hmask;
+  (void)lj_tab_node_snapshot_acq(dict, &hmask);
+  if (!hmask) {
+    /* No hash part means not prepared, yet. */
+    MSize i, len = lj_tab_len(dict), asize;
+    TValue *array;
+    if (!len) return;
+    asize = lj_tab_array_snapshot_acq(dict, &array);
+    lj_tab_resize(L, dict, asize, hsize2hbits(len));
+    lj_tab_read_enter(L2TG(L));
+    asize = lj_tab_array_snapshot_acq(dict, &array);
+    for (i = 1; i <= len && i < asize; i++) {
+      TValue tv;
+      lj_tv_load_acq(&tv, &array[i]);
+      if (tvistab(&tv)) {
+	if (lj_tv_isnil_acq(lj_tab_get(L, dict, &tv))) {  /* Ignore dups. */
+	  serialize_dict_storeint(L, dict, &tv, (int32_t)(i-1));
+	}
+      } else if (!tvisfalse(&tv)) {
+	lj_err_caller(L, LJ_ERR_BUFFER_BADOPT);
+      }
+    }
+    lj_tab_read_leave(L2TG(L));
+    lj_gc_pubtab(L, dict);
+  }
+}
+
+typedef struct SerializeDictPrepCtx {
+  GCtab *dict;
+  int mt;
+} SerializeDictPrepCtx;
+
+static TValue *serialize_dict_prep_cp(lua_State *L, lua_CFunction dummy,
+				      void *ud)
+{
+  SerializeDictPrepCtx *ctx = (SerializeDictPrepCtx *)ud;
+  UNUSED(dummy);
+  if (ctx->mt)
+    serialize_dict_prep_mt(L, ctx->dict);
+  else
+    serialize_dict_prep_str(L, ctx->dict);
+  return NULL;
+}
+
+static void serialize_dict_prep_protected(lua_State *L, GCtab *dict, int mt)
+{
+  SerializeDictPrepCtx ctx;
+  int status;
+  ctx.dict = dict;
+  ctx.mt = mt;
+  /* The dictionary scan may resize, wait, allocate or reject an option after
+  ** acquiring a raw table-generation pin. Catch locally so a Lua-level fast
+  ** pcall never becomes responsible for unwinding that native resource. */
+  status = lj_vm_cpcall(L, NULL, &ctx, serialize_dict_prep_cp);
+  if (LJ_UNLIKELY(status != LUA_OK))
+    lj_err_throw(L, status);
+}
+
+void LJ_FASTCALL lj_serialize_dict_prep_str(lua_State *L, GCtab *dict)
+{
+  serialize_dict_prep_protected(L, dict, 0);
+}
+
+void LJ_FASTCALL lj_serialize_dict_prep_mt(lua_State *L, GCtab *dict)
+{
+  serialize_dict_prep_protected(L, dict, 1);
+}
+
+/* -- Internal serializer ------------------------------------------------- */
+
+/* Put serialized object into buffer. */
+static char *serialize_put(char *w, SBufExt *sbx, cTValue *o)
+{
+  if (LJ_LIKELY(tvisstr(o))) {
+    const GCstr *str = strV(o);
+    MSize len = str->len;
+    w = serialize_more(w, sbx, 5+len);
+    w = serialize_wu124(w, SER_TAG_STR + len);
+    w = lj_buf_wmem(w, strdata(str), len);
+  } else if (tvisint(o)) {
+    uint32_t x = LJ_BE ? lj_bswap((uint32_t)intV(o)) : (uint32_t)intV(o);
+    w = serialize_more(w, sbx, 1+4);
+    *w++ = SER_TAG_INT; memcpy(w, &x, 4); w += 4;
+  } else if (tvisnum(o)) {
+    uint64_t x = LJ_BE ? lj_bswap64(o->u64) : o->u64;
+    w = serialize_more(w, sbx, 1+sizeof(lua_Number));
+    *w++ = SER_TAG_NUM; memcpy(w, &x, 8); w += 8;
+  } else if (tvispri(o)) {
+    w = serialize_more(w, sbx, 1);
+    *w++ = (char)(SER_TAG_NIL + ~itype(o));
+  } else if (tvistab(o)) {
+    const GCtab *t = tabV(o);
+    const Node *hashnode = NULL;
+    uint32_t narray = 0, nhash = 0, one = 2, hmask = 0;
+    TValue *array = NULL;
+    MSize asize;
+    if (sbx->depth <= 0) lj_err_caller(sbufL(sbx), LJ_ERR_BUFFER_DEPTH);
+    sbx->depth--;
+    /* Recursive buffer growth and dictionary lookups can acknowledge multiple
+    ** handshakes while this frame resumes its raw table scan. The external
+    ** serializer wrapper owns a nested protected checkpoint for every throw. */
+    lj_tab_read_enter(L2TG(sbufL(sbx)));
+    asize = lj_tab_array_snapshot_acq(t, &array);
+    if (asize > 0) {  /* Determine max. length of array part. */
+      ptrdiff_t i;
+      for (i = (ptrdiff_t)asize-1; i >= 0; i--) {
+	TValue val;
+	lj_tv_load_acq(&val, &array[i]);
+	if (!tvisnil(&val))
+	  break;
+      }
+      narray = (uint32_t)(i+1);
+      if (narray && lj_tv_isnil_acq(&array[0])) one = 4;
+    }
+    hashnode = lj_tab_node_snapshot_acq(t, &hmask);
+    if (hmask > 0) {  /* Count number of used hash slots. */
+      uint32_t i;
+      for (i = 0; i <= hmask; i++)
+	nhash += !lj_tv_isnil_acq(&hashnode[i].val);
+    }
+    /* Write metatable index. */
+    {
+      GCtab *dict_mt = lj_bufx_dict_mt_acq(sbx);
+      GCtab *mt = lj_tab_metatable_acq(t);
+      if (LJ_UNLIKELY(dict_mt) && mt) {
+	TValue mto;
+	Node *n;
+	settabV(sbufL(sbx), &mto, mt);
+	n = hashgcref(dict_mt, mto.gcr);
+	do {
+	  TValue nk, nv;
+	  lj_tv_load_acq(&nk, &n->key);
+	  if (nk.u64 == mto.u64) {
+	    lj_tv_load_acq(&nv, &n->val);
+	    uint32_t idx = nv.u32.lo;
+	    w = serialize_more(w, sbx, 1+5);
+	    *w++ = SER_TAG_DICT_MT;
+	    w = serialize_wu124(w, idx);
+	    break;
+	  }
+	} while ((n = lj_tab_nextnode_acq(n)));
+      }
+    }
+    /* Write number of array slots and hash slots. */
+    w = serialize_more(w, sbx, 1+2*5);
+    *w++ = (char)(SER_TAG_TAB + (nhash ? 1 : 0) + (narray ? one : 0));
+    if (narray) w = serialize_wu124(w, narray);
+    if (nhash) w = serialize_wu124(w, nhash);
+    if (narray) {  /* Write array entries. */
+      MSize i;
+      for (i = (one >> 2); i < narray; i++) {
+	TValue val;
+	lj_tv_load_acq(&val, &array[i]);
+	w = serialize_put(w, sbx, &val);
+      }
+    }
+    if (nhash) {  /* Write hash entries. */
+      const Node *node = hashnode + hmask;
+      GCtab *dict_str = lj_bufx_dict_str_acq(sbx);
+      if (LJ_UNLIKELY(dict_str)) {
+	for (;; node--) {
+	  TValue key, val;
+	  lj_tv_load_acq(&val, &node->val);
+	  if (!tvisnil(&val)) {
+	    lj_tv_load_acq(&key, &node->key);
+	    if (LJ_LIKELY(tvisstr(&key))) {
+	      /* Inlined lj_tab_getstr is 30% faster. */
+	      const GCstr *str = strV(&key);
+	      Node *n = hashstr(dict_str, str);
+	      do {
+		TValue nk, nv;
+		lj_tv_load_acq(&nk, &n->key);
+		if (tvisstr(&nk) && strV(&nk) == str) {
+		  lj_tv_load_acq(&nv, &n->val);
+		  uint32_t idx = nv.u32.lo;
+		  w = serialize_more(w, sbx, 1+5);
+		  *w++ = SER_TAG_DICT_STR;
+		  w = serialize_wu124(w, idx);
+		  break;
+		}
+		n = lj_tab_nextnode_acq(n);
+		if (!n) {
+		  MSize len = str->len;
+		  w = serialize_more(w, sbx, 5+len);
+		  w = serialize_wu124(w, SER_TAG_STR + len);
+		  w = lj_buf_wmem(w, strdata(str), len);
+		  break;
+		}
+	      } while (1);
+	    } else {
+	      w = serialize_put(w, sbx, &key);
+	    }
+	    w = serialize_put(w, sbx, &val);
+	    if (--nhash == 0) break;
+	  }
+	}
+      } else {
+	for (;; node--) {
+	  TValue key, val;
+	  lj_tv_load_acq(&val, &node->val);
+	  if (!tvisnil(&val)) {
+	    lj_tv_load_acq(&key, &node->key);
+	    w = serialize_put(w, sbx, &key);
+	    w = serialize_put(w, sbx, &val);
+	    if (--nhash == 0) break;
+	  }
+	}
+      }
+    }
+    lj_tab_read_leave(L2TG(sbufL(sbx)));
+    sbx->depth++;
+#if LJ_HASFFI
+  } else if (tviscdata(o)) {
+    lua_State *L = sbufL(sbx);
+    CTState *cts = ctype_cts(L);
+    CType snap;
+    CTInfo info, sinfo;
+    CTSize size, ssize;
+    int ok = lj_ctype_info_wait(L, cts, cdataV(o)->ctypeid, &info, &size,
+				NULL, &snap);
+    uint8_t *sp = cdataptr(cdataV(o));
+    UNUSED(info);
+    UNUSED(size);
+    if (ok <= 0)
+      goto badenc;
+    sinfo = ctype_info_acq(&snap);
+    ssize = ctype_size_acq(&snap);
+    if (ctype_isinteger(sinfo) && ssize == 8) {
+      w = serialize_more(w, sbx, 1+8);
+      *w++ = (sinfo & CTF_UNSIGNED) ? SER_TAG_UINT64 : SER_TAG_INT64;
+#if LJ_BE
+      { uint64_t u = lj_bswap64(*(uint64_t *)sp); memcpy(w, &u, 8); }
+#else
+      memcpy(w, sp, 8);
+#endif
+      w += 8;
+    } else if (ctype_iscomplex(sinfo) && ssize == 16) {
+      w = serialize_more(w, sbx, 1+16);
+      *w++ = SER_TAG_COMPLEX;
+#if LJ_BE
+      {  /* Only swap the doubles. The re/im order stays the same. */
+	uint64_t u = lj_bswap64(((uint64_t *)sp)[0]); memcpy(w, &u, 8);
+	u = lj_bswap64(((uint64_t *)sp)[1]); memcpy(w+8, &u, 8);
+      }
+#else
+      memcpy(w, sp, 16);
+#endif
+      w += 16;
+    } else {
+      goto badenc;  /* NYI other cdata */
+    }
+#endif
+  } else if (tvislightud(o)) {
+    uintptr_t ud = (uintptr_t)lightudV(G(sbufL(sbx)), o);
+    w = serialize_more(w, sbx, 1+sizeof(ud));
+    if (ud == 0) {
+      *w++ = SER_TAG_NULL;
+    } else if (LJ_32 || checku32(ud)) {
+#if LJ_BE && LJ_64
+      ud = lj_bswap64(ud);
+#elif LJ_BE
+      ud = lj_bswap(ud);
+#endif
+      *w++ = SER_TAG_LIGHTUD32; memcpy(w, &ud, 4); w += 4;
+#if LJ_64
+    } else {
+#if LJ_BE
+      ud = lj_bswap64(ud);
+#endif
+      *w++ = SER_TAG_LIGHTUD64; memcpy(w, &ud, 8); w += 8;
+#endif
+    }
+  } else {
+    /* NYI userdata */
+#if LJ_HASFFI
+  badenc:
+#endif
+    lj_err_callerv(sbufL(sbx), LJ_ERR_BUFFER_BADENC, lj_typename(o));
+  }
+  return w;
+}
+
+/* Get serialized object from buffer. */
+static char *serialize_get(char *r, SBufExt *sbx, TValue *o)
+{
+  char *w = lj_buf_wptr_acq((SBuf *)sbx);
+  uint32_t tp;
+  r = serialize_ru124(r, w, &tp); if (LJ_UNLIKELY(!r)) goto eob;
+  if (LJ_LIKELY(tp >= SER_TAG_STR)) {
+    TValue tv;
+    uint32_t len = tp - SER_TAG_STR;
+    if (LJ_UNLIKELY(len > (uint32_t)(w - r))) goto eob;
+    setstrV(sbufL(sbx), &tv, lj_str_new(sbufL(sbx), r, len));
+    copyTVrel(sbufL(sbx), o, &tv);
+    r += len;
+  } else if (tp == SER_TAG_INT) {
+    TValue tv;
+    if (LJ_UNLIKELY(r + 4 > w)) goto eob;
+    setintV(&tv, (int32_t)(LJ_BE ? lj_bswap(lj_getu32(r)) : lj_getu32(r)));
+    copyTVrel(sbufL(sbx), o, &tv);
+    r += 4;
+  } else if (tp == SER_TAG_NUM) {
+    TValue tv;
+    if (LJ_UNLIKELY(r + 8 > w)) goto eob;
+    memcpy(&tv, r, 8); r += 8;
+#if LJ_BE
+    tv.u64 = lj_bswap64(tv.u64);
+#endif
+    if (!tvisnum(&tv)) setnanV(&tv);  /* Fix non-canonical NaNs. */
+    copyTVrel(sbufL(sbx), o, &tv);
+  } else if (tp <= SER_TAG_TRUE) {
+    TValue tv;
+    setpriV(&tv, ~tp);
+    copyTVrel(sbufL(sbx), o, &tv);
+  } else if (tp == SER_TAG_DICT_STR) {
+    GCtab *dict_str;
+    TValue *array = NULL;
+    MSize asize = 0;
+    uint32_t idx;
+    r = serialize_ru124(r, w, &idx); if (LJ_UNLIKELY(!r)) goto eob;
+    idx++;
+    dict_str = lj_bufx_dict_str_acq(sbx);
+    if (dict_str)
+      asize = lj_tab_array_snapshot_acq(dict_str, &array);
+    if (idx < asize) {
+      TValue tv;
+      lj_tv_load_acq(&tv, &array[idx]);
+      if (tvisstr(&tv)) {
+	copyTVrel(sbufL(sbx), o, &tv);
+      } else {
+	lj_err_callerv(sbufL(sbx), LJ_ERR_BUFFER_BADDICTX, idx);
+      }
+    } else {
+      lj_err_callerv(sbufL(sbx), LJ_ERR_BUFFER_BADDICTX, idx);
+    }
+  } else if (tp >= SER_TAG_TAB && tp <= SER_TAG_DICT_MT) {
+    uint32_t narray = 0, nhash = 0;
+    GCtab *t, *mt = NULL;
+    if (sbx->depth <= 0) lj_err_caller(sbufL(sbx), LJ_ERR_BUFFER_DEPTH);
+    sbx->depth--;
+    lj_tab_read_enter(L2TG(sbufL(sbx)));
+    if (tp == SER_TAG_DICT_MT) {
+      GCtab *dict_mt;
+      TValue *array = NULL;
+      MSize asize = 0;
+      uint32_t idx;
+      r = serialize_ru124(r, w, &idx); if (LJ_UNLIKELY(!r)) goto eob;
+      idx++;
+      dict_mt = lj_bufx_dict_mt_acq(sbx);
+      if (dict_mt)
+	asize = lj_tab_array_snapshot_acq(dict_mt, &array);
+      if (idx < asize) {
+	TValue tv;
+	lj_tv_load_acq(&tv, &array[idx]);
+	if (tvistab(&tv)) {
+	  mt = tabV(&tv);
+	} else {
+	  lj_err_callerv(sbufL(sbx), LJ_ERR_BUFFER_BADDICTX, idx);
+	}
+      } else {
+	lj_err_callerv(sbufL(sbx), LJ_ERR_BUFFER_BADDICTX, idx);
+      }
+      r = serialize_ru124(r, w, &tp); if (LJ_UNLIKELY(!r)) goto eob;
+      if (!(tp >= SER_TAG_TAB && tp < SER_TAG_DICT_MT)) goto badtag;
+    }
+    if (tp >= SER_TAG_TAB+2) {
+      r = serialize_ru124(r, w, &narray); if (LJ_UNLIKELY(!r)) goto eob;
+    }
+    if ((tp & 1)) {
+      r = serialize_ru124(r, w, &nhash); if (LJ_UNLIKELY(!r)) goto eob;
+    }
+    t = lj_tab_new(sbufL(sbx), narray, hsize2hbits(nhash));
+    lj_tab_metatable_rel(t, mt);
+    if (mt)
+      lj_gc_pubtabobj(sbufL(sbx), t, mt);
+    {
+      TValue tv;
+      settabV(sbufL(sbx), &tv, t);
+      copyTVrel(sbufL(sbx), o, &tv);
+      /* The destination may be a parent table slot or a C API result slot.
+      ** Retain the child before recursive decoding can allocate or wait; the
+      ** final parent/result publication remains the durable semantic edge. */
+      lj_gc_pubroot(sbufL(sbx), o);
+    }
+    if (narray) {
+      TValue *array;
+      TValue *oa;
+      TValue *oe;
+      (void)lj_tab_array_snapshot_acq(t, &array);
+      oa = array + (tp >= SER_TAG_TAB+4);
+      oe = array + narray;
+      while (oa < oe) r = serialize_get(r, sbx, oa++);
+    }
+    if (nhash) {
+      do {
+	TValue k, *v;
+	r = serialize_get(r, sbx, &k);
+	v = lj_tab_set(sbufL(sbx), t, &k);
+	if (LJ_UNLIKELY(!tvisnil(v)))
+	  lj_err_caller(sbufL(sbx), LJ_ERR_BUFFER_DUPKEY);
+	r = serialize_get(r, sbx, v);
+      } while (--nhash);
+    }
+    lj_tab_read_leave(L2TG(sbufL(sbx)));
+    sbx->depth++;
+#if LJ_HASFFI
+  } else if (tp >= SER_TAG_INT64 &&  tp <= SER_TAG_COMPLEX) {
+    uint32_t sz = tp == SER_TAG_COMPLEX ? 16 : 8;
+    GCcdata *cd;
+    if (LJ_UNLIKELY(r + sz > w)) goto eob;
+    if (LJ_UNLIKELY(!ctype_ctsG(G(sbufL(sbx))))) goto badtag;
+    cd = lj_cdata_new_(sbufL(sbx),
+	   tp == SER_TAG_INT64 ? CTID_INT64 :
+	   tp == SER_TAG_UINT64 ? CTID_UINT64 : CTID_COMPLEX_DOUBLE,
+	   sz);
+    memcpy(cdataptr(cd), r, sz); r += sz;
+#if LJ_BE
+    *(uint64_t *)cdataptr(cd) = lj_bswap64(*(uint64_t *)cdataptr(cd));
+    if (sz == 16)
+      ((uint64_t *)cdataptr(cd))[1] = lj_bswap64(((uint64_t *)cdataptr(cd))[1]);
+#endif
+    if (sz == 16) {  /* Fix non-canonical NaNs. */
+      TValue *cdo = (TValue *)cdataptr(cd);
+      if (!tvisnum(&cdo[0])) setnanV(&cdo[0]);
+      if (!tvisnum(&cdo[1])) setnanV(&cdo[1]);
+    }
+    {
+      TValue tv;
+      setcdataV(sbufL(sbx), &tv, cd);
+      copyTVrel(sbufL(sbx), o, &tv);
+    }
+#endif
+  } else if (tp <= (LJ_64 ? SER_TAG_LIGHTUD64 : SER_TAG_LIGHTUD32)) {
+    TValue tv;
+    uintptr_t ud = 0;
+    if (tp == SER_TAG_LIGHTUD32) {
+      if (LJ_UNLIKELY(r + 4 > w)) goto eob;
+      ud = (uintptr_t)(LJ_BE ? lj_bswap(lj_getu32(r)) : lj_getu32(r));
+      r += 4;
+    }
+#if LJ_64
+    else if (tp == SER_TAG_LIGHTUD64) {
+      if (LJ_UNLIKELY(r + 8 > w)) goto eob;
+      memcpy(&ud, r, 8); r += 8;
+#if LJ_BE
+      ud = lj_bswap64(ud);
+#endif
+    }
+    setrawlightudV(&tv, lj_lightud_intern(sbufL(sbx), (void *)ud));
+#else
+    setrawlightudV(&tv, (void *)ud);
+#endif
+    copyTVrel(sbufL(sbx), o, &tv);
+  } else {
+badtag:
+    lj_err_callerv(sbufL(sbx), LJ_ERR_BUFFER_BADDEC, tp);
+  }
+  return r;
+eob:
+  lj_err_caller(sbufL(sbx), LJ_ERR_BUFFER_EOB);
+  return NULL;
+}
+
+/* -- External serialization API ------------------------------------------ */
+
+typedef struct SerializePutCtx {
+  SBufExt *sbx;
+  cTValue *o;
+  char *result;
+} SerializePutCtx;
+
+typedef struct SerializeGetCtx {
+  SBufExt *sbx;
+  TValue *o;
+  char *result;
+} SerializeGetCtx;
+
+static TValue *serialize_put_cp(lua_State *L, lua_CFunction dummy, void *ud)
+{
+  SerializePutCtx *ctx = (SerializePutCtx *)ud;
+  char *w = lj_buf_wptr_acq((SBuf *)ctx->sbx);
+  UNUSED(L);
+  UNUSED(dummy);
+  ctx->result = serialize_put(w, ctx->sbx, ctx->o);
+  return NULL;
+}
+
+static TValue *serialize_get_cp(lua_State *L, lua_CFunction dummy, void *ud)
+{
+  SerializeGetCtx *ctx = (SerializeGetCtx *)ud;
+  UNUSED(L);
+  UNUSED(dummy);
+  ctx->result = serialize_get(lj_buf_rptr_acq(ctx->sbx), ctx->sbx, ctx->o);
+  return NULL;
+}
+
+static char *serialize_put_protected(SBufExt *sbx, cTValue *o)
+{
+  lua_State *L = sbufL(sbx);
+  SerializePutCtx ctx;
+  int status;
+  ctx.sbx = sbx;
+  ctx.o = o;
+  ctx.result = NULL;
+  /* Recursive serialization intentionally holds generation pins across
+  ** buffer growth. Its own protected C boundary restores the exact outer pin
+  ** checkpoint before an error is rethrown to Lua, including JIT helper calls
+  ** and Lua fast-pcall catch paths. */
+  status = lj_vm_cpcall(L, NULL, &ctx, serialize_put_cp);
+  if (LJ_UNLIKELY(status != LUA_OK))
+    lj_err_throw(L, status);
+  return ctx.result;
+}
+
+static char *serialize_get_protected(SBufExt *sbx, TValue *o)
+{
+  lua_State *L = sbufL(sbx);
+  SerializeGetCtx ctx;
+  int status;
+  ctx.sbx = sbx;
+  ctx.o = o;
+  ctx.result = NULL;
+  status = lj_vm_cpcall(L, NULL, &ctx, serialize_get_cp);
+  if (LJ_UNLIKELY(status != LUA_OK))
+    lj_err_throw(L, status);
+  return ctx.result;
+}
+
+/* Encode to buffer. */
+SBufExt * LJ_FASTCALL lj_serialize_put(SBufExt *sbx, cTValue *o)
+{
+  sbx->depth = LJ_SERIALIZE_DEPTH;
+  lj_buf_wptr_rel((SBuf *)sbx, serialize_put_protected(sbx, o));
+  return sbx;
+}
+
+/* Decode from buffer. */
+char * LJ_FASTCALL lj_serialize_get(SBufExt *sbx, TValue *o)
+{
+  sbx->depth = LJ_SERIALIZE_DEPTH;
+  return serialize_get_protected(sbx, o);
+}
+
+/* Stand-alone encoding, borrowing from global temporary buffer. */
+GCstr * LJ_FASTCALL lj_serialize_encode(lua_State *L, cTValue *o)
+{
+  SBufExt sbx;
+  char *w;
+  memset(&sbx, 0, sizeof(SBufExt));
+  lj_bufx_set_borrow(L, &sbx, &L2TG(L)->tmpbuf);
+  sbx.depth = LJ_SERIALIZE_DEPTH;
+  w = serialize_put_protected(&sbx, o);
+  return lj_str_new(L, lj_buf_bptr_acq((SBuf *)&sbx),
+		    (size_t)(w - lj_buf_bptr_acq((SBuf *)&sbx)));
+}
+
+/* Stand-alone decoding, copy-on-write from string. */
+void lj_serialize_decode(lua_State *L, TValue *o, GCstr *str)
+{
+  SBufExt sbx;
+  char *r;
+  memset(&sbx, 0, sizeof(SBufExt));
+  lj_bufx_set_cow(L, &sbx, strdata(str), str->len);
+  /* No need to set sbx.cowref here. */
+  sbx.depth = LJ_SERIALIZE_DEPTH;
+  r = serialize_get_protected(&sbx, o);
+  if (r != lj_buf_wptr_acq((SBuf *)&sbx))
+    lj_err_caller(L, LJ_ERR_BUFFER_LEFTOV);
+}
+
+#if LJ_HASJIT
+/* Peek into buffer to find the result IRType for specialization purposes. */
+LJ_FUNC MSize LJ_FASTCALL lj_serialize_peektype(SBufExt *sbx)
+{
+  uint32_t tp;
+  if (serialize_ru124(lj_buf_rptr_acq(sbx),
+		      lj_buf_wptr_acq((SBuf *)sbx), &tp)) {
+    /* This must match the handling of all tags in the decoder above. */
+    switch (tp) {
+    case SER_TAG_NIL: return IRT_NIL;
+    case SER_TAG_FALSE: return IRT_FALSE;
+    case SER_TAG_TRUE: return IRT_TRUE;
+    case SER_TAG_NULL: case SER_TAG_LIGHTUD32: case SER_TAG_LIGHTUD64:
+      return IRT_LIGHTUD;
+    case SER_TAG_INT: return LJ_DUALNUM ? IRT_INT : IRT_NUM;
+    case SER_TAG_NUM: return IRT_NUM;
+    case SER_TAG_TAB: case SER_TAG_TAB+1: case SER_TAG_TAB+2:
+    case SER_TAG_TAB+3: case SER_TAG_TAB+4: case SER_TAG_TAB+5:
+    case SER_TAG_DICT_MT:
+      return IRT_TAB;
+    case SER_TAG_INT64: case SER_TAG_UINT64: case SER_TAG_COMPLEX:
+      return IRT_CDATA;
+    case SER_TAG_DICT_STR:
+    default:
+      return IRT_STR;
+    }
+  }
+  return IRT_NIL;  /* Will fail on actual decode. */
+}
+#endif
+
+#endif

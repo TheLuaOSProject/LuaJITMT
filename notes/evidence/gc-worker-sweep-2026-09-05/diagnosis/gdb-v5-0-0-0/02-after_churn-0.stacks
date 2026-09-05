@@ -1,0 +1,6 @@
+
+Thread 1 (Thread 0x7ffff7ca21c0 (LWP 369550) "debug-observed-"):
+#0  sweep_probe_checkpoint (where=where@entry=0x55555568d8b7 "after_churn") at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/sweep-probe.h:15
+#1  0x000055555555f5c7 in sweep_probe_report (where=where@entry=0x55555568d8b7 "after_churn", L=0x7ffff7c90080) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/sweep-probe.h:85
+#2  0x000055555555f91d in snapshot (L=L@entry=0x7ffff7c90080, stage=stage@entry=0x55555568d8b7 "after_churn", round=round@entry=1, filler=filler@entry=0) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/t-string-retention-observed.c:148
+#3  0x000055555555e5b4 in main (argc=<optimized out>, argv=<optimized out>) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/t-string-retention-observed.c:257

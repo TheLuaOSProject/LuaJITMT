@@ -1,0 +1,14 @@
+{
+  "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/t-gc2-worker-scheduler.c": {
+    "sha256": "e9d2173e1279088d500b7bff816dae54e260b039ad5c5d6034f738d5ad2a1a27",
+    "bytes": 49484
+  },
+  "/tmp/lj-worker-bridge-combined-20260905-bz9wysjp/candidate/src/libluajit.a": {
+    "sha256": "0ff71ee36552489234ad9d48455b425bc26f2aeb3c46cc95ef1ae8f88ba78e75",
+    "bytes": 2361258
+  },
+  "/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/combined-untouched": {
+    "sha256": "54f197ab9a238f40985d6109fd261366142ae5988837cbe7ecc4a1ca87c59a08",
+    "bytes": 1708992
+  }
+}

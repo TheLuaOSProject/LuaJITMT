@@ -1,0 +1,88 @@
+[
+  {
+    "exit_code": 0,
+    "argv": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-DLUA_USE_ASSERT",
+      "-DLUA_USE_APICHECK",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-I/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers/src",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline/tests/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,-E",
+      "-o",
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers-duplicate-repeat-t-safepoint-local-native-duplicate",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots"
+    ],
+    "label": "t-safepoint-local-native-duplicate-compile",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.16420813399599865,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers-duplicate-repeat-t-safepoint-local-native-duplicate"
+    ],
+    "label": "t-safepoint-local-native-duplicate-0",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.007563844003016129,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers-duplicate-repeat-t-safepoint-local-native-duplicate"
+    ],
+    "label": "t-safepoint-local-native-duplicate-1",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.007370722996711265,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers-duplicate-repeat-t-safepoint-local-native-duplicate"
+    ],
+    "label": "t-safepoint-local-native-duplicate-2",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.00749031900340924,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers-duplicate-repeat-t-safepoint-local-native-duplicate"
+    ],
+    "label": "t-safepoint-local-native-duplicate-3",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.007440562003466766,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  },
+  {
+    "exit_code": 0,
+    "argv": [
+      "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers-duplicate-repeat-t-safepoint-local-native-duplicate"
+    ],
+    "label": "t-safepoint-local-native-duplicate-4",
+    "cwd": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz",
+    "seconds": 0.007360684001469053,
+    "LUA_PATH": "/tmp/lj-gc-worker-bridge-20260905-bheds8jz/baseline-helpers/src/?.lua;;",
+    "ASAN_OPTIONS": null
+  }
+]

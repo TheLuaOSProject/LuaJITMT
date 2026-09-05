@@ -1,0 +1,30 @@
+{
+  "argv": [
+    "make",
+    "-C",
+    "src",
+    "-j4",
+    "BUILDMODE=static",
+    "CC=clang",
+    "HOST_CC=clang",
+    "CCOPT=-O1",
+    "CCDEBUG=-g",
+    "XCFLAGS=-DLUA_USE_ASSERT -DLUA_USE_APICHECK",
+    "TARGET_CFLAGS=-fsanitize=address -fno-omit-frame-pointer",
+    "TARGET_LDFLAGS=-fsanitize=address",
+    "TARGET_STRIP=:"
+  ],
+  "cwd": "/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/asan-candidate",
+  "exit_code": 0,
+  "seconds": 9.9227070190027,
+  "binaries": {
+    "luajit": {
+      "sha256": "e2b01f2c4b59c7ab86551157e54407e14c020b897ab26705a745681bc705fbf1",
+      "bytes": 19496384
+    },
+    "libluajit.a": {
+      "sha256": "968dd6cf2a7193dc1b89a1d76ed3334cb300a06e48401d4aff0f754397780fed",
+      "bytes": 26684006
+    }
+  }
+}

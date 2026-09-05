@@ -1,0 +1,12 @@
+In file included from /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/t-string-retention-observed.c:33:
+/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/sweep-probe.h: In function ‘sweep_probe_report’:
+/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/sweep-probe.h:25:64: error: comparison of integer expressions of different signedness: ‘long int’ and ‘long unsigned int’ [-Werror=sign-compare]
+   25 |   uint32_t count = base && next && next >= base && next - base <= TG_GC2_SSB_SLOTS ?
+      |                                                                ^~
+/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/sweep-probe.h:58:38: error: ‘GC2State’ has no member named ‘finalizer_owner’; did you mean ‘finalizer_enters’?
+   58 |   PROBE32(finalizer_active); PROBE32(finalizer_owner);
+      |                                      ^~~~~~~~~~~~~~~
+/tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/sweep-probe.h:34:67: note: in definition of macro ‘PROBE32’
+   34 | #define PROBE32(n) printf(",\"" #n "\":%u", la_load32_acq(&g->gc2.n))
+      |                                                                   ^
+cc1: all warnings being treated as errors

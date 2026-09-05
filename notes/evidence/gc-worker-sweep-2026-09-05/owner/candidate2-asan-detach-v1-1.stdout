@@ -1,0 +1,3 @@
+{"stage":"detach_after_own_poll","tid":3,"native":0,"reqmask":0,"poll":0}
+{"stage":"remote_action_refused_owner_pending","wanted":16,"tid":3,"native":0,"reqmask":48}
+{"stage":"joined","overlapped":0}

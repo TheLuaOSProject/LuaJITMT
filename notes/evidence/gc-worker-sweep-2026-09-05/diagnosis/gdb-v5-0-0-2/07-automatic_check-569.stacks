@@ -1,0 +1,36 @@
+
+Thread 3 (Thread 0x7ffff700c6c0 (LWP 369568) "debug-observed-"):
+#0  0x00007ffff7db17b9 in syscall () from /lib/x86_64-linux-gnu/libc.so.6
+#1  0x00005555555f9809 in la_futex_wait (p=<optimized out>, val=<optimized out>, ns=<optimized out>) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/lj_atomic.h:163
+#2  gc2_worker_wake_futex_wait (g=<optimized out>, wake=<optimized out>, timeout_ns=<optimized out>) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/lj_obj.h:5089
+#3  gc2_worker_main (arg=0x5555556eff60) at lj_gc2.c:2816
+#4  0x00007ffff7d35b7b in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#5  0x00007ffff7db37f8 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+
+Thread 2 (Thread 0x7ffff790e6c0 (LWP 369567) "debug-observed-"):
+#0  0x00007ffff7db17b9 in syscall () from /lib/x86_64-linux-gnu/libc.so.6
+#1  0x00005555555d68fd in la_futex_wake (p=<optimized out>, n=<optimized out>) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/lj_atomic.h:167
+#2  gc2_worker_wake_futex_wake (g=<optimized out>, n=<optimized out>) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/debug/src/lj_obj.h:5082
+#3  lj_gc2_worker_wake_n (g=<optimized out>, wake_n=wake_n@entry=1) at lj_gc2.c:2079
+#4  0x00005555555db722 in lj_gc2_worker_wake_n (g=<optimized out>, wake_n=<optimized out>) at lj_gc2.c:2082
+#5  0x000055555556e4c3 in arena_progress_wake (a=0x7fffe62a0000) at lj_arena.c:189
+#6  0x00005555555d9842 in gc2_recovery_complete_small (g=g@entry=0x7ffff7c90130, a=a@entry=0x7fffe62a0000, start=start@entry=1848) at lj_gc2.c:21392
+#7  0x00005555555ec28b in gc2_recovery_drain_small_one (g=0x7fffe62a0000, stop_quantump=0x7ffff790dcf0) at lj_gc2.c:21621
+#8  gc2_recovery_drain_one (g=0x7fffe62a0000, stop_quantump=0x7ffff790dcf0) at lj_gc2.c:21726
+#9  gc2_recovery_drain_owned (g=g@entry=0x7ffff7c90130, limit=limit@entry=1, stop_quantump=stop_quantump@entry=0x7ffff790dd7c) at lj_gc2.c:21757
+#10 0x00005555555f93f5 in gc2_worker_sweep_progress (g=0x7ffff7c90130, limit=64) at lj_gc2.c:22235
+#11 gc2_worker_drain_inner (g=g@entry=0x7ffff7c90130, logical_tg=logical_tg@entry=0x5555556e8560, limit=limit@entry=64, progress=progress@entry=0x7ffff790ddd0, hold_mark_gate=hold_mark_gate@entry=0) at lj_gc2.c:22452
+#12 0x00005555555f970d in gc2_worker_main (arg=0x5555556e8560) at lj_gc2.c:2780
+#13 0x00007ffff7d35b7b in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+#14 0x00007ffff7db37f8 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+
+Thread 1 (Thread 0x7ffff7ca21c0 (LWP 369564) "debug-observed-"):
+#0  sweep_probe_checkpoint (where=where@entry=0x55555568d801 "automatic_check") at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/sweep-probe.h:15
+#1  0x000055555555f5c7 in sweep_probe_report (where=where@entry=0x55555568d801 "automatic_check", L=0x7ffff7c90080) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/sweep-probe.h:85
+#2  0x000055555555fa4b in sweep_probe_auto (L=0x7ffff7c90080) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/sweep-probe.h:95
+#3  automatic_done (L=0x7ffff7c90080) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/t-string-retention-observed.c:168
+#4  0x00005555555c4b78 in lj_BC_FUNCC ()
+#5  0x00005555555602a7 in lj_vm_pcall_unwind (L=L@entry=0x7ffff7c90080, base=0x7ffff7a726a0, nres1=nres1@entry=3, ef=ef@entry=0) at lj_state.c:130
+#6  0x0000555555589781 in lua_pcall (L=L@entry=0x7ffff7c90080, nargs=nargs@entry=0, nresults=nresults@entry=2, errfunc=errfunc@entry=0) at lj_api.c:2797
+#7  0x000055555555e92e in automatic_cycles (L=0x7ffff7c90080, fn=<optimized out>) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/t-string-retention-observed.c:181
+#8  main (argc=<optimized out>, argv=<optimized out>) at /tmp/lj-gc-worker-sweep-20260905-2xv7dsqc/t-string-retention-observed.c:259

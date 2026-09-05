@@ -1,0 +1,565 @@
+/*
+** Library function support.
+** Copyright (C) 2005-2026 Mike Pall. See Copyright Notice in luajit.h
+*/
+
+#define lj_lib_c
+#define LUA_CORE
+
+#include "lauxlib.h"
+
+#include "lj_obj.h"
+#include "lj_atomic.h"
+#include "lj_gc.h"
+#include "lj_err.h"
+#include "lj_str.h"
+#include "lj_tab.h"
+#include "lj_func.h"
+#include "lj_state.h"
+#include "lj_bc.h"
+#include "lj_frame.h"
+#include "lj_dispatch.h"
+#if LJ_HASFFI
+#include "lj_ctype.h"
+#endif
+#include "lj_vm.h"
+#include "lj_strscan.h"
+#include "lj_strfmt.h"
+#include "lj_lex.h"
+#include "lj_bcdump.h"
+#include "lj_lib.h"
+
+/* -- Library initialization ---------------------------------------------- */
+
+static GCtab *lib_create_table(lua_State *L, const char *libname, int hsize)
+{
+  if (libname) {
+    luaL_findtable(L, LUA_REGISTRYINDEX, "_LOADED", 16);
+    lua_getfield(L, -1, libname);
+    if (!tvistab(L->top-1)) {
+      L->top--;
+      if (luaL_findtable(L, LUA_GLOBALSINDEX, libname, hsize) != NULL)
+	lj_err_callerv(L, LJ_ERR_BADMODN, libname);
+      settabV(L, L->top, tabV(L->top-1));
+      L->top++;
+      lua_setfield(L, -3, libname);  /* _LOADED[libname] = new table */
+    }
+    L->top--;
+    settabV(L, L->top-1, tabV(L->top));
+  } else {
+    lua_createtable(L, 0, hsize);
+  }
+  return tabV(L->top-1);
+}
+
+static void lib_weak_write_str(lua_State *L, GCtab *tab, GCstr *key,
+			       cTValue *val)
+{
+  TValue keyv;
+  setstrV(L, &keyv, key);
+  lj_gc2_barrier_weak_write(L, tab, &keyv, val);
+}
+
+static void lib_storefunc_str(lua_State *L, GCtab *tab, GCstr *key,
+			      GCfunc *fn)
+{
+  TValue keytv, tv, *dst;
+  setfuncV(L, &tv, fn);
+  setstrV(L, &keytv, key);
+  /*
+  ** Lockless table insertion may resize/retry and can run collector work before
+  ** the function becomes reachable from the destination slot. Keep the generated
+  ** key/function operands and the destination table published across lookup.
+  */
+  lj_gc_pubobjroot(L, obj2gco(tab));
+  lj_gc_pubroot(L, &keytv);
+  lj_gc_pubroot(L, &tv);
+  for (;;) {
+    dst = lj_tab_setstr(L, tab, key);
+    if (lj_tab_trystoretv_cas_keyed(L, tab, dst, &keytv, &tv) ==
+	LJ_TAB_STORE_CAS_OK) {
+      lj_gc_pubtabkey(L, tab, &keytv);
+      lj_gc_pubtabtv(L, tab, &tv);
+      /* The keyed helper's SMR lifetime ends before it returns, so dst is no
+      ** longer a valid barrier operand. Publish from the stable by-value edge. */
+      lib_weak_write_str(L, tab, key, &tv);
+      return;
+    }
+    lj_tab_store_wait_l(L);  /* Library string store saw stale/FORWARD slot. */
+  }
+}
+
+static void lib_storetv_key(lua_State *L, GCtab *tab, cTValue *key,
+			    cTValue *val)
+{
+  TValue keytv, valtv;
+  TValue *dst;
+  /*
+  ** SET records in generated library definitions commonly store stack values
+  ** after popping them back to L->top. Lockless table insertion may need L->top
+  ** as a temporary root for a stack key during resize/retry, so snapshot both
+  ** operands before looking up or creating the destination slot.
+  */
+  copyTV(L, &keytv, key);
+  copyTV(L, &valtv, val);
+  lj_gc_pubroot(L, &keytv);
+  lj_gc_pubroot(L, &valtv);
+  for (;;) {
+    dst = lj_tab_set(L, tab, &keytv);
+    if (lj_tab_trystoretv_cas_keyed(L, tab, dst, &keytv, &valtv) ==
+	LJ_TAB_STORE_CAS_OK) {
+      lj_gc2_barrier_weak_write(L, tab, &keytv, &valtv);
+      lj_gc_pubtabkey(L, tab, &keytv);
+      lj_gc_pubtabtv(L, tab, &valtv);
+      return;
+    }
+    lj_tab_store_wait_l(L);  /* Library generic store saw stale/FORWARD slot. */
+  }
+}
+
+static const uint8_t *lib_read_lfunc_body(lua_State *L, const uint8_t *p,
+					  GCtab *tab)
+{
+  int len = *p++;
+  TGState *tg = L2TG(L);
+  LexState ls;
+  TValue nilv, namev;
+  TValue *nameanchor;
+  uint32_t nameanchoridx;
+  GCstr *name;
+  GCproto *pt;
+  GCfunc *fn;
+  uint32_t anchoridx;
+  /* Reserve the generated name root before string allocation. The protected
+  ** wrapper below restores this base on every throw, including OOM while the
+  ** direct prototype reader owns an additional construction anchor. */
+  setnilV(&nilv);
+  nameanchor = lj_tg_root_anchor_push(L, tg, &nilv, &nameanchoridx);
+  if (LJ_UNLIKELY(nameanchor == NULL))
+    lj_err_mem(L);
+  name = lj_str_new(L, (const char *)p, len);
+  setstrV(L, &namev, name);
+  copyTVrel(L, nameanchor, &namev);
+  lj_gc_pubroot(L, nameanchor);
+  memset(&ls, 0, sizeof(ls));
+  ls.L = L;
+  ls.p = (const char *)(p+len);
+  ls.pe = (const char *)~(uintptr_t)0;
+  ls.c = -1;
+  ls.level = (BCDUMP_F_STRIP|(LJ_BE*BCDUMP_F_BE));
+  ls.fr2 = LJ_FR2;
+  ls.chunkname = name;
+  pt = lj_bcread_proto(&ls, &anchoridx);
+  pt->firstline = ~(BCLine)0;
+  fn = lj_func_newL_empty(L, pt, lj_state_env_acq(L), anchoridx);
+  lib_storefunc_str(L, tab, name, fn);
+  lj_tg_root_anchor_pop(tg, anchoridx);
+  lj_tg_root_anchor_pop(tg, nameanchoridx);
+  return (const uint8_t *)ls.p;
+}
+
+typedef struct LibReadLFuncCtx {
+  const uint8_t *p;
+  const uint8_t *result;
+  GCtab *tab;
+} LibReadLFuncCtx;
+
+static TValue *lib_read_lfunc_cp(lua_State *L, lua_CFunction dummy, void *ud)
+{
+  LibReadLFuncCtx *ctx = (LibReadLFuncCtx *)ud;
+  UNUSED(dummy);
+  cframe_errfunc(L->cframe) = -1;  /* Inherit the library opener's handler. */
+  ctx->result = lib_read_lfunc_body(L, ctx->p, ctx->tab);
+  return NULL;
+}
+
+static const uint8_t *lib_read_lfunc(lua_State *L, const uint8_t *p,
+				     GCtab *tab)
+{
+  TGState *tg = L2TG(L);
+  LibReadLFuncCtx ctx;
+  uint32_t anchor_base = lj_tg_root_anchor_top_acq(tg);
+  int errcode;
+  ctx.p = p;
+  ctx.result = NULL;
+  ctx.tab = tab;
+  errcode = lj_vm_cpcall(L, NULL, &ctx, lib_read_lfunc_cp);
+  while (lj_tg_root_anchor_top_acq(tg) > anchor_base)
+    lj_tg_root_anchor_pop(tg, lj_tg_root_anchor_top_acq(tg) - 1u);
+  if (LJ_UNLIKELY(errcode))
+    lj_err_throw(L, errcode);
+  return ctx.result;
+}
+
+static void lib_register_body(lua_State *L, const char *libname,
+			      const uint8_t *p, const lua_CFunction *cf)
+{
+  GCtab *env = lj_state_env_acq(L);
+  GCfunc *ofn = NULL;
+  TValue nilv, fnv;
+  TValue *ofnanchor;
+  uint32_t ofnanchoridx;
+  int ffid = *p++;
+  BCIns *bcff = &L2GG(L)->bcff[*p++];
+  GCtab *tab = lib_create_table(L, libname, *p++);
+  ptrdiff_t tpos = L->top - L->base;
+
+  /* Avoid barriers further down. */
+  lj_gc_pubtab(L, tab);
+  lj_tab_nomm_rel(tab, 0);
+  setnilV(&nilv);
+  ofnanchor = lj_tg_root_anchor_push(L, L2TG(L), &nilv, &ofnanchoridx);
+  if (LJ_UNLIKELY(ofnanchor == NULL))
+    lj_err_mem(L);
+
+  for (;;) {
+    uint32_t tag = *p++;
+      MSize len = tag & LIBINIT_LENMASK;
+      tag &= LIBINIT_TAGMASK;
+      if (tag != LIBINIT_STRING) {
+	const char *name;
+	MSize nuv = (MSize)(L->top - L->base - tpos);
+	uint32_t this_ffid = (uint32_t)(ffid++);
+	uint32_t fnanchoridx;
+	GCfunc *fn = lj_func_newC(L, nuv, env, &fnanchoridx);
+	if (nuv) {
+	  MSize i;
+	  TValue *src = L->base + tpos;
+	  for (i = 0; i < nuv; i++) {
+	    copyTVrel(L, &fn->c.upvalue[i], src+i);
+	    lj_gc_pubobjtv(L, fn, &fn->c.upvalue[i]);
+	  }
+	  L->top = src;
+	}
+	name = (const char *)p;
+      p += len;
+      if (tag == LIBINIT_CF)
+	setmref(fn->c.pc, &G(L)->bc_cfunc_int);
+      else
+	setmref(fn->c.pc, bcff++);
+      if (tag == LIBINIT_ASM_)
+	fn->c.f = ofn->c.f;  /* Copy handler from previous function. */
+      else
+	fn->c.f = *cf++;  /* Get cf or handler from C function table. */
+      lj_func_ffid_rel(fn, this_ffid);
+      if (len) {
+	GCstr *key = lj_str_new(L, name, len);
+	lib_storefunc_str(L, tab, key, fn);
+      }
+      setfuncV(L, &fnv, fn);
+      copyTVrel(L, ofnanchor, &fnv);
+      lj_gc_pubroot(L, ofnanchor);
+      lj_tg_root_anchor_pop(L2TG(L), fnanchoridx);
+      ofn = fn;
+    } else {
+      switch (tag | len) {
+      case LIBINIT_LUA:
+	p = lib_read_lfunc(L, p, tab);
+	break;
+      case LIBINIT_SET:
+	L->top -= 2;
+	if (tvisstr(L->top+1) && strV(L->top+1)->len == 0)
+	  env = tabV(L->top);
+	else {  /* Store helper snapshots stack operands and emits the barrier. */
+	  lib_storetv_key(L, tab, L->top+1, L->top);
+	}
+	break;
+      case LIBINIT_NUMBER:
+	memcpy(&L->top->n, p, sizeof(double));
+	L->top++;
+	p += sizeof(double);
+	break;
+      case LIBINIT_COPY:
+	copyTVrel(L, L->top, L->top - *p++);
+	lj_state_stack_pubtv(L, L, L->top);
+	L->top++;
+	break;
+      case LIBINIT_LASTCL:
+	{
+	  TValue fnv;
+	  setfuncV(L, &fnv, ofn);
+	  copyTVrel(L, L->top, &fnv);
+	  lj_state_stack_pubtv(L, L, L->top);
+	  L->top++;
+	}
+	break;
+      case LIBINIT_FFID:
+	ffid++;
+	break;
+      case LIBINIT_END:
+	lj_tg_root_anchor_pop(L2TG(L), ofnanchoridx);
+	return;
+      default:
+	{
+	  TValue strv;
+	  setstrV(L, &strv, lj_str_new(L, (const char *)p, len));
+	  copyTVrel(L, L->top, &strv);
+	  lj_state_stack_pubtv(L, L, L->top);
+	  L->top++;
+	}
+	p += len;
+	break;
+      }
+    }
+  }
+}
+
+typedef struct LibRegisterCtx {
+  const char *libname;
+  const uint8_t *p;
+  const lua_CFunction *cf;
+} LibRegisterCtx;
+
+static TValue *lib_register_cp(lua_State *L, lua_CFunction dummy, void *ud)
+{
+  LibRegisterCtx *ctx = (LibRegisterCtx *)ud;
+  UNUSED(dummy);
+  cframe_errfunc(L->cframe) = -1;
+  lib_register_body(L, ctx->libname, ctx->p, ctx->cf);
+  return NULL;
+}
+
+void lj_lib_register(lua_State *L, const char *libname,
+		     const uint8_t *p, const lua_CFunction *cf)
+{
+  TGState *tg = L2TG(L);
+  LibRegisterCtx ctx;
+  uint32_t anchor_base = lj_tg_root_anchor_top_acq(tg);
+  int errcode;
+  ctx.libname = libname;
+  ctx.p = p;
+  ctx.cf = cf;
+  errcode = lj_vm_cpcall(L, NULL, &ctx, lib_register_cp);
+  while (lj_tg_root_anchor_top_acq(tg) > anchor_base)
+    lj_tg_root_anchor_pop(tg, lj_tg_root_anchor_top_acq(tg) - 1u);
+  if (LJ_UNLIKELY(errcode))
+    lj_err_throw(L, errcode);
+}
+
+/* Push internal function on the stack. */
+GCfunc *lj_lib_pushcc(lua_State *L, lua_CFunction f, int id, int n)
+{
+  GCfunc *fn;
+  lua_pushcclosure(L, f, n);
+  fn = funcV(L->top-1);
+  setmrefrel(fn->c.pc, &G(L)->bc_cfunc_int);
+  lj_func_ffid_rel(fn, (uint32_t)id);
+  return fn;
+}
+
+void lj_lib_prereg(lua_State *L, const char *name, lua_CFunction f, GCtab *env)
+{
+  luaL_findtable(L, LUA_REGISTRYINDEX, "_PRELOAD", 4);
+  lua_pushcfunction(L, f);
+  lj_func_env_rel(funcV(L->top-1), env);
+  lj_gc_pubobjobj(L, funcV(L->top-1), env);
+  lua_setfield(L, -2, name);
+  L->top--;
+}
+
+int lj_lib_postreg(lua_State *L, lua_CFunction cf, int id, const char *name)
+{
+  GCfunc *fn = lj_lib_pushcf(L, cf, id);
+  GCtab *t = lj_func_env_acq(curr_func(L));  /* Reference to parent table. */
+  GCstr *key = lj_str_newz(L, name);
+  TValue fnv;
+  lib_storefunc_str(L, t, key, fn);
+  lj_gc_pubtab(L, t);
+  setfuncV(L, &fnv, fn);
+  copyTVrel(L, L->top, &fnv);
+  lj_state_stack_pubtv(L, L, L->top);
+  L->top++;
+  return 1;
+}
+
+/* -- Type checks --------------------------------------------------------- */
+
+TValue *lj_lib_checkany(lua_State *L, int narg)
+{
+  TValue *o = L->base + narg-1;
+  if (o >= L->top)
+    lj_err_arg(L, narg, LJ_ERR_NOVAL);
+  return o;
+}
+
+GCstr *lj_lib_checkstr(lua_State *L, int narg)
+{
+  TValue *o = L->base + narg-1;
+  if (o < L->top) {
+    if (LJ_LIKELY(tvisstr(o))) {
+      return strV(o);
+    } else if (tvisnumber(o)) {
+      GCstr *s = lj_strfmt_number(L, o);
+      setstrV(L, o, s);
+      return s;
+    }
+  }
+  lj_err_argt(L, narg, LUA_TSTRING);
+  return NULL;  /* unreachable */
+}
+
+GCstr *lj_lib_optstr(lua_State *L, int narg)
+{
+  TValue *o = L->base + narg-1;
+  return (o < L->top && !tvisnil(o)) ? lj_lib_checkstr(L, narg) : NULL;
+}
+
+#if LJ_DUALNUM
+void lj_lib_checknumber(lua_State *L, int narg)
+{
+  TValue *o = L->base + narg-1;
+  if (!(o < L->top && lj_strscan_numberobj(o)))
+    lj_err_argt(L, narg, LUA_TNUMBER);
+}
+#endif
+
+lua_Number lj_lib_checknum(lua_State *L, int narg)
+{
+  TValue *o = L->base + narg-1;
+  if (!(o < L->top &&
+	(tvisnumber(o) || (tvisstr(o) && lj_strscan_num(strV(o), o)))))
+    lj_err_argt(L, narg, LUA_TNUMBER);
+  if (LJ_UNLIKELY(tvisint(o))) {
+    lua_Number n = (lua_Number)intV(o);
+    setnumV(o, n);
+    return n;
+  } else {
+    return numV(o);
+  }
+}
+
+int32_t lj_lib_checkint(lua_State *L, int narg)
+{
+  TValue *o = L->base + narg-1;
+  if (!(o < L->top && lj_strscan_numberobj(o)))
+    lj_err_argt(L, narg, LUA_TNUMBER);
+  if (LJ_LIKELY(tvisint(o))) {
+    return intV(o);
+  } else {
+    int32_t i = lj_num2int(numV(o));
+    if (LJ_DUALNUM) setintV(o, i);
+    return i;
+  }
+}
+
+int32_t lj_lib_optint(lua_State *L, int narg, int32_t def)
+{
+  TValue *o = L->base + narg-1;
+  return (o < L->top && !tvisnil(o)) ? lj_lib_checkint(L, narg) : def;
+}
+
+GCfunc *lj_lib_checkfunc(lua_State *L, int narg)
+{
+  TValue *o = L->base + narg-1;
+  if (!(o < L->top && tvisfunc(o)))
+    lj_err_argt(L, narg, LUA_TFUNCTION);
+  return funcV(o);
+}
+
+GCproto *lj_lib_checkLproto(lua_State *L, int narg, int nolua)
+{
+  TValue *o = L->base + narg-1;
+  if (L->top > o) {
+    if (tvisproto(o)) {
+      return protoV(o);
+    } else if (tvisfunc(o)) {
+      if (isluafunc(funcV(o)))
+	return funcproto(funcV(o));
+      else if (nolua)
+	return NULL;
+    }
+  }
+  lj_err_argt(L, narg, LUA_TFUNCTION);
+  return NULL;  /* unreachable */
+}
+
+GCtab *lj_lib_checktab(lua_State *L, int narg)
+{
+  TValue *o = L->base + narg-1;
+  if (!(o < L->top && tvistab(o)))
+    lj_err_argt(L, narg, LUA_TTABLE);
+  return tabV(o);
+}
+
+GCtab *lj_lib_checktabornil(lua_State *L, int narg)
+{
+  TValue *o = L->base + narg-1;
+  if (o < L->top) {
+    if (tvistab(o))
+      return tabV(o);
+    else if (tvisnil(o))
+      return NULL;
+  }
+  lj_err_arg(L, narg, LJ_ERR_NOTABN);
+  return NULL;  /* unreachable */
+}
+
+int lj_lib_checkopt(lua_State *L, int narg, int def, const char *lst)
+{
+  GCstr *s = def >= 0 ? lj_lib_optstr(L, narg) : lj_lib_checkstr(L, narg);
+  if (s) {
+    const char *opt = strdata(s);
+    MSize len = s->len;
+    int i;
+    for (i = 0; *(const uint8_t *)lst; i++) {
+      if (*(const uint8_t *)lst == len && memcmp(opt, lst+1, len) == 0)
+	return i;
+      lst += 1+*(const uint8_t *)lst;
+    }
+    lj_err_argv(L, narg, LJ_ERR_INVOPTM, opt);
+  }
+  return def;
+}
+
+/* -- Strict type checks -------------------------------------------------- */
+
+/* The following type checks do not coerce between strings and numbers.
+** And they handle plain int64_t/uint64_t FFI numbers, too.
+*/
+
+#if LJ_HASBUFFER
+GCstr *lj_lib_checkstrx(lua_State *L, int narg)
+{
+  TValue *o = L->base + narg-1;
+  if (!(o < L->top && tvisstr(o))) lj_err_argt(L, narg, LUA_TSTRING);
+  return strV(o);
+}
+
+int32_t lj_lib_checkintrange(lua_State *L, int narg, int32_t a, int32_t b)
+{
+  TValue *o = L->base + narg-1;
+  lj_assertL(b >= 0, "expected range must be non-negative");
+  if (o < L->top) {
+    if (LJ_LIKELY(tvisint(o))) {
+      int32_t i = intV(o);
+      if (i >= a && i <= b) return i;
+    } else if (LJ_LIKELY(tvisnum(o))) {
+      /* For performance reasons, this doesn't check for integerness or
+      ** integer overflow. Overflow detection still works, since all FPUs
+      ** return either MININT or MAXINT, which is then out of range.
+      */
+      int32_t i = lj_num2int(numV(o));
+      if (i >= a && i <= b) return i;
+#if LJ_HASFFI
+    } else if (tviscdata(o)) {
+      GCcdata *cd = cdataV(o);
+      if (cd->ctypeid == CTID_INT64) {
+	int64_t i = *(int64_t *)cdataptr(cd);
+	if (i >= (int64_t)a && i <= (int64_t)b) return (int32_t)i;
+      } else if (cd->ctypeid == CTID_UINT64) {
+	uint64_t i = *(uint64_t *)cdataptr(cd);
+	if ((a < 0 || i >= (uint64_t)a) && i <= (uint64_t)b) return (int32_t)i;
+      } else {
+	goto badtype;
+      }
+#endif
+    } else {
+      goto badtype;
+    }
+    lj_err_arg(L, narg, LJ_ERR_NUMRNG);
+  }
+badtype:
+  lj_err_argt(L, narg, LUA_TNUMBER);
+  return 0;  /* unreachable */
+}
+#endif

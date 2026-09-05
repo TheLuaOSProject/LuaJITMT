@@ -1,0 +1,10 @@
+Temporary breakpoint 1 at 0xa8a0: file /tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/t-gc2-worker-scheduler.c, line 1462.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+
+Temporary breakpoint 1, main () at /tmp/lj-scheduler-worker-abort-20260905-wz2vi031/fixture/t-gc2-worker-scheduler.c:1462
+1462	  lua_State *L = luaL_newstate();
+Breakpoint 2 at 0x563b1d2c4326
+
+Program terminated with signal SIGTRAP, Trace/breakpoint trap.
+The program no longer exists.

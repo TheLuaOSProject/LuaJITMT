@@ -1,0 +1,7 @@
+ABORT_OBSERVER
+/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/combined-observer(+0xe06b) [0x5555d1efb06b]
+/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/combined-observer(+0xa36b) [0x5555d1ef736b]
+/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/combined-observer(+0x33dab) [0x5555d1f20dab]
+/tmp/lj-scheduler-worker-abort-20260905-wz2vi031/results/combined-observer(+0x4018b) [0x5555d1f2d18b]
+/lib/x86_64-linux-gnu/libc.so.6(+0x92b7b) [0x7fa209976b7b]
+/lib/x86_64-linux-gnu/libc.so.6(+0x1107f8) [0x7fa2099f47f8]
