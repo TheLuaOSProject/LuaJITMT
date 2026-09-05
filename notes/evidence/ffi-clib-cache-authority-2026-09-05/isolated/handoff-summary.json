@@ -1,0 +1,54 @@
+{
+  "main_fixture_sha256": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+  "main_qualified_runtime_passes": 324,
+  "supplement_fixture_sha256": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+  "geometry_source_sha256": "4241db4f4be64f1d37f534e204c6d961cec2c7350b7f64099528987a4517e89a",
+  "supplement_runtime_passes": 120,
+  "combined_qualified_runtime_passes": 444,
+  "supplement_suites": [
+    {
+      "variant": "candidate",
+      "passes": 40,
+      "total": 40,
+      "geometry_witnesses": [
+        "cache-resize\t1\t16383\ttrue"
+      ],
+      "results_sha256": "b8653edfb6ec7766893290c75bfaa90398f11959e003bf21514262c62958fbdf"
+    },
+    {
+      "variant": "strict",
+      "passes": 40,
+      "total": 40,
+      "geometry_witnesses": [
+        "cache-resize\t1\t16383\ttrue"
+      ],
+      "results_sha256": "f1f36623ec0ca97d0108d303731218507be26a2b4657514412ba017ea701ed30"
+    },
+    {
+      "variant": "asan",
+      "passes": 40,
+      "total": 40,
+      "geometry_witnesses": [
+        "cache-resize\t1\t16383\ttrue"
+      ],
+      "results_sha256": "948aeed957a0a3829a832274d96b17953e4e4e23438cbca0e966bf9d8723d5b8"
+    }
+  ],
+  "exact_5c455f20_controls": {
+    "authority": {
+      "interpreter_passes": 40,
+      "native_semantic_failures": 38,
+      "native_setfenv_passes": 2
+    },
+    "supplement": {
+      "interpreter_passes": 20,
+      "native_semantic_failures": 20
+    }
+  },
+  "historical_597b_controls": {
+    "interpreter_passes": 40,
+    "native_semantic_failures": 38,
+    "native_setfenv_passes": 2
+  },
+  "native_witness_negative_controls": 2
+}

@@ -1,0 +1,276 @@
+{
+  "shared_head": "597b8705208957ade8465416da30976ab9b52195",
+  "prototype": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate",
+  "files": [
+    {
+      "path": "src/lj_crecord.c",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_crecord.c",
+      "sha256": "b1935f652d95f9d531399297add6201210794447b28e453d5ed02027d6e81527",
+      "bytes": 113595,
+      "shared_sha256": "d9117ff3214f258cc84648725effcd498f3d1e93a774a94efd65e81ed11f2bff",
+      "same_as_shared": false,
+      "storage": "content"
+    },
+    {
+      "path": "src/lj_record.c",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_record.c",
+      "sha256": "07116bc933781976c91453a9ca89a46aef4a81d80bf71ab2f6e5269383fcce87",
+      "bytes": 152033,
+      "shared_sha256": "07116bc933781976c91453a9ca89a46aef4a81d80bf71ab2f6e5269383fcce87",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_record.h",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_record.h",
+      "sha256": "957189fca07b3be0ac59f297cbcf507859c6e9534132073a92960bfa235eae2c",
+      "bytes": 2610,
+      "shared_sha256": "957189fca07b3be0ac59f297cbcf507859c6e9534132073a92960bfa235eae2c",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_clib.c",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_clib.c",
+      "sha256": "c32a0cdf5b997658f9b0d369c0402398445d6279aacbbb0242a7c5302c136dda",
+      "bytes": 34810,
+      "shared_sha256": "c32a0cdf5b997658f9b0d369c0402398445d6279aacbbb0242a7c5302c136dda",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_clib.h",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_clib.h",
+      "sha256": "15bd45fe03be044eb902d541028d1e206d2bfdf249ec4de26047df0719d400b9",
+      "bytes": 5857,
+      "shared_sha256": "15bd45fe03be044eb902d541028d1e206d2bfdf249ec4de26047df0719d400b9",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_tab.c",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_tab.c",
+      "sha256": "28b2eac3dc6c0734d131cf33d3f34826ae758c9b3deb437c6bd154e0cd2fd48f",
+      "bytes": 287989,
+      "shared_sha256": "28b2eac3dc6c0734d131cf33d3f34826ae758c9b3deb437c6bd154e0cd2fd48f",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_tab.h",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_tab.h",
+      "sha256": "2f9f61003cfdd252c306f3bc7a12e176483dc879b1adbc6653754ccc88478cf2",
+      "bytes": 32280,
+      "shared_sha256": "2f9f61003cfdd252c306f3bc7a12e176483dc879b1adbc6653754ccc88478cf2",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_tg.c",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_tg.c",
+      "sha256": "16064ba7946becbbc5cc1be2ee00eae4be39f1496c6ab85c5f4cf60f64146406",
+      "bytes": 45600,
+      "shared_sha256": "16064ba7946becbbc5cc1be2ee00eae4be39f1496c6ab85c5f4cf60f64146406",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_dispatch.h",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_dispatch.h",
+      "sha256": "c73f12ffc1cf58a7443d310e71d45d6ac1b791f0688b7f848521e149110c14e5",
+      "bytes": 6274,
+      "shared_sha256": "c73f12ffc1cf58a7443d310e71d45d6ac1b791f0688b7f848521e149110c14e5",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_state.c",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_state.c",
+      "sha256": "80d2fa440b4b81e0d460d485dcbe2fc478e2f158c2f79504e44b1a89ffc2bf64",
+      "bytes": 51955,
+      "shared_sha256": "80d2fa440b4b81e0d460d485dcbe2fc478e2f158c2f79504e44b1a89ffc2bf64",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_trace.c",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_trace.c",
+      "sha256": "22727958fb2df4c3ed07126193a260f2243630ac4fc6d98d133712bd40503feb",
+      "bytes": 247545,
+      "shared_sha256": "22727958fb2df4c3ed07126193a260f2243630ac4fc6d98d133712bd40503feb",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_ffrecord.c",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_ffrecord.c",
+      "sha256": "1acbae42a1ed123361b01b190595a69ec7850c2deb4b8b80249b5e40f7ce17e0",
+      "bytes": 54419,
+      "shared_sha256": "1acbae42a1ed123361b01b190595a69ec7850c2deb4b8b80249b5e40f7ce17e0",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_ir.c",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_ir.c",
+      "sha256": "7f352d38af2424d917d2c5095019e73a43e1cd6f53c71d0eb7d375d33c34c5d7",
+      "bytes": 12958,
+      "shared_sha256": "7f352d38af2424d917d2c5095019e73a43e1cd6f53c71d0eb7d375d33c34c5d7",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_ir.h",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_ir.h",
+      "sha256": "c1c811b87570b2ade55348b356f9b0331c7fa51af6961433d72194adedd1f0a6",
+      "bytes": 21302,
+      "shared_sha256": "c1c811b87570b2ade55348b356f9b0331c7fa51af6961433d72194adedd1f0a6",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_ircall.h",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_ircall.h",
+      "sha256": "822ee730b3589500bf463c9b345cd91fd3c4c5ce056a297734b90f121bd14a69",
+      "bytes": 14066,
+      "shared_sha256": "7855fa0f0e997f94313a581975480edd27f9ac6c394b435d13973968e952c06e",
+      "same_as_shared": false,
+      "storage": "content"
+    },
+    {
+      "path": "src/lj_obj.c",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_obj.c",
+      "sha256": "e23cad6cfc2fd2d6c3ce2c8646af4cf1980d836f9eedc322957f383d9821c294",
+      "bytes": 1670,
+      "shared_sha256": "e23cad6cfc2fd2d6c3ce2c8646af4cf1980d836f9eedc322957f383d9821c294",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_opt_fold.c",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_opt_fold.c",
+      "sha256": "5f990b875aec592290b969b8b12e0b6fa986d30469396e23cc5eebe6a8fcac89",
+      "bytes": 75918,
+      "shared_sha256": "5f990b875aec592290b969b8b12e0b6fa986d30469396e23cc5eebe6a8fcac89",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_opt_mem.c",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_opt_mem.c",
+      "sha256": "34162cb91d55b0e94b8a559c182eb93f37485f60551e0d2c8e7adb61a5ac2159",
+      "bytes": 38383,
+      "shared_sha256": "00787841d7305b758edacb399e16fe5494b9d923525baa5f6b9523af7acbfc2c",
+      "same_as_shared": false,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_opt_loop.c",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_opt_loop.c",
+      "sha256": "d84ee15a992f10af796af03037cfeabbfa84f6c9ce69346d67c36215ecfd49de",
+      "bytes": 20726,
+      "shared_sha256": "d84ee15a992f10af796af03037cfeabbfa84f6c9ce69346d67c36215ecfd49de",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_opt_dce.c",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_opt_dce.c",
+      "sha256": "81bfc25da08ba113a16d8b6067c6184de994abc691f024b88c34560a1203efad",
+      "bytes": 1923,
+      "shared_sha256": "81bfc25da08ba113a16d8b6067c6184de994abc691f024b88c34560a1203efad",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_asm_x86.h",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_asm_x86.h",
+      "sha256": "24895bdd88f7c416295a0d85d11d1e283fc8d3223987b9c26c0e4f0b7161dd4d",
+      "bytes": 164968,
+      "shared_sha256": "24895bdd88f7c416295a0d85d11d1e283fc8d3223987b9c26c0e4f0b7161dd4d",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_gc.c",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_gc.c",
+      "sha256": "7ceb24d2c755325c7c3d4113330bbb4fce6d3c893dd22fc1ef8bf924590ab4cb",
+      "bytes": 194734,
+      "shared_sha256": "7ceb24d2c755325c7c3d4113330bbb4fce6d3c893dd22fc1ef8bf924590ab4cb",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_gc2.c",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_gc2.c",
+      "sha256": "5557bc243f94f5d310287494cc3560d91931455eaa8338ba480f84a33edf45a1",
+      "bytes": 767682,
+      "shared_sha256": "5557bc243f94f5d310287494cc3560d91931455eaa8338ba480f84a33edf45a1",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_gc2.h",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_gc2.h",
+      "sha256": "244b10c49ad036b661a08adc178e6b8247d8ff1b18ed63bc035d3440df16a9f9",
+      "bytes": 37421,
+      "shared_sha256": "244b10c49ad036b661a08adc178e6b8247d8ff1b18ed63bc035d3440df16a9f9",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_tg.h",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_tg.h",
+      "sha256": "a5cb46bde2868512743795750b5a1da71cd1a581bc037da127e60b36cb994015",
+      "bytes": 50068,
+      "shared_sha256": "a5cb46bde2868512743795750b5a1da71cd1a581bc037da127e60b36cb994015",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lib_threading.c",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lib_threading.c",
+      "sha256": "0c68ad63cf688543cf6f8ecf4e9fa6092fa8492176ec6c13356c6bf31aa4b4be",
+      "bytes": 82736,
+      "shared_sha256": "0c68ad63cf688543cf6f8ecf4e9fa6092fa8492176ec6c13356c6bf31aa4b4be",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lib_ffi.c",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lib_ffi.c",
+      "sha256": "d168201fbebddb60e11475b90c50c60f74088dc7ed6aaf5de437199e85965153",
+      "bytes": 80436,
+      "shared_sha256": "d168201fbebddb60e11475b90c50c60f74088dc7ed6aaf5de437199e85965153",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_asm.c",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_asm.c",
+      "sha256": "a2250fff6384c19b8d917804c1472ecda33bfc6533727c7a85f3f11da752867b",
+      "bytes": 88437,
+      "shared_sha256": "a2250fff6384c19b8d917804c1472ecda33bfc6533727c7a85f3f11da752867b",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_arch.h",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_arch.h",
+      "sha256": "d21ad3f86b2f7651de5ab1dcfc4a3c504deae83d8b2b77d5ccbf75394a98ca7b",
+      "bytes": 18650,
+      "shared_sha256": "d21ad3f86b2f7651de5ab1dcfc4a3c504deae83d8b2b77d5ccbf75394a98ca7b",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_obj.h",
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_obj.h",
+      "sha256": "4dddf105f8b3006efb495259340ea4acaae9579e283b769ff9e683810beb435b",
+      "bytes": 220783,
+      "shared_sha256": "4dddf105f8b3006efb495259340ea4acaae9579e283b769ff9e683810beb435b",
+      "same_as_shared": true,
+      "storage": "sha256-only"
+    }
+  ]
+}

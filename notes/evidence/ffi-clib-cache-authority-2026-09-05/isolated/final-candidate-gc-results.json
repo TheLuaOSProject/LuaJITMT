@@ -1,0 +1,842 @@
+[
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "nil",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.022829412002465688,
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-final.py": "641164b56c97b2b020cc40020a4c7daf92754b5b56572b44f40596abf4b1caf0",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close.c": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a": "c0e5e75563bbd5c504d92f41ef99a35012158711aab0ccbc0012814ebb65ac83",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "function",
+    "mode": "nil",
+    "target": "root",
+    "gc": true,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "gc-lifetime\tafter-warm\tafter-mutation\toriginal-env-alive\ncache-authority\tfunction\tnil\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "nil",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.021648990994435735,
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-final.py": "641164b56c97b2b020cc40020a4c7daf92754b5b56572b44f40596abf4b1caf0",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close.c": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a": "c0e5e75563bbd5c504d92f41ef99a35012158711aab0ccbc0012814ebb65ac83",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "function",
+    "mode": "nil",
+    "target": "root",
+    "gc": true,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "gc-lifetime\tafter-warm\tafter-mutation\toriginal-env-alive\ncache-authority\tfunction\tnil\troot\twarm\t2\t6\thelpers\t2\told-exits\t2\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "nil",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.021707140003854875,
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-final.py": "641164b56c97b2b020cc40020a4c7daf92754b5b56572b44f40596abf4b1caf0",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close.c": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a": "c0e5e75563bbd5c504d92f41ef99a35012158711aab0ccbc0012814ebb65ac83",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "function",
+    "mode": "nil",
+    "target": "side",
+    "gc": true,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "gc-lifetime\tafter-warm\tafter-mutation\toriginal-env-alive\ncache-authority\tfunction\tnil\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "nil",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.02478975700068986,
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-final.py": "641164b56c97b2b020cc40020a4c7daf92754b5b56572b44f40596abf4b1caf0",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close.c": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a": "c0e5e75563bbd5c504d92f41ef99a35012158711aab0ccbc0012814ebb65ac83",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "function",
+    "mode": "nil",
+    "target": "side",
+    "gc": true,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "gc-lifetime\tafter-warm\tafter-mutation\toriginal-env-alive\ncache-authority\tfunction\tnil\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t2\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "other",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.021329764000256546,
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-final.py": "641164b56c97b2b020cc40020a4c7daf92754b5b56572b44f40596abf4b1caf0",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close.c": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a": "c0e5e75563bbd5c504d92f41ef99a35012158711aab0ccbc0012814ebb65ac83",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "function",
+    "mode": "other",
+    "target": "root",
+    "gc": true,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "gc-lifetime\tafter-warm\tafter-mutation\toriginal-env-alive\ncache-authority\tfunction\tother\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "other",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.0203937079932075,
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-final.py": "641164b56c97b2b020cc40020a4c7daf92754b5b56572b44f40596abf4b1caf0",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close.c": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a": "c0e5e75563bbd5c504d92f41ef99a35012158711aab0ccbc0012814ebb65ac83",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "function",
+    "mode": "other",
+    "target": "root",
+    "gc": true,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "gc-lifetime\tafter-warm\tafter-mutation\toriginal-env-alive\ncache-authority\tfunction\tother\troot\twarm\t2\t6\thelpers\t2\told-exits\t39\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "other",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.021364467997045722,
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-final.py": "641164b56c97b2b020cc40020a4c7daf92754b5b56572b44f40596abf4b1caf0",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close.c": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a": "c0e5e75563bbd5c504d92f41ef99a35012158711aab0ccbc0012814ebb65ac83",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "function",
+    "mode": "other",
+    "target": "side",
+    "gc": true,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "gc-lifetime\tafter-warm\tafter-mutation\toriginal-env-alive\ncache-authority\tfunction\tother\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "other",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.02228312799707055,
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-final.py": "641164b56c97b2b020cc40020a4c7daf92754b5b56572b44f40596abf4b1caf0",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close.c": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a": "c0e5e75563bbd5c504d92f41ef99a35012158711aab0ccbc0012814ebb65ac83",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "function",
+    "mode": "other",
+    "target": "side",
+    "gc": true,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "gc-lifetime\tafter-warm\tafter-mutation\toriginal-env-alive\ncache-authority\tfunction\tother\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t41\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "fenv",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.02099797000118997,
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-final.py": "641164b56c97b2b020cc40020a4c7daf92754b5b56572b44f40596abf4b1caf0",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close.c": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a": "c0e5e75563bbd5c504d92f41ef99a35012158711aab0ccbc0012814ebb65ac83",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "function",
+    "mode": "fenv",
+    "target": "root",
+    "gc": true,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "gc-lifetime\tafter-warm\tafter-mutation\toriginal-env-alive\ncache-authority\tfunction\tfenv\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "fenv",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.02159421399846906,
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-final.py": "641164b56c97b2b020cc40020a4c7daf92754b5b56572b44f40596abf4b1caf0",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close.c": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a": "c0e5e75563bbd5c504d92f41ef99a35012158711aab0ccbc0012814ebb65ac83",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "function",
+    "mode": "fenv",
+    "target": "root",
+    "gc": true,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "gc-lifetime\tafter-warm\tafter-mutation\toriginal-env-alive\ncache-authority\tfunction\tfenv\troot\twarm\t2\t6\thelpers\t2\told-exits\t1\t0\tok\ttrue\teffects\t39\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "fenv",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.02047180599765852,
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-final.py": "641164b56c97b2b020cc40020a4c7daf92754b5b56572b44f40596abf4b1caf0",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close.c": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a": "c0e5e75563bbd5c504d92f41ef99a35012158711aab0ccbc0012814ebb65ac83",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "function",
+    "mode": "fenv",
+    "target": "side",
+    "gc": true,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "gc-lifetime\tafter-warm\tafter-mutation\toriginal-env-alive\ncache-authority\tfunction\tfenv\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "fenv",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.023191776002931874,
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-final.py": "641164b56c97b2b020cc40020a4c7daf92754b5b56572b44f40596abf4b1caf0",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close.c": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a": "c0e5e75563bbd5c504d92f41ef99a35012158711aab0ccbc0012814ebb65ac83",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "function",
+    "mode": "fenv",
+    "target": "side",
+    "gc": true,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "gc-lifetime\tafter-warm\tafter-mutation\toriginal-env-alive\ncache-authority\tfunction\tfenv\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "read",
+      "close",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.01939361800032202,
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-final.py": "641164b56c97b2b020cc40020a4c7daf92754b5b56572b44f40596abf4b1caf0",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close.c": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a": "c0e5e75563bbd5c504d92f41ef99a35012158711aab0ccbc0012814ebb65ac83",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "read",
+    "mode": "close",
+    "target": "root",
+    "gc": true,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "gc-lifetime\tafter-warm\tafter-mutation\toriginal-env-alive\ncache-authority\tread\tclose\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\tfalse\teffects\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "read",
+      "close",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.0205620800043107,
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-final.py": "641164b56c97b2b020cc40020a4c7daf92754b5b56572b44f40596abf4b1caf0",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close.c": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a": "c0e5e75563bbd5c504d92f41ef99a35012158711aab0ccbc0012814ebb65ac83",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "read",
+    "mode": "close",
+    "target": "root",
+    "gc": true,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "gc-lifetime\tafter-warm\tafter-mutation\toriginal-env-alive\ncache-authority\tread\tclose\troot\twarm\t2\t6\thelpers\t2\told-exits\t1\t0\tok\tfalse\teffects\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "read",
+      "close",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.019610055998782627,
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-final.py": "641164b56c97b2b020cc40020a4c7daf92754b5b56572b44f40596abf4b1caf0",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close.c": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a": "c0e5e75563bbd5c504d92f41ef99a35012158711aab0ccbc0012814ebb65ac83",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "read",
+    "mode": "close",
+    "target": "side",
+    "gc": true,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "gc-lifetime\tafter-warm\tafter-mutation\toriginal-env-alive\ncache-authority\tread\tclose\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\tfalse\teffects\t40\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "read",
+      "close",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.02019379699777346,
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-final.py": "641164b56c97b2b020cc40020a4c7daf92754b5b56572b44f40596abf4b1caf0",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close.c": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a": "c0e5e75563bbd5c504d92f41ef99a35012158711aab0ccbc0012814ebb65ac83",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "read",
+    "mode": "close",
+    "target": "side",
+    "gc": true,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "gc-lifetime\tafter-warm\tafter-mutation\toriginal-env-alive\ncache-authority\tread\tclose\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\tfalse\teffects\t40\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "write",
+      "close",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.01868239900068147,
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-final.py": "641164b56c97b2b020cc40020a4c7daf92754b5b56572b44f40596abf4b1caf0",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close.c": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a": "c0e5e75563bbd5c504d92f41ef99a35012158711aab0ccbc0012814ebb65ac83",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "write",
+    "mode": "close",
+    "target": "root",
+    "gc": true,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "gc-lifetime\tafter-warm\tafter-mutation\toriginal-env-alive\ncache-authority\twrite\tclose\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\tfalse\teffects\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "write",
+      "close",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.022484446002636105,
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-final.py": "641164b56c97b2b020cc40020a4c7daf92754b5b56572b44f40596abf4b1caf0",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close.c": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a": "c0e5e75563bbd5c504d92f41ef99a35012158711aab0ccbc0012814ebb65ac83",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "write",
+    "mode": "close",
+    "target": "root",
+    "gc": true,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "gc-lifetime\tafter-warm\tafter-mutation\toriginal-env-alive\ncache-authority\twrite\tclose\troot\twarm\t2\t6\thelpers\t2\told-exits\t1\t0\tok\tfalse\teffects\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "write",
+      "close",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.01956809299736051,
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-final.py": "641164b56c97b2b020cc40020a4c7daf92754b5b56572b44f40596abf4b1caf0",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close.c": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a": "c0e5e75563bbd5c504d92f41ef99a35012158711aab0ccbc0012814ebb65ac83",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "write",
+    "mode": "close",
+    "target": "side",
+    "gc": true,
+    "status": "-joff",
+    "exit": 0,
+    "stdout": "gc-lifetime\tafter-warm\tafter-mutation\toriginal-env-alive\ncache-authority\twrite\tclose\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\tfalse\teffects\t40\tslots\t39\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "write",
+      "close",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.01934921099746134,
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-final.py": "641164b56c97b2b020cc40020a4c7daf92754b5b56572b44f40596abf4b1caf0",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close.c": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a": "c0e5e75563bbd5c504d92f41ef99a35012158711aab0ccbc0012814ebb65ac83",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "write",
+    "mode": "close",
+    "target": "side",
+    "gc": true,
+    "status": "-jon",
+    "exit": 0,
+    "stdout": "gc-lifetime\tafter-warm\tafter-mutation\toriginal-env-alive\ncache-authority\twrite\tclose\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\tfalse\teffects\t40\tslots\t39\t41\t73\n",
+    "stderr": ""
+  }
+]

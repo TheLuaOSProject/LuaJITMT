@@ -1,0 +1,52 @@
+[
+  {
+    "name": "pre-mt",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jdump=im",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/direct-cost.lua",
+      "clib",
+      "80"
+    ],
+    "cwd": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "sources": {
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/direct-cost.lua": "f3f4a1b1b955a145741aadc9bdca053169737ede33961661674abbb4b2dbe52d",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139"
+    },
+    "exit": 0,
+    "seconds": 0.02189850899594603,
+    "stdout_sha256": "b6d4d99a2a67b65dcffa9c4b7dd6b731c178a1d5e923433c34148a8802c7e6c2",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "shared",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jdump=im",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/shared-cost.lua",
+      "80",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "sources": {
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/shared-cost.lua": "fcc1e729ec1aea0fd85aa42b6c72ea4749faed48f31d3ac6031111d3e936bdd1",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139"
+    },
+    "exit": 0,
+    "seconds": 0.014692977005324792,
+    "stdout_sha256": "0e496090c936c221801bb60329e1fc10f5c9f255476ac3113c4f36b23b6b62ed",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+]

@@ -1,0 +1,1766 @@
+[
+  {
+    "workload": "direct_clib",
+    "pair": 0,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/direct-cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.07526266200147802,
+    "fixture_sha256": "f3f4a1b1b955a145741aadc9bdca053169737ede33961661674abbb4b2dbe52d",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "shape\tclib\troot\t1\tnins\t24\tmcode\t298\tmeta\t1\tnode\t1\tpostmeta\t0\tpostnode\t0\texits\t1\nsample\t1\t0.013701000\nsample\t2\t0.013678000\nsample\t3\t0.013678000\nsample\t4\t0.013677000\nsample\t5\t0.013677000\nresult\tclib\t20000000\t0.013677000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "direct_clib",
+    "pair": 0,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/direct-cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11645212800067384,
+    "fixture_sha256": "f3f4a1b1b955a145741aadc9bdca053169737ede33961661674abbb4b2dbe52d",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "shape\tclib\troot\t1\tnins\t36\tmcode\t477\tmeta\t1\tnode\t2\tpostmeta\t0\tpostnode\t1\texits\t1\nsample\t1\t0.021904000\nsample\t2\t0.021882000\nsample\t3\t0.021882000\nsample\t4\t0.021881000\nsample\t5\t0.021881000\nresult\tclib\t20000000\t0.021881000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "direct_clib",
+    "pair": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/direct-cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11623291800060542,
+    "fixture_sha256": "f3f4a1b1b955a145741aadc9bdca053169737ede33961661674abbb4b2dbe52d",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "shape\tclib\troot\t1\tnins\t36\tmcode\t477\tmeta\t1\tnode\t2\tpostmeta\t0\tpostnode\t1\texits\t1\nsample\t1\t0.021910000\nsample\t2\t0.021882000\nsample\t3\t0.021881000\nsample\t4\t0.021881000\nsample\t5\t0.021881000\nresult\tclib\t20000000\t0.021881000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "direct_clib",
+    "pair": 1,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/direct-cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.07518702200104599,
+    "fixture_sha256": "f3f4a1b1b955a145741aadc9bdca053169737ede33961661674abbb4b2dbe52d",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "shape\tclib\troot\t1\tnins\t24\tmcode\t298\tmeta\t1\tnode\t1\tpostmeta\t0\tpostnode\t0\texits\t1\nsample\t1\t0.013707000\nsample\t2\t0.013678000\nsample\t3\t0.013677000\nsample\t4\t0.013677000\nsample\t5\t0.013677000\nresult\tclib\t20000000\t0.013677000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "direct_clib",
+    "pair": 2,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/direct-cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.07516405700152973,
+    "fixture_sha256": "f3f4a1b1b955a145741aadc9bdca053169737ede33961661674abbb4b2dbe52d",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "shape\tclib\troot\t1\tnins\t24\tmcode\t298\tmeta\t1\tnode\t1\tpostmeta\t0\tpostnode\t0\texits\t1\nsample\t1\t0.013705000\nsample\t2\t0.013679000\nsample\t3\t0.013677000\nsample\t4\t0.013678000\nsample\t5\t0.013678000\nresult\tclib\t20000000\t0.013677000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "direct_clib",
+    "pair": 2,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/direct-cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11629227499724948,
+    "fixture_sha256": "f3f4a1b1b955a145741aadc9bdca053169737ede33961661674abbb4b2dbe52d",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "shape\tclib\troot\t1\tnins\t36\tmcode\t477\tmeta\t1\tnode\t2\tpostmeta\t0\tpostnode\t1\texits\t1\nsample\t1\t0.021908000\nsample\t2\t0.021882000\nsample\t3\t0.021881000\nsample\t4\t0.021881000\nsample\t5\t0.021881000\nresult\tclib\t20000000\t0.021881000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "direct_clib",
+    "pair": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/direct-cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11620702900108881,
+    "fixture_sha256": "f3f4a1b1b955a145741aadc9bdca053169737ede33961661674abbb4b2dbe52d",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "shape\tclib\troot\t1\tnins\t36\tmcode\t477\tmeta\t1\tnode\t2\tpostmeta\t0\tpostnode\t1\texits\t1\nsample\t1\t0.021907000\nsample\t2\t0.021881000\nsample\t3\t0.021881000\nsample\t4\t0.021880000\nsample\t5\t0.021880000\nresult\tclib\t20000000\t0.021880000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "direct_clib",
+    "pair": 3,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/direct-cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.07537125199814909,
+    "fixture_sha256": "f3f4a1b1b955a145741aadc9bdca053169737ede33961661674abbb4b2dbe52d",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "shape\tclib\troot\t1\tnins\t24\tmcode\t298\tmeta\t1\tnode\t1\tpostmeta\t0\tpostnode\t0\texits\t1\nsample\t1\t0.013710000\nsample\t2\t0.013680000\nsample\t3\t0.013679000\nsample\t4\t0.013679000\nsample\t5\t0.013678000\nresult\tclib\t20000000\t0.013678000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "direct_clib",
+    "pair": 4,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/direct-cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.07540123100261553,
+    "fixture_sha256": "f3f4a1b1b955a145741aadc9bdca053169737ede33961661674abbb4b2dbe52d",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "shape\tclib\troot\t1\tnins\t24\tmcode\t298\tmeta\t1\tnode\t1\tpostmeta\t0\tpostnode\t0\texits\t1\nsample\t1\t0.013699000\nsample\t2\t0.013679000\nsample\t3\t0.013678000\nsample\t4\t0.013677000\nsample\t5\t0.013678000\nresult\tclib\t20000000\t0.013677000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "direct_clib",
+    "pair": 4,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/direct-cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11647337700196658,
+    "fixture_sha256": "f3f4a1b1b955a145741aadc9bdca053169737ede33961661674abbb4b2dbe52d",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "shape\tclib\troot\t1\tnins\t36\tmcode\t477\tmeta\t1\tnode\t2\tpostmeta\t0\tpostnode\t1\texits\t1\nsample\t1\t0.021911000\nsample\t2\t0.021882000\nsample\t3\t0.021881000\nsample\t4\t0.021881000\nsample\t5\t0.021881000\nresult\tclib\t20000000\t0.021881000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "direct_clib",
+    "pair": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/direct-cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11638522200155421,
+    "fixture_sha256": "f3f4a1b1b955a145741aadc9bdca053169737ede33961661674abbb4b2dbe52d",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "shape\tclib\troot\t1\tnins\t36\tmcode\t477\tmeta\t1\tnode\t2\tpostmeta\t0\tpostnode\t1\texits\t1\nsample\t1\t0.021908000\nsample\t2\t0.021882000\nsample\t3\t0.021881000\nsample\t4\t0.021881000\nsample\t5\t0.021881000\nresult\tclib\t20000000\t0.021881000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "direct_clib",
+    "pair": 5,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/direct-cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.07530261400097515,
+    "fixture_sha256": "f3f4a1b1b955a145741aadc9bdca053169737ede33961661674abbb4b2dbe52d",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "shape\tclib\troot\t1\tnins\t24\tmcode\t298\tmeta\t1\tnode\t1\tpostmeta\t0\tpostnode\t0\texits\t1\nsample\t1\t0.013704000\nsample\t2\t0.013678000\nsample\t3\t0.013678000\nsample\t4\t0.013678000\nsample\t5\t0.013678000\nresult\tclib\t20000000\t0.013678000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "direct_clib",
+    "pair": 6,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/direct-cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.0751781109975127,
+    "fixture_sha256": "f3f4a1b1b955a145741aadc9bdca053169737ede33961661674abbb4b2dbe52d",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "shape\tclib\troot\t1\tnins\t24\tmcode\t298\tmeta\t1\tnode\t1\tpostmeta\t0\tpostnode\t0\texits\t1\nsample\t1\t0.013710000\nsample\t2\t0.013679000\nsample\t3\t0.013678000\nsample\t4\t0.013678000\nsample\t5\t0.013678000\nresult\tclib\t20000000\t0.013678000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "direct_clib",
+    "pair": 6,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/direct-cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11656798600233742,
+    "fixture_sha256": "f3f4a1b1b955a145741aadc9bdca053169737ede33961661674abbb4b2dbe52d",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "shape\tclib\troot\t1\tnins\t36\tmcode\t477\tmeta\t1\tnode\t2\tpostmeta\t0\tpostnode\t1\texits\t1\nsample\t1\t0.021907000\nsample\t2\t0.021882000\nsample\t3\t0.021881000\nsample\t4\t0.021882000\nsample\t5\t0.021882000\nresult\tclib\t20000000\t0.021881000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "clib",
+    "pair": 0,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.2121455810010957,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "sample\t1\t0.041049000\t20000000\nsample\t2\t0.041022000\t20000000\nsample\t3\t0.041022000\t20000000\nsample\t4\t0.041086000\t20000000\nsample\t5\t0.041022000\t20000000\nresult\tclib\t20000000\t0.041022000\t40\t537\t1\t0\n",
+    "stderr": ""
+  },
+  {
+    "workload": "clib",
+    "pair": 0,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.25788012799966964,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.050162000\t20000000\nsample\t2\t0.050136000\t20000000\nsample\t3\t0.050142000\t20000000\nsample\t4\t0.050137000\t20000000\nsample\t5\t0.050139000\t20000000\nresult\tclib\t20000000\t0.050136000\t52\t728\t1\t0\n",
+    "stderr": ""
+  },
+  {
+    "workload": "clib",
+    "pair": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.25794835000124294,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.050160000\t20000000\nsample\t2\t0.050138000\t20000000\nsample\t3\t0.050137000\t20000000\nsample\t4\t0.050137000\t20000000\nsample\t5\t0.050138000\t20000000\nresult\tclib\t20000000\t0.050137000\t52\t728\t1\t0\n",
+    "stderr": ""
+  },
+  {
+    "workload": "clib",
+    "pair": 1,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21238044900019304,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "sample\t1\t0.041042000\t20000000\nsample\t2\t0.041066000\t20000000\nsample\t3\t0.041093000\t20000000\nsample\t4\t0.041086000\t20000000\nsample\t5\t0.041021000\t20000000\nresult\tclib\t20000000\t0.041021000\t40\t537\t1\t0\n",
+    "stderr": ""
+  },
+  {
+    "workload": "clib",
+    "pair": 2,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21222593000129564,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "sample\t1\t0.041079000\t20000000\nsample\t2\t0.041023000\t20000000\nsample\t3\t0.041022000\t20000000\nsample\t4\t0.041022000\t20000000\nsample\t5\t0.041022000\t20000000\nresult\tclib\t20000000\t0.041022000\t40\t537\t1\t0\n",
+    "stderr": ""
+  },
+  {
+    "workload": "clib",
+    "pair": 2,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.2580013980004878,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.050164000\t20000000\nsample\t2\t0.050138000\t20000000\nsample\t3\t0.050143000\t20000000\nsample\t4\t0.050140000\t20000000\nsample\t5\t0.050138000\t20000000\nresult\tclib\t20000000\t0.050138000\t52\t728\t1\t0\n",
+    "stderr": ""
+  },
+  {
+    "workload": "clib",
+    "pair": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.25792231500236085,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.050163000\t20000000\nsample\t2\t0.050142000\t20000000\nsample\t3\t0.050137000\t20000000\nsample\t4\t0.050140000\t20000000\nsample\t5\t0.050137000\t20000000\nresult\tclib\t20000000\t0.050137000\t52\t728\t1\t0\n",
+    "stderr": ""
+  },
+  {
+    "workload": "clib",
+    "pair": 3,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.2123150999977952,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "sample\t1\t0.041050000\t20000000\nsample\t2\t0.041047000\t20000000\nsample\t3\t0.041044000\t20000000\nsample\t4\t0.041022000\t20000000\nsample\t5\t0.041058000\t20000000\nresult\tclib\t20000000\t0.041022000\t40\t537\t1\t0\n",
+    "stderr": ""
+  },
+  {
+    "workload": "clib",
+    "pair": 4,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21230230999935884,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "sample\t1\t0.041053000\t20000000\nsample\t2\t0.041023000\t20000000\nsample\t3\t0.041045000\t20000000\nsample\t4\t0.041021000\t20000000\nsample\t5\t0.041093000\t20000000\nresult\tclib\t20000000\t0.041021000\t40\t537\t1\t0\n",
+    "stderr": ""
+  },
+  {
+    "workload": "clib",
+    "pair": 4,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.2578308990014193,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.050165000\t20000000\nsample\t2\t0.050137000\t20000000\nsample\t3\t0.050137000\t20000000\nsample\t4\t0.050137000\t20000000\nsample\t5\t0.050140000\t20000000\nresult\tclib\t20000000\t0.050137000\t52\t728\t1\t0\n",
+    "stderr": ""
+  },
+  {
+    "workload": "clib",
+    "pair": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.25775580600020476,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.050162000\t20000000\nsample\t2\t0.050137000\t20000000\nsample\t3\t0.050141000\t20000000\nsample\t4\t0.050137000\t20000000\nsample\t5\t0.050139000\t20000000\nresult\tclib\t20000000\t0.050137000\t52\t728\t1\t0\n",
+    "stderr": ""
+  },
+  {
+    "workload": "clib",
+    "pair": 5,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21216274299877114,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "sample\t1\t0.041042000\t20000000\nsample\t2\t0.041058000\t20000000\nsample\t3\t0.041021000\t20000000\nsample\t4\t0.041022000\t20000000\nsample\t5\t0.041022000\t20000000\nresult\tclib\t20000000\t0.041021000\t40\t537\t1\t0\n",
+    "stderr": ""
+  },
+  {
+    "workload": "clib",
+    "pair": 6,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21228842900018208,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "sample\t1\t0.041047000\t20000000\nsample\t2\t0.041058000\t20000000\nsample\t3\t0.041057000\t20000000\nsample\t4\t0.041022000\t20000000\nsample\t5\t0.041022000\t20000000\nresult\tclib\t20000000\t0.041022000\t40\t537\t1\t0\n",
+    "stderr": ""
+  },
+  {
+    "workload": "clib",
+    "pair": 6,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "clib"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.2580867529977695,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.050382000\t20000000\nsample\t2\t0.050138000\t20000000\nsample\t3\t0.050138000\t20000000\nsample\t4\t0.050137000\t20000000\nsample\t5\t0.050136000\t20000000\nresult\tclib\t20000000\t0.050136000\t52\t728\t1\t0\n",
+    "stderr": ""
+  },
+  {
+    "workload": "call",
+    "pair": 0,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "call"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21807168200029992,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "sample\t1\t0.042075000\t125000250000\nsample\t2\t0.041920000\t125000250000\nsample\t3\t0.042316000\t125000250000\nsample\t4\t0.042331000\t125000250000\nsample\t5\t0.042340000\t125000250000\nresult\tcall\t500000\t0.041920000\t67\t1188\t1\t2\n",
+    "stderr": ""
+  },
+  {
+    "workload": "call",
+    "pair": 0,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "call"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.2213206079977681,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.042700000\t125000250000\nsample\t2\t0.042717000\t125000250000\nsample\t3\t0.042946000\t125000250000\nsample\t4\t0.042933000\t125000250000\nsample\t5\t0.042930000\t125000250000\nresult\tcall\t500000\t0.042700000\t79\t1398\t1\t2\n",
+    "stderr": ""
+  },
+  {
+    "workload": "call",
+    "pair": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "call"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.2201375309996365,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.042660000\t125000250000\nsample\t2\t0.042636000\t125000250000\nsample\t3\t0.042519000\t125000250000\nsample\t4\t0.042782000\t125000250000\nsample\t5\t0.042211000\t125000250000\nresult\tcall\t500000\t0.042211000\t79\t1398\t1\t2\n",
+    "stderr": ""
+  },
+  {
+    "workload": "call",
+    "pair": 1,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "call"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.2190403589993366,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "sample\t1\t0.042327000\t125000250000\nsample\t2\t0.042188000\t125000250000\nsample\t3\t0.042603000\t125000250000\nsample\t4\t0.042536000\t125000250000\nsample\t5\t0.042201000\t125000250000\nresult\tcall\t500000\t0.042188000\t67\t1188\t1\t2\n",
+    "stderr": ""
+  },
+  {
+    "workload": "call",
+    "pair": 2,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "call"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21855201000289526,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "sample\t1\t0.042181000\t125000250000\nsample\t2\t0.042189000\t125000250000\nsample\t3\t0.042441000\t125000250000\nsample\t4\t0.042239000\t125000250000\nsample\t5\t0.042310000\t125000250000\nresult\tcall\t500000\t0.042181000\t67\t1188\t1\t2\n",
+    "stderr": ""
+  },
+  {
+    "workload": "call",
+    "pair": 2,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "call"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.22055282500150497,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.042635000\t125000250000\nsample\t2\t0.042622000\t125000250000\nsample\t3\t0.042618000\t125000250000\nsample\t4\t0.042555000\t125000250000\nsample\t5\t0.042550000\t125000250000\nresult\tcall\t500000\t0.042550000\t79\t1398\t1\t2\n",
+    "stderr": ""
+  },
+  {
+    "workload": "call",
+    "pair": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "call"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.22067039199828287,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.042864000\t125000250000\nsample\t2\t0.042827000\t125000250000\nsample\t3\t0.042660000\t125000250000\nsample\t4\t0.042474000\t125000250000\nsample\t5\t0.042471000\t125000250000\nresult\tcall\t500000\t0.042471000\t79\t1398\t1\t2\n",
+    "stderr": ""
+  },
+  {
+    "workload": "call",
+    "pair": 3,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "call"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21809949100133963,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "sample\t1\t0.042169000\t125000250000\nsample\t2\t0.042346000\t125000250000\nsample\t3\t0.042084000\t125000250000\nsample\t4\t0.042082000\t125000250000\nsample\t5\t0.042063000\t125000250000\nresult\tcall\t500000\t0.042063000\t67\t1188\t1\t2\n",
+    "stderr": ""
+  },
+  {
+    "workload": "call",
+    "pair": 4,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "call"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.2160732190022827,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "sample\t1\t0.041744000\t125000250000\nsample\t2\t0.041863000\t125000250000\nsample\t3\t0.041976000\t125000250000\nsample\t4\t0.041593000\t125000250000\nsample\t5\t0.041605000\t125000250000\nresult\tcall\t500000\t0.041593000\t67\t1188\t1\t2\n",
+    "stderr": ""
+  },
+  {
+    "workload": "call",
+    "pair": 4,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "call"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.2205575339976349,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.042571000\t125000250000\nsample\t2\t0.042628000\t125000250000\nsample\t3\t0.042697000\t125000250000\nsample\t4\t0.042674000\t125000250000\nsample\t5\t0.042726000\t125000250000\nresult\tcall\t500000\t0.042571000\t79\t1398\t1\t2\n",
+    "stderr": ""
+  },
+  {
+    "workload": "call",
+    "pair": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "call"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.22172415199747775,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.043121000\t125000250000\nsample\t2\t0.042837000\t125000250000\nsample\t3\t0.042838000\t125000250000\nsample\t4\t0.042822000\t125000250000\nsample\t5\t0.042815000\t125000250000\nresult\tcall\t500000\t0.042815000\t79\t1398\t1\t2\n",
+    "stderr": ""
+  },
+  {
+    "workload": "call",
+    "pair": 5,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "call"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21840968500328017,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "sample\t1\t0.042206000\t125000250000\nsample\t2\t0.042199000\t125000250000\nsample\t3\t0.042216000\t125000250000\nsample\t4\t0.042193000\t125000250000\nsample\t5\t0.042099000\t125000250000\nresult\tcall\t500000\t0.042099000\t67\t1188\t1\t2\n",
+    "stderr": ""
+  },
+  {
+    "workload": "call",
+    "pair": 6,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "call"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.218675592001091,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "sample\t1\t0.042148000\t125000250000\nsample\t2\t0.042255000\t125000250000\nsample\t3\t0.042366000\t125000250000\nsample\t4\t0.042372000\t125000250000\nsample\t5\t0.042369000\t125000250000\nresult\tcall\t500000\t0.042148000\t67\t1188\t1\t2\n",
+    "stderr": ""
+  },
+  {
+    "workload": "call",
+    "pair": 6,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "call"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.21986752299926593,
+    "fixture_sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "sample\t1\t0.042490000\t125000250000\nsample\t2\t0.042385000\t125000250000\nsample\t3\t0.042590000\t125000250000\nsample\t4\t0.042570000\t125000250000\nsample\t5\t0.042605000\t125000250000\nresult\tcall\t500000\t0.042385000\t79\t1398\t1\t2\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 0,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11354435000248486,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 0,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.1135589789992082,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11359774300217396,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 1,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11388292300034664,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 2,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11390958899937687,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 2,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11396019500170951,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11415014399972279,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 3,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11365840099824709,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 4,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11361603000113973,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 4,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11360354900170933,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11377306800204678,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 5,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11348994199943263,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 6,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11412622900024871,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "ffi_struct",
+    "pair": 6,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/workspaces/lj-lockless/aux/bench/bench.lua",
+      "ffi_struct"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.11352352199901361,
+    "fixture_sha256": "03fbdcfaa5c5416775a9b87f639322ccb0f97c4cf6ecb83bdf691e7307c20ffa",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "benchmark               total_s      ns/op\nffi_struct               0.0206       0.69\n",
+    "stderr": ""
+  },
+  {
+    "workload": "shared",
+    "pair": 0,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/shared-cost.lua",
+      "2000000",
+      "baseline"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.01667286700103432,
+    "fixture_sha256": "fcc1e729ec1aea0fd85aa42b6c72ea4749faed48f31d3ac6031111d3e936bdd1",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "shape\t1\t19\t234\t0\t1\nsample\t1\t0.001400000\nsample\t2\t0.001378000\nsample\t3\t0.001377000\nsample\t4\t0.001380000\nsample\t5\t0.001377000\nresult\tshared\t2000000\t0.001377000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "shared",
+    "pair": 0,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/shared-cost.lua",
+      "2000000",
+      "helper"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 2.5248233740021533,
+    "fixture_sha256": "fcc1e729ec1aea0fd85aa42b6c72ea4749faed48f31d3ac6031111d3e936bdd1",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "shape\t1\t39\t515\t2\t1\nsample\t1\t0.501810000\nsample\t2\t0.501895000\nsample\t3\t0.501638000\nsample\t4\t0.501574000\nsample\t5\t0.501478000\nresult\tshared\t2000000\t0.501478000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "shared",
+    "pair": 1,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/shared-cost.lua",
+      "2000000",
+      "helper"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 2.5303296240017517,
+    "fixture_sha256": "fcc1e729ec1aea0fd85aa42b6c72ea4749faed48f31d3ac6031111d3e936bdd1",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "shape\t1\t39\t515\t2\t1\nsample\t1\t0.502976000\nsample\t2\t0.502689000\nsample\t3\t0.502692000\nsample\t4\t0.502711000\nsample\t5\t0.502661000\nresult\tshared\t2000000\t0.502661000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "shared",
+    "pair": 1,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/shared-cost.lua",
+      "2000000",
+      "baseline"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.016900097998586716,
+    "fixture_sha256": "fcc1e729ec1aea0fd85aa42b6c72ea4749faed48f31d3ac6031111d3e936bdd1",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "shape\t1\t19\t234\t0\t1\nsample\t1\t0.001400000\nsample\t2\t0.001377000\nsample\t3\t0.001381000\nsample\t4\t0.001375000\nsample\t5\t0.001377000\nresult\tshared\t2000000\t0.001375000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "shared",
+    "pair": 2,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/shared-cost.lua",
+      "2000000",
+      "baseline"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.016715186000510585,
+    "fixture_sha256": "fcc1e729ec1aea0fd85aa42b6c72ea4749faed48f31d3ac6031111d3e936bdd1",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "shape\t1\t19\t234\t0\t1\nsample\t1\t0.001396000\nsample\t2\t0.001377000\nsample\t3\t0.001376000\nsample\t4\t0.001380000\nsample\t5\t0.001377000\nresult\tshared\t2000000\t0.001376000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "shared",
+    "pair": 2,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/shared-cost.lua",
+      "2000000",
+      "helper"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 2.5306219889971544,
+    "fixture_sha256": "fcc1e729ec1aea0fd85aa42b6c72ea4749faed48f31d3ac6031111d3e936bdd1",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "shape\t1\t39\t515\t2\t1\nsample\t1\t0.502730000\nsample\t2\t0.502807000\nsample\t3\t0.502864000\nsample\t4\t0.503041000\nsample\t5\t0.502554000\nresult\tshared\t2000000\t0.502554000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "shared",
+    "pair": 3,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/shared-cost.lua",
+      "2000000",
+      "helper"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 2.5336450680006237,
+    "fixture_sha256": "fcc1e729ec1aea0fd85aa42b6c72ea4749faed48f31d3ac6031111d3e936bdd1",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "shape\t1\t39\t515\t2\t1\nsample\t1\t0.503488000\nsample\t2\t0.503425000\nsample\t3\t0.503413000\nsample\t4\t0.503470000\nsample\t5\t0.503319000\nresult\tshared\t2000000\t0.503319000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "shared",
+    "pair": 3,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/shared-cost.lua",
+      "2000000",
+      "baseline"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.016886088000319432,
+    "fixture_sha256": "fcc1e729ec1aea0fd85aa42b6c72ea4749faed48f31d3ac6031111d3e936bdd1",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "shape\t1\t19\t234\t0\t1\nsample\t1\t0.001401000\nsample\t2\t0.001378000\nsample\t3\t0.001380000\nsample\t4\t0.001376000\nsample\t5\t0.001376000\nresult\tshared\t2000000\t0.001376000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "shared",
+    "pair": 4,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/shared-cost.lua",
+      "2000000",
+      "baseline"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.016671900997607736,
+    "fixture_sha256": "fcc1e729ec1aea0fd85aa42b6c72ea4749faed48f31d3ac6031111d3e936bdd1",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "shape\t1\t19\t234\t0\t1\nsample\t1\t0.001397000\nsample\t2\t0.001377000\nsample\t3\t0.001381000\nsample\t4\t0.001377000\nsample\t5\t0.001376000\nresult\tshared\t2000000\t0.001376000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "shared",
+    "pair": 4,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/shared-cost.lua",
+      "2000000",
+      "helper"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 2.52696094500061,
+    "fixture_sha256": "fcc1e729ec1aea0fd85aa42b6c72ea4749faed48f31d3ac6031111d3e936bdd1",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "shape\t1\t39\t515\t2\t1\nsample\t1\t0.502028000\nsample\t2\t0.502203000\nsample\t3\t0.502009000\nsample\t4\t0.502040000\nsample\t5\t0.502058000\nresult\tshared\t2000000\t0.502009000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "shared",
+    "pair": 5,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/shared-cost.lua",
+      "2000000",
+      "helper"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 2.527488200001244,
+    "fixture_sha256": "fcc1e729ec1aea0fd85aa42b6c72ea4749faed48f31d3ac6031111d3e936bdd1",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "shape\t1\t39\t515\t2\t1\nsample\t1\t0.502379000\nsample\t2\t0.502027000\nsample\t3\t0.502045000\nsample\t4\t0.502128000\nsample\t5\t0.502073000\nresult\tshared\t2000000\t0.502027000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "shared",
+    "pair": 5,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/shared-cost.lua",
+      "2000000",
+      "baseline"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.016828333999001188,
+    "fixture_sha256": "fcc1e729ec1aea0fd85aa42b6c72ea4749faed48f31d3ac6031111d3e936bdd1",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "shape\t1\t19\t234\t0\t1\nsample\t1\t0.001399000\nsample\t2\t0.001378000\nsample\t3\t0.001380000\nsample\t4\t0.001376000\nsample\t5\t0.001382000\nresult\tshared\t2000000\t0.001376000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "shared",
+    "pair": 6,
+    "variant": "baseline",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/shared-cost.lua",
+      "2000000",
+      "baseline"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 0.016540865999559173,
+    "fixture_sha256": "fcc1e729ec1aea0fd85aa42b6c72ea4749faed48f31d3ac6031111d3e936bdd1",
+    "exe_sha256": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+    "exit": 0,
+    "stdout": "shape\t1\t19\t234\t0\t1\nsample\t1\t0.001395000\nsample\t2\t0.001376000\nsample\t3\t0.001381000\nsample\t4\t0.001376000\nsample\t5\t0.001376000\nresult\tshared\t2000000\t0.001376000\n",
+    "stderr": ""
+  },
+  {
+    "workload": "shared",
+    "pair": 6,
+    "variant": "candidate",
+    "command": [
+      "taskset",
+      "-c",
+      "31",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/shared-cost.lua",
+      "2000000",
+      "helper"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;",
+      "BENCH_SCALE": "1"
+    },
+    "seconds": 2.528417248999176,
+    "fixture_sha256": "fcc1e729ec1aea0fd85aa42b6c72ea4749faed48f31d3ac6031111d3e936bdd1",
+    "exe_sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+    "exit": 0,
+    "stdout": "shape\t1\t39\t515\t2\t1\nsample\t1\t0.502320000\nsample\t2\t0.502288000\nsample\t3\t0.502480000\nsample\t4\t0.502411000\nsample\t5\t0.502450000\nresult\tshared\t2000000\t0.502288000\n",
+    "stderr": ""
+  }
+]

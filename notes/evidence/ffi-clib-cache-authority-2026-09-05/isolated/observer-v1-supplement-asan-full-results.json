@@ -1,0 +1,1762 @@
+[
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "zero",
+      "nan",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "no-helper",
+      "gc",
+      "pre-mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.04515214800630929,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "zero",
+    "mode": "nan",
+    "target": "root",
+    "phase": "pre-mt",
+    "status": "-joff",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x555afb380e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "zero",
+      "nan",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "no-helper",
+      "gc",
+      "pre-mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.043816283003252465,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "zero",
+    "mode": "nan",
+    "target": "root",
+    "phase": "pre-mt",
+    "status": "-jon",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x557251fcfe60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "zero",
+      "nan",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc",
+      "mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.040030401993135456,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "zero",
+    "mode": "nan",
+    "target": "root",
+    "phase": "mt",
+    "status": "-joff",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x558e6dd66e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "zero",
+      "nan",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc",
+      "mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.04104271099640755,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "zero",
+    "mode": "nan",
+    "target": "root",
+    "phase": "mt",
+    "status": "-jon",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x55d4cb067e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "zero",
+      "nan",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "no-helper",
+      "gc",
+      "pre-mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.039787620000424795,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "zero",
+    "mode": "nan",
+    "target": "side",
+    "phase": "pre-mt",
+    "status": "-joff",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x55e9af06be60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "zero",
+      "nan",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "no-helper",
+      "gc",
+      "pre-mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.04033571900072275,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "zero",
+    "mode": "nan",
+    "target": "side",
+    "phase": "pre-mt",
+    "status": "-jon",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x5622427b8e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "zero",
+      "nan",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc",
+      "mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.0398618079998414,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "zero",
+    "mode": "nan",
+    "target": "side",
+    "phase": "mt",
+    "status": "-joff",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x558936e9fe60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "zero",
+      "nan",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc",
+      "mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.03931670200108783,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "zero",
+    "mode": "nan",
+    "target": "side",
+    "phase": "mt",
+    "status": "-jon",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x5636fc122e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "zero",
+      "pos-inf",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "no-helper",
+      "gc",
+      "pre-mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.04042965700500645,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "zero",
+    "mode": "pos-inf",
+    "target": "root",
+    "phase": "pre-mt",
+    "status": "-joff",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x555cf681ae60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "zero",
+      "pos-inf",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "no-helper",
+      "gc",
+      "pre-mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.03968875099963043,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "zero",
+    "mode": "pos-inf",
+    "target": "root",
+    "phase": "pre-mt",
+    "status": "-jon",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x55b40e7bee60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "zero",
+      "pos-inf",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc",
+      "mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.03962577999482164,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "zero",
+    "mode": "pos-inf",
+    "target": "root",
+    "phase": "mt",
+    "status": "-joff",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x55d9cc654e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "zero",
+      "pos-inf",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc",
+      "mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.04071637000015471,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "zero",
+    "mode": "pos-inf",
+    "target": "root",
+    "phase": "mt",
+    "status": "-jon",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x5587459a9e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "zero",
+      "pos-inf",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "no-helper",
+      "gc",
+      "pre-mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.03977782499714522,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "zero",
+    "mode": "pos-inf",
+    "target": "side",
+    "phase": "pre-mt",
+    "status": "-joff",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x5560cc8a2e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "zero",
+      "pos-inf",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "no-helper",
+      "gc",
+      "pre-mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.039441638997232076,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "zero",
+    "mode": "pos-inf",
+    "target": "side",
+    "phase": "pre-mt",
+    "status": "-jon",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x558886c82e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "zero",
+      "pos-inf",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc",
+      "mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.040291073004482314,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "zero",
+    "mode": "pos-inf",
+    "target": "side",
+    "phase": "mt",
+    "status": "-joff",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x5639df18be60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "zero",
+      "pos-inf",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc",
+      "mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.03875961199810263,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "zero",
+    "mode": "pos-inf",
+    "target": "side",
+    "phase": "mt",
+    "status": "-jon",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x55f235405e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "zero",
+      "neg-inf",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "no-helper",
+      "gc",
+      "pre-mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.038154876994667575,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "zero",
+    "mode": "neg-inf",
+    "target": "root",
+    "phase": "pre-mt",
+    "status": "-joff",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x559fc0bc9e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "zero",
+      "neg-inf",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "no-helper",
+      "gc",
+      "pre-mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.03812336500413949,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "zero",
+    "mode": "neg-inf",
+    "target": "root",
+    "phase": "pre-mt",
+    "status": "-jon",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x5613e8851e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "zero",
+      "neg-inf",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc",
+      "mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.038420046999817714,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "zero",
+    "mode": "neg-inf",
+    "target": "root",
+    "phase": "mt",
+    "status": "-joff",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x555a797c2e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "zero",
+      "neg-inf",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc",
+      "mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.038571687997318804,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "zero",
+    "mode": "neg-inf",
+    "target": "root",
+    "phase": "mt",
+    "status": "-jon",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x56087c73ee60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "zero",
+      "neg-inf",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "no-helper",
+      "gc",
+      "pre-mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.03817445800086716,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "zero",
+    "mode": "neg-inf",
+    "target": "side",
+    "phase": "pre-mt",
+    "status": "-joff",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x559f5f605e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "zero",
+      "neg-inf",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "no-helper",
+      "gc",
+      "pre-mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.0382814149998012,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "zero",
+    "mode": "neg-inf",
+    "target": "side",
+    "phase": "pre-mt",
+    "status": "-jon",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x55ebaaa93e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "zero",
+      "neg-inf",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc",
+      "mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.03792005300056189,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "zero",
+    "mode": "neg-inf",
+    "target": "side",
+    "phase": "mt",
+    "status": "-joff",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x557128ad7e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "zero",
+      "neg-inf",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc",
+      "mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.038160659998538904,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "zero",
+    "mode": "neg-inf",
+    "target": "side",
+    "phase": "mt",
+    "status": "-jon",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x55f584c11e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "read",
+      "resize-other",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "no-helper",
+      "gc",
+      "pre-mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.03827619700314244,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "read",
+    "mode": "resize-other",
+    "target": "root",
+    "phase": "pre-mt",
+    "status": "-joff",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x562fd775ee60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "read",
+      "resize-other",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "no-helper",
+      "gc",
+      "pre-mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.03838556199480081,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "read",
+    "mode": "resize-other",
+    "target": "root",
+    "phase": "pre-mt",
+    "status": "-jon",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x56176c035e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "read",
+      "resize-other",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc",
+      "mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.03788825999799883,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "read",
+    "mode": "resize-other",
+    "target": "root",
+    "phase": "mt",
+    "status": "-joff",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x55d5c4810e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "read",
+      "resize-other",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc",
+      "mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.037775377997604664,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "read",
+    "mode": "resize-other",
+    "target": "root",
+    "phase": "mt",
+    "status": "-jon",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x5651e325be60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "read",
+      "resize-other",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "no-helper",
+      "gc",
+      "pre-mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.03782540899555897,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "read",
+    "mode": "resize-other",
+    "target": "side",
+    "phase": "pre-mt",
+    "status": "-joff",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x55de61774e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "read",
+      "resize-other",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "no-helper",
+      "gc",
+      "pre-mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.03769008599920198,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "read",
+    "mode": "resize-other",
+    "target": "side",
+    "phase": "pre-mt",
+    "status": "-jon",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x5556a828ae60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "read",
+      "resize-other",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc",
+      "mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.03783615800057305,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "read",
+    "mode": "resize-other",
+    "target": "side",
+    "phase": "mt",
+    "status": "-joff",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x55cfb1765e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "read",
+      "resize-other",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc",
+      "mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.03846534500189591,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "read",
+    "mode": "resize-other",
+    "target": "side",
+    "phase": "mt",
+    "status": "-jon",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x563306bfde60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "write",
+      "resize-other",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "no-helper",
+      "gc",
+      "pre-mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.038433465000707656,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "write",
+    "mode": "resize-other",
+    "target": "root",
+    "phase": "pre-mt",
+    "status": "-joff",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x565507aede60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "write",
+      "resize-other",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "no-helper",
+      "gc",
+      "pre-mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.03876044000207912,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "write",
+    "mode": "resize-other",
+    "target": "root",
+    "phase": "pre-mt",
+    "status": "-jon",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x55e70b883e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "write",
+      "resize-other",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc",
+      "mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.03820162900228752,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "write",
+    "mode": "resize-other",
+    "target": "root",
+    "phase": "mt",
+    "status": "-joff",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x55837c1d0e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "write",
+      "resize-other",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc",
+      "mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.038053611999202985,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "write",
+    "mode": "resize-other",
+    "target": "root",
+    "phase": "mt",
+    "status": "-jon",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x56251eb76e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "write",
+      "resize-other",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "no-helper",
+      "gc",
+      "pre-mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.03793214599863859,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "write",
+    "mode": "resize-other",
+    "target": "side",
+    "phase": "pre-mt",
+    "status": "-joff",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x55c60c2a8e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "write",
+      "resize-other",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "no-helper",
+      "gc",
+      "pre-mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.03773693199764239,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "write",
+    "mode": "resize-other",
+    "target": "side",
+    "phase": "pre-mt",
+    "status": "-jon",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x55ea39f00e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "write",
+      "resize-other",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc",
+      "mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.03797144700365607,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "write",
+    "mode": "resize-other",
+    "target": "side",
+    "phase": "mt",
+    "status": "-joff",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x55b5d7ef0e60\n"
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "write",
+      "resize-other",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc",
+      "mt",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.03773146899766289,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "kind": "write",
+    "mode": "resize-other",
+    "target": "side",
+    "phase": "mt",
+    "status": "-jon",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit: ...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: cannot open shared object file: No such file or directory\nstack traceback:\n\t[C]: in function 'assert'\n\t...egressions-20260905-741ke1nb/t-clib-cache-supplement.lua:12: in main chunk\n\t[C]: at 0x564c77088e60\n"
+  }
+]

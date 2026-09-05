@@ -1,0 +1,64 @@
+[
+  {
+    "name": "no-native",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/no-native-negative.lua",
+      "function",
+      "fenv",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.013752703998761717,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/no-native-negative.lua": "037fd5927b58ce2aa889b6636ebaf49ef4f10da7742e98c8ae0dd5db408f5021",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139"
+    },
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit: ...che-regressions-20260905-741ke1nb/no-native-negative.lua:140: ...che-regressions-20260905-741ke1nb/no-native-negative.lua:87: actual native root and installed side required\nstack traceback:\n\t[C]: in function 'assert'\n\t...che-regressions-20260905-741ke1nb/no-native-negative.lua:140: in main chunk\n\t[C]: at 0x55a5b1606100\n",
+    "expected_failure_seen": true
+  },
+  {
+    "name": "no-installed-side",
+    "command": [
+      "taskset",
+      "-c",
+      "24-27",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/no-installed-side-negative.lua",
+      "function",
+      "fenv",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper",
+      "gc"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/?.lua;;"
+    },
+    "seconds": 0.0144584230001783,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/no-installed-side-negative.lua": "1fa260b745cdbaaef0832505edc0362a86ddda81ed61ffadea019102f47f3d31",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139"
+    },
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit: ...essions-20260905-741ke1nb/no-installed-side-negative.lua:140: ...essions-20260905-741ke1nb/no-installed-side-negative.lua:87: actual native root and installed side required\nstack traceback:\n\t[C]: in function 'assert'\n\t...essions-20260905-741ke1nb/no-installed-side-negative.lua:140: in main chunk\n\t[C]: at 0x5613b30e8100\n",
+    "expected_failure_seen": true
+  }
+]

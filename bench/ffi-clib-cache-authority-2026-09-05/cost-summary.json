@@ -1,0 +1,389 @@
+{
+  "runtime_processes": 70,
+  "cpu": 31,
+  "pairs_per_workload": 7,
+  "gc_enabled": true,
+  "results": {
+    "direct_clib": {
+      "ns": {
+        "baseline": [
+          0.68385,
+          0.68385,
+          0.68385,
+          0.6839,
+          0.68385,
+          0.6839,
+          0.6839
+        ],
+        "candidate": [
+          1.09405,
+          1.09405,
+          1.09405,
+          1.0939999999999999,
+          1.09405,
+          1.09405,
+          1.09405
+        ]
+      },
+      "median_ns": {
+        "baseline": 0.68385,
+        "candidate": 1.09405
+      },
+      "median_paired_percent": 59.98391460115522,
+      "geometric_ratio": 1.5997785724203366,
+      "shape_and_result_lines": {
+        "baseline": [
+          [
+            "shape\tclib\troot\t1\tnins\t24\tmcode\t298\tmeta\t1\tnode\t1\tpostmeta\t0\tpostnode\t0\texits\t1",
+            "result\tclib\t20000000\t0.013677000"
+          ],
+          [
+            "shape\tclib\troot\t1\tnins\t24\tmcode\t298\tmeta\t1\tnode\t1\tpostmeta\t0\tpostnode\t0\texits\t1",
+            "result\tclib\t20000000\t0.013677000"
+          ],
+          [
+            "shape\tclib\troot\t1\tnins\t24\tmcode\t298\tmeta\t1\tnode\t1\tpostmeta\t0\tpostnode\t0\texits\t1",
+            "result\tclib\t20000000\t0.013677000"
+          ],
+          [
+            "shape\tclib\troot\t1\tnins\t24\tmcode\t298\tmeta\t1\tnode\t1\tpostmeta\t0\tpostnode\t0\texits\t1",
+            "result\tclib\t20000000\t0.013678000"
+          ],
+          [
+            "shape\tclib\troot\t1\tnins\t24\tmcode\t298\tmeta\t1\tnode\t1\tpostmeta\t0\tpostnode\t0\texits\t1",
+            "result\tclib\t20000000\t0.013677000"
+          ],
+          [
+            "shape\tclib\troot\t1\tnins\t24\tmcode\t298\tmeta\t1\tnode\t1\tpostmeta\t0\tpostnode\t0\texits\t1",
+            "result\tclib\t20000000\t0.013678000"
+          ],
+          [
+            "shape\tclib\troot\t1\tnins\t24\tmcode\t298\tmeta\t1\tnode\t1\tpostmeta\t0\tpostnode\t0\texits\t1",
+            "result\tclib\t20000000\t0.013678000"
+          ]
+        ],
+        "candidate": [
+          [
+            "shape\tclib\troot\t1\tnins\t36\tmcode\t477\tmeta\t1\tnode\t2\tpostmeta\t0\tpostnode\t1\texits\t1",
+            "result\tclib\t20000000\t0.021881000"
+          ],
+          [
+            "shape\tclib\troot\t1\tnins\t36\tmcode\t477\tmeta\t1\tnode\t2\tpostmeta\t0\tpostnode\t1\texits\t1",
+            "result\tclib\t20000000\t0.021881000"
+          ],
+          [
+            "shape\tclib\troot\t1\tnins\t36\tmcode\t477\tmeta\t1\tnode\t2\tpostmeta\t0\tpostnode\t1\texits\t1",
+            "result\tclib\t20000000\t0.021881000"
+          ],
+          [
+            "shape\tclib\troot\t1\tnins\t36\tmcode\t477\tmeta\t1\tnode\t2\tpostmeta\t0\tpostnode\t1\texits\t1",
+            "result\tclib\t20000000\t0.021880000"
+          ],
+          [
+            "shape\tclib\troot\t1\tnins\t36\tmcode\t477\tmeta\t1\tnode\t2\tpostmeta\t0\tpostnode\t1\texits\t1",
+            "result\tclib\t20000000\t0.021881000"
+          ],
+          [
+            "shape\tclib\troot\t1\tnins\t36\tmcode\t477\tmeta\t1\tnode\t2\tpostmeta\t0\tpostnode\t1\texits\t1",
+            "result\tclib\t20000000\t0.021881000"
+          ],
+          [
+            "shape\tclib\troot\t1\tnins\t36\tmcode\t477\tmeta\t1\tnode\t2\tpostmeta\t0\tpostnode\t1\texits\t1",
+            "result\tclib\t20000000\t0.021881000"
+          ]
+        ]
+      }
+    },
+    "clib": {
+      "ns": {
+        "baseline": [
+          2.0511,
+          2.0510500000000005,
+          2.0511,
+          2.0511,
+          2.0510500000000005,
+          2.0510500000000005,
+          2.0511
+        ],
+        "candidate": [
+          2.5068,
+          2.50685,
+          2.5069,
+          2.50685,
+          2.50685,
+          2.50685,
+          2.5068
+        ]
+      },
+      "median_ns": {
+        "baseline": 2.0511,
+        "candidate": 2.50685
+      },
+      "median_paired_percent": 22.222222222222232,
+      "geometric_ratio": 1.222207131429264,
+      "shape_and_result_lines": {
+        "baseline": [
+          [
+            "result\tclib\t20000000\t0.041022000\t40\t537\t1\t0"
+          ],
+          [
+            "result\tclib\t20000000\t0.041021000\t40\t537\t1\t0"
+          ],
+          [
+            "result\tclib\t20000000\t0.041022000\t40\t537\t1\t0"
+          ],
+          [
+            "result\tclib\t20000000\t0.041022000\t40\t537\t1\t0"
+          ],
+          [
+            "result\tclib\t20000000\t0.041021000\t40\t537\t1\t0"
+          ],
+          [
+            "result\tclib\t20000000\t0.041021000\t40\t537\t1\t0"
+          ],
+          [
+            "result\tclib\t20000000\t0.041022000\t40\t537\t1\t0"
+          ]
+        ],
+        "candidate": [
+          [
+            "result\tclib\t20000000\t0.050136000\t52\t728\t1\t0"
+          ],
+          [
+            "result\tclib\t20000000\t0.050137000\t52\t728\t1\t0"
+          ],
+          [
+            "result\tclib\t20000000\t0.050138000\t52\t728\t1\t0"
+          ],
+          [
+            "result\tclib\t20000000\t0.050137000\t52\t728\t1\t0"
+          ],
+          [
+            "result\tclib\t20000000\t0.050137000\t52\t728\t1\t0"
+          ],
+          [
+            "result\tclib\t20000000\t0.050137000\t52\t728\t1\t0"
+          ],
+          [
+            "result\tclib\t20000000\t0.050136000\t52\t728\t1\t0"
+          ]
+        ]
+      }
+    },
+    "call": {
+      "ns": {
+        "baseline": [
+          83.84,
+          84.376,
+          84.36200000000001,
+          84.126,
+          83.186,
+          84.198,
+          84.29599999999999
+        ],
+        "candidate": [
+          85.39999999999999,
+          84.422,
+          85.1,
+          84.94200000000001,
+          85.142,
+          85.63,
+          84.77
+        ]
+      },
+      "median_ns": {
+        "baseline": 84.198,
+        "candidate": 85.1
+      },
+      "median_paired_percent": 0.9699736110120538,
+      "geometric_ratio": 1.0119359687535823,
+      "shape_and_result_lines": {
+        "baseline": [
+          [
+            "result\tcall\t500000\t0.041920000\t67\t1188\t1\t2"
+          ],
+          [
+            "result\tcall\t500000\t0.042188000\t67\t1188\t1\t2"
+          ],
+          [
+            "result\tcall\t500000\t0.042181000\t67\t1188\t1\t2"
+          ],
+          [
+            "result\tcall\t500000\t0.042063000\t67\t1188\t1\t2"
+          ],
+          [
+            "result\tcall\t500000\t0.041593000\t67\t1188\t1\t2"
+          ],
+          [
+            "result\tcall\t500000\t0.042099000\t67\t1188\t1\t2"
+          ],
+          [
+            "result\tcall\t500000\t0.042148000\t67\t1188\t1\t2"
+          ]
+        ],
+        "candidate": [
+          [
+            "result\tcall\t500000\t0.042700000\t79\t1398\t1\t2"
+          ],
+          [
+            "result\tcall\t500000\t0.042211000\t79\t1398\t1\t2"
+          ],
+          [
+            "result\tcall\t500000\t0.042550000\t79\t1398\t1\t2"
+          ],
+          [
+            "result\tcall\t500000\t0.042471000\t79\t1398\t1\t2"
+          ],
+          [
+            "result\tcall\t500000\t0.042571000\t79\t1398\t1\t2"
+          ],
+          [
+            "result\tcall\t500000\t0.042815000\t79\t1398\t1\t2"
+          ],
+          [
+            "result\tcall\t500000\t0.042385000\t79\t1398\t1\t2"
+          ]
+        ]
+      }
+    },
+    "ffi_struct": {
+      "ns": {
+        "baseline": [
+          0.6866666666666666,
+          0.6866666666666666,
+          0.6866666666666666,
+          0.6866666666666666,
+          0.6866666666666666,
+          0.6866666666666666,
+          0.6866666666666666
+        ],
+        "candidate": [
+          0.6866666666666666,
+          0.6866666666666666,
+          0.6866666666666666,
+          0.6866666666666666,
+          0.6866666666666666,
+          0.6866666666666666,
+          0.6866666666666666
+        ]
+      },
+      "median_ns": {
+        "baseline": 0.6866666666666666,
+        "candidate": 0.6866666666666666
+      },
+      "median_paired_percent": 0.0,
+      "geometric_ratio": 1.0,
+      "shape_and_result_lines": {
+        "baseline": [
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ],
+        "candidate": [
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          []
+        ]
+      }
+    },
+    "shared": {
+      "ns": {
+        "baseline": [
+          0.6885,
+          0.6875,
+          0.6880000000000001,
+          0.6880000000000001,
+          0.6880000000000001,
+          0.6880000000000001,
+          0.6880000000000001
+        ],
+        "candidate": [
+          250.739,
+          251.33050000000003,
+          251.277,
+          251.6595,
+          251.00450000000004,
+          251.01350000000002,
+          251.14399999999995
+        ]
+      },
+      "median_ns": {
+        "baseline": 0.6880000000000001,
+        "candidate": 251.14399999999995
+      },
+      "median_paired_percent": 36403.48837209301,
+      "geometric_ratio": 365.06792099392993,
+      "shape_and_result_lines": {
+        "baseline": [
+          [
+            "shape\t1\t19\t234\t0\t1",
+            "result\tshared\t2000000\t0.001377000"
+          ],
+          [
+            "shape\t1\t19\t234\t0\t1",
+            "result\tshared\t2000000\t0.001375000"
+          ],
+          [
+            "shape\t1\t19\t234\t0\t1",
+            "result\tshared\t2000000\t0.001376000"
+          ],
+          [
+            "shape\t1\t19\t234\t0\t1",
+            "result\tshared\t2000000\t0.001376000"
+          ],
+          [
+            "shape\t1\t19\t234\t0\t1",
+            "result\tshared\t2000000\t0.001376000"
+          ],
+          [
+            "shape\t1\t19\t234\t0\t1",
+            "result\tshared\t2000000\t0.001376000"
+          ],
+          [
+            "shape\t1\t19\t234\t0\t1",
+            "result\tshared\t2000000\t0.001376000"
+          ]
+        ],
+        "candidate": [
+          [
+            "shape\t1\t39\t515\t2\t1",
+            "result\tshared\t2000000\t0.501478000"
+          ],
+          [
+            "shape\t1\t39\t515\t2\t1",
+            "result\tshared\t2000000\t0.502661000"
+          ],
+          [
+            "shape\t1\t39\t515\t2\t1",
+            "result\tshared\t2000000\t0.502554000"
+          ],
+          [
+            "shape\t1\t39\t515\t2\t1",
+            "result\tshared\t2000000\t0.503319000"
+          ],
+          [
+            "shape\t1\t39\t515\t2\t1",
+            "result\tshared\t2000000\t0.502009000"
+          ],
+          [
+            "shape\t1\t39\t515\t2\t1",
+            "result\tshared\t2000000\t0.502027000"
+          ],
+          [
+            "shape\t1\t39\t515\t2\t1",
+            "result\tshared\t2000000\t0.502288000"
+          ]
+        ]
+      }
+    }
+  },
+  "summary_setup_note": "The initial interactive parser assumed extra ffi_struct columns; the stock harness prints total_s and ns/op. This parser uses its measured rounded total_s and unchanged 30 million iterations. Raw timing rows were unchanged."
+}

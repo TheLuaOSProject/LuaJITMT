@@ -1,7 +1,7 @@
 # Lockless completion plan
 
 Reviewed: 2026-09-04, starting at `a649f737`.
-Updated: 2026-09-05 after userdata guards/reuse and automatic-GC admission review.
+Updated: 2026-09-05 after C-library cache/lifecycle guards and GC admission review.
 
 This is the operative continuation of the original plan. It preserves the
 requested end state: one shared Lua heap, safe ordinary racy Lua programs,
@@ -97,7 +97,7 @@ are verified reasons the full goal is still open:
 | Generic FFI traces | CALLXS is live; first generated callbacks could overwrite loop slots through stale owner stack bounds | XSAVE owner geometry is repaired; continue aggregate ABI, caller topology and no-replay lifecycle work |
 | Cdata method recording | Pre-MT guards are repaired and restricted pure loops reuse entry checks; shared-MT constructor/field recording still refuses before trace-owned exceptions | Exact rooted recorder/native lookup and root-publication exclusion remain prerequisites for MT enablement |
 | Special userdata dispatch | Mutable methods use common native guards; direct pure pre-MT loops now reuse exact entry metatable/node loads | Keep entry guards and complete-body exclusions; broader captured/upvalue and MT lookup proofs remain |
-| C-library lookup | Direct captured lookup now retains and guards its exact receiver; native cached lookups still ignore environment writes and semantic close | Authoritative runtime cache/lifecycle guards, including direct calls and installed side traces |
+| C-library lookup | Native lookup now guards the original mutable cache and semantic close; shared captured-builtin lookup costs about 251 ns in the measured microbenchmark | Preserve exact authority and lifecycle ordering while reducing helper cost; general MT metamethod recording remains open |
 | Win64 table traces | The recorder rejects ordinary HSTORE/ASTORE, including pre-MT stores | Complete Win64 helper ABI and require executed table-store traces under Wine and native CI |
 | Diagnostics | Remote allocator-list walks are replaced by scalar publication in `abf234ca`; other snapshot lifetime contracts still apply | Preserve owner/lifetime contracts and audit remaining diagnostic access |
 | Allocator API | The default internal-allocator gate ignores custom `lua_Alloc` callbacks and makes `lua_setallocf` a no-op | Restore exact allocation ownership and callback behavior as a separate tested milestone |
@@ -304,6 +304,16 @@ controls and post-fix completion tests:
   improve about 40% for namespaces and 54% for file/buffer; captured receiver
   loops remain excluded and variable file costs remain unexplained. See
   `notes/jit-udata-pure-2026-09-05.md`.
+- Native C-library lookup now reads the original cache through raw pre-MT
+  guards or the existing bounded shared hit helper, preserves actual numeric
+  overrides, guards exact cdata identity, and samples sticky close before use.
+  Root/installed-side effects, cache resize/GC, successful native hit followed
+  by close and recorder error cleanup pass 753 isolated plus 153 canonical
+  processes. The exact baseline fails 58 native semantic controls. Actual
+  foreign-call cost changes about 1%; the shared captured-builtin lookup rises
+  to 251 ns and remains a substantial performance follow-up. Extra forced
+  attachment-during-recording coverage was blocked by automatic safety review
+  and is unperformed. See `notes/ffi-clib-cache-authority-2026-09-05.md`.
 - The isolated string baseline separates completed-cycle retention from missing
   automatic progress. Persistent peers or workers retain 2,457,600 string-body
   bytes through 12 explicit completed cycles; sole-main cleanup reclaims them.

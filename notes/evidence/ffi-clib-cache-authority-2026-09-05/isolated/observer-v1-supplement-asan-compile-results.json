@@ -1,0 +1,57 @@
+[
+  {
+    "command": [
+      "clang",
+      "-std=gnu11",
+      "-shared",
+      "-fPIC",
+      "-O1",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.d",
+      "-I/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c",
+      "-o",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.17088571700151078,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918"
+    },
+    "operation": "compile",
+    "exit": 1,
+    "stdout": "",
+    "stderr": "/usr/bin/ld: /tmp/t-clib-cache-geometry-283e29.o: in function `geometry':\n/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c:16:(.text+0x14c): undefined reference to `lj_assert_fail'\n/usr/bin/ld: /tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so: hidden symbol `lj_assert_fail' isn't defined\n/usr/bin/ld: final link failed: bad value\nclang: error: linker command failed with exit code 1 (use -v to see invocation)\n"
+  }
+]

@@ -3144,7 +3144,7 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
 	  J->base[0] = crec_tv_ct(J, ct, sid, ptr);
 	} else {
 	  J->needsnap = 1;
-	  crec_ct_tv(J, ct, ptr, J->base[2], &J->L->base[2]);
+	  crec_ct_tv(J, ct, ptr, J->base[2], &rd->argv[2]);
 	}
       } else {
 	J->base[0] = lj_ir_kgc(J, obj2gco(cdataV(tv)), IRT_CDATA);

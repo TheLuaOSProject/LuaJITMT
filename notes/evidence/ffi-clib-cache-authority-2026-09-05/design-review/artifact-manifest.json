@@ -1,0 +1,19 @@
+{
+  "root": "/tmp/lj-clib-cache-close-proof-20260905-o4j8qsz5",
+  "artifacts": [
+    {
+      "relative_path": "review.md",
+      "source": "/tmp/lj-clib-cache-close-proof-20260905-o4j8qsz5/review.md",
+      "sha256": "df8825c11037b7e5e880a063a6ee0ba3826d581e979b21d9dc1ec2eab4a2f406",
+      "bytes": 13176,
+      "storage": "text"
+    },
+    {
+      "relative_path": "reviewed-inputs.json",
+      "source": "/tmp/lj-clib-cache-close-proof-20260905-o4j8qsz5/reviewed-inputs.json",
+      "sha256": "f9b1f5fa049edb7657c21c0462466f4ae26a1a9e53fd6edbfb7d58b31106bbed",
+      "bytes": 6094,
+      "storage": "text"
+    }
+  ]
+}

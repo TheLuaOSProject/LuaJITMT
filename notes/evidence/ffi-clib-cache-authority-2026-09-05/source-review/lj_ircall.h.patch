@@ -1,0 +1,12 @@
+diff --git a/tmp/lj-clib-hit-try-proof-20260905-gl2f_616/base/src/lj_ircall.h b/tmp/lj-clib-hit-try-proof-20260905-gl2f_616/src/lj_ircall.h
+index 1a435e90..b9568c21 100644
+--- a/tmp/lj-clib-hit-try-proof-20260905-gl2f_616/base/src/lj_ircall.h
++++ b/tmp/lj-clib-hit-try-proof-20260905-gl2f_616/src/lj_ircall.h
+@@ -203,6 +203,7 @@ typedef struct CCallInfo {
+   _(ANY,	lj_tab_clear,		2,  FS, NIL, CCI_L) \
+   _(ANY,	lj_tab_newkey,		3,   S, PGC, CCI_L|CCI_T) \
+   _(ANY,	lj_tab_gettv_rooted,	4,   S, PGC, CCI_L|CCI_T) \
++  _(ANY,	lj_tab_gettv_rooted_hit_try, 4, S, INT, CCI_L|CCI_T) \
+   _(ANY,	lj_tab_gettv_forjit,	4,   S, PGC, CCI_L|CCI_T) \
+   _(ANY,	lj_tab_storetv_forjit_array_nogc, 5, S, PGC, CCI_L|CCI_T) \
+   _(ANY,	lj_tab_storetv_forjit_array, 5, S, PGC, CCI_L|CCI_T) \

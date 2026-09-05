@@ -1,0 +1,23 @@
+{
+  "command": [
+    "cc",
+    "-shared",
+    "-fPIC",
+    "-O2",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "t-clib-cache-authority-lib.c",
+    "-o",
+    "authority-reproduced.so"
+  ],
+  "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+  "seconds": 0.019843704001687,
+  "exit": 0,
+  "stdout": "",
+  "stderr": "",
+  "source_sha256": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+  "reproduced_sha256": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+  "tested_sha256": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+  "identical_to_tested": true
+}

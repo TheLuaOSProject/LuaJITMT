@@ -1,0 +1,153 @@
+{
+  "base": "9f68fa8d58e0f115764e5bba73406659ed82c274 plus immutable receiver patch 77531ea3eb0977a53ff7413cbad718543bc8952f16b216269523e6ba57664837",
+  "root": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate",
+  "files": [
+    {
+      "path": "src/lj_crecord.c",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/lj_crecord.c",
+      "sha256": "d9117ff3214f258cc84648725effcd498f3d1e93a774a94efd65e81ed11f2bff",
+      "bytes": 111294,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_record.c",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/lj_record.c",
+      "sha256": "07116bc933781976c91453a9ca89a46aef4a81d80bf71ab2f6e5269383fcce87",
+      "bytes": 152033,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_record.h",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/lj_record.h",
+      "sha256": "957189fca07b3be0ac59f297cbcf507859c6e9534132073a92960bfa235eae2c",
+      "bytes": 2610,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_clib.c",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/lj_clib.c",
+      "sha256": "c32a0cdf5b997658f9b0d369c0402398445d6279aacbbb0242a7c5302c136dda",
+      "bytes": 34810,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_clib.h",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/lj_clib.h",
+      "sha256": "15bd45fe03be044eb902d541028d1e206d2bfdf249ec4de26047df0719d400b9",
+      "bytes": 5857,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_tab.c",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/lj_tab.c",
+      "sha256": "28b2eac3dc6c0734d131cf33d3f34826ae758c9b3deb437c6bd154e0cd2fd48f",
+      "bytes": 287989,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_tab.h",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/lj_tab.h",
+      "sha256": "2f9f61003cfdd252c306f3bc7a12e176483dc879b1adbc6653754ccc88478cf2",
+      "bytes": 32280,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_tg.c",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/lj_tg.c",
+      "sha256": "16064ba7946becbbc5cc1be2ee00eae4be39f1496c6ab85c5f4cf60f64146406",
+      "bytes": 45600,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_dispatch.h",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/lj_dispatch.h",
+      "sha256": "c73f12ffc1cf58a7443d310e71d45d6ac1b791f0688b7f848521e149110c14e5",
+      "bytes": 6274,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_state.c",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/lj_state.c",
+      "sha256": "80d2fa440b4b81e0d460d485dcbe2fc478e2f158c2f79504e44b1a89ffc2bf64",
+      "bytes": 51955,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_trace.c",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/lj_trace.c",
+      "sha256": "22727958fb2df4c3ed07126193a260f2243630ac4fc6d98d133712bd40503feb",
+      "bytes": 247545,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_ffrecord.c",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/lj_ffrecord.c",
+      "sha256": "1acbae42a1ed123361b01b190595a69ec7850c2deb4b8b80249b5e40f7ce17e0",
+      "bytes": 54419,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_ir.c",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/lj_ir.c",
+      "sha256": "7f352d38af2424d917d2c5095019e73a43e1cd6f53c71d0eb7d375d33c34c5d7",
+      "bytes": 12958,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_ir.h",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/lj_ir.h",
+      "sha256": "c1c811b87570b2ade55348b356f9b0331c7fa51af6961433d72194adedd1f0a6",
+      "bytes": 21302,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_ircall.h",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/lj_ircall.h",
+      "sha256": "7855fa0f0e997f94313a581975480edd27f9ac6c394b435d13973968e952c06e",
+      "bytes": 14002,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_obj.c",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/lj_obj.c",
+      "sha256": "e23cad6cfc2fd2d6c3ce2c8646af4cf1980d836f9eedc322957f383d9821c294",
+      "bytes": 1670,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_opt_fold.c",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/lj_opt_fold.c",
+      "sha256": "5f990b875aec592290b969b8b12e0b6fa986d30469396e23cc5eebe6a8fcac89",
+      "bytes": 75918,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_opt_mem.c",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/lj_opt_mem.c",
+      "sha256": "34162cb91d55b0e94b8a559c182eb93f37485f60551e0d2c8e7adb61a5ac2159",
+      "bytes": 38383,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_opt_loop.c",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/lj_opt_loop.c",
+      "sha256": "d84ee15a992f10af796af03037cfeabbfa84f6c9ce69346d67c36215ecfd49de",
+      "bytes": 20726,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_opt_dce.c",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/lj_opt_dce.c",
+      "sha256": "81bfc25da08ba113a16d8b6067c6184de994abc691f024b88c34560a1203efad",
+      "bytes": 1923,
+      "storage": "sha256-only"
+    },
+    {
+      "path": "src/lj_asm_x86.h",
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/lj_asm_x86.h",
+      "sha256": "24895bdd88f7c416295a0d85d11d1e283fc8d3223987b9c26c0e4f0b7161dd4d",
+      "bytes": 164968,
+      "storage": "sha256-only"
+    }
+  ]
+}

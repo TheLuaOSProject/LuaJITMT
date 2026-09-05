@@ -1,0 +1,59 @@
+{
+  "root": "/tmp/lj-clib-hit-try-proof-20260905-gl2f_616",
+  "artifacts": [
+    {
+      "path": "base/src/lj_crecord.c",
+      "sha256": "d9117ff3214f258cc84648725effcd498f3d1e93a774a94efd65e81ed11f2bff",
+      "bytes": 111294,
+      "storage": "content"
+    },
+    {
+      "path": "base/src/lj_ircall.h",
+      "sha256": "7855fa0f0e997f94313a581975480edd27f9ac6c394b435d13973968e952c06e",
+      "bytes": 14002,
+      "storage": "content"
+    },
+    {
+      "path": "lj_crecord.c.patch",
+      "sha256": "e7e844cb6746c278d0ca8a0a605730e3bdf2668acb11e2858895f4e8140d64b9",
+      "bytes": 6353,
+      "storage": "content"
+    },
+    {
+      "path": "lj_ircall.h.patch",
+      "sha256": "01fbffd3a655b08541eb72e7fa2e295ff9af0c57ab653ac0c4b4091b3cf2f2b9",
+      "bytes": 775,
+      "storage": "content"
+    },
+    {
+      "path": "review.md",
+      "sha256": "c9fa9605ffecf59e656510a5d6bad8b6a557790a12bc60c1c3d56a80b7c78dad",
+      "bytes": 16923,
+      "storage": "content"
+    },
+    {
+      "path": "reviewed-inputs.json",
+      "sha256": "9be5108fd9d4c1c0ddd947168b25a8f707406dfbdd139c71a3f3be44c052d819",
+      "bytes": 11809,
+      "storage": "content"
+    },
+    {
+      "path": "source-only-scope.json",
+      "sha256": "226059bb27292797939e5237b6a1234ab90ef2c9c62d755ed489b555afc3ee0a",
+      "bytes": 337,
+      "storage": "content"
+    },
+    {
+      "path": "src/lj_crecord.c",
+      "sha256": "b1935f652d95f9d531399297add6201210794447b28e453d5ed02027d6e81527",
+      "bytes": 113595,
+      "storage": "content"
+    },
+    {
+      "path": "src/lj_ircall.h",
+      "sha256": "822ee730b3589500bf463c9b345cd91fd3c4c5ce056a297734b90f121bd14a69",
+      "bytes": 14066,
+      "storage": "content"
+    }
+  ]
+}

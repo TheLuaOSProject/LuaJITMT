@@ -1,0 +1,62 @@
+[
+  {
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-shared",
+      "-fPIC",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-MMD",
+      "-MF",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-exact.d",
+      "-I/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c",
+      "-o",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-exact.so"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/?.lua;;"
+    },
+    "cpu_affinity": [
+      24,
+      25,
+      26,
+      27
+    ],
+    "seconds": 0.08462261599925114,
+    "inputs": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py": "ff0513326113cc36c59d7670c10900f292b24a3d3b0abbbefdcde24889863c9a",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "4241db4f4be64f1d37f534e204c6d961cec2c7350b7f64099528987a4517e89a",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luajit": "7935b1140cb1646f09227806b9b5cbf6579909afd203d081f2ae13d16457d225",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/jit/vmdef.lua": "46261b9a658afcbfedb8cc6f842a5ad34241967954b0d80d0647b76aa193102a"
+    },
+    "operation": "compile",
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "output_binary_sha256": "bd240699e11f70f1082c9adcb4dcb47377cefdeec2f5eba0f14248fcc5236929",
+    "header_and_source_dependencies": {
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c": "4241db4f4be64f1d37f534e204c6d961cec2c7350b7f64099528987a4517e89a",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/lua.h": "5bcec229da426c785982dffe2f832a5dc83dac0024a09e40a6b725b1968b8a6b",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/luaconf.h": "a70c46233a56ea0c74d4df2e88e45371bf94df9b10ef9d2a81cbe18758c1ceff",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/lauxlib.h": "7093ea70fb38341d10475814b90961cec22f9643c11e3ea4c2ddc2cd4b03164e",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/lj_obj.h": "4dddf105f8b3006efb495259340ea4acaae9579e283b769ff9e683810beb435b",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/lj_def.h": "625089c379122ad13e4b8078e073512da41ebfe80173f806abb0d1e4d3b66858",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/lj_arch.h": "d21ad3f86b2f7651de5ab1dcfc4a3c504deae83d8b2b77d5ccbf75394a98ca7b",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/lj_atomic.h": "0a7bbdc91ae21c4dcbe09cd7de500e0aeb341173f5059f43659678e5be53fac1",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/lj_gc2token.h": "3c1ccf57ef4dd5f5a9a251e0472569939bd0bca8d21260f0497a0d1f84aa29b6",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/lj_tgregistry.h": "e97c3112f34628eec2a0e10e7722e0b85f92f94aec92c3ab1e7f93a7bdd4ec99",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/lj_tgslot.h": "f11ac945f5a0d12026bea04a07fc35dedd0571cd3c21a737c508d3e973384b6f",
+      "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b/candidate/src/lj_clib.h": "15bd45fe03be044eb902d541028d1e206d2bfdf249ec4de26047df0719d400b9"
+    }
+  }
+]

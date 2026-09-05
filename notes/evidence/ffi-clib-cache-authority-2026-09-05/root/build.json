@@ -1,0 +1,26 @@
+[
+  {
+    "name": "clean",
+    "command": [
+      "make",
+      "-C",
+      "src",
+      "clean"
+    ],
+    "cwd": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate",
+    "exit": 0,
+    "seconds": 0.03629598499901476
+  },
+  {
+    "name": "build",
+    "command": [
+      "make",
+      "-C",
+      "src",
+      "-j4"
+    ],
+    "cwd": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate",
+    "exit": 0,
+    "seconds": 13.512903666000057
+  }
+]

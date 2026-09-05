@@ -1,0 +1,154 @@
+diff --git a/src/lj_crecord.c b/src/lj_crecord.c
+index ecdc67a2..d134a8ca 100644
+--- a/src/lj_crecord.c
++++ b/src/lj_crecord.c
+@@ -3038,24 +3038,34 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
+     GCstr *name = strV(&rd->argv[1]);
+     CType snap, *ct = &snap;
+     CTypeID id;
+-    TGState *tg = J2TG(J);
+-    TValue key, nilv;
+-    TValue *envtv, *tv;
+-    uint32_t envidx, tvidx;
++    TGState *tg = L2TG(J->L);
++    TValue key, envv, nilv;
++    TValue *envtv, *keytv, *tv;
++    uint32_t envidx, keyidx, tvidx;
++    TRef receiver, envref, nameref;
+     int cache_status, ok;
+     /* Captured namespace methods can be called directly, bypassing the
+     ** metamethod lookup's receiver guard. Specialize and retain this namespace
+     ** before exporting its cached constants or extern addresses. */
+-    emitir(IRTG(IR_EQ, IRT_UDATA), J->base[0],
+-           lj_ir_kgc(J, obj2gco(udataV(&rd->argv[0])), IRT_UDATA));
++    receiver = lj_ir_kgc(J, obj2gco(udataV(&rd->argv[0])), IRT_UDATA);
++    emitir(IRTG(IR_EQ, IRT_UDATA), J->base[0], receiver);
++    if (!env)
++      lj_trace_err(J, LJ_TRERR_NOCACHE);
++    envref = lj_ir_kgc(J, obj2gco(env), IRT_TAB);
++    nameref = lj_ir_kstr(J, name);
+     rd->nres = rd->data;
+     setnilV(&nilv);
+-    envtv = lj_tg_root_anchor_push(J->L, tg, &nilv, &envidx);
+-    tv = lj_tg_root_anchor_push(J->L, tg, &nilv, &tvidx);
+-    lj_assertJ(envtv != NULL && tv != NULL, "missing CLibrary recorder roots");
++    settabV(J->L, &envv, env);
+     setstrV(J->L, &key, name);
+-    if (env)
+-      (void)lj_tab_gettv_forjit(J->L, env, &key, envtv);
++    envtv = lj_tg_root_anchor_push(J->L, tg, &envv, &envidx);
++    keytv = lj_tg_root_anchor_push(J->L, tg, &key, &keyidx);
++    tv = lj_tg_root_anchor_push(J->L, tg, &nilv, &tvidx);
++    lj_assertJ(envtv != NULL && keytv != NULL && tv != NULL,
++               "missing CLibrary recorder roots");
++    lj_gc_pubroot(J->L, envtv);
++    lj_gc_pubroot(J->L, keytv);
++    if (!lj_tab_gettv_rooted_hit_try(J->L, envtv, keytv, envtv))
++      lj_trace_err(J, LJ_TRERR_NOCACHE);
+     cache_status = lj_clib_cache_snapshot(J->L, cl, name, tv);
+     if (cache_status <= 0)
+       lj_trace_err(J, LJ_TRERR_NOCACHE);
+@@ -3065,24 +3075,61 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
+     } else if (!ok) {
+       id = 0;
+     }
+-    /* The original debug environment is the GC root for the recorder's
+-    ** by-value cache snapshot. A concurrent deletion or override is a normal
+-    ** side-exit instead of exporting either table-vector or cache-entry slots. */
++    /* Admission snapshots remain rooted through all fallible recording.
++    ** Runtime authority comes from the guarded lookup below. */
+     if (tvisnil(envtv) || !lj_obj_equal(envtv, tv))
+       lj_trace_err(J, LJ_TRERR_NOCACHE);
+     if (id && !tvisnil(tv)) {
+       CTInfo info = ctype_info_acq(ct);
+-      /* Specialize to the symbol name and make the result a constant. */
+-      emitir(IRTG(IR_EQ, IRT_STR), J->base[1], lj_ir_kstr(J, name));
++      TRef value, lifecycle, state;
++      emitir(IRTG(IR_EQ, IRT_STR), J->base[1], nameref);
++      if (lj_record_mt_shared_tab(J, envref)) {
++        TRef parentout = emitir(IRT(IR_TMPREF, IRT_PGC), envref,
++                               IRTMPREF_IN1|IRTMPREF_OUT1);
++        TRef keyroot = emitir(IRT(IR_TMPREF, IRT_PGC), nameref, IRTMPREF_IN2);
++        TRef hit = lj_ir_call(J, IRCALL_lj_tab_gettv_rooted_hit_try,
++                             parentout, keyroot, parentout);
++        /* Guard refusal and the published result after preceding Lua effects.
++        ** The hit helper attempts admission once and preserves inputs on miss. */
++        J->mergesnap = 0;
++        lj_snap_add(J);
++        J->mergesnap = 1;
++        emitir(IRTGI(IR_NE), hit, lj_ir_kint(J, 0));
++        value = lj_record_vload(J, parentout, 0, itype2irt(tv));
++      } else {
++        RecordIndex ix;
++        IRRef calls = J->chain[IR_CALLS];
++        memset(&ix, 0, sizeof(ix));
++        ix.tab = envref;
++        ix.key = nameref;
++        copyTV(J->L, &ix.tabv, &envv);
++        copyTV(J->L, &ix.keyv, &key);
++        value = lj_record_idx(J, &ix);
++        /* An attachment during fallible recording must not silently select
++        ** the general waiting shared-table helper at this call site. */
++        if (J->chain[IR_CALLS] != calls || lj_record_mt_shared_tab(J, envref))
++          lj_trace_err(J, LJ_TRERR_NOCACHE);
++      }
+       if (ctype_isconstval(info)) {
+-	CTSize size = ctype_size_acq(ct);
+-	CType childsnap;
+-	CType *cct = crec_ctype_rawchild(J, cts, ct, &childsnap);
+-	if (size >= 0x80000000u &&
+-	    (ctype_info_acq(cct) & CTF_UNSIGNED))
+-	  J->base[0] = lj_ir_knum(J, (lua_Number)(uint32_t)size);
+-	else
+-	  J->base[0] = lj_ir_kint(J, (int32_t)size);
++        if (!tref_isnumber(value))
++          lj_trace_err(J, LJ_TRERR_NOCACHE);
++      } else {
++        if (!tref_iscdata(value) || !tviscdata(tv))
++          lj_trace_err(J, LJ_TRERR_NOCACHE);
++        emitir(IRTG(IR_EQ, IRT_CDATA), value,
++               lj_ir_kgc(J, obj2gco(cdataV(tv)), IRT_CDATA));
++      }
++      /* Closing is sticky bit 31. Sample it after any table helper, before
++      ** exporting a result or touching an extern. Handles are physically
++      ** retired only at joined teardown; a later close may overlap the use. */
++      lifecycle = emitir(IRT(IR_ADD, IRT_PTR), receiver,
++        lj_ir_kintp(J, sizeof(GCudata) + offsetof(CLibrary, lifecycle)));
++      state = emitir(IRTI(IR_XLOAD), lifecycle, IRXLOAD_VOLATILE);
++      emitir(IRTGI(IR_GE), state, lj_ir_kint(J, 0));
++      if (ctype_isconstval(info)) {
++	/* Return the actual number: Lua equality alone cannot distinguish a
++	** debug cache override from +0 to -0. */
++	J->base[0] = value;
+       } else if (ctype_isextern(info)) {
+ 	CTypeID sid = ctype_cid(info);
+ 	CType ctsnap;
+@@ -3097,7 +3144,7 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
+ 	  J->base[0] = crec_tv_ct(J, ct, sid, ptr);
+ 	} else {
+ 	  J->needsnap = 1;
+-	  crec_ct_tv(J, ct, ptr, J->base[2], &rd->argv[2]);
++	  crec_ct_tv(J, ct, ptr, J->base[2], &J->L->base[2]);
+ 	}
+       } else {
+ 	J->base[0] = lj_ir_kgc(J, obj2gco(cdataV(tv)), IRT_CDATA);
+@@ -3106,6 +3153,7 @@ void LJ_FASTCALL recff_clib_index(jit_State *J, RecordFFData *rd)
+       lj_trace_err(J, LJ_TRERR_NOCACHE);
+     }
+     lj_tg_root_anchor_pop(tg, tvidx);
++    lj_tg_root_anchor_pop(tg, keyidx);
+     lj_tg_root_anchor_pop(tg, envidx);
+   }  /* else: interpreter will throw. */
+ }
+diff --git a/src/lj_ircall.h b/src/lj_ircall.h
+index 1a435e90..b9568c21 100644
+--- a/src/lj_ircall.h
++++ b/src/lj_ircall.h
+@@ -203,6 +203,7 @@ typedef struct CCallInfo {
+   _(ANY,	lj_tab_clear,		2,  FS, NIL, CCI_L) \
+   _(ANY,	lj_tab_newkey,		3,   S, PGC, CCI_L|CCI_T) \
+   _(ANY,	lj_tab_gettv_rooted,	4,   S, PGC, CCI_L|CCI_T) \
++  _(ANY,	lj_tab_gettv_rooted_hit_try, 4, S, INT, CCI_L|CCI_T) \
+   _(ANY,	lj_tab_gettv_forjit,	4,   S, PGC, CCI_L|CCI_T) \
+   _(ANY,	lj_tab_storetv_forjit_array_nogc, 5, S, PGC, CCI_L|CCI_T) \
+   _(ANY,	lj_tab_storetv_forjit_array, 5, S, PGC, CCI_L|CCI_T) \

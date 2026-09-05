@@ -1,0 +1,169 @@
+[
+  {
+    "label": "compile",
+    "command": [
+      "clang",
+      "-std=gnu11",
+      "-O1",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-I/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src",
+      "-I/workspaces/lj-lockless/tests",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/t-clib-recorder-roots.c",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/libluajit.a",
+      "-Wl,--wrap=lj_tg_root_anchor_push",
+      "-Wl,--wrap=lj_tab_gettv_rooted_hit_try",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan-recorder-roots"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.22493278000183636,
+    "test": false,
+    "inputs": {
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/t-clib-recorder-roots.c": "156c443d01b92fd4c2a63289d86855cf0cffbbb46aac1a3058b2f3b6a7faddf6",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/libluajit.a": "134ca5697d313218451c34cfaa1e354aa0d2e2f157b6c770608caed0530d1137"
+    },
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "label": "1",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan-recorder-roots",
+      "1"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.014263060998928268,
+    "test": true,
+    "inputs": {
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/t-clib-recorder-roots.c": "156c443d01b92fd4c2a63289d86855cf0cffbbb46aac1a3058b2f3b6a7faddf6",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan-recorder-roots": "32190c117678cfaa6a33562e4412ab7202da95df9968809e1c883a7b9b17ddcd"
+    },
+    "exit": 0,
+    "stdout": "clib-recorder-roots mode=1 stage=1 status=4 injected=1 refused=0 hit=0 anchors=0\n",
+    "stderr": ""
+  },
+  {
+    "label": "2",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan-recorder-roots",
+      "2"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.013796113998978399,
+    "test": true,
+    "inputs": {
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/t-clib-recorder-roots.c": "156c443d01b92fd4c2a63289d86855cf0cffbbb46aac1a3058b2f3b6a7faddf6",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan-recorder-roots": "32190c117678cfaa6a33562e4412ab7202da95df9968809e1c883a7b9b17ddcd"
+    },
+    "exit": 0,
+    "stdout": "clib-recorder-roots mode=2 stage=2 status=4 injected=1 refused=0 hit=0 anchors=0\n",
+    "stderr": ""
+  },
+  {
+    "label": "3",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan-recorder-roots",
+      "3"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.014105342997936532,
+    "test": true,
+    "inputs": {
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/t-clib-recorder-roots.c": "156c443d01b92fd4c2a63289d86855cf0cffbbb46aac1a3058b2f3b6a7faddf6",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan-recorder-roots": "32190c117678cfaa6a33562e4412ab7202da95df9968809e1c883a7b9b17ddcd"
+    },
+    "exit": 0,
+    "stdout": "clib-recorder-roots mode=3 stage=3 status=4 injected=1 refused=0 hit=0 anchors=0\n",
+    "stderr": ""
+  },
+  {
+    "label": "refuse",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan-recorder-roots",
+      "refuse"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.014286079996963963,
+    "test": true,
+    "inputs": {
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/t-clib-recorder-roots.c": "156c443d01b92fd4c2a63289d86855cf0cffbbb46aac1a3058b2f3b6a7faddf6",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan-recorder-roots": "32190c117678cfaa6a33562e4412ab7202da95df9968809e1c883a7b9b17ddcd"
+    },
+    "exit": 0,
+    "stdout": "clib-recorder-roots mode=refuse stage=3 status=0 injected=0 refused=1 hit=0 anchors=0\n",
+    "stderr": ""
+  },
+  {
+    "label": "hit",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan-recorder-roots",
+      "hit"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "seconds": 0.014357092004502192,
+    "test": true,
+    "inputs": {
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/t-clib-recorder-roots.c": "156c443d01b92fd4c2a63289d86855cf0cffbbb46aac1a3058b2f3b6a7faddf6",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan-recorder-roots": "32190c117678cfaa6a33562e4412ab7202da95df9968809e1c883a7b9b17ddcd"
+    },
+    "exit": 0,
+    "stdout": "clib-recorder-roots mode=hit stage=3 status=0 injected=0 refused=0 hit=1 anchors=0\n",
+    "stderr": ""
+  }
+]

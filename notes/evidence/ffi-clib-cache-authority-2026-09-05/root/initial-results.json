@@ -1,0 +1,194 @@
+[
+  {
+    "variant": "baseline",
+    "mode": "env",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/clib-cache-lifecycle.lua",
+      "env"
+    ],
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/?.lua;;"
+    },
+    "seconds": 0.00348103199939942,
+    "exit": 0,
+    "stdout": "CLibrary cache or lifecycle\tenv\twarmexits\t0\tok\ttrue\tresult\t0\texits\t0\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-special-udata-independent-20260905-75jums60/clib-cache-lifecycle.lua": "2375915500001c3da5ea9bf06c18d413fd6049014db4f567ec5d37fdd266c120",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit": "a6155571220fb8f7af1e74c41631597d94ba4f645bbb8ed9ba9c1deb2aa903aa"
+    }
+  },
+  {
+    "variant": "baseline",
+    "mode": "env",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/clib-cache-lifecycle.lua",
+      "env"
+    ],
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/?.lua;;"
+    },
+    "seconds": 0.004082816998561611,
+    "exit": 1,
+    "stdout": "CLibrary cache or lifecycle\tenv\twarmexits\t1\tok\ttrue\tresult\t80\texits\t1\n",
+    "stderr": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit: ...a-independent-20260905-75jums60/clib-cache-lifecycle.lua:37: native lookup skipped the changed namespace environment\nstack traceback:\n\t[C]: in function 'assert'\n\t...a-independent-20260905-75jums60/clib-cache-lifecycle.lua:37: in function 'check'\n\t...a-independent-20260905-75jums60/clib-cache-lifecycle.lua:42: in main chunk\n\t[C]: at 0x5608470c7100\n",
+    "inputs": {
+      "/tmp/lj-special-udata-independent-20260905-75jums60/clib-cache-lifecycle.lua": "2375915500001c3da5ea9bf06c18d413fd6049014db4f567ec5d37fdd266c120",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit": "a6155571220fb8f7af1e74c41631597d94ba4f645bbb8ed9ba9c1deb2aa903aa"
+    }
+  },
+  {
+    "variant": "baseline",
+    "mode": "closed",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/clib-cache-lifecycle.lua",
+      "closed"
+    ],
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/?.lua;;"
+    },
+    "seconds": 0.003432295998209156,
+    "exit": 0,
+    "stdout": "CLibrary cache or lifecycle\tclosed\twarmexits\t0\tok\tfalse\tresult\t...a-independent-20260905-75jums60/clib-cache-lifecycle.lua:12: attempt to use a closed C library\texits\t0\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-special-udata-independent-20260905-75jums60/clib-cache-lifecycle.lua": "2375915500001c3da5ea9bf06c18d413fd6049014db4f567ec5d37fdd266c120",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit": "a6155571220fb8f7af1e74c41631597d94ba4f645bbb8ed9ba9c1deb2aa903aa"
+    }
+  },
+  {
+    "variant": "baseline",
+    "mode": "closed",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/clib-cache-lifecycle.lua",
+      "closed"
+    ],
+    "environment": {
+      "LUA_PATH": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/?.lua;;"
+    },
+    "seconds": 0.00410243599981186,
+    "exit": 1,
+    "stdout": "CLibrary cache or lifecycle\tclosed\twarmexits\t1\tok\ttrue\tresult\t80\texits\t1\n",
+    "stderr": "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit: ...a-independent-20260905-75jums60/clib-cache-lifecycle.lua:35: native lookup accepted a closed CLibrary\nstack traceback:\n\t[C]: in function 'assert'\n\t...a-independent-20260905-75jums60/clib-cache-lifecycle.lua:35: in function 'check'\n\t...a-independent-20260905-75jums60/clib-cache-lifecycle.lua:42: in main chunk\n\t[C]: at 0x5569639e4100\n",
+    "inputs": {
+      "/tmp/lj-special-udata-independent-20260905-75jums60/clib-cache-lifecycle.lua": "2375915500001c3da5ea9bf06c18d413fd6049014db4f567ec5d37fdd266c120",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/candidate/src/luajit": "a6155571220fb8f7af1e74c41631597d94ba4f645bbb8ed9ba9c1deb2aa903aa"
+    }
+  },
+  {
+    "variant": "candidate",
+    "mode": "env",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/clib-cache-lifecycle.lua",
+      "env"
+    ],
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/?.lua;;"
+    },
+    "seconds": 0.0033623910021560732,
+    "exit": 0,
+    "stdout": "CLibrary cache or lifecycle\tenv\twarmexits\t0\tok\ttrue\tresult\t0\texits\t0\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-special-udata-independent-20260905-75jums60/clib-cache-lifecycle.lua": "2375915500001c3da5ea9bf06c18d413fd6049014db4f567ec5d37fdd266c120",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/luajit": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc"
+    }
+  },
+  {
+    "variant": "candidate",
+    "mode": "env",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/clib-cache-lifecycle.lua",
+      "env"
+    ],
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/?.lua;;"
+    },
+    "seconds": 0.0035428820010565687,
+    "exit": 0,
+    "stdout": "CLibrary cache or lifecycle\tenv\twarmexits\t1\tok\ttrue\tresult\t0\texits\t80\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-special-udata-independent-20260905-75jums60/clib-cache-lifecycle.lua": "2375915500001c3da5ea9bf06c18d413fd6049014db4f567ec5d37fdd266c120",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/luajit": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc"
+    }
+  },
+  {
+    "variant": "candidate",
+    "mode": "closed",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/luajit",
+      "-joff",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/clib-cache-lifecycle.lua",
+      "closed"
+    ],
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/?.lua;;"
+    },
+    "seconds": 0.003374031002749689,
+    "exit": 0,
+    "stdout": "CLibrary cache or lifecycle\tclosed\twarmexits\t0\tok\tfalse\tresult\t...a-independent-20260905-75jums60/clib-cache-lifecycle.lua:12: attempt to use a closed C library\texits\t0\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-special-udata-independent-20260905-75jums60/clib-cache-lifecycle.lua": "2375915500001c3da5ea9bf06c18d413fd6049014db4f567ec5d37fdd266c120",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/luajit": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc"
+    }
+  },
+  {
+    "variant": "candidate",
+    "mode": "closed",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/luajit",
+      "-jon",
+      "/tmp/lj-special-udata-independent-20260905-75jums60/clib-cache-lifecycle.lua",
+      "closed"
+    ],
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/?.lua;;"
+    },
+    "seconds": 0.0035619910013338085,
+    "exit": 0,
+    "stdout": "CLibrary cache or lifecycle\tclosed\twarmexits\t1\tok\tfalse\tresult\t...a-independent-20260905-75jums60/clib-cache-lifecycle.lua:12: attempt to use a closed C library\texits\t1\n",
+    "stderr": "",
+    "inputs": {
+      "/tmp/lj-special-udata-independent-20260905-75jums60/clib-cache-lifecycle.lua": "2375915500001c3da5ea9bf06c18d413fd6049014db4f567ec5d37fdd266c120",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/luajit": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc"
+    }
+  }
+]

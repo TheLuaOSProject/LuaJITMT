@@ -1,0 +1,53 @@
+{
+  "artifacts": [
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/benchmark.py",
+      "relative_path": "benchmark.py",
+      "sha256": "8cbf3692e33bee18d57e3517bdf3550f457e265b42000d07d0485fed721b8638",
+      "bytes": 2164,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost-results.json",
+      "relative_path": "cost-results.json",
+      "sha256": "2247156f7af1871b76f9d43eef9c15323a881c898b041b301679cdf9d9bd1a44",
+      "bytes": 67695,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost-summary.json",
+      "relative_path": "cost-summary.json",
+      "sha256": "2209b01aa50e4df0e00b53b47d28eae0d9476ddaa01a7e79675ebdc1186ce094",
+      "bytes": 10944,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/cost.lua",
+      "relative_path": "cost.lua",
+      "sha256": "f0a49881218e97c4624ba2dd536b0f1a4af77f68f224ea43d70a9e7a70b977af",
+      "bytes": 2167,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/direct-cost.lua",
+      "relative_path": "direct-cost.lua",
+      "sha256": "f3f4a1b1b955a145741aadc9bdca053169737ede33961661674abbb4b2dbe52d",
+      "bytes": 2432,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/shared-cost.lua",
+      "relative_path": "shared-cost.lua",
+      "sha256": "fcc1e729ec1aea0fd85aa42b6c72ea4749faed48f31d3ac6031111d3e936bdd1",
+      "bytes": 2340,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/perf/summarize.py",
+      "relative_path": "summarize.py",
+      "sha256": "a8e87025ec0b11b0e7b703cef781ee81486188a2d60e34fb25425f53dc2b816c",
+      "bytes": 1934,
+      "storage": "text"
+    }
+  ]
+}

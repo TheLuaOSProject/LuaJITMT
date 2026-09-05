@@ -1,0 +1,100 @@
+{
+  "final_fixture_sha256": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+  "final_c_wrapper_sha256": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+  "runtime_passes": 324,
+  "runtime_suites": [
+    {
+      "variant": "candidate",
+      "suite": "full",
+      "passes": 80,
+      "total": 80,
+      "sha256": "eb94bfac63a820146847e97c40777a141250af55c5e02431dc1da515440f3e5c"
+    },
+    {
+      "variant": "candidate",
+      "suite": "wrapper",
+      "passes": 4,
+      "total": 4,
+      "sha256": "2803dbf12cb0ab8750220079d2bbb58fcab6e19fd54b7142b4fab842ac9dca50"
+    },
+    {
+      "variant": "candidate",
+      "suite": "gc",
+      "passes": 20,
+      "total": 20,
+      "sha256": "902197fe01fe515267b69db90785daff5ed1362d3b0d44734875730f7b211ec8"
+    },
+    {
+      "variant": "candidate",
+      "suite": "gc-wrapper",
+      "passes": 4,
+      "total": 4,
+      "sha256": "66424b6a23cf78a6b4c6cf7c8419936ac7cce84f6b1afa299246ce81295941f6"
+    },
+    {
+      "variant": "strict",
+      "suite": "full",
+      "passes": 80,
+      "total": 80,
+      "sha256": "636cf4b445cbae9198efc401d4cb777148e0ff8a583d5345d540d90eca88d711"
+    },
+    {
+      "variant": "strict",
+      "suite": "wrapper",
+      "passes": 4,
+      "total": 4,
+      "sha256": "38820d36b9bfb30dc72f31b28525a2fd1d1581f0c79d718f8cd40469391932a1"
+    },
+    {
+      "variant": "strict",
+      "suite": "gc",
+      "passes": 20,
+      "total": 20,
+      "sha256": "6a5c16a8c35fec8c402599265e2348e9d14898f7d8dd3a41aaf7a16c764b189e"
+    },
+    {
+      "variant": "strict",
+      "suite": "gc-wrapper",
+      "passes": 4,
+      "total": 4,
+      "sha256": "d86dfa08b16bd92ce88780d0f2712862ea0c340d1ab75ed6cbda87c6632065c3"
+    },
+    {
+      "variant": "asan",
+      "suite": "full",
+      "passes": 80,
+      "total": 80,
+      "sha256": "fbeb22efa8a96a5faaed61ce7974fb0f2c64d08773ea5f64febf8e4522d2df91"
+    },
+    {
+      "variant": "asan",
+      "suite": "wrapper",
+      "passes": 4,
+      "total": 4,
+      "sha256": "3204617a9edf54fc71014e5e95942667c527e017acff41ac0b68c38bdf395a79"
+    },
+    {
+      "variant": "asan",
+      "suite": "gc",
+      "passes": 20,
+      "total": 20,
+      "sha256": "46ae640158eedd3cf8b2f9c6b2c54bab149cabb008ebaa4d1a95864399d44b2c"
+    },
+    {
+      "variant": "asan",
+      "suite": "gc-wrapper",
+      "passes": 4,
+      "total": 4,
+      "sha256": "955e0ddd4267ef82c94a4cdf6e3e03a4ccd2c6811f7b96ab007f84fb4b47cb36"
+    }
+  ],
+  "baseline": {
+    "off_passes": 40,
+    "native_expected_semantic_failures": 38,
+    "native_ignored_setfenv_passes": 2,
+    "base": "597b8705208957ade8465416da30976ab9b52195",
+    "qualification": "Receiver-fix baseline before the pure-loop optimization; not exact 5c455f20."
+  },
+  "native_witness_negative_controls": 2,
+  "all224_inputs_and_root_outputs_still_match": true
+}

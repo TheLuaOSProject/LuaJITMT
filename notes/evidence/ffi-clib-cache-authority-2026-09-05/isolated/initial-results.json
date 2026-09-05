@@ -1,0 +1,52 @@
+[
+  {
+    "variant": "prototype",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "false",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "seconds": 0.012478399999963585,
+    "exit": 1,
+    "stdout": "cache-authority\tfunction\tfalse\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit: ...regressions-20260905-741ke1nb/t-clib-cache-authority.lua:117: ...regressions-20260905-741ke1nb/t-clib-cache-authority.lua:51: lookup result mismatch at 1\nstack traceback:\n\t[C]: in function 'assert'\n\t...regressions-20260905-741ke1nb/t-clib-cache-authority.lua:117: in main chunk\n\t[C]: at 0x55a02776c100\n"
+  },
+  {
+    "variant": "prototype",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "false",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "seconds": 0.008955604000220774,
+    "exit": 1,
+    "stdout": "cache-authority\tfunction\tfalse\troot\twarm\t2\t6\thelpers\t2\told-exits\t39\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit: ...regressions-20260905-741ke1nb/t-clib-cache-authority.lua:117: ...regressions-20260905-741ke1nb/t-clib-cache-authority.lua:51: lookup result mismatch at 1\nstack traceback:\n\t[C]: in function 'assert'\n\t...regressions-20260905-741ke1nb/t-clib-cache-authority.lua:117: in main chunk\n\t[C]: at 0x56439351a100\n"
+  },
+  {
+    "variant": "baseline",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/baseline/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "false",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so"
+    ],
+    "seconds": 0.007477866001863731,
+    "exit": 1,
+    "stdout": "cache-authority\tfunction\tfalse\troot\twarm\t2\t6\thelpers\t0\told-exits\t0\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/baseline/src/luajit: ...regressions-20260905-741ke1nb/t-clib-cache-authority.lua:117: ...regressions-20260905-741ke1nb/t-clib-cache-authority.lua:51: lookup result mismatch at 1\nstack traceback:\n\t[C]: in function 'assert'\n\t...regressions-20260905-741ke1nb/t-clib-cache-authority.lua:117: in main chunk\n\t[C]: at 0x5569b916b100\n"
+  }
+]

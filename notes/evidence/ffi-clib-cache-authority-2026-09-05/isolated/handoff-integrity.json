@@ -1,0 +1,39 @@
+{
+  "candidate": {
+    "source_inputs": 224,
+    "runtime_outputs": 3,
+    "unchanged": true
+  },
+  "strict": {
+    "source_inputs": 224,
+    "runtime_outputs": 3,
+    "unchanged": true
+  },
+  "asan": {
+    "source_inputs": 224,
+    "runtime_outputs": 3,
+    "unchanged": true
+  },
+  "exact_baseline": {
+    "source_inputs": 224,
+    "runtime_outputs": 3,
+    "unchanged": true
+  },
+  "historical_runtime_archive": {
+    "verified_files": 460,
+    "sha256": "00047b4457b4fde295c9fa7225c190f85cd7296e68c9cbba75044e3b862c3390"
+  },
+  "prior_packages": [
+    {
+      "root": "/tmp/lj-special-udata-pure-20260905-u7z61i10",
+      "manifest_sha256": "01fbabe6f4f261e542538c1508dd82234a5be5259c1f3bb5a4d2a79e94f25d6c",
+      "verified_artifacts": 110
+    },
+    {
+      "root": "/tmp/lj-udata-pure-receiver-combined-20260905-sn9vd57b",
+      "manifest_sha256": "384a0d0dbe792f29a92d3fa116590120dc7df26cde08542adca6e1f18e865ae2",
+      "verified_artifacts": 64
+    }
+  ],
+  "main_fixture_sha256": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed"
+}

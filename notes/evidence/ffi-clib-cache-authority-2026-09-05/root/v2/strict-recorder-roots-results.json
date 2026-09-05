@@ -1,0 +1,161 @@
+[
+  {
+    "label": "compile",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-I/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict/src",
+      "-I/workspaces/lj-lockless/tests",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/t-clib-recorder-roots.c",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict/src/libluajit.a",
+      "-Wl,--wrap=lj_tg_root_anchor_push",
+      "-Wl,--wrap=lj_tab_gettv_rooted_hit_try",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict-recorder-roots"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict/src/?.lua;;"
+    },
+    "seconds": 0.14318673600064358,
+    "test": false,
+    "inputs": {
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/t-clib-recorder-roots.c": "156c443d01b92fd4c2a63289d86855cf0cffbbb46aac1a3058b2f3b6a7faddf6",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict/src/libluajit.a": "f180bacfb63e8ba8c2d7769af93c4fcbd0253ca9913b67133c7f10eed981c686"
+    },
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "label": "1",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict-recorder-roots",
+      "1"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict/src/?.lua;;"
+    },
+    "seconds": 0.004855562998272944,
+    "test": true,
+    "inputs": {
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/t-clib-recorder-roots.c": "156c443d01b92fd4c2a63289d86855cf0cffbbb46aac1a3058b2f3b6a7faddf6",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict-recorder-roots": "96aad1d4e4fe2a5e0ef3cbacf983db148343c15ab6b4fc9830fc37fafafec15d"
+    },
+    "exit": 0,
+    "stdout": "clib-recorder-roots mode=1 stage=1 status=4 injected=1 refused=0 hit=0 anchors=0\n",
+    "stderr": ""
+  },
+  {
+    "label": "2",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict-recorder-roots",
+      "2"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict/src/?.lua;;"
+    },
+    "seconds": 0.004760378003993537,
+    "test": true,
+    "inputs": {
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/t-clib-recorder-roots.c": "156c443d01b92fd4c2a63289d86855cf0cffbbb46aac1a3058b2f3b6a7faddf6",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict-recorder-roots": "96aad1d4e4fe2a5e0ef3cbacf983db148343c15ab6b4fc9830fc37fafafec15d"
+    },
+    "exit": 0,
+    "stdout": "clib-recorder-roots mode=2 stage=2 status=4 injected=1 refused=0 hit=0 anchors=0\n",
+    "stderr": ""
+  },
+  {
+    "label": "3",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict-recorder-roots",
+      "3"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict/src/?.lua;;"
+    },
+    "seconds": 0.004614415003743488,
+    "test": true,
+    "inputs": {
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/t-clib-recorder-roots.c": "156c443d01b92fd4c2a63289d86855cf0cffbbb46aac1a3058b2f3b6a7faddf6",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict-recorder-roots": "96aad1d4e4fe2a5e0ef3cbacf983db148343c15ab6b4fc9830fc37fafafec15d"
+    },
+    "exit": 0,
+    "stdout": "clib-recorder-roots mode=3 stage=3 status=4 injected=1 refused=0 hit=0 anchors=0\n",
+    "stderr": ""
+  },
+  {
+    "label": "refuse",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict-recorder-roots",
+      "refuse"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict/src/?.lua;;"
+    },
+    "seconds": 0.004741286000353284,
+    "test": true,
+    "inputs": {
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/t-clib-recorder-roots.c": "156c443d01b92fd4c2a63289d86855cf0cffbbb46aac1a3058b2f3b6a7faddf6",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict-recorder-roots": "96aad1d4e4fe2a5e0ef3cbacf983db148343c15ab6b4fc9830fc37fafafec15d"
+    },
+    "exit": 0,
+    "stdout": "clib-recorder-roots mode=refuse stage=3 status=0 injected=0 refused=1 hit=0 anchors=0\n",
+    "stderr": ""
+  },
+  {
+    "label": "hit",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict-recorder-roots",
+      "hit"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict/src/?.lua;;"
+    },
+    "seconds": 0.00452474900521338,
+    "test": true,
+    "inputs": {
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/t-clib-recorder-roots.c": "156c443d01b92fd4c2a63289d86855cf0cffbbb46aac1a3058b2f3b6a7faddf6",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict-recorder-roots": "96aad1d4e4fe2a5e0ef3cbacf983db148343c15ab6b4fc9830fc37fafafec15d"
+    },
+    "exit": 0,
+    "stdout": "clib-recorder-roots mode=hit stage=3 status=0 injected=0 refused=0 hit=1 anchors=0\n",
+    "stderr": ""
+  }
+]

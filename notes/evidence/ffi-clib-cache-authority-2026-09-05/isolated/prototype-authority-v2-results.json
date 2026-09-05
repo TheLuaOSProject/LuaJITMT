@@ -1,0 +1,2322 @@
+[
+  {
+    "kind": "function",
+    "mode": "false",
+    "target": "root",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "false",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.009693928997876355,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tfalse\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "function",
+    "mode": "false",
+    "target": "root",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "false",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.010410721999505768,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tfalse\troot\twarm\t2\t6\thelpers\t2\told-exits\t39\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "function",
+    "mode": "false",
+    "target": "side",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "false",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.006791943000280298,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tfalse\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "function",
+    "mode": "false",
+    "target": "side",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "false",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.010223224999208469,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tfalse\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t41\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "function",
+    "mode": "nil",
+    "target": "root",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "nil",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.007372708001639694,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tnil\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "function",
+    "mode": "nil",
+    "target": "root",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "nil",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.008191446999262553,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tnil\troot\twarm\t2\t6\thelpers\t2\told-exits\t1\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "function",
+    "mode": "nil",
+    "target": "side",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "nil",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.009571662998496322,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tnil\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "function",
+    "mode": "nil",
+    "target": "side",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "nil",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.008974208001745865,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tnil\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t2\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "function",
+    "mode": "other",
+    "target": "root",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "other",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.009133902000030503,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tother\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "function",
+    "mode": "other",
+    "target": "root",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "other",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.006645804998697713,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tother\troot\twarm\t2\t6\thelpers\t2\told-exits\t39\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "function",
+    "mode": "other",
+    "target": "side",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "other",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.007702113998675486,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tother\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "function",
+    "mode": "other",
+    "target": "side",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "other",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.0076428730026236735,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tother\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t41\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "function",
+    "mode": "fenv",
+    "target": "root",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "fenv",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.008269445999758318,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tfenv\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "function",
+    "mode": "fenv",
+    "target": "root",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "fenv",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.00836948200230836,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 1,
+    "stdout": "cache-authority\tfunction\tfenv\troot\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit: ...regressions-20260905-741ke1nb/t-clib-cache-authority.lua:117: ...regressions-20260905-741ke1nb/t-clib-cache-authority.lua:112: mutation must reach the original native target\nstack traceback:\n\t[C]: in function 'assert'\n\t...regressions-20260905-741ke1nb/t-clib-cache-authority.lua:117: in main chunk\n\t[C]: at 0x55d159eb3100\n"
+  },
+  {
+    "kind": "function",
+    "mode": "fenv",
+    "target": "side",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "fenv",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.007920839001599234,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tfenv\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "function",
+    "mode": "fenv",
+    "target": "side",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "fenv",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.010180271001445362,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tfenv\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "function",
+    "mode": "close",
+    "target": "root",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "close",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.006188019000546774,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tclose\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\tfalse\teffects\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "function",
+    "mode": "close",
+    "target": "root",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "close",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.009908007999911206,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tclose\troot\twarm\t2\t6\thelpers\t2\told-exits\t1\t0\tok\tfalse\teffects\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "function",
+    "mode": "close",
+    "target": "side",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "close",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.007292125999811105,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tclose\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\tfalse\teffects\t40\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "function",
+    "mode": "close",
+    "target": "side",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "function",
+      "close",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.008554304000426782,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tfunction\tclose\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\tfalse\teffects\t40\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "read",
+    "mode": "false",
+    "target": "root",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "read",
+      "false",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.008591207999415928,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tfalse\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "read",
+    "mode": "false",
+    "target": "root",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "read",
+      "false",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.007994423998752609,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tfalse\troot\twarm\t2\t6\thelpers\t2\told-exits\t39\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "read",
+    "mode": "false",
+    "target": "side",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "read",
+      "false",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.0056069359998218715,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tfalse\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "read",
+    "mode": "false",
+    "target": "side",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "read",
+      "false",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.0073124059999827296,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tfalse\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t41\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "read",
+    "mode": "nil",
+    "target": "root",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "read",
+      "nil",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.00862972699906095,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tnil\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "read",
+    "mode": "nil",
+    "target": "root",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "read",
+      "nil",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.00885728000139352,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tnil\troot\twarm\t2\t6\thelpers\t2\told-exits\t1\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "read",
+    "mode": "nil",
+    "target": "side",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "read",
+      "nil",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.006842638998932671,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tnil\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "read",
+    "mode": "nil",
+    "target": "side",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "read",
+      "nil",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.006183411998790689,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tnil\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t2\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "read",
+    "mode": "other",
+    "target": "root",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "read",
+      "other",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.008510769999702461,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tother\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "read",
+    "mode": "other",
+    "target": "root",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "read",
+      "other",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.006640764000621857,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tother\troot\twarm\t2\t6\thelpers\t2\told-exits\t39\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "read",
+    "mode": "other",
+    "target": "side",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "read",
+      "other",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.005695601001207251,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tother\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "read",
+    "mode": "other",
+    "target": "side",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "read",
+      "other",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.006641817002673633,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tother\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t41\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "read",
+    "mode": "close",
+    "target": "root",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "read",
+      "close",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.006718463999277446,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tclose\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\tfalse\teffects\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "read",
+    "mode": "close",
+    "target": "root",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "read",
+      "close",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.008910123000532622,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tclose\troot\twarm\t2\t6\thelpers\t2\told-exits\t1\t0\tok\tfalse\teffects\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "read",
+    "mode": "close",
+    "target": "side",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "read",
+      "close",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.00626916699911817,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tclose\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\tfalse\teffects\t40\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "read",
+    "mode": "close",
+    "target": "side",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "read",
+      "close",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.006234406999283237,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tread\tclose\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\tfalse\teffects\t40\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "write",
+    "mode": "false",
+    "target": "root",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "write",
+      "false",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.00480096799947205,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tfalse\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\tfalse\teffects\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "write",
+    "mode": "false",
+    "target": "root",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "write",
+      "false",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.007755544000247028,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tfalse\troot\twarm\t2\t6\thelpers\t2\told-exits\t1\t0\tok\tfalse\teffects\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "write",
+    "mode": "false",
+    "target": "side",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "write",
+      "false",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.005595391001406824,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tfalse\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\tfalse\teffects\t40\tslots\t39\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "write",
+    "mode": "false",
+    "target": "side",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "write",
+      "false",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.0070072540002001915,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tfalse\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\tfalse\teffects\t40\tslots\t39\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "write",
+    "mode": "nil",
+    "target": "root",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "write",
+      "nil",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.007489226998586673,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tnil\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t39\t180\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "write",
+    "mode": "nil",
+    "target": "root",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "write",
+      "nil",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.007981315000506584,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tnil\troot\twarm\t2\t6\thelpers\t2\told-exits\t1\t1\tok\ttrue\teffects\t80\tslots\t39\t180\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "write",
+    "mode": "nil",
+    "target": "side",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "write",
+      "nil",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.005249428999377415,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tnil\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t39\t180\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "write",
+    "mode": "nil",
+    "target": "side",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "write",
+      "nil",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.00734633500178461,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tnil\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t2\tok\ttrue\teffects\t80\tslots\t39\t180\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "write",
+    "mode": "other",
+    "target": "root",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "write",
+      "other",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.007476650000171503,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tother\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t180\t39\n",
+    "stderr": ""
+  },
+  {
+    "kind": "write",
+    "mode": "other",
+    "target": "root",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "write",
+      "other",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.007890076001785928,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tother\troot\twarm\t2\t6\thelpers\t2\told-exits\t39\t1\tok\ttrue\teffects\t80\tslots\t17\t180\t39\n",
+    "stderr": ""
+  },
+  {
+    "kind": "write",
+    "mode": "other",
+    "target": "side",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "write",
+      "other",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.006124076997366501,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tother\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t39\t41\t180\n",
+    "stderr": ""
+  },
+  {
+    "kind": "write",
+    "mode": "other",
+    "target": "side",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "write",
+      "other",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.005525157001102343,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tother\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t41\tok\ttrue\teffects\t80\tslots\t39\t41\t180\n",
+    "stderr": ""
+  },
+  {
+    "kind": "write",
+    "mode": "close",
+    "target": "root",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "write",
+      "close",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.005430146000435343,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tclose\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\tfalse\teffects\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "write",
+    "mode": "close",
+    "target": "root",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "write",
+      "close",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.007703405000938801,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tclose\troot\twarm\t2\t6\thelpers\t2\told-exits\t1\t0\tok\tfalse\teffects\t1\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "write",
+    "mode": "close",
+    "target": "side",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "write",
+      "close",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.0060501970001496375,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tclose\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\tfalse\teffects\t40\tslots\t39\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "write",
+    "mode": "close",
+    "target": "side",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "write",
+      "close",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.00782960500146146,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tclose\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\tfalse\teffects\t40\tslots\t39\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "zero",
+    "mode": "negative-zero",
+    "target": "root",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "zero",
+      "negative-zero",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.006852114998764591,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tnegative-zero\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "zero",
+    "mode": "negative-zero",
+    "target": "root",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "zero",
+      "negative-zero",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.010640502001479035,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 1,
+    "stdout": "cache-authority\tzero\tnegative-zero\troot\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit: ...regressions-20260905-741ke1nb/t-clib-cache-authority.lua:117: ...regressions-20260905-741ke1nb/t-clib-cache-authority.lua:112: mutation must reach the original native target\nstack traceback:\n\t[C]: in function 'assert'\n\t...regressions-20260905-741ke1nb/t-clib-cache-authority.lua:117: in main chunk\n\t[C]: at 0x561f74d48100\n"
+  },
+  {
+    "kind": "zero",
+    "mode": "negative-zero",
+    "target": "side",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "zero",
+      "negative-zero",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.00617042100202525,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tnegative-zero\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "zero",
+    "mode": "negative-zero",
+    "target": "side",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "zero",
+      "negative-zero",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.008197694998671068,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tnegative-zero\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "zero",
+    "mode": "positive-zero",
+    "target": "root",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "zero",
+      "positive-zero",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.006309806998615386,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tpositive-zero\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "zero",
+    "mode": "positive-zero",
+    "target": "root",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "zero",
+      "positive-zero",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.010554636999586364,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 1,
+    "stdout": "cache-authority\tzero\tpositive-zero\troot\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit: ...regressions-20260905-741ke1nb/t-clib-cache-authority.lua:117: ...regressions-20260905-741ke1nb/t-clib-cache-authority.lua:112: mutation must reach the original native target\nstack traceback:\n\t[C]: in function 'assert'\n\t...regressions-20260905-741ke1nb/t-clib-cache-authority.lua:117: in main chunk\n\t[C]: at 0x5644f44c6100\n"
+  },
+  {
+    "kind": "zero",
+    "mode": "positive-zero",
+    "target": "side",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "zero",
+      "positive-zero",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.009066537000762764,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tpositive-zero\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "zero",
+    "mode": "positive-zero",
+    "target": "side",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "zero",
+      "positive-zero",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.007811637999111554,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tpositive-zero\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "zero",
+    "mode": "false",
+    "target": "root",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "zero",
+      "false",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.00895526800013613,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tfalse\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "zero",
+    "mode": "false",
+    "target": "root",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "zero",
+      "false",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.007022497997240862,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tfalse\troot\twarm\t2\t6\thelpers\t2\told-exits\t39\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "zero",
+    "mode": "false",
+    "target": "side",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "zero",
+      "false",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.0074057830024685245,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tfalse\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "zero",
+    "mode": "false",
+    "target": "side",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "zero",
+      "false",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.009691866998764453,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tfalse\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t41\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "zero",
+    "mode": "nil",
+    "target": "root",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "zero",
+      "nil",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.008171491001121467,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tnil\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "zero",
+    "mode": "nil",
+    "target": "root",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "zero",
+      "nil",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.009036696999828564,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tnil\troot\twarm\t2\t6\thelpers\t2\told-exits\t1\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "zero",
+    "mode": "nil",
+    "target": "side",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "zero",
+      "nil",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.006953395997697953,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tnil\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "zero",
+    "mode": "nil",
+    "target": "side",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "zero",
+      "nil",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.00956828400012455,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tzero\tnil\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t2\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "big",
+    "mode": "number",
+    "target": "root",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "big",
+      "number",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.006564341001649154,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tbig\tnumber\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "big",
+    "mode": "number",
+    "target": "root",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "big",
+      "number",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.007911968001280911,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 1,
+    "stdout": "cache-authority\tbig\tnumber\troot\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit: ...regressions-20260905-741ke1nb/t-clib-cache-authority.lua:117: ...regressions-20260905-741ke1nb/t-clib-cache-authority.lua:112: mutation must reach the original native target\nstack traceback:\n\t[C]: in function 'assert'\n\t...regressions-20260905-741ke1nb/t-clib-cache-authority.lua:117: in main chunk\n\t[C]: at 0x555d92aa8100\n"
+  },
+  {
+    "kind": "big",
+    "mode": "number",
+    "target": "side",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "big",
+      "number",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.006956141001865035,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tbig\tnumber\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "big",
+    "mode": "number",
+    "target": "side",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "big",
+      "number",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.009084739001991693,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tbig\tnumber\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "big",
+    "mode": "false",
+    "target": "root",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "big",
+      "false",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.008259960999566829,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tbig\tfalse\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "big",
+    "mode": "false",
+    "target": "root",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "big",
+      "false",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.0073122130015690345,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tbig\tfalse\troot\twarm\t2\t6\thelpers\t2\told-exits\t39\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "big",
+    "mode": "false",
+    "target": "side",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "big",
+      "false",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.005515315999218728,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tbig\tfalse\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "big",
+    "mode": "false",
+    "target": "side",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "big",
+      "false",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.009068313000170747,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tbig\tfalse\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t41\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "big",
+    "mode": "nil",
+    "target": "root",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "big",
+      "nil",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.0066393079978297465,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tbig\tnil\troot\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "big",
+    "mode": "nil",
+    "target": "root",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "big",
+      "nil",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.005815028998767957,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tbig\tnil\troot\twarm\t2\t6\thelpers\t2\told-exits\t1\t1\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "big",
+    "mode": "nil",
+    "target": "side",
+    "status": "-joff",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-joff",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "big",
+      "nil",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.005723723999835784,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tbig\tnil\tside\twarm\t0\t0\thelpers\t0\told-exits\t0\t0\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  },
+  {
+    "kind": "big",
+    "mode": "nil",
+    "target": "side",
+    "status": "-jon",
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/luajit",
+      "-jon",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "big",
+      "nil",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "helper"
+    ],
+    "cwd": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype",
+    "environment": {
+      "LUA_PATH": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype/src/?.lua;;"
+    },
+    "seconds": 0.00903246300003957,
+    "inputs": {
+      "t-clib-cache-authority.lua": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "authority.so": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da"
+    },
+    "binary_sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+    "exit": 0,
+    "stdout": "cache-authority\tbig\tnil\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t2\tok\ttrue\teffects\t80\tslots\t17\t41\t73\n",
+    "stderr": ""
+  }
+]

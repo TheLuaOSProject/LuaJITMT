@@ -1,0 +1,130 @@
+{
+  "integration": {
+    "base": "bc7fcf457d39dcf065dbea084eb9ff51c32ddff8",
+    "sources": {
+      "src/lj_crecord.c": "62a718fad1c9c271c8225cb1d2255fddf526dde17eff3ecfe2318c2a2249eaa5",
+      "src/lj_ircall.h": "822ee730b3589500bf463c9b345cd91fd3c4c5ce056a297734b90f121bd14a69"
+    },
+    "fixtures": {
+      "tests/t-ffi-clib-cache-authority.lua": {
+        "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+        "sha256": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed"
+      },
+      "tests/t-ffi-clib-cache-between-close.c": {
+        "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close.c",
+        "sha256": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4"
+      },
+      "tests/t-ffi-clib-cache-authority-lib.c": {
+        "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-lib.c",
+        "sha256": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9"
+      },
+      "tests/t-ffi-clib-cache-supplement.lua": {
+        "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+        "sha256": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17"
+      },
+      "tests/t-ffi-clib-cache-geometry.c": {
+        "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c",
+        "sha256": "4241db4f4be64f1d37f534e204c6d961cec2c7350b7f64099528987a4517e89a"
+      },
+      "tests/t-ffi-clib-recorder-roots.c": {
+        "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/t-clib-recorder-roots.c",
+        "sha256": "156c443d01b92fd4c2a63289d86855cf0cffbbb46aac1a3058b2f3b6a7faddf6"
+      }
+    },
+    "all_224_runtime_inputs_match": true,
+    "setup_note": "The initial post-copy verifier incorrectly treated each flat source hash as a per-variant map (AttributeError). Copies were already complete; the corrected flat-map and three frozen-tree verification pass without any further source or fixture changes."
+  },
+  "all_224_runtime_inputs_match_shared_and_three_variants": true,
+  "root_validation": {
+    "candidate": {
+      "build_exit": 0,
+      "broad_commands": 106,
+      "broad_runtime_processes": 98,
+      "recorder_commands": 6,
+      "recorder_runtime_processes": 5
+    },
+    "strict": {
+      "build_exit": 0,
+      "broad_commands": 106,
+      "broad_runtime_processes": 98,
+      "recorder_commands": 6,
+      "recorder_runtime_processes": 5
+    },
+    "asan": {
+      "build_exit": 0,
+      "broad_commands": 108,
+      "broad_runtime_processes": 98,
+      "recorder_commands": 6,
+      "recorder_runtime_processes": 5
+    }
+  },
+  "root_runtime_passes": 309,
+  "independent_runtime_passes": 444,
+  "canonical_runtime_passes": 153,
+  "qualified_functional_runtime_passes": 906,
+  "separate_native_shape_probes": 2,
+  "separate_cost_processes": 70,
+  "exact_baseline_controls": {
+    "authority": {
+      "interpreter_passes": 40,
+      "native_semantic_failures": 38,
+      "native_setfenv_passes": 2
+    },
+    "supplement": {
+      "interpreter_passes": 20,
+      "native_semantic_failures": 20
+    }
+  },
+  "canonical": {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict/src/luajit",
+      "/workspaces/lj-lockless/tools/test.lua",
+      "m7_ffi_clib_cache_authority"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LJ_TEST_ROOT": "/workspaces/lj-lockless",
+      "JOBS": "4",
+      "MAKE_JOBS": "4",
+      "TMPDIR": "/tmp/lj-clib-cache-root-20260905-i59mqoic/canonical-tmp",
+      "LUA_PATH": "/workspaces/lj-lockless/src/?.lua;;"
+    },
+    "runner_sha256": "0ca7eda5636b6176331df5781c04569ecac5a086933a2c2d2b1948179a3139d7",
+    "sources": {
+      "src/lj_crecord.c": "62a718fad1c9c271c8225cb1d2255fddf526dde17eff3ecfe2318c2a2249eaa5",
+      "src/lj_ircall.h": "822ee730b3589500bf463c9b345cd91fd3c4c5ce056a297734b90f121bd14a69",
+      "tests/t-ffi-clib-cache-authority.lua": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "tests/t-ffi-clib-cache-between-close.c": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+      "tests/t-ffi-clib-cache-authority-lib.c": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "tests/t-ffi-clib-cache-supplement.lua": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "tests/t-ffi-clib-cache-geometry.c": "4241db4f4be64f1d37f534e204c6d961cec2c7350b7f64099528987a4517e89a",
+      "tests/t-ffi-clib-recorder-roots.c": "156c443d01b92fd4c2a63289d86855cf0cffbbb46aac1a3058b2f3b6a7faddf6",
+      "tests/suites/m7_ffi.lua": "6d2e15eeded97894a9160236958ae8db3122c9e6ac79af51df181e51ad65e330"
+    },
+    "exit": 0,
+    "seconds": 45.82075772999815,
+    "expected_runtime_processes": 153,
+    "default_binaries": {
+      "luajit": "0c5ef942acee8f6680115787e4a8c8271a5c0c09aceeb8fe7bd57b66fcf4dedf",
+      "libluajit.a": "3f5d7f07537f8dd0af759f2dc4ba2d94d4220665c78d9dc9f445c1b6f4f67528",
+      "libluajit.so": "29b0ca3f41e35a7addb7edd56f319c6aafd2b64b0f37c1c69a727f281ba648a8"
+    },
+    "temporary_files": {
+      "canonical-tmp/lj_t-ffi-clib-cache-authority.so": "27210b3fec3209553c220b3ca6e156adc4b581ccb38500ff75dee45c92c6a506",
+      "canonical-tmp/lj_t-ffi-clib-cache-geometry.so": "f6eb62aee2aef8255b1c2c172b3336e13c5927baf4296f344d7de611ccc961f6",
+      "canonical-tmp/lj_t-ffi-clib-cache-between-close": "87d323c6d59361a6b3a4a946d346eb900297845ed0080b9b08f23da6fbaa6922",
+      "canonical-tmp/lj_t-ffi-clib-recorder-roots": "20b70625cd1394e7a0b552257918add859eb015c65dcce2d2739e5117e937405"
+    }
+  },
+  "limits": [
+    "The extra attachment-during-recording fixture was blocked by automatic safety review citing possible cybersecurity risk and was not performed. The source protocol review and earlier combined first-activation tests remain separately recorded; this is not a claim of that new schedule.",
+    "Public full-GC lifetime checks do not prove collector overlap inside the helper.",
+    "The generated helper attempts bounded admission but publication can retry CAS or grow GC queues. No allocation-free, wait-free or fixed-cost claim.",
+    "A raced pre-MT recorder attempt may use the generic waiting sampler before the new post-check rejects it; that helper cannot be installed here.",
+    "General shared-MT metamethod recording and full stock performance parity remain open.",
+    "Linux x64 validation only; no release readiness claim."
+  ]
+}

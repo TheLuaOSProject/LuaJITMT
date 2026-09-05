@@ -1,0 +1,54 @@
+[
+  {
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype-between-close",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "read",
+      "between-close",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so"
+    ],
+    "exit": 0,
+    "stdout": "cache-authority\tread\tbetween-close\troot\twarm\t2\t6\thelpers\t2\told-exits\t1\t0\tok\tfalse\teffects\t1\tslots\t17\t41\t73\nclose-witness\t1\t1\t1\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype-between-close",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "read",
+      "between-close",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so"
+    ],
+    "exit": 0,
+    "stdout": "cache-authority\tread\tbetween-close\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\tfalse\teffects\t40\tslots\t17\t41\t73\nclose-witness\t1\t1\t1\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype-between-close",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "write",
+      "between-close",
+      "root",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so"
+    ],
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tbetween-close\troot\twarm\t2\t6\thelpers\t2\told-exits\t1\t0\tok\tfalse\teffects\t1\tslots\t17\t41\t73\nclose-witness\t1\t1\t1\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype-between-close",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "write",
+      "between-close",
+      "side",
+      "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so"
+    ],
+    "exit": 0,
+    "stdout": "cache-authority\twrite\tbetween-close\tside\twarm\t2\t6\thelpers\t2\told-exits\t0\t1\tok\tfalse\teffects\t40\tslots\t39\t41\t73\nclose-witness\t1\t1\t1\n",
+    "stderr": ""
+  }
+]

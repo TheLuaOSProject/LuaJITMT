@@ -1,0 +1,35 @@
+{
+  "base": "bc7fcf457d39dcf065dbea084eb9ff51c32ddff8",
+  "sources": {
+    "src/lj_crecord.c": "62a718fad1c9c271c8225cb1d2255fddf526dde17eff3ecfe2318c2a2249eaa5",
+    "src/lj_ircall.h": "822ee730b3589500bf463c9b345cd91fd3c4c5ce056a297734b90f121bd14a69"
+  },
+  "fixtures": {
+    "tests/t-ffi-clib-cache-authority.lua": {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "sha256": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed"
+    },
+    "tests/t-ffi-clib-cache-between-close.c": {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close.c",
+      "sha256": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4"
+    },
+    "tests/t-ffi-clib-cache-authority-lib.c": {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-lib.c",
+      "sha256": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9"
+    },
+    "tests/t-ffi-clib-cache-supplement.lua": {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "sha256": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17"
+    },
+    "tests/t-ffi-clib-cache-geometry.c": {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c",
+      "sha256": "4241db4f4be64f1d37f534e204c6d961cec2c7350b7f64099528987a4517e89a"
+    },
+    "tests/t-ffi-clib-recorder-roots.c": {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/t-clib-recorder-roots.c",
+      "sha256": "156c443d01b92fd4c2a63289d86855cf0cffbbb46aac1a3058b2f3b6a7faddf6"
+    }
+  },
+  "all_224_runtime_inputs_match": true,
+  "setup_note": "The initial post-copy verifier incorrectly treated each flat source hash as a per-variant map (AttributeError). Copies were already complete; the corrected flat-map and three frozen-tree verification pass without any further source or fixture changes."
+}

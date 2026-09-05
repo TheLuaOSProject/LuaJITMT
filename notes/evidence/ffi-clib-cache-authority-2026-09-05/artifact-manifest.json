@@ -1,0 +1,1644 @@
+{
+  "artifacts": [
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority-reproduced.so",
+      "relative_path": "isolated/authority-reproduced.so",
+      "sha256": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "bytes": 15272,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/authority.so",
+      "relative_path": "isolated/authority.so",
+      "sha256": "17e478b509e4205a5a53374ef62d9d9dc7b5b10ffdd0682ffc24c3387f8226da",
+      "bytes": 15272,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/baseline-authority-results.json",
+      "relative_path": "isolated/baseline-authority-results.json",
+      "sha256": "7baab66a4d0012b7c5b3ef06a8be5abe2e2ae882ef04c5fd6ea6ab8be1a22530",
+      "bytes": 103589,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/baseline-authority-v2-results.json",
+      "relative_path": "isolated/baseline-authority-v2-results.json",
+      "sha256": "f5ed00f5b94a01364f9b82b777132f3a74badcf06dc2ec23e97636b39858a485",
+      "bytes": 104000,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/baseline-authority.log",
+      "relative_path": "isolated/baseline-authority.log",
+      "sha256": "ce8b3d32d2818816cff0a00425b4a6aad97401a3a492f7a0f66116e858178917",
+      "bytes": 21881,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/baseline-prototype-runtime-snapshots.tar.gz",
+      "relative_path": "isolated/baseline-prototype-runtime-snapshots.tar.gz",
+      "sha256": "00047b4457b4fde295c9fa7225c190f85cd7296e68c9cbba75044e3b862c3390",
+      "bytes": 8503273,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/exact-baseline-identity.json",
+      "relative_path": "isolated/exact-baseline-identity.json",
+      "sha256": "584421273d953ddda9f59c62df871a790255787736a76897767656d29b5ab28a",
+      "bytes": 20996,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-asan-between-close",
+      "relative_path": "isolated/final-asan-between-close",
+      "sha256": "3c9c65be964517e93c74e8d87a8a3ae537419ef201053716e6e0b62293cd3f3d",
+      "bytes": 19944648,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-asan-between-close.d",
+      "relative_path": "isolated/final-asan-between-close.d",
+      "sha256": "c3d1780623aff43040efa9a473b02e256b2b5e6b08fae459b7f499cce4c6b8e6",
+      "bytes": 1450,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-asan-compile-results.json",
+      "relative_path": "isolated/final-asan-compile-results.json",
+      "sha256": "22a0459437c7014be6353d8f9651b68cddac227d2b2b88fec5d5468648b04aea",
+      "bytes": 5545,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-asan-full-results.json",
+      "relative_path": "isolated/final-asan-full-results.json",
+      "sha256": "fbeb22efa8a96a5faaed61ce7974fb0f2c64d08773ea5f64febf8e4522d2df91",
+      "bytes": 170426,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-asan-gc-results.json",
+      "relative_path": "isolated/final-asan-gc-results.json",
+      "sha256": "46ae640158eedd3cf8b2f9c6b2c54bab149cabb008ebaa4d1a95864399d44b2c",
+      "bytes": 44083,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-asan-gc-wrapper-results.json",
+      "relative_path": "isolated/final-asan-gc-wrapper-results.json",
+      "sha256": "955e0ddd4267ef82c94a4cdf6e3e03a4ccd2c6811f7b96ab007f84fb4b47cb36",
+      "bytes": 9526,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-asan-wrapper-results.json",
+      "relative_path": "isolated/final-asan-wrapper-results.json",
+      "sha256": "3204617a9edf54fc71014e5e95942667c527e017acff41ac0b68c38bdf395a79",
+      "bytes": 9239,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-baseline-full-results.json",
+      "relative_path": "isolated/final-baseline-full-results.json",
+      "sha256": "1b600a6ed57296a14f4c33ed2da94d18e13380488d41084a66cb66e12e575a72",
+      "bytes": 183818,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-baseline-full.log",
+      "relative_path": "isolated/final-baseline-full.log",
+      "sha256": "e82a0b8b909fd27b8a585d7670cf558d7dbd0cd717f5f76a3be155075364b24f",
+      "bytes": 24457,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-candidate-between-close",
+      "relative_path": "isolated/final-candidate-between-close",
+      "sha256": "70098b2f07b4d63e800607a5d44388e011b721f27756db9b1befbbc5932c74ce",
+      "bytes": 1715496,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-candidate-between-close.d",
+      "relative_path": "isolated/final-candidate-between-close.d",
+      "sha256": "130c76af1b588b811026e5146b081a18442c0c3edbd96ad623c202b5978fd63f",
+      "bytes": 1669,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-candidate-compile-results.json",
+      "relative_path": "isolated/final-candidate-compile-results.json",
+      "sha256": "61c31f1f9c4fdadd8df80eaa489d86f0c876dd08cd99e08ff923e8f45585ccfd",
+      "bytes": 5338,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-candidate-full-results.json",
+      "relative_path": "isolated/final-candidate-full-results.json",
+      "sha256": "eb94bfac63a820146847e97c40777a141250af55c5e02431dc1da515440f3e5c",
+      "bytes": 167937,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-candidate-gc-results.json",
+      "relative_path": "isolated/final-candidate-gc-results.json",
+      "sha256": "902197fe01fe515267b69db90785daff5ed1362d3b0d44734875730f7b211ec8",
+      "bytes": 43455,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-candidate-gc-wrapper-results.json",
+      "relative_path": "isolated/final-candidate-gc-wrapper-results.json",
+      "sha256": "66424b6a23cf78a6b4c6cf7c8419936ac7cce84f6b1afa299246ce81295941f6",
+      "bytes": 9422,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-candidate-wrapper-results.json",
+      "relative_path": "isolated/final-candidate-wrapper-results.json",
+      "sha256": "2803dbf12cb0ab8750220079d2bbb58fcab6e19fd54b7142b4fab842ac9dca50",
+      "bytes": 9135,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-library-build.json",
+      "relative_path": "isolated/final-library-build.json",
+      "sha256": "3d2213675fb1fb3b99cad6265a06b947763f5ec51dc983bf948d4ff4047ccf9b",
+      "bytes": 625,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-native-witness-negative-results.json",
+      "relative_path": "isolated/final-native-witness-negative-results.json",
+      "sha256": "98ffada1ef82e041c32257c5ecdca51b09db98a5a4d2d9fff808f20187774d39",
+      "bytes": 3161,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-source-identity.json",
+      "relative_path": "isolated/final-source-identity.json",
+      "sha256": "89d1618705faa940cdd78eab30038db3d44d8532e9f848b75d1bd301c8600ddd",
+      "bytes": 65997,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-strict-between-close",
+      "relative_path": "isolated/final-strict-between-close",
+      "sha256": "d8e9b8de267bf930453d909dfdc678b180a922dcf57e6e8764c4f471a460fe20",
+      "bytes": 14053072,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-strict-between-close.d",
+      "relative_path": "isolated/final-strict-between-close.d",
+      "sha256": "d9d8905e0445a88b6c206d49cd1a7829a0acae71688b64380a0a82a8c94b8101",
+      "bytes": 1603,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-strict-compile-results.json",
+      "relative_path": "isolated/final-strict-compile-results.json",
+      "sha256": "a4ceb7ce4ab189a420a749bc390e3396b10c70fa44252f5121c79c9ba6d31f1d",
+      "bytes": 5478,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-strict-full-results.json",
+      "relative_path": "isolated/final-strict-full-results.json",
+      "sha256": "636cf4b445cbae9198efc401d4cb777148e0ff8a583d5345d540d90eca88d711",
+      "bytes": 166686,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-strict-gc-results.json",
+      "relative_path": "isolated/final-strict-gc-results.json",
+      "sha256": "6a5c16a8c35fec8c402599265e2348e9d14898f7d8dd3a41aaf7a16c764b189e",
+      "bytes": 43152,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-strict-gc-wrapper-results.json",
+      "relative_path": "isolated/final-strict-gc-wrapper-results.json",
+      "sha256": "d86dfa08b16bd92ce88780d0f2712862ea0c340d1ab75ed6cbda87c6632065c3",
+      "bytes": 9347,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-strict-wrapper-results.json",
+      "relative_path": "isolated/final-strict-wrapper-results.json",
+      "sha256": "38820d36b9bfb30dc72f31b28525a2fd1d1581f0c79d718f8cd40469391932a1",
+      "bytes": 9060,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-summary.json",
+      "relative_path": "isolated/final-summary.json",
+      "sha256": "a39355bccffa075f4424166838c2bd7a3c733adcaf113fb066c8fbf7c89081fb",
+      "bytes": 2856,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/final-toolchain.json",
+      "relative_path": "isolated/final-toolchain.json",
+      "sha256": "7c6d9a196b5d64fb0549a0d759f2531ffc22a8f1ea48d1992fedce99aa5cb6cb",
+      "bytes": 813,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.d",
+      "relative_path": "isolated/geometry-asan.d",
+      "sha256": "afcbccc793b883c2227ccf7432e9bd83bfea94a45249577414245c8df92e7dcc",
+      "bytes": 970,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-asan.so",
+      "relative_path": "isolated/geometry-asan.so",
+      "sha256": "986591268e20b3297f4f7903bcef421afcce0f93afea34ce3d2978d044d2a6a2",
+      "bytes": 69944,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-candidate.d",
+      "relative_path": "isolated/geometry-candidate.d",
+      "sha256": "edd90d5ccb9658398df88673315b79d042010219cf28284097883fa0908b06df",
+      "bytes": 1087,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-candidate.so",
+      "relative_path": "isolated/geometry-candidate.so",
+      "sha256": "d063e32bf970f52b605f375a2bd82fa6a74f276139729016caf76fb75cc72e5e",
+      "bytes": 25184,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-exact.d",
+      "relative_path": "isolated/geometry-exact.d",
+      "sha256": "eabec00310aeade3d69fd09f96ce0fba0ee2c77985b3d3af1cdb14d33a9e8155",
+      "bytes": 1213,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-exact.so",
+      "relative_path": "isolated/geometry-exact.so",
+      "sha256": "bd240699e11f70f1082c9adcb4dcb47377cefdeec2f5eba0f14248fcc5236929",
+      "bytes": 25192,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-strict.d",
+      "relative_path": "isolated/geometry-strict.d",
+      "sha256": "75bd69c885160d9d0b44d1392863cdb1ace40d8055490628527712159f992dfb",
+      "bytes": 1116,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/geometry-strict.so",
+      "relative_path": "isolated/geometry-strict.so",
+      "sha256": "2aff165b7ea08baf879d3217c6881bdeef5b2c1330b31850537d2d3e17ace686",
+      "bytes": 43032,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/handoff-integrity.json",
+      "relative_path": "isolated/handoff-integrity.json",
+      "sha256": "85e86f582a11e338424089bdf0d20fe44ee17d7cf52e699efa683be4e8a06980",
+      "bytes": 1059,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/handoff-summary.json",
+      "relative_path": "isolated/handoff-summary.json",
+      "sha256": "acd1b33d43d8503a17210fab5e61dc4f98a912343833c9a139b9dfc287feb1b8",
+      "bytes": 1620,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/handoff.md",
+      "relative_path": "isolated/handoff.md",
+      "sha256": "5a834570fa6badcddc1fd13e490025b3f037bb387260fdc6c75678bce1cbb507",
+      "bytes": 2873,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/initial-results.json",
+      "relative_path": "isolated/initial-results.json",
+      "sha256": "0160bf6faabdf1b63a45dfe1afe740d1b71e0af2532c0d1994c1edf9abba8cc3",
+      "bytes": 2884,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/no-installed-side-negative.lua",
+      "relative_path": "isolated/no-installed-side-negative.lua",
+      "sha256": "1fa260b745cdbaaef0832505edc0362a86ddda81ed61ffadea019102f47f3d31",
+      "bytes": 8772,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/no-native-negative.lua",
+      "relative_path": "isolated/no-native-negative.lua",
+      "sha256": "037fd5927b58ce2aa889b6636ebaf49ef4f10da7742e98c8ae0dd5db408f5021",
+      "bytes": 8786,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/observer-v1-supplement-asan-compile-results.json",
+      "relative_path": "isolated/observer-v1-supplement-asan-compile-results.json",
+      "sha256": "8a3828bb11905bd968476e9696578b05081d9f9c76707dced3854798988d62ec",
+      "bytes": 2721,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/observer-v1-supplement-asan-full-results.json",
+      "relative_path": "isolated/observer-v1-supplement-asan-full-results.json",
+      "sha256": "bca1197916922607e5da8a04bd53ec5cdb2cc41f495f6e1e8036787833638f58",
+      "bytes": 95345,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/observer-v1-supplement-candidate-compile-results.json",
+      "relative_path": "isolated/observer-v1-supplement-candidate-compile-results.json",
+      "sha256": "dffd1df43c775e6a894679cd094bdce4e2e3e93d9f2b38d77b2f81a2cc6aaf16",
+      "bytes": 3860,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/observer-v1-supplement-candidate-full-results.json",
+      "relative_path": "isolated/observer-v1-supplement-candidate-full-results.json",
+      "sha256": "117da881d63d908a3806c4ba9b6b06374755f51fdb9a39f17527b06136d5c1d3",
+      "bytes": 91578,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/observer-v1-supplement-strict-compile-results.json",
+      "relative_path": "isolated/observer-v1-supplement-strict-compile-results.json",
+      "sha256": "fc2770356d759b224ca34ee479f6675207787f0a354f927d66c2e72e18e09810",
+      "bytes": 2556,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/observer-v1-supplement-strict-full-results.json",
+      "relative_path": "isolated/observer-v1-supplement-strict-full-results.json",
+      "sha256": "9f9ea1ca083b7d38d407ba63f07fc36bc71ca4869d06b4a9c5a2b93b234f2af2",
+      "bytes": 93641,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prior-package-integrity.json",
+      "relative_path": "isolated/prior-package-integrity.json",
+      "sha256": "8b2e54debee43c668b356741f8053c2adfb0e360849e3016b33b9fc6019a1668",
+      "bytes": 436,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype-authority-results.json",
+      "relative_path": "isolated/prototype-authority-results.json",
+      "sha256": "306f4c4ec12e45b16fca5e2e477943925597b2b93e97e6bc6f35c470a1c13e39",
+      "bytes": 90668,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype-authority-v2-results.json",
+      "relative_path": "isolated/prototype-authority-v2-results.json",
+      "sha256": "d21bdec96e10428ade0fb7a18de1517550a5c6e0e54867785a02526fb30ced19",
+      "bytes": 92290,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype-between-close",
+      "relative_path": "isolated/prototype-between-close",
+      "sha256": "0fe1de0c394f9fcc77d9b055594ad02c91db8c23983ac73500553b7d8e58c2a7",
+      "bytes": 1715440,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/prototype-between-close-results.json",
+      "relative_path": "isolated/prototype-between-close-results.json",
+      "sha256": "dd0708ed30fcfaf3848aecd0345d1fcc670dd605e32a14dba5b63840bfa18cb1",
+      "bytes": 2097,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/review.md",
+      "relative_path": "isolated/review.md",
+      "sha256": "046beb3183924c7d6558b4115f44e5fd90835dfd88b82538938aee877a37f867",
+      "bytes": 10756,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/root-v2-asan-build.json",
+      "relative_path": "isolated/root-v2-asan-build.json",
+      "sha256": "2d081645c13e4f893b48b300cdf76c92f466c89e7bed5e33ebf999d128d71a2c",
+      "bytes": 3303,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/root-v2-candidate-build.json",
+      "relative_path": "isolated/root-v2-candidate-build.json",
+      "sha256": "e2258870ff04cb4af4c55fb0b208dd140bc5e44d9b686a669e79d392fbee75de",
+      "bytes": 4955,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/root-v2-source-identity.json",
+      "relative_path": "isolated/root-v2-source-identity.json",
+      "sha256": "abca1339e31d03bacf0595bdcdc6c7236d8bcb03a758af9c023b76de4eed72ba",
+      "bytes": 21766,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/root-v2-strict-build.json",
+      "relative_path": "isolated/root-v2-strict-build.json",
+      "sha256": "abce7f644ef9d9aa97982b1d23654f27fe2d68340d7d74544951cd7019d31467",
+      "bytes": 3122,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-authority.py",
+      "relative_path": "isolated/run-authority.py",
+      "sha256": "0822a5eb5e1dbbe7d7f62a5b4a9db97d1f2d3e1d207a57b2ae55d7b62d13ab9d",
+      "bytes": 1803,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-final.py",
+      "relative_path": "isolated/run-final.py",
+      "sha256": "641164b56c97b2b020cc40020a4c7daf92754b5b56572b44f40596abf4b1caf0",
+      "bytes": 4181,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement-v1.py",
+      "relative_path": "isolated/run-supplement-v1.py",
+      "sha256": "002eced0c81ec8e69303d6f99c976c2dbdc7c7ae8493123ef09d300d950591e3",
+      "bytes": 3971,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/run-supplement.py",
+      "relative_path": "isolated/run-supplement.py",
+      "sha256": "ff0513326113cc36c59d7670c10900f292b24a3d3b0abbbefdcde24889863c9a",
+      "bytes": 4087,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/setup.json",
+      "relative_path": "isolated/setup.json",
+      "sha256": "32a6c365065a39ec97e7629b335ac14e952f5de6590cd0aa690d120154421a68",
+      "bytes": 44390,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/supplement-asan-compile-results.json",
+      "relative_path": "isolated/supplement-asan-compile-results.json",
+      "sha256": "d3ff4e349202d7048fbc797aaeaf4edd07cfe06700265b21db29bc8856bfd9f2",
+      "bytes": 4257,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/supplement-asan-full-results.json",
+      "relative_path": "isolated/supplement-asan-full-results.json",
+      "sha256": "948aeed957a0a3829a832274d96b17953e4e4e23438cbca0e966bf9d8723d5b8",
+      "bytes": 92637,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/supplement-candidate-compile-results.json",
+      "relative_path": "isolated/supplement-candidate-compile-results.json",
+      "sha256": "9f631ff9b77f226106a98c4c51b4c135b13bcaed726c56e95bb0868e63713478",
+      "bytes": 4008,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/supplement-candidate-full-results.json",
+      "relative_path": "isolated/supplement-candidate-full-results.json",
+      "sha256": "b8653edfb6ec7766893290c75bfaa90398f11959e003bf21514262c62958fbdf",
+      "bytes": 91578,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/supplement-candidate-pilot-results.json",
+      "relative_path": "isolated/supplement-candidate-pilot-results.json",
+      "sha256": "1fc77a5fe37b334509a55385fb454e9c20d34d534e852a7d95d928d80987cefd",
+      "bytes": 18326,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/supplement-candidate-pilot-v1-results.json",
+      "relative_path": "isolated/supplement-candidate-pilot-v1-results.json",
+      "sha256": "d85c5d769a97ad93962f75d383f609ea8de548837ea482826d869623b7a51612",
+      "bytes": 18726,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/supplement-exact-authority-results.json",
+      "relative_path": "isolated/supplement-exact-authority-results.json",
+      "sha256": "33cb3175f17f3b4ce363f7afd5e7e5763644077e9deafb95ea7f00f640ac4256",
+      "bytes": 172803,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/supplement-exact-authority.log",
+      "relative_path": "isolated/supplement-exact-authority.log",
+      "sha256": "0ac83979647b08514c5bb60533593b968079d01598d7f3ba95e512b04049734f",
+      "bytes": 24163,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/supplement-exact-compile-results.json",
+      "relative_path": "isolated/supplement-exact-compile-results.json",
+      "sha256": "85770f02243eb72a936484bb39aaf24a21d669af31d275807af0e5d627269061",
+      "bytes": 4002,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/supplement-exact-full-results.json",
+      "relative_path": "isolated/supplement-exact-full-results.json",
+      "sha256": "c8e21c6cdd7e7d31d603d112dba0b062c44cfc8f3791ead2196c7146281ec4f5",
+      "bytes": 100765,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/supplement-exact-full.log",
+      "relative_path": "isolated/supplement-exact-full.log",
+      "sha256": "f3029bd29766ac0ad5ce89b7d70b453e17b630737cf22ed4fd4ce351b31c013e",
+      "bytes": 14617,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/supplement-review.md",
+      "relative_path": "isolated/supplement-review.md",
+      "sha256": "f372033786b8ada1a280bc7b96220338625e0f09423b10e66194377fae4ceef0",
+      "bytes": 5028,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/supplement-strict-compile-results.json",
+      "relative_path": "isolated/supplement-strict-compile-results.json",
+      "sha256": "8752c535db77e0edecd7198c71f1fb23e54a263c60abe557cc1af98d33b4dea9",
+      "bytes": 4173,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/supplement-strict-full-results.json",
+      "relative_path": "isolated/supplement-strict-full-results.json",
+      "sha256": "f1f36623ec0ca97d0108d303731218507be26a2b4657514412ba017ea701ed30",
+      "bytes": 90850,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-lib.c",
+      "relative_path": "isolated/t-clib-cache-authority-lib.c",
+      "sha256": "b5e52cb1d5ed5c0e5beef8b50e7906067466403219579e84a6f9fad75231c7b9",
+      "bytes": 215,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-v1.lua",
+      "relative_path": "isolated/t-clib-cache-authority-v1.lua",
+      "sha256": "c712373b03fbfa82f748c942537581e9cc2a61a5d61752fd8c3eca85e700b07b",
+      "bytes": 7300,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-v2.lua",
+      "relative_path": "isolated/t-clib-cache-authority-v2.lua",
+      "sha256": "e3cd2c90f8dabc901ab188ba6eaca15f483c0ace9cd2879d03414df90d9f75ee",
+      "bytes": 7322,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-v3.lua",
+      "relative_path": "isolated/t-clib-cache-authority-v3.lua",
+      "sha256": "2648ba0d00e12529f39537b49431d8f40cdabc125b3f2967ec1b9dd2b2efbe11",
+      "bytes": 7400,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-v4.lua",
+      "relative_path": "isolated/t-clib-cache-authority-v4.lua",
+      "sha256": "e0047a0cd4b7c4956a980c0c5847aae98f28b70ed2660ba662821392ccb5d097",
+      "bytes": 7736,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority-v5.lua",
+      "relative_path": "isolated/t-clib-cache-authority-v5.lua",
+      "sha256": "50cbb1564e813175b40822faff09d3d9bc2dae8d4b5d3fdaa3fb9286c71f70dc",
+      "bytes": 8330,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-authority.lua",
+      "relative_path": "isolated/t-clib-cache-authority.lua",
+      "sha256": "f43a25e242d40469a606cd48c553ea7b59ee678c4242b0e72478931ede6cefed",
+      "bytes": 8768,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close-v1.c",
+      "relative_path": "isolated/t-clib-cache-between-close-v1.c",
+      "sha256": "80a5eb95c96683fb900cdd5470f3e0696d471261665a3cd6cc3b021700ce4e7c",
+      "bytes": 2794,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close-v2.c",
+      "relative_path": "isolated/t-clib-cache-between-close-v2.c",
+      "sha256": "0b92c89fa5534609277302b1aef5c2f86952b87b91ce549ab3f6a22f0d425743",
+      "bytes": 2951,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-between-close.c",
+      "relative_path": "isolated/t-clib-cache-between-close.c",
+      "sha256": "eb2fcc06d171c08ddade7edff84613a19c8006f287b433045f4f487ee5babab4",
+      "bytes": 3033,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry-v1.c",
+      "relative_path": "isolated/t-clib-cache-geometry-v1.c",
+      "sha256": "f9efe224fa075dd7642be2fcc053c5740609ab17e8df244ce967b65111099763",
+      "bytes": 808,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-geometry.c",
+      "relative_path": "isolated/t-clib-cache-geometry.c",
+      "sha256": "4241db4f4be64f1d37f534e204c6d961cec2c7350b7f64099528987a4517e89a",
+      "bytes": 1056,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement-v1.lua",
+      "relative_path": "isolated/t-clib-cache-supplement-v1.lua",
+      "sha256": "591f6b7a6c5084b4e0a09758ad18a5694c807723fcdc2994c4712dc4e4767727",
+      "bytes": 9867,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/t-clib-cache-supplement.lua",
+      "relative_path": "isolated/t-clib-cache-supplement.lua",
+      "sha256": "984df8ebd77aa737a1d083092a5d38875d58ee8b67805f2389bd724acda3ca17",
+      "bytes": 10216,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/test-include/lib/lua_fixture_helpers.h",
+      "relative_path": "isolated/test-include/lib/lua_fixture_helpers.h",
+      "sha256": "cba26c57b088692886b4df5223a3670fad11ec7951002a98c54be4fedb6844fe",
+      "bytes": 1220,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/v5-final-asan-compile-results.json",
+      "relative_path": "isolated/v5-final-asan-compile-results.json",
+      "sha256": "0986aca9e0b75b670c1fdb6c86c2ddbab4e00386ccb2d92eff90210c67c299dc",
+      "bytes": 5545,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/v5-final-asan-full-results.json",
+      "relative_path": "isolated/v5-final-asan-full-results.json",
+      "sha256": "44042fedcefd51cd0810ca4e28aed9e120ffa903a7277438e0d331927010b44c",
+      "bytes": 170419,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/v5-final-asan-gc-results.json",
+      "relative_path": "isolated/v5-final-asan-gc-results.json",
+      "sha256": "0019b5cf8662c1f09f44b00233a596674ede50820f865fa17bd57a773c529c9d",
+      "bytes": 44085,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/v5-final-asan-gc-wrapper-results.json",
+      "relative_path": "isolated/v5-final-asan-gc-wrapper-results.json",
+      "sha256": "0b320462f213f7325fbbf976fe2a2ea20cf453d79fbd4223556dc6b51bc9ac9f",
+      "bytes": 9527,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/v5-final-asan-wrapper-results.json",
+      "relative_path": "isolated/v5-final-asan-wrapper-results.json",
+      "sha256": "fb8628fdb963177bb1cf8982f17f3b82506d50222af8539aef6b3471f4a76b8c",
+      "bytes": 9238,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/v5-final-baseline-full-results.json",
+      "relative_path": "isolated/v5-final-baseline-full-results.json",
+      "sha256": "506c6ce3c4da25a61cab01343ce7dadfcbbc2cfd576eb70fcf053e67fb10dd39",
+      "bytes": 183815,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/v5-final-candidate-compile-results.json",
+      "relative_path": "isolated/v5-final-candidate-compile-results.json",
+      "sha256": "1e99f264975cff440c44b8744c0575c5494e29ede178ab12a9124f7ee4f4a11b",
+      "bytes": 5339,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/v5-final-candidate-full-results.json",
+      "relative_path": "isolated/v5-final-candidate-full-results.json",
+      "sha256": "afdfcd06a8fb2a86ccded2b945fa84ac604d6e23f8a118eb3890709b6fc75c08",
+      "bytes": 167941,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/v5-final-candidate-gc-pilot-results.json",
+      "relative_path": "isolated/v5-final-candidate-gc-pilot-results.json",
+      "sha256": "28308668227b10bddd5fdd0fafbbf072a61f03e239b87d8ef7cf85b24bf3aa10",
+      "bytes": 3939,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/v5-final-candidate-gc-results.json",
+      "relative_path": "isolated/v5-final-candidate-gc-results.json",
+      "sha256": "503fc43f103918741d08582922c22424cb8597bcda2157e843b4111aa5f1a5d0",
+      "bytes": 43461,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/v5-final-candidate-gc-wrapper-results.json",
+      "relative_path": "isolated/v5-final-candidate-gc-wrapper-results.json",
+      "sha256": "6ad1b5d4dedf3b72f31ed698f88a580562de6f7c46b759dfb20320c52751cc53",
+      "bytes": 9421,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/v5-final-candidate-wrapper-results.json",
+      "relative_path": "isolated/v5-final-candidate-wrapper-results.json",
+      "sha256": "22880a0e4f86f575f2f2a2057d621b682f8184a26a440154e6bb7e5d1cd0e51f",
+      "bytes": 9134,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/v5-final-strict-compile-results.json",
+      "relative_path": "isolated/v5-final-strict-compile-results.json",
+      "sha256": "6f9abe5c957f88f6771711f6c1b58b1e13375e1e3d8ce5edc9c925aa657a53e6",
+      "bytes": 5478,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/v5-final-strict-full-results.json",
+      "relative_path": "isolated/v5-final-strict-full-results.json",
+      "sha256": "c2bd1d34768915fbe2e4b6f989ea5990459adbe2e3de3a8bda90de7c0ce226dc",
+      "bytes": 166687,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/v5-final-strict-gc-results.json",
+      "relative_path": "isolated/v5-final-strict-gc-results.json",
+      "sha256": "a7bb676db7670a9c0f5127b337a4064c4283259940d9635f48b0db9b319a603a",
+      "bytes": 43152,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/v5-final-strict-gc-wrapper-results.json",
+      "relative_path": "isolated/v5-final-strict-gc-wrapper-results.json",
+      "sha256": "84ced827c2121cd847d50de2399a9d7b45dd31aa39aaa4210f66e53afbcbcb4c",
+      "bytes": 9348,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/v5-final-strict-wrapper-results.json",
+      "relative_path": "isolated/v5-final-strict-wrapper-results.json",
+      "sha256": "8d52d25106d549487f413bcb419b35ec8f60887d7de6d8319bc63f713f0c0207",
+      "bytes": 9062,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-regressions-20260905-741ke1nb/artifact-manifest.json",
+      "relative_path": "isolated/artifact-manifest.json",
+      "sha256": "880d0c16fd8cee50456eed2490970f4f3ba546014283d7da4be5d0b0cac038e2",
+      "bytes": 23263,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-close-proof-20260905-o4j8qsz5/review.md",
+      "relative_path": "design-review/review.md",
+      "sha256": "df8825c11037b7e5e880a063a6ee0ba3826d581e979b21d9dc1ec2eab4a2f406",
+      "bytes": 13176,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-close-proof-20260905-o4j8qsz5/reviewed-inputs.json",
+      "relative_path": "design-review/reviewed-inputs.json",
+      "sha256": "f9b1f5fa049edb7657c21c0462466f4ae26a1a9e53fd6edbfb7d58b31106bbed",
+      "bytes": 6094,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-close-proof-20260905-o4j8qsz5/artifact-manifest.json",
+      "relative_path": "design-review/artifact-manifest.json",
+      "sha256": "39c787b5497cafc290a59353fbd6f194a7a90083226b97694f401f729820bf8d",
+      "bytes": 621,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-hit-try-proof-20260905-gl2f_616/base/src/lj_crecord.c",
+      "relative_path": "source-review/base/src/lj_crecord.c",
+      "sha256": "d9117ff3214f258cc84648725effcd498f3d1e93a774a94efd65e81ed11f2bff",
+      "bytes": 111294,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-hit-try-proof-20260905-gl2f_616/base/src/lj_ircall.h",
+      "relative_path": "source-review/base/src/lj_ircall.h",
+      "sha256": "7855fa0f0e997f94313a581975480edd27f9ac6c394b435d13973968e952c06e",
+      "bytes": 14002,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-hit-try-proof-20260905-gl2f_616/lj_crecord.c.patch",
+      "relative_path": "source-review/lj_crecord.c.patch",
+      "sha256": "e7e844cb6746c278d0ca8a0a605730e3bdf2668acb11e2858895f4e8140d64b9",
+      "bytes": 6353,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-hit-try-proof-20260905-gl2f_616/lj_ircall.h.patch",
+      "relative_path": "source-review/lj_ircall.h.patch",
+      "sha256": "01fbffd3a655b08541eb72e7fa2e295ff9af0c57ab653ac0c4b4091b3cf2f2b9",
+      "bytes": 775,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-hit-try-proof-20260905-gl2f_616/review.md",
+      "relative_path": "source-review/review.md",
+      "sha256": "c9fa9605ffecf59e656510a5d6bad8b6a557790a12bc60c1c3d56a80b7c78dad",
+      "bytes": 16923,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-hit-try-proof-20260905-gl2f_616/reviewed-inputs.json",
+      "relative_path": "source-review/reviewed-inputs.json",
+      "sha256": "9be5108fd9d4c1c0ddd947168b25a8f707406dfbdd139c71a3f3be44c052d819",
+      "bytes": 11809,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-hit-try-proof-20260905-gl2f_616/source-only-scope.json",
+      "relative_path": "source-review/source-only-scope.json",
+      "sha256": "226059bb27292797939e5237b6a1234ab90ef2c9c62d755ed489b555afc3ee0a",
+      "bytes": 337,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-hit-try-proof-20260905-gl2f_616/src/lj_crecord.c",
+      "relative_path": "source-review/src/lj_crecord.c",
+      "sha256": "b1935f652d95f9d531399297add6201210794447b28e453d5ed02027d6e81527",
+      "bytes": 113595,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-hit-try-proof-20260905-gl2f_616/src/lj_ircall.h",
+      "relative_path": "source-review/src/lj_ircall.h",
+      "sha256": "822ee730b3589500bf463c9b345cd91fd3c4c5ce056a297734b90f121bd14a69",
+      "bytes": 14066,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-hit-try-proof-20260905-gl2f_616/artifact-manifest.json",
+      "relative_path": "source-review/artifact-manifest.json",
+      "sha256": "8cd12b1712bcbd57a993b33e539c429d3fd230f4831358558887d4e2dbe9e46e",
+      "bytes": 1713,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/archive.py",
+      "relative_path": "root/archive.py",
+      "sha256": "c92e96544accb2eb074c3ddd61383b62e96583c6921bcbdb3822088d4908d98c",
+      "bytes": 8247,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/build.json",
+      "relative_path": "root/build.json",
+      "sha256": "4e1a9a73f1882a54cd1fa0d484e5cf95682d76012740e18ada0fb057504b671a",
+      "bytes": 446,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/build.stderr",
+      "relative_path": "root/build.stderr",
+      "sha256": "9c69688084bc0523d94dd95b15161dfc09b24669e5ca3182225eaa986f9b4e3f",
+      "bytes": 135,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/build.stdout",
+      "relative_path": "root/build.stdout",
+      "sha256": "863b29da72b84a789da1af1ef7b1b59131866f329371c23eb637759ca88ba6bf",
+      "bytes": 4287,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate-v2.patch",
+      "relative_path": "root/candidate-v2.patch",
+      "sha256": "44b37bc00516a9e8da102b405e29aa5f0366fed395fc4d776ffb4582efb2be3a",
+      "bytes": 7113,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/canonical.json",
+      "relative_path": "root/canonical.json",
+      "sha256": "95c00e12fbaa2e55121f83e660106e40a0cea7ced5a7a0ffe3781e1d7783f31b",
+      "bytes": 2420,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/canonical.py",
+      "relative_path": "root/canonical.py",
+      "sha256": "363059b0c8f66366fa6ac0a90c992b2a1368ba89ab63b9b028c0d2f77aa0d8d4",
+      "bytes": 1666,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/canonical.stderr",
+      "relative_path": "root/canonical.stderr",
+      "sha256": "01f257ce4483b4a129307b84efd6452196b382b7c8b00351ba53676cc85288ed",
+      "bytes": 61978,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/canonical.stdout",
+      "relative_path": "root/canonical.stdout",
+      "sha256": "4f547ff8a11a3ad2df0422139032e72947251284d52512242449c2fa9f8db4aa",
+      "bytes": 23768,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/clean.stderr",
+      "relative_path": "root/clean.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/clean.stdout",
+      "relative_path": "root/clean.stdout",
+      "sha256": "c878c545d24cefa64cd9921b4f53109b341849d9760dc979339974c65890d70a",
+      "bytes": 423,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/final-validation.json",
+      "relative_path": "root/final-validation.json",
+      "sha256": "37b37fa2f1a88340d824d5d68566a795227a5b085d1e21babf270f6a224571ed",
+      "bytes": 6551,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/initial-results.json",
+      "relative_path": "root/initial-results.json",
+      "sha256": "99b62979b3aca2139f18b676fc3f1c014959f769456c5d73e0c32d63c55389bc",
+      "bytes": 8519,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/integration.json",
+      "relative_path": "root/integration.json",
+      "sha256": "54aa372266f35b6382f38528fd04a0b2b0f4e8132bb74c8d944db93619d26f76",
+      "bytes": 1970,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/setup.json",
+      "relative_path": "root/setup.json",
+      "sha256": "625b92c8f03c2ae84196548bd7b5acafe3820318299f384c76ef5d60cf4def0e",
+      "bytes": 20846,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan-binaries.json",
+      "relative_path": "root/v2/asan-binaries.json",
+      "sha256": "31b7c1a04106ace91e75caf79d28985b677520439aa990472345670bfd867370",
+      "bytes": 753,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan-build.json",
+      "relative_path": "root/v2/asan-build.json",
+      "sha256": "2d081645c13e4f893b48b300cdf76c92f466c89e7bed5e33ebf999d128d71a2c",
+      "bytes": 3303,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan-extern.so",
+      "relative_path": "root/v2/asan-extern.so",
+      "sha256": "8338cd9c57f0c8c9250c2ad61c031862c83a6d326ff16292a9bb3fa99cb9d642",
+      "bytes": 15496,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan-receiver-11.so",
+      "relative_path": "root/v2/asan-receiver-11.so",
+      "sha256": "d3ab0e9ebf73088dcd82104a6f89806bcef9d2974db9d55e7c7eea5fa3fe206f",
+      "bytes": 15288,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan-receiver-29.so",
+      "relative_path": "root/v2/asan-receiver-29.so",
+      "sha256": "cfff842054f1c64a6d40ad5e55da936b071e986d06923a674fb973c479320746",
+      "bytes": 15288,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan-recorder-roots",
+      "relative_path": "root/v2/asan-recorder-roots",
+      "sha256": "32190c117678cfaa6a33562e4412ab7202da95df9968809e1c883a7b9b17ddcd",
+      "bytes": 19958760,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan-recorder-roots-results.json",
+      "relative_path": "root/v2/asan-recorder-roots-results.json",
+      "sha256": "be2e447e9ce39e00a598db180c83817706c63a28ff0c08319ef12bf9f18850dc",
+      "bytes": 5987,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan-remote.so",
+      "relative_path": "root/v2/asan-remote.so",
+      "sha256": "5a3133dee8397ad6869009cdba03914000db508a9da0773a555abdfb065bbc7d",
+      "bytes": 16608,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan-results.json",
+      "relative_path": "root/v2/asan-results.json",
+      "sha256": "58551971faa09d643b6d24c9816e50424f86cac18d6488bce9fb79598e1fbb57",
+      "bytes": 171484,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan-t-ffi-callxs-callback-stack",
+      "relative_path": "root/v2/asan-t-ffi-callxs-callback-stack",
+      "sha256": "0a77605e502199e45a64110d2f6ac5d389f178f90e2a06734e6a3ac010dd93d2",
+      "bytes": 19965728,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan-t-ffi-clib-cache-retire",
+      "relative_path": "root/v2/asan-t-ffi-clib-cache-retire",
+      "sha256": "d39a37c99e7a37d777d4e3a504f9a62d0205b93781bc5a6ba0db9e0787b1225d",
+      "bytes": 18924776,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan-t-ffi-clib-extern-snapshot",
+      "relative_path": "root/v2/asan-t-ffi-clib-extern-snapshot",
+      "sha256": "aabe6c75dea7eef0ec10002497436dc231b36056039b6f3c3c5f5f0703fff363",
+      "bytes": 19970904,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan-t-ffi-recorder-libmeta-busy",
+      "relative_path": "root/v2/asan-t-ffi-recorder-libmeta-busy",
+      "sha256": "47da5c3baf8681eeaaf1f975098c4ea8ed975c3811ade0366db4ac876d6853b3",
+      "bytes": 19980384,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/base.tar",
+      "relative_path": "root/v2/base.tar",
+      "sha256": "7cfc5d43144a723453729c0b9d4115ddcb22469ae966a30f8f765c27679274d4",
+      "bytes": 8038400,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/build.py",
+      "relative_path": "root/v2/build.py",
+      "sha256": "47ebc773a37e9cd3cdc8b9bad0cbf151e8ce3b1096e3e6ba0d3138bd6e67b782",
+      "bytes": 1501,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate-binaries.json",
+      "relative_path": "root/v2/candidate-binaries.json",
+      "sha256": "537d3ecb76c8055c0cc63b774840547ae60b593d522aa0d5214d74c9428a4bc0",
+      "bytes": 773,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate-build.json",
+      "relative_path": "root/v2/candidate-build.json",
+      "sha256": "e2258870ff04cb4af4c55fb0b208dd140bc5e44d9b686a669e79d392fbee75de",
+      "bytes": 4955,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate-extern.so",
+      "relative_path": "root/v2/candidate-extern.so",
+      "sha256": "2993fb39e017fc1654a1934f61f22206d67663d61e7eee92a94a5012f44a63cf",
+      "bytes": 15288,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate-receiver-11.so",
+      "relative_path": "root/v2/candidate-receiver-11.so",
+      "sha256": "65df1cb9356ec22e5dcfdcdf752c2a0dd7f549e084804f976aa27243ea50bf14",
+      "bytes": 15088,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate-receiver-29.so",
+      "relative_path": "root/v2/candidate-receiver-29.so",
+      "sha256": "ede901313b761384ae5964c8a8749b5deb1160c22660ddce1f64a5920f288fe0",
+      "bytes": 15088,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate-recorder-roots",
+      "relative_path": "root/v2/candidate-recorder-roots",
+      "sha256": "e1c1bfcc04825d3399dd7f871fd7ed0dd01c29cb26e36a768ff1a76d9dab80a5",
+      "bytes": 1725424,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate-recorder-roots-results.json",
+      "relative_path": "root/v2/candidate-recorder-roots-results.json",
+      "sha256": "575d60e5910dacee06c17d77d4faead349cb9645d389bd6ebedd898438a3ae98",
+      "bytes": 5462,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate-remote.so",
+      "relative_path": "root/v2/candidate-remote.so",
+      "sha256": "1d1346ed5a22f133d8c0fcd44bdf4565d5e526d11fe93c16c3b97258780db9c1",
+      "bytes": 16624,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate-results.json",
+      "relative_path": "root/v2/candidate-results.json",
+      "sha256": "0d344e2dd7139b01a5945f66fd55388b975030d0e475ce6a59e06a89d395918c",
+      "bytes": 126617,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate-t-ffi-callxs-callback-stack",
+      "relative_path": "root/v2/candidate-t-ffi-callxs-callback-stack",
+      "sha256": "b2dc2045713b2a51d4b2584c4f3042fd8cb539635eef2dda4dfd09bef2836020",
+      "bytes": 1729696,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate-t-ffi-clib-cache-retire",
+      "relative_path": "root/v2/candidate-t-ffi-clib-cache-retire",
+      "sha256": "e051c891412dc144982a684730ea554439960b3428cd0573a752548780197d58",
+      "bytes": 1591160,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate-t-ffi-clib-extern-snapshot",
+      "relative_path": "root/v2/candidate-t-ffi-clib-extern-snapshot",
+      "sha256": "9c0c6ac616404efd53e837dccc866f707a5fda10a42479b26aff5b6781a64eaa",
+      "bytes": 1732912,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate-t-ffi-recorder-libmeta-busy",
+      "relative_path": "root/v2/candidate-t-ffi-recorder-libmeta-busy",
+      "sha256": "24880861289f7310ad4372b21960397d771f14869ad2f0bb680b300a56736201",
+      "bytes": 1735696,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/native-shapes.json",
+      "relative_path": "root/v2/native-shapes.json",
+      "sha256": "aa7534de8cc39d49e50d3133136fa576cf6a4a9452584052789bc26a3a300a4e",
+      "bytes": 2012,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/recorder-roots.py",
+      "relative_path": "root/v2/recorder-roots.py",
+      "sha256": "a29f4dd9364dc9de39cb028625213cea9e44063236c375a853f1f4b15b806dfb",
+      "bytes": 2240,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/shape-pre-mt.stderr",
+      "relative_path": "root/v2/shape-pre-mt.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/shape-pre-mt.stdout",
+      "relative_path": "root/v2/shape-pre-mt.stdout",
+      "sha256": "b6d4d99a2a67b65dcffa9c4b7dd6b731c178a1d5e923433c34148a8802c7e6c2",
+      "bytes": 4948,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/shape-shared.stderr",
+      "relative_path": "root/v2/shape-shared.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/shape-shared.stdout",
+      "relative_path": "root/v2/shape-shared.stdout",
+      "sha256": "0e496090c936c221801bb60329e1fc10f5c9f255476ac3113c4f36b23b6b62ed",
+      "bytes": 5140,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/source-identity.json",
+      "relative_path": "root/v2/source-identity.json",
+      "sha256": "abca1339e31d03bacf0595bdcdc6c7236d8bcb03a758af9c023b76de4eed72ba",
+      "bytes": 21766,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict-binaries.json",
+      "relative_path": "root/v2/strict-binaries.json",
+      "sha256": "2ff5bc37f65288674e9a8ca96361b2ae4915d2b19b280ee94be1ff1b8e22ff84",
+      "bytes": 761,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict-build.json",
+      "relative_path": "root/v2/strict-build.json",
+      "sha256": "abce7f644ef9d9aa97982b1d23654f27fe2d68340d7d74544951cd7019d31467",
+      "bytes": 3122,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict-extern.so",
+      "relative_path": "root/v2/strict-extern.so",
+      "sha256": "2993fb39e017fc1654a1934f61f22206d67663d61e7eee92a94a5012f44a63cf",
+      "bytes": 15288,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict-receiver-11.so",
+      "relative_path": "root/v2/strict-receiver-11.so",
+      "sha256": "65df1cb9356ec22e5dcfdcdf752c2a0dd7f549e084804f976aa27243ea50bf14",
+      "bytes": 15088,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict-receiver-29.so",
+      "relative_path": "root/v2/strict-receiver-29.so",
+      "sha256": "ede901313b761384ae5964c8a8749b5deb1160c22660ddce1f64a5920f288fe0",
+      "bytes": 15088,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict-recorder-roots",
+      "relative_path": "root/v2/strict-recorder-roots",
+      "sha256": "96aad1d4e4fe2a5e0ef3cbacf983db148343c15ab6b4fc9830fc37fafafec15d",
+      "bytes": 14064096,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict-recorder-roots-results.json",
+      "relative_path": "root/v2/strict-recorder-roots-results.json",
+      "sha256": "5f2f4823ea9ec6763e1449094efa804c58042e6b911d236218e25ac705039215",
+      "bytes": 5620,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict-remote.so",
+      "relative_path": "root/v2/strict-remote.so",
+      "sha256": "1d1346ed5a22f133d8c0fcd44bdf4565d5e526d11fe93c16c3b97258780db9c1",
+      "bytes": 16624,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict-results.json",
+      "relative_path": "root/v2/strict-results.json",
+      "sha256": "7245c7c9baee0523c0527e9311f5b16bafbe29fd1ecf6530bebc014fc347013c",
+      "bytes": 125918,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict-t-ffi-callxs-callback-stack",
+      "relative_path": "root/v2/strict-t-ffi-callxs-callback-stack",
+      "sha256": "1e90e18d085d92501b75a6d063f056176273a52c7d525118ed03f38c394129c9",
+      "bytes": 14067536,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict-t-ffi-clib-cache-retire",
+      "relative_path": "root/v2/strict-t-ffi-clib-cache-retire",
+      "sha256": "215cd816a203f601321a6903e7751dacc657e4a74e5adddff383c2d17e9a090c",
+      "bytes": 13154272,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict-t-ffi-clib-extern-snapshot",
+      "relative_path": "root/v2/strict-t-ffi-clib-extern-snapshot",
+      "sha256": "74a68e67240695fb07ef1302ec4c2c15e721d0907345615c2e7be28ce9d462e9",
+      "bytes": 14074328,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict-t-ffi-recorder-libmeta-busy",
+      "relative_path": "root/v2/strict-t-ffi-recorder-libmeta-busy",
+      "sha256": "9d5aee2e28847892851d0eb76585495d92e852ffe5c83e5310d54bbc68f7d792",
+      "bytes": 14077384,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/t-clib-recorder-roots.c",
+      "relative_path": "root/v2/t-clib-recorder-roots.c",
+      "sha256": "156c443d01b92fd4c2a63289d86855cf0cffbbb46aac1a3058b2f3b6a7faddf6",
+      "bytes": 4618,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/validate.py",
+      "relative_path": "root/v2/validate.py",
+      "sha256": "ba03b8eeafb8dd34f20fe796c1e1a64bb8521e26530facb10d1c8398049ad6ad",
+      "bytes": 5591,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/luajit",
+      "relative_path": "root/v2/candidate/src/luajit",
+      "sha256": "3711ef850729b2f860e3967e1205f2ca14657160c9d8e298010ef210de18a139",
+      "bytes": 1514736,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.a",
+      "relative_path": "root/v2/candidate/src/libluajit.a",
+      "sha256": "c0e5e75563bbd5c504d92f41ef99a35012158711aab0ccbc0012814ebb65ac83",
+      "bytes": 2354460,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/libluajit.so",
+      "relative_path": "root/v2/candidate/src/libluajit.so",
+      "sha256": "46d562a6f2a2722899ce8f928f24cb86e5653eccb713b36adc525be45ed871be",
+      "bytes": 1511160,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/host/minilua",
+      "relative_path": "root/v2/candidate/src/host/minilua",
+      "sha256": "8ab7d5a14b0525e3759effc570de0f02965b5618600fbfe15499924a399f1538",
+      "bytes": 154760,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/host/buildvm",
+      "relative_path": "root/v2/candidate/src/host/buildvm",
+      "sha256": "811a1c5192b95d8138a2864b8e770ab807ee4aa808f9458646296add7e940e39",
+      "bytes": 122336,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_crecord.o",
+      "relative_path": "root/v2/candidate/src/lj_crecord.o",
+      "sha256": "14221621bc28565adf35bcdd78248e4c114dd7d3e09e33da132ae29a28b92d06",
+      "bytes": 63224,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_ir.o",
+      "relative_path": "root/v2/candidate/src/lj_ir.o",
+      "sha256": "6c01b388b874ab9e29265328be3cce1a7604608616d9c7d5bbddd9c1b67caa8d",
+      "bytes": 19312,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/jit/vmdef.lua",
+      "relative_path": "root/v2/candidate/src/jit/vmdef.lua",
+      "sha256": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918",
+      "bytes": 9751,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict/src/luajit",
+      "relative_path": "root/v2/strict/src/luajit",
+      "sha256": "0ca7eda5636b6176331df5781c04569ecac5a086933a2c2d2b1948179a3139d7",
+      "bytes": 14099128,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict/src/libluajit.a",
+      "relative_path": "root/v2/strict/src/libluajit.a",
+      "sha256": "f180bacfb63e8ba8c2d7769af93c4fcbd0253ca9913b67133c7f10eed981c686",
+      "bytes": 31018150,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict/src/host/minilua",
+      "relative_path": "root/v2/strict/src/host/minilua",
+      "sha256": "c64281fbd57ff55207ce16c436b691572354f85451db48120a0e9edb2cc3ed04",
+      "bytes": 668568,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict/src/host/buildvm",
+      "relative_path": "root/v2/strict/src/host/buildvm",
+      "sha256": "eec8e7baaa11cd9d3a749eb2070e302af2d8ba1a52827e2d95727c465a0e80d9",
+      "bytes": 268904,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict/src/lj_crecord.o",
+      "relative_path": "root/v2/strict/src/lj_crecord.o",
+      "sha256": "34de10d03c78fcd0847fa012c24c36d4fda7e1c91a57da67650f68a75adc1778",
+      "bytes": 590688,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict/src/lj_ir.o",
+      "relative_path": "root/v2/strict/src/lj_ir.o",
+      "sha256": "8871cfd440cad5127d4cd724bdfece392d8c40607b9b978b6718567a46b3d399",
+      "bytes": 174688,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/strict/src/jit/vmdef.lua",
+      "relative_path": "root/v2/strict/src/jit/vmdef.lua",
+      "sha256": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918",
+      "bytes": 9751,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/luajit",
+      "relative_path": "root/v2/asan/src/luajit",
+      "sha256": "a056edebd8b9e11badab45e8808b49b5d77a0a07a975825b6ac1d85644bafa52",
+      "bytes": 19995544,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/libluajit.a",
+      "relative_path": "root/v2/asan/src/libluajit.a",
+      "sha256": "134ca5697d313218451c34cfaa1e354aa0d2e2f157b6c770608caed0530d1137",
+      "bytes": 27414472,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/host/minilua",
+      "relative_path": "root/v2/asan/src/host/minilua",
+      "sha256": "6a1b665ee0c473e80931c32714f279dcf75c8604f9226d9742ff37167653c95e",
+      "bytes": 550920,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/host/buildvm",
+      "relative_path": "root/v2/asan/src/host/buildvm",
+      "sha256": "e98592440739919abe2f83f3c27ec70cfe16b0f5bb145745805e59ace19c102f",
+      "bytes": 247000,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/lj_crecord.o",
+      "relative_path": "root/v2/asan/src/lj_crecord.o",
+      "sha256": "aedeb3f6ad697337ecf05aa093d697dc95ae5fd50df72bcac83eb3c1427b72c6",
+      "bytes": 600592,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/lj_ir.o",
+      "relative_path": "root/v2/asan/src/lj_ir.o",
+      "sha256": "0b5bae17d7de628adf363fc68085b655af530f4471e780a9eebd3864d0fd4796",
+      "bytes": 173728,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/asan/src/jit/vmdef.lua",
+      "relative_path": "root/v2/asan/src/jit/vmdef.lua",
+      "sha256": "c75073d5bb8cf293876e6d8d91ae8846c9c727512c95ac9987519fe845951918",
+      "bytes": 9751,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_crecord.c",
+      "relative_path": "root/v2/source/src/lj_crecord.c",
+      "sha256": "62a718fad1c9c271c8225cb1d2255fddf526dde17eff3ecfe2318c2a2249eaa5",
+      "bytes": 113597,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_crecord.c",
+      "relative_path": "root/v1/source/src/lj_crecord.c",
+      "sha256": "b1935f652d95f9d531399297add6201210794447b28e453d5ed02027d6e81527",
+      "bytes": 113595,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_ircall.h",
+      "relative_path": "root/v2/source/src/lj_ircall.h",
+      "sha256": "822ee730b3589500bf463c9b345cd91fd3c4c5ce056a297734b90f121bd14a69",
+      "bytes": 14066,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_ircall.h",
+      "relative_path": "root/v1/source/src/lj_ircall.h",
+      "sha256": "822ee730b3589500bf463c9b345cd91fd3c4c5ce056a297734b90f121bd14a69",
+      "bytes": 14066,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/v2/candidate/src/lj_opt_mem.c",
+      "relative_path": "root/v2/source/src/lj_opt_mem.c",
+      "sha256": "00787841d7305b758edacb399e16fe5494b9d923525baa5f6b9523af7acbfc2c",
+      "bytes": 38809,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/lj_opt_mem.c",
+      "relative_path": "root/v1/source/src/lj_opt_mem.c",
+      "sha256": "34162cb91d55b0e94b8a559c182eb93f37485f60551e0d2c8e7adb61a5ac2159",
+      "bytes": 38383,
+      "storage": "text"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/luajit",
+      "relative_path": "root/v1/src/luajit",
+      "sha256": "6144a8895b9fa9771721db03d2d590039eafc6118377a95cbbca59c21651c8dc",
+      "bytes": 1514736,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/libluajit.a",
+      "relative_path": "root/v1/src/libluajit.a",
+      "sha256": "be3ec7c0d27373d0519bd9618a7b42f5ea68943f44d522840f39993cfbf18dee",
+      "bytes": 2354320,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/candidate/src/libluajit.so",
+      "relative_path": "root/v1/src/libluajit.so",
+      "sha256": "4b61a150f83a5fa4faec467a590987bd25d7a497185668a2eb3c62b9a40a7c54",
+      "bytes": 1511160,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/canonical-tmp/lj_t-ffi-clib-cache-authority.so",
+      "relative_path": "root/canonical-tmp/lj_t-ffi-clib-cache-authority.so",
+      "sha256": "27210b3fec3209553c220b3ca6e156adc4b581ccb38500ff75dee45c92c6a506",
+      "bytes": 15272,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/canonical-tmp/lj_t-ffi-clib-cache-between-close",
+      "relative_path": "root/canonical-tmp/lj_t-ffi-clib-cache-between-close",
+      "sha256": "87d323c6d59361a6b3a4a946d346eb900297845ed0080b9b08f23da6fbaa6922",
+      "bytes": 1672624,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/canonical-tmp/lj_t-ffi-clib-cache-geometry.so",
+      "relative_path": "root/canonical-tmp/lj_t-ffi-clib-cache-geometry.so",
+      "sha256": "f6eb62aee2aef8255b1c2c172b3336e13c5927baf4296f344d7de611ccc961f6",
+      "bytes": 15728,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-clib-cache-root-20260905-i59mqoic/canonical-tmp/lj_t-ffi-clib-recorder-roots",
+      "relative_path": "root/canonical-tmp/lj_t-ffi-clib-recorder-roots",
+      "sha256": "20b70625cd1394e7a0b552257918add859eb015c65dcce2d2739e5117e937405",
+      "bytes": 1672752,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/tmp/lj-special-udata-independent-20260905-75jums60/clib-cache-lifecycle.lua",
+      "relative_path": "root/initial-clib-cache-lifecycle.lua",
+      "sha256": "2375915500001c3da5ea9bf06c18d413fd6049014db4f567ec5d37fdd266c120",
+      "bytes": 1164,
+      "storage": "text"
+    },
+    {
+      "source": "/workspaces/lj-lockless/src/luajit",
+      "relative_path": "root/default-binaries/luajit",
+      "sha256": "0c5ef942acee8f6680115787e4a8c8271a5c0c09aceeb8fe7bd57b66fcf4dedf",
+      "bytes": 1514736,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/workspaces/lj-lockless/src/libluajit.a",
+      "relative_path": "root/default-binaries/libluajit.a",
+      "sha256": "3f5d7f07537f8dd0af759f2dc4ba2d94d4220665c78d9dc9f445c1b6f4f67528",
+      "bytes": 2354460,
+      "storage": "hash_only"
+    },
+    {
+      "source": "/workspaces/lj-lockless/src/libluajit.so",
+      "relative_path": "root/default-binaries/libluajit.so",
+      "sha256": "29b0ca3f41e35a7addb7edd56f319c6aafd2b64b0f37c1c69a727f281ba648a8",
+      "bytes": 1511160,
+      "storage": "hash_only"
+    }
+  ],
+  "text_count": 166,
+  "hash_only_count": 68
+}

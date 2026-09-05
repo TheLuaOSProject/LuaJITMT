@@ -95,6 +95,7 @@ local m7_cases = {
   "m7_ffi_carith_l",
   "m7_ffi_clib_cache",
   "m7_ffi_clib_receiver",
+  "m7_ffi_clib_cache_authority",
   "m7_ffi_clib_ldscript",
   "m7_ffi_nested_state",
   "m7_ffi_callback_install",
@@ -518,6 +519,99 @@ print("bulk fill ok")
         })
       end
       print("M7 captured namespace receiver guards passed")
+    end
+  })
+
+  add({
+    name = "m7_ffi_clib_cache_authority",
+    description = "native namespace cache writes, close, GC and recorder cleanup",
+    run = function(t)
+      if jit.os ~= "Linux" or jit.arch ~= "x64" then
+        print("M7 namespace cache authority fixtures require Linux/x64 and GNU ld wrapping")
+        return
+      end
+      build.build_default(t)
+      local library = build_shared_library(t,
+        t:tmp("lj_t-ffi-clib-cache-authority.so"),
+        "t-ffi-clib-cache-authority-lib.c")
+      local geometry = t:tmp("lj_t-ffi-clib-cache-geometry.so")
+      t:cc(geometry, { t:path("tests", "t-ffi-clib-cache-geometry.c") }, {
+        cflags = "-shared -fPIC", link_luajit = false
+      })
+      local function authority(kind, mode, target, gc)
+        local args = { kind, mode, target, library, "helper", gc }
+        for _, enabled in ipairs({ false, true }) do
+          run_luajit_script(t, "t-ffi-clib-cache-authority.lua", args, {
+            joff = not enabled, jon = enabled, timeout = "30s"
+          })
+        end
+      end
+      local cases = {
+        { "function", "false", "nil", "other", "fenv", "close" },
+        { "read", "false", "nil", "other", "close" },
+        { "write", "false", "nil", "other", "close" },
+        { "zero", "negative-zero", "positive-zero", "false", "nil" },
+        { "big", "number", "false", "nil" }
+      }
+      for _, spec in ipairs(cases) do
+        for i = 2, #spec do
+          for _, target in ipairs({ "root", "side" }) do
+            authority(spec[1], spec[i], target)
+          end
+        end
+      end
+      for _, spec in ipairs({
+        { "function", "nil" }, { "function", "other" },
+        { "function", "fenv" }, { "read", "close" }, { "write", "close" }
+      }) do
+        for _, target in ipairs({ "root", "side" }) do
+          authority(spec[1], spec[2], target, "gc")
+        end
+      end
+      for _, spec in ipairs({
+        { "zero", "nan" }, { "zero", "pos-inf" }, { "zero", "neg-inf" },
+        { "read", "resize-other" }, { "write", "resize-other" }
+      }) do
+        for _, target in ipairs({ "root", "side" }) do
+          for _, phase in ipairs({ "pre-mt", "mt" }) do
+            local args = { spec[1], spec[2], target, library,
+              phase == "mt" and "helper" or "no-helper", "gc", phase, geometry }
+            for _, enabled in ipairs({ false, true }) do
+              run_luajit_script(t, "t-ffi-clib-cache-supplement.lua", args, {
+                joff = not enabled, jon = enabled, timeout = "30s"
+              })
+            end
+          end
+        end
+      end
+      local between = t:tmp("lj_t-ffi-clib-cache-between-close")
+      t:cc(between, { t:path("tests", "t-ffi-clib-cache-between-close.c") }, {
+        link_luajit = true,
+        libs = { "-lm", "-ldl", "-pthread",
+                 "-Wl,--wrap=lj_tab_gettv_rooted_hit_try" }
+      })
+      for _, gc in ipairs({ false, "gc" }) do
+        for _, kind in ipairs({ "read", "write" }) do
+          for _, target in ipairs({ "root", "side" }) do
+            local args = { between, t:path("tests", "t-ffi-clib-cache-authority.lua"),
+              kind, "between-close", target, library }
+            if gc then args[#args + 1] = gc end
+            t:run(args, { timeout = "30s", env = { LUA_PATH = lua_path(t) } })
+          end
+        end
+      end
+      local roots = t:tmp("lj_t-ffi-clib-recorder-roots")
+      t:cc(roots, { t:path("tests", "t-ffi-clib-recorder-roots.c") }, {
+        link_luajit = true,
+        libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=lj_tg_root_anchor_push",
+                 "-Wl,--wrap=lj_tab_gettv_rooted_hit_try" }
+      })
+      for _, mode in ipairs({ "1", "2", "3", "refuse", "hit" }) do
+        t:run({ roots, mode }, {
+          timeout = "30s", env = { LUA_PATH = lua_path(t) }
+        })
+      end
+      print("M7 namespace cache authority and lifecycle passed")
     end
   })
 
