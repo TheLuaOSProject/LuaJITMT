@@ -1,0 +1,6 @@
+In file included from /tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/lj_obj.h:15,
+                 from /tmp/lj-gc-pacing-audit-20260905-n76qwv_2/gcdiag.c:10:
+/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/lj_atomic.h: In function ‘la_futex_wait’:
+/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/lj_atomic.h:163:15: error: implicit declaration of function ‘syscall’ [-Wimplicit-function-declaration]
+  163 |   return (int)syscall(SYS_futex, p, FUTEX_WAIT_PRIVATE, val, tp, 0, 0);
+      |               ^~~~~~~

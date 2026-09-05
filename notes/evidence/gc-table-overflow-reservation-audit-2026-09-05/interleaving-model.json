@@ -1,0 +1,54 @@
+{
+  "scope": "SC logical ordering model; no GC/lifetime/weak-memory validation",
+  "post_promotion_bump_with_missed_reuse_reset": {
+    "writer_order": [
+      "write",
+      "promote",
+      "bump",
+      "queue"
+    ],
+    "visited_states": 974,
+    "terminal_states": 15,
+    "first_failure": {
+      "trace": [
+        "A.write",
+        "A.promote",
+        "B.write",
+        "B.promote",
+        "S.capture",
+        "S.read",
+        "C.consume"
+      ],
+      "failure": {
+        "queued": [
+          "Q"
+        ],
+        "proof_covers": [],
+        "mode": "wide"
+      }
+    }
+  },
+  "persistent_monotone_wide_pre_promotion_bump": {
+    "writer_order": [
+      "write",
+      "bump",
+      "promote",
+      "queue"
+    ],
+    "visited_states": 744,
+    "terminal_states": 12,
+    "first_failure": null
+  },
+  "era_comparison_control": {
+    "old": [
+      2,
+      1
+    ],
+    "renewed": [
+      3,
+      1
+    ],
+    "low_serial_only_accepts": true,
+    "full_identity_accepts": false
+  }
+}

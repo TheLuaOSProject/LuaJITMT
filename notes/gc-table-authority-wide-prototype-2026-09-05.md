@@ -149,6 +149,13 @@ designs can be inferred from this defective binary. A corrected prototype,
 explicit emitted-path stride/token/reset controls and fresh comparisons would
 be required before using its timing for design selection.
 
+The following alternative is a historical sketch. The subsequent
+[reservation audit](gc-table-overflow-reservation-audit-2026-09-05.md)
+supersedes its reuse and allocation-failure approach: reserve storage before
+publication, retain wide identity across cell reuse, and invalidate it before
+the sentinel becomes visible. The post-sentinel invalidation below depends on
+resets which existing VM/FNEW allocation paths do not supply.
+
 An optional persistent overflow sidecar is defensible if its initialization and
 allocation-failure rules are made explicit. It can retain the existing inline
 64-bit proof for the common path and reserve dirty MAX as a permanent sentinel

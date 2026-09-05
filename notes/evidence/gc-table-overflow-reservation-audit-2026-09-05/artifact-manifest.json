@@ -1,0 +1,19 @@
+{
+  "files": [
+    {
+      "path": "interleaving-model.json",
+      "bytes": 1008,
+      "sha256": "9d5d5babe2a4686c9fb5daa7887b0a897b1a652cb56ae13091f374e60d942831"
+    },
+    {
+      "path": "interleaving-model.py",
+      "bytes": 4012,
+      "sha256": "7013e82740174a382406927e367ea5882ec991e35ea6d954f933a30fb6fe5341"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 2665,
+      "sha256": "39677e9d17e30cc1160fe761e0084c7afa1823d0d574846d5921817e3b0b8383"
+    }
+  ]
+}

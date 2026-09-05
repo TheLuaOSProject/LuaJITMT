@@ -1,0 +1,93 @@
+{
+  "runtime_src": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src",
+  "runtime_hashes": {
+    "lj_arena.h": "6ab384112c74e400a9092ec38f491107b2c9b5510c18f84e4c7aa02e1c2231f2",
+    "lj_func.c": "ffa40416d4b84951418377217798f82b8c3400334fa4a975f965e919820bdb26",
+    "lj_gc.c": "7ceb24d2c755325c7c3d4113330bbb4fce6d3c893dd22fc1ef8bf924590ab4cb",
+    "lj_gc.h": "3d52d352f6280ee308f9ae71a8edbe4dde6f41f9a00256a0d3d6a3924fddc0dd",
+    "lj_gc2.c": "4d66c49ef385ff23cf6017559addc43f57cb7212e6fab8205abbed2ef9cba2d7",
+    "lj_gc2.h": "feb4003d78f8f1a965d2a4d3e94a964b545b37791c34517ace440996aae12e41",
+    "lj_tg.h": "a5cb46bde2868512743795750b5a1da71cd1a581bc037da127e60b36cb994015",
+    "libluajit.a": "869a4dcc6ee227a12e577cdb1e4fe0eea1eb7c54d829552e41446aae46a8fdd1",
+    "luajit": "4914c147ac254179610c3aeb8ba847fdc215febcbb96af81afb365487b2a1c37"
+  },
+  "shared_head": "5411209f5a5ba701f72bdfe2894beae3e09839e2",
+  "scope": "Unchanged normal runtime. Functional counters, no timings. Main TG, no workers. CPU10. rootless active GC primary; stopped burst diagnostic only.",
+  "shared_source_match_frozen": {
+    "lj_arena.h": true,
+    "lj_func.c": true,
+    "lj_gc.c": true,
+    "lj_gc.h": true,
+    "lj_gc2.c": true,
+    "lj_gc2.h": true,
+    "lj_tg.h": true
+  },
+  "frontend_sha256": "e6cfcb70a6a350d195f4d82f35356c4e4aec7f1f58d1c4ea32f9d9fc58df58e7",
+  "build_command": [
+    "taskset",
+    "-c",
+    "10",
+    "cc",
+    "-D_GNU_SOURCE",
+    "-std=c99",
+    "-O2",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-I/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src",
+    "/tmp/lj-gc-pacing-audit-20260905-n76qwv_2/gcdiag.c",
+    "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/libluajit.a",
+    "-lm",
+    "-ldl",
+    "-pthread",
+    "-o",
+    "/tmp/lj-gc-pacing-audit-20260905-n76qwv_2/gcdiag"
+  ],
+  "runs": [
+    {
+      "script": "rootless.lua",
+      "args": [
+        "0"
+      ],
+      "log": "rootless-0.log",
+      "exit": 0,
+      "timeout_seconds": 25
+    },
+    {
+      "script": "rootless.lua",
+      "args": [
+        "8192"
+      ],
+      "log": "rootless-8192.log",
+      "exit": 0,
+      "timeout_seconds": 25
+    },
+    {
+      "script": "pending-burst.lua",
+      "args": [],
+      "log": "pending-stopped.log",
+      "exit": 0,
+      "timeout_seconds": 25
+    },
+    {
+      "script": "rootless-auto.lua",
+      "args": [
+        "8192"
+      ],
+      "log": "rootless-auto-8192.log",
+      "exit": 0,
+      "timeout_seconds": 25
+    }
+  ],
+  "command_prefix": [
+    "taskset",
+    "-c",
+    "10",
+    "/tmp/lj-gc-pacing-audit-20260905-n76qwv_2/gcdiag"
+  ],
+  "env": {
+    "LUA_PATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/../src/?.lua;;",
+    "LUA_CPATH": "/tmp/lj-linux-integrated-stability-20260905-st7b2_hh/normal/src/?.so;;"
+  },
+  "initial_frontend_build_failure": "Initial strict C99 frontend compile omitted _GNU_SOURCE and failed on syscall declaration in lj_atomic.h; build.log preserved. Final compile added _GNU_SOURCE and passed with -Werror. No runtime source or archive rebuild."
+}

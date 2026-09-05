@@ -1,0 +1,69 @@
+{
+  "files": [
+    {
+      "path": "build-final.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "build.log",
+      "bytes": 568,
+      "sha256": "39057f04eed165f50efdd322b177f8515bd099cabcec604ce57211ffd0e199b9"
+    },
+    {
+      "path": "gcdiag.c",
+      "bytes": 3982,
+      "sha256": "da03fd32a5d1d6fda699f3debad896ba20ccd09e6ab53467e9068d4cc749eebd"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 1148,
+      "sha256": "adf58a3a0ad152501e4222317293c5436aa4d3830b6e198fe56366df1ce17103"
+    },
+    {
+      "path": "metadata.json",
+      "bytes": 3095,
+      "sha256": "3002996175f20c7cdf5345efe1690d96cafe139fe30620626592cab2d6664400"
+    },
+    {
+      "path": "pending-burst.lua",
+      "bytes": 324,
+      "sha256": "e11f80612064644b98cf63d6027bbee3d1a24223cebfff18f071c25257ff3792"
+    },
+    {
+      "path": "pending-stopped.log",
+      "bytes": 2720,
+      "sha256": "3e15ed8456d1328f8c8d83a3bbd16f87f2189688bdc4d2434442d2e0c331bcff"
+    },
+    {
+      "path": "rootless-0.log",
+      "bytes": 6321,
+      "sha256": "702906e7ca1c16e34561441cb4c85a9cba0190180924c4aa10cc9b52fe53fe1f"
+    },
+    {
+      "path": "rootless-8192.log",
+      "bytes": 6362,
+      "sha256": "201940173a7c9b83215d80b1f97f30a0d4d1d20633c90dc7b9ef7635135c9164"
+    },
+    {
+      "path": "rootless-auto-8192.log",
+      "bytes": 11964,
+      "sha256": "b6a6a1071b2be505d768d88c5bc7b383cc58e99a9e503da70897eed878e78e58"
+    },
+    {
+      "path": "rootless-auto.lua",
+      "bytes": 481,
+      "sha256": "5cc9103ebb5ce2a9f5c8dcfa086b463fb5e29904dcf80fec0f0c3a41cc138206"
+    },
+    {
+      "path": "rootless.lua",
+      "bytes": 562,
+      "sha256": "d23482983bfaa5c6b36f39b1c8800e18262a5bf284acd5f61eef9b2d9f97f1a0"
+    },
+    {
+      "path": "summary.json",
+      "bytes": 557,
+      "sha256": "a63ba2c3f31fe9bb0f071cce70a6780263909617c1a234cbc6c4d8bb89c32284"
+    }
+  ]
+}

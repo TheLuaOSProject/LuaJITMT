@@ -1,0 +1,56 @@
+{
+  "repository": "/workspaces/lj-lockless",
+  "head": "cf1770dd783c4d13106a82c0ac5d251672e42bc9",
+  "scope": "Read-only design audit. Shared pending scalar sources were also present. No production files edited and no runtime tests/timings executed.",
+  "files": {
+    "src/lj_arena.c": {
+      "sha256": "98fc9a9af8f8949fe8259d278bb6308790755a06f8f6bcebdcc4a949ec8efbc5",
+      "git_blob": "4a55c2e5367cef0e4c5b774e36d2854bbb63672d"
+    },
+    "src/lj_arena.h": {
+      "sha256": "6ab384112c74e400a9092ec38f491107b2c9b5510c18f84e4c7aa02e1c2231f2",
+      "git_blob": "0971b02565feb93af0bfe6be8905f4e052b1a1f5"
+    },
+    "src/lj_gc2.c": {
+      "sha256": "4d66c49ef385ff23cf6017559addc43f57cb7212e6fab8205abbed2ef9cba2d7",
+      "git_blob": "8cfdceba49e1d01e86a5e5ec8dae885b484ba9de"
+    },
+    "src/lj_gc2.h": {
+      "sha256": "feb4003d78f8f1a965d2a4d3e94a964b545b37791c34517ace440996aae12e41",
+      "git_blob": "cc3129bf9344559dc88fbf4120ad3195d8adc070"
+    },
+    "src/lj_gc2token.h": {
+      "sha256": "3c1ccf57ef4dd5f5a9a251e0472569939bd0bca8d21260f0497a0d1f84aa29b6",
+      "git_blob": "85e5de661d4d42f8a8d15ccd24f39582338588ba"
+    },
+    "src/vm_x64.dasc": {
+      "sha256": "ad48405b4793e8514307cd4efc15238dcd3a29b0d1970b452ee77952b921d64b",
+      "git_blob": "06e5a8466c5d31b622d6909807b7b61d854e6a03"
+    },
+    "src/lj_asm_x86.h": {
+      "sha256": "e5c4bd5411014c84bfc1704f60b24e8efe41bde66ea240908a2af4caaf527742",
+      "git_blob": "44eec4697de634a2008a8be8c8d94511bc0796cc"
+    },
+    "src/lj_obj.h": {
+      "sha256": "4dddf105f8b3006efb495259340ea4acaae9579e283b769ff9e683810beb435b",
+      "git_blob": "fe79e4f3a02f5180f3586388f988ea0863ca80b7"
+    },
+    "src/lj_tab.c": {
+      "sha256": "94a90cb9bd31d3fdfbbd3dca099d49c72ae201c66b4af2a2c920195f0aba5b75",
+      "git_blob": "2936c295abc8ef1581eac4992d8eec0aa23d9553"
+    },
+    "src/lj_gc.c": {
+      "sha256": "7ceb24d2c755325c7c3d4113330bbb4fce6d3c893dd22fc1ef8bf924590ab4cb",
+      "git_blob": "5aebc1a0fc484e5683ec4e78cf6b88b03b724967"
+    },
+    "src/lib_ffi.c": {
+      "sha256": "d168201fbebddb60e11475b90c50c60f74088dc7ed6aaf5de437199e85965153",
+      "git_blob": "96e4bce4a4a2ebd895a6f964798d71d745c85b13"
+    },
+    "notes/gc-table-authority-wide-prototype-2026-09-05.md": {
+      "sha256": "1e352efe5177e19894b63da263bce9e9b0d1eca6a714e85ac1e985aa7de3b1a3",
+      "git_blob": "c5855def7cad90a5328ce6213ebc302fc2179cdd"
+    }
+  },
+  "ffi_caller_confirmation": "src/lib_ffi.c:1118-1134 publishes the metatype table into enumerated base, then releases LJCTypeMetaRoot, then passes base/base+1/base to rooted meta. Confirmed for parent documentation; no scalar note edit performed."
+}

@@ -265,6 +265,14 @@ with separately reserved wider proof storage and unchanged common CAS64
 cost only after proving scanner rollover, reuse, publication, and allocation
 failure behavior. Do not drop invalidations or remove the existing safe veto
 to avoid a slow path.
+The independent reservation audit now supplies the smaller complete comparison
+protocol: retain the 16-byte inline/token geometry, reserve wide storage before
+object publication, keep its identity monotone across cell reuse, and invalidate
+it before publishing the inline sentinel. Pure lazy post-store allocation still
+has no complete OOM progress answer. Small FREE and huge DEFER_FREE token-only
+completion must remain blind to the wider proof. See
+`notes/gc-table-overflow-reservation-audit-2026-09-05.md`. Both alternative
+prototypes remain isolated pending full source, failure, lifetime and cost review.
 
 ### B. Remove measured algorithmic performance cliffs
 
@@ -317,13 +325,29 @@ The rejected first revision's capacity growth remains archived. The
 384-KiB allocation trigger cap also needs a separate pending-root/progress
 audit. Profiles, controls, raw counts, and required proofs are in
 `notes/closure-upvalue-performance-diagnosis-2026-09-04.md`.
+The completed pacing audit confirms that cap is a heuristic cycle-start limit,
+not a bounded pending-chain traversal. It also controls the active hard-assist
+schedule. A 600,000-closure automatic-only control completes 146 cycles and 438
+root scans with zero new pending roots, zero recovery, and 16 traversable arenas
+at all 12 sampled endpoints. Real body reclamation still requires those cycles.
+Keep production pacing unchanged; any isolated cycle-start comparison must
+preserve the existing hard thresholds and active progress cadence. See
+`notes/gc-allocation-pacing-audit-2026-09-05.md`.
 
 `23c0c753` reduces the measured positive scalar interpreter paths by about
 35–45% in seven alternating fresh-process pairs per case, with exact old-path
 controls, GC enabled, and validated results. This establishes the new helper's
 cost for small field/array hits, not general table performance or stock parity.
-The separate combined full harness must still report all missing rows and
-remaining cliffs before selecting the next performance change.
+The combined full JIT pilot now reports a 1.320666406 fork/stock geometric mean
+over all 15 rows, with closures at 1,598.75 ns/op (21.83 times stock). The
+interpreter again times out at 180 seconds after six rows; its aggregate is
+undefined. A separate seven-pair matched diagnosis finds 11–25% overhead from
+failed scalar attempts in three large-table workloads, while the small array
+case improves by about 33%. Preserve those regressions alongside the wins.
+Reusing the existing bounded reader for broader positive hits before chain
+allocation is the next candidate, with unchanged failure inputs and exact GC
+result publication as requirements. See
+`notes/linux-integrated-performance-2026-09-05.md`.
 
 Continue removing demonstrably redundant publications while preserving receiver
 roots and exact post-CAS key/value handoff. Then replace unbounded whole-object

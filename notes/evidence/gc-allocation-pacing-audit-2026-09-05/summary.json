@@ -1,0 +1,28 @@
+{
+  "automatic_only": {
+    "closure_operations": 600000,
+    "cycle_starts_delta": 146,
+    "major_root_scans_delta": 438,
+    "pending_root_flushed_delta": 0,
+    "recovery_published_delta": 0,
+    "recovery_items_all_zero": true,
+    "recovery_failed_all_zero": true,
+    "all_sampled_phases_idle": true,
+    "post_round_total_min": 956715,
+    "post_round_total_max": 1296171,
+    "post_round_traversable_arena_counts": [
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16,
+      16
+    ]
+  }
+}
