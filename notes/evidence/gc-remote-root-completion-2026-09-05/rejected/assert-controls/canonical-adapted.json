@@ -1,0 +1,12 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/assert-controls/canonical-adapted"
+  ],
+  "exit_code": 0,
+  "stdout": "\nt-safepoint-handshake OK: C soft handshakes verified\n",
+  "stderr": "lua_debug> lua_debug> ",
+  "seconds": 2.571964056001889
+}

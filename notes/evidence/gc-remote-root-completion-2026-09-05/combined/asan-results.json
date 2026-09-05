@@ -1,0 +1,644 @@
+[
+  {
+    "name": "build",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-C",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src",
+      "-j4",
+      "BUILDMODE=static",
+      "CCDEBUG=-g",
+      "TARGET_STRIP=:",
+      "XCFLAGS=-DLUA_USE_ASSERT -DLJ_FUNC_TEST_HELPERS -DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLJ_XSAVE_TEST_HELPERS",
+      "CC=clang",
+      "CCOPT=-O1",
+      "TARGET_CFLAGS=-fsanitize=address -fno-omit-frame-pointer",
+      "TARGET_LDFLAGS=-fsanitize=address"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan",
+    "test": false,
+    "seconds": 14.395004493999295,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "exit": 0,
+    "stdout": "make: Entering directory '/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src'\nHOSTCC    host/minilua.o\nHOSTCC    host/buildvm_asm.o\nHOSTCC    host/buildvm_peobj.o\nHOSTCC    host/buildvm_lib.o\nHOSTCC    host/buildvm_fold.o\nHOSTLINK  host/minilua\nVERSION   luajit.h\nDYNASM    host/buildvm_arch.h\nCC        luajit.o\nHOSTCC    host/buildvm.o\nHOSTLINK  host/buildvm\nBUILDVM   lj_vm.S\nBUILDVM   lj_bcdef.h\nBUILDVM   lj_ffdef.h\nBUILDVM   lj_libdef.h\nBUILDVM   lj_recdef.h\nBUILDVM   lj_folddef.h\nBUILDVM   jit/vmdef.lua\nASM       lj_vm.o\nCC        lj_assert.o\nCC        lj_gc.o\nCC        lj_gc2.o\nCC        lj_safepoint.o\nCC        lj_err.o\nCC        lj_char.o\nCC        lj_bc.o\nCC        lj_obj.o\nCC        lj_buf.o\nCC        lj_str.o\nCC        lj_tab.o\nCC        lj_func.o\nCC        lj_udata.o\nCC        lj_meta.o\nCC        lj_debug.o\nCC        lj_prng.o\nCC        lj_state.o\nCC        lj_dispatch.o\nCC        lj_tg.o\nCC        lj_thr.o\nCC        lj_chan.o\nCC        lj_arena.o\nCC        lj_vmevent.o\nCC        lj_vmmath.o\nCC        lj_strscan.o\nCC        lj_strfmt.o\nCC        lj_strfmt_num.o\nCC        lj_serialize.o\nCC        lj_api.o\nCC        lj_profile.o\nCC        lj_lex.o\nCC        lj_parse.o\nCC        lj_bcread.o\nCC        lj_bcwrite.o\nCC        lj_load.o\nCC        lj_ir.o\nCC        lj_opt_mem.o\nCC        lj_opt_fold.o\nCC        lj_opt_narrow.o\nCC        lj_opt_dce.o\nCC        lj_opt_loop.o\nCC        lj_opt_split.o\nCC        lj_opt_sink.o\nCC        lj_mcode.o\nCC        lj_snap.o\nCC        lj_record.o\nCC        lj_crecord.o\nCC        lj_ffrecord.o\nCC        lj_asm.o\nCC        lj_trace.o\nCC        lj_gdbjit.o\nCC        lj_ctype.o\nCC        lj_cdata.o\nCC        lj_cconv.o\nCC        lj_ccall.o\nCC        lj_ccallback.o\nCC        lj_carith.o\nCC        lj_clib.o\nCC        lj_cparse.o\nCC        lj_lib.o\nCC        lj_alloc.o\nCC        lib_aux.o\nCC        lib_base.o\nCC        lib_math.o\nCC        lib_bit.o\nCC        lib_string.o\nCC        lib_table.o\nCC        lib_io.o\nCC        lib_os.o\nCC        lib_package.o\nCC        lib_debug.o\nCC        lib_jit.o\nCC        lib_ffi.o\nCC        lib_buffer.o\nCC        lib_threading.o\nCC        lib_init.o\nAR        libluajit.a\nLINK      luajit\nOK        Successfully built LuaJIT\nmake: Leaving directory '/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src'\n",
+    "stderr": "**** WARNING Cannot determine rolling release version from git log.\n**** WARNING The 'git' command must be available during the build.\n"
+  },
+  {
+    "name": "uninstrumented-generators",
+    "command": [
+      "nm",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/host/minilua",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/host/buildvm"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan",
+    "test": false,
+    "seconds": 0.021113266997417668,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "exit": 0,
+    "stdout": "\n/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/host/minilua:\n0000000000008960 t Arith\n000000000000af50 t GCTM\n0000000000026174 B _CRT_glob\n0000000000025db0 d _DYNAMIC\n0000000000025fe8 d _GLOBAL_OFFSET_TABLE_\n0000000000020000 R _IO_stdin_used\n                 w _ITM_deregisterTMCloneTable\n                 w _ITM_registerTMCloneTable\n0000000000024d74 r __FRAME_END__\n00000000000218bc r __GNU_EH_FRAME_HDR\n0000000000026170 D __TMC_END__\n0000000000024d78 r __abi_tag\n0000000000026170 B __bss_start\n                 U __ctype_b_loc@GLIBC_2.3\n                 U __ctype_tolower_loc@GLIBC_2.3\n                 U __ctype_toupper_loc@GLIBC_2.3\n                 w __cxa_finalize@GLIBC_2.2.5\n0000000000026160 D __data_start\n00000000000033a0 t __do_global_dtors_aux\n0000000000025768 d __do_global_dtors_aux_fini_array_entry\n0000000000026168 D __dso_handle\n                 U __errno_location@GLIBC_2.2.5\n0000000000025760 d __frame_dummy_init_array_entry\n                 w __gmon_start__\n                 U __isoc99_fscanf@GLIBC_2.7\n                 U __libc_start_main@GLIBC_2.34\n0000000000026170 D _edata\n0000000000026178 B _end\n000000000001f668 T _fini\n0000000000003000 T _init\n                 U _setjmp@GLIBC_2.2.5\n0000000000003300 T _start\n0000000000018100 t addfield\n0000000000014610 t addk\n0000000000016d20 t adjust_assign\n000000000001eae0 t arshift\n0000000000017040 t assignment\n0000000000019960 t aux_close\n00000000000184c0 t auxsort\n000000000001e4b0 t band\n000000000001f230 t barg\n0000000000025a90 d base_funcs\n                 U bcmp@GLIBC_2.2.5\n0000000000025770 d bitlib\n000000000001e3e0 t bnot\n0000000000014f40 t body\n000000000001e5c0 t bor\n0000000000012930 t breakstat\n000000000001ef60 t bswap\n000000000001e6d0 t bxor\n0000000000006000 t callTMres\n0000000000005ea0 t call_binTM\n000000000001f640 t callallgcTM\n00000000000127f0 t check_match\n000000000000ee00 t chunk\n                 U clearerr@GLIBC_2.2.5\n0000000000010c20 t close_func\n0000000000004710 t close_state\n0000000000013b60 t codearith\n0000000000026170 b completed.0\n0000000000016530 t condjump\n0000000000014880 t constructor\n00000000000194b0 t createstdfile\n0000000000026160 W data_start\n0000000000003330 t deregister_tm_clones\n00000000000144a0 t discharge2reg\n0000000000020a18 r dummynode_\n000000000001f480 t errfile\n00000000000167e0 t error_expected\n                 U exit@GLIBC_2.2.5\n0000000000016860 t exp1\n0000000000013e20 t exp2reg\n000000000001f630 t f_call\n00000000000197c0 t f_flush\n0000000000019860 t f_lines\n00000000000044f0 t f_luaopen\n000000000000e830 t f_parser\n00000000000198e0 t f_read\n0000000000019910 t f_write\n                 U fclose@GLIBC_2.2.5\n                 U feof@GLIBC_2.2.5\n                 U ferror@GLIBC_2.2.5\n                 U fflush@GLIBC_2.2.5\n                 U fgets@GLIBC_2.2.5\n0000000000015c50 t field\n0000000000025c50 d flib\n                 U floor@GLIBC_2.2.5\n                 U fopen@GLIBC_2.2.5\n00000000000168f0 t forbody\n                 U fprintf@GLIBC_2.2.5\n00000000000033e0 t frame_dummy\n                 U fread@GLIBC_2.2.5\n                 U free@GLIBC_2.2.5\n                 U freopen@GLIBC_2.2.5\n0000000000015d60 t funcargs\n                 U fwrite@GLIBC_2.2.5\n000000000001b170 t g_iofile\n0000000000019e40 t g_read\n000000000001a3c0 t g_write\n000000000001f5c0 t getF\n000000000000e6e0 t getS\n0000000000009e20 t get_compTM\n                 U getc@GLIBC_2.2.5\n000000000001bfb0 t gmatch\n000000000001de70 t gmatch_aux\n0000000000008320 t growCI\n0000000000011bc0 t inclinenumber\n00000000000196c0 t io_close\n00000000000193f0 t io_fclose\n000000000001a750 t io_flush\n0000000000019940 t io_gc\n000000000001a8c0 t io_input\n000000000001a8e0 t io_lines\n0000000000019480 t io_noclose\n000000000001ac20 t io_open\n000000000001adb0 t io_output\n0000000000019650 t io_pclose\n000000000001add0 t io_read\n0000000000019bd0 t io_readline\n000000000001aec0 t io_type\n000000000001b080 t io_write\n0000000000025bb0 d iolib\n000000000000bdc0 t ipairsaux\n0000000000016450 t jumponcond\n0000000000004430 t l_alloc\n00000000000166c0 t leaveblock\n0000000000010fa0 t llex\n                 U longjmp@GLIBC_2.2.5\n000000000001e7e0 t lshift\n000000000000c730 t luaB_assert\n000000000000c7e0 t luaB_error\n000000000000bd20 t luaB_ipairs\n000000000000c920 t luaB_loadfile\n000000000000c9e0 t luaB_loadstring\n000000000000c460 t luaB_newproxy\n000000000000c000 t luaB_next\n000000000000bf60 t luaB_pairs\n000000000000cb80 t luaB_pcall\n000000000000cc90 t luaB_rawget\n000000000000cd30 t luaB_setfenv\n000000000000d100 t luaB_setmetatable\n000000000000d2a0 t luaB_tonumber\n000000000000d4d0 t luaB_type\n000000000000d540 t luaB_unpack\n000000000000b0a0 t luaC_separateudata\n00000000000060b0 t luaD_call\n000000000000e700 t luaD_pcall\n0000000000007f00 t luaD_precall\n0000000000004480 t luaD_rawrunprotected\n0000000000004fb0 t luaD_reallocCI\n0000000000005d10 t luaD_reallocstack\n0000000000004d80 t luaF_close\n00000000000055f0 t luaG_errormsg\n00000000000050c0 t luaG_runerror\n0000000000009150 t luaH_get\n0000000000008a90 t luaH_getn\n0000000000004840 t luaH_new\n0000000000014180 t luaK_code\n0000000000013d40 t luaK_dischargevars\n0000000000014790 t luaK_exp2RK\n0000000000013ab0 t luaK_exp2anyreg\n0000000000012ad0 t luaK_goiftrue\n0000000000016610 t luaK_patchlist\n0000000000016f50 t luaK_storevar\n0000000000018210 t luaL_addvalue\n000000000000da50 t luaL_argerror\n000000000000e4b0 t luaL_checkinteger\n000000000001dc30 t luaL_checknumber\n0000000000018430 t luaL_checkstack\n0000000000019a20 t luaL_checkudata\n000000000000d8e0 t luaL_error\n000000000001e090 t luaL_findtable\n0000000000003d70 t luaL_loadfile\n000000000000e3c0 t luaL_optinteger\n0000000000018360 t luaL_prepbuffer\n0000000000003850 t luaL_register\n000000000000e290 t luaL_typerror\n000000000000df50 t luaL_where\n0000000000014240 t luaM_growaux_\n00000000000057d0 t luaO_chunkid\n0000000000020a40 r luaO_log2.log_2\n0000000000020a08 r luaO_nilobject_\n00000000000058c0 t luaO_pushfstring\n0000000000005210 t luaO_pushvfstring\n0000000000004a90 t luaS_newlstr\n0000000000004930 t luaS_resize\n00000000000258a0 d luaT_init.luaT_eventname\n0000000000025840 d luaT_typenames\n0000000000005950 t luaV_concat\n00000000000083c0 t luaV_gettable\n0000000000008d70 t luaV_lessthan\n0000000000008600 t luaV_settable\n0000000000009060 t luaV_tonumber\n0000000000012070 t luaX_lexerror\n0000000000012670 t luaX_newstring\n0000000000025930 d luaX_tokens\n0000000000010f50 t luaZ_fill\n000000000000e000 t lua_concat\n0000000000003a80 t lua_createtable\n000000000000db00 t lua_getinfo\n0000000000017600 t lua_newuserdata\n0000000000017490 t lua_objlen\n000000000000b1d0 t lua_pushcclosure\n000000000000e130 t lua_pushfstring\n000000000000bc20 t lua_pushlstring\n0000000000003b70 t lua_rawseti\n000000000000c2c0 t lua_setmetatable\n0000000000004110 t lua_tolstring\n0000000000025a30 d lualibs\n000000000000b3d0 t luaopen_base\n000000000000b670 t luaopen_io\n000000000000bb10 t luaopen_os\n000000000000bb30 t luaopen_string\n000000000000b650 t luaopen_table\n00000000000033f0 T main\n00000000000092e0 t mainposition\n                 U malloc@GLIBC_2.2.5\n000000000001d120 t match\n000000000001da50 t match_class\n                 U memchr@GLIBC_2.2.5\n                 U memcpy@GLIBC_2.14\n                 U memset@GLIBC_2.2.5\n0000000000015760 t new_localvar\n00000000000093a0 t newkey\n000000000000ec40 t open_func\n000000000001b3b0 t os_exit\n000000000001b3d0 t os_remove\n0000000000004450 t panic\n00000000000158d0 t parlist\n0000000000014350 t patchlistaux\n                 U pow@GLIBC_2.29\n00000000000150c0 t primaryexp\n0000000000020b40 r priority\n000000000000a5c0 t propagatemark\n000000000001dba0 t push_onecapture\n0000000000015b00 t pushclosure\n000000000001a2e0 t read_chars\n0000000000019d00 t read_line\n0000000000011dd0 t read_long_string\n0000000000012330 t read_numeral\n                 U realloc@GLIBC_2.2.5\n0000000000004ee0 t reallymarkobject\n00000000000154e0 t recfield\n0000000000003360 t register_tm_clones\n                 U remove@GLIBC_2.2.5\n0000000000004cb0 t resetstack\n0000000000009820 t resize\n000000000001ec60 t rol\n000000000001ede0 t ror\n000000000001e960 t rshift\n0000000000012220 t save\n0000000000009b50 t setarrayvector\n0000000000009c60 t setnodevector\n000000000001d970 t singlematch\n0000000000009fb0 t singlestep\n0000000000016140 t singlevar\n00000000000161f0 t singlevaraux\n0000000000011cc0 t skip_sep\n0000000000017fc0 t sort\n0000000000018fc0 t sort_comp\n                 U sprintf@GLIBC_2.2.5\n                 U stderr@GLIBC_2.2.5\n                 U stdin@GLIBC_2.2.5\n                 U stdout@GLIBC_2.2.5\n000000000001b490 t str_byte\n000000000001b6e0 t str_char\n000000000001b7e0 t str_find\n000000000001ccf0 t str_find_aux\n000000000001b7f0 t str_format\n000000000001c060 t str_gsub\n000000000001c780 t str_lower\n000000000001c880 t str_match\n000000000001c890 t str_rep\n000000000001ca20 t str_sub\n000000000001cbf0 t str_upper\n                 U strcat@GLIBC_2.2.5\n                 U strchr@GLIBC_2.2.5\n                 U strcmp@GLIBC_2.2.5\n                 U strcoll@GLIBC_2.2.5\n                 U strcspn@GLIBC_2.2.5\n                 U strerror@GLIBC_2.2.5\n                 U strlen@GLIBC_2.2.5\n0000000000025cf0 d strlib\n                 U strncat@GLIBC_2.2.5\n                 U strncpy@GLIBC_2.2.5\n                 U strpbrk@GLIBC_2.2.5\n                 U strtod@GLIBC_2.2.5\n                 U strtoul@GLIBC_2.2.5\n0000000000012c90 t subexpr\n000000000000abb0 t sweeplist\n0000000000025cc0 d syslib\n0000000000025b60 d tab_funcs\n00000000000177c0 t tconcat\n0000000000017ac0 t tinsert\n000000000001e310 t tobit\n000000000001f030 t tohex\n0000000000017cf0 t tremove\n                 U ungetc@GLIBC_2.2.5\n\n/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/host/buildvm:\n000000000001adc0 d _DYNAMIC\n000000000001afe8 d _GLOBAL_OFFSET_TABLE_\n000000000000e000 R _IO_stdin_used\n                 w _ITM_deregisterTMCloneTable\n                 w _ITM_registerTMCloneTable\n00000000000189fc r __FRAME_END__\n00000000000177d0 r __GNU_EH_FRAME_HDR\n000000000001b0f0 D __TMC_END__\n0000000000018a00 r __abi_tag\n000000000001b0f0 B __bss_start\n                 w __cxa_finalize@GLIBC_2.2.5\n000000000001b0e0 D __data_start\n00000000000062a0 t __do_global_dtors_aux\n00000000000194a8 d __do_global_dtors_aux_fini_array_entry\n000000000001b0e8 D __dso_handle\n                 U __errno_location@GLIBC_2.2.5\n00000000000194a0 d __frame_dummy_init_array_entry\n                 w __gmon_start__\n                 U __libc_start_main@GLIBC_2.34\n000000000001b0f0 D _edata\n0000000000021340 B _end\n000000000000db4c T _fini\n0000000000006000 T _init\n0000000000006200 T _start\n00000000000194b0 D bc_names\n000000000000e2f0 r build_actionlist\n0000000000008560 t build_backend\n000000000001b0f0 b completed.0\n0000000000007560 T dasm_checkstep\n0000000000006e80 T dasm_encode\n0000000000006380 T dasm_free\n0000000000007510 T dasm_getpclabel\n0000000000006460 T dasm_growpc\n00000000000062f0 T dasm_init\n0000000000006b50 T dasm_link\n0000000000006560 T dasm_put\n00000000000064e0 T dasm_setup\n00000000000063f0 T dasm_setupglobal\n000000000001b0e0 W data_start\n0000000000006230 t deregister_tm_clones\n000000000000b770 T emit_asm\n000000000000bd10 t emit_asm_label\n000000000000cff0 T emit_fold\n000000000000be10 T emit_lib\n000000000000bde0 T emit_peobj\n                 U exit@GLIBC_2.2.5\n000000000001a1a0 d extnames\n                 U fclose@GLIBC_2.2.5\n                 U ferror@GLIBC_2.2.5\n000000000001b268 b ffasmfunc\n000000000001b260 b ffid\n                 U fflush@GLIBC_2.2.5\n                 U fgets@GLIBC_2.2.5\n000000000001d340 b foldkeys\n                 U fopen@GLIBC_2.2.5\n                 U fprintf@GLIBC_2.2.5\n                 U fputc@GLIBC_2.2.5\n00000000000062e0 t frame_dummy\n                 U free@GLIBC_2.2.5\n000000000001d334 b funcidx\n000000000001d2e0 b funcname\n                 U fwrite@GLIBC_2.2.5\n000000000001a4d0 d globnames\n00000000000197e0 D ir_names\n0000000000019d00 D ircall_names\n0000000000019c30 D irfield_names\n0000000000019bf0 D irfpm_names\n0000000000019b20 D irt_names\n0000000000017550 r jccnames.rel\n00000000000175d0 r libbc_code\n000000000001ad30 d libbc_map\n000000000000c350 t libdef_endmodule\n000000000000c580 t libdef_func\n000000000001abd0 d libdef_handlers\n000000000000c860 t libdef_lua\n000000000000c470 t libdef_module\n000000000000cee0 t libdef_name\n000000000000cbc0 t libdef_push\n000000000000ca10 t libdef_rec\n000000000000ced0 t libdef_regfunc\n000000000000cdf0 t libdef_set\n000000000001d330 b lineno\n0000000000007650 T main\n                 U malloc@GLIBC_2.2.5\n                 U memcpy@GLIBC_2.14\n                 U memmove@GLIBC_2.2.5\n                 U memset@GLIBC_2.2.5\n000000000001a470 d modenames\n000000000001d290 b modname\n000000000001d288 b modnamelen\n000000000001b26c b modstate\n000000000000d810 t nexttoken\n000000000001d338 b nkeys\n000000000001b280 b obuf\n000000000001d280 b optr\n00000000000075f0 T owrite\n                 U putc@GLIBC_2.2.5\n                 U realloc@GLIBC_2.2.5\n000000000001b264 b recffid\n000000000001b270 b regfunc\n0000000000006260 t register_tm_clones\n000000000001b100 b relocmap\n                 U sprintf@GLIBC_2.2.5\n                 U stderr@GLIBC_2.2.5\n                 U stdin@GLIBC_2.2.5\n                 U stdout@GLIBC_2.2.5\n                 U strchr@GLIBC_2.2.5\n                 U strcmp@GLIBC_2.2.5\n                 U strcpy@GLIBC_2.2.5\n                 U strcspn@GLIBC_2.2.5\n                 U strerror@GLIBC_2.2.5\n                 U strlen@GLIBC_2.2.5\n                 U strncmp@GLIBC_2.2.5\n                 U strstr@GLIBC_2.2.5\n                 U strtod@GLIBC_2.2.5\n                 U strtol@GLIBC_2.2.5\n000000000000b690 t sym_insert\n000000000001aaa0 d trace_errors\n0000000000008490 t usage\n",
+    "stderr": ""
+  },
+  {
+    "name": "instrumented-runtime",
+    "command": [
+      "nm",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/lj_safepoint.o"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan",
+    "test": false,
+    "seconds": 0.01491366700065555,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "exit": 0,
+    "stdout": "0000000000000000 r .L___asan_gen_\n0000000000000000 r .str\n0000000000000000 n .str.0a6c9e2c40d74965b75131a7a510eb5a\n0000000000000000 r .str.1\n0000000000000000 n .str.1.0a6c9e2c40d74965b75131a7a510eb5a\n0000000000000000 r .str.2\n0000000000000000 n .str.2.0a6c9e2c40d74965b75131a7a510eb5a\n0000000000000008 C ___asan_globals_registered\n                 U __asan_handle_no_return\n                 U __asan_init\n                 U __asan_memset\n                 U __asan_option_detect_stack_use_after_return\n                 U __asan_register_elf_globals\n                 U __asan_report_load1\n                 U __asan_report_load4\n                 U __asan_report_load8\n                 U __asan_report_store1\n                 U __asan_report_store4\n                 U __asan_report_store8\n                 U __asan_stack_malloc_1\n                 U __asan_unregister_elf_globals\n                 U __asan_version_mismatch_check_v8\n                 U __errno_location\n0000000000000000 r __func__.mainthread_acq\n0000000000000000 n __func__.mainthread_acq.0a6c9e2c40d74965b75131a7a510eb5a\n                 w __start_asan_globals\n                 w __stop_asan_globals\n0000000000000000 t asan.module_ctor\n0000000000000000 t asan.module_dtor\n                 U lj_arena_alloc_prepare_sweep_kind\n                 U lj_arena_alloc_restore_sweep_kind\n                 U lj_arena_hugetab_abort_sweep\n                 U lj_arena_hugetab_prepare_sweep\n                 U lj_assert_fail\n                 U lj_dispatch_sync_tg\n                 U lj_err_callermsg\n                 U lj_ffi_native_trace_consumed_poll_wait_required\n                 U lj_ffi_native_trace_remote_certify\n                 U lj_ffi_native_trace_remote_shape_allowed\n                 U lj_gc2_flush_alloc\n                 U lj_gc2_flush_ssb\n                 U lj_gc2_reclaim_retired\n                 U lj_gc2_scan_cycle_global_roots\n                 U lj_gc2_scan_cycle_owner_tg_roots\n                 U lj_gc2_scan_cycle_owner_tg_roots_native_parked\n                 U lj_gc2_smr_read_enter\n                 U lj_gc2_smr_read_leave\n                 U lj_gc2_sweep_publish_wake\n00000000000021a0 T lj_native_enter\n00000000000021f0 T lj_native_enter_l\n00000000000023b0 T lj_native_leave\n0000000000002910 T lj_native_leave_l\n0000000000002750 T lj_native_leave_tg\n                 U lj_profile_owner_poll\n00000000000006c0 T lj_safepoint_ack\n0000000000001fd0 T lj_safepoint_ack_check\n0000000000000010 T lj_safepoint_apply_tg\n0000000000001d00 T lj_safepoint_checkstop\n0000000000002a40 T lj_safepoint_handshake\n0000000000001af0 T lj_safepoint_poll\n0000000000001c20 T lj_safepoint_poll_tg\n00000000000004c0 T lj_safepoint_retire_dead_tg\n0000000000000000 T lj_safepoint_test_completion_hook\n                 U lj_thr_get_tg\n                 U lj_thr_get_tg_fallback\n                 U lj_thr_now_ns\n                 U lj_thr_retry_yield\n                 U lj_trace_abort\n                 U lj_trace_flushall_gc\n0000000000003bf0 t safepoint_ack_native\n00000000000008e0 t safepoint_ack_tg\n0000000000000020 t safepoint_apply_tg_mode\n0000000000000000 b safepoint_completion_test_hook\n0000000000000000 n safepoint_completion_test_hook.0a6c9e2c40d74965b75131a7a510eb5a\n0000000000001e40 t safepoint_consume_fresh_stopreq_poll\n0000000000003d70 t safepoint_rearm_fresh_stopreq_poll\n0000000000003970 t safepoint_signal_late\n                 U syscall\n",
+    "stderr": ""
+  },
+  {
+    "name": "stock-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/luajit",
+      "-joff",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/stock/test",
+    "test": true,
+    "seconds": 3.0146232259976387,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "exit": 0,
+    "stdout": "387 passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "stock-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/luajit",
+      "-jon",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/stock/test",
+    "test": true,
+    "seconds": 4.084738944002311,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "exit": 0,
+    "stdout": "509 passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-loadlib",
+    "command": [
+      "clang",
+      "-O2",
+      "-shared",
+      "-fPIC",
+      "-I/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/t-loadlib-stopreq-lib.c",
+      "-o",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-loadlib.so"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan",
+    "test": false,
+    "seconds": 0.03741932699995232,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1"
+    },
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "compile-t-ffi-callxs-callback-stack.c",
+    "command": [
+      "clang",
+      "-std=gnu11",
+      "-O1",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-I/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src",
+      "-I/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/t-ffi-callxs-callback-stack.c",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-t-ffi-callxs-callback-stack"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan",
+    "test": false,
+    "seconds": 0.20761755399871618,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "t-ffi-callxs-callback-stack.c ",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-t-ffi-callxs-callback-stack"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan",
+    "test": true,
+    "seconds": 0.02624210100111668,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "callback stack mode=0 generated=80 callbacks=80 relocated=0 throws=0\ncallback stack mode=1 generated=80 callbacks=80 relocated=1 throws=0\ncallback stack mode=2 generated=1 callbacks=1 relocated=0 throws=1\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-t-safepoint-remote-root-completion.c",
+    "command": [
+      "clang",
+      "-std=gnu11",
+      "-O1",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-I/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src",
+      "-I/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/t-safepoint-remote-root-completion.c",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-o",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-t-safepoint-remote-root-completion"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan",
+    "test": false,
+    "seconds": 0.2396904289998929,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "t-safepoint-remote-root-completion.c 0",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-t-safepoint-remote-root-completion",
+      "0"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan",
+    "test": true,
+    "seconds": 0.013419546001387062,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "mode=0 returned with executor paused: pending=2 poll=0 epoch=20 active suffix retained\nremote owner-root completion PASS\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-safepoint-remote-root-completion.c 1",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-t-safepoint-remote-root-completion",
+      "1"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan",
+    "test": true,
+    "seconds": 0.013015126998652704,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "before completion actual kernel wait: 202 0x7f695cfa35a8 0x80 0x1 0x0 0x0 0x0 0x7ffc37348758 0x7f695d65e7b9\nmode=1 returned with executor paused: pending=2 poll=0 epoch=20 active suffix retained\nremote owner-root completion PASS\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-safepoint-remote-root-completion.c 2",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-t-safepoint-remote-root-completion",
+      "2"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan",
+    "test": true,
+    "seconds": 0.01264048300072318,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "mode=2 returned with executor paused: pending=2 poll=0 epoch=20 active suffix retained\nremote owner-root completion PASS\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-safepoint-remote-root-completion.c 3",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-t-safepoint-remote-root-completion",
+      "3"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan",
+    "test": true,
+    "seconds": 0.012898725999548333,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "mode=3 returned with executor paused: pending=2 poll=0 epoch=20 active suffix retained\nremote owner-root completion PASS\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-safepoint-remote-root-completion.c 4",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-t-safepoint-remote-root-completion",
+      "4"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan",
+    "test": true,
+    "seconds": 0.012292253002669895,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "mode=4 returned with executor paused: pending=2 poll=0 epoch=20 active suffix retained\nremote owner-root completion PASS\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-safepoint-remote-root-completion.c 5",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-t-safepoint-remote-root-completion",
+      "5"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan",
+    "test": true,
+    "seconds": 0.01212898599987966,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "mode=5 returned with executor paused: pending=2 poll=0 epoch=20 active suffix retained\nremote owner-root completion PASS\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-t-safepoint-local-native-duplicate.c",
+    "command": [
+      "clang",
+      "-std=gnu11",
+      "-O1",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-I/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src",
+      "-I/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots",
+      "-o",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-t-safepoint-local-native-duplicate"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan",
+    "test": false,
+    "seconds": 0.21093359299993608,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "t-safepoint-local-native-duplicate.c ",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-t-safepoint-local-native-duplicate"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan",
+    "test": true,
+    "seconds": 0.012409766000928357,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "local native winner remains in exact consumed-poll wait: 202 0x56378522d978 0x80 0x1 0x0 0x0 0x0 0x7f4b626fdb68 0x7f4b659c17b9\nsignaled=3 real-remote-scan=1 owner-scan=1 local-clear=0 teardown-during-scan=0 exact-owner-wait=1 pending=0\nlocal native duplicate scan hold PASS\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-t-safepoint-native-root-hold.c",
+    "command": [
+      "clang",
+      "-std=gnu11",
+      "-O1",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-I/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src",
+      "-I/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/t-safepoint-native-root-hold.c",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_gc2_scan_cycle_global_roots",
+      "-Wl,--wrap=lj_gc2_flush_ssb",
+      "-o",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-t-safepoint-native-root-hold"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan",
+    "test": false,
+    "seconds": 0.2202764110006683,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "t-safepoint-native-root-hold.c 0",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-t-safepoint-native-root-hold",
+      "0"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan",
+    "test": true,
+    "seconds": 0.013882646002457477,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "mode=0 actual_kernel_wait=202 0x7fa421b535a8 0x80 0x1 0x0 0x0 0x0 0x7ffe7855e518 0x7fa42220b7b9\nheld: native=0 reqmask=0 poll=1 pending=2 ack=19 epoch=20 returned=0 scan_calls=1\nrelease: leader completed, native return resumed, exact root still marked and source unchanged\nreal consumed native acknowledgement probe PASS\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-safepoint-native-root-hold.c 1",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-t-safepoint-native-root-hold",
+      "1"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan",
+    "test": true,
+    "seconds": 0.01315419399907114,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "mode=1 actual_kernel_wait=202 0x7f4557fc35a8 0x80 0x1 0x0 0x0 0x0 0x7ffed918e9f8 0x7f45584da7b9\nheld: native=0 reqmask=0 poll=1 pending=2 ack=19 epoch=20 returned=0 scan_calls=1\nrelease: leader completed, native return resumed, exact root still marked and source unchanged\nreal consumed native acknowledgement probe PASS\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-safepoint-native-root-hold.c 2",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-t-safepoint-native-root-hold",
+      "2"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan",
+    "test": true,
+    "seconds": 0.012941859997226857,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "mode=2 actual_kernel_wait=202 0x7f65545d35a8 0x80 0x1 0x0 0x0 0x0 0x7ffe8508d098 0x7f6554e977b9\nheld: native=0 reqmask=0 poll=1 pending=0 ack=20 epoch=20 returned=0 scan_calls=1\nrelease: leader completed, native return resumed, exact root still marked and source unchanged\nreal consumed native acknowledgement probe PASS\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-safepoint-native-root-hold.c 3",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-t-safepoint-native-root-hold",
+      "3"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan",
+    "test": true,
+    "seconds": 0.012960077998286579,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "mode=3 actual_kernel_wait=202 0x7f0db75e35a8 0x80 0x1 0x0 0x0 0x0 0x7ffd412ce2f8 0x7f0db7fb47b9\nheld: native=0 reqmask=0 poll=1 pending=2 ack=20 epoch=20 returned=0 scan_calls=1\nrelease: leader completed, native return resumed, exact root still marked and source unchanged\nreal consumed native acknowledgement probe PASS\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-t-safepoint-handshake.c",
+    "command": [
+      "clang",
+      "-std=gnu11",
+      "-O1",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-fsanitize=address",
+      "-fno-omit-frame-pointer",
+      "-I/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src",
+      "-I/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/t-safepoint-handshake.c",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-rdynamic",
+      "-o",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-t-safepoint-handshake"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan",
+    "test": false,
+    "seconds": 0.4823888659993827,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "t-safepoint-handshake.c ",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-t-safepoint-handshake"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan",
+    "test": true,
+    "seconds": 2.7754674880015955,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "\nt-safepoint-handshake OK: C soft handshakes verified\n",
+    "stderr": "lua_debug> lua_debug> "
+  },
+  {
+    "name": "generated-remote-flush",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/luajit",
+      "-jon",
+      "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/final.lua"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan",
+    "test": true,
+    "seconds": 0.03943460300070001,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan/src/?.lua;;",
+      "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/asan-loadlib.so",
+      "LJ_M7_FFI_CALLXS_FLUSH_SO": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/native-witness.so"
+    },
+    "exit": 0,
+    "stdout": "t-ffi-callxs-remote-flush OK: boxed GC/flush 0.000/0.000s, bool GC/flush 0.000/0.000s, sret GC/flush 0.000/0.000s before release\n",
+    "stderr": ""
+  }
+]

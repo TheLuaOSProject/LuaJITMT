@@ -1,0 +1,13 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/assert-controls/completion-probe",
+    "4"
+  ],
+  "exit_code": 0,
+  "stdout": "mode=4 returned with executor paused: pending=2 poll=0 epoch=20 active suffix retained\nreal local-completion native return probe PASS\n",
+  "stderr": "",
+  "seconds": 0.0037688570009777322
+}

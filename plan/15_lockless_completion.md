@@ -1,7 +1,7 @@
 # Lockless completion plan
 
 Reviewed: 2026-09-04, starting at `a649f737`.
-Updated: 2026-09-05 after cdata/GC fixes, native polling and callback stack repair.
+Updated: 2026-09-05 after guarded cdata reuse and restricted remote-root completion.
 
 This is the operative continuation of the original plan. It preserves the
 requested end state: one shared Lua heap, safe ordinary racy Lua programs,
@@ -80,7 +80,7 @@ are verified reasons the full goal is still open:
 | Table resize | Structural owner plus source `FORWARD` can strand the only value in an owner's local variable; descriptor migration is dormant | Durable exact payloads, helpable migration/publication, GC and native grace |
 | Descriptor installation | Separate capacity-shadow store can corrupt a winning descriptor before the losing ownership CAS | Publish control and capacity in one atomic pair; deterministic competing-generation test |
 | Automatic GC | Allocation-driven MARK/root/sweep boundaries still execute synchronous handshakes | Persistent asynchronous phase requests and helper-owned completion |
-| Native acknowledgement | Real paused-leader probes hold native return before remote root scan, after action claim, and after all target actions | Distinguish request claim, target action completion, and global completion; replace mutable-root borrowing before removing its hold |
+| Native acknowledgement | Completed exact owner-root actions can release through the unique remote executor; local/duplicate and broader actions still hold | Replace mutable-root borrowing and retain exact completion authority; local native-depth polls can overlap a remote pre-claim scan |
 | First MT attachment | Mode-0 traces omitted the TG request poll and real attachment waited for natural exit | Every XPOLL now observes the TG request; the larger attachment/flush ownership dependencies still require asynchronous completion |
 | Worker scheduling | MARK-close ownership loss can be reported as progress and cause repeated drain-loop execution | Return/defer without false progress or peer sleep; preserve durable retry |
 | GC work per mutation | Public SWEEP barriers can repeatedly queue an entire growing table; traversal charges a whole vector as one work unit | Prove redundant barrier elision, bound traversal by slots/bytes, and measure full-suite phase/history amplification |
@@ -271,6 +271,14 @@ controls and post-fix completion tests:
   Normal/assert/ASan and the shared canonical aggregate pass. General shared-MT
   metatable/library lookup recording remains refused; no runtime source changes.
   See `notes/ffi-remote-flush-fixture-2026-09-05.md`.
+- Exact owner-root/SSB actions can release their native owner after the unique
+  remote executor finishes all private accesses. Local winners remain held:
+  a real native-depth detach/duplicate schedule exposed an outstanding remote
+  scan despite a current ack epoch. The restricted source passes 36 combined
+  processes and a new canonical case, preserving old full-root holds and
+  subsequent phase/STOPREQ actions. This is one completed-target wait window;
+  full asynchronous GC remains open. See
+  `notes/gc-remote-root-completion-2026-09-05.md`.
 - `1bce0fa5`: promote exhausted inline table dirty authority into pre-reserved
   persistent wide proof, retaining common stamp/token geometry. Small mappings
   use a dense sidecar plane and Huge mappings use checked tail reservation.
@@ -488,11 +496,15 @@ optimized and optimizer-disabled loops. Focused paired costs are unchanged
 within these samples. The baseline active-worker `setmetatable` tracing gate
 still reports NYI; it is retained as a separate recorder coverage gap. A current
 `hs_epoch_ack` is an execution claim, not completion: the real SSB action can
-still be paused after it. First prove any early return for the precise
-`SCAN_OWNER_ROOTS|FLUSH_SSB` class, including all later leader accesses,
-late root/SSB work, and epoch/poll races. Full global root scans still read
-recorder scratch geometry, and trace/allocator/phase actions retain separate
-holds. Introduce completion state together with its proven consumer.
+still be paused after it. The precise `SCAN_OWNER_ROOTS|FLUSH_SSB` class now
+permits early release only by its unique remote executor after all private
+accesses. Local native-depth polls can win a duplicate epoch while a remote
+pre-claim scan remains active; their hold must stay. The real teardown-overlap
+counterexample, restricted fix, later tail authority, new SSB suffix and phase
+controls are in `notes/gc-remote-root-completion-2026-09-05.md`. Full global
+root scans still read recorder scratch geometry, and trace/allocator/phase
+actions retain separate holds. Further completion state needs its exact
+consumer and a futex predicate that cannot lose the wake.
 
 Automatic phase conversion additionally needs durable MARK initialization
 with no early worker admission or reset replay, a persistent exact-cycle root

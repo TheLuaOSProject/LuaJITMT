@@ -1,0 +1,11 @@
+--- a/src/lj_safepoint.c
++++ b/src/lj_safepoint.c
+@@ -447,7 +447,7 @@
+         /* A late signaler may have sampled this TG before its epoch claim and
+         ** republish the same counted epoch after reqmask consumption. Preserve
+         ** that duplicate's wake; the existing claim-loser path drops its slot. */
+-        safepoint_restore_counted_poll(tg);
++        /* Negative control: intentionally omit counted-poll repair. */
+ 	safepoint_completion_test_pause(g, tg, epoch,
+ 	  LJ_SAFEPOINT_COMPLETION_TEST_CLEARED);
+       }

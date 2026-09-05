@@ -1,0 +1,23 @@
+--- a/tests/t-safepoint-handshake.c
++++ b/tests/t-safepoint-handshake.c
+@@ -997,9 +997,17 @@
+   assert(tg->poll == 0);
+   assert(tg->reqmask == 0);
+   assert(tg->hs_epoch_ack == epoch0);
+-  assert(tg->ssb_active == &tg->ssb_node[0]);
+-  assert(tg->ssb_free == &tg->ssb_node[1]);
+-  assert(tg->ssb_base == tg->ssb_node[0].slot);
++  /* Collection may rotate either embedded node into the active role. The
++  ** contract is one active and one distinct available node, each owner-bound. */
++  assert(tg->ssb_active == &tg->ssb_node[0] ||
++         tg->ssb_active == &tg->ssb_node[1]);
++  assert(tg->ssb_free == &tg->ssb_node[0] ||
++         tg->ssb_free == &tg->ssb_node[1]);
++  assert(tg->ssb_active != tg->ssb_free);
++  assert(lj_gc2_ssb_owner_acq(tg->ssb_active) == tg);
++  assert(lj_gc2_ssb_owner_acq(tg->ssb_free) == tg);
++  assert(lj_gc2_ssb_next_acq(tg->ssb_free) == NULL);
++  assert(tg->ssb_base == tg->ssb_active->slot);
+   assert(tg->ssb_next == tg->ssb_base);
+   assert(tg->ssb_end == tg->ssb_base + TG_GC2_SSB_SLOTS);
+   test_owner_only_root_handshake(L, g, tg);

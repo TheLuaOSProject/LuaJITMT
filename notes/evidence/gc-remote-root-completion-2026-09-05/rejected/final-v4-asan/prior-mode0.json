@@ -1,0 +1,17 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/final-v4-asan/prior-holds",
+    "0"
+  ],
+  "exit_code": 0,
+  "stdout": "mode=0 actual_kernel_wait=202 0x7f699c7135a8 0x80 0x1 0x0 0x0 0x0 0x7fffbb7fb618 0x7f699cdc07b9\nheld: native=0 reqmask=0 poll=1 pending=2 ack=19 epoch=20 returned=0 scan_calls=1\nrelease: leader completed, native return resumed, exact root still marked and source unchanged\nreal consumed native acknowledgement probe PASS\n",
+  "stderr": "",
+  "seconds": 0.014074486000026809,
+  "test_env": {
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/assert-controls/loadlib-stopreq.so"
+  }
+}

@@ -49,6 +49,7 @@ local m3_scaffold_deps = {
   "m3_gc2_mark_close_progress",
   "m3_gc_active_thread_roots",
   "m3_safepoint_handshake",
+  "m3_safepoint_native_completion",
   "m3_vmevent_native_stdio",
   "m3_vm_safepoint",
   "m3_interp_stock_joff",
@@ -404,6 +405,46 @@ return function(add)
       run_luajit_script_jit_modes(t, "t-gc-active-thread-roots.lua", nil,
                                   { timeout = "60s" })
       print("M3 active thread root GC regression passed")
+    end
+  })
+
+  register({
+    name = "m3_safepoint_native_completion",
+    description = "remote owner-root completion and retained local/scanner holds",
+    run = function(t)
+      if jit.os ~= "Linux" or jit.arch ~= "x64" then
+        print("M3 native completion fixtures require Linux/x64 and GNU ld wrapping")
+        return
+      end
+      local flags = gc2_test_cflags .. " -DLUA_USE_ASSERT"
+      build.with_default_build_restore(t, function()
+        build.clean_build(t, { xcflags = flags })
+        local fixtures = {
+          { name = "t-safepoint-remote-root-completion", modes = { "0", "1", "2", "3", "4", "5" },
+            wraps = { "lj_gc2_scan_cycle_owner_tg_roots_native_parked" } },
+          { name = "t-safepoint-local-native-duplicate", modes = { false },
+            wraps = { "lj_gc2_scan_cycle_owner_tg_roots_native_parked", "lj_lex_gc2_markroots" } },
+          { name = "t-safepoint-native-root-hold", modes = { "0", "1", "2", "3" },
+            wraps = { "lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+                      "lj_gc2_scan_cycle_global_roots", "lj_gc2_flush_ssb" } }
+        }
+        for _, fixture in ipairs(fixtures) do
+          local exe = t:tmp("lj_" .. fixture.name)
+          local libs = { "-lm", "-ldl", "-pthread" }
+          for _, symbol in ipairs(fixture.wraps) do
+            libs[#libs + 1] = "-Wl,--wrap=" .. symbol
+          end
+          t:cc(exe, { t:path("tests", fixture.name .. ".c") }, {
+            cflags = flags, link_luajit = true, libs = libs
+          })
+          for _, mode in ipairs(fixture.modes) do
+            local argv = { exe }
+            if mode then argv[#argv + 1] = mode end
+            t:run(argv, { timeout = "25s" })
+          end
+        end
+      end)
+      print("M3 remote completion and required native holds passed")
     end
   })
 

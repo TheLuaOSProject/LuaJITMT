@@ -1,0 +1,12 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-owner-roots-independent-20260905-ieiod4uo/rejected-local-completion"
+  ],
+  "exit": -6,
+  "seconds": 0.0469777719990816,
+  "stdout": "signaled=3 real-remote-scan=1 owner-scan=1 local-clear=1 teardown-during-scan=1 exact-owner-wait=0 pending=0\n",
+  "stderr": "rejected-local-completion: /tmp/lj-owner-roots-independent-20260905-ieiod4uo/t-local-native-duplicate.c:187: main: Assertion `!ctx.teardown_overlap && ctx.observed_wait' failed.\n"
+}

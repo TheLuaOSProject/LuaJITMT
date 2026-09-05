@@ -1,0 +1,13 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/final-assert/completion-probe",
+    "8"
+  ],
+  "exit_code": 0,
+  "stdout": "completed winner duplicate loser actual kernel wait: 202 0x7f6b702e35a8 0x80 0x1 0x0 0x0 0x0 0x7fffaa856338 0x7f6b7040c7b9\nrefusal/requeue signal publications=3\nreal local-completion native return probe PASS\n",
+  "stderr": "",
+  "seconds": 0.00554979899970931
+}

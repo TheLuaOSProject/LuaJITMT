@@ -1,0 +1,13 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/assert-controls/completion-probe",
+    "7"
+  ],
+  "exit_code": 0,
+  "stdout": "refusal/requeue signal publications=3\nreal local-completion native return probe PASS\n",
+  "stderr": "",
+  "seconds": 0.004449082000064664
+}

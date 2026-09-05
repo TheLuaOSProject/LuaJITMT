@@ -1,0 +1,31 @@
+make: Entering directory '/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/candidate-assert/src'
+CC        lj_gc.o
+CC        lj_gc2.o
+CC        lj_safepoint.o
+CC        lj_prng.o
+CC        lj_dispatch.o
+CC        lj_tg.o
+CC        lj_thr.o
+CC        lj_chan.o
+CC        lj_vmevent.o
+CC        lj_profile.o
+CC        lj_load.o
+CC        lj_mcode.o
+CC        lj_trace.o
+CC        lj_ctype.o
+CC        lj_ccall.o
+CC        lj_ccallback.o
+CC        lj_clib.o
+CC        lib_aux.o
+CC        lib_base.o
+CC        lib_io.o
+CC        lib_os.o
+CC        lib_package.o
+CC        lib_debug.o
+CC        lib_jit.o
+CC        lib_threading.o
+CC        luajit.o
+AR        libluajit.a
+LINK      luajit
+OK        Successfully built LuaJIT
+make: Leaving directory '/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/candidate-assert/src'

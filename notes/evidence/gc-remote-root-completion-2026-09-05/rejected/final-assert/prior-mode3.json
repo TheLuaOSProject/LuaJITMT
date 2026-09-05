@@ -1,0 +1,13 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/final-assert/prior-holds",
+    "3"
+  ],
+  "exit_code": 0,
+  "stdout": "mode=3 actual_kernel_wait=202 0x7f56120135a8 0x80 0x1 0x0 0x0 0x0 0x7ffe792a2408 0x7f56121347b9\nheld: native=0 reqmask=0 poll=1 pending=2 ack=20 epoch=20 returned=0 scan_calls=1\nrelease: leader completed, native return resumed, exact root still marked and source unchanged\nreal consumed native acknowledgement probe PASS\n",
+  "stderr": "",
+  "seconds": 0.0036287270013417583
+}

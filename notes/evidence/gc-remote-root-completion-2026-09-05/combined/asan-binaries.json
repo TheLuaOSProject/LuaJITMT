@@ -1,0 +1,9 @@
+{
+  "luajit": "db0b12cbe5eb277f9739526561a412ab66ff6576e10e8e8b81888f20f9107632",
+  "libluajit.a": "e92d773b4f8cb094a7fb0e8388596794574dbecd270b56cbabd025b7414847bc",
+  "asan-t-ffi-callxs-callback-stack": "ad61cda249020ed4d9357620a4cbc2bb459439d707eb959d207f285df8542f5a",
+  "asan-t-safepoint-remote-root-completion": "9a52c5f1e95a6c48c27bd9542381f8a179f675d0ce388d9d88f6a052256f3826",
+  "asan-t-safepoint-local-native-duplicate": "a3a9aaf5449038fe53334d68faa511680f1c80b1d9e6d1a55779e61c4d440f34",
+  "asan-t-safepoint-native-root-hold": "14f2e22eaef80d66dbeacbe8f818bca6d2dcc6c76f1577a366fe58ba34abec72",
+  "asan-t-safepoint-handshake": "4938c354cba531f247dfbb11b749a69025389c53fe0cf66ebc2c030a9445b888"
+}

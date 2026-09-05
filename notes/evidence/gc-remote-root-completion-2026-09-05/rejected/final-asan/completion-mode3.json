@@ -1,0 +1,17 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/final-asan/completion-probe",
+    "3"
+  ],
+  "exit_code": 0,
+  "stdout": "mode=3 returned with executor paused: pending=2 poll=0 epoch=20 active suffix retained\nreal local-completion native return probe PASS\n",
+  "stderr": "",
+  "seconds": 0.01378433399804635,
+  "test_env": {
+    "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1",
+    "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/final-asan/loadlib-stopreq.so"
+  }
+}

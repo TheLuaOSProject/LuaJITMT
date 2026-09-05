@@ -1,0 +1,21 @@
+{
+  "base": "b4e26564542cb8bfa997a11c6a90e5e0017a2f79",
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-owner-roots-independent-20260905-ieiod4uo/remote-only/src",
+    "-j4",
+    "BUILDMODE=static",
+    "CCDEBUG=-g",
+    "TARGET_STRIP=:",
+    "XCFLAGS=-DLJ_FUNC_TEST_HELPERS -DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLUA_USE_ASSERT"
+  ],
+  "exit": 0,
+  "seconds": 10.143412114000967,
+  "safepoint_c_sha256": "7df6f10a21f3ed0c0db92a8f26b590ffb96d3fc6ac390ad99264455abedd7812",
+  "safepoint_h_sha256": "328aa2bc63d753257d8adca5a5417ccdda059b942138aecda20a3da53752d46c",
+  "archive_sha256": "6744c0ff862756b1054fe80df1efec4139772f0d76cecd75f9735edbce3d4c35"
+}

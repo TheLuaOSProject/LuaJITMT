@@ -1,0 +1,14 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/candidate-normal/src/luajit",
+    "-joff",
+    "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/smoke.lua"
+  ],
+  "exit_code": 0,
+  "stdout": "normal local-completion smoke PASS\n",
+  "stderr": "",
+  "seconds": 0.007130063000658993
+}

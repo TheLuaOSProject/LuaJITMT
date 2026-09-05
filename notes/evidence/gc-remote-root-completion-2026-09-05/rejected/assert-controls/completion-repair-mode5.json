@@ -1,0 +1,13 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/assert-controls/completion-probe",
+    "5"
+  ],
+  "exit_code": -6,
+  "stdout": "",
+  "stderr": "completion-probe: /tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/completion-probe.c:119: leader: Assertion `lj_safepoint_handshake(p->g, LJ_GC2_HS_SCAN_OWNER_ROOTS|LJ_GC2_HS_FLUSH_SSB) == 2' failed.\n",
+  "seconds": 0.07268199499958428
+}

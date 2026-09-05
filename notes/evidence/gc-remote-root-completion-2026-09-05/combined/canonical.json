@@ -1,0 +1,33 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/luajit",
+    "/workspaces/lj-lockless/tools/test.lua",
+    "m3_safepoint_native_completion"
+  ],
+  "cwd": "/workspaces/lj-lockless",
+  "environment": {
+    "LJ_TEST_ROOT": "/workspaces/lj-lockless",
+    "JOBS": "4",
+    "MAKE_JOBS": "4",
+    "TMPDIR": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/canonical-tmp",
+    "LUA_PATH": "/workspaces/lj-lockless/src/?.lua;;"
+  },
+  "exit": 0,
+  "seconds": 27.748906106000504,
+  "final_source": {
+    "src/lj_safepoint.c": "9779c6607135ffd7e06d6c1834022ad77cf491d8a30df6b63f9e5516d045af03",
+    "src/lj_safepoint.h": "328aa2bc63d753257d8adca5a5417ccdda059b942138aecda20a3da53752d46c",
+    "tests/suites/m3_gc.lua": "0f7d0aa2417d8f6feb16c1dcb183c0df8556f312e29d2faa2ef1e30a13cc0552",
+    "tests/t-safepoint-remote-root-completion.c": "9d8944de53856419fc82aefed90f7dac346cd5d014c2bb2b92f2904cf8566dfb",
+    "tests/t-safepoint-local-native-duplicate.c": "2e0ae7c4ff8e8d8d605478ca3d33a5c9bf3eec74af37894091ae9b6543903ded",
+    "tests/t-safepoint-native-root-hold.c": "e7993ffdfd42218236986f960d95765b865d7a3f05b4637dbf4c7b33be8b5946"
+  },
+  "restored_binaries": {
+    "luajit": "fcfc133052586a7ea73013af2c8da345cec431effa868080da5e1b27309db574",
+    "libluajit.a": "7f3738261318686d5a3e8d93d80c5c3a63a2ff3c38216d2e8f8ef5a8426bdbdb",
+    "libluajit.so": "c37177e6c57b54ccab74e37c1598eb3d297ce8480233a7715cd9a37f894affde"
+  }
+}

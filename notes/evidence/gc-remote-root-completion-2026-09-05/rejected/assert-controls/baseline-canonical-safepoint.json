@@ -1,0 +1,12 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/assert-controls/baseline-canonical-safepoint"
+  ],
+  "exit_code": -6,
+  "stdout": "",
+  "stderr": "baseline-canonical-safepoint: /tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/candidate-assert/tests/t-safepoint-handshake.c:1000: main: Assertion `tg->ssb_active == &tg->ssb_node[0]' failed.\n",
+  "seconds": 0.12513243699868326
+}

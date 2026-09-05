@@ -1,0 +1,1 @@
+Rejected before build or execution: new receipt plus wake on unchanged poll permits waiter check -> receipt publish+wake -> futex wait(poll=1), losing the wake. Replaced with executor-owned poll clear after the last private action, before pending decrement. This is a design-review finding, not a tested runtime regression.

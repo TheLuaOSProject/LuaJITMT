@@ -1,0 +1,146 @@
+{
+  "scope": "Read-only exact SCAN_OWNER_ROOTS tail proof, then exact production SCAN_OWNER_ROOTS|FLUSH_SSB in unchanged MARK; no shared edits, no runtime builds/tests or timings",
+  "created_utc": "2026-09-05T04:53:27.178431+00:00",
+  "shared_head": "77dff654e11672a6c6259c21b5dbaa0ca873e3ba",
+  "source": [
+    {
+      "path": "/workspaces/lj-lockless/src/lj_safepoint.c",
+      "snapshot": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/source/src/lj_safepoint.c",
+      "sha256": "975d637cad5cd83110b0151a736dece72bb93ae6c44be6bfd06ea8a2928e7f4e"
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_safepoint.h",
+      "snapshot": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/source/src/lj_safepoint.h",
+      "sha256": "099a350c56ddefd2cd992815e2a41a5035f061a378008c0031e00800660d7d40"
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_tg.c",
+      "snapshot": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/source/src/lj_tg.c",
+      "sha256": "16064ba7946becbbc5cc1be2ee00eae4be39f1496c6ab85c5f4cf60f64146406"
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_tg.h",
+      "snapshot": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/source/src/lj_tg.h",
+      "sha256": "a5cb46bde2868512743795750b5a1da71cd1a581bc037da127e60b36cb994015"
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_gc2.c",
+      "snapshot": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/source/src/lj_gc2.c",
+      "sha256": "5557bc243f94f5d310287494cc3560d91931455eaa8338ba480f84a33edf45a1"
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_gc2.h",
+      "snapshot": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/source/src/lj_gc2.h",
+      "sha256": "244b10c49ad036b661a08adc178e6b8247d8ff1b18ed63bc035d3440df16a9f9"
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_gc.c",
+      "snapshot": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/source/src/lj_gc.c",
+      "sha256": "7ceb24d2c755325c7c3d4113330bbb4fce6d3c893dd22fc1ef8bf924590ab4cb"
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_gc.h",
+      "snapshot": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/source/src/lj_gc.h",
+      "sha256": "3d52d352f6280ee308f9ae71a8edbe4dde6f41f9a00256a0d3d6a3924fddc0dd"
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_thr.c",
+      "snapshot": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/source/src/lj_thr.c",
+      "sha256": "93aed8d88e36795e6186323924f5d96e7edc897b15f491f422223844eb666bb7"
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_thr.h",
+      "snapshot": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/source/src/lj_thr.h",
+      "sha256": "f39140aec08b622f0db5123fdf311e5e753075462b7a0f75c251c86a58985b28"
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_obj.h",
+      "snapshot": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/source/src/lj_obj.h",
+      "sha256": "4dddf105f8b3006efb495259340ea4acaae9579e283b769ff9e683810beb435b"
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_str.c",
+      "snapshot": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/source/src/lj_str.c",
+      "sha256": "a256c39e9f2f05e6c6d96e2aa140d0f6e04bad5e1e7966cbff15ba08d4959975"
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_tab.c",
+      "snapshot": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/source/src/lj_tab.c",
+      "sha256": "28b2eac3dc6c0734d131cf33d3f34826ae758c9b3deb437c6bd154e0cd2fd48f"
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_ctype.c",
+      "snapshot": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/source/src/lj_ctype.c",
+      "sha256": "63990b7796d93a7c4c8659e61c2f0ec43dd766a2972ed679f8f46a4237b2171b"
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_clib.c",
+      "snapshot": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/source/src/lj_clib.c",
+      "sha256": "c32a0cdf5b997658f9b0d369c0402398445d6279aacbbb0242a7c5302c136dda"
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_trace.c",
+      "snapshot": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/source/src/lj_trace.c",
+      "sha256": "22727958fb2df4c3ed07126193a260f2243630ac4fc6d98d133712bd40503feb"
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_mcode.c",
+      "snapshot": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/source/src/lj_mcode.c",
+      "sha256": "c658b71c17ffcf5f892fc2c360f0ee5e80c297498b7fc168813882eca6c336fa"
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_arena.c",
+      "snapshot": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/source/src/lj_arena.c",
+      "sha256": "b90b713ca6183ec36ca594c16c37d110e87fcebd815aa3f207da3d3f4be83973"
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lj_arena.h",
+      "snapshot": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/source/src/lj_arena.h",
+      "sha256": "c1e19e04c5a65aa05f7f37a195864995988610f06b4fb9ec897405982a4cd1c8"
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/lib_threading.c",
+      "snapshot": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/source/src/lib_threading.c",
+      "sha256": "0c68ad63cf688543cf6f8ecf4e9fa6092fa8492176ec6c13356c6bf31aa4b4be"
+    },
+    {
+      "path": "/workspaces/lj-lockless/src/vm_x64.dasc",
+      "snapshot": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/source/src/vm_x64.dasc",
+      "sha256": "ad48405b4793e8514307cd4efc15238dcd3a29b0d1970b452ee77952b921d64b"
+    }
+  ],
+  "prior_handoff": [
+    {
+      "path": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/review.md",
+      "sha256": "0d49de18fd6588ac983bbba19a9e72a9824bad512d9777e550ef5e9567179040"
+    },
+    {
+      "path": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/manifest.json",
+      "sha256": "51de31931f4394aa12a2513ac49eba67a44348c55c34556baa8c729733f8f144"
+    },
+    {
+      "path": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/probe.c",
+      "sha256": "e7993ffdfd42218236986f960d95765b865d7a3f05b4637dbf4c7b33be8b5946"
+    },
+    {
+      "path": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/probe",
+      "sha256": "2af72f7c1be6dc5423caba5993b6ba908ed5267e12183c76557c8a6e4516b4ad"
+    },
+    {
+      "path": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/mode-0.json",
+      "sha256": "db63b190e2aee62dad5e47dd3e284746532b0c444142f78a9f27d628d98667a0"
+    },
+    {
+      "path": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/mode-1.json",
+      "sha256": "acdf7f03e791fc3c49e649d5966ad610722494333deca7e10fd70613c42e4edc"
+    },
+    {
+      "path": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/mode-2.json",
+      "sha256": "08585259864881838ab72329e2c1d4b4f0ffdd5a9107de0e8ed40aa9612fb2a7"
+    },
+    {
+      "path": "/tmp/lj-native-ack-review-20260905-lg2ml_eq/mode-3.json",
+      "sha256": "8ac0946bb6b8dbbf5ce23cb70fc95ae8eacc8dcb3c1b696f7fb167b530a14e66"
+    }
+  ]
+}

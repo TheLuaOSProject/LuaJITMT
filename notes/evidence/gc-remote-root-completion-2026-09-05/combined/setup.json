@@ -1,0 +1,14 @@
+{
+  "base": "35cfaaa28e54dab337c6d320891ef36cb4bab6e5",
+  "parent_candidate_sha256": "4a2a3fef9ebaa66d2e529b23b2f50e579ebc22d1e7719492c3d9043b24c81360",
+  "remote_only_derivative_sha256": "82e035204c7cb94fb405d50cf21e157c81d089c8eadcddfa8283013c3a75d853",
+  "prepared": {
+    "src/lj_safepoint.c": "9779c6607135ffd7e06d6c1834022ad77cf491d8a30df6b63f9e5516d045af03",
+    "src/lj_safepoint.h": "328aa2bc63d753257d8adca5a5417ccdda059b942138aecda20a3da53752d46c",
+    "tests/t-safepoint-handshake.c": "987d739501012141a6985b329177c4f2af4706e045356034f57f302efdfc2465",
+    "tests/t-safepoint-local-native-duplicate.c": "2e0ae7c4ff8e8d8d605478ca3d33a5c9bf3eec74af37894091ae9b6543903ded",
+    "tests/t-safepoint-remote-root-completion.c": "9d8944de53856419fc82aefed90f7dac346cd5d014c2bb2b92f2904cf8566dfb",
+    "tests/t-safepoint-native-root-hold.c": "e7993ffdfd42218236986f960d95765b865d7a3f05b4637dbf4c7b33be8b5946"
+  },
+  "scope": "Unique remote leader only; local native duplicate hold preserved; no shared safepoint changes"
+}

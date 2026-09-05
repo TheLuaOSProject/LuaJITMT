@@ -1,0 +1,6 @@
+make: Entering directory '/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/candidate-no-repair/src'
+CC        lj_safepoint.o
+AR        libluajit.a
+LINK      luajit
+OK        Successfully built LuaJIT
+make: Leaving directory '/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/candidate-no-repair/src'

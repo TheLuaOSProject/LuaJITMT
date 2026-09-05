@@ -1,0 +1,11 @@
+--- a/src/lj_safepoint.c
++++ b/src/lj_safepoint.c
+@@ -431,7 +431,7 @@
+     safepoint_note_ack_latency(g);  /* 13.8: mutator-observed poll latency. */
+   {
+     int hold = safepoint_hold_poll_until_leader(g, actions);
+-    int completed = hold &&
++    int completed = hold && native_parked &&
+       safepoint_owner_roots_complete(g, tg, actions, mark_cycle);
+     if (completed) {
+       safepoint_completion_test_pause(g, tg, epoch,

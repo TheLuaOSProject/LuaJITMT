@@ -1,0 +1,16 @@
+== m3_safepoint_native_completion ==
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLJ_GC2_TEST_HELPERS -DLUA_USE_ASSERT -I'/workspaces/lj-lockless/src' '/workspaces/lj-lockless/tests/t-safepoint-remote-root-completion.c' '/workspaces/lj-lockless/src/libluajit.a' -lm -ldl -pthread -Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked -o '/tmp/lj-remote-root-completion-20260905-ose6bdtd/canonical-tmp/lj_t-safepoint-remote-root-completion'
++ timeout '25s' '/tmp/lj-remote-root-completion-20260905-ose6bdtd/canonical-tmp/lj_t-safepoint-remote-root-completion' '0'
++ timeout '25s' '/tmp/lj-remote-root-completion-20260905-ose6bdtd/canonical-tmp/lj_t-safepoint-remote-root-completion' '1'
++ timeout '25s' '/tmp/lj-remote-root-completion-20260905-ose6bdtd/canonical-tmp/lj_t-safepoint-remote-root-completion' '2'
++ timeout '25s' '/tmp/lj-remote-root-completion-20260905-ose6bdtd/canonical-tmp/lj_t-safepoint-remote-root-completion' '3'
++ timeout '25s' '/tmp/lj-remote-root-completion-20260905-ose6bdtd/canonical-tmp/lj_t-safepoint-remote-root-completion' '4'
++ timeout '25s' '/tmp/lj-remote-root-completion-20260905-ose6bdtd/canonical-tmp/lj_t-safepoint-remote-root-completion' '5'
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLJ_GC2_TEST_HELPERS -DLUA_USE_ASSERT -I'/workspaces/lj-lockless/src' '/workspaces/lj-lockless/tests/t-safepoint-local-native-duplicate.c' '/workspaces/lj-lockless/src/libluajit.a' -lm -ldl -pthread -Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked -Wl,--wrap=lj_lex_gc2_markroots -o '/tmp/lj-remote-root-completion-20260905-ose6bdtd/canonical-tmp/lj_t-safepoint-local-native-duplicate'
++ timeout '25s' '/tmp/lj-remote-root-completion-20260905-ose6bdtd/canonical-tmp/lj_t-safepoint-local-native-duplicate'
++ cc -std=gnu11 -O2 -Wall -Wextra -Werror -mcx16 -DLJ_GC2_TEST_HELPERS -DLUA_USE_ASSERT -I'/workspaces/lj-lockless/src' '/workspaces/lj-lockless/tests/t-safepoint-native-root-hold.c' '/workspaces/lj-lockless/src/libluajit.a' -lm -ldl -pthread -Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked -Wl,--wrap=lj_gc2_scan_cycle_global_roots -Wl,--wrap=lj_gc2_flush_ssb -o '/tmp/lj-remote-root-completion-20260905-ose6bdtd/canonical-tmp/lj_t-safepoint-native-root-hold'
++ timeout '25s' '/tmp/lj-remote-root-completion-20260905-ose6bdtd/canonical-tmp/lj_t-safepoint-native-root-hold' '0'
++ timeout '25s' '/tmp/lj-remote-root-completion-20260905-ose6bdtd/canonical-tmp/lj_t-safepoint-native-root-hold' '1'
++ timeout '25s' '/tmp/lj-remote-root-completion-20260905-ose6bdtd/canonical-tmp/lj_t-safepoint-native-root-hold' '2'
++ timeout '25s' '/tmp/lj-remote-root-completion-20260905-ose6bdtd/canonical-tmp/lj_t-safepoint-native-root-hold' '3'
+ok m3_safepoint_native_completion

@@ -1,0 +1,16 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/candidate-normal/src",
+    "-j4",
+    "BUILDMODE=static",
+    "CCDEBUG=-g",
+    "TARGET_STRIP=:"
+  ],
+  "exit_code": 0,
+  "seconds": 9.385369305000495
+}

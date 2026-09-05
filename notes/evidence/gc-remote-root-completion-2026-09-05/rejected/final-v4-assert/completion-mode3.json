@@ -1,0 +1,16 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/final-v4-assert/completion-probe",
+    "3"
+  ],
+  "exit_code": 0,
+  "stdout": "mode=3 returned with executor paused: pending=2 poll=0 epoch=20 active suffix retained\nreal local-completion native return probe PASS\n",
+  "stderr": "",
+  "seconds": 0.0038214250016608275,
+  "test_env": {
+    "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/assert-controls/loadlib-stopreq.so"
+  }
+}

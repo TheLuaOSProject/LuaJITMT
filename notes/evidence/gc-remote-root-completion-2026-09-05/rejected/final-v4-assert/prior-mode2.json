@@ -1,0 +1,16 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/final-v4-assert/prior-holds",
+    "2"
+  ],
+  "exit_code": 0,
+  "stdout": "mode=2 actual_kernel_wait=202 0x7f91d4b235a8 0x80 0x1 0x0 0x0 0x0 0x7ffde5486428 0x7f91d4c457b9\nheld: native=0 reqmask=0 poll=1 pending=0 ack=20 epoch=20 returned=0 scan_calls=1\nrelease: leader completed, native return resumed, exact root still marked and source unchanged\nreal consumed native acknowledgement probe PASS\n",
+  "stderr": "",
+  "seconds": 0.003626523001003079,
+  "test_env": {
+    "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/assert-controls/loadlib-stopreq.so"
+  }
+}

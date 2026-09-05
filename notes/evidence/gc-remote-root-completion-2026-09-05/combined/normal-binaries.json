@@ -1,0 +1,5 @@
+{
+  "luajit": "676ff3acc78a4055a4b3dfa5754011097068995e04c02bbced412c5be229bbdd",
+  "libluajit.a": "0ed1755f6436ec9795c8dcffe72e6eef5f6846af458af0dfc9a461248b468853",
+  "normal-t-ffi-callxs-callback-stack": "bed7a09a6b6a803db938af1cdd40b24bb2f05f784d34df27c579306e6e487df2"
+}

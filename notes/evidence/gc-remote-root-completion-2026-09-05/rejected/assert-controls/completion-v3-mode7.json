@@ -1,0 +1,13 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/assert-controls/completion-probe",
+    "7"
+  ],
+  "exit_code": -6,
+  "stdout": "",
+  "stderr": "completion-probe: /tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/completion-probe.c:53: completion_hook: Assertion `lj_tg_reqmask_acq(tg) == 0' failed.\n",
+  "seconds": 0.0656407409987878
+}

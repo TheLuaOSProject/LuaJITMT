@@ -1,0 +1,144 @@
+--- a/src/lj_safepoint.c
++++ b/src/lj_safepoint.c
+@@ -23,6 +23,26 @@
+ #include "lj_thr.h"
+ #include "lj_tg.h"
+ #include "lj_trace.h"
++
++#if defined(LJ_GC2_TEST_HELPERS)
++static LJSafepointCompletionTestHook safepoint_completion_test_hook;
++
++void lj_safepoint_test_completion_hook(LJSafepointCompletionTestHook hook)
++{
++  la_storefunc_rel(&safepoint_completion_test_hook, hook);
++}
++
++static void safepoint_completion_test_pause(global_State *g, TGState *tg,
++					 uint64_t epoch, uint32_t point)
++{
++  LJSafepointCompletionTestHook hook =
++    la_loadfunc_acq(&safepoint_completion_test_hook);
++  if (hook)
++    hook(g, tg, epoch, point);
++}
++#else
++#define safepoint_completion_test_pause(g, tg, epoch, point) ((void)0)
++#endif
+ 
+ static uint64_t safepoint_now_ns(void)
+ {
+@@ -166,6 +186,24 @@
+ 	 gc2_hs_leader_acq(g) != 0;
+ }
+ 
++/* This is local action completion, never a root-fixpoint or SSB-empty proof.
++** Every owner-private access (including fresh SSB installation and the
++** unconditional allocation-accounting flush) has finished before this test.
++** MARK/cycle samples only narrow eligibility: they do not pin the phase.
++** A later legal transition retains its ordinary barriers, entry gates and
++** counted handshake. This exact tail touches only target atomics, published
++** SSB nodes and independently retained metadata; the leader's last SSB flush
++** uses its own physical TG. Broader masks retain their global root, trace,
++** allocator and phase-action holds. */
++static int safepoint_owner_roots_complete(global_State *g, TGState *tg,
++					uint32_t actions, uint32_t cycle)
++{
++  return actions == (LJ_GC2_HS_SCAN_OWNER_ROOTS|LJ_GC2_HS_FLUSH_SSB) &&
++	 cycle != 0 && gc2_phase_acq(g) == LJ_GC2_MARK &&
++	 gc2_cycle_acq(g) == cycle && !lj_tg_jit_active_acq(tg) &&
++	 !lj_tg_flags_test_acq(tg, TGF_DEAD|TGF_STOPREQ_FRESH);
++}
++
+ static void safepoint_clear_consumed_polls(global_State *g, uint64_t epoch)
+ {
+   TGState *tg;
+@@ -315,7 +353,7 @@
+ 				 int native_trace_cert_required)
+ {
+   uint64_t epoch;
+-  uint32_t actions, oldpending;
++  uint32_t actions, oldpending, mark_cycle;
+   int roots_scanned;
+   if (!g || !tg)
+     return 0;
+@@ -348,6 +386,10 @@
+     return 0;
+   }
+   epoch = gc2_hs_epoch_acq(g);  /* 05 section 5.4.2 epoch. */
++  safepoint_completion_test_pause(g, tg, epoch,
++    LJ_SAFEPOINT_COMPLETION_TEST_CONSUMED);
++  mark_cycle = actions == (LJ_GC2_HS_SCAN_OWNER_ROOTS|LJ_GC2_HS_FLUSH_SSB) &&
++    gc2_phase_acq(g) == LJ_GC2_MARK ? gc2_cycle_acq(g) : 0;
+   if (native_parked && lj_tg_hs_epoch_ack_acq(tg) != epoch) {
+ #if LJ_HASFFI && LJ_HASJIT
+     /* Admission captured this obligation before reqmask consumption. Never
+@@ -389,8 +431,27 @@
+     safepoint_note_ack_latency(g);  /* 13.8: mutator-observed poll latency. */
+   {
+     int hold = safepoint_hold_poll_until_leader(g, actions);
+-    if (!hold)
++    int completed = hold &&
++      safepoint_owner_roots_complete(g, tg, actions, mark_cycle);
++    if (completed) {
++      safepoint_completion_test_pause(g, tg, epoch,
++	LJ_SAFEPOINT_COMPLETION_TEST_BEFORE_CLEAR);
++      hold = 0;
++    }
++    if (!hold) {
++      /* This executor still owns its pending slot and the current leader
++      ** excludes a newer epoch. Changing the futex word is the durable local
++      ** completion publication; waking an unchanged poll could lose a wake. */
+       safepoint_clear_poll(tg);
++      if (completed) {
++        /* A late signaler may have sampled this TG before its epoch claim and
++        ** republish the same counted epoch after reqmask consumption. Preserve
++        ** that duplicate's wake; the existing claim-loser path drops its slot. */
++        safepoint_restore_counted_poll(tg);
++	safepoint_completion_test_pause(g, tg, epoch,
++	  LJ_SAFEPOINT_COMPLETION_TEST_CLEARED);
++      }
++    }
+     oldpending = gc2_hs_pending_sub_acqrel(g, 1);  /* 05 section 5.4.2. */
+     if (oldpending == 1)
+       gc2_hs_pending_futex_wake(g, 1);
+@@ -627,6 +688,8 @@
+       continue;  /* Already counted by this handshake. */
+     (void)gc2_hs_pending_add_rlx(g, 1);
+     signaled++;
++    safepoint_completion_test_pause(g, tg, epoch,
++      LJ_SAFEPOINT_COMPLETION_TEST_COUNTED);
+     lj_tg_reqmask_rel(tg, actions);  /* 05 section 5.4.2. */
+     /* A consumed trace-flush poll can remain set after the TG has acked an
+     ** earlier epoch, keeping that TG parked until the leader retires trace
+@@ -654,7 +717,8 @@
+   /* A sanctioned native-to-Lua reentry clears in_native with release ordering
+   ** and polls before changing the Lua stack, C frame, root anchors, SSB or
+   ** allocator. If a remote acknowledgement consumed the request first, its
+-  ** poll remains set through leader completion and the reentry waits for it.
++  ** poll remains set through private action completion and the reentry waits
++  ** for it. Broader action masks retain the hold through the leader's tail.
+   ** Thus a still-native TG is a stable owner-private snapshot for root/SSB and
+   ** allocator boundary actions. Trace retirement has the extra JIT gate below.
+   */
+--- a/src/lj_safepoint.h
++++ b/src/lj_safepoint.h
+@@ -19,6 +19,19 @@
+ LJ_FUNC void lj_safepoint_apply_tg(global_State *g, TGState *tg,
+ 				   uint32_t actions);
+ LJ_FUNC uint32_t lj_safepoint_retire_dead_tg(global_State *g, TGState *tg);
++
++#if defined(LJ_GC2_TEST_HELPERS)
++enum {
++  LJ_SAFEPOINT_COMPLETION_TEST_BEFORE_CLEAR = 1,
++  LJ_SAFEPOINT_COMPLETION_TEST_CLEARED = 2,
++  LJ_SAFEPOINT_COMPLETION_TEST_CONSUMED = 3,
++  LJ_SAFEPOINT_COMPLETION_TEST_COUNTED = 4
++};
++typedef void (*LJSafepointCompletionTestHook)(global_State *g, TGState *tg,
++					    uint64_t epoch, uint32_t point);
++LJ_FUNC void lj_safepoint_test_completion_hook(
++  LJSafepointCompletionTestHook hook);
++#endif
+ typedef struct LJNativeFrame {
+   ptrdiff_t base;
+   ptrdiff_t top;

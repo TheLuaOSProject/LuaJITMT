@@ -1,0 +1,89 @@
+{
+  "runtime_source_count": 224,
+  "only_runtime_changes": [
+    "src/lj_safepoint.c",
+    "src/lj_safepoint.h"
+  ],
+  "sources": {
+    "src/lj_safepoint.c": "9779c6607135ffd7e06d6c1834022ad77cf491d8a30df6b63f9e5516d045af03",
+    "src/lj_safepoint.h": "328aa2bc63d753257d8adca5a5417ccdda059b942138aecda20a3da53752d46c",
+    "tests/suites/m3_gc.lua": "0f7d0aa2417d8f6feb16c1dcb183c0df8556f312e29d2faa2ef1e30a13cc0552",
+    "tests/t-safepoint-handshake.c": "987d739501012141a6985b329177c4f2af4706e045356034f57f302efdfc2465",
+    "tests/t-safepoint-local-native-duplicate.c": "2e0ae7c4ff8e8d8d605478ca3d33a5c9bf3eec74af37894091ae9b6543903ded",
+    "tests/t-safepoint-remote-root-completion.c": "9d8944de53856419fc82aefed90f7dac346cd5d014c2bb2b92f2904cf8566dfb",
+    "tests/t-safepoint-native-root-hold.c": "e7993ffdfd42218236986f960d95765b865d7a3f05b4637dbf4c7b33be8b5946"
+  },
+  "variants": {
+    "normal": {
+      "commands": 6,
+      "runtime_test_processes": 4,
+      "all_pass": true,
+      "binaries": {
+        "luajit": "676ff3acc78a4055a4b3dfa5754011097068995e04c02bbced412c5be229bbdd",
+        "libluajit.a": "0ed1755f6436ec9795c8dcffe72e6eef5f6846af458af0dfc9a461248b468853",
+        "normal-t-ffi-callxs-callback-stack": "bed7a09a6b6a803db938af1cdd40b24bb2f05f784d34df27c579306e6e487df2"
+      }
+    },
+    "strict": {
+      "commands": 23,
+      "runtime_test_processes": 16,
+      "all_pass": true,
+      "binaries": {
+        "luajit": "cca225994e981852b477b93dc33afc108f43ae308265685c06862db71094368c",
+        "libluajit.a": "e23caeee712530588b12557e59d6071bd96bfb2c0302ad2863dede5563cee6e9",
+        "strict-t-ffi-callxs-callback-stack": "67859a207130e0d575c9426828a800fb5edb4bf155122cc155529f39b51ddb61",
+        "strict-t-safepoint-remote-root-completion": "f5ed7386a35ebda8b835b993206be6df39331318ae0e56a56c386d8f513a68e3",
+        "strict-t-safepoint-local-native-duplicate": "075ebe0e8cbe0e5b886037c0389d9cd6c8ef18c1c88fd9fc7e7f089c2cbe816e",
+        "strict-t-safepoint-native-root-hold": "f926021f587fc11b757a7b6b7d8cad2269ed9d5e9ea91e3f73d8252c34d02ea9",
+        "strict-t-safepoint-handshake": "dccbf7cd5a456c168deae28011a479b702253459b54850e134f8efbc75de9f15"
+      }
+    },
+    "asan": {
+      "commands": 25,
+      "runtime_test_processes": 16,
+      "all_pass": true,
+      "binaries": {
+        "luajit": "db0b12cbe5eb277f9739526561a412ab66ff6576e10e8e8b81888f20f9107632",
+        "libluajit.a": "e92d773b4f8cb094a7fb0e8388596794574dbecd270b56cbabd025b7414847bc",
+        "asan-t-ffi-callxs-callback-stack": "ad61cda249020ed4d9357620a4cbc2bb459439d707eb959d207f285df8542f5a",
+        "asan-t-safepoint-remote-root-completion": "9a52c5f1e95a6c48c27bd9542381f8a179f675d0ce388d9d88f6a052256f3826",
+        "asan-t-safepoint-local-native-duplicate": "a3a9aaf5449038fe53334d68faa511680f1c80b1d9e6d1a55779e61c4d440f34",
+        "asan-t-safepoint-native-root-hold": "14f2e22eaef80d66dbeacbe8f818bca6d2dcc6c76f1577a366fe58ba34abec72",
+        "asan-t-safepoint-handshake": "4938c354cba531f247dfbb11b749a69025389c53fe0cf66ebc2c030a9445b888"
+      }
+    }
+  },
+  "canonical": {
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/luajit",
+      "/workspaces/lj-lockless/tools/test.lua",
+      "m3_safepoint_native_completion"
+    ],
+    "cwd": "/workspaces/lj-lockless",
+    "environment": {
+      "LJ_TEST_ROOT": "/workspaces/lj-lockless",
+      "JOBS": "4",
+      "MAKE_JOBS": "4",
+      "TMPDIR": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/canonical-tmp",
+      "LUA_PATH": "/workspaces/lj-lockless/src/?.lua;;"
+    },
+    "exit": 0,
+    "seconds": 27.748906106000504,
+    "final_source": {
+      "src/lj_safepoint.c": "9779c6607135ffd7e06d6c1834022ad77cf491d8a30df6b63f9e5516d045af03",
+      "src/lj_safepoint.h": "328aa2bc63d753257d8adca5a5417ccdda059b942138aecda20a3da53752d46c",
+      "tests/suites/m3_gc.lua": "0f7d0aa2417d8f6feb16c1dcb183c0df8556f312e29d2faa2ef1e30a13cc0552",
+      "tests/t-safepoint-remote-root-completion.c": "9d8944de53856419fc82aefed90f7dac346cd5d014c2bb2b92f2904cf8566dfb",
+      "tests/t-safepoint-local-native-duplicate.c": "2e0ae7c4ff8e8d8d605478ca3d33a5c9bf3eec74af37894091ae9b6543903ded",
+      "tests/t-safepoint-native-root-hold.c": "e7993ffdfd42218236986f960d95765b865d7a3f05b4637dbf4c7b33be8b5946"
+    },
+    "restored_binaries": {
+      "luajit": "fcfc133052586a7ea73013af2c8da345cec431effa868080da5e1b27309db574",
+      "libluajit.a": "7f3738261318686d5a3e8d93d80c5c3a63a2ff3c38216d2e8f8ef5a8426bdbdb",
+      "libluajit.so": "c37177e6c57b54ccab74e37c1598eb3d297ce8480233a7715cd9a37f894affde"
+    }
+  }
+}

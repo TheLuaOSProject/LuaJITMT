@@ -1,0 +1,572 @@
+[
+  {
+    "name": "build",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "make",
+      "-C",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src",
+      "-j4",
+      "BUILDMODE=static",
+      "CCDEBUG=-g",
+      "TARGET_STRIP=:",
+      "XCFLAGS=-DLUA_USE_ASSERT -DLJ_FUNC_TEST_HELPERS -DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLJ_XSAVE_TEST_HELPERS"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict",
+    "test": false,
+    "seconds": 14.366498198000045,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "make: Entering directory '/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src'\nHOSTCC    host/minilua.o\nHOSTCC    host/buildvm_asm.o\nHOSTCC    host/buildvm_peobj.o\nHOSTCC    host/buildvm_lib.o\nHOSTCC    host/buildvm_fold.o\nHOSTLINK  host/minilua\nVERSION   luajit.h\nDYNASM    host/buildvm_arch.h\nCC        luajit.o\nHOSTCC    host/buildvm.o\nHOSTLINK  host/buildvm\nBUILDVM   lj_vm.S\nBUILDVM   lj_bcdef.h\nBUILDVM   lj_ffdef.h\nBUILDVM   lj_libdef.h\nBUILDVM   lj_recdef.h\nBUILDVM   lj_folddef.h\nBUILDVM   jit/vmdef.lua\nASM       lj_vm.o\nCC        lj_assert.o\nCC        lj_gc.o\nCC        lj_gc2.o\nCC        lj_safepoint.o\nCC        lj_err.o\nCC        lj_char.o\nCC        lj_bc.o\nCC        lj_obj.o\nCC        lj_buf.o\nCC        lj_str.o\nCC        lj_tab.o\nCC        lj_func.o\nCC        lj_udata.o\nCC        lj_meta.o\nCC        lj_debug.o\nCC        lj_prng.o\nCC        lj_state.o\nCC        lj_dispatch.o\nCC        lj_tg.o\nCC        lj_thr.o\nCC        lj_chan.o\nCC        lj_arena.o\nCC        lj_vmevent.o\nCC        lj_vmmath.o\nCC        lj_strscan.o\nCC        lj_strfmt.o\nCC        lj_strfmt_num.o\nCC        lj_serialize.o\nCC        lj_api.o\nCC        lj_profile.o\nCC        lj_lex.o\nCC        lj_parse.o\nCC        lj_bcread.o\nCC        lj_bcwrite.o\nCC        lj_load.o\nCC        lj_ir.o\nCC        lj_opt_mem.o\nCC        lj_opt_fold.o\nCC        lj_opt_narrow.o\nCC        lj_opt_dce.o\nCC        lj_opt_loop.o\nCC        lj_opt_split.o\nCC        lj_opt_sink.o\nCC        lj_mcode.o\nCC        lj_snap.o\nCC        lj_record.o\nCC        lj_crecord.o\nCC        lj_ffrecord.o\nCC        lj_asm.o\nCC        lj_trace.o\nCC        lj_gdbjit.o\nCC        lj_ctype.o\nCC        lj_cdata.o\nCC        lj_cconv.o\nCC        lj_ccall.o\nCC        lj_ccallback.o\nCC        lj_carith.o\nCC        lj_clib.o\nCC        lj_cparse.o\nCC        lj_lib.o\nCC        lj_alloc.o\nCC        lib_aux.o\nCC        lib_base.o\nCC        lib_math.o\nCC        lib_bit.o\nCC        lib_string.o\nCC        lib_table.o\nCC        lib_io.o\nCC        lib_os.o\nCC        lib_package.o\nCC        lib_debug.o\nCC        lib_jit.o\nCC        lib_ffi.o\nCC        lib_buffer.o\nCC        lib_threading.o\nCC        lib_init.o\nAR        libluajit.a\nLINK      luajit\nOK        Successfully built LuaJIT\nmake: Leaving directory '/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src'\n",
+    "stderr": "**** WARNING Cannot determine rolling release version from git log.\n**** WARNING The 'git' command must be available during the build.\n"
+  },
+  {
+    "name": "stock-joff",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/luajit",
+      "-joff",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/stock/test",
+    "test": true,
+    "seconds": 1.4998121879980317,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "387 passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "stock-jon",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/luajit",
+      "-jon",
+      "test.lua",
+      "--quiet"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/stock/test",
+    "test": true,
+    "seconds": 1.9209864129989,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "509 passed\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-loadlib",
+    "command": [
+      "cc",
+      "-O2",
+      "-shared",
+      "-fPIC",
+      "-I/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/t-loadlib-stopreq-lib.c",
+      "-o",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-loadlib.so"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict",
+    "test": false,
+    "seconds": 0.025248136000300292,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/?.lua;;"
+    },
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "compile-t-ffi-callxs-callback-stack.c",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-I/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src",
+      "-I/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/t-ffi-callxs-callback-stack.c",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-o",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-t-ffi-callxs-callback-stack"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict",
+    "test": false,
+    "seconds": 0.156130914001551,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/?.lua;;",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "t-ffi-callxs-callback-stack.c ",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-t-ffi-callxs-callback-stack"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict",
+    "test": true,
+    "seconds": 0.009664232999057276,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/?.lua;;",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "callback stack mode=0 generated=80 callbacks=80 relocated=0 throws=0\ncallback stack mode=1 generated=80 callbacks=80 relocated=1 throws=0\ncallback stack mode=2 generated=1 callbacks=1 relocated=0 throws=1\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-t-safepoint-remote-root-completion.c",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-I/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src",
+      "-I/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/t-safepoint-remote-root-completion.c",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-o",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-t-safepoint-remote-root-completion"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict",
+    "test": false,
+    "seconds": 0.20378624599834438,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/?.lua;;",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "t-safepoint-remote-root-completion.c 0",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-t-safepoint-remote-root-completion",
+      "0"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict",
+    "test": true,
+    "seconds": 0.004465644997253548,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/?.lua;;",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "mode=0 returned with executor paused: pending=2 poll=0 epoch=20 active suffix retained\nremote owner-root completion PASS\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-safepoint-remote-root-completion.c 1",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-t-safepoint-remote-root-completion",
+      "1"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict",
+    "test": true,
+    "seconds": 0.004298761999962153,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/?.lua;;",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "before completion actual kernel wait: 202 0x7f77462535a8 0x80 0x1 0x0 0x0 0x0 0x7ffe587d9058 0x7f774637e7b9\nmode=1 returned with executor paused: pending=2 poll=0 epoch=20 active suffix retained\nremote owner-root completion PASS\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-safepoint-remote-root-completion.c 2",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-t-safepoint-remote-root-completion",
+      "2"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict",
+    "test": true,
+    "seconds": 0.003957851000450319,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/?.lua;;",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "mode=2 returned with executor paused: pending=2 poll=0 epoch=20 active suffix retained\nremote owner-root completion PASS\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-safepoint-remote-root-completion.c 3",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-t-safepoint-remote-root-completion",
+      "3"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict",
+    "test": true,
+    "seconds": 0.003816103002463933,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/?.lua;;",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "mode=3 returned with executor paused: pending=2 poll=0 epoch=20 active suffix retained\nremote owner-root completion PASS\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-safepoint-remote-root-completion.c 4",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-t-safepoint-remote-root-completion",
+      "4"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict",
+    "test": true,
+    "seconds": 0.0040394950010522734,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/?.lua;;",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "mode=4 returned with executor paused: pending=2 poll=0 epoch=20 active suffix retained\nremote owner-root completion PASS\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-safepoint-remote-root-completion.c 5",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-t-safepoint-remote-root-completion",
+      "5"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict",
+    "test": true,
+    "seconds": 0.003563769001630135,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/?.lua;;",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "mode=5 returned with executor paused: pending=2 poll=0 epoch=20 active suffix retained\nremote owner-root completion PASS\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-t-safepoint-local-native-duplicate.c",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-I/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src",
+      "-I/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/t-safepoint-local-native-duplicate.c",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_lex_gc2_markroots",
+      "-o",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-t-safepoint-local-native-duplicate"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict",
+    "test": false,
+    "seconds": 0.16404625100039993,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/?.lua;;",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "t-safepoint-local-native-duplicate.c ",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-t-safepoint-local-native-duplicate"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict",
+    "test": true,
+    "seconds": 0.004111910999199608,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/?.lua;;",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "local native winner remains in exact consumed-poll wait: 202 0x555a3826ad18 0x80 0x1 0x0 0x0 0x0 0x7f784db4ed28 0x7f784defd7b9\nsignaled=3 real-remote-scan=1 owner-scan=1 local-clear=0 teardown-during-scan=0 exact-owner-wait=1 pending=0\nlocal native duplicate scan hold PASS\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-t-safepoint-native-root-hold.c",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-I/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src",
+      "-I/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/t-safepoint-native-root-hold.c",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-Wl,--wrap=lj_gc2_scan_cycle_owner_tg_roots_native_parked",
+      "-Wl,--wrap=lj_gc2_scan_cycle_global_roots",
+      "-Wl,--wrap=lj_gc2_flush_ssb",
+      "-o",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-t-safepoint-native-root-hold"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict",
+    "test": false,
+    "seconds": 0.18766969199714367,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/?.lua;;",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "t-safepoint-native-root-hold.c 0",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-t-safepoint-native-root-hold",
+      "0"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict",
+    "test": true,
+    "seconds": 0.00487599199914257,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/?.lua;;",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "mode=0 actual_kernel_wait=202 0x7f16be6d35a8 0x80 0x1 0x0 0x0 0x0 0x7fff81122b58 0x7f16be7fb7b9\nheld: native=0 reqmask=0 poll=1 pending=2 ack=19 epoch=20 returned=0 scan_calls=1\nrelease: leader completed, native return resumed, exact root still marked and source unchanged\nreal consumed native acknowledgement probe PASS\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-safepoint-native-root-hold.c 1",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-t-safepoint-native-root-hold",
+      "1"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict",
+    "test": true,
+    "seconds": 0.004106270000193035,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/?.lua;;",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "mode=1 actual_kernel_wait=202 0x7f10adfd35a8 0x80 0x1 0x0 0x0 0x0 0x7ffef874f4e8 0x7f10ae0f17b9\nheld: native=0 reqmask=0 poll=1 pending=2 ack=19 epoch=20 returned=0 scan_calls=1\nrelease: leader completed, native return resumed, exact root still marked and source unchanged\nreal consumed native acknowledgement probe PASS\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-safepoint-native-root-hold.c 2",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-t-safepoint-native-root-hold",
+      "2"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict",
+    "test": true,
+    "seconds": 0.0038778349990025163,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/?.lua;;",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "mode=2 actual_kernel_wait=202 0x7fa68e9535a8 0x80 0x1 0x0 0x0 0x0 0x7fff1cb45608 0x7fa68ea727b9\nheld: native=0 reqmask=0 poll=1 pending=0 ack=20 epoch=20 returned=0 scan_calls=1\nrelease: leader completed, native return resumed, exact root still marked and source unchanged\nreal consumed native acknowledgement probe PASS\n",
+    "stderr": ""
+  },
+  {
+    "name": "t-safepoint-native-root-hold.c 3",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-t-safepoint-native-root-hold",
+      "3"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict",
+    "test": true,
+    "seconds": 0.003760286999749951,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/?.lua;;",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "mode=3 actual_kernel_wait=202 0x7fd71d8335a8 0x80 0x1 0x0 0x0 0x0 0x7ffca6543378 0x7fd71d9517b9\nheld: native=0 reqmask=0 poll=1 pending=2 ack=20 epoch=20 returned=0 scan_calls=1\nrelease: leader completed, native return resumed, exact root still marked and source unchanged\nreal consumed native acknowledgement probe PASS\n",
+    "stderr": ""
+  },
+  {
+    "name": "compile-t-safepoint-handshake.c",
+    "command": [
+      "cc",
+      "-std=gnu11",
+      "-O2",
+      "-g",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-mcx16",
+      "-DLUA_USE_ASSERT",
+      "-DLJ_FUNC_TEST_HELPERS",
+      "-DLJ_GC2_TEST_HELPERS",
+      "-DLJ_TAB_TEST_HELPERS",
+      "-DLJ_ARENA_TEST_HELPERS",
+      "-DLJ_TRACE_TEST_HELPERS",
+      "-DLJ_XSAVE_TEST_HELPERS",
+      "-I/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src",
+      "-I/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/t-safepoint-handshake.c",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/libluajit.a",
+      "-lm",
+      "-ldl",
+      "-pthread",
+      "-rdynamic",
+      "-o",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-t-safepoint-handshake"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict",
+    "test": false,
+    "seconds": 0.4030843319997075,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/?.lua;;",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "t-safepoint-handshake.c ",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-t-safepoint-handshake"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict",
+    "test": true,
+    "seconds": 2.505986304000544,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/?.lua;;",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-loadlib.so"
+    },
+    "exit": 0,
+    "stdout": "\nt-safepoint-handshake OK: C soft handshakes verified\n",
+    "stderr": "lua_debug> lua_debug> "
+  },
+  {
+    "name": "generated-remote-flush",
+    "command": [
+      "taskset",
+      "-c",
+      "0-15",
+      "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/luajit",
+      "-jon",
+      "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/final.lua"
+    ],
+    "cwd": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict",
+    "test": true,
+    "seconds": 0.01618609499928425,
+    "environment": {
+      "LUA_PATH": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/tests/lib/?.lua;/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict/src/?.lua;;",
+      "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-remote-root-completion-20260905-ose6bdtd/strict-loadlib.so",
+      "LJ_M7_FFI_CALLXS_FLUSH_SO": "/tmp/lj-remote-flush-readiness-20260905-root-i9ll10l3/native-witness.so"
+    },
+    "exit": 0,
+    "stdout": "t-ffi-callxs-remote-flush OK: boxed GC/flush 0.000/0.000s, bool GC/flush 0.000/0.000s, sret GC/flush 0.000/0.000s before release\n",
+    "stderr": ""
+  }
+]

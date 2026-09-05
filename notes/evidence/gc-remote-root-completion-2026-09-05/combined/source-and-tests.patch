@@ -1,0 +1,989 @@
+diff --git a/src/lj_safepoint.c b/src/lj_safepoint.c
+index 917e7b49..ced214ed 100644
+--- a/src/lj_safepoint.c
++++ b/src/lj_safepoint.c
+@@ -24,6 +24,26 @@
+ #include "lj_tg.h"
+ #include "lj_trace.h"
+ 
++#if defined(LJ_GC2_TEST_HELPERS)
++static LJSafepointCompletionTestHook safepoint_completion_test_hook;
++
++void lj_safepoint_test_completion_hook(LJSafepointCompletionTestHook hook)
++{
++  la_storefunc_rel(&safepoint_completion_test_hook, hook);
++}
++
++static void safepoint_completion_test_pause(global_State *g, TGState *tg,
++					 uint64_t epoch, uint32_t point)
++{
++  LJSafepointCompletionTestHook hook =
++    la_loadfunc_acq(&safepoint_completion_test_hook);
++  if (hook)
++    hook(g, tg, epoch, point);
++}
++#else
++#define safepoint_completion_test_pause(g, tg, epoch, point) ((void)0)
++#endif
++
+ static uint64_t safepoint_now_ns(void)
+ {
+   return lj_thr_now_ns();
+@@ -166,6 +186,24 @@ static int safepoint_hold_poll_until_leader(global_State *g, uint32_t actions)
+ 	 gc2_hs_leader_acq(g) != 0;
+ }
+ 
++/* This is local action completion, never a root-fixpoint or SSB-empty proof.
++** Every owner-private access (including fresh SSB installation and the
++** unconditional allocation-accounting flush) has finished before this test.
++** MARK/cycle samples only narrow eligibility: they do not pin the phase.
++** A later legal transition retains its ordinary barriers, entry gates and
++** counted handshake. This exact tail touches only target atomics, published
++** SSB nodes and independently retained metadata; the leader's last SSB flush
++** uses its own physical TG. Broader masks retain their global root, trace,
++** allocator and phase-action holds. */
++static int safepoint_owner_roots_complete(global_State *g, TGState *tg,
++					uint32_t actions, uint32_t cycle)
++{
++  return actions == (LJ_GC2_HS_SCAN_OWNER_ROOTS|LJ_GC2_HS_FLUSH_SSB) &&
++	 cycle != 0 && gc2_phase_acq(g) == LJ_GC2_MARK &&
++	 gc2_cycle_acq(g) == cycle && !lj_tg_jit_active_acq(tg) &&
++	 !lj_tg_flags_test_acq(tg, TGF_DEAD|TGF_STOPREQ_FRESH);
++}
++
+ static void safepoint_clear_consumed_polls(global_State *g, uint64_t epoch)
+ {
+   TGState *tg;
+@@ -315,7 +353,7 @@ static uint32_t safepoint_ack_tg(global_State *g, TGState *tg,
+ 				 int native_trace_cert_required)
+ {
+   uint64_t epoch;
+-  uint32_t actions, oldpending;
++  uint32_t actions, oldpending, mark_cycle;
+   int roots_scanned;
+   if (!g || !tg)
+     return 0;
+@@ -348,6 +386,10 @@ retry:
+     return 0;
+   }
+   epoch = gc2_hs_epoch_acq(g);  /* 05 section 5.4.2 epoch. */
++  safepoint_completion_test_pause(g, tg, epoch,
++    LJ_SAFEPOINT_COMPLETION_TEST_CONSUMED);
++  mark_cycle = actions == (LJ_GC2_HS_SCAN_OWNER_ROOTS|LJ_GC2_HS_FLUSH_SSB) &&
++    gc2_phase_acq(g) == LJ_GC2_MARK ? gc2_cycle_acq(g) : 0;
+   if (native_parked && lj_tg_hs_epoch_ack_acq(tg) != epoch) {
+ #if LJ_HASFFI && LJ_HASJIT
+     /* Admission captured this obligation before reqmask consumption. Never
+@@ -389,8 +431,31 @@ retry:
+     safepoint_note_ack_latency(g);  /* 13.8: mutator-observed poll latency. */
+   {
+     int hold = safepoint_hold_poll_until_leader(g, actions);
+-    if (!hold)
++    /* Local poll callers can retain native depth during startup or detach.
++    ** A duplicate may then have a remote pre-claim root scan still in flight,
++    ** even after the local executor wins the epoch. Only the unique leader's
++    ** remote executor can prove no other remote scan outlives this clear. */
++    int completed = hold && native_parked &&
++      safepoint_owner_roots_complete(g, tg, actions, mark_cycle);
++    if (completed) {
++      safepoint_completion_test_pause(g, tg, epoch,
++	LJ_SAFEPOINT_COMPLETION_TEST_BEFORE_CLEAR);
++      hold = 0;
++    }
++    if (!hold) {
++      /* This executor still owns its pending slot and the current leader
++      ** excludes a newer epoch. Changing the futex word is the durable local
++      ** completion publication; waking an unchanged poll could lose a wake. */
+       safepoint_clear_poll(tg);
++      if (completed) {
++        /* A late signaler may have sampled this TG before its epoch claim and
++        ** republish the same counted epoch after reqmask consumption. Preserve
++        ** that duplicate's wake; the existing claim-loser path drops its slot. */
++        safepoint_restore_counted_poll(tg);
++	safepoint_completion_test_pause(g, tg, epoch,
++	  LJ_SAFEPOINT_COMPLETION_TEST_CLEARED);
++      }
++    }
+     oldpending = gc2_hs_pending_sub_acqrel(g, 1);  /* 05 section 5.4.2. */
+     if (oldpending == 1)
+       gc2_hs_pending_futex_wake(g, 1);
+@@ -627,6 +692,8 @@ static uint32_t safepoint_signal_late(global_State *g, uint32_t actions,
+       continue;  /* Already counted by this handshake. */
+     (void)gc2_hs_pending_add_rlx(g, 1);
+     signaled++;
++    safepoint_completion_test_pause(g, tg, epoch,
++      LJ_SAFEPOINT_COMPLETION_TEST_COUNTED);
+     lj_tg_reqmask_rel(tg, actions);  /* 05 section 5.4.2. */
+     /* A consumed trace-flush poll can remain set after the TG has acked an
+     ** earlier epoch, keeping that TG parked until the leader retires trace
+@@ -654,7 +721,8 @@ static int safepoint_native_ack_allowed(TGState *tg, uint32_t actions,
+   /* A sanctioned native-to-Lua reentry clears in_native with release ordering
+   ** and polls before changing the Lua stack, C frame, root anchors, SSB or
+   ** allocator. If a remote acknowledgement consumed the request first, its
+-  ** poll remains set through leader completion and the reentry waits for it.
++  ** poll remains set through private action completion and the reentry waits
++  ** for it. Broader action masks retain the hold through the leader's tail.
+   ** Thus a still-native TG is a stable owner-private snapshot for root/SSB and
+   ** allocator boundary actions. Trace retirement has the extra JIT gate below.
+   */
+diff --git a/src/lj_safepoint.h b/src/lj_safepoint.h
+index 19819609..1f8c7acf 100644
+--- a/src/lj_safepoint.h
++++ b/src/lj_safepoint.h
+@@ -19,6 +19,19 @@ LJ_FUNC uint32_t lj_safepoint_handshake(global_State *g, uint32_t actions);
+ LJ_FUNC void lj_safepoint_apply_tg(global_State *g, TGState *tg,
+ 				   uint32_t actions);
+ LJ_FUNC uint32_t lj_safepoint_retire_dead_tg(global_State *g, TGState *tg);
++
++#if defined(LJ_GC2_TEST_HELPERS)
++enum {
++  LJ_SAFEPOINT_COMPLETION_TEST_BEFORE_CLEAR = 1,
++  LJ_SAFEPOINT_COMPLETION_TEST_CLEARED = 2,
++  LJ_SAFEPOINT_COMPLETION_TEST_CONSUMED = 3,
++  LJ_SAFEPOINT_COMPLETION_TEST_COUNTED = 4
++};
++typedef void (*LJSafepointCompletionTestHook)(global_State *g, TGState *tg,
++					    uint64_t epoch, uint32_t point);
++LJ_FUNC void lj_safepoint_test_completion_hook(
++  LJSafepointCompletionTestHook hook);
++#endif
+ typedef struct LJNativeFrame {
+   ptrdiff_t base;
+   ptrdiff_t top;
+diff --git a/tests/suites/m3_gc.lua b/tests/suites/m3_gc.lua
+index 61300fed..7381139d 100644
+--- a/tests/suites/m3_gc.lua
++++ b/tests/suites/m3_gc.lua
+@@ -49,6 +49,7 @@ local m3_scaffold_deps = {
+   "m3_gc2_mark_close_progress",
+   "m3_gc_active_thread_roots",
+   "m3_safepoint_handshake",
++  "m3_safepoint_native_completion",
+   "m3_vmevent_native_stdio",
+   "m3_vm_safepoint",
+   "m3_interp_stock_joff",
+@@ -407,6 +408,46 @@ return function(add)
+     end
+   })
+ 
++  register({
++    name = "m3_safepoint_native_completion",
++    description = "remote owner-root completion and retained local/scanner holds",
++    run = function(t)
++      if jit.os ~= "Linux" or jit.arch ~= "x64" then
++        print("M3 native completion fixtures require Linux/x64 and GNU ld wrapping")
++        return
++      end
++      local flags = gc2_test_cflags .. " -DLUA_USE_ASSERT"
++      build.with_default_build_restore(t, function()
++        build.clean_build(t, { xcflags = flags })
++        local fixtures = {
++          { name = "t-safepoint-remote-root-completion", modes = { "0", "1", "2", "3", "4", "5" },
++            wraps = { "lj_gc2_scan_cycle_owner_tg_roots_native_parked" } },
++          { name = "t-safepoint-local-native-duplicate", modes = { false },
++            wraps = { "lj_gc2_scan_cycle_owner_tg_roots_native_parked", "lj_lex_gc2_markroots" } },
++          { name = "t-safepoint-native-root-hold", modes = { "0", "1", "2", "3" },
++            wraps = { "lj_gc2_scan_cycle_owner_tg_roots_native_parked",
++                      "lj_gc2_scan_cycle_global_roots", "lj_gc2_flush_ssb" } }
++        }
++        for _, fixture in ipairs(fixtures) do
++          local exe = t:tmp("lj_" .. fixture.name)
++          local libs = { "-lm", "-ldl", "-pthread" }
++          for _, symbol in ipairs(fixture.wraps) do
++            libs[#libs + 1] = "-Wl,--wrap=" .. symbol
++          end
++          t:cc(exe, { t:path("tests", fixture.name .. ".c") }, {
++            cflags = flags, link_luajit = true, libs = libs
++          })
++          for _, mode in ipairs(fixture.modes) do
++            local argv = { exe }
++            if mode then argv[#argv + 1] = mode end
++            t:run(argv, { timeout = "25s" })
++          end
++        end
++      end)
++      print("M3 remote completion and required native holds passed")
++    end
++  })
++
+   register({
+     name = "m3_safepoint_handshake",
+     description = "C-level safepoint handshake fixture",
+diff --git a/tests/t-safepoint-handshake.c b/tests/t-safepoint-handshake.c
+index 623f69c1..b1f8c5d0 100644
+--- a/tests/t-safepoint-handshake.c
++++ b/tests/t-safepoint-handshake.c
+@@ -997,9 +997,17 @@ int main(void)
+   assert(tg->poll == 0);
+   assert(tg->reqmask == 0);
+   assert(tg->hs_epoch_ack == epoch0);
+-  assert(tg->ssb_active == &tg->ssb_node[0]);
+-  assert(tg->ssb_free == &tg->ssb_node[1]);
+-  assert(tg->ssb_base == tg->ssb_node[0].slot);
++  /* Collection may rotate either embedded node into the active role. The
++  ** contract is one active and one distinct available node, each owner-bound. */
++  assert(tg->ssb_active == &tg->ssb_node[0] ||
++         tg->ssb_active == &tg->ssb_node[1]);
++  assert(tg->ssb_free == &tg->ssb_node[0] ||
++         tg->ssb_free == &tg->ssb_node[1]);
++  assert(tg->ssb_active != tg->ssb_free);
++  assert(lj_gc2_ssb_owner_acq(tg->ssb_active) == tg);
++  assert(lj_gc2_ssb_owner_acq(tg->ssb_free) == tg);
++  assert(lj_gc2_ssb_next_acq(tg->ssb_free) == NULL);
++  assert(tg->ssb_base == tg->ssb_active->slot);
+   assert(tg->ssb_next == tg->ssb_base);
+   assert(tg->ssb_end == tg->ssb_base + TG_GC2_SSB_SLOTS);
+   test_owner_only_root_handshake(L, g, tg);
+diff --git a/tests/t-safepoint-local-native-duplicate.c b/tests/t-safepoint-local-native-duplicate.c
+new file mode 100644
+--- /dev/null
++++ b/tests/t-safepoint-local-native-duplicate.c
+@@ -0,0 +1,193 @@
++#define _GNU_SOURCE
++#include <assert.h>
++#include <pthread.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <sys/syscall.h>
++#include <time.h>
++#include <unistd.h>
++#include "lua.h"
++#include "lauxlib.h"
++#include "lualib.h"
++#include "lj_obj.h"
++#include "lj_atomic.h"
++#include "lj_gc2.h"
++#include "lj_safepoint.h"
++#include "lj_tg.h"
++#include "lj_thr.h"
++#include "lj_lex.h"
++
++typedef struct Probe {
++  global_State *g;
++  TGState owner;
++  uint32_t ready, armed, refused, consumed, remote_scan;
++  uint32_t release_scan, detached, teardown_overlap, observed_wait;
++  uint32_t local_clear, real_remote_scan, owner_scan;
++  pid_t owner_sysid;
++} Probe;
++static Probe ctx;
++static uint64_t now_ns(void)
++{
++  struct timespec t;
++  assert(clock_gettime(CLOCK_MONOTONIC, &t) == 0);
++  return (uint64_t)t.tv_sec * 1000000000u + (uint64_t)t.tv_nsec;
++}
++static void until(const uint32_t *p, uint32_t value)
++{
++  uint64_t end = now_ns() + 5000000000ull;
++  while (la_load32_acq(p) != value) {
++    assert(now_ns() < end);
++    la_cpu_pause();
++  }
++}
++static void completion_hook(global_State *g, TGState *tg,
++                            uint64_t epoch, uint32_t point)
++{
++  Probe *p = &ctx;
++  if (g != p->g || tg != &p->owner || !la_load32_acq(&p->armed)) return;
++  if (point == LJ_SAFEPOINT_COMPLETION_TEST_CONSUMED &&
++      lj_thr_get_tg() == tg && lj_tg_hs_epoch_ack_acq(tg) != epoch) {
++    assert(lj_tg_in_native_acq(tg) == 1);
++    assert(lj_tg_reqmask_acq(tg) == 0);
++    la_store32_rel(&p->consumed, 1);
++    until(&p->remote_scan, 1);
++  }
++  if (point == LJ_SAFEPOINT_COMPLETION_TEST_CLEARED && lj_thr_get_tg() == tg) {
++    assert(la_load32_acq(&p->remote_scan));
++    assert(!la_load32_acq(&p->release_scan));
++    assert(lj_tg_reqmask_acq(tg) == 0);
++    assert(lj_tg_poll_acq(tg) == 0);
++    la_store32_rel(&p->local_clear, 1);
++  }
++}
++extern int __real_lj_gc2_scan_cycle_owner_tg_roots_native_parked(global_State *, TGState *);
++int __wrap_lj_gc2_scan_cycle_owner_tg_roots_native_parked(global_State *g, TGState *tg)
++{
++  if (g == ctx.g && tg == &ctx.owner && la_load32_acq(&ctx.armed) &&
++      !la_load32_acq(&ctx.consumed)) {
++    /* Keep legitimate remote refusal until the owner actually consumes its
++    ** requeued request; scheduling may make the leader retry first. The target
++    ** performs its real local acknowledgement from lj_tg_detach below. */
++    la_store32_rel(&ctx.refused, 1);
++    return 0;
++  }
++  return __real_lj_gc2_scan_cycle_owner_tg_roots_native_parked(g, tg);
++}
++extern void __real_lj_lex_gc2_markroots(global_State *, TGState *);
++void __wrap_lj_lex_gc2_markroots(global_State *g, TGState *tg)
++{
++  Probe *p = &ctx;
++  if (g == p->g && tg == &p->owner && la_load32_acq(&p->armed)) {
++    if (lj_thr_get_tg() != tg) {
++      /* This is inside actual owner-root traversal, after its DEAD check and
++      ** tmpbuf access but before parser/anchor/thread-root accesses. */
++      assert(la_load32_acq(&p->consumed));
++      assert(lj_tg_in_native_acq(tg) == 1);
++      assert(lj_tg_reqmask_acq(tg) == 0);
++      assert(lj_tg_hs_epoch_ack_acq(tg) != gc2_hs_epoch_acq(g));
++      (void)la_add32_rlx(&p->real_remote_scan, 1);
++      la_store32_rel(&p->remote_scan, 1);
++      until(&p->release_scan, 1);
++    } else {
++      (void)la_add32_rlx(&p->owner_scan, 1);
++    }
++  }
++  __real_lj_lex_gc2_markroots(g, tg);
++}
++static void *owner(void *arg)
++{
++  Probe *p = arg;
++  TGState *tg = &p->owner;
++  lj_tg_init_thread(p->g, tg, NULL, 0);
++  lj_tg_tid_rel(tg, lj_thr_newid());
++  lj_arena_alloc_owner_rel(&tg->alloc, lj_tg_tid_acq(tg));
++  lj_thr_set_tg(tg);
++  p->owner_sysid = (pid_t)syscall(SYS_gettid);
++  /* Match the production GC-worker lifecycle: native from attach to detach;
++  ** lj_tg_detach itself services its outstanding TG-only acknowledgement. */
++  lj_native_enter(tg);
++  lj_tg_attach(p->g, tg);
++  la_store32_rel(&p->ready, 1);
++  until(&p->refused, 1);
++  while (lj_tg_reqmask_acq(tg) == 0) la_cpu_pause();
++  lj_tg_detach(p->g, tg);
++  if (!la_load32_acq(&p->release_scan))
++    la_store32_rel(&p->teardown_overlap, 1);
++  assert(lj_tg_flags_test_acq(tg, TGF_DEAD));
++  assert(lj_tg_in_native_acq(tg) == 0);
++  la_store32_rel(&p->detached, 1);
++  lj_thr_set_tg(NULL);
++  return NULL;
++}
++static void *observer(void *arg)
++{
++  Probe *p = arg;
++  char path[96], line[320];
++  uint64_t end;
++  until(&p->remote_scan, 1);
++  end = now_ns() + 5000000000ull;
++  snprintf(path, sizeof(path), "/proc/self/task/%ld/syscall", (long)p->owner_sysid);
++  for (;;) {
++    long nr;
++    unsigned long long addr, op, val, timeout_arg;
++    FILE *f;
++    if (la_load32_acq(&p->detached)) {
++      assert(la_load32_acq(&p->teardown_overlap));
++      break;
++    }
++    assert(now_ns() < end);
++    f = fopen(path, "r");
++    if (f) {
++      if (!fgets(line, sizeof(line), f)) line[0] = 0;
++      fclose(f);
++      if (sscanf(line, "%ld %llx %llx %llx %llx", &nr, &addr, &op, &val, &timeout_arg) == 5 &&
++          nr == SYS_futex && addr == (unsigned long long)(uintptr_t)&p->owner.poll &&
++          op == FUTEX_WAIT_PRIVATE && val == 1 && timeout_arg == 0) {
++        assert(!la_load32_acq(&p->local_clear));
++        assert(lj_tg_in_native_acq(&p->owner) == 1);
++        assert(lj_tg_reqmask_acq(&p->owner) == 0);
++        assert(lj_tg_hs_epoch_ack_acq(&p->owner) == gc2_hs_epoch_acq(p->g));
++        printf("local native winner remains in exact consumed-poll wait: %s", line);
++        la_store32_rel(&p->observed_wait, 1);
++        break;
++      }
++    }
++    usleep(1000);
++  }
++  la_store32_rel(&p->release_scan, 1);
++  return NULL;
++}
++int main(void)
++{
++  lua_State *L;
++  pthread_t w, o;
++  uint32_t signaled;
++  alarm(15);
++  setvbuf(stdout, NULL, _IOLBF, 0);
++  L = luaL_newstate(); assert(L); luaL_openlibs(L);
++  lua_gc(L, LUA_GCCOLLECT, 0); lua_gc(L, LUA_GCSTOP, 0);
++  ctx.g = G(L);
++  assert(pthread_create(&w, NULL, owner, &ctx) == 0);
++  until(&ctx.ready, 1);
++  lj_gc2_mark_begin(ctx.g);
++  assert(gc2_phase_acq(ctx.g) == LJ_GC2_MARK);
++  la_store32_rel(&ctx.armed, 1);
++  lj_safepoint_test_completion_hook(completion_hook);
++  assert(pthread_create(&o, NULL, observer, &ctx) == 0);
++  signaled = lj_safepoint_handshake(ctx.g,
++      LJ_GC2_HS_SCAN_OWNER_ROOTS|LJ_GC2_HS_FLUSH_SSB);
++  assert(pthread_join(w, NULL) == 0);
++  assert(pthread_join(o, NULL) == 0);
++  la_store32_rel(&ctx.armed, 0);
++  lj_safepoint_test_completion_hook(NULL);
++  printf("signaled=%u real-remote-scan=%u owner-scan=%u local-clear=%u teardown-during-scan=%u exact-owner-wait=%u pending=%u\n",
++      signaled,ctx.real_remote_scan,ctx.owner_scan,ctx.local_clear,
++      ctx.teardown_overlap,ctx.observed_wait,gc2_hs_pending_acq(ctx.g));
++  assert(ctx.real_remote_scan == 1 && ctx.owner_scan == 1);
++  assert(gc2_hs_pending_acq(ctx.g) == 0 && gc2_hs_leader_acq(ctx.g) == 0);
++  assert(!ctx.teardown_overlap && ctx.observed_wait);
++  lua_gc(L, LUA_GCCOLLECT, 0);
++  lua_close(L);
++  puts("local native duplicate scan hold PASS");
++  return 0;
++}
+diff --git a/tests/t-safepoint-remote-root-completion.c b/tests/t-safepoint-remote-root-completion.c
+new file mode 100644
+--- /dev/null
++++ b/tests/t-safepoint-remote-root-completion.c
+@@ -0,0 +1,321 @@
++#define _GNU_SOURCE
++#include <assert.h>
++#include <inttypes.h>
++#include <pthread.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <sys/syscall.h>
++#include <unistd.h>
++#include "lua.h"
++#include "lauxlib.h"
++#include "lualib.h"
++#include "lj_obj.h"
++#include "lj_atomic.h"
++#include "lj_gc.h"
++#include "lj_gc2.h"
++#include "lj_safepoint.h"
++#include "lj_tg.h"
++#include "lj_thr.h"
++
++/* The unique remote executor may resume its completed owner before the
++** remaining handshake tail. All requests, native transitions, root scans,
++** MARK/IDLE transitions, SSB publication and Lua state claims are real. */
++typedef struct Probe {
++  global_State *g;
++  TGState *owner;
++  TGState peer, late;
++  lua_State *L;
++  GCtab *root;
++  LJStateOwner owner_word;
++  uint64_t epoch;
++  GC2SSBNode *fresh;
++  uint32_t mode, armed, before, cleared, release_before, release_tail;
++  uint32_t returned, peer_done, allow_detach, remote_scans;
++  uint32_t observed_futex, late_done;
++  pid_t owner_sysid;
++  pthread_t peer_thread, observer;
++} Probe;
++static Probe ctx;
++static void until(const uint32_t *p, uint32_t v)
++{
++  while (la_load32_acq(p) != v) la_cpu_pause();
++}
++static void completion_hook(global_State *g, TGState *tg,
++                            uint64_t epoch, uint32_t point)
++{
++  Probe *p = &ctx;
++  if (g != p->g || tg != p->owner || !la_load32_acq(&p->armed)) return;
++  if (point != LJ_SAFEPOINT_COMPLETION_TEST_BEFORE_CLEAR &&
++      point != LJ_SAFEPOINT_COMPLETION_TEST_CLEARED) return;
++  assert(lj_tg_reqmask_acq(tg) == 0);
++  assert(lj_tg_hs_epoch_ack_acq(tg) == epoch);
++  assert(gc2_hs_pending_acq(g) != 0);
++  assert(gc2_phase_acq(g) == LJ_GC2_MARK);
++  assert(lj_gc2_ismarked(g, obj2gco(p->root)) == 1);
++  assert(lj_state_owner_word_acq(p->L) == p->owner_word);
++  assert(lj_thr_get_tg() == &p->peer);
++  assert(gc2_hs_leader_acq(g) == lj_tg_tid_acq(&p->peer));
++  p->epoch = epoch;
++  if (point == LJ_SAFEPOINT_COMPLETION_TEST_BEFORE_CLEAR) {
++    assert(lj_tg_poll_acq(tg) == 1);
++    la_store32_rel(&p->before, 1);
++    if (p->mode == 1) until(&p->release_before, 1);
++  } else {
++    assert(point == LJ_SAFEPOINT_COMPLETION_TEST_CLEARED);
++    assert(lj_tg_poll_acq(tg) == 0);
++    p->fresh = lj_tg_ssb_active_acq(tg);
++    assert(lj_tg_ssb_next_acq(tg) == lj_tg_ssb_base_acq(tg));
++    la_store32_rel(&p->cleared, 1);
++    until(&p->release_tail, 1);
++    assert(la_load32_acq(&p->returned) == 1);
++    assert(lj_tg_in_native_acq(tg) == 0);
++    assert(lj_state_owner_word_acq(p->L) == p->owner_word);
++  }
++}
++extern int __real_lj_gc2_scan_cycle_owner_tg_roots_native_parked(global_State *, TGState *);
++int __wrap_lj_gc2_scan_cycle_owner_tg_roots_native_parked(global_State *g, TGState *tg)
++{
++  int r;
++  if (g != ctx.g || tg != ctx.owner || !la_load32_acq(&ctx.armed))
++    return __real_lj_gc2_scan_cycle_owner_tg_roots_native_parked(g, tg);
++  r = __real_lj_gc2_scan_cycle_owner_tg_roots_native_parked(g, tg);
++  assert(r == 1);
++  (void)la_add32_rlx(&ctx.remote_scans, 1);
++  return r;
++}
++static void init_peer(Probe *p, TGState *tg)
++{
++  lj_tg_init_thread(p->g, tg, NULL, 0);
++  lj_tg_tid_rel(tg, lj_thr_newid());
++  assert(lj_thr_id_is_owner(lj_tg_tid_acq(tg)));
++  lj_arena_alloc_owner_rel(&tg->alloc, lj_tg_tid_acq(tg));
++  lj_thr_set_tg(tg);
++  lj_tg_attach(p->g, tg);
++}
++static void *leader(void *arg)
++{
++  Probe *p = arg;
++  uint64_t epoch;
++  uint32_t signaled;
++  init_peer(p, &p->peer);
++  signaled = lj_safepoint_handshake(p->g,
++    LJ_GC2_HS_SCAN_OWNER_ROOTS|LJ_GC2_HS_FLUSH_SSB);
++  assert(signaled == 2);
++  epoch = gc2_hs_epoch_acq(p->g);
++  assert(gc2_hs_pending_acq(p->g) == 0);
++  assert(gc2_hs_leader_acq(p->g) == 0);
++  if (p->mode == 2 || p->mode == 3) {
++    uint32_t actions = p->mode == 2 ? LJ_GC2_HS_FLUSH_SSB : LJ_GC2_HS_STOPREQ;
++    assert(lj_safepoint_handshake(p->g, actions) >= 2);
++    assert(gc2_hs_epoch_acq(p->g) == epoch + 1);
++  }
++  if (p->mode == 5) lj_native_enter(&p->peer);
++  la_store32_rel(&p->peer_done, 1);
++  until(&p->allow_detach, 1);
++  if (p->mode == 5) (void)lj_native_leave_tg(&p->peer);
++  lj_tg_detach(p->g, &p->peer);
++  lj_thr_set_tg(NULL);
++  return NULL;
++}
++static void *preserve_abort(void *arg)
++{
++  Probe *p = arg;
++  init_peer(p, &p->late);
++  assert(gc2_worker_active_acq(p->g) == 0);
++  lj_gc2_preserve_abort_to_idle(p->g);
++  assert(gc2_phase_acq(p->g) == LJ_GC2_IDLE);
++  assert(gc2_cycle_leader_acq(p->g) == 0);
++  lj_tg_detach(p->g, &p->late);
++  lj_thr_set_tg(NULL);
++  la_store32_rel(&p->late_done, 1);
++  return NULL;
++}
++static void *late_attach(void *arg)
++{
++  Probe *p = arg;
++  init_peer(p, &p->late);
++  assert(lj_tg_hs_epoch_ack_acq(&p->late) == p->epoch);
++  assert(lj_tg_reqmask_acq(&p->late) == 0);
++  assert(lj_tg_poll_acq(&p->late) == 0);
++  assert(lj_tg_mark_active_acq(&p->late) == 1);
++  assert(lj_tg_alloc_black_acq(&p->late) == 1);
++  lj_tg_detach(p->g, &p->late);
++  assert(lj_tg_flags_test_acq(&p->late, TGF_DEAD));
++  assert(lj_tg_reqmask_acq(&p->late) == 0);
++  assert(lj_tg_poll_acq(&p->late) == 0);
++  lj_thr_set_tg(NULL);
++  la_store32_rel(&p->late_done, 1);
++  return NULL;
++}
++static void *observer(void *arg)
++{
++  Probe *p = arg;
++  char path[96], line[320];
++  unsigned i;
++  until(&p->before, 1);
++  snprintf(path, sizeof(path), "/proc/self/task/%ld/syscall", (long)p->owner_sysid);
++  for (i = 0; i < 2000; i++) {
++    long nr;
++    unsigned long long addr, op, val, timeout_arg;
++    FILE *f = fopen(path, "r");
++    assert(f);
++    if (!fgets(line, sizeof(line), f)) line[0] = 0;
++    fclose(f);
++    if (sscanf(line, "%ld %llx %llx %llx %llx", &nr, &addr, &op, &val, &timeout_arg) == 5 &&
++        nr == SYS_futex && addr == (unsigned long long)(uintptr_t)&p->owner->poll &&
++        op == FUTEX_WAIT_PRIVATE && val == 1 && timeout_arg == 0) {
++      assert(lj_tg_reqmask_acq(p->owner) == 0);
++      assert(lj_tg_in_native_acq(p->owner) == 0);
++      assert(la_load32_acq(&p->returned) == 0);
++      assert(la_load32_acq(&p->cleared) == 0);
++      printf("before completion actual kernel wait: %s", line);
++      la_store32_rel(&p->observed_futex, 1);
++      la_store32_rel(&p->release_before, 1);
++      return NULL;
++    }
++    usleep(1000);
++  }
++  fprintf(stderr, "no exact pre-clear wait observed: %s", line);
++  abort();
++}
++static int native_probe(lua_State *L)
++{
++  Probe *p = &ctx;
++  LJNativeFrame frame;
++  TValue saved;
++  uint32_t returned_actions;
++  pthread_t abort_thread;
++  assert(tvistab(L->base));
++  p->L = L; p->g = G(L); p->owner = L2TG(L); p->root = tabV(L->base);
++  p->owner_word = lj_state_owner_word_acq(L);
++  p->owner_sysid = (pid_t)syscall(SYS_gettid);
++  assert(lj_thr_get_tg() == p->owner && lj_tg_owns_state_acq(p->owner, L));
++  lj_tv_load_acq(&saved, L->base);
++  lj_gc2_mark_begin(p->g);
++  assert(gc2_phase_acq(p->g) == LJ_GC2_MARK);
++  assert(lj_gc2_ismarked(p->g, obj2gco(p->root)) == 0);
++  la_store32_rel(&p->armed, 1);
++  lj_safepoint_test_completion_hook(completion_hook);
++  lj_native_enter_l(L, &frame);
++  if (p->mode == 1)
++    assert(pthread_create(&p->observer, NULL, observer, p) == 0);
++  assert(pthread_create(&p->peer_thread, NULL, leader, p) == 0);
++  if (p->mode == 1) {
++    until(&p->before, 1);
++  } else {
++    until(&p->cleared, 1);
++  }
++  returned_actions = lj_native_leave_l(L, &frame);
++  assert((returned_actions & ~(LJ_GC2_HS_SCAN_OWNER_ROOTS|LJ_GC2_HS_FLUSH_SSB)) == 0);
++  if (p->mode == 1) until(&p->cleared, 1);
++  la_store32_rel(&p->returned, 1);
++  assert(lj_tg_poll_acq(p->owner) == 0);
++  assert(lj_tg_reqmask_acq(p->owner) == 0);
++  assert(tv_rawload(L->base) == tv_rawload(&saved));
++  assert(lj_gc2_ismarked(p->g, obj2gco(p->root)) == 1);
++  {
++    assert(gc2_hs_pending_acq(p->g) != 0);
++    assert(gc2_hs_leader_acq(p->g) == lj_tg_tid_acq(&p->peer));
++    assert(la_load32_acq(&p->release_tail) == 0);
++    assert(lj_tg_ssb_active_acq(p->owner) == p->fresh);
++    if (p->mode == 5) {
++      assert(pthread_create(&abort_thread, NULL, preserve_abort, p) == 0);
++      while (gc2_phase_acq(p->g) != LJ_GC2_IDLE) la_cpu_pause();
++      assert(gc2_hs_leader_acq(p->g) == lj_tg_tid_acq(&p->peer));
++      assert(gc2_hs_epoch_acq(p->g) == p->epoch);
++      assert(gc2_cycle_leader_acq(p->g) == LJ_THREAD_GCSCAN);
++      assert(gc2_hs_pending_acq(p->g) != 0);
++    }
++    /* A newly produced below-capacity suffix remains visible while the
++    ** executor is still paused. Local completion cannot certify SSB empty. */
++    assert(lj_gc2_test_ssb_push(p->g, obj2gco(p->root)) == 1);
++    assert(lj_tg_ssb_next_acq(p->owner) > lj_tg_ssb_base_acq(p->owner));
++    assert(lj_tg_ssb_next_acq(p->owner) < lj_tg_ssb_end_acq(p->owner));
++    assert(!lj_gc2_test_ssb_empty(p->g));
++    lua_pushinteger(L, 3141); lua_setfield(L, 1, "value");
++    printf("mode=%u returned with executor paused: pending=%u poll=0 epoch=%" PRIu64 " active suffix retained\n",
++      p->mode, gc2_hs_pending_acq(p->g), p->epoch);
++    if (p->mode == 4) {
++      pthread_t late;
++      assert(pthread_create(&late, NULL, late_attach, p) == 0);
++      assert(pthread_join(late, NULL) == 0);
++      assert(la_load32_acq(&p->late_done) == 1);
++    }
++    la_store32_rel(&p->release_tail, 1);
++  }
++  if (p->mode == 2 || p->mode == 3) {
++    uint32_t next_actions = p->mode == 2 ? LJ_GC2_HS_FLUSH_SSB : LJ_GC2_HS_STOPREQ;
++    while (lj_tg_reqmask_acq(p->owner) == 0) la_cpu_pause();
++    assert(gc2_hs_epoch_acq(p->g) == p->epoch + 1);
++    assert(lj_tg_reqmask_acq(p->owner) == next_actions);
++    assert(lj_tg_poll_acq(p->owner) == 1);
++    assert(lj_tg_hs_epoch_ack_acq(p->owner) == p->epoch);
++    assert(lj_tg_in_native_acq(p->owner) == 0);
++    assert(la_load32_acq(&p->remote_scans) == 1);
++    /* A duplicate claim can be the final acknowledged slot, returning zero.
++    ** Verify actual action state and settled ownership instead of assuming
++    ** exactly one publication/return mask for this epoch. */
++    assert((lj_safepoint_poll_tg(p->owner) & ~next_actions) == 0);
++    assert(lj_tg_reqmask_acq(p->owner) == 0);
++    assert(lj_tg_hs_epoch_ack_acq(p->owner) == p->epoch + 1);
++    if (p->mode == 2)
++      assert(lj_tg_ssb_next_acq(p->owner) == lj_tg_ssb_base_acq(p->owner));
++  }
++  if (p->mode == 5) {
++    while (lj_tg_reqmask_acq(p->owner) == 0) la_cpu_pause();
++    assert(gc2_hs_epoch_acq(p->g) == p->epoch + 1);
++    assert(lj_tg_poll_acq(p->owner) == 1);
++    assert(lj_tg_hs_epoch_ack_acq(p->owner) == p->epoch);
++    assert(lj_tg_in_native_acq(p->owner) == 0);
++    {
++      uint32_t phase_actions = lj_tg_reqmask_acq(p->owner);
++      assert((phase_actions & LJ_GC2_HS_ALLOC_WHITE) != 0);
++      assert((lj_safepoint_poll_tg(p->owner) & ~phase_actions) == 0);
++      assert(lj_tg_hs_epoch_ack_acq(p->owner) == p->epoch + 1);
++    }
++    assert(pthread_join(abort_thread, NULL) == 0);
++    assert(la_load32_acq(&p->late_done) == 1);
++    assert(lj_tg_alloc_black_acq(p->owner) == 0);
++  }
++  until(&p->peer_done, 1);
++  la_store32_rel(&p->allow_detach, 1);
++  assert(pthread_join(p->peer_thread, NULL) == 0);
++  if (p->mode == 1) {
++    assert(pthread_join(p->observer, NULL) == 0);
++    assert(la_load32_acq(&p->observed_futex) == 1);
++  }
++  la_store32_rel(&p->armed, 0);
++  lj_safepoint_test_completion_hook(NULL);
++  assert(gc2_hs_pending_acq(p->g) == 0 && gc2_hs_leader_acq(p->g) == 0);
++  if (p->mode == 3) {
++    assert(lj_tg_flags_test_acq(p->owner, TGF_STOPREQ_FRESH));
++    assert(lj_tg_poll_acq(p->owner) == 1);
++    assert(lj_safepoint_ack(L) == LJ_GC2_HS_STOPREQ);
++    lj_safepoint_checkstop(L, LJ_GC2_HS_STOPREQ);
++    abort();
++  }
++  assert(lj_tg_poll_acq(p->owner) == 0);
++  return 0;
++}
++int main(int argc, char **argv)
++{
++  lua_State *L;
++  assert(argc == 2);
++  ctx.mode = (uint32_t)strtoul(argv[1], NULL, 10);
++  assert(ctx.mode <= 5);
++  alarm(20); setvbuf(stdout, NULL, _IOLBF, 0);
++  L = luaL_newstate(); assert(L); luaL_openlibs(L);
++  lua_gc(L, LUA_GCCOLLECT, 0); lua_gc(L, LUA_GCSTOP, 0);
++  lua_pushcfunction(L, native_probe); lua_setglobal(L, "native_probe");
++  lua_pushinteger(L, ctx.mode); lua_setglobal(L, "probe_mode");
++  if (luaL_dostring(L,
++    "jit.off(true,true); local t={value=2718}; local ok,err=pcall(native_probe,t); "
++    "if probe_mode==3 then assert(not ok and tostring(err):find('interrupt')) else assert(ok,err) end; "
++    "collectgarbage('collect'); assert(t.value==3141)")) {
++    fprintf(stderr, "%s\n", lua_tostring(L, -1)); abort();
++  }
++  lua_gc(L, LUA_GCCOLLECT, 0); assert(gc2_phase_acq(G(L)) == LJ_GC2_IDLE);
++  lua_close(L);
++  puts("remote owner-root completion PASS");
++  return 0;
++}
+diff --git a/tests/t-safepoint-native-root-hold.c b/tests/t-safepoint-native-root-hold.c
+new file mode 100644
+--- /dev/null
++++ b/tests/t-safepoint-native-root-hold.c
+@@ -0,0 +1,224 @@
++#define _GNU_SOURCE
++#include <assert.h>
++#include <inttypes.h>
++#include <pthread.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <sys/syscall.h>
++#include <unistd.h>
++#include "lua.h"
++#include "lauxlib.h"
++#include "lualib.h"
++#include "lj_obj.h"
++#include "lj_atomic.h"
++#include "lj_gc.h"
++#include "lj_gc2.h"
++#include "lj_safepoint.h"
++#include "lj_tg.h"
++#include "lj_thr.h"
++
++/* An observation-only Linux probe. The only interposition pauses an already
++** admitted real remote-native call (or its completed handshake's global pass).
++** It does not manufacture request, epoch, pending, native or state ownership. */
++typedef struct Probe {
++  global_State *g;
++  TGState *owner;
++  TGState peer;
++  lua_State *L;
++  GCtab *root;
++  LJStateOwner owner_word;
++  uint64_t epoch;
++  uint32_t mode, paused, release, returned, peer_done, allow_detach;
++  uint32_t observed_futex, scan_calls, global_calls, flush_calls, armed;
++  int scan_result;
++  pid_t owner_sysid;
++  pthread_t peer_thread, observer;
++} Probe;
++static Probe ctx;
++static void until(const uint32_t *p, uint32_t v)
++{
++  while (la_load32_acq(p) != v) la_cpu_pause();
++}
++static void pause_owner(Probe *p)
++{
++  assert(lj_thr_get_tg() == &p->peer);
++  assert(gc2_hs_leader_acq(p->g) == lj_tg_tid_acq(&p->peer));
++  assert(lj_tg_reqmask_acq(p->owner) == 0);
++  assert(lj_tg_poll_acq(p->owner) == 1);
++  assert(lj_tg_in_native_acq(p->owner) == 1);
++  assert(lj_state_owner_word_acq(p->L) == p->owner_word);
++  p->epoch = gc2_hs_epoch_acq(p->g);
++  if (p->mode == 2) {
++    assert(gc2_hs_pending_acq(p->g) == 0);
++    assert(lj_tg_hs_epoch_ack_acq(p->owner) == p->epoch);
++  } else {
++    assert(gc2_hs_pending_acq(p->g) != 0);
++    if (p->mode == 3)
++      assert(lj_tg_hs_epoch_ack_acq(p->owner) == p->epoch);
++    else
++      assert(lj_tg_hs_epoch_ack_acq(p->owner) != p->epoch);
++  }
++  la_store32_rel(&p->paused, 1);
++  until(&p->release, 1);
++  assert(lj_state_owner_word_acq(p->L) == p->owner_word);
++  assert(lj_tg_in_native_acq(p->owner) == 0);
++  assert(la_load32_acq(&p->returned) == 0);
++}
++extern int __real_lj_gc2_scan_cycle_owner_tg_roots_native_parked(global_State *, TGState *);
++int __wrap_lj_gc2_scan_cycle_owner_tg_roots_native_parked(global_State *g, TGState *tg)
++{
++  int r;
++  if (g != ctx.g || tg != ctx.owner || !la_load32_acq(&ctx.armed))
++    return __real_lj_gc2_scan_cycle_owner_tg_roots_native_parked(g, tg);
++  ctx.scan_calls++;
++  assert(ctx.scan_calls == 1);
++  if (ctx.mode == 0) pause_owner(&ctx);
++  r = __real_lj_gc2_scan_cycle_owner_tg_roots_native_parked(g, tg);
++  ctx.scan_result = r;
++  assert(r == 1);
++  assert(lj_gc2_ismarked(g, obj2gco(ctx.root)) == 1);
++  if (ctx.mode == 1) pause_owner(&ctx);
++  return r;
++}
++extern void __real_lj_gc2_scan_cycle_global_roots(global_State *);
++void __wrap_lj_gc2_scan_cycle_global_roots(global_State *g)
++{
++  if (g == ctx.g && la_load32_acq(&ctx.armed)) {
++    ctx.global_calls++;
++    if (ctx.mode == 2) {
++      assert(ctx.scan_calls == 1 && ctx.scan_result == 1);
++      pause_owner(&ctx);
++    }
++  }
++  __real_lj_gc2_scan_cycle_global_roots(g);
++}
++extern uint32_t __real_lj_gc2_flush_ssb(global_State *, TGState *);
++uint32_t __wrap_lj_gc2_flush_ssb(global_State *g, TGState *tg)
++{
++  if (g == ctx.g && tg == ctx.owner && ctx.mode == 3 &&
++      la_load32_acq(&ctx.armed) && lj_thr_get_tg() == &ctx.peer) {
++    ctx.flush_calls++;
++    assert(ctx.flush_calls == 1 && ctx.scan_calls == 1 && ctx.scan_result == 1);
++    pause_owner(&ctx);
++  }
++  return __real_lj_gc2_flush_ssb(g, tg);
++}
++static void *leader(void *arg)
++{
++  Probe *p = arg;
++  uint32_t n;
++  lj_tg_init_thread(p->g, &p->peer, NULL, 0);
++  lj_tg_tid_rel(&p->peer, lj_thr_newid());
++  assert(lj_thr_id_is_owner(lj_tg_tid_acq(&p->peer)));
++  lj_arena_alloc_owner_rel(&p->peer.alloc, lj_tg_tid_acq(&p->peer));
++  lj_thr_set_tg(&p->peer);
++  lj_tg_attach(p->g, &p->peer);
++  assert(lj_thr_get_tg() == &p->peer);
++  assert(lj_tg_in_native_acq(p->owner) == 1);
++  n = lj_safepoint_handshake(p->g, LJ_GC2_HS_SCAN_ROOTS | LJ_GC2_HS_FLUSH_SSB);
++  assert(n == 2);
++  assert(gc2_hs_pending_acq(p->g) == 0);
++  assert(gc2_hs_leader_acq(p->g) == 0);
++  la_store32_rel(&p->peer_done, 1);
++  until(&p->allow_detach, 1);
++  lj_tg_detach(p->g, &p->peer);
++  lj_thr_set_tg(NULL);
++  return NULL;
++}
++static void *observer(void *arg)
++{
++  Probe *p = arg;
++  char path[96], line[320];
++  unsigned i;
++  until(&p->paused, 1);
++  snprintf(path, sizeof(path), "/proc/self/task/%ld/syscall", (long)p->owner_sysid);
++  for (i=0; i<2000; i++) {
++    long nr;
++    unsigned long long addr, op, val, timeout_arg;
++    FILE *f = fopen(path, "r");
++    assert(f);
++    if (!fgets(line, sizeof(line), f)) line[0] = 0;
++    fclose(f);
++    if (sscanf(line, "%ld %llx %llx %llx %llx", &nr, &addr, &op, &val, &timeout_arg) == 5 &&
++        nr == SYS_futex && addr == (unsigned long long)(uintptr_t)&p->owner->poll &&
++        op == FUTEX_WAIT_PRIVATE && val == 1 && timeout_arg == 0) {
++      assert(la_load32_acq(&p->returned) == 0);
++      assert(la_load32_acq(&p->release) == 0);
++      assert(lj_tg_in_native_acq(p->owner) == 0);
++      assert(lj_tg_reqmask_acq(p->owner) == 0);
++      assert(lj_tg_poll_acq(p->owner) == 1);
++      assert(gc2_hs_epoch_acq(p->g) == p->epoch);
++      assert(lj_state_owner_word_acq(p->L) == p->owner_word);
++      printf("mode=%u actual_kernel_wait=%s", p->mode, line);
++      printf("held: native=0 reqmask=0 poll=1 pending=%u ack=%" PRIu64 " epoch=%" PRIu64 " returned=0 scan_calls=%u\n",
++        gc2_hs_pending_acq(p->g), lj_tg_hs_epoch_ack_acq(p->owner), p->epoch, p->scan_calls);
++      la_store32_rel(&p->observed_futex, 1);
++      la_store32_rel(&p->release, 1);
++      return NULL;
++    }
++    usleep(1000);
++  }
++  fprintf(stderr, "no exact native-return futex observed; last syscall=%s", line);
++  abort();
++}
++static int native_probe(lua_State *L)
++{
++  LJNativeFrame frame;
++  TValue saved;
++  assert(tvistab(L->base));
++  ctx.L=L; ctx.g=G(L); ctx.owner=L2TG(L); ctx.root=tabV(L->base);
++  ctx.owner_word=lj_state_owner_word_acq(L);
++  ctx.owner_sysid=(pid_t)syscall(SYS_gettid);
++  assert(lj_thr_get_tg() == ctx.owner);
++  assert(lj_tg_owns_state_acq(ctx.owner,L));
++  lj_tv_load_acq(&saved,L->base);
++  lj_gc2_mark_begin(ctx.g);
++  assert(gc2_phase_acq(ctx.g) == LJ_GC2_MARK);
++  assert(lj_gc2_ismarked(ctx.g,obj2gco(ctx.root)) == 0);
++  la_store32_rel(&ctx.armed,1);
++  lj_native_enter_l(L,&frame);
++  assert(pthread_create(&ctx.observer,NULL,observer,&ctx)==0);
++  assert(pthread_create(&ctx.peer_thread,NULL,leader,&ctx)==0);
++  until(&ctx.paused,1);
++  assert(lj_native_leave_l(L,&frame)==0);
++  la_store32_rel(&ctx.returned,1);
++  assert(lj_tg_poll_acq(ctx.owner)==0);
++  assert(lj_tg_reqmask_acq(ctx.owner)==0);
++  assert(lj_tg_hs_epoch_ack_acq(ctx.owner)==ctx.epoch);
++  assert(tv_rawload(L->base)==tv_rawload(&saved));
++  assert(lj_gc2_ismarked(ctx.g,obj2gco(ctx.root))==1);
++  until(&ctx.peer_done,1);
++  la_store32_rel(&ctx.allow_detach,1);
++  assert(pthread_join(ctx.observer,NULL)==0);
++  assert(pthread_join(ctx.peer_thread,NULL)==0);
++  assert(ctx.observed_futex && ctx.scan_calls==1 && ctx.global_calls==1);
++  assert(ctx.mode != 3 || ctx.flush_calls == 1);
++  la_store32_rel(&ctx.armed,0);
++  /* Dead-TG physical retirement has its own grace. Static peer storage stays
++  ** alive until the final collection/close performs that normal cleanup. */
++  puts("release: leader completed, native return resumed, exact root still marked and source unchanged");
++  return 0;
++}
++int main(int argc,char **argv)
++{
++  lua_State *L;
++  assert(argc==2);
++  ctx.mode=(uint32_t)strtoul(argv[1],NULL,10);
++  assert(ctx.mode<=3);
++  alarm(20);
++  setvbuf(stdout,NULL,_IOLBF,0);
++  L=luaL_newstate(); assert(L);
++  luaL_openlibs(L);
++  lua_gc(L,LUA_GCCOLLECT,0);
++  lua_gc(L,LUA_GCSTOP,0);
++  lua_pushcfunction(L,native_probe); lua_setglobal(L,"native_probe");
++  if (luaL_dostring(L,"jit.off(true,true); local t={value=2718}; native_probe(t); collectgarbage('collect'); assert(t.value==2718)")) {
++    fprintf(stderr,"%s\n",lua_tostring(L,-1)); abort();
++  }
++  lua_gc(L,LUA_GCCOLLECT,0);
++  assert(gc2_phase_acq(G(L))==LJ_GC2_IDLE);
++  lua_close(L);
++  puts("real consumed native acknowledgement probe PASS");
++  return 0;
++}

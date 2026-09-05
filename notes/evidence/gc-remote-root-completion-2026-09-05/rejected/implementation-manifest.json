@@ -1,0 +1,15 @@
+{
+  "baseline_archive_commit": "b4e26564542cb8bfa997a11c6a90e5e0017a2f79",
+  "prior_core_snapshot_commit": "77dff654e11672a6c6259c21b5dbaa0ca873e3ba",
+  "production_files": {
+    "lj_safepoint.c": "cd462a385ad7d481051882d75073ca9ce06f400277f0c795ba1f4d4de1032c68",
+    "lj_safepoint.h": "328aa2bc63d753257d8adca5a5417ccdda059b942138aecda20a3da53752d46c"
+  },
+  "fixture_files": {
+    "completion-probe.c": "e5e888568bfec0c9d9817f786ef8fea1948d6556a7458722594ae8dad329f210",
+    "canonical-safepoint-adapted.c": "987d739501012141a6985b329177c4f2af4706e045356034f57f302efdfc2465",
+    "candidate-source.patch": "6e7d74bb98a2e88c40768a7661c8c232b8b6bc605ecda3fc04c943b9464829df"
+  },
+  "new_fields": false,
+  "shared_edits": false
+}

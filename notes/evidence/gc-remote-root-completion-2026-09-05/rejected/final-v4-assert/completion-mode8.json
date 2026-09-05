@@ -1,0 +1,16 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/final-v4-assert/completion-probe",
+    "8"
+  ],
+  "exit_code": 0,
+  "stdout": "completed winner duplicate loser actual kernel wait: 202 0x7fc628e335a8 0x80 0x1 0x0 0x0 0x0 0x7ffca898bf68 0x7fc628f587b9\nrefusal/requeue signal publications=3\nreal local-completion native return probe PASS\n",
+  "stderr": "",
+  "seconds": 0.003786456996749621,
+  "test_env": {
+    "LJ_LOADLIB_STOPREQ_SO": "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/assert-controls/loadlib-stopreq.so"
+  }
+}

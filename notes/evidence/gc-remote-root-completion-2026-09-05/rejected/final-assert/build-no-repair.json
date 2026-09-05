@@ -1,0 +1,19 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "make",
+    "-C",
+    "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/candidate-no-repair/src",
+    "-j4",
+    "BUILDMODE=static",
+    "CCDEBUG=-g",
+    "TARGET_STRIP=:",
+    "XCFLAGS=-DLJ_FUNC_TEST_HELPERS -DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLJ_TRACE_TEST_HELPERS -DLUA_USE_ASSERT"
+  ],
+  "exit_code": 0,
+  "stdout": "make: Entering directory '/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/candidate-no-repair/src'\nCC        lj_safepoint.o\nAR        libluajit.a\nLINK      luajit\nOK        Successfully built LuaJIT\nmake: Leaving directory '/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/candidate-no-repair/src'\n",
+  "stderr": "",
+  "seconds": 0.2912125129987544
+}

@@ -1,0 +1,19 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "0-15",
+    "gcc",
+    "-shared",
+    "-fPIC",
+    "-O2",
+    "-I/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/candidate-assert/tests",
+    "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/candidate-assert/tests/t-loadlib-stopreq-lib.c",
+    "-o",
+    "/tmp/lj-native-owner-root-tail-proof-20260905-zhqsneo2/assert-controls/loadlib-stopreq.so"
+  ],
+  "exit_code": 0,
+  "stdout": "",
+  "stderr": "",
+  "seconds": 0.017486084998381557
+}
